@@ -83,6 +83,7 @@ function activeProps(overrides: Partial<HookProps> = {}): HookProps {
     isSessionActive: true,
     widgetNavigationAllowed: true,
     isPartySession: false,
+    boardConnection: 'connectedByMe',
     ...overrides,
   };
 }

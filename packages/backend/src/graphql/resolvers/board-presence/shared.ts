@@ -2,9 +2,10 @@ import { GraphQLError } from 'graphql';
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import type { ResolvedBoard } from '@boardsesh/shared-schema';
+import type { BoardConnectionHolder, ResolvedBoard } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
+import { pubsub } from '../../../pubsub/index';
 import { logger } from '../../../utils/logger';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
 
@@ -396,6 +397,36 @@ export function defaultBoardName(boardType: string): string {
 function boardConfigPresenceSlug(boardType: string, layoutId: number, sizeId: number, setIds: string): string {
   const digest = createHash('sha256').update(`${boardType}:${layoutId}:${sizeId}:${setIds}`).digest('hex').slice(0, 20);
   return `presence-${boardType}-${layoutId}-${sizeId}-${digest}`;
+}
+
+/**
+ * The board's current connection holder, or null when the board is free. Single
+ * source of truth for "who's connected + writing now": the live `boardConnection`
+ * query and the APNs Live Activity push path both read it through here so the
+ * holder + display-identity rules can never drift between the two surfaces.
+ *
+ * The holder is the emitter id of the most recent confirmed send
+ * (`pubsub.getBoardWriter`): a `userId`, or `conn:{connectionId}` for an
+ * anonymous client (reported with a null userId). Display identity is adopted
+ * from the newest climb ONLY when that climb was sent by THIS holder — the
+ * newest climb can belong to a previous sender (the current holder took the wall
+ * but their send hasn't landed yet), and pairing their name with the holder's
+ * userId would mislabel the avatar. When they don't match we still report the
+ * holder's userId; clients render a "?".
+ */
+export async function resolveBoardHolder(boardId: number): Promise<BoardConnectionHolder | null> {
+  const emitterId = await pubsub.getBoardWriter(String(boardId));
+  if (emitterId === null) return null;
+  const userId = emitterId.startsWith('conn:') ? null : emitterId;
+  const recent = await pubsub.getRecentBoardClimbs(String(boardId));
+  const last = recent[0];
+  const lastBySameHolder = userId !== null && last?.sentByUserId === userId;
+  return {
+    userId,
+    displayName: lastBySameHolder ? (last.sentByDisplayName ?? null) : null,
+    avatarUrl: lastBySameHolder ? (last.sentByAvatarUrl ?? null) : null,
+    lastSentAt: lastBySameHolder ? (last.sentAt ?? null) : null,
+  };
 }
 
 async function ensureSystemBoardOwner(): Promise<void> {

@@ -276,6 +276,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid frames' }, { status: 400 });
     }
 
+    // Optional dim scrim over the board photo (0–1 opacity), applied only with
+    // include_background. Darkens the board behind the holds so the lit climb
+    // reads clearly at thumbnail size — the server equivalent of the mobile climb
+    // list's LayeredClimbImage `dim` (rgba(0,0,0,0.18)). The Live Activity widget
+    // opts in via dim_background=0.18.
+    const dimBackgroundRaw = searchParams.get('dim_background');
+    const dimBackground = dimBackgroundRaw !== null ? Number(dimBackgroundRaw) : 0;
+    if (dimBackgroundRaw !== null && (Number.isNaN(dimBackground) || dimBackground < 0 || dimBackground > 1)) {
+      return NextResponse.json({ error: 'dim_background must be a number between 0 and 1' }, { status: 400 });
+    }
+
     const parsedSetIds = setIds
       .split(',')
       .map(Number)
@@ -374,10 +385,22 @@ export async function GET(request: NextRequest) {
         const [firstBg, ...restBgs] = resizedBuffers;
 
         if (firstBg) {
-          // Composite: first background as base → remaining backgrounds → WASM overlay on top
+          // Composite: first background as base → remaining backgrounds →
+          // optional dim scrim → WASM overlay on top. The dim scrim (a black
+          // layer at dim_background opacity) darkens the board photo behind the
+          // holds; mirrors LayeredClimbImage's background→dim→holds stack.
           const composeT0 = performance.now();
+          const dimLayer =
+            dimBackground > 0
+              ? await sharp({
+                  create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: dimBackground } },
+                })
+                  .png()
+                  .toBuffer()
+              : null;
           const compositedImage = sharp(firstBg).composite([
             ...restBgs.map((buf) => ({ input: buf, blend: 'over' as const })),
+            ...(dimLayer ? [{ input: dimLayer, blend: 'over' as const }] : []),
             {
               input: overlayBuffer,
               raw: { width, height, channels: 4 as const },

@@ -11,9 +11,9 @@ Two BLE layers exist in the codebase. The **React Native layer** (`packages/mobi
 **What works today:**
 
 - A native `URLSessionWebSocketTask` owned by `SessionWebSocketManager` feeds the Live Activity while the app is backgrounded (the JS-side `graphql-ws` socket suspends on lock). The JS webview owns its own `graphql-ws` client — the same one web and Android use — separate from this native connection; they are not shared. See `docs/websocket-implementation.md` (iOS Live Activity Integration).
-- Widget shows current climb name, grade, angle, queue position, and board thumbnail
-- Widget shows whether our session's climb is confirmed on the wall (lightbulb lit). Sessions are always-live, so any participant may navigate.
-- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and POST the backend `/api/widget/navigate` REST endpoint (not the native WS) with the registered Live Activity bearer token. The endpoint accepts any current session member (no driver gate) and rejects a stale token whose session ended (410) or whose user is no longer a participant (403).
+- Widget shows current climb name, grade, angle, queue position, and board thumbnail, restyled to the Velvet Send design system (see `docs/ai-design-guidelines.md`) — `targets/BoardseshWidgets/ClimbSessionLiveActivity.swift`.
+- Widget reflects **connection ownership** (see below): the lightbulb is lit and Previous/Next are shown only while _this_ device holds the BLE link; once a peer takes the board the bulb goes out, the controls hide, and the card just shows the climb on the wall ("<name> is on the wall").
+- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and POST the backend `/api/widget/navigate` REST endpoint (not the native WS) with the registered Live Activity bearer token. They are only shown when this device holds the board (the App Intent's `navigationAllowed` guard and the widget's `boardConnection == connectedByMe` agree). The endpoint rejects a stale token whose session ended (410) or whose user is no longer a participant (403).
 - Tapping the widget lightbulb POSTs `/api/widget/take-control` with the registered Live Activity bearer token. The endpoint requires the token row to have a bound `userId` and re-asserts (re-broadcasts `CurrentClimbChanged` for) the current climb; it returns 200.
 - All queue delta events (FullSync, ItemAdded, ItemRemoved, CurrentClimbChanged, Reordered) are processed natively and persisted to App Group
 - Message buffering when webview is backgrounded, with flush or resync on foreground
@@ -27,6 +27,24 @@ Two BLE layers exist in the codebase. The **React Native layer** (`packages/mobi
 2. Rust board renderer has no Swift/iOS bindings -- only targets WASM today
 3. MoonBoard remains on the existing Capacitor BLE path; the native background BLE path currently targets Aurora boards only
 4. Cross-device repaint when _another_ user navigates: if your phone is suspended, your board stays stale until you unlock the phone. Tracked in issue #2174 (presence/ack design) and ultimately solved by the planned WS-enabled board controller.
+
+## Connection ownership (lightbulb + Previous/Next)
+
+The Live Activity reflects a tri-state `boardConnection`, from **this device's** point of view, in `ClimbSessionAttributes.ContentState` (optional fields `boardConnection` + `holderDisplayName`, so older binaries decoding a newer push — and vice-versa — never fail; `nil` ⇒ `connectedByMe`):
+
+- **`connectedByMe`** — this device holds the BLE link → lightbulb lit (warm amber glow), Previous/Next shown and active (they write BLE to the wall).
+- **`heldByPeer`** — a session member (or anonymous holder while in a session) drives the board → lightbulb out, Previous/Next hidden, card shows the wall climb + "<name> is on the wall".
+- **`disconnected`** — nobody we can tie to is driving → lightbulb out (tap to reconnect via `ReconnectBoardIntent`), Previous/Next hidden.
+
+The derivation is shared with the in-app lightbulb so they can never disagree: `deriveBoardConnection(...)` in `packages/mobile/src/components/play-drawer/lightbulb-control.ts` (the existing `deriveLightbulbLit` is re-expressed as `deriveBoardConnection(...) !== 'disconnected'`), surfaced by the `useBoardConnectionState` hook (`packages/mobile/src/components/ble/use-board-connection-state.ts`), which both `useLightbulbControl` and `LiveActivityBridge` consume.
+
+Three update paths set `boardConnection`:
+
+1. **Foreground (JS)** — `LiveActivityBridge` → `useLiveActivity` threads it through to `updateActivity`/`startSession`; the native module mirrors it into the App Group (`SharedWidgetWallControlState.saveBoardConnection`) so widget intents and the native-WS builder have a fallback.
+2. **Backgrounded (APNs push)** — the backend stamps it **per token**: it resolves the session's board holder once per send (`session:{id}:board` → `resolveBoardHolder`) and groups tokens by derived state, so the holder's device gets `connectedByMe` and peers get `heldByPeer`. See `packages/backend/src/services/apns/board-connection.ts` + `sendGroupedNotification` in `apns/index.ts`. A board hand-off (peer takes over) isn't a queue event, so `reportBoardClimb` kicks a debounced push when the writer changes. When the holder/board can't be resolved (no Redis, no mapping, anonymous holder) the fields are omitted and the device keeps its own App-Group state.
+3. **Native WebSocket (backgrounded queue events)** — `LiveActivityManager.buildContentState` preserves the last-known `boardConnection` from the App Group so a peer's climb change doesn't reset the bulb.
+
+The widget resolves the effective state per render with `resolveBoardState(...)`: pushed `context.state.boardConnection` → App Group mirror → derive from `navigationAllowed` (true ⇒ connectedByMe).
 
 ## Architecture Decision: Where Does BLE Live?
 

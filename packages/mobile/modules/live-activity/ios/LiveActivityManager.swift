@@ -237,6 +237,15 @@ actor LiveActivityManager {
 
         let item = items[currentIndex]
 
+        // This builder runs for native-WebSocket-driven updates (background queue
+        // events) which carry no board-connection info. Preserve the last-known
+        // board-connection state mirrored into the App Group by the JS update
+        // path / APNs push so a peer's climb change doesn't reset the bulb to
+        // "connectedByMe". Absent (nil) → the widget treats it as connectedByMe.
+        let (boardConnection, holderDisplayName) = SharedConstants.sharedDefaults
+            .map { SharedWidgetWallControlState.loadBoardConnection(from: $0) }
+            ?? (nil, nil)
+
         return ClimbSessionAttributes.ContentState(
             climbName: item.climbName,
             climbDifficulty: VGradeFormatter.formatVGrade(item.difficulty),
@@ -245,7 +254,9 @@ actor LiveActivityManager {
             totalClimbs: items.count,
             hasNext: currentIndex < items.count - 1,
             hasPrevious: currentIndex > 0,
-            climbUuid: item.climbUuid
+            climbUuid: item.climbUuid,
+            boardConnection: boardConnection,
+            holderDisplayName: holderDisplayName
         )
     }
 }

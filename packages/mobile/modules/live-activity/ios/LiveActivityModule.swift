@@ -605,6 +605,8 @@ public class LiveActivityModule: Module {
         let graphqlUrl = options.graphqlUrl
         let widgetNavigationAllowed = options.widgetNavigationAllowed
         let isPartySession = options.isPartySession
+        let boardConnection = options.boardConnection
+        let holderDisplayName = options.holderDisplayName
         let boardBackgroundPaths = options.boardBackgroundPaths
 
         // Store session details for push token registration.
@@ -659,6 +661,11 @@ public class LiveActivityModule: Module {
                 isPartySession: isPartySession,
                 to: defaults
             )
+            SharedWidgetWallControlState.saveBoardConnection(
+                boardConnection,
+                holderDisplayName: holderDisplayName,
+                to: defaults
+            )
         }
         if let authToken = authToken {
             if authToken.isEmpty {
@@ -706,7 +713,9 @@ public class LiveActivityModule: Module {
             totalClimbs: 0,
             hasNext: false,
             hasPrevious: false,
-            climbUuid: ""
+            climbUuid: "",
+            boardConnection: boardConnection,
+            holderDisplayName: holderDisplayName
         )
 
         let pushTokenHandler: @Sendable (String) -> Void = { [weak self] token in
@@ -806,9 +815,11 @@ public class LiveActivityModule: Module {
         var wallControlChanged = false
         if let defaults = SharedConstants.sharedDefaults {
             let previousWallControl = SharedWidgetWallControlState.load(from: defaults)
+            let previousBoardConnection = defaults.string(forKey: SharedConstants.boardConnectionKey)
             wallControlChanged =
                 previousWallControl.navigationAllowed != options.widgetNavigationAllowed ||
-                previousWallControl.requiresServerAuthorization != options.isPartySession
+                previousWallControl.requiresServerAuthorization != options.isPartySession ||
+                previousBoardConnection != options.boardConnection
 
             var queueItems: [SharedQueueItem] = []
             for item in options.queue {
@@ -829,6 +840,11 @@ public class LiveActivityModule: Module {
                 isPartySession: options.isPartySession,
                 to: defaults
             )
+            SharedWidgetWallControlState.saveBoardConnection(
+                options.boardConnection,
+                holderDisplayName: options.holderDisplayName,
+                to: defaults
+            )
         }
 
         let state = ClimbSessionAttributes.ContentState(
@@ -839,7 +855,9 @@ public class LiveActivityModule: Module {
             totalClimbs: options.totalClimbs,
             hasNext: options.hasNext,
             hasPrevious: options.hasPrevious,
-            climbUuid: options.climbUuid
+            climbUuid: options.climbUuid,
+            boardConnection: options.boardConnection,
+            holderDisplayName: options.holderDisplayName
         )
 
         let activityManager = LiveActivityManager.shared
@@ -861,14 +879,21 @@ public class LiveActivityModule: Module {
         var wallControlChanged = false
         if let defaults = SharedConstants.sharedDefaults {
             let previousWallControl = SharedWidgetWallControlState.load(from: defaults)
+            let previousBoardConnection = defaults.string(forKey: SharedConstants.boardConnectionKey)
             wallControlChanged =
                 previousWallControl.navigationAllowed != options.widgetNavigationAllowed ||
-                previousWallControl.requiresServerAuthorization != options.isPartySession
+                previousWallControl.requiresServerAuthorization != options.isPartySession ||
+                previousBoardConnection != options.boardConnection
 
             SharedQueueState.saveCurrentIndex(options.currentIndex, to: defaults)
             SharedWidgetWallControlState.save(
                 navigationAllowed: options.widgetNavigationAllowed,
                 isPartySession: options.isPartySession,
+                to: defaults
+            )
+            SharedWidgetWallControlState.saveBoardConnection(
+                options.boardConnection,
+                holderDisplayName: options.holderDisplayName,
                 to: defaults
             )
         }
@@ -881,7 +906,9 @@ public class LiveActivityModule: Module {
             totalClimbs: options.totalClimbs,
             hasNext: options.hasNext,
             hasPrevious: options.hasPrevious,
-            climbUuid: options.climbUuid
+            climbUuid: options.climbUuid,
+            boardConnection: options.boardConnection,
+            holderDisplayName: options.holderDisplayName
         )
 
         let activityManager = LiveActivityManager.shared
@@ -910,6 +937,12 @@ struct StartSessionOptions: Record {
     @Field var graphqlUrl: String?
     @Field var widgetNavigationAllowed: Bool = true
     @Field var isPartySession: Bool = false
+    /// Board-connection state from THIS device's POV: "connectedByMe" |
+    /// "heldByPeer" | "disconnected". Defaults to connectedByMe so a build that
+    /// predates the JS side sending it behaves as before.
+    @Field var boardConnection: String = "connectedByMe"
+    /// Display name of the peer holding the board (heldByPeer only).
+    @Field var holderDisplayName: String?
     /// Bundled board-background webp file paths (JS-resolved via expo-asset).
     /// Empty when none resolved. iOS-only; the Android SessionPresence Record
     /// ignores the extra key.
@@ -939,6 +972,8 @@ struct UpdateActivityOptions: Record {
     @Field var queue: [UpdateActivityQueueItem] = []
     @Field var widgetNavigationAllowed: Bool = true
     @Field var isPartySession: Bool = false
+    @Field var boardConnection: String = "connectedByMe"
+    @Field var holderDisplayName: String?
 }
 
 struct UpdateActivityClimbOptions: Record {
@@ -952,4 +987,6 @@ struct UpdateActivityClimbOptions: Record {
     @Field var climbUuid: String = ""
     @Field var widgetNavigationAllowed: Bool = true
     @Field var isPartySession: Bool = false
+    @Field var boardConnection: String = "connectedByMe"
+    @Field var holderDisplayName: String?
 }

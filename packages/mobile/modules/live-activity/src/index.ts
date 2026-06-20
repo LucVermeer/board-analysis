@@ -68,6 +68,18 @@ export const boardBleNative = requireOptionalNativeModule<BoardBleNativeModule>(
 
 // --- LiveActivity native module ---
 
+/**
+ * Board-connection state from THIS device's point of view, driving the Live
+ * Activity lightbulb + Previous/Next visibility:
+ * - `connectedByMe`: this device holds the BLE link → bulb lit, controls shown.
+ * - `heldByPeer`: someone else drives the board → bulb out, controls hidden,
+ *   card shows the climb on the wall.
+ * - `disconnected`: nobody is driving → bulb out (tap to reconnect), controls
+ *   hidden.
+ * Kept in sync with the in-app lightbulb via `deriveBoardConnection`.
+ */
+export type LiveActivityBoardConnection = 'connectedByMe' | 'heldByPeer' | 'disconnected';
+
 export type LiveActivityStartSessionOptions = {
   sessionId: string;
   serverUrl: string;
@@ -80,6 +92,10 @@ export type LiveActivityStartSessionOptions = {
   graphqlUrl?: string;
   widgetNavigationAllowed: boolean;
   isPartySession: boolean;
+  /** Board-connection state from this device's POV (see the type doc). */
+  boardConnection: LiveActivityBoardConnection;
+  /** Display name of the peer holding the board (heldByPeer only). */
+  holderDisplayName?: string | null;
   /**
    * Bundled board-background webp file paths for the active board, resolved on
    * the JS side (expo-asset) and staged into the App Group so the iOS
@@ -126,6 +142,10 @@ export type LiveActivityUpdateOptions = {
   queue: LiveActivityQueueItem[];
   widgetNavigationAllowed: boolean;
   isPartySession: boolean;
+  /** Board-connection state from this device's POV (see the type doc). */
+  boardConnection: LiveActivityBoardConnection;
+  /** Display name of the peer holding the board (heldByPeer only). */
+  holderDisplayName?: string | null;
 };
 
 export type LiveActivityClimbUpdateOptions = Omit<LiveActivityUpdateOptions, 'queue'>;

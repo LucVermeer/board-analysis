@@ -41,10 +41,17 @@ import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
 import { warmPopularConfigsCache } from './graphql/resolvers/social/boards';
 import { warmRecentBetaLinksCache } from './graphql/resolvers/beta-videos/queries';
-import { initializeApns, shutdownApns, sendLiveActivityUpdate, isApnsConfigured } from './services/apns';
+import {
+  initializeApns,
+  shutdownApns,
+  sendLiveActivityUpdate,
+  setSessionHolderResolver,
+  isApnsConfigured,
+} from './services/apns';
 import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat';
 import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
 import { buildContentStateFromQueueState } from './services/apns/content-state';
+import { resolveBoardHolder } from './graphql/resolvers/board-presence/shared';
 import { logger, setInstanceIdProvider } from './utils/logger';
 import { isClientAbortError } from './utils/http-errors';
 import type { QueueEvent } from '@boardsesh/shared-schema';
@@ -113,6 +120,22 @@ export async function startServer(): Promise<ServerResources> {
 
   // Initialize APNs for iOS Live Activity push notifications
   initializeApns();
+
+  // Teach the APNs send path how to resolve a session's board holder so every
+  // pushed Live Activity reflects WHO holds the board (connectedByMe on the
+  // holder's device, heldByPeer on everyone else's). One lookup per send, keyed
+  // by the session→board mapping `reportBoardClimb` persists. Returns null when
+  // the board/holder can't be resolved (no mapping, no Redis, anonymous holder),
+  // in which case boardConnection is omitted and the device keeps its own state.
+  setSessionHolderResolver(async (sessionId: string) => {
+    const boardId = await pubsub.getSessionBoard(sessionId);
+    if (boardId === null) return null;
+    const holder = await resolveBoardHolder(Number(boardId));
+    // No holder, or an anonymous (`conn:`) holder (null userId): we can't tell
+    // whether it's this device or a peer, so omit boardConnection.
+    if (!holder || holder.userId == null) return null;
+    return { holderUserId: holder.userId, holderDisplayName: holder.displayName ?? null };
+  });
 
   // Start periodic cleanup of expired/revoked mobile refresh tokens.
   startRefreshTokenCleanup();

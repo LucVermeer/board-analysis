@@ -1,10 +1,8 @@
-import { useCallback, useContext } from 'react';
-import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
+import { useCallback } from 'react';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
-import { useBoardPresenceControls } from '../../providers/board-presence-provider';
-import { useQueueSessionControls } from '../../providers/queue-provider';
 import { track } from '../../lib/analytics';
-import { deriveLightbulbLit, derivePlayDrawerLightbulbPressAction } from '../play-drawer/lightbulb-control';
+import { derivePlayDrawerLightbulbPressAction } from '../play-drawer/lightbulb-control';
+import { useBoardConnectionState } from './use-board-connection-state';
 
 type LightbulbControlSource = 'lightbulb_toolbar' | 'lightbulb_drawer';
 
@@ -50,35 +48,9 @@ export type LightbulbControl = {
  */
 export function useLightbulbControl(options: UseLightbulbControlOptions): LightbulbControl {
   const { source, boardLayout, climbUuid } = options;
-  const bluetooth = useOptionalBluetoothContext();
-  // Subscribed to the authoritative board-presence feed iff a board is bound.
-  const { boardId } = useBoardPresenceControls();
-  // Raw context (non-throwing) so a bulb rendered outside the provider degrades
-  // to "no peer holder" instead of crashing.
-  const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
-  const { isSessionWallLit, sessionId, sessionMemberUserIds } = useQueueSessionControls();
-
-  const localConnected = bluetooth?.isConnected ?? false;
-  const pending = bluetooth?.loading ?? false;
-
-  // The board-presence holder is board-scoped (anyone on this board feed). Tie it
-  // to the session so the bulb only lights for someone I'm climbing with: a
-  // logged-in holder matches by userId; an anonymous holder falls back to the
-  // session wall-lit flag (in a session only). A holder who isn't in my session —
-  // or any holder while I'm solo — no longer lights the bulb, but its avatar still
-  // shows via the lightbulb holder pip (LightbulbHolderBadge).
-  const holder = boardPresenceCurrent?.holder ?? null;
-  const holderUserId = holder?.userId ?? null;
-  const sessionHolderPresent = sessionId !== null && holderUserId !== null && sessionMemberUserIds.has(holderUserId);
-  const holderIsAnonymous = holder !== null && holderUserId === null && sessionId !== null;
-
-  const lit = deriveLightbulbLit({
-    localConnected,
-    isSubscribedToBoardFeed: boardId !== null,
-    sessionHolderPresent,
-    holderIsAnonymous,
-    isSessionWallLit,
-  });
+  // Ownership/lit derivation is shared with the Live Activity bridge via this
+  // hook so the in-app bulb and the lock-screen bulb can never disagree.
+  const { bluetooth, lit, localConnected, pending, sessionId } = useBoardConnectionState();
 
   const onPress = useCallback(() => {
     if (!bluetooth) return;

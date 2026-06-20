@@ -43,11 +43,13 @@ enum ClimbNavigationIntent {
         logger.notice("\(label).perform() running bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public) direction=\(direction.rawValue, privacy: .public)")
 
         guard let defaults = SharedConstants.sharedDefaults else { return }
+        // No navigationAllowed gate: the widget only shows Prev/Next when this
+        // device holds the board (connectedByMe — see SessionFooter), so reaching
+        // here means we may drive. Gating visibility rather than the intent fixes
+        // Prev/Next no-op'ing when the persisted navigationAllowed flag drifted
+        // from the shown state. `wallControl` is still read below to decide whether
+        // the party-session server POST runs.
         let wallControl = SharedWidgetWallControlState.load(from: defaults)
-        guard wallControl.navigationAllowed else {
-            logger.notice("\(label).perform() ignored because this device is not the current wall driver")
-            return
-        }
 
         let (items, currentIndex) = SharedQueueState.load(from: defaults)
         guard let newIndex = direction.newIndex(from: currentIndex, count: items.count) else {
@@ -77,7 +79,11 @@ enum ClimbNavigationIntent {
             totalClimbs: items.count,
             hasNext: newIndex < items.count - 1,
             hasPrevious: newIndex > 0,
-            climbUuid: newItem.climbUuid
+            climbUuid: newItem.climbUuid,
+            // Prev/Next are only shown when this device drives the wall, so the
+            // optimistic frame keeps the bulb lit + controls shown.
+            boardConnection: "connectedByMe",
+            holderDisplayName: nil
         )
 
         for activity in Activity<ClimbSessionAttributes>.activities {

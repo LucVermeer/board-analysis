@@ -391,6 +391,39 @@ describe('board-render API route', () => {
     expect(mockWebpOptions).toHaveBeenCalledWith({ lossless: true });
   });
 
+  it('adds a dim scrim layer to the composite when dim_background is set', async () => {
+    const response = await GET(
+      makeRequest({ ...validParams, thumbnail: '1', include_background: '1', dim_background: '0.18' }),
+    );
+    expect(response.status).toBe(200);
+    expect(mockComposite).toHaveBeenCalledTimes(1);
+    // The single background is the base; the composite array is [dim scrim, holds overlay].
+    const layers = mockComposite.mock.calls[0][0] as unknown[];
+    expect(layers).toHaveLength(2);
+  });
+
+  it('does not add a dim scrim when dim_background is absent', async () => {
+    const response = await GET(makeRequest({ ...validParams, thumbnail: '1', include_background: '1' }));
+    expect(response.status).toBe(200);
+    expect(mockComposite).toHaveBeenCalledTimes(1);
+    // composite array is [holds overlay] only — no scrim.
+    const layers = mockComposite.mock.calls[0][0] as unknown[];
+    expect(layers).toHaveLength(1);
+  });
+
+  it('returns 400 when dim_background is out of range', async () => {
+    const response = await GET(makeRequest({ ...validParams, dim_background: '1.5' }));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain('dim_background');
+  });
+
+  it('ignores dim_background without include_background (overlay-only, no composite)', async () => {
+    const response = await GET(makeRequest({ ...validParams, dim_background: '0.18' }));
+    expect(response.status).toBe(200);
+    expect(mockComposite).not.toHaveBeenCalled();
+  });
+
   it('falls back to lossless when background images are missing', async () => {
     // Make findPublicImagePath return null for all candidates
     mockExistsSync.mockImplementation((path) => path.includes('.wasm'));

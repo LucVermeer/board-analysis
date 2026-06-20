@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPlayDrawerBoardLayout,
+  deriveBoardConnection,
   deriveLightbulbLit,
   derivePlayDrawerLightbulbPressAction,
 } from '../lightbulb-control';
@@ -147,5 +148,113 @@ describe('deriveLightbulbLit', () => {
         isSessionWallLit: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe('deriveBoardConnection', () => {
+  it('is connectedByMe whenever this device holds the BLE link', () => {
+    // Local connection wins over every other signal.
+    expect(
+      deriveBoardConnection({
+        localConnected: true,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: true,
+        holderIsAnonymous: false,
+        isSessionWallLit: true,
+      }),
+    ).toBe('connectedByMe');
+  });
+
+  it('is heldByPeer when a session member holds the wall', () => {
+    expect(
+      deriveBoardConnection({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: true,
+        holderIsAnonymous: false,
+        isSessionWallLit: false,
+      }),
+    ).toBe('heldByPeer');
+  });
+
+  it('is heldByPeer for an anonymous holder while the session reads lit', () => {
+    expect(
+      deriveBoardConnection({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: false,
+        holderIsAnonymous: true,
+        isSessionWallLit: true,
+      }),
+    ).toBe('heldByPeer');
+  });
+
+  it('is heldByPeer for a member who never bound the board feed but the session is lit', () => {
+    expect(
+      deriveBoardConnection({
+        localConnected: false,
+        isSubscribedToBoardFeed: false,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
+        isSessionWallLit: true,
+      }),
+    ).toBe('heldByPeer');
+  });
+
+  it('is disconnected when nobody tied to me is driving', () => {
+    // Subscribed, holder is a stranger / cleared, no session flag.
+    expect(
+      deriveBoardConnection({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
+        isSessionWallLit: false,
+      }),
+    ).toBe('disconnected');
+
+    // A stuck session flag with a cleared holder still reads disconnected.
+    expect(
+      deriveBoardConnection({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
+        isSessionWallLit: true,
+      }),
+    ).toBe('disconnected');
+
+    // No board feed, no session flag.
+    expect(
+      deriveBoardConnection({
+        localConnected: false,
+        isSubscribedToBoardFeed: false,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
+        isSessionWallLit: false,
+      }),
+    ).toBe('disconnected');
+  });
+
+  it('stays in lockstep with deriveLightbulbLit (lit ⇔ not disconnected) across all inputs', () => {
+    const bools = [false, true];
+    for (const localConnected of bools) {
+      for (const isSubscribedToBoardFeed of bools) {
+        for (const sessionHolderPresent of bools) {
+          for (const holderIsAnonymous of bools) {
+            for (const isSessionWallLit of bools) {
+              const args = {
+                localConnected,
+                isSubscribedToBoardFeed,
+                sessionHolderPresent,
+                holderIsAnonymous,
+                isSessionWallLit,
+              };
+              expect(deriveLightbulbLit(args)).toBe(deriveBoardConnection(args) !== 'disconnected');
+            }
+          }
+        }
+      }
+    }
   });
 });

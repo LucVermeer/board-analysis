@@ -64,6 +64,7 @@ function Harness() {
     isSessionActive: true,
     widgetNavigationAllowed: true,
     isPartySession: false,
+    boardConnection: 'connectedByMe',
   });
   return null;
 }

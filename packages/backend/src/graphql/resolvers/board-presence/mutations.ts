@@ -20,6 +20,8 @@ import { generateUniqueSlug } from '../social/boards';
 import { logger } from '../../../utils/logger';
 import { pubsub } from '../../../pubsub/index';
 import { roomManager } from '../../../services/room-manager';
+import { isApnsConfigured, sendLiveActivityUpdate } from '../../../services/apns';
+import { buildContentStateFromQueueState } from '../../../services/apns/content-state';
 import {
   assertValidBoardId,
   candidateToActiveBoard,
@@ -508,14 +510,29 @@ export const boardPresenceMutations = {
     // Outside the Redis try below since it can't fail and must not be swallowed.
     roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
 
+    // Remember which board this connection's party session is on (when it's in
+    // one), so the APNs Live Activity path can resolve the board's holder for a
+    // session — QueueState/push-token rows carry sessionId but not boardId. Best-
+    // effort: a solo (no-session) sender just doesn't establish a mapping.
+    const reportingSessionId = roomManager.getClient(ctx.connectionId)?.sessionId ?? null;
+    if (reportingSessionId) {
+      try {
+        await pubsub.setSessionBoard(reportingSessionId, String(boardId));
+      } catch (error) {
+        logger.warn(`[board-presence] setSessionBoard failed: ${String(error)}`);
+      }
+    }
+
     // This emitter is now the board's connection holder. The holder is Redis-only
     // (degrades to "no holder" without Redis), so only broadcast a hand-off when
     // Redis actually backs the writer — otherwise setBoardWriter returns null and
     // `null !== emitterId` would spuriously broadcast on every send. Non-fatal.
+    let writerChanged = false;
     if (pubsub.isRedisConnected()) {
       try {
         const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
         if (previousHolder !== emitterId) {
+          writerChanged = true;
           pubsub.publishBoardPresenceEvent(String(boardId), {
             __typename: 'BoardConnectionChanged',
             holder: {
@@ -530,6 +547,25 @@ export const boardPresenceMutations = {
       } catch (error) {
         logger.warn(`[board-presence] board writer update failed: ${String(error)}`);
       }
+    }
+
+    // A board hand-off (a peer took over) changes every device's
+    // boardConnection, but it isn't a queue event — the queue-event hook that
+    // normally drives Live Activity pushes never fires here. So when the holder
+    // changes, kick a debounced push for the affected session so backgrounded
+    // iPhones flip to heldByPeer/connectedByMe right away rather than waiting up
+    // to 90s for the heartbeat backstop. Fire-and-forget; the heartbeat catches
+    // any miss. Skipped entirely when APNs is unconfigured.
+    if (writerChanged && reportingSessionId && isApnsConfigured()) {
+      void (async () => {
+        try {
+          const queueState = await roomManager.getQueueState(reportingSessionId);
+          const contentState = buildContentStateFromQueueState(queueState);
+          if (contentState) sendLiveActivityUpdate(reportingSessionId, contentState);
+        } catch (error) {
+          logger.warn(`[board-presence] Live Activity dispatch on writer change failed: ${String(error)}`);
+        }
+      })();
     }
 
     // Durable history (logged-in + dwell-gated): persist this push to
