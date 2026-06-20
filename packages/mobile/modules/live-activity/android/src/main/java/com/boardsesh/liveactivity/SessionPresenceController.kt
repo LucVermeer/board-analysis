@@ -68,7 +68,10 @@ internal class SessionPresenceController(
             putExtra(BoardSessionService.EXTRA_RECONNECT_LABEL, strings?.reconnectLabel ?: "Connect to board")
             putExtra(BoardSessionService.EXTRA_ON_WALL_TEMPLATE, strings?.onWallTemplate ?: "{{name}} is on the wall")
             // Initial lightbulb / controls state before the first climb update.
-            putExtra(BoardSessionService.EXTRA_BOARD_CONNECTION, options?.boardConnection ?: "connectedByMe")
+            putExtra(
+                BoardSessionService.EXTRA_BOARD_CONNECTION,
+                options?.boardConnection ?: BoardSessionService.CONNECTION_CONNECTED_BY_ME,
+            )
             options?.holderDisplayName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
         }
         // Startup path: a failed initial promotion means the service never

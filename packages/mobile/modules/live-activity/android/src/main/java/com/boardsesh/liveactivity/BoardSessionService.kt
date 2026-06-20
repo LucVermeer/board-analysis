@@ -278,7 +278,10 @@ class BoardSessionService : Service() {
         return builder.build()
     }
 
-    private fun buildContentView(layoutId: Int): RemoteViews {
+    // internal so a test can inflate the result and assert the rendered holder line
+    // without going through the DecoratedCustomViewStyle framework wrapper.
+    @VisibleForTesting
+    internal fun buildContentView(layoutId: Int): RemoteViews {
         val views = RemoteViews(packageName, layoutId)
         views.setTextViewText(R.id.session_title, climbName ?: contentTitleFallback)
 

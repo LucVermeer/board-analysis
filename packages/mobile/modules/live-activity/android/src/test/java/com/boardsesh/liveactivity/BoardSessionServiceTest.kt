@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.core.app.ServiceCompat
 import androidx.test.core.app.ApplicationProvider
 import io.mockk.every
@@ -308,6 +310,32 @@ class BoardSessionServiceTest {
             "heldByPeer",
             shadowOf(outlineBulb.actionIntent).savedIntent.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION),
         )
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `the on-the-wall holder line shows for heldByPeer and clears when this device takes the board`() {
+        every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        // A peer holds the board: the expanded card shows "<name> is on the wall".
+        service.onStartCommand(updateIntent("heldByPeer", holderName = "Alex"), 0, 2)
+        val heldHolder = service.buildContentView(R.layout.notification_session_expanded)
+            .apply(context, FrameLayout(context))
+            .findViewById<TextView>(R.id.session_holder)
+        assertEquals(android.view.View.VISIBLE, heldHolder.visibility)
+        assertEquals("Alex is on the wall", heldHolder.text.toString())
+
+        // This device takes the board back. The connectedByMe update simply omits
+        // EXTRA_HOLDER_NAME, so the line must clear — not linger from the prior hold.
+        service.onStartCommand(updateIntent("connectedByMe"), 0, 3)
+        val mineHolder = service.buildContentView(R.layout.notification_session_expanded)
+            .apply(context, FrameLayout(context))
+            .findViewById<TextView>(R.id.session_holder)
+        assertEquals(android.view.View.GONE, mineHolder.visibility)
     }
 
     @Test
