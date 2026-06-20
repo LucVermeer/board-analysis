@@ -28,6 +28,10 @@ import { spacing, borderRadius, shadows } from '../../src/theme/tokens';
 const REGION_DEBOUNCE_MS = 500;
 const MIN_MOVE_DEG = 0.04;
 
+// The floating close button is a fixed square; the "Showing <place>" pill aligns
+// under the search field by clearing the button + the row gap.
+const CLOSE_BUTTON_SIZE = 44;
+
 function movedEnough(a: Coords, b: Coords): boolean {
   const dLat = a.latitude - b.latitude;
   const dLng = a.longitude - b.longitude;
@@ -68,6 +72,18 @@ export default function GymDiscovery() {
 
   // A chosen view (searched or panned) wins; fall back to the device fix.
   const center = viewCenter ?? location.coords;
+
+  // Stable sheet chrome styles so they don't allocate a new object each render.
+  const sheetBackgroundStyle = useMemo(
+    () => ({ backgroundColor: systemColors.secondaryBackground }),
+    [systemColors.secondaryBackground],
+  );
+  const sheetHandleStyle = useMemo(
+    () => ({ backgroundColor: systemColors.tertiaryLabel }),
+    [systemColors.tertiaryLabel],
+  );
+  // Clear the home indicator / gesture bar at the bottom of the list.
+  const listContentStyle = useMemo(() => [styles.list, { paddingBottom: insets.bottom + spacing[6] }], [insets.bottom]);
 
   // Refs mirror state so the stable, debounced region handler reads fresh values
   // without being torn down and rebuilt on every pan.
@@ -238,7 +254,12 @@ export default function GymDiscovery() {
       />
       {isGeocoding ? <ActivityIndicator /> : null}
       {inputText.length > 0 || searchLabel ? (
-        <Pressable onPress={clearSearch} hitSlop={8} accessibilityLabel={t('mobile.gyms.clearSearch')}>
+        <Pressable
+          onPress={clearSearch}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.gyms.clearSearch')}
+        >
           <Icon name="close" size={18} color={systemColors.secondaryLabel} />
         </Pressable>
       ) : null}
@@ -263,7 +284,9 @@ export default function GymDiscovery() {
     </View>
   );
 
-  const screen = <Stack.Screen options={{ title: t('mobile.gyms.title'), headerShown: false }} />;
+  // The root stack hides headers globally; this screen draws its own floating
+  // top bar over the map. The title is kept for the back/breadcrumb affordance.
+  const screen = <Stack.Screen options={{ title: t('mobile.gyms.title') }} />;
 
   // No place to show yet: prompt for location (the search bar above still works
   // for browsing a typed place without granting it).
@@ -318,10 +341,10 @@ export default function GymDiscovery() {
         index={1}
         snapPoints={SNAP_POINTS}
         enablePanDownToClose={false}
-        backgroundStyle={{ backgroundColor: systemColors.secondaryBackground }}
-        handleIndicatorStyle={{ backgroundColor: systemColors.tertiaryLabel }}
+        backgroundStyle={sheetBackgroundStyle}
+        handleIndicatorStyle={sheetHandleStyle}
       >
-        <BottomSheetScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <BottomSheetScrollView contentContainerStyle={listContentStyle} showsVerticalScrollIndicator={false}>
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
             {t('mobile.gyms.subtitle')}
           </Text>
@@ -433,8 +456,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeButton: {
-    width: 44,
-    height: 44,
+    width: CLOSE_BUTTON_SIZE,
+    height: CLOSE_BUTTON_SIZE,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -456,7 +479,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     borderRadius: borderRadius.full,
-    marginLeft: 44 + spacing[2],
+    marginLeft: CLOSE_BUTTON_SIZE + spacing[2],
   },
   center: {
     flex: 1,
@@ -473,7 +496,6 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: spacing[4],
-    paddingBottom: spacing[8],
     gap: spacing[2],
   },
   sectionLabel: {

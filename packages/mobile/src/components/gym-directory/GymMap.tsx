@@ -1,4 +1,4 @@
-import { Component, forwardRef, memo, useCallback, useImperativeHandle, useRef, type ReactNode } from 'react';
+import { Component, forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
 import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 export type GymMapMarker = {
@@ -89,6 +89,17 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
     nativeRef.current = (instance as NativeMapHandle | null) ?? null;
   }, []);
 
+  // Markers only change on a refetch; rebuild the native marker array then, not
+  // on the re-renders a changing `center` prop triggers during a pan.
+  const mapMarkers = useMemo(
+    () =>
+      markers.map((marker) => ({
+        coordinates: { latitude: marker.latitude, longitude: marker.longitude },
+        title: marker.name,
+      })),
+    [markers],
+  );
+
   if (!Maps) return null;
   // requireNativeView can hand back a component that exists in JS but throws on
   // mount when the native side is absent — the boundary above is the real guard;
@@ -100,10 +111,6 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
     coordinates: initialCameraRef.current,
     zoom: DEFAULT_ZOOM,
   };
-  const mapMarkers = markers.map((marker) => ({
-    coordinates: { latitude: marker.latitude, longitude: marker.longitude },
-    title: marker.name,
-  }));
 
   // expo-maps types the camera coordinates as optional; only forward a complete
   // pair so the screen never re-queries around a half-defined center.
