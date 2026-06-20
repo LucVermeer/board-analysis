@@ -434,26 +434,38 @@ class BoardSessionService : Service() {
     // a dark base. No server.
     private fun composeThumbnail(overlay: String, backgrounds: List<String>): Bitmap? {
         val overlayBitmap = decodeLocalFile(overlay) ?: return null
-        val width = overlayBitmap.width
-        val height = overlayBitmap.height
-        val composed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(composed)
-        canvas.drawColor(thumbBackingColor)
-        val dst = Rect(0, 0, width, height)
-        for (path in backgrounds) {
-            val background = decodeLocalFile(path) ?: continue
-            canvas.drawBitmap(background, null, dst, null)
-            background.recycle()
+        var composed: Bitmap? = null
+        var scaled: Bitmap? = null
+        var rounded: Bitmap? = null
+        try {
+            val width = overlayBitmap.width
+            val height = overlayBitmap.height
+            composed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(composed)
+            canvas.drawColor(thumbBackingColor)
+            val dst = Rect(0, 0, width, height)
+            for (path in backgrounds) {
+                val background = decodeLocalFile(path) ?: continue
+                try {
+                    canvas.drawBitmap(background, null, dst, null)
+                } finally {
+                    background.recycle()
+                }
+            }
+            canvas.drawBitmap(overlayBitmap, null, dst, null)
+            scaled = downscale(composed)
+            rounded = roundCorners(scaled)
+            return rounded
+        } finally {
+            // Recycle every decoded/intermediate bitmap; only the returned `rounded`
+            // survives (roundCorners always allocates a fresh one). On the success
+            // path this is the eager free that keeps native bitmap memory off the GC;
+            // on an exception path (e.g. createBitmap/createScaledBitmap OOM) it stops
+            // a leak the outer Throwable catch would otherwise silently swallow.
+            overlayBitmap.recycle()
+            composed?.let { if (it !== scaled && it !== rounded) it.recycle() }
+            scaled?.let { if (it !== rounded) it.recycle() }
         }
-        canvas.drawBitmap(overlayBitmap, null, dst, null)
-        overlayBitmap.recycle()
-        // Free the intermediates eagerly so native bitmap memory isn't left to the
-        // GC on low-memory devices — only the final rounded bitmap is retained.
-        val scaled = downscale(composed)
-        if (scaled !== composed) composed.recycle()
-        val rounded = roundCorners(scaled)
-        if (rounded !== scaled) scaled.recycle()
-        return rounded
     }
 
     private fun decodeLocalFile(path: String): Bitmap? {
