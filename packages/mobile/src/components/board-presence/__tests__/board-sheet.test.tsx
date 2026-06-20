@@ -8,6 +8,7 @@ const presence = vi.hoisted(() => ({
   currentClimb: null as BoardPresenceClimb | null,
   history: [] as BoardPresenceClimb[],
   stats: null as BoardPresenceStats | null,
+  refresh: vi.fn(),
 }));
 
 const presenceControls = vi.hoisted(() => ({
@@ -62,6 +63,9 @@ vi.mock('react-native', () => ({
     accessibilityLabel,
   }: ViewMockProps & { onPress?: () => void; accessibilityLabel?: string }) =>
     createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
+  // Surface onRefresh as a clickable element so the pull-to-refresh wiring is testable.
+  RefreshControl: ({ onRefresh }: { onRefresh?: () => void }) =>
+    createElement('button', { onClick: onRefresh, 'aria-label': 'refresh' }),
 }));
 
 vi.mock('@gorhom/bottom-sheet', () => ({
@@ -77,16 +81,19 @@ vi.mock('@gorhom/bottom-sheet', () => ({
     ListHeaderComponent,
     ListEmptyComponent,
     keyExtractor,
+    refreshControl,
   }: {
     data: BoardPresenceClimb[];
     renderItem: (info: { item: BoardPresenceClimb }) => ReactNode;
     ListHeaderComponent?: ReactNode;
     ListEmptyComponent?: ReactNode;
     keyExtractor: (item: BoardPresenceClimb) => string;
+    refreshControl?: ReactNode;
   }) =>
     createElement(
       'div',
       { 'data-list': 'true' },
+      refreshControl,
       ListHeaderComponent,
       data.length === 0
         ? ListEmptyComponent
@@ -117,6 +124,7 @@ vi.mock('@boardsesh/board-presence-react', () => ({
     isLive: true,
   }),
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
+  useBoardPresenceActions: () => ({ refresh: presence.refresh }),
 }));
 
 vi.mock('../../../providers/board-presence-provider', () => ({
@@ -278,6 +286,7 @@ describe('BoardSheet', () => {
     presence.history = [];
     presence.stats = null;
     presenceControls.boardId = 123;
+    presence.refresh.mockClear();
     analytics.track.mockClear();
     graphql.request.mockReset();
     toast.showToast.mockClear();
@@ -322,7 +331,23 @@ describe('BoardSheet', () => {
     expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardNowPlayingReceived, {
       boardId: 123,
       climbUuid: 'c1',
+      seq: 3,
     });
+  });
+
+  it('triggers a manual catch-up when the history list is pulled to refresh', () => {
+    presence.history = [makeClimb('c1', 3)];
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('refresh'));
+    expect(presence.refresh).toHaveBeenCalledWith('manual');
   });
 
   it('tracks history views from the imperative present call', () => {

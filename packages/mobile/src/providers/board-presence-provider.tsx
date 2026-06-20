@@ -20,14 +20,21 @@
 // (b) report a freshly-lit climb on wall-confirm. Reads of the wall's current
 // climb go through `@boardsesh/board-presence-react`'s split contexts.
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
-import { BoardPresenceProvider } from '@boardsesh/board-presence-react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AppState } from 'react-native';
+import {
+  BoardPresenceProvider,
+  useBoardPresenceActions,
+  type BoardPresenceCatchUpInfo,
+} from '@boardsesh/board-presence-react';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { BoardCandidate, ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
 import {
   createMobileBoardPresenceClient,
   type MobileBoardPresenceClient,
 } from '../lib/board-presence/board-presence-client';
 import { getWsClient } from '../lib/graphql/ws-client';
+import { track } from '../lib/analytics';
 import { BoardDisambiguationSheet } from '../components/board-discovery/BoardDisambiguationSheet';
 
 /** Board config needed to find-or-bind the shared board on first sighting. */
@@ -298,6 +305,18 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     setPendingDisambiguation(null);
   }, []);
 
+  // Telemetry for every catch-up. `recoveredThroughSeqDelta > 0` means the live
+  // feed silently dropped pushes (Redis pub/sub has no replay) and we just
+  // recovered them — the measurable "history was slow to update" signal. Stable
+  // identity (reads boardIdRef) so it never re-binds the presence subscription.
+  const handleCatchUp = useCallback((info: BoardPresenceCatchUpInfo) => {
+    track(SHARED_EVENTS.BoardHistoryCatchUp, {
+      boardId: boardIdRef.current ?? undefined,
+      reason: info.reason,
+      recoveredThroughSeqDelta: info.recoveredThroughSeqDelta,
+    });
+  }, []);
+
   const controls = useMemo<BoardPresenceControlsValue>(
     () => ({
       enabled,
@@ -323,7 +342,8 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
 
   return (
     <BoardPresenceControlsContext.Provider value={controls}>
-      <BoardPresenceProvider boardId={boardId} client={client}>
+      <BoardPresenceProvider boardId={boardId} client={client} onCatchUp={handleCatchUp}>
+        <BoardPresenceForegroundSync />
         {children}
       </BoardPresenceProvider>
       <BoardDisambiguationSheet
@@ -334,6 +354,28 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       />
     </BoardPresenceControlsContext.Provider>
   );
+}
+
+/**
+ * Refetch the wall feed when the app returns to the foreground. iOS can suspend
+ * the WebSocket while the app is backgrounded without emitting a clean
+ * reconnect, so climbs pushed in the meantime are dropped (Redis pub/sub has no
+ * replay) and the seq-gap detector only recovers them if a *later* event
+ * arrives. A foreground catch-up pulls them from the durable history right away.
+ * Rendered inside `BoardPresenceProvider` so it can read the `refresh` action;
+ * the catch-up coalescer dedups it against any reconnect/gap catch-up.
+ */
+function BoardPresenceForegroundSync(): null {
+  const { refresh } = useBoardPresenceActions();
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        refresh('foreground');
+      }
+    });
+    return () => subscription.remove();
+  }, [refresh]);
+  return null;
 }
 
 /**

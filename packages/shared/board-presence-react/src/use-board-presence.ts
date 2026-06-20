@@ -30,6 +30,30 @@ import type {
 } from '@boardsesh/shared-schema';
 import type { BoardPresenceClient } from './types';
 
+/**
+ * Why a catch-up (re-fetch of recent climbs + stats + connection) ran. Live
+ * events ride Redis pub/sub, which has no replay — so anything published while
+ * this client's socket was mid-reconnect is gone, and the durable Redis history
+ * list is the only recovery source. These are the four triggers that pull it:
+ * - `gap`: a live event arrived with a seq jump (we already missed something).
+ * - `reconnect`: the WebSocket reconnected (events in the gap window are lost).
+ * - `foreground`: the app returned to the foreground (socket may have been
+ *   suspended by the OS without a clean reconnect).
+ * - `manual`: an explicit user refresh (pull-to-refresh).
+ */
+export type BoardPresenceCatchUpReason = 'gap' | 'reconnect' | 'foreground' | 'manual';
+
+/** Telemetry payload emitted after a catch-up completes. */
+export type BoardPresenceCatchUpInfo = {
+  reason: BoardPresenceCatchUpReason;
+  /**
+   * How far the catch-up advanced the observed seq beyond what we'd seen when
+   * it started — a proxy for the number of live events that had been silently
+   * missed and were just recovered. `0` means the catch-up found nothing new.
+   */
+  recoveredThroughSeqDelta: number;
+};
+
 export type UseBoardPresenceResult = {
   currentClimb: BoardPresenceCurrentState['currentClimb'];
   previousClimb: BoardPresenceCurrentState['previousClimb'];
@@ -42,6 +66,7 @@ export type UseBoardPresenceResult = {
   reportClimbWithUndoTarget: BoardPresenceActions['reportClimbWithUndoTarget'];
   reportDisconnect: BoardPresenceActions['reportDisconnect'];
   getUndoTarget: BoardPresenceActions['getUndoTarget'];
+  refresh: BoardPresenceActions['refresh'];
 };
 
 export type BoardPresenceReportResult = {
@@ -91,6 +116,13 @@ export type BoardPresenceActions = {
   reportDisconnect: () => Promise<boolean>;
   /** Latest captured undo target for action-only consumers that need a ref-like read. */
   getUndoTarget: () => BoardPresenceClimb | null;
+  /**
+   * Force a catch-up: re-fetch recent climbs + stats + connection from the
+   * durable Redis-backed source and merge them in (deduped by seq). Use for
+   * pull-to-refresh (`manual`) and app-foreground recovery (`foreground`). A
+   * no-op while inert; coalesced with any in-flight catch-up.
+   */
+  refresh: (reason?: BoardPresenceCatchUpReason) => void;
 };
 
 function boardPresenceEventSeq(event: BoardPresenceEvent): number | null {
@@ -110,7 +142,11 @@ function highestClimbSeq(climbs: BoardPresenceClimb[]): number {
   return climbs.reduce((highestSeq, climb) => Math.max(highestSeq, climb.seq), 0);
 }
 
-export function useBoardPresence(boardId: number | null, client: BoardPresenceClient | null): UseBoardPresenceResult {
+export function useBoardPresence(
+  boardId: number | null,
+  client: BoardPresenceClient | null,
+  onCatchUp?: (info: BoardPresenceCatchUpInfo) => void,
+): UseBoardPresenceResult {
   const [state, dispatch] = useReducer(boardPresenceReducer, initialBoardPresenceState);
   const [isLive, setIsLive] = useState(false);
   const [undoTarget, setUndoTarget] = useState<BoardPresenceClimb | null>(null);
@@ -126,6 +162,14 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
   const undoTargetRef = useRef<BoardPresenceClimb | null>(undoTarget);
   undoTargetRef.current = undoTarget;
   const observedSeqRef = useRef(0);
+  // Keep the telemetry callback in a ref so it can change without forcing the
+  // subscription effect (keyed on [boardId, client]) to tear down and re-attach.
+  const onCatchUpRef = useRef(onCatchUp);
+  onCatchUpRef.current = onCatchUp;
+  // Points at the active effect-run's `runCatchUp`, so the stable `refresh()`
+  // action and the AppState/reconnect triggers can invoke it without being
+  // listed in the effect deps. Null while inert.
+  const catchUpRef = useRef<((reason: BoardPresenceCatchUpReason) => void) | null>(null);
 
   useEffect(() => {
     // No board or no transport: collapse to the initial state and stay inert.
@@ -135,6 +179,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       setIsLive(false);
       setUndoTarget(null);
       observedSeqRef.current = 0;
+      catchUpRef.current = null;
       return;
     }
 
@@ -147,6 +192,9 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     let isActive = true;
     let catchUpInFlight = false;
     let catchUpRequested = false;
+    // Reason for a catch-up requested while another was already in flight; the
+    // coalesced follow-up run reports the most recent trigger.
+    let catchUpRequestedReason: BoardPresenceCatchUpReason = 'gap';
     // Once a baseline exists, a live gap may trigger catch-up even while the
     // initial backfill is still resolving. That overlap is safe: both paths
     // merge through BACKFILL_HISTORY, which dedups by (climbUuid, seq).
@@ -155,12 +203,13 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     // ignored by comparing against the ref, which the cleanup flips off.
     const subscribedBoardId = boardId;
 
-    const runCatchUp = () => {
+    const runCatchUp = (reason: BoardPresenceCatchUpReason) => {
       if (!isActive || boardIdRef.current !== subscribedBoardId) {
         return;
       }
       if (catchUpInFlight) {
         catchUpRequested = true;
+        catchUpRequestedReason = reason;
         return;
       }
 
@@ -203,6 +252,13 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
               payload: { holder: connectionResult.value ?? null, upToSeq: repairedThroughSeq },
             });
           }
+
+          // Emit telemetry: how far this catch-up advanced past what we'd seen
+          // when it started ≈ the live events that had been silently dropped and
+          // were just recovered. Drop the first backfill's apparent "gap" from a
+          // zero baseline — that's the normal cold-start seed, not a recovery.
+          const recoveredThroughSeqDelta = startedAtSeq > 0 ? Math.max(0, repairedThroughSeq - startedAtSeq) : 0;
+          onCatchUpRef.current?.({ reason, recoveredThroughSeqDelta });
         })
         .finally(() => {
           if (!isActive) {
@@ -211,10 +267,11 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
           catchUpInFlight = false;
           if (catchUpRequested) {
             catchUpRequested = false;
-            runCatchUp();
+            runCatchUp(catchUpRequestedReason);
           }
         });
     };
+    catchUpRef.current = runCatchUp;
 
     // 1) Subscribe FIRST. Events arriving during the catch-up fetches below are
     //    buffered straight into the reducer; the reducer's seq-dedup then keeps
@@ -230,7 +287,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
           const previousObservedSeq = observedSeqRef.current;
           observedSeqRef.current = Math.max(previousObservedSeq, eventSeq);
           if (hasSequenceBaseline && eventSeq > previousObservedSeq + 1) {
-            runCatchUp();
+            runCatchUp('gap');
           }
           hasSequenceBaseline = true;
         }
@@ -251,6 +308,15 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       },
     );
     setIsLive(true);
+
+    // 1b) Catch up on every reconnect. graphql-ws transparently re-subscribes
+    //     after a dropped socket, but the live feed rides Redis pub/sub (no
+    //     replay), so any climb pushed during the gap window is lost for this
+    //     client and the seq-gap detector above only fires if a *later* event
+    //     happens to arrive. Proactively re-read the durable Redis history on
+    //     reconnect so a just-missed send shows up without waiting for the next
+    //     one. Optional on the client (web omits it); returns an unsubscribe.
+    const unsubscribeReconnect = client.onReconnect?.(() => runCatchUp('reconnect'));
 
     // 2) Backfill recent history, then 3) seed stats. Both guarded against
     //    unmount and against a board switch (a late resolve for the previous
@@ -303,9 +369,18 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     return () => {
       isActive = false;
       setIsLive(false);
+      catchUpRef.current = null;
+      unsubscribeReconnect?.();
       unsubscribe();
     };
   }, [boardId, client]);
+
+  // Stable manual catch-up trigger. Defaults to `manual` (pull-to-refresh);
+  // callers pass `foreground` for app-resume recovery. Reads the live
+  // `catchUpRef` so it never re-binds the subscription effect.
+  const refresh = useCallback((reason: BoardPresenceCatchUpReason = 'manual') => {
+    catchUpRef.current?.(reason);
+  }, []);
 
   const reportClimbWithUndoTarget = useCallback(
     async (climb: ClimbQueueItemInput, angle: number | null): Promise<BoardPresenceReportResult> => {
@@ -360,6 +435,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       reportClimbWithUndoTarget,
       reportDisconnect,
       getUndoTarget,
+      refresh,
     }),
     [
       state.currentClimb,
@@ -373,6 +449,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       reportClimbWithUndoTarget,
       reportDisconnect,
       getUndoTarget,
+      refresh,
     ],
   );
 }

@@ -102,6 +102,22 @@ export function createMobileBoardPresenceClient(getClient: () => Client): Mobile
       );
     },
 
+    onReconnect(callback) {
+      // graphql-ws fires `connected` on the first connect AND on every
+      // reconnect. Skip the first (the initial backfill already covers it) and
+      // fire on each reconnect so the hook can re-read the durable history for
+      // anything the Redis pub/sub feed dropped during the gap. Same mechanism
+      // the queue provider uses (queue-provider.tsx on('connected')). `on`
+      // returns its own unsubscribe.
+      let connectedOnce = false;
+      return getClient().on('connected', () => {
+        if (connectedOnce) {
+          callback();
+        }
+        connectedOnce = true;
+      });
+    },
+
     async fetchRecentClimbs(boardId) {
       const data = await execute<BoardRecentClimbsData>(getClient(), {
         query: BOARD_RECENT_CLIMBS,

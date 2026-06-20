@@ -20,7 +20,31 @@ const transport = vi.hoisted(() => ({
   ),
   reportClimb: vi.fn(async () => true),
 }));
-const sharedProvider = vi.hoisted(() => ({ lastBoardId: undefined as number | null | undefined }));
+const sharedProvider = vi.hoisted(() => ({
+  lastBoardId: undefined as number | null | undefined,
+  lastOnCatchUp: undefined as ((info: { reason: string; recoveredThroughSeqDelta: number }) => void) | undefined,
+}));
+// The refresh action exposed by the (mocked) shared actions context, and a track
+// spy — so we can assert the foreground sync and catch-up telemetry wiring.
+const refreshMock = vi.hoisted(() => vi.fn());
+const trackMock = vi.hoisted(() => vi.fn());
+// Capture the AppState 'change' handler so a test can fire 'active'/'background'.
+const appState = vi.hoisted(() => {
+  const ref: { handler: ((state: string) => void) | null } = { handler: null };
+  return {
+    addEventListener: vi.fn((_event: string, cb: (state: string) => void) => {
+      ref.handler = cb;
+      return { remove: vi.fn() };
+    }),
+    fire: (state: string) => ref.handler?.(state),
+  };
+});
+
+vi.mock('react-native', () => ({
+  AppState: { addEventListener: appState.addEventListener },
+}));
+
+vi.mock('../../lib/analytics', () => ({ track: trackMock }));
 
 // Board presence is always-on (the flag was removed); the provider no longer
 // reads useFeatureFlag, but stub the module so nothing transitively loads the
@@ -54,10 +78,21 @@ vi.mock('../../components/board-discovery/BoardDisambiguationSheet', () => ({
 // Capture the boardId handed to the shared provider so we can assert it updates
 // after resolve.
 vi.mock('@boardsesh/board-presence-react', () => ({
-  BoardPresenceProvider: ({ boardId, children }: { boardId: number | null; children: ReactNode }) => {
+  BoardPresenceProvider: ({
+    boardId,
+    onCatchUp,
+    children,
+  }: {
+    boardId: number | null;
+    onCatchUp?: (info: { reason: string; recoveredThroughSeqDelta: number }) => void;
+    children: ReactNode;
+  }) => {
     sharedProvider.lastBoardId = boardId;
+    sharedProvider.lastOnCatchUp = onCatchUp;
     return createElement('div', { 'data-board-id': String(boardId) }, children);
   },
+  // BoardPresenceForegroundSync (rendered inside the provider) reads this.
+  useBoardPresenceActions: () => ({ refresh: refreshMock }),
 }));
 
 import { MobileBoardPresenceProvider, useBoardPresenceControls } from '../board-presence-provider';
@@ -105,6 +140,10 @@ describe('MobileBoardPresenceProvider', () => {
     transport.reportClimb.mockClear();
     transport.reportClimb.mockResolvedValue(true);
     sharedProvider.lastBoardId = undefined;
+    sharedProvider.lastOnCatchUp = undefined;
+    refreshMock.mockClear();
+    trackMock.mockClear();
+    appState.addEventListener.mockClear();
     capturedControls = null;
   });
 
@@ -441,5 +480,44 @@ describe('MobileBoardPresenceProvider', () => {
     });
 
     expect(transport.reportClimb).toHaveBeenCalledWith(42, { uuid: 'queue-1', climb: { uuid: 'climb-1' } }, 40);
+  });
+
+  it('catches up the wall feed when the app returns to the foreground', () => {
+    renderProvider();
+    expect(appState.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+
+    refreshMock.mockClear();
+    act(() => appState.fire('active'));
+    expect(refreshMock).toHaveBeenCalledWith('foreground');
+  });
+
+  it('does not catch up when the app goes to the background', () => {
+    renderProvider();
+    refreshMock.mockClear();
+    act(() => appState.fire('background'));
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it('tracks a catch-up telemetry event with the active boardId, reason, and recovered delta', async () => {
+    renderProvider();
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+    });
+    await waitFor(() => expect(sharedProvider.lastBoardId).toBe(42));
+
+    trackMock.mockClear();
+    act(() => sharedProvider.lastOnCatchUp?.({ reason: 'reconnect', recoveredThroughSeqDelta: 2 }));
+
+    expect(trackMock).toHaveBeenCalledWith('Board History Catch Up', {
+      boardId: 42,
+      reason: 'reconnect',
+      recoveredThroughSeqDelta: 2,
+    });
   });
 });

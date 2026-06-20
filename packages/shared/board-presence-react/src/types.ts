@@ -42,6 +42,17 @@ export interface BoardPresenceClient {
     onComplete?: () => void,
   ): () => void;
 
+  /**
+   * Register a callback fired whenever the underlying transport reconnects
+   * (i.e. on every reconnect, not the first connect). The hook uses this to
+   * catch up the durable history after a dropped socket — live events ride
+   * Redis pub/sub with no replay, so anything pushed during the reconnect
+   * window is otherwise lost for this client. Returns an unsubscribe function.
+   * Optional so read-only / web clients that don't expose reconnect events
+   * still satisfy the interface (their feed self-heals on the next live event).
+   */
+  onReconnect?(callback: () => void): () => void;
+
   /** Newest-first recent climbs, used to backfill history for a late joiner. */
   fetchRecentClimbs(boardId: number): Promise<BoardPresenceClimb[]>;
 
