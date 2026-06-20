@@ -13,7 +13,7 @@
  */
 
 import { type ReactNode } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { timing } from '../../theme/animations';
 import {
@@ -88,7 +88,13 @@ export function ActiveContextBar({
         },
       ]}
     >
-      <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}>
+      {/* Android: drop the `entering` animation entirely. Even this content-sized inner
+          Animated.View absorbs touches once it runs an `entering` layout animation —
+          Reanimated #5728 ignores pointerEvents on API 36, and in the full-width Material
+          variant (fillPrimary) the band spans the screen, freezing the top + bottom bars
+          the moment a climb is selected and the bar mounts. iOS honors pointerEvents, so
+          it keeps the fade. (#3060 split the outer View out but kept this inner fade.) */}
+      <Animated.View entering={reduceMotion || Platform.OS === 'android' ? undefined : FadeIn.duration(timing.normal)}>
         {fillPrimary ? (
           <View style={styles.fillRow} pointerEvents="box-none" importantForAccessibility="auto">
             {primary}
