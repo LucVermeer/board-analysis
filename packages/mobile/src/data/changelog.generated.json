@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-20T02:44:20.903Z",
+  "generatedAt": "2026-06-20T05:39:12.128Z",
   "entries": [
+    {
+      "prNumber": 3073,
+      "category": "new",
+      "title": "Drive your board from the Android session notification",
+      "mergedAt": "2026-06-20T05:38:00Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3073",
+      "body": "The session notification now shows your current climb with its grade, angle, and your spot in the queue, and draws the board art right on your phone. Previous and Next move the board through your queue without opening the app, and the lightbulb shows when you're connected. When a crewmate takes the board, the card steps back to show what's on the wall."
+    },
     {
       "prNumber": 3077,
       "category": "new",
