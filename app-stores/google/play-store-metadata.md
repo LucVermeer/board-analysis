@@ -53,13 +53,27 @@ so swapping either file and re-running is all it takes to update the listing.
 
 ## Screenshots
 
+**Source of truth: `app-stores/google/screenshots/pixel-2/*.png`** (committed, like the
+listing text and icon). The `android screenshots` lane uploads them, and the
+`Mobile Store Metadata` workflow runs that lane whenever the committed set changes
+on main (it's in the workflow's `paths`). `sync_image_upload: true` means an
+unchanged set is a no-op, so a text-only listing edit doesn't re-submit them.
+
+**Refreshing them:** dispatch `mobile-screenshots-android.yml` with
+`commit_to_main = true`. It builds the screenshot APK, captures fresh shots on an
+emulator, and commits them back to main via the OTA push app token — which
+re-triggers `Mobile Store Metadata`, which uploads them. The nightly cron only
+captures (uploads the artifact + posts a Discord preview); it never commits,
+because the capture isn't byte-deterministic (relative timestamps, live feed
+data) and auto-committing would churn the live listing daily.
+
 **Specs:**
 
 - Minimum 2, maximum 8 per device type (phone, 7-inch tablet, 10-inch tablet)
 - JPEG or PNG, 16:9 or 9:16 aspect ratio
 - Minimum 320px, maximum 3840px per side
 
-**Screens to capture** (8 = the Play Store phone max; captured + uploaded by `vp run mobile:screenshots --platform android`, in store display order):
+**Screens to capture** (8 = the Play Store phone max; captured by `vp run mobile:screenshots --platform android`, in store display order):
 
 1. `00-home` — activity feed, your crew's sessions
 2. `01-climbs` — browse the board's climbs
@@ -75,6 +89,38 @@ so swapping either file and re-running is all it takes to update the listing.
 ## What's New
 
 Canonical: [`fastlane/metadata/android/en-US/changelogs/default.txt`](../../fastlane/metadata/android/en-US/changelogs/default.txt). Ships with the AAB at release time — `android-apk-rn.yml` stages it as the release's `whatsNewDirectory` (Play limit: 500 characters). Update it on every release.
+
+## Publishing pipeline & the review gate
+
+The `Mobile Store Metadata` workflow pushes the full Android listing — text
+(`android metadata`), icon + feature graphic (`android images`), and screenshots
+(`android screenshots`) — to Google Play whenever the committed assets change on
+main.
+
+**Why a green run used to leave the listing stale.** `supply` commits a
+listing-only edit (no AAB) with `changes_not_sent_for_review: false`, i.e. "send
+these for review". Google rejects that on a listing-only edit with _"Please set
+the query parameter changesNotSentForReview to true"_. fastlane's default
+`rescue_changes_not_sent_for_review: true` silently catches that, re-commits with
+`changesNotSentForReview=true`, and prints "Successfully finished the upload" — so
+CI was green while the changes sat in the Play Console as **"changes ready to send
+for review"** and never published. The lanes now set
+`rescue_changes_not_sent_for_review: false`, so that case fails the workflow
+loudly instead of faking success.
+
+**Managed publishing must stay OFF.** With it off, changes that are sent for
+review auto-publish once review passes. If someone turns managed publishing on,
+every API-committed change queues under _Publishing overview → changes ready to
+publish_ and waits for a manual "Publish" — the listing will look stale again
+even though CI is green.
+
+**If the listing stops updating:** check the Play Console _Publishing overview_
+first. A backlog of "ready to send for review" / "ready to publish" means a
+review/publishing gate, not a broken upload — the workflow logs will show
+"Successfully finished the upload to Google Play". A red workflow with the
+`changesNotSentForReview` error means Google won't auto-review a listing-only
+edit and the changes must be sent for review from the Console (or bundled with a
+release).
 
 ## Testing Instructions
 

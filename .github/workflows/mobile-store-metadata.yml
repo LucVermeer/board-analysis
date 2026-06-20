@@ -1,15 +1,26 @@
 name: Mobile Store Metadata
 
-# Pushes the source-controlled store listing text to App Store Connect / Google
+# Pushes the source-controlled store listing assets to App Store Connect / Google
 # Play for the React Native app (packages/mobile). iOS uses deliver
-# (fastlane/metadata/en-US/), Android uses supply
-# (fastlane/metadata/android/en-US/). Listing text only — no binary, no
-# screenshots, no review submission, no staged rollout. The text lands on the
-# editable App Store version / Play draft listing, so a wrong value is fixed by
-# editing the .txt and re-running.
+# (fastlane/metadata/en-US/) and pushes listing text only — no binary, no
+# screenshots, no review submission. Android uses supply and pushes the full
+# committed listing: text (fastlane/metadata/android/en-US/*.txt), images
+# (.../images/icon.png + featureGraphic.png), AND phone screenshots
+# (app-stores/google/screenshots/pixel-2/*.png). No binary, no staged rollout.
 #
-# Runs automatically when the committed listing copy changes on main
-# (fastlane/metadata/** or the Fastfile lane logic), pushing to both stores. Also
+# Android review: supply commits with changes_not_sent_for_review: false (it
+# sends the changes for review). With managed publishing OFF, Google auto-
+# publishes once review passes. The lanes set rescue_changes_not_sent_for_review:
+# false so a "can't auto-send for review" rejection fails LOUDLY here instead of
+# being silently committed-but-never-submitted (the old false-green that left the
+# live listing stale). iOS deliver still lands text on the editable version
+# without submitting (submit_for_review: false).
+#
+# Runs automatically when the committed listing assets change on main
+# (fastlane/metadata/**, fastlane/Fastfile, or app-stores/google/screenshots/**),
+# pushing to both stores. The Android screenshot set is refreshed by
+# mobile-screenshots-android.yml, which captures fresh shots and commits them
+# back to main — that commit re-triggers this workflow, which uploads them. Also
 # dispatchable by hand to push a single store on demand. A push build always
 # targets `all`; a manual build uses the chosen platform input.
 #
@@ -24,6 +35,7 @@ on:
     paths:
       - 'fastlane/metadata/**'
       - 'fastlane/Fastfile'
+      - 'app-stores/google/screenshots/**'
   workflow_dispatch:
     inputs:
       platform:
@@ -119,3 +131,28 @@ jobs:
           set -euo pipefail
           [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ] || { echo "::error::Missing GOOGLE_PLAY_SERVICE_ACCOUNT_JSON."; exit 1; }
           bundle exec fastlane android images
+
+      # Uploads the committed phone screenshots (source of truth:
+      # app-stores/google/screenshots/pixel-2/), refreshed by
+      # mobile-screenshots-android.yml's commit-back. sync_image_upload: true in
+      # the lane means an unchanged set is a sha256 no-op, so re-running on a
+      # text-only change doesn't re-submit screenshots for review. Skips cleanly
+      # if no screenshots are committed yet (the lane requires >= 2), so this
+      # never blocks a text/icon push.
+      - name: Upload Play Store screenshots
+        if: ${{ env.PLATFORM == 'android' || env.PLATFORM == 'all' }}
+        working-directory: fastlane
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_DISABLE_ANIMATION: '1'
+        run: |
+          set -euo pipefail
+          [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ] || { echo "::error::Missing GOOGLE_PLAY_SERVICE_ACCOUNT_JSON."; exit 1; }
+          shots_dir="$GITHUB_WORKSPACE/app-stores/google/screenshots/pixel-2"
+          count=$(find "$shots_dir" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$count" -lt 2 ]; then
+            echo "No committed Play screenshots ($count found in $shots_dir); skipping screenshot upload."
+            exit 0
+          fi
+          bundle exec fastlane android screenshots

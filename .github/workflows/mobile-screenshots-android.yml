@@ -1,8 +1,9 @@
 name: Mobile Screenshots (Android)
 
 # Captures native Play Store / onboarding screenshots from the RN app via Maestro
-# (scripts/mobile-screenshots.ts) and uploads them as a build artifact. Manual +
-# nightly only — never gates PRs.
+# (scripts/mobile-screenshots.ts), uploads them as a build artifact, and posts the
+# set to the Discord deploy channel as a daily preview. Manual + nightly only —
+# never gates PRs.
 #
 # Split out from the old combined mobile-screenshots.yml so iOS and Android run
 # independently: an Android-only change reruns here in ~15-20 min without waiting
@@ -14,10 +15,15 @@ name: Mobile Screenshots (Android)
 # against PROD signed in as the test user (the canonical store recipe), so
 # there's no local backend.
 #
-# On a manual dispatch with `upload = true`, the captured screenshots are pushed
-# to Google Play via fastlane (screenshots ONLY — no binary or text metadata).
-# The nightly cron never uploads (it only captures); uploading mutates the live
-# listing, so it's opt-in per dispatch.
+# Getting screenshots to the store: this workflow does NOT upload to Google Play.
+# On a manual dispatch with `commit_to_main = true` it commits the captured set
+# back to main (app-stores/google/screenshots/pixel-2/) using the OTA push app
+# token; that commit re-triggers mobile-store-metadata.yml, the single uploader
+# (text + icon + screenshots together). The nightly cron only captures + uploads
+# the artifact — it never commits, because the capture isn't byte-deterministic
+# (e.g. relative timestamps), so auto-committing would churn the live listing
+# daily. Refresh the store by dispatching with commit_to_main once the captured
+# artifact looks right.
 
 on:
   workflow_dispatch:
@@ -33,8 +39,8 @@ on:
         description: 'Android emulator device label used for screenshot output'
         type: string
         default: 'Pixel 2'
-      upload:
-        description: 'Upload captured screenshots to Google Play. Never runs on the nightly cron. Requires the app-store flow.'
+      commit_to_main:
+        description: 'Commit the captured screenshots back to main (mobile-store-metadata.yml then uploads them to Google Play). Never runs on the nightly cron. Requires the app-store flow.'
         type: boolean
         default: false
   schedule:
@@ -54,7 +60,12 @@ jobs:
     timeout-minutes: 75
 
     env:
-      UPLOAD_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.upload }}
+      # Commit the captured set back to main only on an opt-in manual dispatch.
+      # The commit (path app-stores/google/screenshots/**) re-triggers
+      # mobile-store-metadata.yml, which uploads to Google Play. The nightly cron
+      # leaves this false (capture-only) so non-deterministic captures don't churn
+      # the live listing daily.
+      COMMIT_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_to_main }}
       EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
       EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
       EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
@@ -69,17 +80,38 @@ jobs:
       SCREENSHOT_USER_PASSWORD: ${{ secrets.SCREENSHOT_USER_PASSWORD || 'test' }}
 
     steps:
-      # Uploading mutates the live Play listing and the dimension gate that
-      # guards it only runs for the app-store flow, so refuse an onboarding
-      # upload up front instead of pushing the wrong screens to the store.
-      - name: Validate upload inputs
-        if: ${{ env.UPLOAD_RUN == 'true' && inputs.flow == 'onboarding' }}
+      # Committing screenshots to main feeds them straight to the live Play
+      # listing (via mobile-store-metadata.yml), and the dimension gate that
+      # guards them only runs for the app-store flow, so refuse an onboarding
+      # commit up front instead of pushing the wrong screens to the store.
+      - name: Validate commit inputs
+        if: ${{ env.COMMIT_RUN == 'true' && inputs.flow == 'onboarding' }}
         run: |
-          echo "::error::upload=true requires the app-store flow. The onboarding flow is capture-only."
+          echo "::error::commit_to_main requires the app-store flow. The onboarding flow is capture-only."
           exit 1
+
+      # Mint the GitHub App token FIRST so checkout persists ITS credentials for
+      # the screenshot push-back. The default GITHUB_TOKEN (github-actions[bot])
+      # isn't in main's PR-bypass list and is rejected; the app is. Skips cleanly
+      # when the app isn't configured — the artifact still uploads for a manual
+      # commit.
+      - name: Mint push token
+        id: push_token
+        if: vars.OTA_PUSH_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.OTA_PUSH_APP_ID }}
+          private-key: ${{ secrets.OTA_PUSH_APP_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Full history so the screenshot push-back can reset onto the latest main.
+          fetch-depth: 0
+          # Persist the app token (when configured) so the push-back authenticates
+          # as the app and bypasses main's PR rule. Falls back to the default
+          # token (read-only checkout) when the app isn't set up.
+          token: ${{ steps.push_token.outputs.token || github.token }}
 
       - uses: oven-sh/setup-bun@v2
 
@@ -234,8 +266,8 @@ jobs:
       # didn't composite into adb screencap — a blank board-view hero even reached
       # the store once). A blank frame is just the status bar and compresses to
       # ~16KB; every real screen here is >140KB. Fail the run if any shot is
-      # suspiciously small, so the upload below (gated on success()) can't push a
-      # blank. Bump min_bytes if a legitimately sparse screen is ever added.
+      # suspiciously small, so the commit-back below (gated on success()) can't
+      # push a blank. Bump min_bytes if a legitimately sparse screen is ever added.
       - name: Assert screenshots are not blank
         if: ${{ inputs.flow != 'onboarding' }}
         run: |
@@ -260,25 +292,88 @@ jobs:
         if: ${{ inputs.flow != 'onboarding' }}
         run: vp run check:screenshot-dimensions -- --platform android
 
-      - name: Set up Ruby + fastlane
-        if: success() && env.UPLOAD_RUN == 'true'
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.4'
-          bundler-cache: true
-          working-directory: fastlane
-
-      - name: Upload screenshots to Google Play
-        if: success() && env.UPLOAD_RUN == 'true'
-        working-directory: fastlane
+      # Post the captured set to the Discord deploy channel — the nightly run is a
+      # daily visual preview of the live store screenshots (and a manual app-store
+      # dispatch shows what it captured before commit_to_main). Reuses the
+      # DISCORD_DEPLOY_WEBHOOK that the build/deploy jobs already post to. Discord
+      # caps a webhook message at 10 files / 8MB; the 8-shot set is ~3.6MB, so it
+      # fits one multipart POST. success() so we only ever post a validated capture
+      # (the blank + dimension gates above passed) — never a blank/partial set; the
+      # later commit step runs after this, so its outcome can't suppress the
+      # preview. Best-effort, so a webhook hiccup never fails the run.
+      - name: Post screenshots to Discord
+        if: ${{ success() && inputs.flow != 'onboarding' }}
         env:
-          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          FASTLANE_SKIP_UPDATE_CHECK: '1'
-          FASTLANE_DISABLE_ANIMATION: '1'
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          if [ -z "${DISCORD_DEPLOY_WEBHOOK:-}" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping Discord post"
+            exit 0
+          fi
+          shots_dir="app-stores/google/screenshots/pixel-2"
+          # head -n 10: Discord rejects a webhook message with >10 attachments. The
+          # store set is <= 8, so this is just a guard against a future screen push
+          # silently breaking the post.
+          mapfile -t shots < <(find "$shots_dir" -maxdepth 1 -name '*.png' | sort | head -n 10)
+          if [ "${#shots[@]}" -eq 0 ]; then
+            echo "No screenshots captured — skipping Discord post"
+            exit 0
+          fi
+          file_args=()
+          index=0
+          for shot in "${shots[@]}"; do
+            file_args+=(-F "files[${index}]=@${shot}")
+            index=$((index + 1))
+          done
+          content=$(printf '📸 **Play Store screenshots** (%d shots) on `%s`\n<%s>' \
+            "${#shots[@]}" "$GITHUB_REF_NAME" "$RUN_URL")
+          payload=$(jq -nc --arg content "$content" '{content: $content, allowed_mentions: {parse: []}}')
+          curl -sS --fail-with-body -X POST "$DISCORD_DEPLOY_WEBHOOK" \
+            -F "payload_json=${payload}" \
+            "${file_args[@]}" \
+            || echo "::warning::Failed to post screenshots to Discord (see status above)"
+
+      # Commit the freshly captured screenshots back to main. The commit touches
+      # app-stores/google/screenshots/**, which re-triggers mobile-store-metadata.yml
+      # — that workflow is the single uploader to Google Play (text + icon +
+      # screenshots together). Idempotent: a captured set byte-identical to main is
+      # a no-op. No [skip ci], on purpose — the metadata workflow MUST see this push
+      # (an app-token push does trigger workflows).
+      - name: Commit screenshots to main
+        if: ${{ success() && env.COMMIT_RUN == 'true' && inputs.flow != 'onboarding' && vars.OTA_PUSH_APP_ID != '' }}
         run: |
           set -euo pipefail
-          [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ] || { echo "::error::Missing GOOGLE_PLAY_SERVICE_ACCOUNT_JSON."; exit 1; }
-          bundle exec fastlane android screenshots
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          shots_dir="app-stores/google/screenshots/pixel-2"
+          # Stash the captured shots outside the work tree so the reset-to-main
+          # below (it discards working-tree changes) can't wipe them.
+          staged="$RUNNER_TEMP/play-screenshots"
+          rm -rf "$staged" && mkdir -p "$staged"
+          cp "$shots_dir"/*.png "$staged"/
+          for attempt in 1 2 3; do
+            git fetch origin main
+            # Land ONLY the screenshots on top of the latest main: hard-reset to
+            # main, then re-apply the captured set.
+            git reset --hard origin/main
+            rm -rf "$shots_dir" && mkdir -p "$shots_dir"
+            cp "$staged"/*.png "$shots_dir"/
+            git add "$shots_dir"
+            if git diff --cached --quiet; then
+              echo "Captured screenshots match main — nothing to commit."
+              exit 0
+            fi
+            git commit -m "chore(store): refresh Play Store screenshots"
+            if git push origin HEAD:main; then
+              echo "Pushed refreshed screenshots to main; mobile-store-metadata.yml will upload them."
+              exit 0
+            fi
+            echo "Push rejected (main advanced); retry ${attempt}/3…"
+          done
+          echo "::error::Could not push screenshots to main after 3 attempts."
+          exit 1
 
       - name: Upload screenshots artifact
         if: always()

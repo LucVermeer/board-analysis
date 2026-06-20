@@ -291,6 +291,11 @@ platform :android do
           skip_upload_images: true,
           skip_upload_screenshots: false,
           sync_image_upload: true,
+          # See the comment on the `metadata` lane: never let fastlane silently
+          # swallow Google's "send these for review" rejection. A green run must
+          # mean the screenshots are actually queued for review, not stranded
+          # unsubmitted in the Play Console.
+          rescue_changes_not_sent_for_review: false,
           timeout: 300
         )
       end
@@ -314,6 +319,18 @@ platform :android do
       skip_upload_changelogs: true,
       skip_upload_images: true,
       skip_upload_screenshots: true,
+      # Do NOT let fastlane silently swallow Google's review gate. By default
+      # supply commits with changes_not_sent_for_review: false (i.e. "send these
+      # for review"), but Google rejects a listing-only edit (no AAB) with
+      # "Please set the query parameter changesNotSentForReview to true". The
+      # fastlane default rescue_changes_not_sent_for_review: true catches that,
+      # silently re-commits with changesNotSentForReview=true, and prints
+      # "Successfully finished the upload" — so CI is green while the changes sit
+      # in the Play Console as "ready to send for review" and never publish (the
+      # exact reason the live listing kept showing the old icon/copy). Setting it
+      # false makes that case fail loudly so we see Google's real response on the
+      # next run instead of a false green.
+      rescue_changes_not_sent_for_review: false,
       timeout: 300
     )
   end
@@ -338,6 +355,10 @@ platform :android do
       # toggles a sha256 skip-if-unchanged for images, so it's deliberately
       # omitted (don't flip it on: for screenshots, false means delete-all-then-
       # reupload, which is why the screenshots lane sets it true).
+      # See the comment on the `metadata` lane: surface Google's "send for
+      # review" rejection instead of silently committing changes that never
+      # publish.
+      rescue_changes_not_sent_for_review: false,
       timeout: 300
     )
   end
