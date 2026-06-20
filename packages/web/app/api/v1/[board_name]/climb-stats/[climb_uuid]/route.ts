@@ -1,11 +1,32 @@
 import { type ClimbStatsForAngle, getClimbStatsForAllAngles } from '@/app/lib/data/queries';
 import type { ErrorResponse, BoardName } from '@/app/lib/types';
+import { checkRateLimit, getClientIp } from '@/app/lib/auth/rate-limiter';
 import { NextResponse } from 'next/server';
+
+// Per-IP cap on this public, documented endpoint. The app itself fetches climb
+// stats over GraphQL now, so the only traffic here is API consumers and bots —
+// and a cache MISS (unique climb_uuid) is what costs a serverless invocation, so
+// capping misses is exactly what blunts a scraper enumerating UUIDs. Runs in the
+// Node serverless runtime, where this in-memory limiter works per-instance (same
+// mechanism /api/auth/register already relies on). Strict cross-instance limiting
+// would need a shared store (Vercel KV / Upstash) — tracked as a follow-up.
+const MAX_REQUESTS_PER_MINUTE = 120;
 
 export async function GET(
   req: Request,
   props: { params: Promise<{ board_name: string; climb_uuid: string }> },
 ): Promise<NextResponse<ClimbStatsForAngle[] | ErrorResponse>> {
+  const clientIp = getClientIp(req);
+  const { limited, retryAfterSeconds } = checkRateLimit(`climb-stats:${clientIp}`, MAX_REQUESTS_PER_MINUTE, 60_000);
+  if (limited) {
+    // Log UA + IP so a future alert window can confirm whether this is a scraper.
+    console.info(`[rate-limit] 429 climb-stats ip=${clientIp} ua=${req.headers.get('user-agent') ?? 'unknown'}`);
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
+    );
+  }
+
   const params = await props.params;
   try {
     // Create a minimal parsed params object with just what we need
