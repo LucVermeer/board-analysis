@@ -56,12 +56,19 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
       // native Google failure is almost always an unregistered signing-cert SHA-1
       // (a Google Cloud fix), and Apple sign-in isn't offered on Android at all —
       // so we surface the real error instead (see auth.ts).
+      // Keyed by provider so the map is exhaustive: extending Provider without a
+      // web fn here is a type error, rather than silently routing the new provider
+      // to the Google flow.
+      const webFallbackFor: Record<Provider, () => Promise<OAuthSignInResult>> = {
+        apple: signInWithAppleWeb,
+        google: signInWithGoogleWeb,
+      };
       const runWebFallback = async (): Promise<void> => {
         const fallbackStartedAt = Date.now();
         track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'web_fallback', ...registrationProps });
         let fallback: OAuthSignInResult;
         try {
-          fallback = provider === 'apple' ? await signInWithAppleWeb() : await signInWithGoogleWeb();
+          fallback = await webFallbackFor[provider]();
         } catch (fallbackError) {
           track(SHARED_EVENTS.LoginFailed, {
             auth_method: provider,

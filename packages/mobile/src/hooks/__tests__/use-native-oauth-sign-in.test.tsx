@@ -146,13 +146,16 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
     expect(events).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
   });
 
-  it('falls back when native Apple returns a non-cancel failure', async () => {
+  it('falls back and signs in when native Apple returns a non-cancel failure', async () => {
     signInWithAppleMock.mockResolvedValue({ success: false, status: 401, error: 'invalid' });
     signInWithAppleWebMock.mockResolvedValue({ success: true });
 
-    await runSignIn('apple');
+    const setError = await runSignIn('apple');
 
     expect(signInWithAppleWebMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(trackedEvents()).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
   });
 
   it('does NOT fall back when the user cancels native Apple', async () => {
@@ -162,6 +165,21 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
 
     expect(signInWithAppleWebMock).not.toHaveBeenCalled();
     expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('stays silent (no error, no report) when the browser Apple sheet is cancelled', async () => {
+    // The native throw triggers the fallback; the user then backs out of the
+    // browser. A browser cancel is not an error — no message, no error tracking.
+    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 1000 }));
+    signInWithAppleWebMock.mockResolvedValue({ success: false, cancelled: true });
+
+    const setError = await runSignIn('apple');
+
+    expect(signInWithAppleWebMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    // setError(null) at the start; never set to an error message.
+    expect(setError).not.toHaveBeenCalledWith('nativeStart.oauthError');
+    expect(trackedEvents()).toContainEqual({ event: 'Login Failed', flow: 'web_fallback', reason: 'cancel' });
   });
 
   it('surfaces an error and reports once when the Apple web fallback also fails', async () => {
