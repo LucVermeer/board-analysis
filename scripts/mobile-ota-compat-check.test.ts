@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CHECK_TITLE,
   STICKY_MARKER,
+  confirmComparison,
   deriveOverall,
   deriveVerdict,
   parseArgs,
@@ -121,7 +122,27 @@ describe('renderComment', () => {
       ctx,
     );
     expect(comment).toContain('Native change detected');
-    expect(comment).toContain('`1111111111aa` → `2222222222bb`');
+    expect(comment).toContain('PR `1111111111aa` · main `2222222222bb`');
+  });
+
+  it('labels the unknown case "(no baseline)" rather than a bare em-dash pair', () => {
+    const comment = renderComment(
+      {
+        results: [
+          platformResult({ platform: 'ios', verdict: 'unknown', prFingerprint: 'abcdef123456', baseFingerprint: null }),
+          platformResult({
+            platform: 'android',
+            verdict: 'unknown',
+            prFingerprint: 'abcdef123456',
+            baseFingerprint: null,
+          }),
+        ],
+        overall: 'unknown',
+      },
+      ctx,
+    );
+    expect(comment).toContain('`abcdef123456` (no baseline)');
+    expect(comment).toContain('OTA compatibility unknown');
   });
 
   it('states "already on a released build" only when shippedTagExists is true', () => {
@@ -160,6 +181,67 @@ describe('renderSummary', () => {
 describe('CHECK_TITLE covers every verdict', () => {
   it.each<Verdict>(['ota-compatible', 'native-change-required', 'unknown'])('has a title for %s', (verdict) => {
     expect(CHECK_TITLE[verdict]).toBeTruthy();
+  });
+});
+
+describe('confirmComparison (retry/confirmation logic)', () => {
+  // A resolver that yields a scripted sequence, repeating the last value once
+  // exhausted, and counts how many times it was called.
+  function sequence(values: readonly (string | null)[]): { resolve: () => string | null; calls: () => number } {
+    let index = 0;
+    return {
+      resolve: () => values[Math.min(index++, values.length - 1)],
+      calls: () => index,
+    };
+  }
+
+  it('trusts an equal first read without retrying', () => {
+    const pr = sequence(['abc', 'should-not-read']);
+    const base = sequence(['abc', 'should-not-read']);
+    expect(confirmComparison(pr.resolve, base.resolve)).toEqual({ prFingerprint: 'abc', baseFingerprint: 'abc' });
+    expect(pr.calls()).toBe(1);
+    expect(base.calls()).toBe(1);
+  });
+
+  it('returns early without retrying when a side is null', () => {
+    const pr = sequence([null, 'abc']);
+    const base = sequence(['abc']);
+    expect(confirmComparison(pr.resolve, base.resolve)).toEqual({ prFingerprint: null, baseFingerprint: 'abc' });
+    expect(pr.calls()).toBe(1);
+  });
+
+  it('collapses a flake: a spurious difference that re-resolves to equal → equal', () => {
+    const pr = sequence(['flake', 'abc', 'abc']);
+    const base = sequence(['abc', 'abc', 'abc']);
+    expect(confirmComparison(pr.resolve, base.resolve)).toEqual({ prFingerprint: 'abc', baseFingerprint: 'abc' });
+  });
+
+  it('confirms a stable native change and stops early on a repeated differing pair', () => {
+    const pr = sequence(['aaa']);
+    const base = sequence(['bbb']);
+    expect(confirmComparison(pr.resolve, base.resolve)).toEqual({ prFingerprint: 'aaa', baseFingerprint: 'bbb' });
+    // 1 initial read + 1 confirmation (which repeats the pair → break) = 2 each.
+    expect(pr.calls()).toBe(2);
+    expect(base.calls()).toBe(2);
+  });
+
+  it('exhausts retries when the differing pair never repeats nor agrees', () => {
+    let prIndex = 0;
+    let baseIndex = 0;
+    const result = confirmComparison(
+      () => `pr${prIndex++}`,
+      () => `base${baseIndex++}`,
+      3,
+    );
+    // 1 initial + 3 confirmations, all distinct → returns the last differing pair.
+    expect(prIndex).toBe(4);
+    expect(baseIndex).toBe(4);
+    expect(result).toEqual({ prFingerprint: 'pr3', baseFingerprint: 'base3' });
+  });
+
+  it('confirms equality against a fixed (constant) baseline when the PR converges', () => {
+    const pr = sequence(['flake', 'abc']);
+    expect(confirmComparison(pr.resolve, () => 'abc')).toEqual({ prFingerprint: 'abc', baseFingerprint: 'abc' });
   });
 });
 
