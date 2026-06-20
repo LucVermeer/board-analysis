@@ -297,10 +297,12 @@ jobs:
       # dispatch shows what it captured before commit_to_main). Reuses the
       # DISCORD_DEPLOY_WEBHOOK that the build/deploy jobs already post to. Discord
       # caps a webhook message at 10 files / 8MB; the 8-shot set is ~3.6MB, so it
-      # fits one multipart POST. always() so a downstream commit failure can't
-      # suppress the preview; best-effort, so a webhook hiccup never fails the run.
+      # fits one multipart POST. success() so we only ever post a validated capture
+      # (the blank + dimension gates above passed) — never a blank/partial set; the
+      # later commit step runs after this, so its outcome can't suppress the
+      # preview. Best-effort, so a webhook hiccup never fails the run.
       - name: Post screenshots to Discord
-        if: ${{ always() && inputs.flow != 'onboarding' }}
+        if: ${{ success() && inputs.flow != 'onboarding' }}
         env:
           DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -311,7 +313,10 @@ jobs:
             exit 0
           fi
           shots_dir="app-stores/google/screenshots/pixel-2"
-          mapfile -t shots < <(find "$shots_dir" -maxdepth 1 -name '*.png' | sort)
+          # head -n 10: Discord rejects a webhook message with >10 attachments. The
+          # store set is <= 8, so this is just a guard against a future screen push
+          # silently breaking the post.
+          mapfile -t shots < <(find "$shots_dir" -maxdepth 1 -name '*.png' | sort | head -n 10)
           if [ "${#shots[@]}" -eq 0 ]; then
             echo "No screenshots captured — skipping Discord post"
             exit 0
