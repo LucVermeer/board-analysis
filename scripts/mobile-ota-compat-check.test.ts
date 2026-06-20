@@ -121,7 +121,7 @@ describe('renderComment', () => {
       ctx,
     );
     expect(comment).toContain('Native change detected');
-    expect(comment).toContain('`1111111111aa` → `2222222222bb`');
+    expect(comment).toContain('PR `1111111111aa` · main `2222222222bb`');
   });
 
   it('states "already on a released build" only when shippedTagExists is true', () => {

@@ -143,6 +143,38 @@ Resolve the current fingerprint locally to predict what the gate will see: `cd p
 bunx expo-updates runtimeversion:resolve --platform ios` (add the production env to match CI
 exactly — see the parity check above).
 
+## PR-time OTA-compatibility signal
+
+The native gate above answers "should `main` rebuild?". `mobile-ota-check.yml` answers the same
+question one step earlier, on the PR: **does this change ride over-the-air, or does it force a new
+TestFlight/Play build?** It runs on every non-`main` push touching mobile code and posts a sticky
+comment plus a neutral **"OTA compatibility"** check-run. It is informational only — a native change
+is legitimate, so it never blocks merge.
+
+The verdict is a **fingerprint diff of the branch versus `origin/main`**, resolved in one job under
+identical env (`scripts/mobile-ota-compat-check.ts`, run via `vp run check:mobile-ota-compat`): the
+job checks out the PR, materializes `origin/main` as a sibling `git worktree` with its own
+`bun install`, then resolves both per platform and compares — equal fingerprint → ships OTA,
+different → needs a native build.
+
+It diffs against `main` rather than looking up a shipped `fingerprint-<platform>-<hash>` tag on
+purpose: the equality verdict is invariant to env imperfections. `GOOGLE_MAPS_API_KEY` is a
+Production-environment secret unavailable on feature-branch pushes, but a missing key shifts _both_
+sides of the comparison by the same constant, so the delta is still detected — the check needs no
+Production secret. The shipped-tag lookup survives only as a secondary "already on a released build"
+line, shown when confidently true (it matches the iOS tag in CI, and is suppressed for Android,
+whose tag was built with the maps key the branch push lacks).
+
+The workflow's fingerprint-affecting env is held byte-identical to the native builds + OTA publish by
+`scripts/mobile-ci-env-parity.test.ts` (which now guards four workflows, and asserts this one
+intentionally omits `GOOGLE_MAPS_API_KEY`). Reproduce a verdict locally:
+
+```bash
+git worktree add /tmp/main-baseline origin/main
+(cd /tmp/main-baseline && bun install --frozen-lockfile)
+vp run check:mobile-ota-compat -- --write-env --base-dir /tmp/main-baseline
+```
+
 ## One-time setup (infra — done outside this repo)
 
 `vp run mobile:ota-setup` scripts the in-repo phases (cert generation, the Railway env block, the

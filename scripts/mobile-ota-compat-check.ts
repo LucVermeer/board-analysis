@@ -48,6 +48,16 @@ import { execFileSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+/**
+ * `bunx expo-updates runtimeversion:resolve` is intermittently non-deterministic
+ * (≈5% of invocations its autolinking step computes a hash off a different source
+ * set), so a single resolve can't be trusted to mean "the fingerprint changed".
+ * The check confirms a *difference* before reporting it: a real native change
+ * stays different across re-resolves, a flake collapses back to equal. An "equal"
+ * is trusted immediately (two independent trees won't collide on a wrong hash).
+ */
+const MAX_DIFF_CONFIRMATIONS = 5;
+
 export type Platform = 'ios' | 'android';
 export type Verdict = 'ota-compatible' | 'native-change-required' | 'unknown';
 
@@ -110,9 +120,9 @@ export function deriveVerdict(prFingerprint: string | null, baseFingerprint: str
  * "unknown" downgrades an otherwise-compatible headline to honest uncertainty.
  */
 export function deriveOverall(results: readonly PlatformResult[]): Verdict {
+  if (results.length === 0) return 'unknown';
   if (results.some((entry) => entry.verdict === 'native-change-required')) return 'native-change-required';
   if (results.some((entry) => entry.verdict === 'unknown')) return 'unknown';
-  if (results.length === 0) return 'unknown';
   return 'ota-compatible';
 }
 
@@ -144,24 +154,27 @@ export const CHECK_TITLE: Record<Verdict, string> = {
   unknown: 'OTA compatibility unknown (no baseline)',
 };
 
-/** PURE: the fingerprint cell for one platform, e.g. `abc123` (unchanged) or `pr` → `main`. */
+/**
+ * PURE: the fingerprint cell for one platform. Each hash is labelled (no bare
+ * arrow) so it reads as two static snapshots, not a state transition:
+ *   compatible → `abc` (matches main)
+ *   native     → PR `abc` · main `def`
+ *   unknown    → PR `abc` · main —
+ */
 function fingerprintCell(entry: PlatformResult): string {
   if (entry.verdict === 'ota-compatible') {
-    const cell = `\`${shortHash(entry.prFingerprint)}\` (unchanged)`;
+    const cell = `\`${shortHash(entry.prFingerprint)}\` (matches \`main\`)`;
     // Secondary signal — only ever stated when confidently true.
     return entry.shippedTagExists ? `${cell} · already on a released build` : cell;
   }
-  if (entry.verdict === 'native-change-required') {
-    return `\`${shortHash(entry.prFingerprint)}\` → \`${shortHash(entry.baseFingerprint)}\``;
-  }
-  return `\`${shortHash(entry.prFingerprint)}\` (no baseline)`;
+  return `PR \`${shortHash(entry.prFingerprint)}\` · main \`${shortHash(entry.baseFingerprint)}\``;
 }
 
 function table(results: readonly PlatformResult[]): string {
   const rows = results.map(
     (entry) => `| ${PLATFORM_LABEL[entry.platform]} | ${VERDICT_CELL[entry.verdict]} | ${fingerprintCell(entry)} |`,
   );
-  return ['| Platform | Verdict | Fingerprint (PR → main) |', '| --- | --- | --- |', ...rows].join('\n');
+  return ['| Platform | Verdict | Fingerprint |', '| --- | --- | --- |', ...rows].join('\n');
 }
 
 /** PURE: render the sticky PR comment markdown. */
@@ -216,6 +229,9 @@ function writeEnv(mobileDir: string): void {
  * use. Returns null on any failure (mirrors the gates' `|| true` tolerance).
  * iOS resolves WITHOUT GOOGLE_MAPS_API_KEY, Android WITH it — applied identically
  * to PR and baseline so the equality verdict holds regardless of the key.
+ *
+ * May intermittently return a wrong hash (see MAX_DIFF_CONFIRMATIONS) — callers
+ * must confirm a difference, never act on a single differing read.
  */
 function resolveFingerprint(mobileDir: string, platform: Platform): string | null {
   const childEnv = { ...process.env };
@@ -232,6 +248,41 @@ function resolveFingerprint(mobileDir: string, platform: Platform): string | nul
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a platform's PR and baseline fingerprints, confirming any difference so
+ * a flaky resolve can't surface as a false "native change". Trusts an "equal"
+ * read immediately; on a difference, re-resolves both up to MAX_DIFF_CONFIRMATIONS
+ * times — returns the equal pair the moment one agrees, or stops early once the
+ * same differing pair repeats (a stable, real native change).
+ */
+function comparePlatform(
+  platform: Platform,
+  prMobileDir: string,
+  readBaseFingerprint: () => string | null,
+): { prFingerprint: string | null; baseFingerprint: string | null } {
+  let prFingerprint = resolveFingerprint(prMobileDir, platform);
+  let baseFingerprint = readBaseFingerprint();
+
+  if (!prFingerprint || !baseFingerprint || prFingerprint === baseFingerprint) {
+    return { prFingerprint, baseFingerprint };
+  }
+
+  let previousPr = prFingerprint;
+  let previousBase = baseFingerprint;
+  for (let attempt = 0; attempt < MAX_DIFF_CONFIRMATIONS; attempt += 1) {
+    const pr = resolveFingerprint(prMobileDir, platform);
+    const base = readBaseFingerprint();
+    if (pr) prFingerprint = pr;
+    if (base) baseFingerprint = base;
+    if (pr && base && pr === base) return { prFingerprint: pr, baseFingerprint: base };
+    // The same differing pair twice running → a stable, genuine native change.
+    if (pr && base && pr === previousPr && base === previousBase) break;
+    if (pr) previousPr = pr;
+    if (base) previousBase = base;
+  }
+  return { prFingerprint, baseFingerprint };
 }
 
 /** Secondary signal: does a released binary already carry this fingerprint? */
@@ -337,10 +388,13 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   }
 
   const results: PlatformResult[] = PLATFORMS.map((platform) => {
-    const prFingerprint = resolveFingerprint(options.prMobileDir, platform);
-    const baseFingerprint =
+    // Re-read the baseline the same way each attempt: a provided value is fixed,
+    // a worktree is re-resolved so a flaky baseline read can also self-correct.
+    const readBaseFingerprint = (): string | null =>
       options.baseFingerprints[platform] ??
       (options.baseMobileDir ? resolveFingerprint(options.baseMobileDir, platform) : null);
+
+    const { prFingerprint, baseFingerprint } = comparePlatform(platform, options.prMobileDir, readBaseFingerprint);
 
     if (!prFingerprint) {
       console.warn(
