@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T05:43:42.802Z",
+  "generatedAt": "2026-06-20T07:38:31.655Z",
   "entries": [
+    {
+      "prNumber": 3097,
+      "category": "fixed",
+      "title": "Pick a board and keep climbing — fixed an Android freeze that hit right after switching boards.",
+      "mergedAt": "2026-06-20T07:37:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3097"
+    },
     {
       "prNumber": 3090,
       "category": "fixed",
