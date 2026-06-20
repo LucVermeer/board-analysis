@@ -318,6 +318,30 @@ prebuild --platform ios --clean --no-install`, then confirm `ios/Boardsesh/Suppo
 4. Make a trivial JS change, push to `main` (or `vp run mobile:publish -- --channel production`),
    relaunch the TestFlight app, and confirm the OTA downloads and applies.
 
+## Tester channel switcher (in-app, production builds)
+
+Users granted the **`tester`** community role (admin panel → Roles; admins implicitly count as
+testers) see an extra "OTA Channel Switcher" row under **More → Development** in the app. It lets a
+tester repoint a production/TestFlight build at a different channel (e.g. `preview-2`) at runtime to
+validate a specific PR's OTA, without a per-tester build.
+
+- **Mechanism:** `Updates.setUpdateRequestHeadersOverride({ 'expo-channel-name': <channel> })` —
+  overrides only the channel header, keeping the build's `updates.url`, so the embedded code-signing
+  cert still verifies every manifest. Then `checkForUpdateAsync` → `fetchUpdateAsync` → `reloadAsync`.
+- **Why no `disableAntiBrickingMeasures`:** the header-only override (unlike
+  `setUpdateURLAndRequestHeadersOverride`) needs no anti-brick opt-out. expo-updates only requires
+  that the overridden header was **baked in at build time** (`updates.requestHeaders` — production
+  builds bake `expo-channel-name` via `EXPO_UPDATES_CHANNEL`). So anti-bricking rollback + code
+  signing stay intact for every user, and the feature is pure JS (rides an OTA; no native rebuild).
+  ⚠️ If you ever drop the `expo-channel-name` header from `app.config.ts`'s `resolveUpdatesConfig`,
+  the switcher breaks (the override throws). Keep it baked in.
+- **Constraint:** the target channel must have an OTA published at the **same fingerprint
+  runtimeVersion** as the running binary, or `checkForUpdateAsync` reports nothing available.
+- **Gating:** the row shows only when `isTester && !__DEV__ && Updates.isEnabled` (overrides are inert
+  in dev/Expo Go). Logic lives in `src/lib/channel-switch.ts` (unit-tested); UI in
+  `src/components/ChannelSwitcherScreen.tsx`. The `tester` role is global-only and grants nothing
+  beyond this flag (`UserProfile.isTester`).
+
 ## Deferred
 
 - **`beta` channel**: TestFlight on `beta`, App Store on `production`, promote at GA.

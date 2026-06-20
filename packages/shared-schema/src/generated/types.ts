@@ -1002,7 +1002,7 @@ export type CommunityRoleAssignment = {
   userId: Scalars['ID']['output'];
 };
 
-export type CommunityRoleType = 'admin' | 'community_leader';
+export type CommunityRoleType = 'admin' | 'community_leader' | 'tester';
 
 /** A community setting key-value pair. */
 export type CommunitySetting = {
@@ -5818,6 +5818,8 @@ export type UserProfile = {
   email: Scalars['String']['output'];
   /** Unique user identifier */
   id: Scalars['ID']['output'];
+  /** Whether this user can reach tester-only developer tooling (has the tester or admin community role) */
+  isTester: Scalars['Boolean']['output'];
 };
 
 /** Paginated user search results. */
@@ -9824,6 +9826,7 @@ export type UserProfileResolvers<
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   email?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isTester?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 

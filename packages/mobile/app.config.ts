@@ -62,7 +62,10 @@ export function resolveUpdatesConfig(easProjectId: string, projectRoot: string):
     url: selfHostUrl,
     enabled: true,
     // Written into Expo.plist (EXUpdatesRequestHeaders) and AndroidManifest by
-    // `expo prebuild`; the self-hosted server maps this channel to a branch.
+    // `expo prebuild`; the self-hosted server maps this channel to a branch. The
+    // tester channel switcher overrides this header at runtime via
+    // Updates.setUpdateRequestHeadersOverride — which only works because the key
+    // is baked in here — and needs no disableAntiBrickingMeasures.
     ...(channel ? { requestHeaders: { 'expo-channel-name': channel } } : {}),
     // Verifies the manifest signature on-device so a compromised manifest host
     // can't push arbitrary JS. Private key lives only on the server.

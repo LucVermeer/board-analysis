@@ -8,6 +8,7 @@ import type {
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
+import { userIsTester } from './tester';
 import {
   UpdateProfileInputSchema,
   SaveAuroraCredentialInputSchema,
@@ -87,6 +88,7 @@ export const userMutations = {
       email: user.email,
       displayName: profile?.displayName || user.name || undefined,
       avatarUrl: profile?.avatarUrl || user.image || undefined,
+      isTester: await userIsTester(user.id),
     };
   },
 

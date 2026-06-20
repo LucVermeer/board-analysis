@@ -10,6 +10,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { BoardNameSchema } from '../../../validation/schemas';
 import { getAuroraCredentialStatuses } from '../../../services/aurora-credentials';
+import { userIsTester } from './tester';
 
 export const userQueries = {
   /**
@@ -43,6 +44,7 @@ export const userQueries = {
       email: row.email,
       displayName: row.displayName || row.name || undefined,
       avatarUrl: row.avatarUrl || row.image || undefined,
+      isTester: await userIsTester(row.id),
     };
   },
 
