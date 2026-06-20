@@ -86,7 +86,8 @@ export type ChannelResetResult =
 /**
  * Clear the channel override and return to the build-time channel. Mirrors
  * performChannelSwitch's commit discipline: the mirror is only cleared once we're
- * committed to reloading, and a pre-commit failure re-applies the previous override.
+ * committed to reloading, and a pre-commit failure re-applies the previous override
+ * AND restores the mirror to it, so the display never diverges from the native state.
  */
 export async function performChannelReset(
   previousOverride: string | null,
@@ -109,6 +110,7 @@ export async function performChannelReset(
       return { status: 'pending-restart' };
     }
     deps.applyOverride(previousOverride);
+    await (previousOverride ? deps.writeMirror(previousOverride) : deps.clearMirror()).catch(deps.onMirrorError);
     return { status: 'failed', error };
   }
 }

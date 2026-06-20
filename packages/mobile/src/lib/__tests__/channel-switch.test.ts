@@ -102,14 +102,27 @@ describe('performChannelReset', () => {
     expect(deps.reload).toHaveBeenCalledOnce();
   });
 
-  it('pre-commit failure re-applies the previous override → failed', async () => {
+  it('pre-commit failure re-applies the previous override + mirror → failed', async () => {
     const deps = makeDeps({ checkForUpdate: vi.fn().mockRejectedValue(new Error('offline')) });
     const result = await performChannelReset('preview-2', deps);
 
     expect(result.status).toBe('failed');
     expect(deps.applyOverride).toHaveBeenNthCalledWith(1, null);
     expect(deps.applyOverride).toHaveBeenLastCalledWith('preview-2');
+    // the mirror is restored to the previous channel (not cleared), so display matches native.
+    expect(deps.writeMirror).toHaveBeenCalledWith('preview-2');
     expect(deps.clearMirror).not.toHaveBeenCalled();
+    expect(deps.reload).not.toHaveBeenCalled();
+  });
+
+  it('pre-commit failure with no previous override clears the mirror', async () => {
+    const deps = makeDeps({ checkForUpdate: vi.fn().mockRejectedValue(new Error('offline')) });
+    const result = await performChannelReset(null, deps);
+
+    expect(result.status).toBe('failed');
+    expect(deps.applyOverride).toHaveBeenLastCalledWith(null);
+    expect(deps.clearMirror).toHaveBeenCalledOnce();
+    expect(deps.writeMirror).not.toHaveBeenCalled();
     expect(deps.reload).not.toHaveBeenCalled();
   });
 
