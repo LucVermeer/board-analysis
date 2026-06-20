@@ -122,6 +122,10 @@ vi.mock('react-native-gesture-handler', () => {
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
+// The leading board control drags in the BLE stack + Icon (@expo/vector-icons);
+// the row's layout tests don't exercise it, so stub it (it has its own unit test).
+vi.mock('../BoardControlIndicator', () => ({ BoardControlIndicator: () => null }));
+
 type TextMockProps = {
   children?: ReactNode;
   color?: string;

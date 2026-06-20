@@ -4,8 +4,12 @@ import { GlassSurface } from '../GlassSurface';
 import { useTheme } from '../../providers/theme-provider';
 import { useEffectiveSurfaceMode } from '../../hooks/use-effective-surface-mode';
 import { shadows } from '../../theme/tokens';
+import { withAlpha } from '../../theme/colors';
 
 export type AccessoryBarSurfaceTreatment = 'floating' | 'docked';
+
+/** Visual emphasis: `connected` lights the bar up when you're driving the wall. */
+export type AccessoryBarSurfaceEmphasis = 'none' | 'connected';
 
 type AccessoryBarSurfaceProps = {
   /** Surface height; the default radius is a full pill (`height / 2`). */
@@ -13,6 +17,13 @@ type AccessoryBarSurfaceProps = {
   borderRadius?: number;
   /** Material can dock the surface to the tab bar instead of rendering a floating pill. */
   treatment?: AccessoryBarSurfaceTreatment;
+  /**
+   * `connected` = this device holds the board's BLE link. Expressed per platform:
+   * a violet M3 tonal container + a level-3 cast on Material (matching the active
+   * tab pill), a soft warm tint on the iOS glass/blur/solid capsule. Never on the
+   * iOS 26 native platter (UIKit-owned — handled in the content layer instead).
+   */
+  emphasis?: AccessoryBarSurfaceEmphasis;
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 };
@@ -34,13 +45,19 @@ export function AccessoryBarSurface({
   height,
   borderRadius,
   treatment = 'floating',
+  emphasis = 'none',
   style,
   children,
 }: AccessoryBarSurfaceProps) {
   const mode = useEffectiveSurfaceMode();
-  const { systemColors, variant, m3SurfaceContainers, materialElevation } = useTheme();
+  const { systemColors, variant, m3, m3SurfaceContainers, materialElevation, brandColors } = useTheme();
   const radius = treatment === 'docked' ? 0 : (borderRadius ?? height / 2);
   const shape: ViewStyle = { height, borderRadius: radius };
+  const connected = emphasis === 'connected';
+  // A soft warm tint for the iOS glass/blur/solid capsule when you hold control —
+  // deliberately gentler than the lightbulb's own halo so a large surface doesn't
+  // read as "tap me". Composited via GlassSurface's pointerEvents-none tint layer.
+  const warmTint = connected ? withAlpha(brandColors.warning, 0.12) : undefined;
 
   // Native Liquid Glass draws its own refractive edge + lift.
   if (mode === 'glass') {
@@ -48,6 +65,7 @@ export function AccessoryBarSurface({
       <View style={[shape, style]}>
         <GlassSurface
           glassEffectStyle="regular"
+          tintColor={warmTint}
           borderRadius={radius}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
@@ -65,26 +83,41 @@ export function AccessoryBarSurface({
     // canonical nav/bottom-bar role). Docked adds a hairline top separator;
     // floating is the same tone as a lifted pill. The grade colour lives in the
     // bar's leading accent, not here. No clip on this View, so the cast shows.
+    // When you hold control, swap to the violet `secondaryContainer` tonal (the
+    // same tone the active tab pill uses) and step the cast to level-3 — M3
+    // expresses "active" through tone + elevation, not a drop-shadow glow.
+    const surfaceBackground = connected ? m3.secondaryContainer : m3SurfaceContainers.base;
+    const surfaceElevation = connected ? materialElevation.level3 : materialElevation.level2;
     const materialSurfaceStyle: ViewStyle =
       treatment === 'docked'
         ? {
-            backgroundColor: m3SurfaceContainers.base,
+            backgroundColor: surfaceBackground,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: systemColors.separator,
-            ...materialElevation.level2,
+            ...surfaceElevation,
           }
-        : { backgroundColor: m3SurfaceContainers.base, ...materialElevation.level2 };
+        : { backgroundColor: surfaceBackground, ...surfaceElevation };
     return <View style={[shape, materialSurfaceStyle, style]}>{children}</View>;
   }
 
   // Blur / solid fallback: the surface has no intrinsic edge, so add the hairline
-  // border and separation shadow.
+  // border and separation shadow. When you hold control, warm the edge and tint
+  // the fill amber.
   return (
     <View
-      style={[shape, shadows.sm, { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator }, style]}
+      style={[
+        shape,
+        shadows.sm,
+        {
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: connected ? withAlpha(brandColors.warning, 0.4) : systemColors.separator,
+        },
+        style,
+      ]}
     >
       <GlassSurface
         fallbackColor={systemColors.elevatedSurface}
+        tintColor={warmTint}
         borderRadius={radius}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"

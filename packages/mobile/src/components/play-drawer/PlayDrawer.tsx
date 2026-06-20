@@ -31,8 +31,7 @@ import { computeFirstScreenHeight } from './play-drawer-layout';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
-import { BleControlSheet } from '../ble/BleControlSheet';
-import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
+import { useBleControlSheet } from '../../providers/ble-control-sheet-provider';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
@@ -168,7 +167,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
-  const [bleControlOpen, setBleControlOpen] = useState(false);
   const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
@@ -189,9 +187,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { isAuthenticated } = useAuth();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
-  const bluetoothArmUndoWallChangeToast = bluetooth?.armUndoWallChangeToast;
-  const bluetoothReassertWall = bluetooth?.reassertWall;
-  const bluetoothClearBoard = bluetooth?.clearBoard;
+  // Opens the shared, app-root BLE controls sheet (same instance the persistent
+  // bar's board control uses), so there's one Re-light / Disconnect menu.
+  const { open: openBleControlSheet } = useBleControlSheet();
 
   usePlayDrawerWakeLock(isSheetOpen);
 
@@ -490,29 +488,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const handleLightbulbLongPress = useCallback(() => {
     if (!bluetooth?.isConnected) return;
-    // Reveal the BLE controls (Re-light / Disconnect) rather than disconnecting
-    // blind — keeps the destructive action behind a labelled menu.
-    setBleControlOpen(true);
-  }, [bluetooth]);
-
-  const handleBleReassert = useCallback(() => {
-    bluetoothArmUndoWallChangeToast?.();
-    bluetoothReassertWall?.();
-  }, [bluetoothArmUndoWallChangeToast, bluetoothReassertWall]);
-
-  const handleBleClearLights = useCallback(() => {
-    void bluetoothClearBoard?.();
-  }, [bluetoothClearBoard]);
-
-  const handleBleControlClose = useCallback(() => {
-    setBleControlOpen(false);
-  }, []);
-
-  // Close the BLE controls sheet if the link drops while it's open — otherwise
-  // it lingers showing Re-light / Disconnect actions that no-op on a dead link.
-  useEffect(() => {
-    if (!bluetoothConnected) setBleControlOpen(false);
-  }, [bluetoothConnected]);
+    // Reveal the shared BLE controls (Re-light / Disconnect) rather than
+    // disconnecting blind — keeps the destructive action behind a labelled menu.
+    openBleControlSheet();
+  }, [bluetooth, openBleControlSheet]);
 
   const handleOpenActions = useCallback(() => {
     // iOS: open the floating reaction menu (over the drawer) instead of the in-drawer
@@ -860,18 +839,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           setIds={setIds}
           sessionId={sessionId}
           consensusGradeName={displayedClimb.difficulty}
-        />
-      )}
-
-      {/* BLE controls revealed by long-pressing the lightbulb. */}
-      {bluetooth && (
-        <BleControlSheet
-          visible={bleControlOpen}
-          onReassert={handleBleReassert}
-          onClearLights={handleBleClearLights}
-          supportsClearLights={boardName !== 'moonboard'}
-          onDisconnect={disconnectAllBluetooth}
-          onClose={handleBleControlClose}
         />
       )}
     </>

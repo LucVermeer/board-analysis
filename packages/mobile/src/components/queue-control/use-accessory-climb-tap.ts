@@ -18,6 +18,12 @@ import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 export type AccessoryClimbTap = {
   /** Tap → open the play drawer for the displayed climb. */
   openGesture: GestureType;
+  /**
+   * The same open-the-displayed-climb action as a plain callback, for non-gesture
+   * callers (e.g. the bar's board control opening the read-only "Now on the wall"
+   * view when a teammate drives).
+   */
+  openPlay: () => void;
   /** Local queue head; the wrappers re-apply `useWallOrQueueCurrentClimb` for display. */
   currentItem: ClimbQueueItem | null | undefined;
 };
@@ -65,5 +71,5 @@ export function useAccessoryClimbTap(): AccessoryClimbTap {
     [handleOpenPlay],
   );
 
-  return { openGesture, currentItem: currentClimbQueueItem };
+  return { openGesture, openPlay: handleOpenPlay, currentItem: currentClimbQueueItem };
 }

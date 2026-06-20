@@ -29,15 +29,22 @@ vi.mock('../../../providers/theme-provider', () => ({
       elevatedSurface: '#FFFFFF',
       separator: '#CCCCCC',
     },
+    m3: { secondaryContainer: '#5A4A90' },
+    brandColors: { warning: '#FBBF24' },
     m3SurfaceContainers: { lowest: '#101018', low: '#202028', base: '#2A2138', high: '#33293F', highest: '#3B2F49' },
     materialElevation: {
       level2: { elevation: 2, shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+      level3: { elevation: 3, shadowOpacity: 0.14, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
     },
   }),
 }));
 
 vi.mock('../../../theme/tokens', () => ({
   shadows: { sm: { elevation: 2 } },
+}));
+
+vi.mock('../../../theme/colors', () => ({
+  withAlpha: (color: string, alpha: number) => `${color}-${alpha}`,
 }));
 
 import { AccessoryBarSurface } from '../AccessoryBarSurface';
@@ -79,5 +86,19 @@ describe('AccessoryBarSurface', () => {
 
     expect(container.querySelector('[data-glass]')).toBeNull();
     expect(container.querySelector('[data-view]')?.getAttribute('data-style')).toContain('"backgroundColor":"#2A2138"');
+  });
+
+  it('lights the Material docked bar with the violet secondaryContainer + a higher elevation when connected', () => {
+    // "You have control" reads as the active-tab violet tonal + a level-3 cast,
+    // not a drop-shadow glow — the M3 way to say "active".
+    const { container } = render(
+      <AccessoryBarSurface height={48} treatment="docked" emphasis="connected">
+        child
+      </AccessoryBarSurface>,
+    );
+
+    const style = container.querySelector('[data-view]')?.getAttribute('data-style') ?? '';
+    expect(style).toContain('"backgroundColor":"#5A4A90"');
+    expect(style).toContain('"elevation":3');
   });
 });

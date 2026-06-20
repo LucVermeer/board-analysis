@@ -9,7 +9,7 @@ import { View, StyleSheet, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { Climb } from '@boardsesh/queue';
-import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
+import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH, glassSize } from '../../theme/layout';
 import { spacing } from '../../theme/tokens';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { useGradeFormat } from '../../hooks/use-grade-format';
@@ -20,6 +20,8 @@ import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './Access
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useAccessoryClimbTap } from './use-accessory-climb-tap';
 import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
+import { useBoardConnectionState } from '../ble/use-board-connection-state';
+import { BoardControlIndicator } from './BoardControlIndicator';
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -76,16 +78,23 @@ export function ClimbCapsule({
   endActionSize = 0,
   surfaceTreatment = 'floating',
 }: ClimbCapsuleProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { boardConfig } = useDrawerHost();
   const { formatGrade } = useGradeFormat();
   const { openGesture, currentItem } = useAccessoryClimbTap();
+  // Connection state drives the leading control + the "you have control" glow.
+  // Read from the single source so the bar can't disagree with the drawer bulb.
+  const { boardConnection, bluetooth } = useBoardConnectionState();
 
   // Source-of-truth flip: show the wall's lit climb when a board feed is live
   // (flag-gated), else the local queue head.
   const currentClimb = useWallOrQueueCurrentClimb(currentItem?.climb ?? null);
   // Board art needs the active board config; matches the iOS 26 native accessory.
   const showThumbnail = boardConfig != null;
+  // Show the connect control once a board is bound (the BLE context exists).
+  const hasBoardControl = bluetooth != null;
+  // Only "you are driving the wall" lights the bar up.
+  const connected = boardConnection === 'connectedByMe';
 
   const grades = useMemo(() => {
     const currentColor = currentClimb
@@ -103,25 +112,32 @@ export function ClimbCapsule({
   // Reserve room on the right so the name/grade never slide under the inline tick.
   const endActionReservedWidth = endAction ? endActionSize + spacing[2] : 0;
   const labelRight = spacing[4] + endActionReservedWidth;
+  // Reserve room on the LEFT for the board control, symmetric to the tick, so the
+  // climb name never slides under it.
+  const leadingReservedWidth = hasBoardControl ? glassSize.inline + spacing[2] : 0;
+  const labelLeft = spacing[4] + leadingReservedWidth;
 
   // The docked Material bar stays on a neutral M3 surface (a step above the tab bar
   // via elevation) and marks the grade with a vivid leading colour stripe — distinct
   // from the tab bar without painting a full grade-coloured band. The grade number
-  // keeps its per-grade colour, matching the list rows.
+  // keeps its per-grade colour, matching the list rows. When you hold control the
+  // stripe recolors to the brand violet so it reads as a control-on edge marker.
   const showGradeAccent = surfaceTreatment === 'docked';
+  const gradeAccentColor = connected ? brandColors.primary : grades.currentColor;
 
   return (
     <AccessoryBarSurface
       height={height}
       borderRadius={capsuleRadius}
       treatment={surfaceTreatment}
+      emphasis={connected ? 'connected' : 'none'}
       style={[styles.capsule, fillWidth ? null : styles.capsuleCap]}
     >
       {showGradeAccent ? (
         <View
           testID="grade-accent"
           pointerEvents="none"
-          style={[styles.gradeAccent, { backgroundColor: grades.currentColor }]}
+          style={[styles.gradeAccent, { backgroundColor: gradeAccentColor }]}
         />
       ) : null}
       <GestureDetector gesture={openGesture}>
@@ -130,7 +146,7 @@ export function ClimbCapsule({
           accessibilityRole="button"
           accessibilityLabel={currentClimb.name}
         >
-          <View style={[styles.labelSlot, { right: labelRight }]}>
+          <View style={[styles.labelSlot, { left: labelLeft, right: labelRight }]}>
             <ClimbLabel
               climb={currentClimb}
               labelColor={systemColors.label}
@@ -142,6 +158,13 @@ export function ClimbCapsule({
           </View>
         </View>
       </GestureDetector>
+      {/* Leading board control — outside the tap target so it never opens the
+          drawer. Sits over the bar's left edge, symmetric to the trailing tick. */}
+      {hasBoardControl ? (
+        <View style={[styles.leadingActionSlot, { height }]}>
+          <BoardControlIndicator size={glassSize.inline} enableLongPress />
+        </View>
+      ) : null}
       {endAction ? <View style={[styles.endActionSlot, { width: endActionSize, height }]}>{endAction}</View> : null}
     </AccessoryBarSurface>
   );
@@ -181,6 +204,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: spacing[2],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leadingActionSlot: {
+    position: 'absolute',
+    top: 0,
+    left: spacing[2],
     alignItems: 'center',
     justifyContent: 'center',
   },

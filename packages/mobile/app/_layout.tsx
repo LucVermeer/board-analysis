@@ -25,6 +25,7 @@ import { ToastProvider } from '../src/providers/toast-provider';
 import { QueueProvider } from '../src/providers/queue-provider';
 import { QueueSnackbarProvider } from '../src/providers/queue-snackbar-provider';
 import { DrawerHostProvider } from '../src/providers/drawer-host-provider';
+import { BleControlSheetProvider } from '../src/providers/ble-control-sheet-provider';
 import { DeepLinkProvider } from '../src/providers/deep-link-provider';
 import { ShareTargetProvider } from '../src/providers/share-target-provider';
 import { TabBarHeightProvider } from '../src/providers/tab-bar-height-provider';
@@ -334,90 +335,98 @@ function RootLayout() {
                                         <MobileBoardPresenceProvider>
                                           <BottomSheetModalProvider>
                                             <BluetoothProviderWrapper>
-                                              <DrawerHostProvider>
-                                                <DeepLinkProvider>
-                                                  <ShareTargetProvider>
-                                                    <TabBarHeightProvider>
-                                                      <UserDrawerProvider>
-                                                        <ThemedNavigation>
-                                                          <Stack
-                                                            // Root scenes keep the opaque, theme-aware nav background so a dark
-                                                            // backstop sits behind the tab screens (the tab stacks paint their own
-                                                            // transparent content over it). glassStackScreenOptions' transparent
-                                                            // contentStyle would expose the light window background at the top of the
-                                                            // screen in dark mode, where the floating chrome leaves it uncovered.
-                                                            // The header props still apply to root-level pushed screens (session, about).
-                                                            screenOptions={{
-                                                              ...glassStackScreenOptions,
-                                                              headerShown: false,
-                                                              contentStyle: undefined,
-                                                            }}
-                                                            initialRouteName="index"
-                                                          >
-                                                            <Stack.Screen name="index" />
-                                                            <Stack.Screen name="(tabs)" />
-                                                            <Stack.Screen
-                                                              name="auth"
-                                                              options={{ headerShown: false, gestureEnabled: false }}
-                                                            />
-                                                            {/* Public climber profiles + climber search, pushed from any
+                                              {/* One BLE controls sheet (Re-light / Turn off /
+                                                  Disconnect) shared by the play-drawer lightbulb and
+                                                  the persistent bar's board control. Wraps
+                                                  DrawerHostProvider (which renders PlayDrawer as a
+                                                  sibling of its children) so both the drawer and the
+                                                  bar descend from it. */}
+                                              <BleControlSheetProvider>
+                                                <DrawerHostProvider>
+                                                  <DeepLinkProvider>
+                                                    <ShareTargetProvider>
+                                                      <TabBarHeightProvider>
+                                                        <UserDrawerProvider>
+                                                          <ThemedNavigation>
+                                                            <Stack
+                                                              // Root scenes keep the opaque, theme-aware nav background so a dark
+                                                              // backstop sits behind the tab screens (the tab stacks paint their own
+                                                              // transparent content over it). glassStackScreenOptions' transparent
+                                                              // contentStyle would expose the light window background at the top of the
+                                                              // screen in dark mode, where the floating chrome leaves it uncovered.
+                                                              // The header props still apply to root-level pushed screens (session, about).
+                                                              screenOptions={{
+                                                                ...glassStackScreenOptions,
+                                                                headerShown: false,
+                                                                contentStyle: undefined,
+                                                              }}
+                                                              initialRouteName="index"
+                                                            >
+                                                              <Stack.Screen name="index" />
+                                                              <Stack.Screen name="(tabs)" />
+                                                              <Stack.Screen
+                                                                name="auth"
+                                                                options={{ headerShown: false, gestureEnabled: false }}
+                                                              />
+                                                              {/* Public climber profiles + climber search, pushed from any
                                                           tab (tappable avatars, the Home search action). */}
-                                                            <Stack.Screen name="users/[userId]/index" />
-                                                            {/* A climber's full beta-video grid — the "See all" target of
+                                                              <Stack.Screen name="users/[userId]/index" />
+                                                              {/* A climber's full beta-video grid — the "See all" target of
                                                           the profile beta shelf. Sets its own solid header. */}
-                                                            <Stack.Screen name="users/[userId]/beta" />
-                                                            {/* Headerless push — hides the tab bar like the other pushed
+                                                              <Stack.Screen name="users/[userId]/beta" />
+                                                              {/* Headerless push — hides the tab bar like the other pushed
                                                           screens, with its own in-body search bar. NOT a modal: a native
                                                           modal presentation traps the root play drawer beneath it when a
                                                           climb is opened from a profile pushed off search. */}
-                                                            <Stack.Screen
-                                                              name="users/search"
-                                                              options={{ headerShown: false }}
-                                                            />
-                                                            <Stack.Screen name="users/connections" />
-                                                            <Stack.Screen
-                                                              name="join/[sessionId]"
-                                                              options={{ presentation: 'modal', headerShown: false }}
-                                                            />
-                                                            <Stack.Screen
-                                                              name="share-beta"
-                                                              options={{ presentation: 'modal', headerShown: false }}
-                                                            />
-                                                            {/* Board selection is a modal off the Climbs capsule /
+                                                              <Stack.Screen
+                                                                name="users/search"
+                                                                options={{ headerShown: false }}
+                                                              />
+                                                              <Stack.Screen name="users/connections" />
+                                                              <Stack.Screen
+                                                                name="join/[sessionId]"
+                                                                options={{ presentation: 'modal', headerShown: false }}
+                                                              />
+                                                              <Stack.Screen
+                                                                name="share-beta"
+                                                                options={{ presentation: 'modal', headerShown: false }}
+                                                              />
+                                                              {/* Board selection is a modal off the Climbs capsule /
                                                       no-board CTA — board switching is rare, so it doesn't
                                                       earn a tab. Its own _layout owns the headers. */}
-                                                            <Stack.Screen
-                                                              name="boards"
-                                                              options={{ presentation: 'modal', headerShown: false }}
-                                                            />
-                                                            {/* First-run welcome walkthrough. Full-screen cover
+                                                              <Stack.Screen
+                                                                name="boards"
+                                                                options={{ presentation: 'modal', headerShown: false }}
+                                                              />
+                                                              {/* First-run welcome walkthrough. Full-screen cover
                                                       over the Climbs tab; gesture disabled so the user
                                                       leaves only via Skip / finish / the final CTA, never
                                                       an accidental swipe-dismiss. */}
-                                                            <Stack.Screen
-                                                              name="onboarding"
-                                                              options={{
-                                                                presentation: 'fullScreenModal',
-                                                                headerShown: false,
-                                                                gestureEnabled: false,
-                                                                animation: 'fade',
-                                                              }}
-                                                            />
-                                                          </Stack>
-                                                        </ThemedNavigation>
-                                                        <PersistentQueueBar />
-                                                        {/* One-time tip floating above the tab bar / accessory bar,
+                                                              <Stack.Screen
+                                                                name="onboarding"
+                                                                options={{
+                                                                  presentation: 'fullScreenModal',
+                                                                  headerShown: false,
+                                                                  gestureEnabled: false,
+                                                                  animation: 'fade',
+                                                                }}
+                                                              />
+                                                            </Stack>
+                                                          </ThemedNavigation>
+                                                          <PersistentQueueBar />
+                                                          {/* One-time tip floating above the tab bar / accessory bar,
                                                             mounted next to PersistentQueueBar so it watches climb
                                                             presence globally and overlays both the native (iOS 26) and
                                                             JS bottom-bar variants. */}
-                                                        <AccessoryOnboardingTip />
-                                                        <OnboardingGate ready={authReady && fontsReady} />
-                                                      </UserDrawerProvider>
-                                                    </TabBarHeightProvider>
-                                                    <AnalyticsScreenTracker />
-                                                  </ShareTargetProvider>
-                                                </DeepLinkProvider>
-                                              </DrawerHostProvider>
+                                                          <AccessoryOnboardingTip />
+                                                          <OnboardingGate ready={authReady && fontsReady} />
+                                                        </UserDrawerProvider>
+                                                      </TabBarHeightProvider>
+                                                      <AnalyticsScreenTracker />
+                                                    </ShareTargetProvider>
+                                                  </DeepLinkProvider>
+                                                </DrawerHostProvider>
+                                              </BleControlSheetProvider>
                                             </BluetoothProviderWrapper>
                                           </BottomSheetModalProvider>
                                         </MobileBoardPresenceProvider>

@@ -416,7 +416,16 @@
     "permissionRequired": "Autorisation Bluetooth requise",
     "errorPermissionDenied": "Autorisez le Bluetooth pour connecter un panneau.",
     "errorLedMissing": "Impossible d'envoyer au panneau — données LED manquantes pour cette configuration.",
-    "errorIncompatible": "Ce bloc est pour une configuration de panneau différente."
+    "errorIncompatible": "Ce bloc est pour une configuration de panneau différente.",
+    "barControl": {
+      "connectedLabel": "Panneau connecté, vous avez le contrôle",
+      "connectedHint": "Ouvre les commandes du panneau",
+      "peerLabel": "Sur le mur de {{name}}",
+      "peerLabelAnonymous": "Sur le mur",
+      "peerHint": "Ouvre la voie sur le mur",
+      "disconnectedLabel": "Panneau déconnecté",
+      "disconnectedHint": "Se connecter au panneau"
+    }
   },
   "integrations": {
     "title": "Applications connectées",
