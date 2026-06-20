@@ -188,6 +188,26 @@ class BoardSessionServiceTest {
 
     @Test
     @Config(sdk = [30])
+    fun `connectedByMe shows only the available nav button alongside the lit lightbulb`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        // First climb in the queue: only Next (+ the lit bulb), no Previous.
+        service.onStartCommand(updateIntent("connectedByMe", hasPrevious = false, hasNext = true), 0, 2)
+        assertEquals(listOf("Relight wall", "Next"), actionTitles(captured.captured))
+
+        // Last climb: only Previous (+ the lit bulb), no Next.
+        service.onStartCommand(updateIntent("connectedByMe", hasPrevious = true, hasNext = false), 0, 3)
+        assertEquals(listOf("Previous", "Relight wall"), actionTitles(captured.captured))
+    }
+
+    @Test
+    @Config(sdk = [30])
     fun `heldByPeer hides Previous and Next, leaving only the reconnect lightbulb`() {
         val captured = slot<Notification>()
         every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs

@@ -419,9 +419,17 @@ class BoardSessionService : Service() {
         for (path in backgrounds) {
             val background = decodeLocalFile(path) ?: continue
             canvas.drawBitmap(background, null, dst, null)
+            background.recycle()
         }
         canvas.drawBitmap(overlayBitmap, null, dst, null)
-        return roundCorners(downscale(composed))
+        overlayBitmap.recycle()
+        // Free the intermediates eagerly so native bitmap memory isn't left to the
+        // GC on low-memory devices — only the final rounded bitmap is retained.
+        val scaled = downscale(composed)
+        if (scaled !== composed) composed.recycle()
+        val rounded = roundCorners(scaled)
+        if (rounded !== scaled) scaled.recycle()
+        return rounded
     }
 
     private fun decodeLocalFile(path: String): Bitmap? {

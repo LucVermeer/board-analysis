@@ -317,7 +317,9 @@ export function useLiveActivity({
   // asset cache) from the notification until some other dep changes. The joined
   // string changes only when the resolved backgrounds change, so it re-fires the
   // push exactly when needed.
-  const backgroundsKey = androidThumbnailBackgroundPaths?.join('|') ?? '';
+  // JSON.stringify keeps the key unambiguous: two distinct path lists can never
+  // collide into one string (no single delimiter that a path might itself contain).
+  const backgroundsKey = androidThumbnailBackgroundPaths ? JSON.stringify(androidThumbnailBackgroundPaths) : '';
 
   // Track whether the queue-sync effect fired this render cycle so the
   // climb-nav effect can skip its redundant lightweight update.
