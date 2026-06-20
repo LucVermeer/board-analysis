@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T11:44:52.759Z",
+  "generatedAt": "2026-06-20T12:17:31.887Z",
   "entries": [
+    {
+      "prNumber": 3104,
+      "category": "fixed",
+      "title": "Fixed an Android freeze where the top and bottom bars stopped responding right after you picked a climb.",
+      "mergedAt": "2026-06-20T12:16:18Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3104"
+    },
     {
       "prNumber": 3101,
       "category": "new",
