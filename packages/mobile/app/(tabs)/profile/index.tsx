@@ -62,7 +62,7 @@ export default function YouScreen() {
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <View style={styles.page}>
         {activeTab === 'progress' ? (
-          <ProgressTab data={youData} topInset={chromeHeight} screenTitle={dashboardTitle} />
+          <ProgressTab data={youData} topInset={chromeHeight} screenTitle={dashboardTitle} userId={userId} />
         ) : null}
         {activeTab === 'sessions' ? (
           <SessionsTab userId={userId} topInset={chromeHeight} screenTitle={dashboardTitle} />

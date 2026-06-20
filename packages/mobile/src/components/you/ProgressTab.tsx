@@ -8,6 +8,7 @@ import { Icon } from '../Icon';
 import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
 import { ActivityIndicator } from '../ActivityIndicator';
+import { ProfileBetaShelf } from './ProfileBetaShelf';
 import { StatsSummaryCard } from './StatsSummaryCard';
 import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
 import { ActivityHeatmap } from './ActivityHeatmap';
@@ -30,9 +31,12 @@ type ProgressTabProps = {
   /** In-body identity title (the own "You" tab passes "You"). Omitted on another
    *  climber's profile, where the name lives in the public-profile header. */
   screenTitle?: string;
+  /** Climber whose beta-video shelf to show above the stats. Omit to hide it
+   *  (e.g. before the viewer's own id resolves). */
+  userId?: string;
 };
 
-export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTitle }: ProgressTabProps) {
+export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTitle, userId }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
   const { t: tCommon } = useTranslation('common');
@@ -132,6 +136,10 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTit
             hardestFlash={data.hardestFlash}
             percentile={data.percentile}
           />
+
+          {/* Recent beta videos shelf — sits below the stats summary, hidden when
+              the climber has shared none (or has no stats yet). */}
+          {userId ? <ProfileBetaShelf userId={userId} /> : null}
 
           {data.activityHeatmap && (
             <>

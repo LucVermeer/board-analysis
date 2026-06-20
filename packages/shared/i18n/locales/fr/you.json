@@ -78,7 +78,14 @@
       "notFoundTitle": "Grimpeur introuvable",
       "notFoundBody": "Nous n'avons pas trouvé ce grimpeur.",
       "noClimbs": "Aucun bloc créé pour l'instant",
-      "climbsError": "Impossible de charger les blocs"
+      "climbsError": "Impossible de charger les blocs",
+      "betaShelf": {
+        "title": "Vidéos de beta",
+        "seeAll": "Tout voir",
+        "allTitle": "Vidéos de beta",
+        "empty": "Pas encore de vidéos de beta",
+        "emptyBody": "La beta partagée par ce grimpeur apparaît ici."
+      }
     },
     "comments": {
       "title": "Commentaires",

@@ -18,12 +18,8 @@ import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { SectionHeader } from '../../../src/components/SectionHeader';
-import {
-  PlaylistCard,
-  PlaylistScrollSection,
-  PlaylistFormSheet,
-  type PlaylistFormValues,
-} from '../../../src/components/playlist';
+import { HorizontalScrollSection } from '../../../src/components/HorizontalScrollSection';
+import { PlaylistCard, PlaylistFormSheet, type PlaylistFormValues } from '../../../src/components/playlist';
 import { DiscoverTopChrome } from '../../../src/components/chrome';
 import { SMART_PLAYLISTS, type SmartPlaylistPresentation } from '../../../src/lib/smart-playlists';
 import { useAuth } from '../../../src/providers/auth-provider';
@@ -495,7 +491,7 @@ export default function DiscoverLibrary() {
 
         {/* My Playlists — user's own playlists, excluding the pinned grid above. */}
         {isAuthenticated && (userLoading || unpinnedUserPlaylists.length > 0) ? (
-          <PlaylistScrollSection
+          <HorizontalScrollSection
             title={t('library.allPlaylists.title')}
             actionLabel={userPlaylists.length > 0 ? t('library.allPlaylists.seeAll') : undefined}
             onActionPress={userPlaylists.length > 0 ? () => router.push('/(tabs)/discover/all') : undefined}
@@ -517,12 +513,12 @@ export default function DiscoverLibrary() {
                 onTogglePin={() => handleToggleCardPin(playlist)}
               />
             ))}
-          </PlaylistScrollSection>
+          </HorizontalScrollSection>
         ) : null}
 
         {/* For You — the same smart-playlist cards as web, in mobile product order. */}
         {isAuthenticated && userId && (smartCountsLoading || forYouSmartCards.length > 0) ? (
-          <PlaylistScrollSection title={t('library.sections.forYou')} loading={smartCountsLoading}>
+          <HorizontalScrollSection title={t('library.sections.forYou')} loading={smartCountsLoading}>
             {forYouSmartCards.map(({ preset, count }, index) => (
               <PlaylistCard
                 key={preset.type}
@@ -537,12 +533,12 @@ export default function DiscoverLibrary() {
                 onTogglePin={smartPinsHydrated ? () => handleToggleSmartPin(preset.type) : undefined}
               />
             ))}
-          </PlaylistScrollSection>
+          </HorizontalScrollSection>
         ) : null}
 
         {/* Community Playlists — user-made public playlists. */}
         {communityLoading || communityItems.length > 0 ? (
-          <PlaylistScrollSection
+          <HorizontalScrollSection
             title={t('library.sections.community')}
             loading={communityLoading && communityItems.length === 0}
             isLoadingMore={communityLoadingMore}
@@ -566,7 +562,7 @@ export default function DiscoverLibrary() {
                 onTogglePin={isAuthenticated ? () => handleToggleDiscoverPin(playlist.uuid) : undefined}
               />
             ))}
-          </PlaylistScrollSection>
+          </HorizontalScrollSection>
         ) : null}
 
         {/* Load error: a section's first page failed and the hub is empty.

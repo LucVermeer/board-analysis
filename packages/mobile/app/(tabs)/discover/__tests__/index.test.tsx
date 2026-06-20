@@ -250,10 +250,12 @@ vi.mock('../../../../src/components/playlist', () => ({
       createElement('span', null, metaLabel ? `${name} ${metaLabel}` : name),
       onTogglePin ? createElement('button', { 'aria-label': `pin-${name}`, onClick: onTogglePin }, 'pin') : null,
     ),
-  PlaylistScrollSection: ({ children, title }: { children?: ReactNode; title: string }) =>
-    createElement('section', { 'data-scroll-section': title }, createElement('h2', null, title), children),
   PlaylistFormSheet: ({ onSubmit }: { onSubmit: (values: typeof FORM_VALUES) => void }) =>
     createElement('button', { 'aria-label': 'submit-create', onClick: () => onSubmit(FORM_VALUES) }, 'submit'),
+}));
+vi.mock('../../../../src/components/HorizontalScrollSection', () => ({
+  HorizontalScrollSection: ({ children, title }: { children?: ReactNode; title: string }) =>
+    createElement('section', { 'data-scroll-section': title }, createElement('h2', null, title), children),
 }));
 // The chrome exposes the create button so the test can open + submit the flow.
 vi.mock('../../../../src/components/chrome', () => ({

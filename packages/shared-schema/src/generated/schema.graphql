@@ -4369,8 +4369,10 @@ type Query {
   most-recent-first. Matches both videos this user added directly and
   videos posted under the Instagram handle linked from their profile.
   Returns only rows whose thumbnails are cached in our S3.
+  Paginate with offset (the page size is limit); the caller infers
+  "has more" from a full page coming back.
   """
-  userBetaLinks(userId: String!, limit: Int = 50): [RecentBetaLink!]!
+  userBetaLinks(userId: String!, limit: Int = 50, offset: Int = 0): [RecentBetaLink!]!
 
   """
   Live preview metadata for a shared Instagram/TikTok URL, before it's

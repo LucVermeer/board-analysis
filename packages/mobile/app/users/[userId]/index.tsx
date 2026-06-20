@@ -2,19 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Text } from '../../src/components/Text';
-import { Icon } from '../../src/components/Icon';
-import { ActivityIndicator } from '../../src/components/ActivityIndicator';
-import { Button } from '../../src/components/Button';
-import { SegmentedControl } from '../../src/components/SegmentedControl';
-import { PublicProfileHeaderBlock } from '../../src/components/you/PublicProfileHeaderBlock';
-import { ProgressTab } from '../../src/components/you/ProgressTab';
-import { SessionsTab } from '../../src/components/you/SessionsTab';
-import { LogbookTab } from '../../src/components/you/LogbookTab';
-import { ProfileClimbsTab } from '../../src/components/you/ProfileClimbsTab';
-import { useProfile, usePublicProfile, useYouProfileData } from '../../src/lib/graphql/hooks';
-import { useTheme } from '../../src/providers/theme-provider';
-import { spacing } from '../../src/theme/tokens';
+import { Text } from '../../../src/components/Text';
+import { Icon } from '../../../src/components/Icon';
+import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
+import { Button } from '../../../src/components/Button';
+import { SegmentedControl } from '../../../src/components/SegmentedControl';
+import { PublicProfileHeaderBlock } from '../../../src/components/you/PublicProfileHeaderBlock';
+import { ProgressTab } from '../../../src/components/you/ProgressTab';
+import { SessionsTab } from '../../../src/components/you/SessionsTab';
+import { LogbookTab } from '../../../src/components/you/LogbookTab';
+import { ProfileClimbsTab } from '../../../src/components/you/ProfileClimbsTab';
+import { useProfile, usePublicProfile, useYouProfileData } from '../../../src/lib/graphql/hooks';
+import { useTheme } from '../../../src/providers/theme-provider';
+import { spacing } from '../../../src/theme/tokens';
 
 type ProfileSection = 'progress' | 'sessions' | 'logbook' | 'climbs';
 
@@ -122,7 +122,7 @@ export default function PublicProfileScreen() {
       </View>
 
       <View style={styles.flex}>
-        {activeSection === 'progress' ? <ProgressTab data={youData} topInset={0} /> : null}
+        {activeSection === 'progress' ? <ProgressTab data={youData} topInset={0} userId={userId} /> : null}
         {activeSection === 'sessions' ? <SessionsTab userId={userId} topInset={0} /> : null}
         {activeSection === 'logbook' ? <LogbookTab userId={userId} topInset={0} viewerIsOwner={isSelf} /> : null}
         {activeSection === 'climbs' ? <ProfileClimbsTab userId={userId} topInset={0} /> : null}

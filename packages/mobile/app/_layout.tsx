@@ -362,7 +362,10 @@ function RootLayout() {
                                                             />
                                                             {/* Public climber profiles + climber search, pushed from any
                                                           tab (tappable avatars, the Home search action). */}
-                                                            <Stack.Screen name="users/[userId]" />
+                                                            <Stack.Screen name="users/[userId]/index" />
+                                                            {/* A climber's full beta-video grid — the "See all" target of
+                                                          the profile beta shelf. Sets its own solid header. */}
+                                                            <Stack.Screen name="users/[userId]/beta" />
                                                             {/* Headerless push — hides the tab bar like the other pushed
                                                           screens, with its own in-body search bar. NOT a modal: a native
                                                           modal presentation traps the root play drawer beneath it when a
