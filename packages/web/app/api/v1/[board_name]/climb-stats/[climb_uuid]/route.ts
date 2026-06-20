@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server';
 // capping misses is exactly what blunts a scraper enumerating UUIDs. Runs in the
 // Node serverless runtime, where this in-memory limiter works per-instance (same
 // mechanism /api/auth/register already relies on). Strict cross-instance limiting
-// would need a shared store (Vercel KV / Upstash) — tracked as a follow-up.
+// would need a shared store (Vercel KV / Upstash) — tracked in #3096.
 const MAX_REQUESTS_PER_MINUTE = 120;
 
 export async function GET(
@@ -23,7 +23,8 @@ export async function GET(
     console.info(`[rate-limit] 429 climb-stats ip=${clientIp} ua=${req.headers.get('user-agent') ?? 'unknown'}`);
     return NextResponse.json(
       { error: 'Too many requests. Please slow down.' },
-      { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
+      // Never advertise a 0/negative back-off — clients treat that as "retry now".
+      { status: 429, headers: { 'Retry-After': String(Math.max(1, retryAfterSeconds)) } },
     );
   }
 
