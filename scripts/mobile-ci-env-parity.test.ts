@@ -31,6 +31,10 @@ const WORKFLOW_DIR = resolve(REPO_ROOT, '.github/workflows');
 const NATIVE_IOS = 'ios-testflight-rn.yml';
 const NATIVE_ANDROID = 'android-apk-rn.yml';
 const OTA = 'mobile-ota-production.yml';
+// The PR-time OTA-compatibility check (mobile-ota-check.yml) resolves the same
+// fingerprint, so its fingerprint-affecting env must stay locked to the native
+// builds — or it would report a verdict against an env the binaries never had.
+const OTA_CHECK = 'mobile-ota-check.yml';
 
 // Workflow-level env keys that feed the resolved config (fingerprint) and/or the
 // inlined JS bundle (runtime correctness). Every one must be declared identically
@@ -61,9 +65,11 @@ function workflowEnvValue(source: string, key: string): string | null {
 }
 
 describe('mobile CI env parity (OTA fingerprint invariant)', () => {
-  const workflows = [NATIVE_IOS, NATIVE_ANDROID, OTA];
+  // The PR-time OTA-compat check resolves the same fingerprint as the native
+  // builds + OTA publish, so it must share the same fingerprint-affecting env.
+  const workflows = [NATIVE_IOS, NATIVE_ANDROID, OTA, OTA_CHECK];
 
-  it.each(SHARED_ENV_KEYS)('declares %s identically across all three workflows', (key) => {
+  it.each(SHARED_ENV_KEYS)('declares %s identically across all mobile fingerprint workflows', (key) => {
     const values = workflows.map((name) => ({ name, value: workflowEnvValue(readWorkflow(name), key) }));
 
     for (const { name, value } of values) {
@@ -76,8 +82,18 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
       `${key} drifted across the mobile workflows: ${JSON.stringify(values)}. For a ` +
         `config-affecting var this desyncs the fingerprint runtimeVersion (the OTA never reaches ` +
         `the binary); for a bundle-only var it ships an OTA pointing at the wrong backend/analytics. ` +
-        `Keep all three workflows in lockstep.`,
+        `Keep all the mobile fingerprint workflows in lockstep.`,
     ).toBe(1);
+  });
+
+  it('keeps GOOGLE_MAPS_API_KEY out of the PR OTA-compat check (it diffs vs main without the key)', () => {
+    // mobile-ota-check.yml intentionally omits GOOGLE_MAPS_API_KEY: it's a
+    // Production-environment secret, unavailable on feature-branch pushes, and the
+    // diff-vs-main verdict doesn't need it — a missing key shifts BOTH sides of
+    // the comparison equally. Re-adding it here would reintroduce a Production
+    // dependency the branch push can't satisfy, so guard the omission.
+    const otaCheck = readWorkflow(OTA_CHECK);
+    expect(otaCheck).not.toMatch(/^\s*GOOGLE_MAPS_API_KEY:/m);
   });
 
   it('publishes the Android OTA with the same GOOGLE_MAPS_API_KEY the Android build bakes in', () => {
