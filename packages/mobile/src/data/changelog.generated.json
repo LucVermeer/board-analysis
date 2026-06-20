@@ -1,14 +1,6 @@
 {
-  "generatedAt": "2026-06-19T23:47:59.054Z",
+  "generatedAt": "2026-06-19T23:58:18.701Z",
   "entries": [
-    {
-      "prNumber": 3072,
-      "category": "fixed",
-      "title": "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
-      "mergedAt": "2026-06-19T23:19:28Z",
-      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3072",
-      "body": "https://claude.ai/code/session_0142LzvfoFMQ3sQMtkFFugTJ"
-    },
     {
       "prNumber": 3069,
       "category": "fixed",
