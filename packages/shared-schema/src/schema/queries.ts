@@ -108,6 +108,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     """
     climbStatsHistory(boardName: String!, climbUuid: ID!): [ClimbStatsHistoryEntry!]!
 
+    """
+    Get current per-angle statistics for a climb from the live stats table.
+    Returns one entry for each angle the climb has been logged at.
+    """
+    climbStatsForAngles(boardName: String!, climbUuid: ID!): [ClimbStatsForAngle!]!
+
     # ============================================
     # User Management Queries (require auth)
     # ============================================

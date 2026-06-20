@@ -870,6 +870,30 @@ export type ClimbSearchResult = {
 };
 
 /**
+ * Current statistics for a climb at one angle, read from the live stats table.
+ * One entry per angle the climb has been logged at.
+ */
+export type ClimbStatsForAngle = {
+  __typename?: 'ClimbStatsForAngle';
+  /** Board angle in degrees */
+  angle: Scalars['Int']['output'];
+  /** Number of people who have completed this climb at this angle */
+  ascensionistCount?: Maybe<Scalars['Int']['output']>;
+  /** Human-readable grade label derived from displayDifficulty (e.g., 'V5', '6B+') */
+  difficulty?: Maybe<Scalars['String']['output']>;
+  /** Average difficulty rating */
+  difficultyAverage?: Maybe<Scalars['Float']['output']>;
+  /** Display difficulty value */
+  displayDifficulty?: Maybe<Scalars['Float']['output']>;
+  /** When the first ascent was logged (ISO timestamp) */
+  faAt?: Maybe<Scalars['String']['output']>;
+  /** Username of the first ascensionist */
+  faUsername?: Maybe<Scalars['String']['output']>;
+  /** Average quality rating */
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
+};
+
+/**
  * A single snapshot of climb statistics from the history table.
  * Captured during shared sync to track trends over time.
  */
@@ -3452,6 +3476,11 @@ export type Query = {
   /** Get proposals for a specific climb. */
   climbProposals: ProposalConnection;
   /**
+   * Get current per-angle statistics for a climb from the live stats table.
+   * Returns one entry for each angle the climb has been logged at.
+   */
+  climbStatsForAngles: Array<ClimbStatsForAngle>;
+  /**
    * Get climb stats history for a climb over the last 12 months.
    * Returns snapshots captured during shared sync for trend analysis.
    */
@@ -3883,6 +3912,12 @@ export type QueryClimbCommunityStatusArgs = {
 /** Root query type for all read operations. */
 export type QueryClimbProposalsArgs = {
   input: GetClimbProposalsInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryClimbStatsForAnglesArgs = {
+  boardName: Scalars['String']['input'];
+  climbUuid: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -6037,6 +6072,26 @@ export type BetaLinkPreviewQuery = {
     username?: string | null;
     caption?: string | null;
   };
+};
+
+export type ClimbStatsForAnglesQueryVariables = Exact<{
+  boardName: Scalars['String']['input'];
+  climbUuid: Scalars['ID']['input'];
+}>;
+
+export type ClimbStatsForAnglesQuery = {
+  __typename?: 'Query';
+  climbStatsForAngles: Array<{
+    __typename?: 'ClimbStatsForAngle';
+    angle: number;
+    ascensionistCount?: number | null;
+    qualityAverage?: number | null;
+    difficultyAverage?: number | null;
+    displayDifficulty?: number | null;
+    difficulty?: string | null;
+    faUsername?: string | null;
+    faAt?: string | null;
+  }>;
 };
 
 export type ClimbStatsHistoryQueryVariables = Exact<{
@@ -8574,6 +8629,62 @@ export const BetaLinkPreviewDocument = {
     },
   ],
 } as unknown as DocumentNode<BetaLinkPreviewQuery, BetaLinkPreviewQueryVariables>;
+export const ClimbStatsForAnglesDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'ClimbStatsForAngles' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardName' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'ID' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'climbStatsForAngles' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardName' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardName' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuid' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficultyAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'displayDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'faUsername' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'faAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ClimbStatsForAnglesQuery, ClimbStatsForAnglesQueryVariables>;
 export const ClimbStatsHistoryDocument = {
   kind: 'Document',
   definitions: [

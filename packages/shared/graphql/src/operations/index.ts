@@ -13,6 +13,7 @@ export * from './new-climb-feed';
 export * from './sessions';
 export * from './create-session';
 export * from './climb-stats-history';
+export * from './climb-stats-for-angles';
 export * from './feedback';
 export * from './beta-links';
 export * from './integrations';
