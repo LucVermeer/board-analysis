@@ -16,10 +16,12 @@
  * pair, so `jsQueueToolbarVisible` is false here and this returns null.
  */
 
+import { useSegments } from 'expo-router';
 import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT, TOOLBAR_RESERVE, TAB_BAR_HEIGHT, glassSize } from '../../theme/layout';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { selectByVariant } from '../../theme/variants';
+import { isGymDiscoveryRoute } from '../../lib/route-segments';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
@@ -34,11 +36,15 @@ export { TOOLBAR_RESERVE, TAB_BAR_HEIGHT };
 export function PersistentQueueBar() {
   const { state } = useQueue();
   const { variant } = useTheme();
+  const segments = useSegments();
   const bottomChrome = useBottomChromeMetrics();
 
   const currentClimb = useWallOrQueueCurrentClimb(state.currentClimbQueueItem?.climb ?? null);
 
   if (!currentClimb) return null;
+  // The gym-discovery screen is a full-bleed map with its own bottom sheet — the
+  // climb accessory would overlap it, so suppress it there.
+  if (isGymDiscoveryRoute(segments)) return null;
   if (!bottomChrome.jsQueueToolbarVisible && bottomChrome.nativeAccessoryMounted) return null;
 
   const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });

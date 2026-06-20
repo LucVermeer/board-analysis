@@ -140,6 +140,7 @@
       "searchPlaceholder": "Rechercher une ville, une salle ou un mur",
       "showingPlace": "Résultats pour {{place}}",
       "clearSearch": "Effacer la recherche",
+      "closeMap": "Fermer",
       "otherBoardsTitle": "Murs à proximité"
     }
   },

@@ -8,6 +8,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 const cfg = vi.hoisted(() => ({
   onClimbsTab: true,
   insideTabs: true,
+  onGymDiscovery: false,
   currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
   wallClimb: null as null | { uuid: string; angle: number },
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
@@ -47,6 +48,7 @@ vi.mock('expo-router', () => ({ useSegments: () => [] }));
 vi.mock('../../../lib/route-segments', () => ({
   isClimbsTabRoute: () => cfg.onClimbsTab,
   isTabsRoute: () => cfg.insideTabs,
+  isGymDiscoveryRoute: () => cfg.onGymDiscovery,
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
@@ -131,6 +133,7 @@ describe('PersistentQueueBar', () => {
   beforeEach(() => {
     cfg.onClimbsTab = true;
     cfg.insideTabs = true;
+    cfg.onGymDiscovery = false;
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
     cfg.wallClimb = null;
     cfg.variant = 'liquidGlass';
@@ -149,6 +152,15 @@ describe('PersistentQueueBar', () => {
     const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
+  });
+
+  it('renders nothing on the gym-discovery map route', () => {
+    // The /gyms screen is a full-bleed map with its own bottom sheet, so the
+    // climb accessory is suppressed there even with a current climb.
+    cfg.onGymDiscovery = true;
+    const { container } = render(<PersistentQueueBar />);
+    expect(container.querySelector('[data-capsule]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
   });
 
   it('does not render the JS toolbar when the native bottom accessory is active', () => {
