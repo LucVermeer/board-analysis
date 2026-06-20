@@ -227,6 +227,14 @@ class BoardSessionService : Service() {
         val channel = NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = channelDescription
             setShowBadge(false)
+            // DEFAULT importance lifts the ongoing card above the shade's "Silent"
+            // group, but keep it silent: an ongoing session notification must never
+            // play a sound or vibrate on session start. Importance governs shade
+            // placement; sound/vibration are separate channel settings, and
+            // setOnlyAlertOnce only suppresses RE-alerts (not the first post), so
+            // mute the channel itself here.
+            setSound(null, null)
+            enableVibration(false)
         }
         manager.createNotificationChannel(channel)
     }
@@ -276,7 +284,10 @@ class BoardSessionService : Service() {
             views.setTextViewText(R.id.session_position, positionText)
             val holder = holderDisplayName
             val holderLine = if (boardConnection == CONNECTION_HELD_BY_PEER && !holder.isNullOrBlank()) {
-                onWallTemplate.replace("{{name}}", holder)
+                // Substitute the single template placeholder. replaceFirst (literal,
+                // single-pass) so a display name that itself contains "{{name}}" is
+                // inserted verbatim, never re-expanded.
+                onWallTemplate.replaceFirst("{{name}}", holder)
             } else {
                 null
             }

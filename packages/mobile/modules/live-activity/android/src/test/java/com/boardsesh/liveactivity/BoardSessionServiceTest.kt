@@ -370,7 +370,7 @@ class BoardSessionServiceTest {
 
     @Test
     @Config(sdk = [30])
-    fun `start migrates the legacy LOW channel to the DEFAULT-importance channel`() {
+    fun `start migrates the legacy LOW channel to a silent DEFAULT-importance channel`() {
         every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
         val manager = context.getSystemService(NotificationManager::class.java)
         // Simulate an install that still has the old LOW channel.
@@ -383,9 +383,11 @@ class BoardSessionServiceTest {
         // The legacy channel is deleted and replaced by the new DEFAULT one (importance
         // can't be raised in place, so the bump needs a fresh id).
         assertNull(manager.getNotificationChannel("boardsesh_session"))
-        assertEquals(
-            NotificationManager.IMPORTANCE_DEFAULT,
-            manager.getNotificationChannel(BoardSessionService.CHANNEL_ID).importance,
-        )
+        val migrated = manager.getNotificationChannel(BoardSessionService.CHANNEL_ID)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, migrated.importance)
+        // DEFAULT lifts it above the "Silent" group, but it must stay silent — no
+        // sound or vibration on session start (the regression this guards).
+        assertNull(migrated.sound)
+        assertFalse(migrated.shouldVibrate())
     }
 }
