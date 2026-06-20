@@ -24,7 +24,7 @@ export const meta = {
 
 const PROJECT = args && args.project ? String(args.project) : '412845';
 const REPO = args && args.repo ? String(args.repo) : 'boardsesh/boardsesh';
-const LOOKBACK = args && args.lookbackDays ? String(args.lookbackDays) : '30';
+const LOOKBACK = String((args && parseInt(args.lookbackDays, 10)) || 30); // numeric days; falls back to 30 on missing/non-numeric input
 
 const MCP_PREAMBLE = `You are auditing Boardsesh's PostHog project (id ${PROJECT}, base https://us.posthog.com). To use PostHog: first call ToolSearch with query "select:mcp__posthog__exec" to load the tool, then drive it CLI-style via mcp__posthog__exec({command, context}). HARD RULE: run \`info <tool>\` before \`call <tool>\`, and for query-* tools drill \`schema <tool> <field>\` before populating array fields. Confirm any event name exists with \`call read-data-schema {"query":{"kind":"events"}}\` — never guess event names. The \`context\` arg must be 15-25 words, third person, no first person. Test accounts must be filtered out (filterTestAccounts/filter_test_accounts true).`;
 
@@ -253,9 +253,12 @@ const SYNTH_SCHEMA = {
   },
 };
 
-phase('Synthesize');
-const synth = await agent(
-  `Draft final GitHub issue specs for the ${REPO} repo from verified, non-duplicate findings. Merge any that share a root cause.
+// Nothing survived triage (all dropped/deduped) → no synthesis agent to spawn.
+let synth = { issues: [], hygiene: null };
+if (toFile.length > 0 || hygiene.length > 0) {
+  phase('Synthesize');
+  synth = await agent(
+    `Draft final GitHub issue specs for the ${REPO} repo from verified, non-duplicate findings. Merge any that share a root cause.
 
 REAL BUGS TO FILE (JSON):
 ${JSON.stringify(toFile, null, 2)}
@@ -269,8 +272,9 @@ Rules:
 - labels: priority:<severity> plus "bug" plus "from-posthog" plus platform ("ios"/"android"/"mobile"/"web") as applicable. Only use labels from this set.
 - If the NOISE list above is non-empty, build exactly ONE hygiene issue at P3 titled around "error-tracking hygiene" that bundles the noise items as a checklist (each: what to stop logging / guard, and where); labels priority:P3, from-posthog, plus platform if uniform. If the NOISE list is empty, set hygiene to null — do not invent a placeholder.
 Return the spec. Do not file anything.`,
-  { label: 'synthesize', phase: 'Synthesize', schema: SYNTH_SCHEMA },
-);
+    { label: 'synthesize', phase: 'Synthesize', schema: SYNTH_SCHEMA },
+  );
+}
 
 return {
   collectorContext,
