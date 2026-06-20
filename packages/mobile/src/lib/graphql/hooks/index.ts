@@ -644,13 +644,18 @@ export function useUserBetaLinks(
   const offsetRef = useRef(0);
   const hasMoreRef = useRef(false);
   const isFetchingRef = useRef(false);
+  // Bumped on every reset (userId change) and refetch. A response whose
+  // generation no longer matches is discarded, so a request still in flight
+  // when the user navigates to another climber can't write the previous
+  // climber's beta into the now-reset state (and can't free the fetch flag the
+  // new request owns).
+  const generationRef = useRef(0);
 
   const active = enabled && !!userId;
 
   const fetchPage = useCallback(
-    async (offset: number, isInitial: boolean) => {
+    async (offset: number, isInitial: boolean, generation: number) => {
       if (!userId) return;
-      if (isFetchingRef.current) return;
       isFetchingRef.current = true;
       if (isInitial) setIsLoading(true);
       else setIsLoadingMore(true);
@@ -660,6 +665,8 @@ export function useUserBetaLinks(
           GET_USER_BETA_LINKS,
           { userId, limit: pageSize, offset },
         );
+        // A newer reset/refetch superseded this request while it was in flight.
+        if (generation !== generationRef.current) return;
 
         const rows = response.userBetaLinks;
         const fresh: RecentBetaVideo[] = [];
@@ -683,22 +690,33 @@ export function useUserBetaLinks(
         hasMoreRef.current = more;
         setHasError(false);
       } catch (err: unknown) {
+        if (generation !== generationRef.current) return;
         console.error('Failed to fetch user beta links:', err);
         if (isInitial) setHasError(true);
       } finally {
-        if (isInitial) setIsLoading(false);
-        else setIsLoadingMore(false);
-        isFetchingRef.current = false;
+        // Only the current generation owns the shared loading/fetching flags; a
+        // superseded request must not clear them out from under the new one.
+        if (generation === generationRef.current) {
+          if (isInitial) setIsLoading(false);
+          else setIsLoadingMore(false);
+          isFetchingRef.current = false;
+        }
       }
     },
     [userId, pageSize],
   );
 
-  // Reset and re-fetch page 0 whenever the user (or enabled) changes.
-  useEffect(() => {
+  // Reset every page-state ref + flag under a fresh generation and re-fetch page
+  // 0. Shared by the userId-change effect and the manual refetch so both
+  // supersede any in-flight request rather than being blocked by it (clearing
+  // isFetchingRef) and clear the error overlay before retrying (setHasError).
+  const startFresh = useCallback(() => {
+    generationRef.current += 1;
+    const generation = generationRef.current;
     seenIdentitiesRef.current = new Set();
     offsetRef.current = 0;
     hasMoreRef.current = false;
+    isFetchingRef.current = false;
     setVideos([]);
     setHasMore(false);
     setHasError(false);
@@ -706,22 +724,20 @@ export function useUserBetaLinks(
       setIsLoading(false);
       return;
     }
-    void fetchPage(0, true);
+    void fetchPage(0, true, generation);
   }, [active, fetchPage]);
+
+  useEffect(() => {
+    startFresh();
+  }, [startFresh]);
 
   const loadMore = useCallback(() => {
     if (hasMoreRef.current && !isFetchingRef.current) {
-      void fetchPage(offsetRef.current, false);
+      void fetchPage(offsetRef.current, false, generationRef.current);
     }
   }, [fetchPage]);
 
-  const refetch = useCallback(() => {
-    seenIdentitiesRef.current = new Set();
-    offsetRef.current = 0;
-    void fetchPage(0, true);
-  }, [fetchPage]);
-
-  return { videos, isLoading, isLoadingMore, hasMore, hasError, loadMore, refetch };
+  return { videos, isLoading, isLoadingMore, hasMore, hasError, loadMore, refetch: startFresh };
 }
 
 // ============================================

@@ -606,7 +606,16 @@ export const betaLinkQueries = {
             : eq(dbSchema.boardBetaLinks.createdByUserId, userId),
         ),
       )
-      .orderBy(desc(dbSchema.boardBetaLinks.createdAt))
+      // createdAt is not unique, so offset paging needs a deterministic
+      // tie-breaker — without one, rows sharing a createdAt around a page
+      // boundary can reorder between requests and the shelf would duplicate or
+      // skip videos. The PK (boardType, climbUuid, link) makes the order total.
+      .orderBy(
+        desc(dbSchema.boardBetaLinks.createdAt),
+        desc(dbSchema.boardBetaLinks.boardType),
+        desc(dbSchema.boardBetaLinks.climbUuid),
+        desc(dbSchema.boardBetaLinks.link),
+      )
       .offset(safeOffset)
       .limit(cappedLimit);
 
