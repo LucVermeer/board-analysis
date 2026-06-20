@@ -1,11 +1,14 @@
 /// <reference types="node" />
 
 /**
- * Generates packages/mobile/src/data/changelog.generated.json — the entries
- * shown on the mobile "What's New" screen. Each entry is one merged PR that
- * carries a non-empty `## Release Notes` section in its description (the copy the
- * author wrote for users). Category is derived from the PR title's
- * Conventional-Commit type.
+ * Generates two views of the changelog from the SAME entries:
+ *   - packages/mobile/src/data/changelog.generated.json — the feed for the mobile
+ *     "What's New" screen.
+ *   - CHANGELOG.md (repo root) — a human-readable, Keep a Changelog-style render
+ *     for contributors browsing the repo.
+ * Each entry is one merged PR that carries a non-empty `## Release Notes` section
+ * in its description (the copy the author wrote for users). Category is derived
+ * from the PR title's Conventional-Commit type.
  *
  * Crawls merged PRs against `main` via paginated `gh api graphql` (public data,
  * works with the default Actions token). Bounded by a START date so history stays
@@ -25,7 +28,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildEntries, isContentEqual, type ChangelogData, type RawPullRequest } from './lib/changelog-transform';
+import {
+  buildEntries,
+  isContentEqual,
+  renderChangelogMarkdown,
+  type ChangelogData,
+  type RawPullRequest,
+} from './lib/changelog-transform';
 
 const REPO_OWNER = 'boardsesh';
 const REPO_NAME = 'boardsesh';
@@ -38,6 +47,10 @@ const CRAWL_START_DATE = '2026-06-01T00:00:00.000Z';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(here, '../packages/mobile/src/data/changelog.generated.json');
+// Human-readable rendering of the SAME entries, for contributors browsing the
+// repo. Owned + pushed by the OTA workflow exactly like the JSON; kept out of the
+// formatter (vite.config.ts fmt.ignore) so it never drifts from this output.
+const CHANGELOG_PATH = resolve(here, '../CHANGELOG.md');
 
 const isCheckMode = process.argv.includes('--check');
 
@@ -185,7 +198,10 @@ function main(): void {
   const data: ChangelogData = { generatedAt, entries };
   mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
   writeFileSync(OUTPUT_PATH, `${JSON.stringify(data, null, 2)}\n`);
-  console.log(`[changelog] wrote ${entries.length} entries`);
+  // CHANGELOG.md is a pure function of the entries (no timestamp), so it's
+  // deterministic — the same entries always produce a byte-identical file.
+  writeFileSync(CHANGELOG_PATH, renderChangelogMarkdown(entries));
+  console.log(`[changelog] wrote ${entries.length} entries (changelog.generated.json + CHANGELOG.md)`);
 }
 
 main();

@@ -173,3 +173,60 @@ export function buildEntries(pullRequests: RawPullRequest[]): ChangelogEntry[] {
 export function isContentEqual(first: ChangelogData, second: ChangelogData): boolean {
   return JSON.stringify(first.entries) === JSON.stringify(second.entries);
 }
+
+// Human-readable labels + fixed render order for the markdown category
+// subsections. Empty groups are skipped.
+const CATEGORY_LABELS: ReadonlyArray<readonly [ChangelogCategory, string]> = [
+  ['new', 'New'],
+  ['improved', 'Improved'],
+  ['fixed', 'Fixed'],
+];
+
+const CHANGELOG_PREAMBLE = `# Changelog
+
+User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
+Notes" section of merged pull requests — do not edit by hand (a CI check rejects
+manual changes). See docs/mobile-ota-updates.md.
+`;
+
+/**
+ * Renders the changelog entries as a human-readable, Keep a Changelog-style
+ * CHANGELOG.md: `## <YYYY-MM-DD>` sections newest-first, each with `### New /
+ * Improved / Fixed` subsections of PR-linked bullets. A pure function of the
+ * entries with no timestamps, so the same entries always produce a byte-identical
+ * file. `entries` is expected newest-first (as `buildEntries` returns).
+ */
+export function renderChangelogMarkdown(entries: ChangelogEntry[]): string {
+  if (entries.length === 0) return CHANGELOG_PREAMBLE;
+
+  // Group by UTC date, keeping the newest-first order in which each date first
+  // appears (entries are already sorted newest-first by mergedAt).
+  const dateOrder: string[] = [];
+  const byDate = new Map<string, ChangelogEntry[]>();
+  for (const entry of entries) {
+    const date = entry.mergedAt.slice(0, 10); // ISO 8601 → YYYY-MM-DD (UTC)
+    let group = byDate.get(date);
+    if (!group) {
+      group = [];
+      byDate.set(date, group);
+      dateOrder.push(date);
+    }
+    group.push(entry);
+  }
+
+  const sections = dateOrder.map((date) => {
+    const dayEntries = byDate.get(date) ?? [];
+    const blocks = CATEGORY_LABELS.flatMap(([category, label]) => {
+      const inCategory = dayEntries.filter((entry) => entry.category === category);
+      if (inCategory.length === 0) return [];
+      const bullets = inCategory.map((entry) => {
+        const line = `- ${entry.title} ([#${entry.prNumber}](${entry.prUrl}))`;
+        return entry.body ? `${line}\n  ${entry.body.replace(/\n/g, '\n  ')}` : line;
+      });
+      return [`### ${label}\n\n${bullets.join('\n')}`];
+    });
+    return `## ${date}\n\n${blocks.join('\n\n')}`;
+  });
+
+  return `${CHANGELOG_PREAMBLE}\n${sections.join('\n\n')}\n`;
+}
