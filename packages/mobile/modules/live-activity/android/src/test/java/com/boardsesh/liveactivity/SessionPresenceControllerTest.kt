@@ -152,6 +152,53 @@ class SessionPresenceControllerTest {
 
     @Test
     @Config(sdk = [30])
+    fun `startSession forwards the initial board connection and holder`() {
+        val (controller, launchedIntents) = recordingController()
+
+        controller.startSession(
+            StartSessionOptions().apply {
+                boardConnection = "heldByPeer"
+                holderDisplayName = "Alex"
+            },
+        )
+
+        val start = launchedIntents.single()
+        assertEquals(BoardSessionService.ACTION_START, start.action)
+        assertEquals("heldByPeer", start.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION))
+        assertEquals("Alex", start.getStringExtra(BoardSessionService.EXTRA_HOLDER_NAME))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `updateActivity forwards ownership and the on-device thumbnail paths`() {
+        val (controller, launchedIntents) = recordingController()
+        controller.startSession(null)
+
+        controller.updateActivity(
+            updateOptions().apply {
+                currentIndex = 1
+                totalClimbs = 3
+                boardConnection = "heldByPeer"
+                holderDisplayName = "Sam"
+                androidThumbnailOverlayPath = "file:///cache/overlay.png"
+                androidThumbnailBackgroundPaths = listOf("/assets/kilter-bg.png", "/assets/kilter-holds.png")
+            },
+        )
+
+        val update = launchedIntents.last()
+        assertEquals(BoardSessionService.ACTION_UPDATE, update.action)
+        assertEquals(3, update.getIntExtra(BoardSessionService.EXTRA_TOTAL_CLIMBS, -1))
+        assertEquals("heldByPeer", update.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION))
+        assertEquals("Sam", update.getStringExtra(BoardSessionService.EXTRA_HOLDER_NAME))
+        assertEquals("file:///cache/overlay.png", update.getStringExtra(BoardSessionService.EXTRA_OVERLAY_PATH))
+        assertEquals(
+            arrayListOf("/assets/kilter-bg.png", "/assets/kilter-holds.png"),
+            update.getStringArrayListExtra(BoardSessionService.EXTRA_BACKGROUND_PATHS),
+        )
+    }
+
+    @Test
+    @Config(sdk = [30])
     fun `updateActivity before a session starts is a no-op`() {
         val (controller, launchedIntents) = recordingController()
 

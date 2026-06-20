@@ -26,6 +26,9 @@ type AndroidNotificationStrings = {
   contentTitleFallback: string;
   previousLabel: string;
   nextLabel: string;
+  relightLabel: string;
+  reconnectLabel: string;
+  onWallTemplate: string;
 };
 
 type UseLiveActivityOptions = {
@@ -42,6 +45,9 @@ type UseLiveActivityOptions = {
   holderDisplayName?: string | null;
   /** Localized strings for the Android foreground-service notification (ignored on iOS). */
   androidNotification?: AndroidNotificationStrings;
+  /** Android-only on-device thumbnail (BoardRenderer overlay + bundled backgrounds). */
+  androidThumbnailOverlayPath?: string | null;
+  androidThumbnailBackgroundPaths?: string[];
 };
 
 // Both iOS (ActivityKit) and Android (foreground service) back the session-
@@ -130,6 +136,8 @@ export function useLiveActivity({
   boardConnection,
   holderDisplayName,
   androidNotification,
+  androidThumbnailOverlayPath,
+  androidThumbnailBackgroundPaths,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
   const generationRef = useRef(0);
@@ -152,6 +160,10 @@ export function useLiveActivity({
   boardConnectionRef.current = boardConnection;
   const holderDisplayNameRef = useRef(holderDisplayName);
   holderDisplayNameRef.current = holderDisplayName;
+  const overlayPathRef = useRef(androidThumbnailOverlayPath);
+  overlayPathRef.current = androidThumbnailOverlayPath;
+  const backgroundPathsRef = useRef(androidThumbnailBackgroundPaths);
+  backgroundPathsRef.current = androidThumbnailBackgroundPaths;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
@@ -266,6 +278,8 @@ export function useLiveActivity({
             isPartySession: isPartySessionRef.current,
             boardConnection: boardConnectionRef.current,
             holderDisplayName: holderDisplayNameRef.current,
+            androidThumbnailOverlayPath: overlayPathRef.current,
+            androidThumbnailBackgroundPaths: backgroundPathsRef.current,
           });
         })
         .catch((error) => {
@@ -296,6 +310,16 @@ export function useLiveActivity({
       }
     };
   }, [shouldBeActive, stableBoard, available]);
+
+  // Stable scalar trigger for the on-device thumbnail backgrounds: the paths array
+  // has a fresh identity each render, so depending on it directly would churn the
+  // effects, but excluding it entirely drops a LATE background resolution (cold
+  // asset cache) from the notification until some other dep changes. The joined
+  // string changes only when the resolved backgrounds change, so it re-fires the
+  // push exactly when needed.
+  // JSON.stringify keeps the key unambiguous: two distinct path lists can never
+  // collide into one string (no single delimiter that a path might itself contain).
+  const backgroundsKey = androidThumbnailBackgroundPaths ? JSON.stringify(androidThumbnailBackgroundPaths) : '';
 
   // Track whether the queue-sync effect fired this render cycle so the
   // climb-nav effect can skip its redundant lightweight update.
@@ -334,8 +358,22 @@ export function useLiveActivity({
       isPartySession,
       boardConnection,
       holderDisplayName,
+      androidThumbnailOverlayPath,
+      androidThumbnailBackgroundPaths,
     });
-  }, [boardConnection, holderDisplayName, isPartySession, serializedQueue, stableBoard, widgetNavigationAllowed]);
+  }, [
+    androidThumbnailOverlayPath,
+    // Depend on backgroundsKey, not the array itself: it changes only when the
+    // resolved backgrounds change, so it re-fires the push when late-resolving
+    // backgrounds arrive (the array is read at effect time).
+    backgroundsKey,
+    boardConnection,
+    holderDisplayName,
+    isPartySession,
+    serializedQueue,
+    stableBoard,
+    widgetNavigationAllowed,
+  ]);
 
   // Effect 2: Climb navigation — lightweight update with only scalar data.
   useEffect(() => {
@@ -361,8 +399,13 @@ export function useLiveActivity({
       isPartySession,
       boardConnection,
       holderDisplayName,
+      androidThumbnailOverlayPath,
+      androidThumbnailBackgroundPaths,
     });
   }, [
+    androidThumbnailOverlayPath,
+    // See Effect 1: backgroundsKey re-fires the push on a late background resolution.
+    backgroundsKey,
     boardConnection,
     currentClimbQueueItem,
     holderDisplayName,

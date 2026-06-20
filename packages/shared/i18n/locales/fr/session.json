@@ -486,7 +486,10 @@
         "channelDescription": "Garde ta planche connectée et affiche les commandes de session quand Boardsesh est en arrière-plan.",
         "contentTitleFallback": "Session d'escalade",
         "previous": "Précédent",
-        "next": "Suivant"
+        "next": "Suivant",
+        "relight": "Rallumer le mur",
+        "reconnect": "Se connecter à la planche",
+        "onWall": "{{name}} est sur le mur"
       },
       "inStatsFlashes": "Flashs",
       "inLeaderboardTitle": "Qui grimpe",

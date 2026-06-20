@@ -49,13 +49,14 @@ internal class SessionPresenceController(
     var sessionActive = false
         private set
 
-    fun startSession(strings: AndroidNotificationStrings?) {
+    fun startSession(options: StartSessionOptions?) {
         // On API 34+ a connectedDevice FGS can't promote without
         // BLUETOOTH_CONNECT, so skip the start rather than create a
         // startForeground() contract we can't satisfy. The FGS only keeps the
         // BLE link alive, so without the permission there's nothing to keep.
         if (!canRunConnectedDeviceService(context)) throw MissingBluetoothPermissionException()
         sessionActive = true
+        val strings = options?.androidNotification
         val intent = Intent(context, BoardSessionService::class.java).apply {
             action = BoardSessionService.ACTION_START
             putExtra(BoardSessionService.EXTRA_CHANNEL_NAME, strings?.channelName ?: "Active climbing session")
@@ -63,6 +64,15 @@ internal class SessionPresenceController(
             putExtra(BoardSessionService.EXTRA_TITLE_FALLBACK, strings?.contentTitleFallback ?: "Climbing session")
             putExtra(BoardSessionService.EXTRA_PREV_LABEL, strings?.previousLabel ?: "Previous")
             putExtra(BoardSessionService.EXTRA_NEXT_LABEL, strings?.nextLabel ?: "Next")
+            putExtra(BoardSessionService.EXTRA_RELIGHT_LABEL, strings?.relightLabel ?: "Relight wall")
+            putExtra(BoardSessionService.EXTRA_RECONNECT_LABEL, strings?.reconnectLabel ?: "Connect to board")
+            putExtra(BoardSessionService.EXTRA_ON_WALL_TEMPLATE, strings?.onWallTemplate ?: "{{name}} is on the wall")
+            // Initial lightbulb / controls state before the first climb update.
+            putExtra(
+                BoardSessionService.EXTRA_BOARD_CONNECTION,
+                options?.boardConnection ?: BoardSessionService.CONNECTION_CONNECTED_BY_ME,
+            )
+            options?.holderDisplayName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
         }
         // Startup path: a failed initial promotion means the service never
         // started, so clear sessionActive to stop futile update retries.
@@ -88,6 +98,18 @@ internal class SessionPresenceController(
             putExtra(BoardSessionService.EXTRA_HAS_NEXT, options.hasNext)
             putExtra(BoardSessionService.EXTRA_HAS_PREVIOUS, options.hasPrevious)
             putExtra(BoardSessionService.EXTRA_CURRENT_INDEX, options.currentIndex)
+            putExtra(BoardSessionService.EXTRA_TOTAL_CLIMBS, options.totalClimbs)
+            putExtra(BoardSessionService.EXTRA_BOARD_CONNECTION, options.boardConnection)
+            options.holderDisplayName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
+            // On-device thumbnail: the BoardRenderer overlay PNG + the bundled board
+            // background layers, composited by the service (no backend fetch).
+            options.androidThumbnailOverlayPath?.let { putExtra(BoardSessionService.EXTRA_OVERLAY_PATH, it) }
+            if (options.androidThumbnailBackgroundPaths.isNotEmpty()) {
+                putStringArrayListExtra(
+                    BoardSessionService.EXTRA_BACKGROUND_PATHS,
+                    ArrayList(options.androidThumbnailBackgroundPaths),
+                )
+            }
         }
         // Update path: the service is already running. A failed re-delivery while
         // the app briefly backgrounds (ForegroundServiceStartNotAllowedException)

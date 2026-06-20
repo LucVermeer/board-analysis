@@ -116,6 +116,12 @@ export type LiveActivityStartSessionOptions = {
     contentTitleFallback: string;
     previousLabel: string;
     nextLabel: string;
+    /** Lightbulb action label while this device drives the wall (connectedByMe). */
+    relightLabel: string;
+    /** Lightbulb action label while a peer holds it / nobody is driving. */
+    reconnectLabel: string;
+    /** "{{name}} is on the wall" template; Kotlin substitutes holderDisplayName. */
+    onWallTemplate: string;
   };
 };
 
@@ -146,6 +152,15 @@ export type LiveActivityUpdateOptions = {
   boardConnection: LiveActivityBoardConnection;
   /** Display name of the peer holding the board (heldByPeer only). */
   holderDisplayName?: string | null;
+  /**
+   * Android-only: on-device climb render for the notification thumbnail, so it
+   * never hits the network (the app's "no-network board art" rule). `file://`
+   * holds-only PNG from the BoardRenderer native module, layered over the bundled
+   * board background image paths. The foreground service composites them; iOS
+   * ignores these (ActivityKit fetches its own thumbnail).
+   */
+  androidThumbnailOverlayPath?: string | null;
+  androidThumbnailBackgroundPaths?: string[];
 };
 
 export type LiveActivityClimbUpdateOptions = Omit<LiveActivityUpdateOptions, 'queue'>;
@@ -153,6 +168,18 @@ export type LiveActivityClimbUpdateOptions = Omit<LiveActivityUpdateOptions, 'qu
 export type WidgetQueueNavigateEvent = {
   action: 'next' | 'previous';
   currentIndex: number;
+  correlationId: string;
+};
+
+/**
+ * Android-only: a tap on the foreground-service notification's lightbulb.
+ * - `reconnect`: bulb was out (heldByPeer / disconnected) → reconnect to the
+ *   last board, taking it back from a peer (Aurora is last-connection-wins).
+ * - `reassert`: bulb was lit (connectedByMe) → re-push the current climb to the
+ *   wall. iOS drives the equivalent through App Intents, not this event.
+ */
+export type BoardControlEvent = {
+  action: 'reconnect' | 'reassert';
   correlationId: string;
 };
 
@@ -183,6 +210,8 @@ type SessionPresenceNativeModule = {
   updateActivity(options: LiveActivityUpdateOptions): Promise<void>;
   updateActivityClimb(options: LiveActivityClimbUpdateOptions): Promise<void>;
   addListener(event: 'queueNavigate', listener: (payload: WidgetQueueNavigateEvent) => void): EventSubscription;
+  // Android-only: lightbulb taps on the ongoing notification (reconnect/reassert).
+  addListener(event: 'boardControl', listener: (payload: BoardControlEvent) => void): EventSubscription;
 };
 
 export const sessionPresenceNative = requireOptionalNativeModule<SessionPresenceNativeModule>('SessionPresence');

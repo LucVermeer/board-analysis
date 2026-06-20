@@ -486,7 +486,10 @@
         "channelDescription": "Keeps your board connected and shows session controls while Boardsesh runs in the background.",
         "contentTitleFallback": "Climbing session",
         "previous": "Previous",
-        "next": "Next"
+        "next": "Next",
+        "relight": "Relight wall",
+        "reconnect": "Connect to board",
+        "onWall": "{{name}} is on the wall"
       },
       "inStatsFlashes": "Flashes",
       "inLeaderboardTitle": "Who's climbing",
