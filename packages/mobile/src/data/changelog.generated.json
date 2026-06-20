@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T13:49:44.629Z",
+  "generatedAt": "2026-06-20T21:52:54.435Z",
   "entries": [
+    {
+      "prNumber": 3111,
+      "category": "fixed",
+      "title": "The wall history keeps up with your crew now — sends from friends show up right away, even after your phone's been in your pocket or your signal dropped for a moment. Pull down on the history list any time to refresh it.",
+      "mergedAt": "2026-06-20T21:51:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3111"
+    },
     {
       "prNumber": 3068,
       "category": "new",
