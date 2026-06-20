@@ -220,9 +220,22 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
           // until a store build with the new fingerprint ships). This removes the
           // `appVersion` footgun where a native change without a `version` bump
           // could push JS to a binary lacking the native capability it needs.
-          // Resolved by Expo's bundled @expo/fingerprint; verify with
-          // `bunx expo-updates runtimeversion:resolve --platform ios|android`.
-          runtimeVersion: { policy: 'fingerprint' as const },
+          //
+          // The NATIVE BUILD sets EXPO_UPDATES_FINGERPRINT_OVERRIDE to the gate's
+          // Linux fingerprint, so this returns it as a LITERAL runtimeVersion that
+          // prebuild bakes into the binary's Expo.plist. That forces the iOS binary
+          // onto the *Linux* fingerprint instead of the macOS one it would otherwise
+          // resolve at build time — `@expo/fingerprint` is not deterministic across
+          // Linux/macOS, and that divergence stranded iOS OTAs (the binary embedded a
+          // hash the Linux publish never published under). The OTA publish does NOT
+          // set the override: it resolves the CURRENT commit's fingerprint fresh (on
+          // Linux), which matches the binary's embedded Linux value for a JS-only
+          // commit, and on a native change resolves the NEW fingerprint so old
+          // binaries are correctly excluded. Override unset => identical to before, so
+          // the gate's canonical fingerprint is unchanged. See docs/mobile-ota-updates.md.
+          runtimeVersion: process.env.EXPO_UPDATES_FINGERPRINT_OVERRIDE?.trim()
+            ? process.env.EXPO_UPDATES_FINGERPRINT_OVERRIDE.trim()
+            : { policy: 'fingerprint' as const },
           updates: resolveUpdatesConfig(EAS_PROJECT_ID, projectRoot),
         }
       : {}),

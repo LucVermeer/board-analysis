@@ -133,6 +133,40 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
     expect(android).toMatch(/fingerprint-android-/);
   });
 
+  it('forces the binary onto the gate fingerprint, and the OTA publish resolves fresh (never pinned)', () => {
+    // The iOS binary is baked on macOS but the gate/publish run on Linux, and
+    // @expo/fingerprint is not deterministic across the two. The native builds set
+    // EXPO_UPDATES_FINGERPRINT_OVERRIDE to the gate's Linux fingerprint so the binary
+    // embeds the *Linux* value (app.config emits it as a literal runtimeVersion) —
+    // which the Linux publish then matches.
+    const ios = readWorkflow(NATIVE_IOS);
+    const android = readWorkflow(NATIVE_ANDROID);
+    const ota = readWorkflow(OTA);
+    const gatePin = /EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*needs\.gate\.outputs\.fingerprint\s*\}\}/;
+
+    // Native builds embed the gate's canonical (Linux) fingerprint.
+    expect(ios, 'iOS build must pin the binary to the gate fingerprint').toMatch(gatePin);
+    expect(android, 'Android build must pin the binary to the gate fingerprint').toMatch(gatePin);
+
+    // The divergence source is gone: exactly one runtimeversion:resolve per native
+    // workflow (the gate). A second occurrence means a build-side re-resolve crept
+    // back in — the macOS/Linux split that stranded iOS OTAs.
+    expect(ios.match(/runtimeversion:resolve --platform ios/g)?.length ?? 0).toBe(1);
+    expect(android.match(/runtimeversion:resolve --platform android/g)?.length ?? 0).toBe(1);
+
+    // CRITICAL: the OTA publish must NEVER pin the fingerprint. It resolves the
+    // CURRENT commit's fingerprint fresh and publishes under it. Pinning to a fixed
+    // value (e.g. the last shipped tag) would, on a native-change commit, serve the
+    // new JS to OLD binaries under the old runtimeVersion — bypassing the fingerprint
+    // compatibility check and crashing installs that lack the new native code.
+    // Match a real YAML env-key line (`KEY:`), not a comment that names the var.
+    expect(
+      /^\s*EXPO_UPDATES_FINGERPRINT_OVERRIDE:/m.test(ota),
+      'The OTA publish must not set EXPO_UPDATES_FINGERPRINT_OVERRIDE — it resolves the current ' +
+        'fingerprint fresh. Pinning it would deliver native-dependent JS to incompatible old binaries.',
+    ).toBe(false);
+  });
+
   it('resolves the iOS fingerprint without GOOGLE_MAPS_API_KEY and Android with it', () => {
     // GOOGLE_MAPS_API_KEY changes the resolved android.config — hence the
     // fingerprint — so the gate must mirror the per-platform split the native
