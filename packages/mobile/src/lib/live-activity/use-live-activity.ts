@@ -361,10 +361,11 @@ export function useLiveActivity({
       androidThumbnailOverlayPath,
       androidThumbnailBackgroundPaths,
     });
-    // backgroundsKey (not the array itself) re-fires the push when late-resolving
-    // backgrounds arrive; the array is read at effect time.
   }, [
     androidThumbnailOverlayPath,
+    // Depend on backgroundsKey, not the array itself: it changes only when the
+    // resolved backgrounds change, so it re-fires the push when late-resolving
+    // backgrounds arrive (the array is read at effect time).
     backgroundsKey,
     boardConnection,
     holderDisplayName,
@@ -401,9 +402,9 @@ export function useLiveActivity({
       androidThumbnailOverlayPath,
       androidThumbnailBackgroundPaths,
     });
-    // See Effect 1: backgroundsKey re-fires on a late background resolution.
   }, [
     androidThumbnailOverlayPath,
+    // See Effect 1: backgroundsKey re-fires the push on a late background resolution.
     backgroundsKey,
     boardConnection,
     currentClimbQueueItem,
