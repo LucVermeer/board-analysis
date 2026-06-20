@@ -136,6 +136,15 @@ function makeClient() {
   const fetchRecentClimbs = vi.fn((boardId: number) => pushDeferred(recentByBoard, boardId).promise);
   const fetchStats = vi.fn((boardId: number) => pushDeferred(statsByBoard, boardId).promise);
   const fetchConnection = vi.fn((boardId: number) => pushDeferred(connectionByBoard, boardId).promise);
+
+  // Transport reconnect registration. `triggerReconnect` fires the registered
+  // callback the way graphql-ws `on('connected')` would on a reconnect.
+  let reconnectCallback: (() => void) | null = null;
+  const onReconnectUnsubscribe = vi.fn();
+  const onReconnect = vi.fn((callback: () => void) => {
+    reconnectCallback = callback;
+    return onReconnectUnsubscribe;
+  });
   const subscribeNowPlaying = vi.fn(
     (
       boardId: number,
@@ -158,6 +167,7 @@ function makeClient() {
     fetchConnection,
     reportClimb,
     reportDisconnect,
+    onReconnect,
     resolveBoardForSerial: vi.fn(),
   };
 
@@ -170,6 +180,9 @@ function makeClient() {
     fetchStats,
     fetchConnection,
     subscribeNowPlaying,
+    onReconnect,
+    onReconnectUnsubscribe,
+    triggerReconnect: () => reconnectCallback?.(),
     emit: (event: BoardPresenceEvent) => onEvent?.(event),
     emitError: (err: unknown) => onError?.(err),
     emitComplete: () => onComplete?.(),
@@ -500,6 +513,132 @@ describe('useBoardPresence — sequence gap recovery', () => {
     });
 
     expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('useBoardPresence — reconnect / foreground / manual catch-up', () => {
+  // Seed a board with one climb (seq 1) so observedSeq is a non-zero baseline.
+  async function mountSeeded(onCatchUp?: (info: { reason: string; recoveredThroughSeqDelta: number }) => void) {
+    const harness = makeClient();
+    const view = renderHook(() => useBoardPresence(1, harness.client, onCatchUp));
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('first', 1)]);
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 1 });
+      await harness.resolveConnection(1, holder({ userId: 'seed' }));
+    });
+    return { harness, view };
+  }
+
+  it('does not fire catch-up telemetry on the initial mount/backfill', async () => {
+    const onCatchUp = vi.fn();
+    // Seeding goes through the direct backfill path, NOT runCatchUp — so no
+    // telemetry should fire on mount. Guards a future refactor that routes the
+    // initial backfill through runCatchUp from silently emitting spurious events.
+    await mountSeeded(onCatchUp);
+    expect(onCatchUp).not.toHaveBeenCalled();
+  });
+
+  it('registers a reconnect listener and catches up when the transport reconnects', async () => {
+    const onCatchUp = vi.fn();
+    const { harness } = await mountSeeded(onCatchUp);
+    expect(harness.onReconnect).toHaveBeenCalledTimes(1);
+    expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(1);
+    expect(onCatchUp).not.toHaveBeenCalled();
+
+    // A reconnect must re-read the durable history WITHOUT waiting for a later
+    // live event to reveal the gap (the whole point of the fix).
+    act(() => harness.triggerReconnect());
+    expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(2);
+    expect(harness.fetchStats).toHaveBeenCalledTimes(2);
+    expect(harness.fetchConnection).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('missed-while-offline', 3), climb('first', 1)]);
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 2 });
+      await harness.resolveConnection(1, holder({ userId: 'seed' }));
+    });
+
+    // seq advanced 1 → 3 ⇒ ~2 events were silently dropped and just recovered.
+    expect(onCatchUp).toHaveBeenCalledWith({ reason: 'reconnect', recoveredThroughSeqDelta: 2 });
+  });
+
+  it('refresh() runs a manual catch-up and reports the manual reason', async () => {
+    const onCatchUp = vi.fn();
+    const { harness, view } = await mountSeeded(onCatchUp);
+
+    act(() => view.result.current.refresh());
+    expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('newer', 4), climb('first', 1)]);
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 1 });
+      await harness.resolveConnection(1, holder({ userId: 'seed' }));
+    });
+
+    expect(onCatchUp).toHaveBeenCalledWith({ reason: 'manual', recoveredThroughSeqDelta: 3 });
+  });
+
+  it('refresh("foreground") reports the foreground reason', async () => {
+    const onCatchUp = vi.fn();
+    const { harness, view } = await mountSeeded(onCatchUp);
+
+    act(() => view.result.current.refresh('foreground'));
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('first', 1)]);
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 1 });
+      await harness.resolveConnection(1, holder({ userId: 'seed' }));
+    });
+
+    // Nothing newer arrived ⇒ delta 0, but the trigger is still reported.
+    expect(onCatchUp).toHaveBeenCalledWith({ reason: 'foreground', recoveredThroughSeqDelta: 0 });
+  });
+
+  it('reports a zero delta for a cold-start catch-up (no false "dropped events" signal)', async () => {
+    const onCatchUp = vi.fn();
+    const harness = makeClient();
+    renderHook(() => useBoardPresence(1, harness.client, onCatchUp));
+
+    // Reconnect fires before any baseline exists (observedSeq still 0). Even if
+    // the catch-up pulls climbs, the delta must be 0 — that's the cold-start
+    // seed, not a recovery of dropped events.
+    act(() => harness.triggerReconnect());
+    await act(async () => {
+      // The mount backfill + the reconnect catch-up each issued a fetch; resolve
+      // both rounds so the catch-up's allSettled chain completes.
+      await harness.resolveRecent(1, [climb('a', 5)]);
+      await harness.resolveStats(1, { ...emptyStats });
+      await harness.resolveConnection(1, null);
+      await harness.resolveRecent(1, [climb('a', 5)]);
+      await harness.resolveStats(1, { ...emptyStats });
+      await harness.resolveConnection(1, null);
+    });
+
+    expect(onCatchUp).toHaveBeenCalledWith({ reason: 'reconnect', recoveredThroughSeqDelta: 0 });
+  });
+
+  it('unsubscribes the reconnect listener on unmount', () => {
+    const harness = makeClient();
+    const { unmount } = renderHook(() => useBoardPresence(1, harness.client));
+    expect(harness.onReconnect).toHaveBeenCalledTimes(1);
+    expect(harness.onReconnectUnsubscribe).not.toHaveBeenCalled();
+    unmount();
+    expect(harness.onReconnectUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('still functions when the client does not implement onReconnect (web/read-only)', async () => {
+    const harness = makeClient();
+    const clientWithoutReconnect: BoardPresenceClient = { ...harness.client, onReconnect: undefined };
+    const { result } = renderHook(() => useBoardPresence(1, clientWithoutReconnect));
+
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('first', 1)]);
+      await harness.resolveStats(1, { ...emptyStats });
+      await harness.resolveConnection(1, null);
+    });
+
+    // refresh() still drives a catch-up even with no reconnect hook available.
+    act(() => result.current.refresh());
+    expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(2);
   });
 });
 

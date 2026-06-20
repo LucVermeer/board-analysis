@@ -116,6 +116,12 @@ export const SHARED_EVENTS = {
   BoardSheetOpened: 'Board Sheet Opened',
   BoardHistoryViewed: 'Board History Viewed',
   BoardSwapInvokedFromSheet: 'Board Swap Invoked From Sheet',
+  // Fired after a board-history catch-up completes. Props:
+  // { boardId?, reason: 'gap' | 'reconnect' | 'foreground' | 'manual',
+  //   recoveredThroughSeqDelta }. `recoveredThroughSeqDelta > 0` means live
+  //   events were silently dropped (Redis pub/sub has no replay) and just
+  //   recovered — the signal for "history was slow/stale to update".
+  BoardHistoryCatchUp: 'Board History Catch Up',
   // External platform integrations (Apple Health, Strava). Props:
   // { integration: 'apple_health' | 'strava', trigger?: 'auto' | 'manual',
   //   enabled?: boolean }

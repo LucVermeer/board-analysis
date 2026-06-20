@@ -12,7 +12,7 @@
 // sheet is only ever opened from the board glyph when the flag is on.
 
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View, type ColorValue } from 'react-native';
+import { Platform, Pressable, RefreshControl, StyleSheet, View, type ColorValue } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
@@ -22,7 +22,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
-import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
+import {
+  useBoardPresenceActions,
+  useBoardPresenceCurrent,
+  useBoardPresenceFeed,
+} from '@boardsesh/board-presence-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { BoardName, BoardPresenceClimb, BoardPresenceHardestSend, Climb } from '@boardsesh/shared-schema';
 import { GlassSheetBackground } from '../GlassSheetBackground';
@@ -194,9 +198,32 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 
   const { currentClimb } = useBoardPresenceCurrent();
   const { history, stats } = useBoardPresenceFeed();
+  const { refresh } = useBoardPresenceActions();
   const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
   const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
+
+  // Pull-to-refresh: a manual catch-up for when a user notices the wall feed is
+  // stale. `refresh()` is fire-and-forget (the durable history merges back in
+  // via context), so show the spinner briefly, then clear it.
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleRefresh = useCallback(() => {
+    refresh('manual');
+    setIsRefreshing(true);
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => setIsRefreshing(false), 800);
+  }, [refresh]);
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    },
+    [],
+  );
   const visibleHistory = useMemo(
     () =>
       currentClimb
@@ -210,6 +237,12 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   historyCountRef.current = visibleHistory.length;
 
   const lastReceivedWallClimbRef = useRef<string | null>(null);
+  // `seq` rides along in the telemetry payload but must NOT trigger the effect —
+  // a same-uuid seq bump (e.g. a backfill merge) shouldn't re-evaluate the
+  // "new climb on the wall" event. Read it from a ref so the effect keys only on
+  // the climb uuid.
+  const currentClimbSeqRef = useRef(currentClimb?.seq);
+  currentClimbSeqRef.current = currentClimb?.seq;
   const actionClimbCacheRef = useRef(new Map<string, Climb>());
   const actionClimbRequestRef = useRef(new Map<string, Promise<Climb | null>>());
   const pendingActionKeysRef = useRef(new Set<string>());
@@ -223,6 +256,8 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     track(SHARED_EVENTS.BoardNowPlayingReceived, {
       boardId: boardPresenceBoardIdRef.current ?? undefined,
       climbUuid: currentClimbUuid,
+      // `seq` lets PostHog spot gaps in the live stream (a jump = dropped pushes).
+      seq: currentClimbSeqRef.current ?? undefined,
     });
   }, [currentClimb?.climbUuid]);
 
@@ -664,6 +699,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
         contentContainerStyle={{ paddingBottom: spacing[4] }}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />
+        }
       />
 
       <Pressable

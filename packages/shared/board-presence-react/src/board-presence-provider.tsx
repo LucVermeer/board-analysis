@@ -6,6 +6,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import {
   useBoardPresence,
   type BoardPresenceActions,
+  type BoardPresenceCatchUpInfo,
   type BoardPresenceCurrentState,
   type BoardPresenceFeedState,
   type UseBoardPresenceResult,
@@ -27,21 +28,30 @@ const BoardPresenceHasClimbContext = createContext<boolean | undefined>(undefine
 export function BoardPresenceProvider({
   boardId,
   client,
+  onCatchUp,
   children,
 }: {
   boardId: number | null;
   client: BoardPresenceClient | null;
+  /**
+   * Optional telemetry hook fired after a catch-up (reconnect / foreground /
+   * gap / manual) completes — lets the platform measure how often live events
+   * are silently dropped and recovered, without pulling analytics into this
+   * renderer-agnostic package.
+   */
+  onCatchUp?: (info: BoardPresenceCatchUpInfo) => void;
   children: ReactNode;
 }) {
-  const value = useBoardPresence(boardId, client);
+  const value = useBoardPresence(boardId, client, onCatchUp);
   const actions = useMemo<BoardPresenceActions>(
     () => ({
       reportClimb: value.reportClimb,
       reportClimbWithUndoTarget: value.reportClimbWithUndoTarget,
       reportDisconnect: value.reportDisconnect,
       getUndoTarget: value.getUndoTarget,
+      refresh: value.refresh,
     }),
-    [value.reportClimb, value.reportClimbWithUndoTarget, value.reportDisconnect, value.getUndoTarget],
+    [value.reportClimb, value.reportClimbWithUndoTarget, value.reportDisconnect, value.getUndoTarget, value.refresh],
   );
   const current = useMemo<BoardPresenceCurrentState>(
     () => ({

@@ -9,6 +9,8 @@
 export { useBoardPresence } from './use-board-presence';
 export type {
   BoardPresenceActions,
+  BoardPresenceCatchUpInfo,
+  BoardPresenceCatchUpReason,
   BoardPresenceCurrentState,
   BoardPresenceFeedState,
   BoardPresenceReportResult,
