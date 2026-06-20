@@ -317,12 +317,17 @@ describe('playlistClimbs resolver', () => {
     expect(byUuid['climb-tension'].angle).toBe(25);
   });
 
-  it('rejects activeBoardName without activeAngle (they must be provided together)', async () => {
+  it('rejects either activeBoardName or activeAngle alone — they must be provided together', async () => {
     const ctx = makeCtx();
-    // Validation runs before any DB access, so no select mocks are needed.
+    // Validation runs before any DB access, so no select mocks are needed. Assert
+    // the specific refine message (not just "throws") so an unrelated DB/resolver
+    // failure can't make this pass, and cover both directions of the refine.
     await expect(
       playlistQueries.playlistClimbs(null, { input: { playlistId: 'test-pl', activeBoardName: 'kilter' } }, ctx),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/must be provided together/);
+    await expect(
+      playlistQueries.playlistClimbs(null, { input: { playlistId: 'test-pl', activeAngle: 40 } }, ctx),
+    ).rejects.toThrow(/must be provided together/);
   });
 
   it('should return climbs in specific-board mode when boardName is provided', async () => {
