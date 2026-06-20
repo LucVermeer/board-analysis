@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T07:38:31.655Z",
+  "generatedAt": "2026-06-20T07:52:29.827Z",
   "entries": [
+    {
+      "prNumber": 3092,
+      "category": "fixed",
+      "title": "Sign in with Apple now falls back to a browser sign-in on iPhone when the native prompt can't complete, so you're not locked out.",
+      "mergedAt": "2026-06-20T07:51:23Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3092"
+    },
     {
       "prNumber": 3097,
       "category": "fixed",
