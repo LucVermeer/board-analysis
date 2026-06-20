@@ -160,6 +160,11 @@ const DEDUP_SCHEMA = {
   },
 };
 
+// Verify + Dedup are stages of one concurrent pipeline(). Per the Workflow
+// guidance, pipeline stages pick their progress group via the per-agent `phase`
+// option (set below), NOT a global phase() call — a global call would race
+// across items running concurrently. That is why there is no phase('Dedup')
+// here: the dedup agents are grouped by their { phase: 'Dedup' } option.
 phase('Verify');
 const triaged = await pipeline(
   rawCandidates,
@@ -214,7 +219,7 @@ log(
 const SYNTH_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['issues', 'hygiene'],
+  required: ['issues'],
   properties: {
     issues: {
       type: 'array',
@@ -236,7 +241,7 @@ const SYNTH_SCHEMA = {
       },
     },
     hygiene: {
-      type: 'object',
+      type: ['object', 'null'],
       additionalProperties: false,
       required: ['title', 'body', 'labels'],
       properties: {
@@ -262,7 +267,7 @@ Rules:
 - One issue per distinct root cause. Title in climber/plain voice describing what is broken (not the stack trace).
 - Body markdown sections: **What's happening** (user-facing symptom), **Evidence** (PostHog _posthogUrl + occurrences/users/sessions over ${LOOKBACK}d, platform), **Suspected cause** (the suspectedFile if known), **Severity** (Px + one-line why), **Related** (relatedIssues numbers if any).
 - labels: priority:<severity> plus "bug" plus "from-posthog" plus platform ("ios"/"android"/"mobile"/"web") as applicable. Only use labels from this set.
-- Build exactly ONE hygiene issue at P3 titled around "error-tracking hygiene" that bundles the noise items as a checklist (each: what to stop logging / guard, and where). labels: priority:P3, from-posthog, plus platform if uniform.
+- If the NOISE list above is non-empty, build exactly ONE hygiene issue at P3 titled around "error-tracking hygiene" that bundles the noise items as a checklist (each: what to stop logging / guard, and where); labels priority:P3, from-posthog, plus platform if uniform. If the NOISE list is empty, set hygiene to null — do not invent a placeholder.
 Return the spec. Do not file anything.`,
   { label: 'synthesize', phase: 'Synthesize', schema: SYNTH_SCHEMA },
 );

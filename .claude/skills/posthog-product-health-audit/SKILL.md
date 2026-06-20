@@ -36,7 +36,7 @@ The workflow runs in the background; you get notified on completion. Watch live 
 
 **2 — Verify (pipeline per candidate).** `classify` (label + severity + suspected file via repo grep + whether a fix already exists) → `refute` (adversarial skeptic that tries to kill it; defaults to a lower keep level when uncertain). Each candidate ends as `issue`, `hygiene`, or `drop`.
 
-**3 — Dedup gate (mandatory, dedicated agent).** Before anything is filed, an agent searches **open and closed** issues (`gh issue list --search`, `gh search issues`) for the same root cause. `duplicate:true` candidates are recorded with a link and not filed; near-matches go in `relatedIssues`. When unsure, it errs toward `duplicate:false` (a reviewed near-dup beats a missed bug).
+**3 — Dedup gate (mandatory).** A dedicated dedup agent runs for **each** surviving candidate as the final stage of the verify `pipeline()` (so dedup for one finding overlaps verification of the next — no barrier). It searches **open and closed** issues (`gh issue list --search`, `gh search issues`) for the same root cause. `duplicate:true` candidates are recorded with a link and not filed; near-matches go in `relatedIssues`. When unsure, it errs toward `duplicate:false` (a reviewed near-dup beats a missed bug).
 
 **4 — Synthesize → File.** One issue per root cause, climber-voice title, body = symptom + PostHog evidence link + occurrences/users/sessions + suspected file + severity rationale + related issues. Then create them with `gh` (see below).
 
@@ -53,7 +53,7 @@ Every filed issue also gets `bug`, the provenance label `from-posthog`, and a pl
 
 ## Noise policy
 
-Real-but-not-user-facing telemetry (user cancels thrown as errors, dev/screenshot-only `ReferenceError`s, log spam) is **not** filed one-per-item. The synthesis step rolls it into a single **P3 "error-tracking hygiene"** issue as a checklist (what to stop logging / guard, and where). Transient infra blips (a lone 502/504, a DNS miss) and expected behaviour (e.g. "auth required" when logged out — confirm in code first) are dropped, with the reason recorded.
+Real-but-not-user-facing telemetry (user cancels thrown as errors, dev/screenshot-only `ReferenceError`s, log spam) is **not** filed one-per-item. The synthesis step rolls it into a single **P3 "error-tracking hygiene"** issue as a checklist (what to stop logging / guard, and where). When a run turns up no such noise, `issueSpecs.hygiene` is `null` — skip it, don't file a placeholder. Transient infra blips (a lone 502/504, a DNS miss) and expected behaviour (e.g. "auth required" when logged out — confirm in code first) are dropped, with the reason recorded.
 
 ## Filing (Phase 4)
 
