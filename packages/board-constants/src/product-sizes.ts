@@ -1,5 +1,6 @@
 import { AURORA_BOARDS, type BoardName } from '@boardsesh/shared-schema';
-import { AURORA_PRODUCT_SIZES, HOLE_PLACEMENTS, IMAGE_FILENAMES, LAYOUTS, SETS } from './generated/product-sizes-data';
+import { AURORA_PRODUCT_SIZES, IMAGE_FILENAMES, LAYOUTS, SETS } from './generated/product-sizes-data';
+import { HOLE_PLACEMENTS, getBoardHolePlacements } from './hole-placements';
 import type { HoldTuple, LayoutData, ProductSizeData, SetData, SizeEdges } from './types';
 
 export type { HoldTuple, LayoutData, ProductSizeData, SetData, SizeEdges } from './types';
@@ -22,7 +23,7 @@ export const PRODUCT_SIZES: Record<BoardName, Record<number, ProductSizeData>> =
   moonboard: MOONBOARD_PRODUCT_SIZES,
 };
 
-export { LAYOUTS, SETS, IMAGE_FILENAMES, HOLE_PLACEMENTS };
+export { LAYOUTS, SETS, IMAGE_FILENAMES, HOLE_PLACEMENTS, getBoardHolePlacements };
 
 // The Kilter Homewall is layout 8 / product 7 in Aurora's data. These gate the
 // tall/wide climb filters and the expansion-aware hold filtering, so web,
@@ -191,5 +192,8 @@ export const getImageFilename = (
 
 export const getHolePlacements = (boardName: BoardName, layoutId: number, setId: number): HoldTuple[] => {
   const key = `${layoutId}-${setId}`;
-  return HOLE_PLACEMENTS[boardName]?.[key] ?? [];
+  // Load only the requested board's shard (lazily, via getBoardHolePlacements) so
+  // selecting a board never evaluates every board's holds. On Hermes this is the
+  // difference between a ~30–86 KB per-board eval and a ~200 KB all-boards eval.
+  return getBoardHolePlacements(boardName)[key] ?? [];
 };
