@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toBoardName } from '@boardsesh/board-config';
 import { useQueue } from '../../providers/queue-provider';
 import { useBoardConnectionState } from '../../components/ble/use-board-connection-state';
+import { useNativeClimbRender } from '../../hooks/use-native-climb-render';
 import { useLiveActivity } from './use-live-activity';
 import { addWidgetQueueNavigateListener, addBoardControlListener } from './live-activity-plugin';
 
@@ -29,6 +31,26 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // THIS device holds the BLE link (connectedByMe); once a peer takes the wall
   // the bulb goes out and the controls hide, leaving just the current climb.
   const { bluetooth, boardConnection, holderDisplayName } = useBoardConnectionState();
+
+  // On-device thumbnail for the Android notification: render the current climb's
+  // holds-only PNG via the BoardRenderer native module and layer the bundled board
+  // backgrounds — the app's "no-network board art" rule, so the notification never
+  // hits the backend. iOS ignores these (ActivityKit fetches its own); rendering on
+  // iOS too is harmless — it's the same cached overlay the list thumbnails produce.
+  const displayClimb = state.currentClimbQueueItem?.climb ?? state.queue[0]?.climb ?? null;
+  const { overlayUri, backgroundPaths } = useNativeClimbRender({
+    frames: displayClimb?.frames ?? '',
+    boardName: toBoardName(boardName) ?? 'kilter',
+    layoutId,
+    sizeId,
+    setIds,
+    // Filled markers read as solid lit dots once scaled into the small notification
+    // thumbnail; 384px gives the ~88dp expanded image enough resolution while the
+    // service caps the composited bitmap so the RemoteViews stays under the Binder
+    // transaction limit.
+    filledStyle: true,
+    renderWidth: 384,
+  });
 
   // Localized strings for the Android foreground-service notification (channel +
   // Previous/Next + lightbulb actions, and the "on the wall" line). Built here
@@ -64,6 +86,8 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     boardConnection,
     holderDisplayName,
     androidNotification,
+    androidThumbnailOverlayPath: overlayUri,
+    androidThumbnailBackgroundPaths: backgroundPaths,
   });
 
   // Subscribe to widget Next/Previous taps. Native already advanced the shared

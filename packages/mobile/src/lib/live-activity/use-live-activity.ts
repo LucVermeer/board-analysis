@@ -45,6 +45,9 @@ type UseLiveActivityOptions = {
   holderDisplayName?: string | null;
   /** Localized strings for the Android foreground-service notification (ignored on iOS). */
   androidNotification?: AndroidNotificationStrings;
+  /** Android-only on-device thumbnail (BoardRenderer overlay + bundled backgrounds). */
+  androidThumbnailOverlayPath?: string | null;
+  androidThumbnailBackgroundPaths?: string[];
 };
 
 // Both iOS (ActivityKit) and Android (foreground service) back the session-
@@ -133,6 +136,8 @@ export function useLiveActivity({
   boardConnection,
   holderDisplayName,
   androidNotification,
+  androidThumbnailOverlayPath,
+  androidThumbnailBackgroundPaths,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
   const generationRef = useRef(0);
@@ -155,6 +160,10 @@ export function useLiveActivity({
   boardConnectionRef.current = boardConnection;
   const holderDisplayNameRef = useRef(holderDisplayName);
   holderDisplayNameRef.current = holderDisplayName;
+  const overlayPathRef = useRef(androidThumbnailOverlayPath);
+  overlayPathRef.current = androidThumbnailOverlayPath;
+  const backgroundPathsRef = useRef(androidThumbnailBackgroundPaths);
+  backgroundPathsRef.current = androidThumbnailBackgroundPaths;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
@@ -269,6 +278,8 @@ export function useLiveActivity({
             isPartySession: isPartySessionRef.current,
             boardConnection: boardConnectionRef.current,
             holderDisplayName: holderDisplayNameRef.current,
+            androidThumbnailOverlayPath: overlayPathRef.current,
+            androidThumbnailBackgroundPaths: backgroundPathsRef.current,
           });
         })
         .catch((error) => {
@@ -337,8 +348,21 @@ export function useLiveActivity({
       isPartySession,
       boardConnection,
       holderDisplayName,
+      androidThumbnailOverlayPath,
+      androidThumbnailBackgroundPaths,
     });
-  }, [boardConnection, holderDisplayName, isPartySession, serializedQueue, stableBoard, widgetNavigationAllowed]);
+    // androidThumbnailBackgroundPaths (an array) is intentionally NOT a dep — its
+    // identity changes per render; the content-addressed overlay path string is the
+    // stable re-post trigger, and the latest backgrounds are read at effect time.
+  }, [
+    androidThumbnailOverlayPath,
+    boardConnection,
+    holderDisplayName,
+    isPartySession,
+    serializedQueue,
+    stableBoard,
+    widgetNavigationAllowed,
+  ]);
 
   // Effect 2: Climb navigation — lightweight update with only scalar data.
   useEffect(() => {
@@ -364,8 +388,12 @@ export function useLiveActivity({
       isPartySession,
       boardConnection,
       holderDisplayName,
+      androidThumbnailOverlayPath,
+      androidThumbnailBackgroundPaths,
     });
+    // See Effect 1: the backgrounds array is read at effect time, not a dep.
   }, [
+    androidThumbnailOverlayPath,
     boardConnection,
     currentClimbQueueItem,
     holderDisplayName,

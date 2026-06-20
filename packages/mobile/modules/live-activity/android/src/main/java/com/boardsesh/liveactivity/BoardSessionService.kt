@@ -13,8 +13,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
-import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -25,8 +25,6 @@ import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
@@ -70,24 +68,17 @@ class BoardSessionService : Service() {
     private var hasPrevious: Boolean = false
     private var currentIndex: Int = 0
     private var totalClimbs: Int = 0
-    private var climbUuid: String? = null
     private var boardConnection: String = CONNECTION_CONNECTED_BY_ME
     private var holderDisplayName: String? = null
 
-    // Board config (set on ACTION_START) → board-render thumbnail URL.
-    private var serverUrl: String = ""
-    private var boardName: String = ""
-    private var layoutId: Int = 0
-    private var sizeId: Int = 0
-    private var setIds: String = ""
+    // On-device climb thumbnail (the app's no-network board-art rule): the
+    // BoardRenderer holds-only PNG and the bundled board background layers under it,
+    // composited locally — never a backend fetch.
+    private var overlayPath: String? = null
+    private var backgroundPaths: List<String> = emptyList()
 
-    // climbUuid → render frames, refreshed from the full updateActivity payload so
-    // a lightweight updateActivityClimb (empty queue) can still resolve the
-    // current climb's thumbnail.
-    private val queueFrames: MutableMap<String, String> = HashMap()
-
-    // The render URL whose bitmap the notification is currently displaying; the
-    // async fetch only applies its result if this still matches (stale guard).
+    // The overlay path whose composited bitmap is currently displayed; the async
+    // compose only applies its result if this still matches (stale guard).
     @Volatile
     private var currentImageKey: String? = null
 
@@ -100,7 +91,9 @@ class BoardSessionService : Service() {
     // a Robolectric test can drive the async image path on the calling thread.
     internal var imageExecutor: Executor = sharedImageExecutor
     internal var postToMain: (Runnable) -> Unit = { mainHandler.post(it) }
-    internal var imageFetcher: (String) -> Bitmap? = { url -> fetchBitmap(url) }
+    internal var imageComposer: (String, List<String>) -> Bitmap? = { overlay, backgrounds ->
+        composeThumbnail(overlay, backgrounds)
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -120,11 +113,6 @@ class BoardSessionService : Service() {
                 relightLabel = intent.getStringExtra(EXTRA_RELIGHT_LABEL) ?: relightLabel
                 reconnectLabel = intent.getStringExtra(EXTRA_RECONNECT_LABEL) ?: reconnectLabel
                 onWallTemplate = intent.getStringExtra(EXTRA_ON_WALL_TEMPLATE) ?: onWallTemplate
-                serverUrl = intent.getStringExtra(EXTRA_SERVER_URL) ?: serverUrl
-                boardName = intent.getStringExtra(EXTRA_BOARD_NAME) ?: boardName
-                layoutId = intent.getIntExtra(EXTRA_LAYOUT_ID, layoutId)
-                sizeId = intent.getIntExtra(EXTRA_SIZE_ID, sizeId)
-                setIds = intent.getStringExtra(EXTRA_SET_IDS) ?: setIds
                 boardConnection = intent.getStringExtra(EXTRA_BOARD_CONNECTION) ?: boardConnection
                 holderDisplayName = intent.getStringExtra(EXTRA_HOLDER_NAME)
             }
@@ -135,12 +123,14 @@ class BoardSessionService : Service() {
                 hasPrevious = intent.getBooleanExtra(EXTRA_HAS_PREVIOUS, hasPrevious)
                 currentIndex = intent.getIntExtra(EXTRA_CURRENT_INDEX, currentIndex)
                 totalClimbs = intent.getIntExtra(EXTRA_TOTAL_CLIMBS, totalClimbs)
-                climbUuid = intent.getStringExtra(EXTRA_CLIMB_UUID) ?: climbUuid
                 boardConnection = intent.getStringExtra(EXTRA_BOARD_CONNECTION) ?: boardConnection
                 // Absent extra ⇒ no peer holder ⇒ clear (the controller only sends
                 // it for heldByPeer).
                 holderDisplayName = intent.getStringExtra(EXTRA_HOLDER_NAME)
-                applyQueueFrames(intent)
+                // Absent overlay ⇒ render not ready yet; keep the last one so the
+                // thumbnail doesn't flicker out between updates.
+                intent.getStringExtra(EXTRA_OVERLAY_PATH)?.let { overlayPath = it }
+                intent.getStringArrayListExtra(EXTRA_BACKGROUND_PATHS)?.let { backgroundPaths = it }
             }
         }
 
@@ -158,27 +148,15 @@ class BoardSessionService : Service() {
         }
 
         foregrounded = true
-        // Network never runs before promotion: the notification was already built
-        // (with the cached bitmap or a placeholder) and posted above.
-        maybeFetchImage()
+        // Image compositing never runs before promotion: the notification was
+        // already built (with the cached bitmap or a placeholder) and posted above.
+        maybeComposeImage()
 
         // START_NOT_STICKY: don't let the OS recreate the service in the background
         // after a kill — a null-intent restart on a frozen/cold-starting process
         // can't promote within 5 s. The JS useLiveActivity effect re-starts the
         // session when the app reopens.
         return START_NOT_STICKY
-    }
-
-    private fun applyQueueFrames(intent: Intent) {
-        val uuids = intent.getStringArrayListExtra(EXTRA_QUEUE_UUIDS)
-        val frameList = intent.getStringArrayListExtra(EXTRA_QUEUE_FRAMES)
-        // Empty/absent on the lightweight updateActivityClimb path — keep the
-        // cache from the last full update.
-        if (uuids == null || frameList == null || uuids.size != frameList.size) return
-        queueFrames.clear()
-        for (i in uuids.indices) {
-            queueFrames[uuids[i]] = frameList[i]
-        }
     }
 
     // Promotes the service to the foreground; returns true on success. Channel
@@ -228,6 +206,11 @@ class BoardSessionService : Service() {
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
+        // Importance can't be raised on an existing channel, so the bump from LOW
+        // to DEFAULT (lift the ongoing card above the shade's "Silent" group)
+        // needs a fresh channel id. Delete the legacy LOW channel so users don't
+        // see two identically-named entries in system Settings.
+        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
         val existing = manager.getNotificationChannel(CHANNEL_ID)
         if (existing != null) {
             // Re-create only when ACTION_START delivered a fresh localized name
@@ -236,7 +219,7 @@ class BoardSessionService : Service() {
             // language in system Settings forever.
             if (!channelNameLocalized || existing.name?.toString() == channelName) return
         }
-        val channel = NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_LOW).apply {
+        val channel = NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = channelDescription
             setShowBadge(false)
         }
@@ -252,6 +235,9 @@ class BoardSessionService : Service() {
             .setColor(ContextCompat.getColor(this, R.color.session_accent))
             .setOngoing(true)
             .setSilent(true)
+            // DEFAULT-importance channel: alert once on first post so re-posting on
+            // every climb/connection update doesn't re-peek the ongoing card.
+            .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
@@ -317,6 +303,7 @@ class BoardSessionService : Service() {
             .setContentTitle(climbName ?: contentTitleFallback)
             .setOngoing(true)
             .setSilent(true)
+            .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .build()
     }
@@ -365,50 +352,34 @@ class BoardSessionService : Service() {
         }
     }
 
-    // --- Climb thumbnail ---
+    // --- Climb thumbnail (on-device, no network) ---
 
-    // The board-render URL for the current climb, or null when board config or the
-    // climb's frames aren't known yet. Mirrors the iOS SharedConstants builder.
-    private fun currentRenderUrl(): String? {
-        val uuid = climbUuid ?: return null
-        val frames = queueFrames[uuid] ?: return null
-        if (serverUrl.isBlank() || boardName.isBlank() || setIds.isBlank() || frames.isBlank()) return null
-        return Uri.parse("$serverUrl/api/internal/board-render").buildUpon()
-            .appendQueryParameter("board_name", boardName)
-            .appendQueryParameter("layout_id", layoutId.toString())
-            .appendQueryParameter("size_id", sizeId.toString())
-            .appendQueryParameter("set_ids", setIds)
-            .appendQueryParameter("frames", frames)
-            .appendQueryParameter("thumbnail", "1")
-            .appendQueryParameter("include_background", "1")
-            .build()
-            .toString()
-    }
+    private fun currentBitmap(): Bitmap? = overlayPath?.takeIf { it.isNotBlank() }?.let { bitmapCache.get(it) }
 
-    private fun currentBitmap(): Bitmap? = currentRenderUrl()?.let { bitmapCache.get(it) }
-
-    // Fetches the current climb's thumbnail off the main thread (after promotion),
-    // then re-posts the notification with it. Never blocks startForeground().
-    private fun maybeFetchImage() {
-        val url = currentRenderUrl() ?: return
-        currentImageKey = url
-        if (bitmapCache.get(url) != null) return
-        if (!inFlight.add(url)) return
+    // Composites the current climb's thumbnail off the main thread (after
+    // promotion), then re-posts the notification with it. Never blocks
+    // startForeground(), never touches the network.
+    private fun maybeComposeImage() {
+        val overlay = overlayPath?.takeIf { it.isNotBlank() } ?: return
+        currentImageKey = overlay
+        if (bitmapCache.get(overlay) != null) return
+        if (!inFlight.add(overlay)) return
+        val backgrounds = backgroundPaths
         imageExecutor.execute {
             val bitmap = try {
-                imageFetcher(url)
+                imageComposer(overlay, backgrounds)
             } catch (error: Exception) {
-                Log.w(TAG, "thumbnail fetch failed: ${error.message}")
+                Log.w(TAG, "thumbnail compose failed: ${error.message}")
                 null
             } finally {
-                inFlight.remove(url)
+                inFlight.remove(overlay)
             }
             if (bitmap == null) return@execute
-            bitmapCache.put(url, bitmap)
+            bitmapCache.put(overlay, bitmap)
             postToMain {
                 // Stale guard: the climb may have moved on (or the session ended)
-                // while the fetch was in flight.
-                if (currentImageKey != url || !foregrounded) return@postToMain
+                // while the compose was in flight.
+                if (currentImageKey != overlay || !foregrounded) return@postToMain
                 try {
                     getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
                 } catch (error: Exception) {
@@ -418,25 +389,32 @@ class BoardSessionService : Service() {
         }
     }
 
-    private fun fetchBitmap(url: String): Bitmap? {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = HTTP_TIMEOUT_MS
-            readTimeout = HTTP_TIMEOUT_MS
-            instanceFollowRedirects = true
-            requestMethod = "GET"
+    // Decode the bundled board background layers + the holds-only overlay (both
+    // local PNGs from the BoardRenderer module / bundled assets) and stack them on
+    // a dark base. No server.
+    private fun composeThumbnail(overlay: String, backgrounds: List<String>): Bitmap? {
+        val overlayBitmap = decodeLocalFile(overlay) ?: return null
+        val width = overlayBitmap.width
+        val height = overlayBitmap.height
+        val composed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(composed)
+        canvas.drawColor(THUMB_BACKING_COLOR)
+        val dst = Rect(0, 0, width, height)
+        for (path in backgrounds) {
+            val background = decodeLocalFile(path) ?: continue
+            canvas.drawBitmap(background, null, dst, null)
         }
-        return try {
-            connection.connect()
-            if (connection.responseCode !in 200..299) return null
-            val decoded = connection.inputStream.use { BitmapFactory.decodeStream(it) } ?: return null
-            roundCorners(downscale(decoded))
-        } finally {
-            connection.disconnect()
-        }
+        canvas.drawBitmap(overlayBitmap, null, dst, null)
+        return roundCorners(downscale(composed))
     }
 
-    // Cap the long side so a non-thumbnail response can't blow the ~1 MB RemoteViews
-    // Binder transaction limit (200 px webp ≈ 200 KB; this is a safety net).
+    private fun decodeLocalFile(path: String): Bitmap? {
+        val fsPath = if (path.startsWith("file://")) path.removePrefix("file://") else path
+        return BitmapFactory.decodeFile(fsPath)
+    }
+
+    // Cap the long side so a large render can't blow the ~1 MB RemoteViews Binder
+    // transaction limit (the bitmap rides in both the collapsed + expanded views).
     private fun downscale(src: Bitmap): Bitmap {
         val longSide = maxOf(src.width, src.height)
         if (longSide <= MAX_IMAGE_DIMEN) return src
@@ -450,21 +428,34 @@ class BoardSessionService : Service() {
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val rect = RectF(0f, 0f, src.width.toFloat(), src.height.toFloat())
+        // Opaque dark rounded backing first: a holds-only render (transparent
+        // background) then reads as a dark board with lit holds instead of letting
+        // the (near-white on Android 12+) notification surface show through. A
+        // fully composited board photo is opaque and simply covers this.
+        paint.color = THUMB_BACKING_COLOR
         canvas.drawRoundRect(rect, radius, radius, paint)
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        // Draw the render on top, clipped to the rounded backing (SRC_ATOP keeps the
+        // backing wherever the render is transparent).
+        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
         canvas.drawBitmap(src, 0f, 0f, paint)
         return output
     }
 
     companion object {
-        const val CHANNEL_ID = "boardsesh_session"
+        // v2 channel at IMPORTANCE_DEFAULT (the original boardsesh_session was LOW;
+        // importance can't be raised in place, so a new id is required).
+        const val CHANNEL_ID = "boardsesh_session_active"
+        private const val LEGACY_CHANNEL_ID = "boardsesh_session"
         const val NOTIFICATION_ID = 4711
         private const val TAG = "BoardSession"
 
-        private const val HTTP_TIMEOUT_MS = 8000
         private const val MAX_IMAGE_DIMEN = 256
         private const val IMAGE_CORNER_DP = 8f
         private const val BITMAP_CACHE_ENTRIES = 8
+
+        // Near-black board backing for the thumbnail (matches the iOS card), so a
+        // holds-only render doesn't show the notification surface through the holds.
+        private val THUMB_BACKING_COLOR = 0xFF0A0A0A.toInt()
 
         const val ACTION_START = "com.boardsesh.liveactivity.action.START"
         const val ACTION_UPDATE = "com.boardsesh.liveactivity.action.UPDATE"
@@ -487,17 +478,11 @@ class BoardSessionService : Service() {
         const val EXTRA_HAS_PREVIOUS = "hasPrevious"
         const val EXTRA_CURRENT_INDEX = "currentIndex"
         const val EXTRA_TOTAL_CLIMBS = "totalClimbs"
-        const val EXTRA_CLIMB_UUID = "climbUuid"
         const val EXTRA_BOARD_CONNECTION = "boardConnection"
         const val EXTRA_HOLDER_NAME = "holderDisplayName"
         const val EXTRA_CORRELATION_ID = "correlationId"
-        const val EXTRA_SERVER_URL = "serverUrl"
-        const val EXTRA_BOARD_NAME = "boardName"
-        const val EXTRA_LAYOUT_ID = "layoutId"
-        const val EXTRA_SIZE_ID = "sizeId"
-        const val EXTRA_SET_IDS = "setIds"
-        const val EXTRA_QUEUE_UUIDS = "queueUuids"
-        const val EXTRA_QUEUE_FRAMES = "queueFrames"
+        const val EXTRA_OVERLAY_PATH = "overlayPath"
+        const val EXTRA_BACKGROUND_PATHS = "backgroundPaths"
 
         const val CONNECTION_CONNECTED_BY_ME = "connectedByMe"
         const val CONNECTION_HELD_BY_PEER = "heldByPeer"

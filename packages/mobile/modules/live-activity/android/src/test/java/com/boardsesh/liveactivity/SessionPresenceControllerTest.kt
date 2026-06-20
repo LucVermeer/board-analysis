@@ -152,16 +152,11 @@ class SessionPresenceControllerTest {
 
     @Test
     @Config(sdk = [30])
-    fun `startSession forwards board config and initial board connection`() {
+    fun `startSession forwards the initial board connection and holder`() {
         val (controller, launchedIntents) = recordingController()
 
         controller.startSession(
             StartSessionOptions().apply {
-                serverUrl = "https://example.com"
-                boardName = "kilter"
-                layoutId = 1
-                sizeId = 10
-                setIds = "1,2"
                 boardConnection = "heldByPeer"
                 holderDisplayName = "Alex"
             },
@@ -169,48 +164,36 @@ class SessionPresenceControllerTest {
 
         val start = launchedIntents.single()
         assertEquals(BoardSessionService.ACTION_START, start.action)
-        assertEquals("https://example.com", start.getStringExtra(BoardSessionService.EXTRA_SERVER_URL))
-        assertEquals("kilter", start.getStringExtra(BoardSessionService.EXTRA_BOARD_NAME))
-        assertEquals(1, start.getIntExtra(BoardSessionService.EXTRA_LAYOUT_ID, -1))
-        assertEquals(10, start.getIntExtra(BoardSessionService.EXTRA_SIZE_ID, -1))
-        assertEquals("1,2", start.getStringExtra(BoardSessionService.EXTRA_SET_IDS))
         assertEquals("heldByPeer", start.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION))
         assertEquals("Alex", start.getStringExtra(BoardSessionService.EXTRA_HOLDER_NAME))
     }
 
     @Test
     @Config(sdk = [30])
-    fun `updateActivity forwards climb identity, ownership, and the queue frames`() {
+    fun `updateActivity forwards ownership and the on-device thumbnail paths`() {
         val (controller, launchedIntents) = recordingController()
         controller.startSession(null)
 
         controller.updateActivity(
             updateOptions().apply {
-                climbUuid = "climb-1"
                 currentIndex = 1
                 totalClimbs = 3
                 boardConnection = "heldByPeer"
                 holderDisplayName = "Sam"
-                queue = listOf(
-                    QueueItemFrames().apply { climbUuid = "climb-0"; frames = "p1r12" },
-                    QueueItemFrames().apply { climbUuid = "climb-1"; frames = "p2r15" },
-                )
+                androidThumbnailOverlayPath = "file:///cache/overlay.png"
+                androidThumbnailBackgroundPaths = listOf("/assets/kilter-bg.png", "/assets/kilter-holds.png")
             },
         )
 
         val update = launchedIntents.last()
         assertEquals(BoardSessionService.ACTION_UPDATE, update.action)
-        assertEquals("climb-1", update.getStringExtra(BoardSessionService.EXTRA_CLIMB_UUID))
         assertEquals(3, update.getIntExtra(BoardSessionService.EXTRA_TOTAL_CLIMBS, -1))
         assertEquals("heldByPeer", update.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION))
         assertEquals("Sam", update.getStringExtra(BoardSessionService.EXTRA_HOLDER_NAME))
+        assertEquals("file:///cache/overlay.png", update.getStringExtra(BoardSessionService.EXTRA_OVERLAY_PATH))
         assertEquals(
-            arrayListOf("climb-0", "climb-1"),
-            update.getStringArrayListExtra(BoardSessionService.EXTRA_QUEUE_UUIDS),
-        )
-        assertEquals(
-            arrayListOf("p1r12", "p2r15"),
-            update.getStringArrayListExtra(BoardSessionService.EXTRA_QUEUE_FRAMES),
+            arrayListOf("/assets/kilter-bg.png", "/assets/kilter-holds.png"),
+            update.getStringArrayListExtra(BoardSessionService.EXTRA_BACKGROUND_PATHS),
         )
     }
 

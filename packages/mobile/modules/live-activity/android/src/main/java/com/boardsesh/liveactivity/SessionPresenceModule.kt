@@ -22,33 +22,21 @@ class AndroidNotificationStrings : Record {
     @Field var onWallTemplate: String = "{{name}} is on the wall"
 }
 
-// Board config (already sent by JS startSession) lets the service build the
-// board-render URL for the climb thumbnail; boardConnection/holderDisplayName
-// drive the lightbulb + Previous/Next visibility. iOS reads these via the App
-// Group; on Android they ride the START intent.
+// boardConnection/holderDisplayName drive the lightbulb + Previous/Next
+// visibility. iOS reads these via the App Group; on Android they ride the START
+// intent.
 class StartSessionOptions : Record {
     @Field var androidNotification: AndroidNotificationStrings? = null
-    @Field var serverUrl: String = ""
-    @Field var boardName: String = ""
-    @Field var layoutId: Int = 0
-    @Field var sizeId: Int = 0
-    @Field var setIds: String = ""
     @Field var boardConnection: String = "connectedByMe"
     @Field var holderDisplayName: String? = null
 }
 
-// A queue item's render frames, keyed by climbUuid. The full updateActivity
-// serializes the whole queue; the service caches climbUuid → frames so it can
-// resolve the current climb's thumbnail even on a lightweight updateActivityClimb
-// (which omits the queue).
-class QueueItemFrames : Record {
-    @Field var climbUuid: String = ""
-    @Field var frames: String = ""
-}
-
 // Mirrors the fields of LiveActivityUpdateOptions the notification needs. Other
 // iOS-only fields are simply not declared, so Expo drops them during
-// deserialization. `queue` is empty on the lightweight updateActivityClimb path.
+// deserialization. The thumbnail is rendered on-device (the app's no-network
+// board-art rule): `overlayPath` is the BoardRenderer holds-only PNG and
+// `backgroundPaths` are the bundled board background layers under it; the service
+// composites them locally — no backend fetch.
 class SessionUpdateOptions : Record {
     @Field var climbName: String = ""
     @Field var climbDifficulty: String = ""
@@ -57,10 +45,10 @@ class SessionUpdateOptions : Record {
     @Field var totalClimbs: Int = 0
     @Field var hasNext: Boolean = false
     @Field var hasPrevious: Boolean = false
-    @Field var climbUuid: String = ""
     @Field var boardConnection: String = "connectedByMe"
     @Field var holderDisplayName: String? = null
-    @Field var queue: List<QueueItemFrames> = emptyList()
+    @Field var androidThumbnailOverlayPath: String? = null
+    @Field var androidThumbnailBackgroundPaths: List<String> = emptyList()
 }
 
 /**

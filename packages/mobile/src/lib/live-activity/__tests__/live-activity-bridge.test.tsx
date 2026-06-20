@@ -78,6 +78,10 @@ vi.mock('../../../components/ble/use-board-connection-state', () => ({
   }),
 }));
 
+vi.mock('../../../hooks/use-native-climb-render', () => ({
+  useNativeClimbRender: () => ({ overlayUri: null, backgroundPaths: [], missingBackgroundCount: 0 }),
+}));
+
 vi.mock('../use-live-activity', () => ({
   useLiveActivity: (args: unknown) => widget.useLiveActivity(args),
 }));

@@ -152,6 +152,15 @@ export type LiveActivityUpdateOptions = {
   boardConnection: LiveActivityBoardConnection;
   /** Display name of the peer holding the board (heldByPeer only). */
   holderDisplayName?: string | null;
+  /**
+   * Android-only: on-device climb render for the notification thumbnail, so it
+   * never hits the network (the app's "no-network board art" rule). `file://`
+   * holds-only PNG from the BoardRenderer native module, layered over the bundled
+   * board background image paths. The foreground service composites them; iOS
+   * ignores these (ActivityKit fetches its own thumbnail).
+   */
+  androidThumbnailOverlayPath?: string | null;
+  androidThumbnailBackgroundPaths?: string[];
 };
 
 export type LiveActivityClimbUpdateOptions = Omit<LiveActivityUpdateOptions, 'queue'>;

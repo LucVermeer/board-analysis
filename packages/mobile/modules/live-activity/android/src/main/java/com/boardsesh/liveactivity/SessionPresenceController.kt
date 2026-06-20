@@ -67,12 +67,6 @@ internal class SessionPresenceController(
             putExtra(BoardSessionService.EXTRA_RELIGHT_LABEL, strings?.relightLabel ?: "Relight wall")
             putExtra(BoardSessionService.EXTRA_RECONNECT_LABEL, strings?.reconnectLabel ?: "Connect to board")
             putExtra(BoardSessionService.EXTRA_ON_WALL_TEMPLATE, strings?.onWallTemplate ?: "{{name}} is on the wall")
-            // Board config so the service can build the board-render thumbnail URL.
-            putExtra(BoardSessionService.EXTRA_SERVER_URL, options?.serverUrl ?: "")
-            putExtra(BoardSessionService.EXTRA_BOARD_NAME, options?.boardName ?: "")
-            putExtra(BoardSessionService.EXTRA_LAYOUT_ID, options?.layoutId ?: 0)
-            putExtra(BoardSessionService.EXTRA_SIZE_ID, options?.sizeId ?: 0)
-            putExtra(BoardSessionService.EXTRA_SET_IDS, options?.setIds ?: "")
             // Initial lightbulb / controls state before the first climb update.
             putExtra(BoardSessionService.EXTRA_BOARD_CONNECTION, options?.boardConnection ?: "connectedByMe")
             options?.holderDisplayName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
@@ -102,21 +96,15 @@ internal class SessionPresenceController(
             putExtra(BoardSessionService.EXTRA_HAS_PREVIOUS, options.hasPrevious)
             putExtra(BoardSessionService.EXTRA_CURRENT_INDEX, options.currentIndex)
             putExtra(BoardSessionService.EXTRA_TOTAL_CLIMBS, options.totalClimbs)
-            putExtra(BoardSessionService.EXTRA_CLIMB_UUID, options.climbUuid)
             putExtra(BoardSessionService.EXTRA_BOARD_CONNECTION, options.boardConnection)
             options.holderDisplayName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
-            // Full updates carry the queue; the service caches climbUuid → frames
-            // so a later lightweight updateActivityClimb (empty queue) can still
-            // resolve the current climb's thumbnail. Parallel arrays keep it a
-            // primitive Intent extra (no Serializable/Parcelable).
-            if (options.queue.isNotEmpty()) {
+            // On-device thumbnail: the BoardRenderer overlay PNG + the bundled board
+            // background layers, composited by the service (no backend fetch).
+            options.androidThumbnailOverlayPath?.let { putExtra(BoardSessionService.EXTRA_OVERLAY_PATH, it) }
+            if (options.androidThumbnailBackgroundPaths.isNotEmpty()) {
                 putStringArrayListExtra(
-                    BoardSessionService.EXTRA_QUEUE_UUIDS,
-                    ArrayList(options.queue.map { it.climbUuid }),
-                )
-                putStringArrayListExtra(
-                    BoardSessionService.EXTRA_QUEUE_FRAMES,
-                    ArrayList(options.queue.map { it.frames }),
+                    BoardSessionService.EXTRA_BACKGROUND_PATHS,
+                    ArrayList(options.androidThumbnailBackgroundPaths),
                 )
             }
         }

@@ -67,25 +67,20 @@ class BoardSessionServiceTest {
         return Robolectric.buildService(BoardSessionService::class.java, intent).create().startCommand(0, 1).get()
     }
 
-    // Starts a service with board config so the climb thumbnail URL can be built,
-    // wiring the image seams to run on the calling thread (deterministic async).
-    private fun startWithBoardConfig(
-        imageFetcher: (String) -> Bitmap?,
+    // Starts a service wiring the image seams to run on the calling thread
+    // (deterministic async) with an injectable composer.
+    private fun startWithImageSeams(
+        imageComposer: (String, List<String>) -> Bitmap?,
         executor: Executor = Executor { it.run() },
     ): BoardSessionService {
         val intent = Intent(context, BoardSessionService::class.java).apply {
             action = BoardSessionService.ACTION_START
-            putExtra(BoardSessionService.EXTRA_SERVER_URL, "https://example.com")
-            putExtra(BoardSessionService.EXTRA_BOARD_NAME, "kilter")
-            putExtra(BoardSessionService.EXTRA_LAYOUT_ID, 1)
-            putExtra(BoardSessionService.EXTRA_SIZE_ID, 10)
-            putExtra(BoardSessionService.EXTRA_SET_IDS, "1,2")
         }
         val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
         val service = controller.get()
         service.imageExecutor = executor
         service.postToMain = { it.run() }
-        service.imageFetcher = imageFetcher
+        service.imageComposer = imageComposer
         controller.startCommand(0, 1)
         return service
     }
@@ -94,9 +89,9 @@ class BoardSessionServiceTest {
         connection: String,
         hasPrevious: Boolean = false,
         hasNext: Boolean = false,
-        climbUuid: String = "",
         holderName: String? = null,
-        queue: List<Pair<String, String>> = emptyList(),
+        overlayPath: String? = null,
+        backgroundPaths: List<String> = emptyList(),
     ): Intent = Intent(context, BoardSessionService::class.java).apply {
         action = BoardSessionService.ACTION_UPDATE
         putExtra(BoardSessionService.EXTRA_CLIMB_NAME, "Test Climb")
@@ -105,12 +100,11 @@ class BoardSessionServiceTest {
         putExtra(BoardSessionService.EXTRA_HAS_NEXT, hasNext)
         putExtra(BoardSessionService.EXTRA_CURRENT_INDEX, 1)
         putExtra(BoardSessionService.EXTRA_TOTAL_CLIMBS, 3)
-        putExtra(BoardSessionService.EXTRA_CLIMB_UUID, climbUuid)
         putExtra(BoardSessionService.EXTRA_BOARD_CONNECTION, connection)
         holderName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
-        if (queue.isNotEmpty()) {
-            putStringArrayListExtra(BoardSessionService.EXTRA_QUEUE_UUIDS, ArrayList(queue.map { it.first }))
-            putStringArrayListExtra(BoardSessionService.EXTRA_QUEUE_FRAMES, ArrayList(queue.map { it.second }))
+        overlayPath?.let { putExtra(BoardSessionService.EXTRA_OVERLAY_PATH, it) }
+        if (backgroundPaths.isNotEmpty()) {
+            putStringArrayListExtra(BoardSessionService.EXTRA_BACKGROUND_PATHS, ArrayList(backgroundPaths))
         }
     }
 
@@ -296,24 +290,33 @@ class BoardSessionServiceTest {
 
     @Test
     @Config(sdk = [30])
-    fun `fetches and re-posts the climb thumbnail on the async path`() {
+    fun `composites the on-device thumbnail and re-posts on the async path`() {
         every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
-        val fetched = mutableListOf<String>()
+        val composed = mutableListOf<Pair<String, List<String>>>()
         val stub = Bitmap.createBitmap(4, 5, Bitmap.Config.ARGB_8888)
 
-        val service = startWithBoardConfig(imageFetcher = { url -> fetched.add(url); stub })
-        // START carried no climb; no URL to fetch yet.
-        assertTrue(fetched.isEmpty())
+        val service = startWithImageSeams(imageComposer = { overlay, backgrounds ->
+            composed.add(overlay to backgrounds)
+            stub
+        })
+        // START carried no climb; nothing to compose yet.
+        assertTrue(composed.isEmpty())
 
-        service.onStartCommand(updateIntent("connectedByMe", climbUuid = "c1", queue = listOf("c1" to "p1r15")), 0, 2)
+        service.onStartCommand(
+            updateIntent(
+                "connectedByMe",
+                overlayPath = "file:///cache/overlay-c1.png",
+                backgroundPaths = listOf("/assets/kilter-bg.png"),
+            ),
+            0,
+            2,
+        )
 
-        assertEquals(1, fetched.size)
-        val url = fetched.single()
-        assertTrue(url.contains("/api/internal/board-render"))
-        assertTrue(url.contains("board_name=kilter"))
-        assertTrue(url.contains("frames=p1r15"))
-        assertTrue(url.contains("include_background=1"))
-        // The decoded bitmap is applied via a NotificationManager.notify re-post
+        // Composited from the on-device overlay + bundled backgrounds — no network.
+        assertEquals(1, composed.size)
+        assertEquals("file:///cache/overlay-c1.png", composed.single().first)
+        assertEquals(listOf("/assets/kilter-bg.png"), composed.single().second)
+        // The composited bitmap is applied via a NotificationManager.notify re-post
         // (not startForeground, which is mocked).
         val manager = context.getSystemService(NotificationManager::class.java)
         assertNotNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
@@ -321,27 +324,27 @@ class BoardSessionServiceTest {
 
     @Test
     @Config(sdk = [30])
-    fun `drops a stale thumbnail when the climb moved on before the fetch finished`() {
+    fun `drops a stale thumbnail when the climb moved on before the compose finished`() {
         every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
         val tasks = mutableListOf<Runnable>()
         val stub = Bitmap.createBitmap(4, 5, Bitmap.Config.ARGB_8888)
 
-        // Defer fetches so we can run them out of order relative to the climb change.
-        val service = startWithBoardConfig(imageFetcher = { stub }, executor = Executor { tasks.add(it) })
+        // Defer composes so we can run them out of order relative to the climb change.
+        val service = startWithImageSeams(imageComposer = { _, _ -> stub }, executor = Executor { tasks.add(it) })
 
-        // Move to climb A (queues fetch A), then to climb B (queues fetch B; B is
-        // now the current image key).
-        service.onStartCommand(updateIntent("connectedByMe", climbUuid = "A", queue = listOf("A" to "fa")), 0, 2)
-        service.onStartCommand(updateIntent("connectedByMe", climbUuid = "B", queue = listOf("A" to "fa", "B" to "fb")), 0, 3)
+        // Move to climb A (queues compose A), then to climb B (queues compose B; B
+        // is now the current image key).
+        service.onStartCommand(updateIntent("connectedByMe", overlayPath = "file:///cache/A.png"), 0, 2)
+        service.onStartCommand(updateIntent("connectedByMe", overlayPath = "file:///cache/B.png"), 0, 3)
         assertEquals(2, tasks.size)
 
         val manager = context.getSystemService(NotificationManager::class.java)
 
-        // Running the stale fetch (A) must NOT re-post — the current climb is B.
+        // Running the stale compose (A) must NOT re-post — the current climb is B.
         tasks[0].run()
         assertNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
 
-        // The current fetch (B) re-posts.
+        // The current compose (B) re-posts.
         tasks[1].run()
         assertNotNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
     }
