@@ -1,0 +1,15 @@
+# Changelog
+
+User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
+Notes" section of merged pull requests — do not edit by hand (a CI check rejects
+manual changes). See docs/mobile-ota-updates.md.
+
+## 2026-06-19
+
+### New
+
+- See what's new right in the app — a What's New page now lives under Settings, with a "New" dot when there's an update you haven't read yet. ([#3066](https://github.com/boardsesh/boardsesh/pull/3066))
+
+### Fixed
+
+- The board view now renders natively on the newest Android phones that use 16 KB memory pages (Android 15 and later, 64-bit devices). ([#3069](https://github.com/boardsesh/boardsesh/pull/3069))
