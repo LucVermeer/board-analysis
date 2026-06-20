@@ -30,9 +30,12 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildEntries,
+  buildNativeReleases,
   isContentEqual,
   renderChangelogMarkdown,
   type ChangelogData,
+  type NativePlatform,
+  type RawFingerprintTag,
   type RawPullRequest,
 } from './lib/changelog-transform';
 
@@ -58,12 +61,60 @@ function gh(args: string[]): string {
   return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
+function git(args: string[]): string {
+  return execFileSync('git', args, { cwd: here, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+}
+
 function readExisting(): ChangelogData {
   try {
-    return JSON.parse(readFileSync(OUTPUT_PATH, 'utf8')) as ChangelogData;
+    const parsed = JSON.parse(readFileSync(OUTPUT_PATH, 'utf8')) as Partial<ChangelogData>;
+    return {
+      generatedAt: parsed.generatedAt ?? '',
+      entries: parsed.entries ?? [],
+      nativeReleases: parsed.nativeReleases ?? [],
+    };
   } catch {
-    return { generatedAt: '', entries: [] };
+    return { generatedAt: '', entries: [], nativeReleases: [] };
   }
+}
+
+// Each native build workflow pushes a lightweight tag `fingerprint-<platform>-<hash>`
+// onto the shipping commit after a successful store upload (see
+// ios-testflight-rn.yml / android-apk-rn.yml). Reading them tells us which commits
+// crossed a native-fingerprint boundary, i.e. shipped a store update. Degrades to
+// none on any git failure (not a repo, shallow clone, tags not fetched) so the
+// changelog still generates from PR entries alone.
+const FINGERPRINT_TAG = /^fingerprint-(ios|android)-([0-9a-f]+)$/;
+
+function gatherFingerprintTags(): RawFingerprintTag[] {
+  let raw: string;
+  try {
+    // Lightweight tags point straight at the shipping commit, so `%(objectname)`
+    // is that commit SHA; we resolve its committer date below.
+    raw = git(['for-each-ref', '--format=%(refname:short) %(objectname)', 'refs/tags/fingerprint-*']);
+  } catch (error) {
+    console.warn(`[changelog] could not read fingerprint tags, skipping native-release markers: ${String(error)}`);
+    return [];
+  }
+
+  const tags: RawFingerprintTag[] = [];
+  for (const line of raw.split('\n')) {
+    const [refName, sha] = line.trim().split(/\s+/);
+    const match = refName ? FINGERPRINT_TAG.exec(refName) : null;
+    if (!match || !sha) continue;
+
+    let date: string;
+    try {
+      date = git(['log', '-1', '--format=%cI', sha]).trim();
+    } catch {
+      // Tag points at a commit not in this (possibly shallow) clone — skip it.
+      continue;
+    }
+    if (!date) continue;
+
+    tags.push({ platform: match[1] as NativePlatform, hash: match[2], sha, date });
+  }
+  return tags;
 }
 
 // Merged PRs against main, newest-updated first so the crawl can stop early once
@@ -175,14 +226,15 @@ function main(): void {
   }
 
   const entries = buildEntries(pullRequests);
-  const candidate: ChangelogData = { generatedAt: existing.generatedAt, entries };
-  const entriesUnchanged = isContentEqual(candidate, existing);
+  const nativeReleases = buildNativeReleases(gatherFingerprintTags());
+  const candidate: ChangelogData = { generatedAt: existing.generatedAt, entries, nativeReleases };
+  const contentUnchanged = isContentEqual(candidate, existing);
 
   if (isCheckMode) {
-    // Compare entries only: the committed seed ships with an empty `generatedAt`,
-    // so a matching-but-unstamped snapshot is up to date, not stale.
-    if (entriesUnchanged) {
-      console.log(`[changelog] up to date (${entries.length} entries).`);
+    // Compare entries + native releases only: the committed seed ships with an
+    // empty `generatedAt`, so a matching-but-unstamped snapshot is up to date.
+    if (contentUnchanged) {
+      console.log(`[changelog] up to date (${entries.length} entries, ${nativeReleases.length} native releases).`);
       return;
     }
     console.error(
@@ -192,16 +244,18 @@ function main(): void {
     return;
   }
 
-  // Keep the timestamp stable when the entries are unchanged AND already stamped;
+  // Keep the timestamp stable when the content is unchanged AND already stamped;
   // stamp a real time on the first write (the seed's `generatedAt` is empty).
-  const generatedAt = entriesUnchanged && existing.generatedAt ? existing.generatedAt : new Date().toISOString();
-  const data: ChangelogData = { generatedAt, entries };
+  const generatedAt = contentUnchanged && existing.generatedAt ? existing.generatedAt : new Date().toISOString();
+  const data: ChangelogData = { generatedAt, entries, nativeReleases };
   mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
   writeFileSync(OUTPUT_PATH, `${JSON.stringify(data, null, 2)}\n`);
-  // CHANGELOG.md is a pure function of the entries (no timestamp), so it's
-  // deterministic — the same entries always produce a byte-identical file.
-  writeFileSync(CHANGELOG_PATH, renderChangelogMarkdown(entries));
-  console.log(`[changelog] wrote ${entries.length} entries (changelog.generated.json + CHANGELOG.md)`);
+  // CHANGELOG.md is a pure function of the inputs (no timestamp), so it's
+  // deterministic — the same entries + releases always produce a byte-identical file.
+  writeFileSync(CHANGELOG_PATH, renderChangelogMarkdown(entries, nativeReleases));
+  console.log(
+    `[changelog] wrote ${entries.length} entries + ${nativeReleases.length} native releases (changelog.generated.json + CHANGELOG.md)`,
+  );
 }
 
 main();

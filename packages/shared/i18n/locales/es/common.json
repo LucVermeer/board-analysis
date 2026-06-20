@@ -393,7 +393,29 @@
         "fixed": "Corregido"
       },
       "viewPr": "Ver en GitHub",
-      "empty": "Aún no hay cambios registrados: hemos estado escalando demasiado. Vuelve después del próximo encadene."
+      "empty": "Aún no hay cambios registrados: hemos estado escalando demasiado. Vuelve después del próximo encadene.",
+      "nativeRelease": {
+        "title": "Actualización de la app",
+        "appStore": "Una nueva versión llegó a la App Store.",
+        "playStore": "Una nueva versión llegó a la Play Store."
+      },
+      "checkForUpdates": "Buscar actualizaciones",
+      "checking": "Buscando…",
+      "downloading": "Descargando…",
+      "upToDate": {
+        "title": "Estás al día",
+        "message": "Ya tienes la última versión."
+      },
+      "updateReady": {
+        "title": "Actualización lista",
+        "message": "¿Reiniciar Boardsesh ahora para usar la última versión?",
+        "restart": "Reiniciar",
+        "later": "Más tarde"
+      },
+      "checkError": {
+        "title": "No se pudo buscar actualizaciones",
+        "message": "Algo salió mal al obtener la última versión. Inténtalo de nuevo en un rato."
+      }
     }
   },
   "lightControl": {

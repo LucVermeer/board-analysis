@@ -188,9 +188,24 @@ Run `vp run mobile:ota-setup` with no argument for the ordered runbook.
 `## Release Notes` sections, commits it, **pushes it back to `main`** (commit tagged `[skip ci]` so
 the push can't re-trigger the OTA), and only then runs `eoas publish` (which needs a clean tree).
 Nothing else writes the file: the native build workflows and `refresh-acknowledgements.yml` only
-*read* it, and a CI guard (`changelog-owned` in `ci.yml`) fails any PR that edits it. The OTA still
+_read_ it, and a CI guard (`changelog-owned` in `ci.yml`) fails any PR that edits it. The OTA still
 publishes whether or not the push-back is wired — the push-back just keeps `main`'s copy (which the
 native binaries embed) current.
+
+### Native-release markers + on-demand update check
+
+The generator also reads the `fingerprint-<platform>-<hash>` tags the native build workflows push
+(after a successful store upload) and emits a `nativeReleases` array alongside `entries` — each marker
+records the shipping commit's date, platforms, and per-platform fingerprint. Both `CHANGELOG.md` and
+the in-app "What's New" interleave these as a dated **App update** divider, so the boundary between
+OTA-delivered and store-delivered changes is visible (the app filters markers to the running
+platform). The tag lands only after the store upload finishes, so a marker shows up on the _next_
+changelog regeneration, not the same push that triggered the native build. The OTA publish workflow
+checks out with `fetch-tags: true` so the tags are present when the generator runs.
+
+The changelog screen also has a **Check for updates** button (shown only when `Updates.isEnabled`,
+i.e. production OTA builds) that pulls an OTA on demand: `checkForUpdateAsync` → `fetchUpdateAsync` →
+"restart now?" → `reloadAsync`.
 
 **Push-back needs a bypass identity**, because `main` requires a pull request (enforce-admins on),
 which blocks the default `GITHUB_TOKEN` from pushing directly. One-time setup:
@@ -199,8 +214,8 @@ which blocks the default `GITHUB_TOKEN` from pushing directly. One-time setup:
    No webhook needed. Note its **App ID**.
 2. **Install** the App on `boardsesh/boardsesh` (only this repo).
 3. **Generate a private key** for the App (downloads a `.pem`).
-4. **Add the App to the bypass list**: repo → Settings → Branches → `main` rule → *Allow specified
-   actors to bypass required pull requests* → add the App.
+4. **Add the App to the bypass list**: repo → Settings → Branches → `main` rule → _Allow specified
+   actors to bypass required pull requests_ → add the App.
 5. **Wire the secrets**: set repo **variable** `OTA_PUSH_APP_ID` = the App ID, and repo **secret**
    `OTA_PUSH_APP_PRIVATE_KEY` = the `.pem` contents.
 

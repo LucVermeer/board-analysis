@@ -1,20 +1,31 @@
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import * as Updates from 'expo-updates';
 import * as Application from 'expo-application';
+import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
 import { PressableSurface } from '../src/components/PressableSurface';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
 import { useStackScreenOptions } from '../src/hooks/use-stack-screen-options';
-import { entries, latestEntryDate, type ChangelogCategory, type ChangelogEntry } from '../src/lib/changelog';
+import {
+  timeline,
+  isNativeRelease,
+  latestEntryDate,
+  type ChangelogCategory,
+  type ChangelogEntry,
+  type NativeRelease,
+  type TimelineItem,
+} from '../src/lib/changelog';
 import { markChangelogSeen } from '../src/lib/changelog-seen';
 import { reportError } from '../src/lib/error-reporting';
 import { formatRelativeTime } from '../src/lib/format-relative-time';
+import { hapticError } from '../src/lib/haptics';
 import { openExternalUrl } from '../src/lib/open-url';
+import { useConfirm } from '../src/providers/dialog-provider';
 import { useTheme } from '../src/providers/theme-provider';
 import { borderRadius, spacing } from '../src/theme/tokens';
 import type { IconName } from '../src/components/icon-map';
@@ -118,7 +129,100 @@ const ChangelogEntryRow = memo(function ChangelogEntryRow({ entry, onPress }: Ch
   );
 });
 
-const keyExtractor = (entry: ChangelogEntry) => `pr-${entry.prNumber}`;
+// A native (store) release marker — a distinct, accent-bordered divider that marks
+// where a new app version shipped to the store. Tappable entries flow above/below
+// it; this one is informational only.
+const NativeReleaseRow = memo(function NativeReleaseRow({ release }: { release: NativeRelease }) {
+  const { t } = useTranslation('common');
+  const { systemColors, brandColors } = useTheme();
+  const storeLine =
+    Platform.OS === 'android'
+      ? t('mobile.changelog.nativeRelease.playStore')
+      : t('mobile.changelog.nativeRelease.appStore');
+  return (
+    <View
+      style={[
+        styles.nativeCard,
+        { backgroundColor: systemColors.secondaryBackground, borderColor: brandColors.primary },
+      ]}
+    >
+      <View style={styles.nativeHeader}>
+        <Icon name="star.fill" size={14} color={brandColors.primary} />
+        <Text variant="footnote" color={brandColors.primary} style={styles.nativeTitle}>
+          {t('mobile.changelog.nativeRelease.title')}
+        </Text>
+        <Text variant="caption1" color={systemColors.tertiaryLabel} numberOfLines={1} style={styles.nativeDate}>
+          {formatRelativeTime(release.date)}
+        </Text>
+      </View>
+      <Text variant="subheadline" color={systemColors.secondaryLabel}>
+        {storeLine}
+      </Text>
+    </View>
+  );
+});
+
+type UpdateStatus = 'idle' | 'checking' | 'downloading';
+
+// Pull an OTA on demand: check → download → "restart now?" → reload. Mirrors the
+// BranchSwitcherScreen flow. Hidden when Updates.isEnabled is false (dev / Expo Go),
+// where checkForUpdateAsync throws.
+const CheckForUpdatesButton = memo(function CheckForUpdatesButton() {
+  const { t } = useTranslation('common');
+  const confirm = useConfirm();
+  const [status, setStatus] = useState<UpdateStatus>('idle');
+
+  const handlePress = useCallback(async () => {
+    try {
+      setStatus('checking');
+      const check = await Updates.checkForUpdateAsync();
+      if (!check.isAvailable) {
+        setStatus('idle');
+        Alert.alert(t('mobile.changelog.upToDate.title'), t('mobile.changelog.upToDate.message'));
+        return;
+      }
+      setStatus('downloading');
+      await Updates.fetchUpdateAsync();
+      setStatus('idle');
+      const confirmed = await confirm({
+        title: t('mobile.changelog.updateReady.title'),
+        message: t('mobile.changelog.updateReady.message'),
+        confirmLabel: t('mobile.changelog.updateReady.restart'),
+        cancelLabel: t('mobile.changelog.updateReady.later'),
+      });
+      if (confirmed) await Updates.reloadAsync();
+    } catch (error) {
+      setStatus('idle');
+      hapticError();
+      reportError(error);
+      Alert.alert(t('mobile.changelog.checkError.title'), t('mobile.changelog.checkError.message'));
+    }
+  }, [confirm, t]);
+
+  if (!Updates.isEnabled) return null;
+
+  const title =
+    status === 'checking'
+      ? t('mobile.changelog.checking')
+      : status === 'downloading'
+        ? t('mobile.changelog.downloading')
+        : t('mobile.changelog.checkForUpdates');
+
+  return (
+    <Button
+      title={title}
+      onPress={() => void handlePress()}
+      variant="tonal"
+      size="small"
+      icon="refresh"
+      loading={status !== 'idle'}
+      disabled={status !== 'idle'}
+      style={styles.checkButton}
+    />
+  );
+});
+
+const keyExtractor = (item: TimelineItem) => (isNativeRelease(item) ? `native-${item.sha}` : `pr-${item.prNumber}`);
 
 export default function ChangelogScreen() {
   const { t } = useTranslation('common');
@@ -139,7 +243,12 @@ export default function ChangelogScreen() {
   }, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: ChangelogEntry }) => <ChangelogEntryRow entry={item} onPress={handleOpenPr} />,
+    ({ item }: { item: TimelineItem }) =>
+      isNativeRelease(item) ? (
+        <NativeReleaseRow release={item} />
+      ) : (
+        <ChangelogEntryRow entry={item} onPress={handleOpenPr} />
+      ),
     [handleOpenPr],
   );
 
@@ -150,9 +259,10 @@ export default function ChangelogScreen() {
           wrapper it collapses to zero height and renders nothing (mirrors
           licenses.tsx). */}
       <View style={styles.flex}>
-        {entries.length === 0 ? (
+        {timeline.length === 0 ? (
           <View style={styles.emptyWrap}>
             <CurrentBuildChip />
+            <CheckForUpdatesButton />
             <Text variant="body" color={systemColors.secondaryLabel} style={styles.emptyText}>
               {t('mobile.changelog.empty')}
             </Text>
@@ -161,7 +271,7 @@ export default function ChangelogScreen() {
           // FlashList v2 self-measures rows — `estimatedItemSize` was removed and
           // no longer typechecks (see licenses.tsx for the same note).
           <FlashList
-            data={entries}
+            data={timeline}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             contentInsetAdjustmentBehavior="automatic"
@@ -175,7 +285,10 @@ export default function ChangelogScreen() {
                 <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.intro}>
                   {t('mobile.changelog.intro')}
                 </Text>
-                <CurrentBuildChip />
+                <View style={styles.headerMeta}>
+                  <CurrentBuildChip />
+                  <CheckForUpdatesButton />
+                </View>
               </View>
             }
             ItemSeparatorComponent={Separator}
@@ -197,6 +310,15 @@ const styles = StyleSheet.create({
   listHeader: {
     gap: spacing[3],
     marginBottom: spacing[4],
+  },
+  headerMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing[3],
+  },
+  checkButton: {
+    alignSelf: 'flex-start',
   },
   intro: {
     lineHeight: 20,
@@ -244,6 +366,25 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     lineHeight: 20,
+  },
+  nativeCard: {
+    borderRadius: borderRadius.lg,
+    padding: spacing[4],
+    gap: spacing[2],
+    borderWidth: 1,
+  },
+  nativeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  nativeTitle: {
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  nativeDate: {
+    flex: 1,
+    textAlign: 'right',
   },
   emptyWrap: {
     flex: 1,

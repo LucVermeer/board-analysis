@@ -113,6 +113,11 @@ jobs:
         with:
           # Full history so the changelog push-back can rebase onto the latest main.
           fetch-depth: 0
+          # The changelog generator reads the `fingerprint-<platform>-<hash>` tags
+          # (pushed by the native build workflows) to weave native-release markers
+          # into the changelog. fetch-depth: 0 already pulls tags, but be explicit
+          # so a future shallow tweak can't silently drop them.
+          fetch-tags: true
           # Persist the app token (when configured) so the push-back authenticates
           # as the app and bypasses the branch's PR rule. Falls back to the default
           # token (read-only checkout) when the app isn't set up.

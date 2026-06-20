@@ -4,11 +4,14 @@ import {
   isNoReleaseNoteBoxChecked,
   categorize,
   buildEntries,
+  buildNativeReleases,
   isContentEqual,
   renderChangelogMarkdown,
   type RawPullRequest,
+  type RawFingerprintTag,
   type ChangelogData,
   type ChangelogEntry,
+  type NativeRelease,
 } from '../lib/changelog-transform';
 
 describe('extractReleaseNotes', () => {
@@ -208,6 +211,52 @@ describe('buildEntries', () => {
   });
 });
 
+describe('buildNativeReleases', () => {
+  const tag = (over: Partial<RawFingerprintTag>): RawFingerprintTag => ({
+    platform: 'ios',
+    hash: 'abc123',
+    sha: 'sha-1',
+    date: '2026-06-19T12:00:00Z',
+    ...over,
+  });
+
+  it('collapses iOS + Android tags on the same commit into one marker', () => {
+    const releases = buildNativeReleases([
+      tag({ platform: 'ios', hash: 'iosfp', sha: 'sha-1' }),
+      tag({ platform: 'android', hash: 'androidfp', sha: 'sha-1' }),
+    ]);
+    expect(releases).toHaveLength(1);
+    expect(releases[0]).toEqual({
+      kind: 'native-release',
+      date: '2026-06-19T12:00:00Z',
+      sha: 'sha-1',
+      platforms: ['android', 'ios'], // sorted, stable
+      fingerprints: { ios: 'iosfp', android: 'androidfp' },
+    });
+  });
+
+  it('keeps tags on different commits as separate markers, newest-first', () => {
+    const releases = buildNativeReleases([
+      tag({ sha: 'older', date: '2026-06-10T00:00:00Z' }),
+      tag({ sha: 'newer', date: '2026-06-18T00:00:00Z' }),
+    ]);
+    expect(releases.map((release) => release.sha)).toEqual(['newer', 'older']);
+  });
+
+  it('takes the first hash per platform for a commit', () => {
+    const releases = buildNativeReleases([
+      tag({ platform: 'ios', hash: 'first', sha: 'sha-1' }),
+      tag({ platform: 'ios', hash: 'second', sha: 'sha-1' }),
+    ]);
+    expect(releases[0].platforms).toEqual(['ios']);
+    expect(releases[0].fingerprints).toEqual({ ios: 'first' });
+  });
+
+  it('returns [] for no tags', () => {
+    expect(buildNativeReleases([])).toEqual([]);
+  });
+});
+
 describe('isContentEqual', () => {
   const entries = [
     {
@@ -218,16 +267,25 @@ describe('isContentEqual', () => {
       prUrl: 'u',
     },
   ];
+  const nativeReleases: NativeRelease[] = [
+    { kind: 'native-release', date: '2026-06-10T10:00:00Z', sha: 's', platforms: ['ios'], fingerprints: { ios: 'fp' } },
+  ];
 
   it('is true when only generatedAt differs', () => {
-    const first: ChangelogData = { generatedAt: '2026-06-10T00:00:00Z', entries };
-    const second: ChangelogData = { generatedAt: '2026-06-19T00:00:00Z', entries };
+    const first: ChangelogData = { generatedAt: '2026-06-10T00:00:00Z', entries, nativeReleases };
+    const second: ChangelogData = { generatedAt: '2026-06-19T00:00:00Z', entries, nativeReleases };
     expect(isContentEqual(first, second)).toBe(true);
   });
 
   it('is false when entries differ', () => {
-    const first: ChangelogData = { generatedAt: 'x', entries };
-    const second: ChangelogData = { generatedAt: 'x', entries: [] };
+    const first: ChangelogData = { generatedAt: 'x', entries, nativeReleases };
+    const second: ChangelogData = { generatedAt: 'x', entries: [], nativeReleases };
+    expect(isContentEqual(first, second)).toBe(false);
+  });
+
+  it('is false when native releases differ', () => {
+    const first: ChangelogData = { generatedAt: 'x', entries, nativeReleases };
+    const second: ChangelogData = { generatedAt: 'x', entries, nativeReleases: [] };
     expect(isContentEqual(first, second)).toBe(false);
   });
 });
@@ -277,5 +335,39 @@ describe('renderChangelogMarkdown', () => {
   it('is deterministic (same entries → byte-identical output)', () => {
     const entries = [entry({ prNumber: 3 }), entry({ prNumber: 4, category: 'fixed' })];
     expect(renderChangelogMarkdown(entries)).toBe(renderChangelogMarkdown(entries));
+  });
+
+  const nativeRelease = (over: Partial<NativeRelease>): NativeRelease => ({
+    kind: 'native-release',
+    date: '2026-06-19T12:00:00Z',
+    sha: 'sha-1',
+    platforms: ['ios', 'android'],
+    fingerprints: {},
+    ...over,
+  });
+
+  it('leads a day with an App update note labelled by the platforms present', () => {
+    const md = renderChangelogMarkdown(
+      [entry({ prNumber: 11, category: 'new', title: 'Day feature', mergedAt: '2026-06-19T10:00:00Z' })],
+      [nativeRelease({ platforms: ['ios', 'android'] })],
+    );
+    expect(md).toContain('### App update\n\nA new version shipped to the App Store and Play Store.');
+    // The App update note precedes the New subsection within the same date.
+    const day = md.slice(md.indexOf('## 2026-06-19'));
+    expect(day.indexOf('### App update')).toBeLessThan(day.indexOf('### New'));
+  });
+
+  it('labels a single-platform release with just that store', () => {
+    const iosOnly = renderChangelogMarkdown([], [nativeRelease({ platforms: ['ios'] })]);
+    expect(iosOnly).toContain('A new version shipped to the App Store.');
+    const androidOnly = renderChangelogMarkdown([], [nativeRelease({ platforms: ['android'] })]);
+    expect(androidOnly).toContain('A new version shipped to the Play Store.');
+  });
+
+  it('renders a native-only date as its own section', () => {
+    const md = renderChangelogMarkdown([], [nativeRelease({ date: '2026-06-15T00:00:00Z' })]);
+    expect(md).toContain('## 2026-06-15');
+    expect(md).toContain('### App update');
+    expect(md).not.toContain('### New');
   });
 });
