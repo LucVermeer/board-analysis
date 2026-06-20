@@ -215,8 +215,13 @@ class BoardSessionService : Service() {
         // Importance can't be raised on an existing channel, so the bump from LOW
         // to DEFAULT (lift the ongoing card above the shade's "Silent" group)
         // needs a fresh channel id. Delete the legacy LOW channel so users don't
-        // see two identically-named entries in system Settings.
-        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+        // see two identically-named entries in system Settings — but only when it's
+        // still present: ensureChannel() runs on every update, and an unconditional
+        // delete would churn the manager on the hot path long after the one-time
+        // migration is done.
+        if (manager.getNotificationChannel(LEGACY_CHANNEL_ID) != null) {
+            manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+        }
         val existing = manager.getNotificationChannel(CHANNEL_ID)
         if (existing != null) {
             // Re-create only when ACTION_START delivered a fresh localized name
@@ -450,7 +455,11 @@ class BoardSessionService : Service() {
     }
 
     // Cap the long side so a large render can't blow the ~1 MB RemoteViews Binder
-    // transaction limit (the bitmap rides in both the collapsed + expanded views).
+    // transaction limit. The bitmap is parcelled TWICE — RemoteViews doesn't dedupe,
+    // and setImageViewBitmap runs in both the collapsed and expanded views — so the
+    // transaction carries 2× the single-bitmap size. At 256 px the worst case is a
+    // square board: 256·256·4 = 256 KB per copy → ~512 KB for both, comfortably under
+    // the limit (a portrait board, the common case, is smaller still).
     // internal so a test can pin the cap without the decode/compose shadows.
     internal fun downscale(src: Bitmap): Bitmap {
         val longSide = maxOf(src.width, src.height)
