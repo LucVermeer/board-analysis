@@ -18,7 +18,10 @@ export default defineConfig({
     // formatting it produces noise diffs every time `vp check --fix`
     // runs without changing what ships, and the linter already ignores
     // the same path. Keep them in lock-step.
-    ignore: ['design/**', '**/generated/**', '**/board-controller/**'],
+    // CHANGELOG.md is generated (and owned/pushed) by the mobile OTA pipeline
+    // from PR Release Notes — never hand-format it, or the bot's output and a
+    // formatted copy would drift (and the push-to-main `vp check` would flag it).
+    ignore: ['design/**', '**/generated/**', '**/board-controller/**', 'CHANGELOG.md'],
   },
   lint: {
     ignorePatterns: ['**/board-controller/**'],

@@ -4,8 +4,10 @@ import {
   categorize,
   buildEntries,
   isContentEqual,
+  renderChangelogMarkdown,
   type RawPullRequest,
   type ChangelogData,
+  type ChangelogEntry,
 } from '../lib/changelog-transform';
 
 describe('extractReleaseNotes', () => {
@@ -199,5 +201,53 @@ describe('isContentEqual', () => {
     const first: ChangelogData = { generatedAt: 'x', entries };
     const second: ChangelogData = { generatedAt: 'x', entries: [] };
     expect(isContentEqual(first, second)).toBe(false);
+  });
+});
+
+describe('renderChangelogMarkdown', () => {
+  const entry = (over: Partial<ChangelogEntry> & { prNumber: number }): ChangelogEntry => ({
+    category: 'new',
+    title: `Title ${over.prNumber}`,
+    mergedAt: '2026-06-19T12:00:00Z',
+    prUrl: `https://github.com/boardsesh/boardsesh/pull/${over.prNumber}`,
+    ...over,
+  });
+
+  it('returns the preamble only when there are no entries', () => {
+    const md = renderChangelogMarkdown([]);
+    expect(md.startsWith('# Changelog')).toBe(true);
+    expect(md).not.toContain('## 20'); // no dated section
+  });
+
+  it('groups by date then New/Improved/Fixed, newest date first, with PR links', () => {
+    const md = renderChangelogMarkdown([
+      entry({ prNumber: 10, category: 'new', title: 'Newer day feature', mergedAt: '2026-06-19T10:00:00Z' }),
+      entry({ prNumber: 9, category: 'fixed', title: 'Older day fix', mergedAt: '2026-06-12T10:00:00Z' }),
+      entry({ prNumber: 8, category: 'improved', title: 'Older day tweak', mergedAt: '2026-06-12T09:00:00Z' }),
+    ]);
+    // Newest date section comes first.
+    expect(md.indexOf('## 2026-06-19')).toBeLessThan(md.indexOf('## 2026-06-12'));
+    // Category subsections + PR-linked bullet.
+    expect(md).toContain('### New\n\n- Newer day feature ([#10](https://github.com/boardsesh/boardsesh/pull/10))');
+    // Fixed order: Improved before Fixed within the 2026-06-12 section.
+    const day = md.slice(md.indexOf('## 2026-06-12'));
+    expect(day.indexOf('### Improved')).toBeLessThan(day.indexOf('### Fixed'));
+  });
+
+  it('omits empty category subsections', () => {
+    const md = renderChangelogMarkdown([entry({ prNumber: 1, category: 'fixed', title: 'Only a fix' })]);
+    expect(md).toContain('### Fixed');
+    expect(md).not.toContain('### New');
+    expect(md).not.toContain('### Improved');
+  });
+
+  it('renders an optional body as an indented continuation line', () => {
+    const md = renderChangelogMarkdown([entry({ prNumber: 2, title: 'Has body', body: 'More detail here.' })]);
+    expect(md).toContain('- Has body ([#2](https://github.com/boardsesh/boardsesh/pull/2))\n  More detail here.');
+  });
+
+  it('is deterministic (same entries → byte-identical output)', () => {
+    const entries = [entry({ prNumber: 3 }), entry({ prNumber: 4, category: 'fixed' })];
+    expect(renderChangelogMarkdown(entries)).toBe(renderChangelogMarkdown(entries));
   });
 });

@@ -101,6 +101,7 @@ jobs:
               - 'bun.lock'
             changelogData:
               - 'packages/mobile/src/data/changelog.generated.json'
+              - 'CHANGELOG.md'
 
   setup:
     needs: [changes]
@@ -617,7 +618,7 @@ jobs:
     steps:
       - name: Reject manual changelog edits
         run: |
-          echo "::error::packages/mobile/src/data/changelog.generated.json is owned by the Mobile OTA Production workflow (it regenerates and pushes it on every OTA). Revert your change to this file — it should never be edited in a PR."
+          echo "::error::The changelog files (packages/mobile/src/data/changelog.generated.json and CHANGELOG.md) are owned by the Mobile OTA Production workflow (it regenerates and pushes them on every OTA). Revert your change — they're generated from PR Release Notes, never edited in a PR."
           exit 1
 
   test-report:

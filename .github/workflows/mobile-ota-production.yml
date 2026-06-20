@@ -182,7 +182,9 @@ jobs:
           vp run generate:changelog
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add packages/mobile/src/data/changelog.generated.json
+          # Both outputs of the generator: the mobile JSON feed and the root
+          # human-readable CHANGELOG.md (deterministic from the same entries).
+          git add packages/mobile/src/data/changelog.generated.json CHANGELOG.md
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Changelog unchanged — nothing to commit."
@@ -235,23 +237,29 @@ jobs:
         run: |
           set -euo pipefail
           cp packages/mobile/src/data/changelog.generated.json "$RUNNER_TEMP/changelog.json"
+          cp CHANGELOG.md "$RUNNER_TEMP/CHANGELOG.md"
           for attempt in 1 2 3; do
             git fetch origin main
-            # Idempotent on ENTRIES (ignore the generatedAt timestamp): if main
-            # already carries these entries, we're done — no churn, no conflict.
-            main_entries="$(git show origin/main:packages/mobile/src/data/changelog.generated.json 2>/dev/null | jq -cS '.entries' 2>/dev/null || echo 'missing')"
+            # Idempotent: skip only when main already carries BOTH the same JSON
+            # entries (ignoring the generatedAt timestamp) AND the same CHANGELOG.md.
+            # Checking the markdown too covers the bootstrap case where main has the
+            # entries but not yet the (newly added) CHANGELOG.md.
+            main_entries="$(git show origin/main:packages/mobile/src/data/changelog.generated.json 2>/dev/null | jq -cS '.entries' 2>/dev/null || echo 'missing-json')"
             our_entries="$(jq -cS '.entries' "$RUNNER_TEMP/changelog.json")"
-            if [ "$main_entries" = "$our_entries" ]; then
-              echo "main already has the current changelog entries — nothing to push."
+            main_md="$(git show origin/main:CHANGELOG.md 2>/dev/null || echo 'missing-md')"
+            our_md="$(cat "$RUNNER_TEMP/CHANGELOG.md")"
+            if [ "$main_entries" = "$our_entries" ] && [ "$main_md" = "$our_md" ]; then
+              echo "main already has the current changelog (json + CHANGELOG.md) — nothing to push."
               exit 0
             fi
-            # Land ONLY the changelog file on top of the latest main: hard-reset to
-            # main (so we never revert files changed since our checkout), then
-            # re-apply our generated file. No rebase — a full-file regen can't
+            # Land ONLY the two changelog files on top of the latest main: hard-reset
+            # to main (so we never revert files changed since our checkout), then
+            # re-apply our generated files. No rebase — a full-file regen can't
             # auto-merge a different generatedAt.
             git reset --hard origin/main
             cp "$RUNNER_TEMP/changelog.json" packages/mobile/src/data/changelog.generated.json
-            git add packages/mobile/src/data/changelog.generated.json
+            cp "$RUNNER_TEMP/CHANGELOG.md" CHANGELOG.md
+            git add packages/mobile/src/data/changelog.generated.json CHANGELOG.md
             if git diff --cached --quiet; then
               echo "Changelog matches main (timestamp aside) — nothing to push."
               exit 0
