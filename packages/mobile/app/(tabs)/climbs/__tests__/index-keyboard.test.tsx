@@ -31,6 +31,14 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {}, hairlineWidth: 1 },
   RefreshControl: () => createElement('div', { 'data-refresh-control': 'true' }),
   Keyboard: { dismiss: mocks.dismissKeyboard },
+  // Run deferred work synchronously in tests; the prewarm + background-cache
+  // effects schedule through InteractionManager.runAfterInteractions in the screen.
+  InteractionManager: {
+    runAfterInteractions: (callback: () => void) => {
+      callback();
+      return { cancel: () => undefined };
+    },
+  },
 }));
 
 vi.mock('@shopify/flash-list', () => ({

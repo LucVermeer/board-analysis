@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect, type ComponentProps } from 'react';
-import { View, StyleSheet, RefreshControl, Keyboard } from 'react-native';
+import { View, StyleSheet, RefreshControl, Keyboard, InteractionManager } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -406,15 +406,21 @@ function ClimbListInner() {
 
   useEffect(() => {
     if (!boardConfig || !searchReady) return;
+    let task: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
     const timeout = setTimeout(() => {
-      prewarmCreateBoardHolds({
-        boardName: boardConfig.boardName as BoardName,
-        layoutId: boardConfig.layoutId,
-        sizeId: boardConfig.sizeId,
-        setIds: parseSetIdsParam(boardConfig.setIds),
+      task = InteractionManager.runAfterInteractions(() => {
+        prewarmCreateBoardHolds({
+          boardName: boardConfig.boardName as BoardName,
+          layoutId: boardConfig.layoutId,
+          sizeId: boardConfig.sizeId,
+          setIds: parseSetIdsParam(boardConfig.setIds),
+        });
       });
     }, PREWARM_BOARD_HOLDS_DELAY_MS);
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      task?.cancel();
+    };
   }, [boardConfig, searchReady]);
 
   useEffect(() => {
@@ -457,13 +463,18 @@ function ClimbListInner() {
   // over HTTP (the production CDN/WAF 403s the app's request).
   useEffect(() => {
     if (!activeBoard) return;
-    const parsedSetIds = activeBoard.setIds.split(',').map(Number);
-    void ensureBackgroundsCached({
-      boardName: activeBoard.boardType as BoardName,
-      layoutId: activeBoard.layoutId,
-      sizeId: activeBoard.sizeId,
-      setIds: parsedSetIds,
+    const task = InteractionManager.runAfterInteractions(() => {
+      const parsedSetIds = activeBoard.setIds.split(',').map(Number);
+      void ensureBackgroundsCached({
+        boardName: activeBoard.boardType as BoardName,
+        layoutId: activeBoard.layoutId,
+        sizeId: activeBoard.sizeId,
+        setIds: parsedSetIds,
+      });
     });
+    return () => {
+      task.cancel();
+    };
   }, [activeBoard]);
 
   const searchInput = useMemo(
