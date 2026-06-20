@@ -22,6 +22,7 @@ import android.os.Looper
 import android.util.Log
 import android.util.LruCache
 import android.widget.RemoteViews
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -284,10 +285,10 @@ class BoardSessionService : Service() {
             views.setTextViewText(R.id.session_position, positionText)
             val holder = holderDisplayName
             val holderLine = if (boardConnection == CONNECTION_HELD_BY_PEER && !holder.isNullOrBlank()) {
-                // Substitute the single template placeholder. replaceFirst (literal,
-                // single-pass) so a display name that itself contains "{{name}}" is
-                // inserted verbatim, never re-expanded.
-                onWallTemplate.replaceFirst("{{name}}", holder)
+                // String.replace(String, String) is an unambiguous LITERAL, single-pass
+                // substitution (no regex overload to resolve against), so a display name
+                // that itself contains "{{name}}" is inserted verbatim, never re-expanded.
+                onWallTemplate.replace("{{name}}", holder)
             } else {
                 null
             }
@@ -476,7 +477,10 @@ class BoardSessionService : Service() {
 
         private const val MAX_IMAGE_DIMEN = 256
         private const val IMAGE_CORNER_DP = 8f
-        private const val BITMAP_CACHE_ENTRIES = 8
+        // Cap the thumbnail cache by BYTES (Android bitmap best practice), not entry
+        // count, so it can't balloon if a board ever renders larger than the 256px
+        // downscale ceiling. ~256 KB per thumbnail → ~8 entries at 2 MB.
+        private const val BITMAP_CACHE_BYTES = 2 * 1024 * 1024
 
         const val ACTION_START = "com.boardsesh.liveactivity.action.START"
         const val ACTION_UPDATE = "com.boardsesh.liveactivity.action.UPDATE"
@@ -517,13 +521,16 @@ class BoardSessionService : Service() {
         // Process-static so a rapid stop/start keeps thumbnails warm (mirrors the
         // iOS ThumbnailFetcher's persistent cache intent) and so a single worker
         // thread serves every service instance instead of leaking one per restart.
-        private val bitmapCache = LruCache<String, Bitmap>(BITMAP_CACHE_ENTRIES)
+        private val bitmapCache = object : LruCache<String, Bitmap>(BITMAP_CACHE_BYTES) {
+            override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+        }
         private val inFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
         private val sharedImageExecutor: Executor = Executors.newSingleThreadExecutor()
 
         // The cache + in-flight set are process-static; clear them between tests so
         // one test's warmed thumbnail can't turn another's expected fetch into a
         // cache hit.
+        @VisibleForTesting
         internal fun resetImageStateForTest() {
             bitmapCache.evictAll()
             inFlight.clear()

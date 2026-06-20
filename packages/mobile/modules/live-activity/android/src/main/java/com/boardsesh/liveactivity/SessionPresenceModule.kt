@@ -1,5 +1,6 @@
 package com.boardsesh.liveactivity
 
+import androidx.annotation.VisibleForTesting
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
@@ -162,8 +163,10 @@ class SessionPresenceModule : Module() {
 
         // Test seams for the (process-static) buffer multiplex: inspect/clear the
         // pending queue without an Expo runtime / live module instance.
+        @VisibleForTesting
         internal fun pendingEventsSnapshotForTest(): List<Pair<String, Map<String, Any?>>> = pendingEvents.toList()
 
+        @VisibleForTesting
         internal fun clearPendingForTest() = pendingEvents.clear()
 
         // Routes to the live module (buffering if JS isn't listening yet); with no
