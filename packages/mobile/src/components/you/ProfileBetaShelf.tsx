@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { betaLinkIdentity } from '@boardsesh/shared-schema';
 import { HorizontalScrollSection } from '../HorizontalScrollSection';
-import { BetaVideoCard, BETA_CARD_HEIGHT } from '../play-drawer/BetaVideoCard';
+import { BetaVideoCard, BETA_CARD_COMPACT_HEIGHT } from '../play-drawer/BetaVideoCard';
 import { useUserBetaLinks } from '../../lib/graphql/hooks';
 
 type ProfileBetaShelfProps = {
@@ -38,10 +38,10 @@ export const ProfileBetaShelf = memo(function ProfileBetaShelf({ userId }: Profi
       loading={isLoading && !hasVideos}
       isLoadingMore={isLoadingMore}
       onEndReached={loadMore}
-      minHeight={BETA_CARD_HEIGHT}
+      minHeight={BETA_CARD_COMPACT_HEIGHT}
     >
       {videos.map((video) => (
-        <BetaVideoCard key={betaLinkIdentity(video.betaLink.link)} link={video.betaLink} />
+        <BetaVideoCard key={betaLinkIdentity(video.betaLink.link)} link={video.betaLink} size="compact" />
       ))}
     </HorizontalScrollSection>
   );

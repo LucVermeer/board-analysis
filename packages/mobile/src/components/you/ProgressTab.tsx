@@ -109,10 +109,6 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTit
           Omitted on another climber's profile, where the name lives in the header. */}
       {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
 
-      {/* Recent beta videos shelf — scrolls away above the stats, hidden when
-          the climber has shared none. */}
-      {userId ? <ProfileBetaShelf userId={userId} /> : null}
-
       {recordTipVisible ? (
         <View style={styles.tipInset}>
           <OnboardingTipBanner
@@ -140,6 +136,10 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTit
             hardestFlash={data.hardestFlash}
             percentile={data.percentile}
           />
+
+          {/* Recent beta videos shelf — sits below the stats summary, hidden when
+              the climber has shared none (or has no stats yet). */}
+          {userId ? <ProfileBetaShelf userId={userId} /> : null}
 
           {data.activityHeatmap && (
             <>

@@ -20,6 +20,11 @@ export const BETA_CARD_WIDTH = 108;
 const BETA_CARD_ASPECT_RATIO = 9 / 16;
 export const BETA_CARD_HEIGHT = BETA_CARD_WIDTH / BETA_CARD_ASPECT_RATIO;
 
+// Half-size variant for the profile beta shelf, where the strip is a secondary
+// section under the stats summary rather than a hero row.
+export const BETA_CARD_COMPACT_WIDTH = BETA_CARD_WIDTH / 2;
+export const BETA_CARD_COMPACT_HEIGHT = BETA_CARD_HEIGHT / 2;
+
 type Props = {
   link: BetaLink;
   /**
@@ -29,9 +34,19 @@ type Props = {
    */
   uploaderName?: string | null;
   uploaderAvatarUrl?: string | null;
+  /**
+   * `'compact'` halves the card (54×96) for the profile shelf; `'default'`
+   * (108×192) is the hero size used by the home + session shelves and the grid.
+   */
+  size?: 'default' | 'compact';
 };
 
-export const BetaVideoCard = memo(function BetaVideoCard({ link, uploaderName, uploaderAvatarUrl }: Props) {
+export const BetaVideoCard = memo(function BetaVideoCard({
+  link,
+  uploaderName,
+  uploaderAvatarUrl,
+  size = 'default',
+}: Props) {
   const { t } = useTranslation('session');
   const { showToast } = useToast();
   const [imageFailed, setImageFailed] = useState(false);
@@ -56,12 +71,20 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link, uploaderName, u
       ? t('mobile.betaVideos.cardLabelWithUser', { username })
       : t('mobile.betaVideos.cardLabel');
 
+  const compact = size === 'compact';
+  const cardWidth = compact ? BETA_CARD_COMPACT_WIDTH : BETA_CARD_WIDTH;
+  const cardHeight = compact ? BETA_CARD_COMPACT_HEIGHT : BETA_CARD_HEIGHT;
+  const badgeSize = compact ? 14 : 22;
+  const badgeIconSize = compact ? 8 : 12;
+  const fallbackIconSize = compact ? 20 : 28;
+  const pillMaxWidth = cardWidth - spacing[2] * 2;
+
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="link"
       accessibilityLabel={accessibilityLabel}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      style={({ pressed }) => [styles.card, { width: cardWidth, height: cardHeight }, pressed && styles.cardPressed]}
     >
       {link.thumbnail && !imageFailed ? (
         <Image
@@ -78,25 +101,25 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link, uploaderName, u
         />
       ) : (
         <View style={[styles.thumbnail, styles.thumbnailFallback]}>
-          <Icon name="video" size={28} color={iosSystemColors.systemGray} />
+          <Icon name="video" size={fallbackIconSize} color={iosSystemColors.systemGray} />
         </View>
       )}
 
       {platform && (
-        <View style={styles.platformBadge}>
-          <Icon name={platform.icon} size={12} color={iosSystemColors.white} />
+        <View style={[styles.platformBadge, { width: badgeSize, height: badgeSize }]}>
+          <Icon name={platform.icon} size={badgeIconSize} color={iosSystemColors.white} />
         </View>
       )}
 
       {uploaderName ? (
-        <View style={[styles.usernamePill, styles.uploaderPill]}>
+        <View style={[styles.usernamePill, { maxWidth: pillMaxWidth }, styles.uploaderPill]}>
           <Avatar uri={uploaderAvatarUrl ?? undefined} name={uploaderName} size={16} />
           <Text variant="caption2" color={iosSystemColors.white} numberOfLines={1} style={styles.uploaderName}>
             {uploaderName}
           </Text>
         </View>
       ) : username ? (
-        <View style={styles.usernamePill}>
+        <View style={[styles.usernamePill, { maxWidth: pillMaxWidth }, compact && styles.usernamePillCompact]}>
           <Text variant="caption2" color={iosSystemColors.white} numberOfLines={1}>
             @{username}
           </Text>
@@ -114,8 +137,7 @@ function detectPlatform(url: string): { name: 'instagram' | 'tiktok'; icon: Icon
 
 const styles = StyleSheet.create({
   card: {
-    width: BETA_CARD_WIDTH,
-    height: BETA_CARD_HEIGHT,
+    // width/height are applied inline from the `size` prop.
     borderRadius: borderRadius.md,
     overflow: 'hidden',
     backgroundColor: `${iosSystemColors.systemGray}1F`,
@@ -149,11 +171,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: spacing[1],
     left: spacing[1],
-    maxWidth: BETA_CARD_WIDTH - spacing[2] * 2,
+    // maxWidth is applied inline from the resolved card width.
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: borderRadius.full,
     backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  usernamePillCompact: {
+    paddingHorizontal: spacing[1],
+    paddingVertical: 1,
   },
   uploaderPill: {
     flexDirection: 'row',
