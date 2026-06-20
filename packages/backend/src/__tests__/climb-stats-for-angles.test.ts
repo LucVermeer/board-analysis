@@ -31,8 +31,19 @@ vi.mock('@boardsesh/db/queries', async (importOriginal) => {
   };
 });
 
+// Spy on the shared rate-limit helper (keep validateInput and everything else
+// real). Lets us assert the resolver enforces a limit without coupling to the
+// limiter's module-global counter or NODE_ENV.
+vi.mock('../graphql/resolvers/shared/helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../graphql/resolvers/shared/helpers')>();
+  return { ...actual, applyRateLimit: vi.fn(async () => {}) };
+});
+
 import { climbQueries } from '../graphql/resolvers/climbs/queries';
+import { applyRateLimit } from '../graphql/resolvers/shared/helpers';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
+
+const applyRateLimitMock = vi.mocked(applyRateLimit);
 
 // Anonymous HTTP-style context: only the in-memory rate-limit tier runs (the
 // Redis tier is gated on authenticated users), so no infra is needed.
@@ -102,6 +113,19 @@ describe('climbStatsForAngles resolver', () => {
 
     expect(result).toEqual([]);
     expect(dbReadMock.select).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies a 60/min rate limit for this operation before querying', async () => {
+    await callResolver('kilter', 'CLIMB-1');
+
+    expect(applyRateLimitMock).toHaveBeenCalledWith(ctx, 60, 'climb-stats-for-angles');
+  });
+
+  it('propagates a rate-limit rejection without touching the DB', async () => {
+    applyRateLimitMock.mockRejectedValueOnce(new Error('RATE_LIMITED'));
+
+    await expect(callResolver('kilter', 'CLIMB-1')).rejects.toThrow('RATE_LIMITED');
+    expect(dbReadMock.select).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown board name', async () => {
