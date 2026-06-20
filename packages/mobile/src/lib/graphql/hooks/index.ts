@@ -656,10 +656,10 @@ export function useUserBetaLinks(
       else setIsLoadingMore(true);
 
       try {
-        const response = await getHttpClient().request<
-          GetUserBetaLinksQueryResponse,
-          GetUserBetaLinksQueryVariables
-        >(GET_USER_BETA_LINKS, { userId, limit: pageSize, offset });
+        const response = await getHttpClient().request<GetUserBetaLinksQueryResponse, GetUserBetaLinksQueryVariables>(
+          GET_USER_BETA_LINKS,
+          { userId, limit: pageSize, offset },
+        );
 
         const rows = response.userBetaLinks;
         const fresh: RecentBetaVideo[] = [];
