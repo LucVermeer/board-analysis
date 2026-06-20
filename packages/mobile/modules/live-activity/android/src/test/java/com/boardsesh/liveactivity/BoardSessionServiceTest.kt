@@ -373,6 +373,40 @@ class BoardSessionServiceTest {
 
     @Test
     @Config(sdk = [30])
+    fun `recomposes when the backgrounds resolve late for the same overlay`() {
+        every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
+        val composed = mutableListOf<Pair<String, List<String>>>()
+        val stub = Bitmap.createBitmap(4, 5, Bitmap.Config.ARGB_8888)
+
+        val service = startWithImageSeams(imageComposer = { overlay, backgrounds ->
+            composed.add(overlay to backgrounds)
+            stub
+        })
+
+        // Update 1: the overlay is known but the bundled board backgrounds aren't
+        // cached yet, so JS sends an empty list -> composites a holds-only thumbnail.
+        service.onStartCommand(updateIntent("connectedByMe", overlayPath = "file:///cache/o1.png"), 0, 2)
+        // Update 2: SAME overlay, backgrounds now resolved (the use-live-activity
+        // backgroundsKey effect re-fires). The service must RE-composite with the
+        // board photo, not serve the cached holds-only composite — the cache key folds
+        // in the backgrounds, so the second update is a miss.
+        service.onStartCommand(
+            updateIntent(
+                "connectedByMe",
+                overlayPath = "file:///cache/o1.png",
+                backgroundPaths = listOf("/assets/kilter-bg.png"),
+            ),
+            0,
+            3,
+        )
+
+        assertEquals(2, composed.size)
+        assertEquals(emptyList<String>(), composed[0].second)
+        assertEquals(listOf("/assets/kilter-bg.png"), composed[1].second)
+    }
+
+    @Test
+    @Config(sdk = [30])
     fun `downscale caps the thumbnail long side so the RemoteViews stays under the Binder limit`() {
         val service = Robolectric.buildService(BoardSessionService::class.java).create().get()
 

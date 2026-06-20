@@ -371,17 +371,28 @@ class BoardSessionService : Service() {
 
     // --- Climb thumbnail (on-device, no network) ---
 
-    private fun currentBitmap(): Bitmap? = overlayPath?.takeIf { it.isNotBlank() }?.let { bitmapCache.get(it) }
+    // The composited bitmap depends on BOTH the overlay AND the backgrounds, so the
+    // cache / in-flight / stale-guard key must fold in the backgrounds — otherwise a
+    // late background resolution (JS first sends the overlay with empty backgrounds,
+    // then re-fires once the bundled board layers are cached) would hit the cached
+    // holds-only composite keyed by overlay alone and never re-render with the board
+    // photo. The separator is a null char (never present in a file path).
+    private fun imageKey(overlay: String, backgrounds: List<String>): String =
+        if (backgrounds.isEmpty()) overlay else overlay + "\u0000" + backgrounds.joinToString("\u0000")
+
+    private fun currentBitmap(): Bitmap? =
+        overlayPath?.takeIf { it.isNotBlank() }?.let { bitmapCache.get(imageKey(it, backgroundPaths)) }
 
     // Composites the current climb's thumbnail off the main thread (after
     // promotion), then re-posts the notification with it. Never blocks
     // startForeground(), never touches the network.
     private fun maybeComposeImage() {
         val overlay = overlayPath?.takeIf { it.isNotBlank() } ?: return
-        currentImageKey = overlay
-        if (bitmapCache.get(overlay) != null) return
-        if (!inFlight.add(overlay)) return
         val backgrounds = backgroundPaths
+        val key = imageKey(overlay, backgrounds)
+        currentImageKey = key
+        if (bitmapCache.get(key) != null) return
+        if (!inFlight.add(key)) return
         imageExecutor.execute {
             val bitmap = try {
                 imageComposer(overlay, backgrounds)
@@ -389,14 +400,14 @@ class BoardSessionService : Service() {
                 Log.w(TAG, "thumbnail compose failed: ${error.message}")
                 null
             } finally {
-                inFlight.remove(overlay)
+                inFlight.remove(key)
             }
             if (bitmap == null) return@execute
-            bitmapCache.put(overlay, bitmap)
+            bitmapCache.put(key, bitmap)
             postToMain {
                 // Stale guard: the climb may have moved on (or the session ended)
                 // while the compose was in flight.
-                if (currentImageKey != overlay || !foregrounded) return@postToMain
+                if (currentImageKey != key || !foregrounded) return@postToMain
                 try {
                     getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
                 } catch (error: Exception) {
