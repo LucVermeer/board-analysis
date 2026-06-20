@@ -1,6 +1,5 @@
 export { PlaylistPreviewSquare, type PlaylistPreviewSquareProps } from './PlaylistPreviewSquare';
 export { PlaylistCard, type PlaylistCardProps } from './PlaylistCard';
-export { PlaylistScrollSection, type PlaylistScrollSectionProps } from './PlaylistScrollSection';
 export { PlaylistListRow, PlaylistListRowSeparator, type PlaylistListRowProps } from './PlaylistListRow';
 export {
   PlaylistDetailView,

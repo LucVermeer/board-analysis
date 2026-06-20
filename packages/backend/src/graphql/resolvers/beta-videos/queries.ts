@@ -560,9 +560,14 @@ export const betaLinkQueries = {
   // resolver there.
   userBetaLinks: async (
     _: unknown,
-    { userId, limit }: { userId: string; limit?: number | null },
+    { userId, limit, offset }: { userId: string; limit?: number | null; offset?: number | null },
   ): Promise<RecentBetaLinkResult[]> => {
     const cappedLimit = Math.min(Math.max(limit ?? USER_BETA_LINKS_DEFAULT_LIMIT, 1), USER_BETA_LINKS_MAX_LIMIT);
+    // Offset paging: the client advances by `limit` per page and infers
+    // hasMore from a full page coming back. The post-fetch KayaClimb filter
+    // below can shrink a page below `limit`, which the client reads as the
+    // end — acceptable since KayaClimb rows are rare and being phased out.
+    const safeOffset = Math.max(offset ?? 0, 0);
 
     // Look up the user's IG handle from their profile, if set. Independent
     // query so we don't pay the cost of a second join when no profile row
@@ -602,6 +607,7 @@ export const betaLinkQueries = {
         ),
       )
       .orderBy(desc(dbSchema.boardBetaLinks.createdAt))
+      .offset(safeOffset)
       .limit(cappedLimit);
 
     return rows

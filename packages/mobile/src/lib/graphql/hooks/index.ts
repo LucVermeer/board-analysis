@@ -519,14 +519,18 @@ export function useFavoriteStatus(
 // Beta Videos (Instagram + TikTok per climb)
 // ============================================
 
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   GET_BETA_LINKS,
   GET_RECENT_BETA_LINKS,
+  GET_USER_BETA_LINKS,
   ATTACH_BETA_LINK,
   type GetBetaLinksQueryResponse,
   type GetBetaLinksQueryVariables,
   type GetRecentBetaLinksQueryResponse,
   type GetRecentBetaLinksQueryVariables,
+  type GetUserBetaLinksQueryResponse,
+  type GetUserBetaLinksQueryVariables,
   type RecentBetaLinkGqlRow,
   type AttachBetaLinkMutationVariables,
   type AttachBetaLinkMutationResponse,
@@ -600,6 +604,124 @@ export function useRecentBetaLinks(limit = 20, boardType?: string | null, layout
     enabled,
     staleTime: 5 * 60 * 1000,
   });
+}
+
+const USER_BETA_LINKS_PAGE_SIZE = 20;
+
+export type UseUserBetaLinksResult = {
+  /** Accumulated, deduped, video-only beta links across all loaded pages. */
+  videos: RecentBetaVideo[];
+  /** True while the first page is loading. */
+  isLoading: boolean;
+  /** True while a subsequent page is loading. */
+  isLoadingMore: boolean;
+  /** Whether the last page came back full (so there may be more). */
+  hasMore: boolean;
+  /** True when the first-page fetch failed. */
+  hasError: boolean;
+  loadMore: () => void;
+  refetch: () => void;
+};
+
+/**
+ * A climber's recent beta videos, offset-paginated for the profile shelf and
+ * its "See all" grid. Public query (no auth token). Mirrors the offset-paging
+ * shape of `useUserPlaylists`: page 0 on mount/userId-change, more pages on
+ * `loadMore`, dedupe + video-only filter persisted across pages.
+ */
+export function useUserBetaLinks(
+  userId: string | null | undefined,
+  pageSize: number = USER_BETA_LINKS_PAGE_SIZE,
+  enabled = true,
+): UseUserBetaLinksResult {
+  const [videos, setVideos] = useState<RecentBetaVideo[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  const seenIdentitiesRef = useRef<Set<string>>(new Set());
+  const offsetRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const isFetchingRef = useRef(false);
+
+  const active = enabled && !!userId;
+
+  const fetchPage = useCallback(
+    async (offset: number, isInitial: boolean) => {
+      if (!userId) return;
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      if (isInitial) setIsLoading(true);
+      else setIsLoadingMore(true);
+
+      try {
+        const response = await getHttpClient().request<
+          GetUserBetaLinksQueryResponse,
+          GetUserBetaLinksQueryVariables
+        >(GET_USER_BETA_LINKS, { userId, limit: pageSize, offset });
+
+        const rows = response.userBetaLinks;
+        const fresh: RecentBetaVideo[] = [];
+        for (const betaRow of rows) {
+          const betaLink = mapBetaLink(betaRow.betaLink);
+          if (!isBetaVideoUrl(betaLink.link)) continue;
+          const identity = betaLinkIdentity(betaLink.link);
+          if (seenIdentitiesRef.current.has(identity)) continue;
+          seenIdentitiesRef.current.add(identity);
+          fresh.push({ ...betaRow, betaLink });
+        }
+
+        setVideos((prev) => (isInitial ? fresh : [...prev, ...fresh]));
+        // Advance the DB offset by the requested page size — it must skip the
+        // rows already fetched regardless of how many survived the video-only /
+        // dedupe filter above. `hasMore` is a heuristic: a full raw page back
+        // means there may be more.
+        offsetRef.current = offset + pageSize;
+        const more = rows.length === pageSize;
+        setHasMore(more);
+        hasMoreRef.current = more;
+        setHasError(false);
+      } catch (err: unknown) {
+        console.error('Failed to fetch user beta links:', err);
+        if (isInitial) setHasError(true);
+      } finally {
+        if (isInitial) setIsLoading(false);
+        else setIsLoadingMore(false);
+        isFetchingRef.current = false;
+      }
+    },
+    [userId, pageSize],
+  );
+
+  // Reset and re-fetch page 0 whenever the user (or enabled) changes.
+  useEffect(() => {
+    seenIdentitiesRef.current = new Set();
+    offsetRef.current = 0;
+    hasMoreRef.current = false;
+    setVideos([]);
+    setHasMore(false);
+    setHasError(false);
+    if (!active) {
+      setIsLoading(false);
+      return;
+    }
+    void fetchPage(0, true);
+  }, [active, fetchPage]);
+
+  const loadMore = useCallback(() => {
+    if (hasMoreRef.current && !isFetchingRef.current) {
+      void fetchPage(offsetRef.current, false);
+    }
+  }, [fetchPage]);
+
+  const refetch = useCallback(() => {
+    seenIdentitiesRef.current = new Set();
+    offsetRef.current = 0;
+    void fetchPage(0, true);
+  }, [fetchPage]);
+
+  return { videos, isLoading, isLoadingMore, hasMore, hasError, loadMore, refetch };
 }
 
 // ============================================

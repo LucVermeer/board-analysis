@@ -3718,6 +3718,8 @@ export type Query = {
    * most-recent-first. Matches both videos this user added directly and
    * videos posted under the Instagram handle linked from their profile.
    * Returns only rows whose thumbnails are cached in our S3.
+   * Paginate with offset (the page size is limit); the caller infers
+   * "has more" from a full page coming back.
    */
   userBetaLinks: Array<RecentBetaLink>;
   /** Get a user's percentile ranking based on distinct climbs ascended. */
@@ -4175,6 +4177,7 @@ export type QueryUserAscentsFeedArgs = {
 /** Root query type for all read operations. */
 export type QueryUserBetaLinksArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
   userId: Scalars['String']['input'];
 };
 
@@ -5990,6 +5993,7 @@ export type GetRecentBetaLinksQuery = {
 export type GetUserBetaLinksQueryVariables = Exact<{
   userId: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
 export type GetUserBetaLinksQuery = {
@@ -8461,6 +8465,11 @@ export const GetUserBetaLinksDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'limit' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'offset' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -8478,6 +8487,11 @@ export const GetUserBetaLinksDocument = {
                 kind: 'Argument',
                 name: { kind: 'Name', value: 'limit' },
                 value: { kind: 'Variable', name: { kind: 'Name', value: 'limit' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'offset' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'offset' } },
               },
             ],
             selectionSet: {

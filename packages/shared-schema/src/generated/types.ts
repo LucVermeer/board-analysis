@@ -3721,6 +3721,8 @@ export type Query = {
    * most-recent-first. Matches both videos this user added directly and
    * videos posted under the Instagram handle linked from their profile.
    * Returns only rows whose thumbnails are cached in our S3.
+   * Paginate with offset (the page size is limit); the caller infers
+   * "has more" from a full page coming back.
    */
   userBetaLinks: Array<RecentBetaLink>;
   /** Get a user's percentile ranking based on distinct climbs ascended. */
@@ -4178,6 +4180,7 @@ export type QueryUserAscentsFeedArgs = {
 /** Root query type for all read operations. */
 export type QueryUserBetaLinksArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
   userId: Scalars['String']['input'];
 };
 
@@ -8921,7 +8924,7 @@ export type QueryResolvers<
     Array<ResolversTypes['RecentBetaLink']>,
     ParentType,
     ContextType,
-    RequireFields<QueryUserBetaLinksArgs, 'limit' | 'userId'>
+    RequireFields<QueryUserBetaLinksArgs, 'limit' | 'offset' | 'userId'>
   >;
   userClimbPercentile?: Resolver<
     ResolversTypes['UserClimbPercentile'],

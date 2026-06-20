@@ -78,7 +78,14 @@
       "notFoundTitle": "Escalador no encontrado",
       "notFoundBody": "No pudimos encontrar a ese escalador.",
       "noClimbs": "Aún no hay bloques creados",
-      "climbsError": "No se pudieron cargar los bloques"
+      "climbsError": "No se pudieron cargar los bloques",
+      "betaShelf": {
+        "title": "Vídeos de beta",
+        "seeAll": "Ver todos",
+        "allTitle": "Vídeos de beta",
+        "empty": "Aún no hay vídeos de beta",
+        "emptyBody": "La beta que comparte este escalador aparece aquí."
+      }
     },
     "comments": {
       "title": "Comentarios",

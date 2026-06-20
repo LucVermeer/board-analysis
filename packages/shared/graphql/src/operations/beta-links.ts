@@ -67,8 +67,8 @@ export type GetRecentBetaLinksQueryResponse = {
 };
 
 export const GET_USER_BETA_LINKS = gql`
-  query GetUserBetaLinks($userId: String!, $limit: Int) {
-    userBetaLinks(userId: $userId, limit: $limit) {
+  query GetUserBetaLinks($userId: String!, $limit: Int, $offset: Int) {
+    userBetaLinks(userId: $userId, limit: $limit, offset: $offset) {
       climbName
       boardType
       layoutId
@@ -90,6 +90,7 @@ export const GET_USER_BETA_LINKS = gql`
 export type GetUserBetaLinksQueryVariables = {
   userId: string;
   limit?: number;
+  offset?: number;
 };
 
 export type GetUserBetaLinksQueryResponse = {

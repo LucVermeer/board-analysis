@@ -78,7 +78,14 @@
       "notFoundTitle": "Climber not found",
       "notFoundBody": "We couldn't find that climber.",
       "noClimbs": "No climbs created yet",
-      "climbsError": "Couldn't load climbs"
+      "climbsError": "Couldn't load climbs",
+      "betaShelf": {
+        "title": "Beta videos",
+        "seeAll": "See all",
+        "allTitle": "Beta videos",
+        "empty": "No beta videos yet",
+        "emptyBody": "Beta this climber shares shows up here."
+      }
     },
     "comments": {
       "title": "Comments",

@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vite-plus/test'
 const {
   selectMock,
   recentSelectMock,
+  offsetSpy,
   executeMock,
   updateMock,
   fetchInstagramMetaMock,
@@ -18,6 +19,7 @@ const {
 } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   recentSelectMock: vi.fn(),
+  offsetSpy: vi.fn(),
   executeMock: vi.fn(),
   updateMock: vi.fn(),
   fetchInstagramMetaMock: vi.fn(),
@@ -64,6 +66,10 @@ vi.mock('../db/client', () => ({
           leftJoin: () => chain,
           where: () => chain,
           orderBy: () => chain,
+          offset: (value: number) => {
+            offsetSpy(value);
+            return chain;
+          },
           limit: () => Promise.resolve(recentSelectMock()),
         };
         return chain;
@@ -447,6 +453,7 @@ describe('recentBetaLinks resolver', () => {
 describe('userBetaLinks resolver', () => {
   beforeEach(() => {
     recentSelectMock.mockReset();
+    offsetSpy.mockReset();
     fetchInstagramMetaMock.mockReset();
     fetchTikTokMetaMock.mockReset();
   });
@@ -522,6 +529,28 @@ describe('userBetaLinks resolver', () => {
 
     expect(fetchInstagramMetaMock).not.toHaveBeenCalled();
     expect(fetchTikTokMetaMock).not.toHaveBeenCalled();
+  });
+
+  it('forwards the offset to the paged query for the next page', async () => {
+    recentSelectMock
+      .mockReturnValueOnce([{ instagramUrl: null }])
+      .mockReturnValueOnce([joinedRow({ link: 'https://www.instagram.com/p/PAGE2/' }, 'Page Two')]);
+
+    const result = await betaLinkQueries.userBetaLinks(undefined, { userId: 'user-1', limit: 20, offset: 20 });
+
+    expect(offsetSpy).toHaveBeenCalledWith(20);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.climbName).toBe('Page Two');
+  });
+
+  it('defaults a missing offset to 0', async () => {
+    recentSelectMock
+      .mockReturnValueOnce([{ instagramUrl: null }])
+      .mockReturnValueOnce([joinedRow({ link: 'https://www.instagram.com/p/A/' })]);
+
+    await betaLinkQueries.userBetaLinks(undefined, { userId: 'user-1', limit: 50 });
+
+    expect(offsetSpy).toHaveBeenCalledWith(0);
   });
 });
 

@@ -1,12 +1,12 @@
 import { type ReactNode } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { SectionHeader } from '../SectionHeader';
-import { ActivityIndicator } from '../ActivityIndicator';
-import { spacing } from '../../theme/tokens';
+import { SectionHeader } from './SectionHeader';
+import { ActivityIndicator } from './ActivityIndicator';
+import { spacing } from '../theme/tokens';
 
-export type PlaylistScrollSectionProps = {
+export type HorizontalScrollSectionProps = {
   title: string;
-  /** PlaylistCard (variant="scroll") children, laid out horizontally. */
+  /** Horizontally-laid-out card children (playlist cards, beta cards, …). */
   children: ReactNode;
   /** Fires when the user scrolls near the right edge — drives pagination. */
   onEndReached?: () => void;
@@ -17,18 +17,24 @@ export type PlaylistScrollSectionProps = {
   /** Trailing header affordance (e.g. "See all") — expands the shelf to a full list. */
   actionLabel?: string;
   onActionPress?: () => void;
+  /** Height of the loading row / minimum shelf height, sized to the cards the
+   *  shelf holds (120-tall playlist cards vs 192-tall beta cards). */
+  minHeight?: number;
 };
 
 // Right-edge slop (px) at which onEndReached fires, so the next page starts
 // loading before the user hits the very end of the scroller.
 const END_REACHED_THRESHOLD = 200;
+const DEFAULT_MIN_HEIGHT = 160;
 
 /**
- * Horizontal playlist scroller with a section title. Uses a ScrollView (the
- * card count per section is small and bounded) and fires `onEndReached` as the
- * content scrolls within `END_REACHED_THRESHOLD` of the right edge.
+ * Horizontal card scroller with a section title and an optional "See all"
+ * affordance. Uses a ScrollView (the loaded card count per shelf is bounded)
+ * and fires `onEndReached` as the content scrolls within
+ * `END_REACHED_THRESHOLD` of the right edge. Generic over its children —
+ * playlist shelves on Discover and the beta-links shelf on profiles share it.
  */
-export function PlaylistScrollSection({
+export function HorizontalScrollSection({
   title,
   children,
   onEndReached,
@@ -36,12 +42,13 @@ export function PlaylistScrollSection({
   isLoadingMore,
   actionLabel,
   onActionPress,
-}: PlaylistScrollSectionProps) {
+  minHeight = DEFAULT_MIN_HEIGHT,
+}: HorizontalScrollSectionProps) {
   return (
     <View style={styles.section}>
       <SectionHeader title={title} actionLabel={actionLabel} onActionPress={onActionPress} />
       {loading ? (
-        <View style={styles.loadingRow}>
+        <View style={[styles.loadingRow, { height: minHeight }]}>
           <ActivityIndicator size="small" />
         </View>
       ) : (
@@ -82,7 +89,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   loadingRow: {
-    height: 160,
     alignItems: 'center',
     justifyContent: 'center',
   },
