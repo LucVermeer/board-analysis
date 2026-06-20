@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Verify that every native library (.so) bundled in an Android APK or AAB has its
-# ELF LOAD segments aligned to >= 16 KB (0x4000). Apps targeting Android 15+ (API
-# 35+) must support 16 KB memory page sizes: a 4 KB-aligned .so fails to dlopen on
-# 16 KB-page devices (Pixel 8/9, etc.) with "not 16 KB aligned" → UnsatisfiedLinkError,
-# and Google Play rejects the AAB at upload. This check is the CI guard that proves
-# our own libs (the board-renderer JNI wrapper + prebuilt Rust FFI) are aligned and
-# catches any third-party lib that regresses.
+# Verify that every 64-bit native library (.so) bundled in an Android APK or AAB
+# has its ELF LOAD segments aligned to >= 16 KB (0x4000). Apps targeting Android
+# 15+ (API 35+) must support 16 KB memory page sizes: a 4 KB-aligned .so fails to
+# dlopen on 16 KB-page devices (Pixel 8/9, etc.) with "not 16 KB aligned" →
+# UnsatisfiedLinkError, and Google Play rejects the AAB at upload. This check is
+# the CI guard that proves our own libs (the board-renderer JNI wrapper + prebuilt
+# Rust FFI) are aligned and catches any third-party lib that regresses.
+#
+# 64-bit ONLY: the 16 KB requirement applies to arm64-v8a and x86_64. 16 KB-page
+# devices run a 64-bit kernel and never load 32-bit code, so Google Play does not
+# enforce 16 KB on armeabi-v7a / x86 — those ship 4 KB-aligned by design. Auditing
+# them too would false-fail every release, so 32-bit ABIs are skipped below.
 #
 # Usage: scripts/check-16kb-alignment.sh <path-to-apk-or-aab> [more-archives...]
 #
@@ -52,8 +57,19 @@ for archive in "$@"; do
   found_so=0
   while IFS= read -r -d '' so; do
     found_so=1
-    checked_any=1
     rel="${so#"$dir"/}"
+
+    # 64-bit only (see header): the ABI is the directory directly holding the .so
+    # (lib/<abi>/… or base/lib/<abi>/…). Skip 32-bit ABIs, which legitimately ship
+    # 4 KB-aligned. Matched exactly so x86_64 is NOT caught by the x86 case.
+    abi="$(basename "$(dirname "$so")")"
+    case "$abi" in
+    armeabi-v7a | x86)
+      echo "  skip (32-bit ABI, 16 KB N/A): $rel"
+      continue
+      ;;
+    esac
+    checked_any=1
 
     # Collect the p_align of every LOAD segment (last column of each LOAD line),
     # e.g. "0x4000" or "0x1000". readelf -W avoids line-wrapping the wide output.

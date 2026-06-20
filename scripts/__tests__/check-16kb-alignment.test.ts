@@ -72,8 +72,8 @@ describe.skipIf(!toolsPresent)('check-16kb-alignment.sh', () => {
     fs.rmSync(workdir, { recursive: true, force: true });
   });
 
-  function newLibDir(name: string): string {
-    const libDir = path.join(workdir, name, 'lib', 'arm64-v8a');
+  function newLibDir(name: string, abi = 'arm64-v8a'): string {
+    const libDir = path.join(workdir, name, 'lib', abi);
     fs.mkdirSync(libDir, { recursive: true });
     return libDir;
   }
@@ -95,6 +95,23 @@ describe.skipIf(!toolsPresent)('check-16kb-alignment.sh', () => {
     const libDir = newLibDir('misaligned');
     writeMisalignedCopy(alignedSo, path.join(libDir, 'libforged.so'));
     expect(runGuard(zipTopDir('misaligned', 'lib'))).toBe(1);
+  });
+
+  it('skips a misaligned 32-bit lib but still checks the 64-bit ones (passes)', () => {
+    // Mirrors a real AAB: aligned 64-bit libs alongside 4 KB-aligned 32-bit libs.
+    // The 16 KB rule is 64-bit only, so the armeabi-v7a lib must be skipped, not
+    // fail the release.
+    const arm64 = newLibDir('mixed-abi', 'arm64-v8a');
+    fs.copyFileSync(alignedSo, path.join(arm64, 'libboard_renderer_ffi.so'));
+    const armeabi = newLibDir('mixed-abi', 'armeabi-v7a');
+    writeMisalignedCopy(alignedSo, path.join(armeabi, 'libforged.so'));
+    expect(runGuard(zipTopDir('mixed-abi', 'lib'))).toBe(0);
+  });
+
+  it('still fails a misaligned x86_64 lib (64-bit is not caught by the x86 skip)', () => {
+    const x64 = newLibDir('x86_64-bad', 'x86_64');
+    writeMisalignedCopy(alignedSo, path.join(x64, 'libforged.so'));
+    expect(runGuard(zipTopDir('x86_64-bad', 'lib'))).toBe(1);
   });
 
   it('fails (not just warns) when an archive ships no native libraries', () => {
