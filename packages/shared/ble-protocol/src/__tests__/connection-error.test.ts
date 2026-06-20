@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { classifyBleFailure, isDisconnectionError, type BleFailureCategory } from '../connection-error';
+import {
+  classifyBleFailure,
+  classifyBleFailureReason,
+  isDisconnectionError,
+  type BleFailureCategory,
+  type BleSendFailureReason,
+} from '../connection-error';
 
 // Mimics a react-native-ble-plx BleError: an Error subclass whose `name` is
 // 'BleError' (so the predicate classifies from the message, not the name).
@@ -156,6 +162,41 @@ describe('isDisconnectionError', () => {
   for (const { name, error } of notDisconnects) {
     it(`treats as non-disconnect: ${name}`, () => {
       expect(isDisconnectionError(error)).toBe(false);
+    });
+  }
+});
+
+describe('classifyBleFailureReason', () => {
+  const cases: Array<{ name: string; error: unknown; expected: BleSendFailureReason }> = [
+    // A dead-link write is the dominant real cause — it must win over the
+    // DOMException fallback (NetworkError is a DOMException too).
+    {
+      name: 'web NetworkError (GATT disconnected)',
+      error: new DOMException('GATT Server is disconnected.', 'NetworkError'),
+      expected: 'disconnected',
+    },
+    { name: 'native "Not connected"', error: new Error('Not connected'), expected: 'disconnected' },
+    // The mirror builder throws this exact phrase when a hold has no mirror id.
+    {
+      name: 'mirror mapping missing',
+      error: new Error('Mirrored hold ID is not defined for hold ID 42.'),
+      expected: 'missing_mirror_mapping',
+    },
+    // A DOMException we don't otherwise classify is namespaced by its name.
+    {
+      name: 'unclassified DOMException',
+      error: new DOMException('boom', 'OperationError'),
+      expected: 'dom_OperationError',
+    },
+    { name: 'DOMException with empty name', error: new DOMException('boom', ''), expected: 'dom_exception' },
+    // Anything else thrown on a live link.
+    { name: 'opaque write error', error: new Error('something opaque'), expected: 'write_failed' },
+    { name: 'plain string', error: 'a plain string', expected: 'write_failed' },
+  ];
+
+  for (const { name, error, expected } of cases) {
+    it(`classifies: ${name} -> ${expected}`, () => {
+      expect(classifyBleFailureReason(error)).toBe(expected);
     });
   }
 });

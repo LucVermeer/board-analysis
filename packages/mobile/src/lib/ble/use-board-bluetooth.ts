@@ -12,6 +12,7 @@ import {
 import { getMoonboardBluetoothPacket, isMoonboardDeviceName } from '@boardsesh/ble-protocol/moonboard';
 import {
   classifyBleFailure,
+  classifyBleFailureReason,
   isDisconnectionError,
   type BleFailureCategory,
 } from '@boardsesh/ble-protocol/connection-error';
@@ -239,13 +240,6 @@ function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): { signal
   signalB.addEventListener('abort', onAbort);
 
   return { signal: controller.signal, dispose: detach };
-}
-
-function classifyBleFailureReason(error: unknown): string {
-  if (isDisconnectionError(error)) return 'disconnected';
-  if (error instanceof Error && error.message.includes('Mirrored hold ID')) return 'missing_mirror_mapping';
-  if (error instanceof DOMException) return `dom_${error.name || 'exception'}`;
-  return 'write_failed';
 }
 
 export function useBoardBluetooth({

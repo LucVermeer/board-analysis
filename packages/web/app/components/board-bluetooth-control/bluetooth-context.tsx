@@ -33,6 +33,7 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '@/app/lib/ble/types';
 import type { PickerState } from './use-board-bluetooth';
+import type { BleSendFailureReason } from '@boardsesh/ble-protocol/connection-error';
 import { useLedColorOverrides, type LedColorOverrides } from '@/app/lib/led-color-overrides-db';
 import { accumulateFramesToMaps, accumulatedMapsToFrameStrings } from '@boardsesh/board-constants/hold-states';
 import type { BoardName } from '@boardsesh/shared-schema';
@@ -140,6 +141,7 @@ function presenceClimbToQueueItemInput(presenceClimb: BoardPresenceClimb): Climb
 
 function BluetoothAutoSender({
   sendFramesToBoard,
+  lastSendFailureReasonRef,
   layoutName,
   boardName,
   boardId,
@@ -152,6 +154,12 @@ function BluetoothAutoSender({
     signal?: AbortSignal,
     climbUuid?: string,
   ) => Promise<boolean | undefined>;
+  /**
+   * The reason the hook's most recent `sendFramesToBoard` returned `false`,
+   * read synchronously on the `false` branch below to label the failure with
+   * its real cause. See the ref's declaration in `use-board-bluetooth.ts`.
+   */
+  lastSendFailureReasonRef: React.RefObject<BleSendFailureReason | null>;
   layoutName: string;
   boardName: BoardName;
   boardId: number | null;
@@ -301,11 +309,17 @@ function BluetoothAutoSender({
               // and via WS broadcast for other party members).
               onWallConfirmedRef.current(item, sendSignature);
             } else if (result === false) {
+              // The hook set this synchronously on its failing path right before
+              // returning false; we read it here in the same microtask the await
+              // resolved in, so the real cause — usually `disconnected` after a
+              // mid-session board drop — is recorded instead of the old catch-all
+              // `characteristic_unavailable`.
+              const failureReason = lastSendFailureReasonRef.current ?? 'unknown';
               track('Climb Sent to Board Failure', {
                 climbUuid: item.climb?.uuid,
                 boardLayout: layoutName,
                 boardId: boardId ?? undefined,
-                failureReason: 'characteristic_unavailable',
+                failureReason,
                 climbHoldCount,
               });
             }
@@ -483,15 +497,23 @@ export function BluetoothProvider({
     [setSessionBoardSerial, boardDetails, resetReportDedup],
   );
 
-  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
-    useBoardBluetooth({
-      boardDetails: boardDetails ?? undefined,
-      boardUuid,
-      ledColorOverrides,
-      analyticsBoardId: presenceBoardId,
-      onConnectSuccess: handleConnectSuccess,
-      onConnectionChange: handleConnectionChange,
-    });
+  const {
+    isConnected,
+    loading,
+    connect,
+    disconnect,
+    sendFramesToBoard,
+    lastSendFailureReasonRef,
+    pickerState,
+    reconnectSerialForCurrentBoard,
+  } = useBoardBluetooth({
+    boardDetails: boardDetails ?? undefined,
+    boardUuid,
+    ledColorOverrides,
+    analyticsBoardId: presenceBoardId,
+    onConnectSuccess: handleConnectSuccess,
+    onConnectionChange: handleConnectionChange,
+  });
 
   // Bumped by reassertWall() to force the auto-sender to re-push the current
   // climb once even when it's byte-identical to the last send.
@@ -906,6 +928,7 @@ export function BluetoothProvider({
       {isConnected && partyMode === 'off' && boardDetails && (
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
+          lastSendFailureReasonRef={lastSendFailureReasonRef}
           layoutName={boardDetails.layout_name ?? ''}
           boardName={boardDetails.board_name}
           boardId={presenceBoardId}

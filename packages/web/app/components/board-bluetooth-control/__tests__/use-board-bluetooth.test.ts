@@ -397,11 +397,57 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(sendResult).toBe(false);
+    expect(result.current.lastSendFailureReasonRef.current).toBe('missing_led_placements');
     expect(mockShowMessage).toHaveBeenCalledWith(
       'Could not send to board — LED data missing for this board configuration.',
       'error',
     );
     expect(mockAdapter.write).not.toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), undefined);
+  });
+
+  it('records incompatible_climb when every Aurora placement is skipped', async () => {
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Empty packet + skipped placements => the climb is for a different board.
+    mockGetAuroraBluetoothPacket.mockReturnValueOnce({
+      packet: new Uint8Array([]),
+      skippedPositionCount: 3,
+      skippedRoleCount: 0,
+      totalPlacements: 3,
+    });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p4131r42');
+    });
+
+    expect(sendResult).toBe(false);
+    expect(result.current.lastSendFailureReasonRef.current).toBe('incompatible_climb');
+    expect(mockShowMessage).toHaveBeenCalledWith('This climb is for a different board configuration.', 'error');
+    warnSpy.mockRestore();
+  });
+
+  it('records missing_mirror_data when a mirrored send has no holdsData', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // mockBoardDetails advertises supportsMirroring but carries no holdsData,
+    // so a mirrored send can't build the mirror and bails before the write.
+    const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p4131r42', true);
+    });
+
+    expect(sendResult).toBe(false);
+    expect(result.current.lastSendFailureReasonRef.current).toBe('missing_mirror_data');
+    errorSpy.mockRestore();
   });
 
   // Traditional `[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/...` routes
@@ -654,6 +700,13 @@ describe('useBoardBluetooth', () => {
 
       expect(sendResult).toBe(false);
       expect(result.current.isConnected).toBe(false);
+      // The real cause is recorded for the AutoSender to label, and the
+      // tug-of-war is tracked (mirrors mobile) instead of staying silent.
+      expect(result.current.lastSendFailureReasonRef.current).toBe('disconnected');
+      expect(mockTrack).toHaveBeenCalledWith('Bluetooth Connection Stolen', {
+        boardLayout: 'Original',
+        boardId: undefined,
+      });
       errorSpy.mockRestore();
     });
 
@@ -677,6 +730,11 @@ describe('useBoardBluetooth', () => {
 
       expect(sendResult).toBe(false);
       expect(result.current.isConnected).toBe(false);
+      expect(result.current.lastSendFailureReasonRef.current).toBe('disconnected');
+      expect(mockTrack).toHaveBeenCalledWith('Bluetooth Connection Stolen', {
+        boardLayout: 'Original',
+        boardId: undefined,
+      });
       errorSpy.mockRestore();
     });
 
@@ -697,6 +755,9 @@ describe('useBoardBluetooth', () => {
 
       expect(sendResult).toBe(false);
       expect(result.current.isConnected).toBe(true);
+      // A live-link write failure is `write_failed`, NOT a stolen-board signal.
+      expect(result.current.lastSendFailureReasonRef.current).toBe('write_failed');
+      expect(mockTrack).not.toHaveBeenCalledWith('Bluetooth Connection Stolen', expect.anything());
       errorSpy.mockRestore();
     });
   });

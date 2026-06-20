@@ -36,6 +36,7 @@ vi.mock('../use-board-bluetooth', () => ({
       connect: vi.fn(),
       disconnect: vi.fn(),
       sendFramesToBoard: mockSendFrames,
+      lastSendFailureReasonRef: { current: null },
       pickerState: null,
       reconnectSerialForCurrentBoard: null,
     };
