@@ -21,7 +21,12 @@ export async function GET(
 
     const climbStats = await getClimbStatsForAllAngles(parsedParams);
 
-    return NextResponse.json(climbStats);
+    // Cache at the edge: climb stats change slowly (only when ticks are logged),
+    // so serve repeat hits from the CDN instead of invoking the function and
+    // hitting Postgres on every request. 5 min fresh, 1 day stale-while-revalidate.
+    return NextResponse.json(climbStats, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=86400' },
+    });
   } catch (error) {
     console.error('Error fetching climb stats:', error);
     return NextResponse.json({ error: 'Failed to fetch climb stats' }, { status: 500 });

@@ -873,6 +873,30 @@ export type ClimbSearchResult = {
 };
 
 /**
+ * Current statistics for a climb at one angle, read from the live stats table.
+ * One entry per angle the climb has been logged at.
+ */
+export type ClimbStatsForAngle = {
+  __typename?: 'ClimbStatsForAngle';
+  /** Board angle in degrees */
+  angle: Scalars['Int']['output'];
+  /** Number of people who have completed this climb at this angle */
+  ascensionistCount?: Maybe<Scalars['Int']['output']>;
+  /** Human-readable grade label derived from displayDifficulty (e.g., 'V5', '6B+') */
+  difficulty?: Maybe<Scalars['String']['output']>;
+  /** Average difficulty rating */
+  difficultyAverage?: Maybe<Scalars['Float']['output']>;
+  /** Display difficulty value */
+  displayDifficulty?: Maybe<Scalars['Float']['output']>;
+  /** When the first ascent was logged (ISO timestamp) */
+  faAt?: Maybe<Scalars['String']['output']>;
+  /** Username of the first ascensionist */
+  faUsername?: Maybe<Scalars['String']['output']>;
+  /** Average quality rating */
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
+};
+
+/**
  * A single snapshot of climb statistics from the history table.
  * Captured during shared sync to track trends over time.
  */
@@ -3451,6 +3475,11 @@ export type Query = {
   /** Get proposals for a specific climb. */
   climbProposals: ProposalConnection;
   /**
+   * Get current per-angle statistics for a climb from the live stats table.
+   * Returns one entry for each angle the climb has been logged at.
+   */
+  climbStatsForAngles: Array<ClimbStatsForAngle>;
+  /**
    * Get climb stats history for a climb over the last 12 months.
    * Returns snapshots captured during shared sync for trend analysis.
    */
@@ -3880,6 +3909,12 @@ export type QueryClimbCommunityStatusArgs = {
 /** Root query type for all read operations. */
 export type QueryClimbProposalsArgs = {
   input: GetClimbProposalsInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryClimbStatsForAnglesArgs = {
+  boardName: Scalars['String']['input'];
+  climbUuid: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -6071,6 +6106,7 @@ export type ResolversTypes = ResolversObject<{
   ClimbQueueItemInput: ClimbQueueItemInput;
   ClimbSearchInput: ClimbSearchInput;
   ClimbSearchResult: ResolverTypeWrapper<ClimbSearchResult>;
+  ClimbStatsForAngle: ResolverTypeWrapper<ClimbStatsForAngle>;
   ClimbStatsHistoryEntry: ResolverTypeWrapper<ClimbStatsHistoryEntry>;
   Comment: ResolverTypeWrapper<Comment>;
   CommentAdded: ResolverTypeWrapper<CommentAdded>;
@@ -6353,6 +6389,7 @@ export type ResolversParentTypes = ResolversObject<{
   ClimbQueueItemInput: ClimbQueueItemInput;
   ClimbSearchInput: ClimbSearchInput;
   ClimbSearchResult: ClimbSearchResult;
+  ClimbStatsForAngle: ClimbStatsForAngle;
   ClimbStatsHistoryEntry: ClimbStatsHistoryEntry;
   Comment: Comment;
   CommentAdded: CommentAdded;
@@ -7005,6 +7042,21 @@ export type ClimbSearchResultResolvers<
   climbs?: Resolver<Array<ResolversTypes['Climb']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type ClimbStatsForAngleResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbStatsForAngle'] = ResolversParentTypes['ClimbStatsForAngle'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  ascensionistCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  difficulty?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  difficultyAverage?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  displayDifficulty?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  faAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  faUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  qualityAverage?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -8590,6 +8642,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryClimbProposalsArgs, 'input'>
   >;
+  climbStatsForAngles?: Resolver<
+    Array<ResolversTypes['ClimbStatsForAngle']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryClimbStatsForAnglesArgs, 'boardName' | 'climbUuid'>
+  >;
   climbStatsHistory?: Resolver<
     Array<ResolversTypes['ClimbStatsHistoryEntry']>,
     ParentType,
@@ -9904,6 +9962,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   ClimbPlaylistMembership?: ClimbPlaylistMembershipResolvers<ContextType>;
   ClimbQueueItem?: ClimbQueueItemResolvers<ContextType>;
   ClimbSearchResult?: ClimbSearchResultResolvers<ContextType>;
+  ClimbStatsForAngle?: ClimbStatsForAngleResolvers<ContextType>;
   ClimbStatsHistoryEntry?: ClimbStatsHistoryEntryResolvers<ContextType>;
   Comment?: CommentResolvers<ContextType>;
   CommentAdded?: CommentAddedResolvers<ContextType>;

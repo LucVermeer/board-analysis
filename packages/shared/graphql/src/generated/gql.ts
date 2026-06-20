@@ -21,6 +21,7 @@ type Documents = {
   '\n  query GetRecentBetaLinks($limit: Int, $boardType: String) {\n    recentBetaLinks(limit: $limit, boardType: $boardType) {\n      climbName\n      boardType\n      layoutId\n      betaLink {\n        climbUuid\n        link\n        foreignUsername\n        angle\n        thumbnail\n        isListed\n        createdAt\n        tickUuid\n        boardId\n      }\n    }\n  }\n': typeof types.GetRecentBetaLinksDocument;
   '\n  query GetUserBetaLinks($userId: String!, $limit: Int) {\n    userBetaLinks(userId: $userId, limit: $limit) {\n      climbName\n      boardType\n      layoutId\n      betaLink {\n        climbUuid\n        link\n        foreignUsername\n        angle\n        thumbnail\n        isListed\n        createdAt\n        tickUuid\n        boardId\n      }\n    }\n  }\n': typeof types.GetUserBetaLinksDocument;
   '\n  query BetaLinkPreview($link: String!) {\n    betaLinkPreview(link: $link) {\n      link\n      thumbnail\n      username\n      caption\n    }\n  }\n': typeof types.BetaLinkPreviewDocument;
+  '\n  query ClimbStatsForAngles($boardName: String!, $climbUuid: ID!) {\n    climbStatsForAngles(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      difficulty\n      faUsername\n      faAt\n    }\n  }\n': typeof types.ClimbStatsForAnglesDocument;
   '\n  query ClimbStatsHistory($boardName: String!, $climbUuid: ID!) {\n    climbStatsHistory(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      createdAt\n    }\n  }\n': typeof types.ClimbStatsHistoryDocument;
   '\n  query GetGlobalCommentFeed($input: GlobalCommentFeedInput) {\n    globalCommentFeed(input: $input) {\n      comments {\n        uuid\n        userId\n        userDisplayName\n        userAvatarUrl\n        entityType\n        entityId\n        parentCommentUuid\n        body\n        isDeleted\n        replyCount\n        upvotes\n        downvotes\n        voteScore\n        userVote\n        createdAt\n        updatedAt\n      }\n      totalCount\n      hasMore\n      cursor\n    }\n  }\n': typeof types.GetGlobalCommentFeedDocument;
   '\n  query GetComments($input: CommentsInput!) {\n    comments(input: $input) {\n      comments {\n        uuid\n        userId\n        userDisplayName\n        userAvatarUrl\n        entityType\n        entityId\n        parentCommentUuid\n        body\n        isDeleted\n        replyCount\n        upvotes\n        downvotes\n        voteScore\n        userVote\n        createdAt\n        updatedAt\n      }\n      totalCount\n      hasMore\n    }\n  }\n': typeof types.GetCommentsDocument;
@@ -140,6 +141,8 @@ const documents: Documents = {
     types.GetUserBetaLinksDocument,
   '\n  query BetaLinkPreview($link: String!) {\n    betaLinkPreview(link: $link) {\n      link\n      thumbnail\n      username\n      caption\n    }\n  }\n':
     types.BetaLinkPreviewDocument,
+  '\n  query ClimbStatsForAngles($boardName: String!, $climbUuid: ID!) {\n    climbStatsForAngles(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      difficulty\n      faUsername\n      faAt\n    }\n  }\n':
+    types.ClimbStatsForAnglesDocument,
   '\n  query ClimbStatsHistory($boardName: String!, $climbUuid: ID!) {\n    climbStatsHistory(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      createdAt\n    }\n  }\n':
     types.ClimbStatsHistoryDocument,
   '\n  query GetGlobalCommentFeed($input: GlobalCommentFeedInput) {\n    globalCommentFeed(input: $input) {\n      comments {\n        uuid\n        userId\n        userDisplayName\n        userAvatarUrl\n        entityType\n        entityId\n        parentCommentUuid\n        body\n        isDeleted\n        replyCount\n        upvotes\n        downvotes\n        voteScore\n        userVote\n        createdAt\n        updatedAt\n      }\n      totalCount\n      hasMore\n      cursor\n    }\n  }\n':
@@ -399,6 +402,12 @@ export function graphql(
 export function graphql(
   source: '\n  query BetaLinkPreview($link: String!) {\n    betaLinkPreview(link: $link) {\n      link\n      thumbnail\n      username\n      caption\n    }\n  }\n',
 ): (typeof documents)['\n  query BetaLinkPreview($link: String!) {\n    betaLinkPreview(link: $link) {\n      link\n      thumbnail\n      username\n      caption\n    }\n  }\n'];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  query ClimbStatsForAngles($boardName: String!, $climbUuid: ID!) {\n    climbStatsForAngles(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      difficulty\n      faUsername\n      faAt\n    }\n  }\n',
+): (typeof documents)['\n  query ClimbStatsForAngles($boardName: String!, $climbUuid: ID!) {\n    climbStatsForAngles(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      difficulty\n      faUsername\n      faAt\n    }\n  }\n'];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

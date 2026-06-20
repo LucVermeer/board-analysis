@@ -5,8 +5,16 @@ import { getListPageCacheTTL } from './app/lib/list-page-cache';
 import { CLIMB_SESSION_COOKIE } from './app/lib/climb-session-cookie';
 import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALE_HEADER, isSupportedLocale } from './app/lib/i18n/config';
 import { detectLocale } from './app/lib/i18n/detect-locale';
+import { checkRateLimit, getClientIp } from './app/lib/auth/rate-limiter';
 
 const SPECIAL_ROUTES = ['angles', 'grades']; // routes that don't need board validation
+
+// Best-effort per-IP cap on the public /api/v1/* surface. Generous enough that
+// real API consumers and normal app usage never hit it, but it deters a single
+// scraper from hammering an endpoint (e.g. the climb-stats invocation spike).
+// In-memory + per-instance on Vercel, so this is defense-in-depth, not a hard
+// cap — strict limiting would need a shared store (Vercel KV / Upstash).
+const API_V1_MAX_REQUESTS_PER_MINUTE = 120;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -21,6 +29,24 @@ export function middleware(request: NextRequest) {
 
   // Check API routes
   if (pathname.startsWith('/api/v1/')) {
+    // Rate limit the public API surface before doing any work.
+    const clientIp = getClientIp(request);
+    const { limited, retryAfterSeconds } = checkRateLimit(`api-v1:${clientIp}`, API_V1_MAX_REQUESTS_PER_MINUTE, 60_000);
+    if (limited) {
+      // Log the offender so a future alert window can confirm crawler traffic
+      // (the API routes themselves log no user-agent/IP).
+      console.info(
+        `[rate-limit] 429 api/v1 ip=${clientIp} ua=${request.headers.get('user-agent') ?? 'unknown'} path=${pathname}`,
+      );
+      return new NextResponse(JSON.stringify({ error: 'Too many requests. Please slow down.' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(retryAfterSeconds),
+        },
+      });
+    }
+
     const pathParts = pathname.split('/');
     if (pathParts.length >= 4) {
       const routeIdentifier = pathParts[3].toLowerCase(); // either a board name or special route
