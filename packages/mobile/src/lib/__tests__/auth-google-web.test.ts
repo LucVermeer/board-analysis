@@ -30,7 +30,7 @@ vi.mock('expo-web-browser', () => ({
   openAuthSessionAsync: (...args: unknown[]) => openAuthSessionAsyncMock(...args),
 }));
 
-const { signInWithGoogleWeb } = await import('../auth');
+const { signInWithGoogleWeb, signInWithAppleWeb } = await import('../auth');
 
 const okExchange = () =>
   new Response(JSON.stringify({ jwt: 'jwt-1', refreshToken: 'refresh-1', expiresAt: '2026-01-01T00:00:00.000Z' }), {
@@ -138,5 +138,47 @@ describe('signInWithGoogleWeb', () => {
     openAuthSessionAsyncMock.mockRejectedValue(new Error('no browser'));
 
     expect(await signInWithGoogleWeb()).toEqual({ success: false, status: null, error: 'network' });
+  });
+});
+
+// signInWithAppleWeb shares signInWithProviderWeb's body with signInWithGoogleWeb
+// (the redirect, deep-link parse, and token exchange are provider-agnostic), so
+// this only pins the one per-provider difference — the native-start provider
+// param — plus the happy path, rather than re-running every shared branch.
+describe('signInWithAppleWeb', () => {
+  beforeEach(() => {
+    openAuthSessionAsyncMock.mockReset();
+    storeTokensMock.mockReset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens native-start with provider=apple and exchanges the transfer token into a stored session', async () => {
+    openAuthSessionAsyncMock.mockResolvedValue({
+      type: 'success',
+      url: 'com.boardsesh.app://auth/callback?transferToken=apple-tok&next=%2F',
+    });
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okExchange());
+
+    const result = await signInWithAppleWeb();
+
+    expect(result).toEqual({ success: true });
+    const [startUrl, redirect] = openAuthSessionAsyncMock.mock.calls[0];
+    expect(startUrl).toContain('https://web.test/auth/native-start?provider=apple');
+    expect(redirect).toBe('com.boardsesh.app://auth/callback');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://backend.test/auth/native/exchange',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ transferToken: 'apple-tok' }) }),
+    );
+    expect(storeTokensMock).toHaveBeenCalledWith('jwt-1', 'refresh-1', '2026-01-01T00:00:00.000Z');
+  });
+
+  it('treats a dismissed browser as a cancellation and never exchanges', async () => {
+    openAuthSessionAsyncMock.mockResolvedValue({ type: 'dismiss' });
+    const fetchMock = vi.spyOn(global, 'fetch');
+
+    expect(await signInWithAppleWeb()).toEqual({ success: false, cancelled: true });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

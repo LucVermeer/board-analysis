@@ -245,21 +245,23 @@ async function exchangeTransferToken(transferToken: string): Promise<OAuthSignIn
 }
 
 /**
- * Browser-based Google sign-in — the fallback for when native GoogleSignin can't
- * present its OAuth browser (iOS 26.5.1 fails with GIDSignIn "Unable to open
- * Safari" before any network call). Opens the web app's /auth/native-start page in
- * an auth-session browser, which runs the proven NextAuth Google flow, mints a
- * single-use transfer token on success, and redirects back to NATIVE_OAUTH_REDIRECT;
- * we then exchange that token for our JWT pair. Reuses the same handoff the web app
- * already serves (the Strava/Aurora pattern) — no @react-native-google-signin
- * involvement, so it's immune to the native SDK's iOS-version breakage.
+ * Browser-based OAuth sign-in — the fallback for when the native provider SDK
+ * can't complete on the device. Opens the web app's /auth/native-start page in an
+ * auth-session browser, which runs the proven NextAuth flow for `provider`, mints
+ * a single-use transfer token on success, and redirects back to
+ * NATIVE_OAUTH_REDIRECT; we then exchange that token for our JWT pair. Reuses the
+ * same handoff the web app already serves (the Strava/Aurora pattern), with no
+ * native OAuth SDK involvement, so it's immune to the native SDK's per-OS-version
+ * breakage. The web /auth/native-start page already allows both 'google' and
+ * 'apple' (its ALLOWED_PROVIDERS), and the callback + exchange are
+ * provider-agnostic, so the only per-provider difference is this query param.
  *
  * Never throws: every outcome maps to an OAuthSignInResult (success / cancelled /
  * failure) so the caller treats it exactly like the native path.
  */
-export async function signInWithGoogleWeb(): Promise<OAuthSignInResult> {
+async function signInWithProviderWeb(provider: AuthProvider): Promise<OAuthSignInResult> {
   const nativeCallbackUrl = `${WEB_BASE_URL}/api/auth/native/callback?next=${encodeURIComponent('/')}`;
-  const startUrl = `${WEB_BASE_URL}/auth/native-start?provider=google&callbackUrl=${encodeURIComponent(nativeCallbackUrl)}`;
+  const startUrl = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${encodeURIComponent(nativeCallbackUrl)}`;
 
   let result: WebBrowser.WebBrowserAuthSessionResult;
   try {
@@ -279,6 +281,20 @@ export async function signInWithGoogleWeb(): Promise<OAuthSignInResult> {
   if (!transferToken) return { success: false, status: null, error: 'no_transfer_token' };
 
   return exchangeTransferToken(transferToken);
+}
+
+// Browser Google fallback — for when native GoogleSignin can't present its OAuth
+// browser (iOS 26.5.1 fails with GIDSignIn "Unable to open Safari" before any
+// network call).
+export function signInWithGoogleWeb(): Promise<OAuthSignInResult> {
+  return signInWithProviderWeb('google');
+}
+
+// Browser Apple fallback — for when native Sign in with Apple throws a non-cancel
+// error (ASAuthorizationError.unknown / code 1000: device not signed into iCloud,
+// 2FA disabled, transient Apple ID issues), which otherwise dead-ends the user.
+export function signInWithAppleWeb(): Promise<OAuthSignInResult> {
+  return signInWithProviderWeb('apple');
 }
 
 export type CredentialsSignInResult = { success: true } | NativeAuthFailure;

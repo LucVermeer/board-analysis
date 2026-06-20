@@ -9,11 +9,13 @@ import { renderHook, act } from '@testing-library/react';
 const signInWithAppleMock = vi.fn();
 const signInWithGoogleMock = vi.fn();
 const signInWithGoogleWebMock = vi.fn();
+const signInWithAppleWebMock = vi.fn();
 vi.mock('../../providers/auth-provider', () => ({
   useAuth: () => ({
     signInWithApple: signInWithAppleMock,
     signInWithGoogle: signInWithGoogleMock,
     signInWithGoogleWeb: signInWithGoogleWebMock,
+    signInWithAppleWeb: signInWithAppleWebMock,
   }),
 }));
 
@@ -25,9 +27,10 @@ vi.mock('../../lib/error-reporting', () => ({ reportError: (...args: unknown[]) 
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-// The hook reads Platform.OS to gate the Google web fallback to iOS. A mutable
-// hoisted ref lets each test flip the platform (default iOS, where the fallback
-// lives); the real react-native module is too heavy to load under jsdom.
+// The hook reads Platform.OS to gate the browser web fallback (Google + Apple)
+// to iOS. A mutable hoisted ref lets each test flip the platform (default iOS,
+// where the fallback lives); the real react-native module is too heavy to load
+// under jsdom.
 const { platform } = vi.hoisted(() => ({ platform: { OS: 'ios' } as { OS: string } }));
 vi.mock('react-native', () => ({ Platform: platform }));
 
@@ -58,6 +61,7 @@ describe('useNativeOAuthSignIn — Google web fallback (iOS)', () => {
     signInWithAppleMock.mockReset();
     signInWithGoogleMock.mockReset();
     signInWithGoogleWebMock.mockReset();
+    signInWithAppleWebMock.mockReset();
   });
 
   it('falls back to the web flow when native Google throws ("Unable to open Safari") and signs in', async () => {
@@ -111,14 +115,90 @@ describe('useNativeOAuthSignIn — Google web fallback (iOS)', () => {
       reason: 'invalid_oauth_token',
     });
   });
+});
 
-  it('does not fall back for Apple failures (Apple is unaffected)', async () => {
-    signInWithAppleMock.mockRejectedValue(new Error('boom'));
+describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
+  beforeEach(() => {
+    platform.OS = 'ios';
+    trackMock.mockReset();
+    reportErrorMock.mockReset();
+    signInWithAppleMock.mockReset();
+    signInWithGoogleMock.mockReset();
+    signInWithGoogleWebMock.mockReset();
+    signInWithAppleWebMock.mockReset();
+  });
+
+  it('falls back to the web flow when native Apple throws (ASAuthorizationError.unknown) and signs in', async () => {
+    // code 1000 is ASAuthorizationError.unknown — the dead-end this fixes.
+    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 1000 }));
+    signInWithAppleWebMock.mockResolvedValue({ success: true });
+
+    const setError = await runSignIn('apple');
+
+    expect(signInWithAppleWebMock).toHaveBeenCalledTimes(1);
+    // The Google web fallback must not run for an Apple attempt.
+    expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
+    // The handled native failure no longer reaches error tracking — the fallback owns it.
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(null);
+    const events = trackedEvents();
+    expect(events).toContainEqual({ event: 'Login Attempted', flow: 'web_fallback', reason: undefined });
+    expect(events).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
+  });
+
+  it('falls back and signs in when native Apple returns a non-cancel failure', async () => {
+    signInWithAppleMock.mockResolvedValue({ success: false, status: 401, error: 'invalid' });
+    signInWithAppleWebMock.mockResolvedValue({ success: true });
+
+    const setError = await runSignIn('apple');
+
+    expect(signInWithAppleWebMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(trackedEvents()).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
+  });
+
+  it('does NOT fall back when the user cancels native Apple', async () => {
+    signInWithAppleMock.mockResolvedValue({ success: false, cancelled: true });
 
     await runSignIn('apple');
 
-    expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
+    expect(signInWithAppleWebMock).not.toHaveBeenCalled();
+    expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('stays silent (no error, no report) when the browser Apple sheet is cancelled', async () => {
+    // The native throw triggers the fallback; the user then backs out of the
+    // browser. A browser cancel is not an error — no message, no error tracking.
+    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 1000 }));
+    signInWithAppleWebMock.mockResolvedValue({ success: false, cancelled: true });
+
+    const setError = await runSignIn('apple');
+
+    expect(signInWithAppleWebMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    // setError(null) at the start; never set to an error message.
+    expect(setError).not.toHaveBeenCalledWith('nativeStart.oauthError');
+    expect(trackedEvents()).toContainEqual({ event: 'Login Failed', flow: 'web_fallback', reason: 'cancel' });
+  });
+
+  it('surfaces an error and reports once when the Apple web fallback also fails', async () => {
+    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 1000 }));
+    signInWithAppleWebMock.mockResolvedValue({
+      success: false,
+      status: 401,
+      error: 'Invalid or expired transfer token',
+    });
+
+    const setError = await runSignIn('apple');
+
     expect(reportErrorMock).toHaveBeenCalledTimes(1);
+    expect(setError).toHaveBeenLastCalledWith('nativeStart.oauthError');
+    expect(trackedEvents()).toContainEqual({
+      event: 'Login Failed',
+      flow: 'web_fallback',
+      reason: 'invalid_oauth_token',
+    });
   });
 });
 
@@ -130,6 +210,7 @@ describe('useNativeOAuthSignIn — Android has no web fallback', () => {
     signInWithAppleMock.mockReset();
     signInWithGoogleMock.mockReset();
     signInWithGoogleWebMock.mockReset();
+    signInWithAppleWebMock.mockReset();
   });
 
   it('surfaces the native error (no fallback) when Google throws — the SHA-1/DEVELOPER_ERROR case', async () => {
@@ -166,5 +247,17 @@ describe('useNativeOAuthSignIn — Android has no web fallback', () => {
 
     expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
     expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('does not run the Apple web fallback on Android (the iOS gate holds)', async () => {
+    // Apple sign-in isn't offered on Android, but guard the gate anyway: a native
+    // throw must surface the real error, not silently open a browser fallback.
+    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 1000 }));
+
+    const setError = await runSignIn('apple');
+
+    expect(signInWithAppleWebMock).not.toHaveBeenCalled();
+    expect(reportErrorMock).toHaveBeenCalledTimes(1);
+    expect(setError).toHaveBeenLastCalledWith('nativeStart.oauthError');
   });
 });
