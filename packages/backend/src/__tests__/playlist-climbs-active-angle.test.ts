@@ -4,6 +4,12 @@ import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
 import { playlistQueries } from '../graphql/resolvers/playlists/queries';
 
+// Seeds use raw `sql` rather than `db.insert(...)` because the integration test
+// DB is built from a minimal hand-maintained DDL (schema-sql.ts), not the full
+// Drizzle schema — the query builder emits every default-bearing column (e.g.
+// quality_normalized) which that DDL omits, so a builder insert fails. Naming
+// only the columns the test DDL declares is the genuine raw-SQL exception.
+
 // Integration test (real DB) for #1596: in all-boards mode the playlist climbs
 // resolver must render on-active-board climbs' grades at the user's SELECTED
 // wall angle — not the angle with the most ascents. This exercises the actual
@@ -61,6 +67,8 @@ describe('playlistClimbs — active-angle override (real DB)', () => {
     await seedClimb('tension', 'climb-c', 'Off-board');
     await seedStats('tension', 'climb-c', 30, 16, 50);
 
+    // Explicit id keeps the playlist_climbs FK references below trivial; the
+    // TRUNCATE ... RESTART IDENTITY above frees id 1.
     await db.execute(sql`
       INSERT INTO playlists (id, uuid, board_type, layout_id, name, is_public)
       VALUES (1, ${PLAYLIST_UUID}, 'kilter', 1, 'Active angle', true)
