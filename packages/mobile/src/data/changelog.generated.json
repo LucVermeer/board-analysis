@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-19T23:58:18.701Z",
+  "generatedAt": "2026-06-20T02:44:20.903Z",
   "entries": [
+    {
+      "prNumber": 3077,
+      "category": "new",
+      "title": "The lock-screen Live Activity got a cleaner look and now knows who's on the board.",
+      "mergedAt": "2026-06-20T02:43:17Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3077",
+      "body": "When you're connected, the bulb glows and Prev/Next move the wall through your\nqueue; when a crewmate takes over, it shows what they're climbing instead. The\ngrade shows in its real grade colour up in the corner, and the board thumbnail is\neasier to read at a glance."
+    },
     {
       "prNumber": 3069,
       "category": "fixed",

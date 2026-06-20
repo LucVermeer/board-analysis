@@ -4,6 +4,16 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-06-20
+
+### New
+
+- The lock-screen Live Activity got a cleaner look and now knows who's on the board. ([#3077](https://github.com/boardsesh/boardsesh/pull/3077))
+  When you're connected, the bulb glows and Prev/Next move the wall through your
+  queue; when a crewmate takes over, it shows what they're climbing instead. The
+  grade shows in its real grade colour up in the corner, and the board thumbnail is
+  easier to read at a glance.
+
 ## 2026-06-19
 
 ### New
