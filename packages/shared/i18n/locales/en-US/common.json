@@ -195,7 +195,29 @@
         "fixed": "Fixed"
       },
       "viewPr": "View on GitHub",
-      "empty": "No changes logged yet — we've been too busy climbing. Check back after the next send."
+      "empty": "No changes logged yet — we've been too busy climbing. Check back after the next send.",
+      "nativeRelease": {
+        "title": "App update",
+        "appStore": "A new version shipped to the App Store.",
+        "playStore": "A new version shipped to the Play Store."
+      },
+      "checkForUpdates": "Check for updates",
+      "checking": "Checking…",
+      "downloading": "Downloading…",
+      "upToDate": {
+        "title": "You're up to date",
+        "message": "You're already on the latest version."
+      },
+      "updateReady": {
+        "title": "Update ready",
+        "message": "Restart Boardsesh now to use the latest version?",
+        "restart": "Restart",
+        "later": "Later"
+      },
+      "checkError": {
+        "title": "Couldn't check for updates",
+        "message": "Something went wrong getting the latest version. Try again in a bit."
+      }
     }
   },
   "lightControl": {
