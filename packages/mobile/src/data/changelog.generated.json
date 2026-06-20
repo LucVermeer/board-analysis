@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T21:52:54.435Z",
+  "generatedAt": "2026-06-20T23:26:57.732Z",
   "entries": [
+    {
+      "prNumber": 3118,
+      "category": "fixed",
+      "title": "Find a gym on a full-screen map you can drag to resize, pan to explore new areas, and search by city — board picking right from the map.",
+      "mergedAt": "2026-06-20T23:25:38Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3118"
+    },
     {
       "prNumber": 3111,
       "category": "fixed",
