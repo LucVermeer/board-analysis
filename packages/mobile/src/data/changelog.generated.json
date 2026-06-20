@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T13:20:58.981Z",
+  "generatedAt": "2026-06-20T13:49:44.629Z",
   "entries": [
+    {
+      "prNumber": 3068,
+      "category": "new",
+      "title": "Beta testers can now switch OTA update channels right in the app to preview a specific build.",
+      "mergedAt": "2026-06-20T13:48:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3068"
+    },
     {
       "prNumber": 3108,
       "category": "fixed",
