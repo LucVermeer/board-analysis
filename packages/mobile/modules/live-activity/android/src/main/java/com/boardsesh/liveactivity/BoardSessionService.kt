@@ -404,7 +404,11 @@ class BoardSessionService : Service() {
         imageExecutor.execute {
             val bitmap = try {
                 imageComposer(overlay, backgrounds)
-            } catch (error: Exception) {
+            } catch (error: Throwable) {
+                // Throwable, not Exception: decoding/compositing large board PNGs can
+                // OutOfMemoryError on low-memory devices, which is an Error — catching
+                // only Exception would let it kill this background thread noisily.
+                // Degrade to no thumbnail (the notification still posts without art).
                 Log.w(TAG, "thumbnail compose failed: ${error.message}")
                 null
             } finally {

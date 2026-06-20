@@ -150,8 +150,8 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
 
   useEffect(() => {
     const unsubscribe = addBoardControlListener((event) => {
-      const bt = bluetoothRef.current;
-      if (!bt) return;
+      const bluetoothCtx = bluetoothRef.current;
+      if (!bluetoothCtx) return;
       if (event.action === 'reconnect') {
         // Measure the lock-screen reconnect like the in-app bulb (source-tagged).
         track('Board Lightbulb Connect', {
@@ -160,11 +160,11 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
           boardLayout: null,
           climbUuid: climbUuidRef.current ?? null,
         });
-        bt.armUndoWallChangeToast();
-        void bt.connect(undefined, undefined, bt.reconnectSerialForCurrentBoard ?? undefined);
+        bluetoothCtx.armUndoWallChangeToast();
+        void bluetoothCtx.connect(undefined, undefined, bluetoothCtx.reconnectSerialForCurrentBoard ?? undefined);
       } else if (event.action === 'reassert') {
         // A re-push of the current climb — no climb change to undo, so no toast.
-        bt.reassertWall();
+        bluetoothCtx.reassertWall();
       }
     });
     return unsubscribe;
