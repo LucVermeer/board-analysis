@@ -1,6 +1,7 @@
 package com.boardsesh.liveactivity
 
 import android.app.Notification
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -20,6 +21,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -347,5 +349,43 @@ class BoardSessionServiceTest {
         // The current compose (B) re-posts.
         tasks[1].run()
         assertNotNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `downscale caps the thumbnail long side so the RemoteViews stays under the Binder limit`() {
+        val service = Robolectric.buildService(BoardSessionService::class.java).create().get()
+
+        // A larger-than-target render is capped to MAX_IMAGE_DIMEN (256) on its long
+        // side — the guarantee that keeps the bitmap (duplicated across the collapsed
+        // + expanded views) well under the ~1 MB Binder transaction limit.
+        val large = Bitmap.createBitmap(400, 500, Bitmap.Config.ARGB_8888)
+        val scaled = service.downscale(large)
+        assertEquals(256, maxOf(scaled.width, scaled.height))
+
+        // An already-small render is returned untouched (no needless re-alloc).
+        val small = Bitmap.createBitmap(100, 120, Bitmap.Config.ARGB_8888)
+        assertSame(small, service.downscale(small))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `start migrates the legacy LOW channel to the DEFAULT-importance channel`() {
+        every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
+        val manager = context.getSystemService(NotificationManager::class.java)
+        // Simulate an install that still has the old LOW channel.
+        manager.createNotificationChannel(
+            NotificationChannel("boardsesh_session", "Active climbing session", NotificationManager.IMPORTANCE_LOW),
+        )
+
+        startService(BoardSessionService.ACTION_START)
+
+        // The legacy channel is deleted and replaced by the new DEFAULT one (importance
+        // can't be raised in place, so the bump needs a fresh id).
+        assertNull(manager.getNotificationChannel("boardsesh_session"))
+        assertEquals(
+            NotificationManager.IMPORTANCE_DEFAULT,
+            manager.getNotificationChannel(BoardSessionService.CHANNEL_ID).importance,
+        )
     }
 }

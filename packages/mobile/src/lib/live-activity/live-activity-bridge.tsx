@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toBoardName } from '@boardsesh/board-config';
+import { track } from '../../lib/analytics';
 import { useQueue } from '../../providers/queue-provider';
 import { useBoardConnectionState } from '../../components/ble/use-board-connection-state';
 import { useNativeClimbRender } from '../../hooks/use-native-climb-render';
 import { useLiveActivity } from './use-live-activity';
-import { addWidgetQueueNavigateListener, addBoardControlListener } from './live-activity-plugin';
+import {
+  addWidgetQueueNavigateListener,
+  addBoardControlListener,
+  isAndroidSessionPresence,
+} from './live-activity-plugin';
 
 type LiveActivityBridgeProps = {
   boardName: string;
@@ -35,11 +40,13 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // On-device thumbnail for the Android notification: render the current climb's
   // holds-only PNG via the BoardRenderer native module and layer the bundled board
   // backgrounds — the app's "no-network board art" rule, so the notification never
-  // hits the backend. iOS ignores these (ActivityKit fetches its own); rendering on
-  // iOS too is harmless — it's the same cached overlay the list thumbnails produce.
+  // hits the backend. Only the Android foreground service consumes these (iOS
+  // fetches its own via ActivityKit), so skip the render on iOS by passing empty
+  // frames — useNativeClimbRender then no-ops its render effect instead of doing
+  // work iOS discards.
   const displayClimb = state.currentClimbQueueItem?.climb ?? state.queue[0]?.climb ?? null;
   const { overlayUri, backgroundPaths } = useNativeClimbRender({
-    frames: displayClimb?.frames ?? '',
+    frames: isAndroidSessionPresence ? (displayClimb?.frames ?? '') : '',
     boardName: toBoardName(boardName) ?? 'kilter',
     layoutId,
     sizeId,
@@ -134,16 +141,29 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // changes when a board is (de)selected).
   const bluetoothRef = useRef(bluetooth);
   bluetoothRef.current = bluetooth;
+  // Refs so the once-subscribed listener reads the latest session/climb for the
+  // reconnect analytics without re-registering.
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const climbUuidRef = useRef(displayClimb?.uuid);
+  climbUuidRef.current = displayClimb?.uuid;
 
   useEffect(() => {
     const unsubscribe = addBoardControlListener((event) => {
       const bt = bluetoothRef.current;
       if (!bt) return;
       if (event.action === 'reconnect') {
+        // Measure the lock-screen reconnect like the in-app bulb (source-tagged).
+        track('Board Lightbulb Connect', {
+          source: 'notification',
+          mode: sessionIdRef.current !== null ? 'party' : 'solo',
+          boardLayout: null,
+          climbUuid: climbUuidRef.current ?? null,
+        });
         bt.armUndoWallChangeToast();
         void bt.connect(undefined, undefined, bt.reconnectSerialForCurrentBoard ?? undefined);
       } else if (event.action === 'reassert') {
-        bt.armUndoWallChangeToast();
+        // A re-push of the current climb — no climb change to undo, so no toast.
         bt.reassertWall();
       }
     });

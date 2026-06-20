@@ -160,6 +160,12 @@ class SessionPresenceModule : Module() {
             pendingEvents.add(eventName to event)
         }
 
+        // Test seams for the (process-static) buffer multiplex: inspect/clear the
+        // pending queue without an Expo runtime / live module instance.
+        internal fun pendingEventsSnapshotForTest(): List<Pair<String, Map<String, Any?>>> = pendingEvents.toList()
+
+        internal fun clearPendingForTest() = pendingEvents.clear()
+
         // Routes to the live module (buffering if JS isn't listening yet); with no
         // live module the event is buffered for replay on reattach. The old
         // fallback — startActivity from the receiver — was a notification

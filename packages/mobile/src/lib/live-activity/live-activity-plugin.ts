@@ -19,6 +19,12 @@ import {
 const sessionModule =
   Platform.OS === 'ios' ? liveActivityNative : Platform.OS === 'android' ? sessionPresenceNative : null;
 
+// The on-device notification thumbnail (BoardRenderer overlay + bundled
+// backgrounds) is consumed only by the Android foreground service; iOS fetches
+// its own via ActivityKit. Exposed so the bridge can skip the render on iOS
+// rather than do work whose result iOS discards.
+export const isAndroidSessionPresence = Platform.OS === 'android';
+
 export async function isLiveActivityAvailable(): Promise<boolean> {
   if (!sessionModule) return false;
   try {

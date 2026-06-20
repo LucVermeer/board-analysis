@@ -311,6 +311,14 @@ export function useLiveActivity({
     };
   }, [shouldBeActive, stableBoard, available]);
 
+  // Stable scalar trigger for the on-device thumbnail backgrounds: the paths array
+  // has a fresh identity each render, so depending on it directly would churn the
+  // effects, but excluding it entirely drops a LATE background resolution (cold
+  // asset cache) from the notification until some other dep changes. The joined
+  // string changes only when the resolved backgrounds change, so it re-fires the
+  // push exactly when needed.
+  const backgroundsKey = androidThumbnailBackgroundPaths?.join('|') ?? '';
+
   // Track whether the queue-sync effect fired this render cycle so the
   // climb-nav effect can skip its redundant lightweight update.
   const queueSyncedRef = useRef(false);
@@ -351,11 +359,11 @@ export function useLiveActivity({
       androidThumbnailOverlayPath,
       androidThumbnailBackgroundPaths,
     });
-    // androidThumbnailBackgroundPaths (an array) is intentionally NOT a dep — its
-    // identity changes per render; the content-addressed overlay path string is the
-    // stable re-post trigger, and the latest backgrounds are read at effect time.
+    // backgroundsKey (not the array itself) re-fires the push when late-resolving
+    // backgrounds arrive; the array is read at effect time.
   }, [
     androidThumbnailOverlayPath,
+    backgroundsKey,
     boardConnection,
     holderDisplayName,
     isPartySession,
@@ -391,9 +399,10 @@ export function useLiveActivity({
       androidThumbnailOverlayPath,
       androidThumbnailBackgroundPaths,
     });
-    // See Effect 1: the backgrounds array is read at effect time, not a dep.
+    // See Effect 1: backgroundsKey re-fires on a late background resolution.
   }, [
     androidThumbnailOverlayPath,
+    backgroundsKey,
     boardConnection,
     currentClimbQueueItem,
     holderDisplayName,

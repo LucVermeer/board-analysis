@@ -87,6 +87,11 @@ class BoardSessionService : Service() {
 
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
+    // Near-black thumbnail backing (matches the iOS card + the letterbox placeholder
+    // in colors.xml) so a holds-only render doesn't show the notification surface
+    // through the holds. Sourced from the one canonical resource per density bucket.
+    private val thumbBackingColor: Int by lazy { ContextCompat.getColor(this, R.color.session_image_placeholder) }
+
     // Injectable seams (mirror SessionPresenceController.startForegroundService) so
     // a Robolectric test can drive the async image path on the calling thread.
     internal var imageExecutor: Executor = sharedImageExecutor
@@ -398,7 +403,7 @@ class BoardSessionService : Service() {
         val height = overlayBitmap.height
         val composed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(composed)
-        canvas.drawColor(THUMB_BACKING_COLOR)
+        canvas.drawColor(thumbBackingColor)
         val dst = Rect(0, 0, width, height)
         for (path in backgrounds) {
             val background = decodeLocalFile(path) ?: continue
@@ -415,7 +420,8 @@ class BoardSessionService : Service() {
 
     // Cap the long side so a large render can't blow the ~1 MB RemoteViews Binder
     // transaction limit (the bitmap rides in both the collapsed + expanded views).
-    private fun downscale(src: Bitmap): Bitmap {
+    // internal so a test can pin the cap without the decode/compose shadows.
+    internal fun downscale(src: Bitmap): Bitmap {
         val longSide = maxOf(src.width, src.height)
         if (longSide <= MAX_IMAGE_DIMEN) return src
         val scale = MAX_IMAGE_DIMEN.toFloat() / longSide
@@ -432,7 +438,7 @@ class BoardSessionService : Service() {
         // background) then reads as a dark board with lit holds instead of letting
         // the (near-white on Android 12+) notification surface show through. A
         // fully composited board photo is opaque and simply covers this.
-        paint.color = THUMB_BACKING_COLOR
+        paint.color = thumbBackingColor
         canvas.drawRoundRect(rect, radius, radius, paint)
         // Draw the render on top, clipped to the rounded backing (SRC_ATOP keeps the
         // backing wherever the render is transparent).
@@ -452,10 +458,6 @@ class BoardSessionService : Service() {
         private const val MAX_IMAGE_DIMEN = 256
         private const val IMAGE_CORNER_DP = 8f
         private const val BITMAP_CACHE_ENTRIES = 8
-
-        // Near-black board backing for the thumbnail (matches the iOS card), so a
-        // holds-only render doesn't show the notification surface through the holds.
-        private val THUMB_BACKING_COLOR = 0xFF0A0A0A.toInt()
 
         const val ACTION_START = "com.boardsesh.liveactivity.action.START"
         const val ACTION_UPDATE = "com.boardsesh.liveactivity.action.UPDATE"

@@ -54,9 +54,18 @@ const boardState = vi.hoisted(() => ({
   hasBluetooth: true,
 }));
 
+const climbRender = vi.hoisted(() => ({
+  overlayUri: null as string | null,
+  backgroundPaths: [] as string[],
+}));
+
+const analytics = vi.hoisted(() => ({ track: vi.fn() }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
+
+vi.mock('../../analytics', () => ({ track: analytics.track }));
 
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({
@@ -79,7 +88,11 @@ vi.mock('../../../components/ble/use-board-connection-state', () => ({
 }));
 
 vi.mock('../../../hooks/use-native-climb-render', () => ({
-  useNativeClimbRender: () => ({ overlayUri: null, backgroundPaths: [], missingBackgroundCount: 0 }),
+  useNativeClimbRender: () => ({
+    overlayUri: climbRender.overlayUri,
+    backgroundPaths: climbRender.backgroundPaths,
+    missingBackgroundCount: 0,
+  }),
 }));
 
 vi.mock('../use-live-activity', () => ({
@@ -99,6 +112,7 @@ vi.mock('../live-activity-plugin', () => ({
       widget.boardControlListener = null;
     };
   },
+  isAndroidSessionPresence: true,
 }));
 
 const climbItem = makeItem(0);
@@ -241,6 +255,22 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
     bt.armUndoWallChangeToast.mockClear();
     bt.reassertWall.mockClear();
     bt.reconnectSerialForCurrentBoard = 'serial-123';
+    analytics.track.mockClear();
+    climbRender.overlayUri = null;
+    climbRender.backgroundPaths = [];
+  });
+
+  it('threads the on-device thumbnail (overlay + background paths) to the notification', () => {
+    climbRender.overlayUri = 'file:///cache/overlay.png';
+    climbRender.backgroundPaths = ['/assets/kilter-bg.png'];
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        androidThumbnailOverlayPath: 'file:///cache/overlay.png',
+        androidThumbnailBackgroundPaths: ['/assets/kilter-bg.png'],
+      }),
+    );
   });
 
   it('forwards the localized lightbulb labels + on-wall template to the notification', () => {
@@ -268,6 +298,11 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
     expect(bt.connect).toHaveBeenCalledTimes(1);
     expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, 'serial-123');
     expect(bt.reassertWall).not.toHaveBeenCalled();
+    // The lock-screen reconnect is measured like the in-app bulb.
+    expect(analytics.track).toHaveBeenCalledWith(
+      'Board Lightbulb Connect',
+      expect.objectContaining({ source: 'notification' }),
+    );
   });
 
   it('reconnect: falls back to undefined serial (board picker) when none is remembered', () => {
@@ -281,14 +316,14 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
     expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, undefined);
   });
 
-  it('reassert: re-pushes the current climb without reconnecting', () => {
+  it('reassert: re-pushes the current climb without reconnecting (no undo toast — nothing changed)', () => {
     renderBridge();
 
     act(() => {
       widget.boardControlListener?.({ action: 'reassert', correlationId: 'bulb-3' });
     });
 
-    expect(bt.armUndoWallChangeToast).toHaveBeenCalledTimes(1);
+    expect(bt.armUndoWallChangeToast).not.toHaveBeenCalled();
     expect(bt.reassertWall).toHaveBeenCalledTimes(1);
     expect(bt.connect).not.toHaveBeenCalled();
   });
