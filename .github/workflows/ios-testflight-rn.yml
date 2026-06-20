@@ -62,10 +62,11 @@ jobs:
   # Fingerprint gate: resolve the iOS runtimeVersion fingerprint on a cheap Linux
   # runner and skip the ~60-min macOS build when a binary with that fingerprint
   # already shipped (a fingerprint-ios-<hash> tag exists). The OTA publish
-  # (mobile-ota-production.yml) still delivers the JS to matching binaries. The
-  # build job re-resolves on macOS and tags THAT value, so a Linux/macOS
-  # fingerprint divergence can only ever make iOS over-build, never wrongly skip.
-  # See docs/mobile-ota-updates.md.
+  # (mobile-ota-production.yml) still delivers the JS to matching binaries. This
+  # gate is the ONE canonical resolution: the build job embeds this exact value in
+  # the binary via EXPO_UPDATES_FINGERPRINT_OVERRIDE (no macOS re-resolve) and tags
+  # it, so binary-rv == tag == the OTA-published rv by construction — no cross-OS
+  # divergence to over-build around or strand OTAs over. See docs/mobile-ota-updates.md.
   gate:
     # main-only: the iOS build is main-only by design (it uploads to TestFlight),
     # so a dispatch forces a build only from main — there's no point running the
@@ -158,6 +159,13 @@ jobs:
       KEYCHAIN_PASSWORD: ${{ github.run_id }}
       # Shared EXPO_PUBLIC_* / EXPO_UPDATES_* env lives at the workflow level
       # (above) so the gate and build jobs resolve a byte-identical fingerprint.
+      #
+      # Pin the binary's runtimeVersion to the gate's canonical (Linux) fingerprint.
+      # app.config.ts reads this and emits it as a LITERAL runtimeVersion, so
+      # `expo prebuild` bakes this exact value into Expo.plist and the macOS runner
+      # never resolves its own (divergent) fingerprint. Job-level so it's live at
+      # prebuild AND the xcodebuild archive phase. See docs/mobile-ota-updates.md.
+      EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${{ needs.gate.outputs.fingerprint }}
 
     steps:
       - name: Checkout repository
@@ -182,22 +190,21 @@ jobs:
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
           EOF
 
-      # Re-resolve the fingerprint on THIS (macOS) runner, before prebuild, and
-      # tag this value on a successful upload (final step). The gate checks the
-      # Linux value; tagging the build-runner value means a cross-OS divergence
-      # can only ever over-build, never wrongly skip.
-      - name: Resolve fingerprint for tagging
+      # The binary embeds the gate's canonical fingerprint via
+      # EXPO_UPDATES_FINGERPRINT_OVERRIDE (job env above), so the macOS runner no
+      # longer re-resolves its own value — that cross-OS divergence is what
+      # stranded iOS OTAs (binary on the macOS hash, publish on the Linux hash).
+      # Record the gate value here so the tag step (final) tags exactly what the
+      # binary embeds: tag == binary-rv == published-rv by construction.
+      - name: Record fingerprint for tagging
         run: |
           set -uo pipefail
-          raw="$(cd packages/mobile && bunx expo-updates runtimeversion:resolve --platform ios 2>/dev/null || true)"
-          fp="$(printf '%s' "$raw" | jq -r '.runtimeVersion // empty' 2>/dev/null || true)"
-          if ! printf '%s' "$fp" | grep -qiE '^[0-9a-f]{8,}$'; then
-            echo "::warning::Could not resolve the iOS fingerprint on the build runner — the fingerprint tag will be skipped (the next push rebuilds)."
-          else
+          fp="${{ needs.gate.outputs.fingerprint }}"
+          if printf '%s' "$fp" | grep -qiE '^[0-9a-f]{8,}$'; then
             echo "FINGERPRINT_IOS=$fp" >> "$GITHUB_ENV"
-            if [ "$fp" != "${{ needs.gate.outputs.fingerprint }}" ]; then
-              echo "::warning::iOS fingerprint differs between the Linux gate (${{ needs.gate.outputs.fingerprint }}) and this macOS build ($fp); the gate will conservatively keep building iOS until they agree. Investigate cross-OS @expo/fingerprint determinism."
-            fi
+            echo "::notice::iOS binary embeds gate fingerprint $fp (EXPO_UPDATES_FINGERPRINT_OVERRIDE); tagging that value on a successful upload."
+          else
+            echo "::warning::Gate produced no usable fingerprint; the binary self-resolves on macOS and no fingerprint-ios tag is pushed (next push rebuilds)."
           fi
 
       - name: Expo prebuild (generate ios/)

@@ -81,9 +81,10 @@ jobs:
   # Fingerprint gate: resolve the Android runtimeVersion fingerprint and skip the
   # native build when a binary with that fingerprint already shipped (a
   # fingerprint-android-<hash> tag exists). The OTA publish
-  # (mobile-ota-production.yml) still delivers the JS to matching binaries. The
-  # build job re-resolves and tags THAT value on success. Gate + build both run
-  # on Linux, so the fingerprints match exactly. See docs/mobile-ota-updates.md.
+  # (mobile-ota-production.yml) still delivers the JS to matching binaries. This
+  # gate is the ONE canonical resolution: the build embeds this exact value in the
+  # binary via EXPO_UPDATES_FINGERPRINT_OVERRIDE and tags it, so binary-rv == tag
+  # == the OTA-published rv by construction. See docs/mobile-ota-updates.md.
   gate:
     # Push is always on main; a manual dispatch (any branch) always builds, so
     # `workflow_dispatch` keeps producing an APK artifact off a feature branch.
@@ -168,6 +169,15 @@ jobs:
     # Shared EXPO_PUBLIC_* / EXPO_UPDATES_* / GOOGLE_MAPS_API_KEY env lives at the
     # workflow level (above) so the gate and build jobs resolve a byte-identical
     # fingerprint.
+    env:
+      # Pin the binary's runtimeVersion to the gate's canonical fingerprint.
+      # app.config.ts emits this as a LITERAL runtimeVersion, so `expo prebuild`
+      # bakes this exact value into the binary and the build never resolves its
+      # own. Android gate+build are both Linux, so this is belt-and-suspenders —
+      # but it keeps the invariant identical to iOS: binary-rv == the
+      # fingerprint-android-<hash> tag == the OTA-published rv by construction.
+      # See docs/mobile-ota-updates.md.
+      EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${{ needs.gate.outputs.fingerprint }}
 
     steps:
       - name: Checkout repository
@@ -233,21 +243,19 @@ jobs:
           echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
           echo "::warning::Sentry source-map upload is disabled for Android release builds until the Gradle upload task is compatible with the generated Gradle version."
 
-      # Re-resolve the fingerprint (Linux, same runner class as the gate) before
-      # prebuild, and tag this value on a successful release (final tag step).
-      # GOOGLE_MAPS_API_KEY is inherited from the workflow env.
-      - name: Resolve fingerprint for tagging
+      # The binary embeds the gate's canonical fingerprint via
+      # EXPO_UPDATES_FINGERPRINT_OVERRIDE (job env above), so the build no longer
+      # re-resolves. Record the gate value so the tag step (final) tags exactly
+      # what the binary embeds: tag == binary-rv == OTA-published rv.
+      - name: Record fingerprint for tagging
         run: |
           set -uo pipefail
-          raw="$(cd packages/mobile && bunx expo-updates runtimeversion:resolve --platform android 2>/dev/null || true)"
-          fp="$(printf '%s' "$raw" | jq -r '.runtimeVersion // empty' 2>/dev/null || true)"
-          if ! printf '%s' "$fp" | grep -qiE '^[0-9a-f]{8,}$'; then
-            echo "::warning::Could not resolve the Android fingerprint on the build runner — the fingerprint tag will be skipped (the next push rebuilds)."
-          else
+          fp="${{ needs.gate.outputs.fingerprint }}"
+          if printf '%s' "$fp" | grep -qiE '^[0-9a-f]{8,}$'; then
             echo "FINGERPRINT_ANDROID=$fp" >> "$GITHUB_ENV"
-            if [ "$fp" != "${{ needs.gate.outputs.fingerprint }}" ]; then
-              echo "::warning::Android fingerprint differs between the gate (${{ needs.gate.outputs.fingerprint }}) and this build ($fp) — both run on Linux, so this is unexpected; investigate."
-            fi
+            echo "::notice::Android binary embeds gate fingerprint $fp (EXPO_UPDATES_FINGERPRINT_OVERRIDE); tagging that value on a successful release."
+          else
+            echo "::warning::Gate produced no usable fingerprint; the binary self-resolves and no fingerprint-android tag is pushed (next push rebuilds)."
           fi
 
       - name: Expo prebuild (generate android/)

@@ -133,6 +133,38 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
     expect(android).toMatch(/fingerprint-android-/);
   });
 
+  it('pins ONE fingerprint end to end (gate value into the binaries, shipped-tag value into the OTA)', () => {
+    // The gate is the single canonical resolution. The native builds embed that
+    // exact value in the binary via EXPO_UPDATES_FINGERPRINT_OVERRIDE (app.config
+    // emits it as a literal runtimeVersion), and the OTA publish pins each platform
+    // to the most-recent shipped fingerprint-<platform>-<hash> tag. So binary-rv ==
+    // tag == published-rv by construction — no Linux/macOS resolution can diverge
+    // and strand an OTA. If any of these wires breaks, the OTA silently stops
+    // landing, so assert them all.
+    const ios = readWorkflow(NATIVE_IOS);
+    const android = readWorkflow(NATIVE_ANDROID);
+    const ota = readWorkflow(OTA);
+    const gatePin = /EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*needs\.gate\.outputs\.fingerprint\s*\}\}/;
+
+    // Native builds embed the gate's canonical fingerprint.
+    expect(ios, 'iOS build must pin the binary to the gate fingerprint').toMatch(gatePin);
+    expect(android, 'Android build must pin the binary to the gate fingerprint').toMatch(gatePin);
+
+    // The divergence source is gone: exactly one runtimeversion:resolve per native
+    // workflow (the gate). A second occurrence means a build-side re-resolve crept
+    // back in — the macOS/Linux split that stranded iOS OTAs.
+    expect(ios.match(/runtimeversion:resolve --platform ios/g)?.length ?? 0).toBe(1);
+    expect(android.match(/runtimeversion:resolve --platform android/g)?.length ?? 0).toBe(1);
+
+    // The OTA publish pins each platform to its last shipped native tag.
+    expect(ota).toMatch(/git describe --tags --abbrev=0 --match 'fingerprint-ios-\*'/);
+    expect(ota).toMatch(/git describe --tags --abbrev=0 --match 'fingerprint-android-\*'/);
+    expect(ota).toMatch(/EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*steps\.pins\.outputs\.ios_fp\s*\}\}/);
+    expect(ota).toMatch(/EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*steps\.pins\.outputs\.android_fp\s*\}\}/);
+    // The publish needs local tags to resolve those pins.
+    expect(ota).toMatch(/fetch-tags:\s*true/);
+  });
+
   it('resolves the iOS fingerprint without GOOGLE_MAPS_API_KEY and Android with it', () => {
     // GOOGLE_MAPS_API_KEY changes the resolved android.config — hence the
     // fingerprint — so the gate must mirror the per-platform split the native
