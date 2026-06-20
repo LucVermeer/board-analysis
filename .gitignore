@@ -114,10 +114,13 @@ packages/mobile/.app-cache/
 # Local analysis workspace (out-of-tree artifacts, not source)
 .local-work/
 
-# App Store screenshots are captured fresh by the Maestro pipeline
+# Apple App Store screenshots are captured fresh by the Maestro pipeline
 # (vp run mobile:screenshots) and uploaded on demand — not committed.
 /app-stores/apple/screenshots/
-/app-stores/google/screenshots/
+# Google Play screenshots ARE committed: app-stores/google/screenshots/pixel-2/
+# is the source of truth the Mobile Store Metadata workflow uploads, refreshed by
+# mobile-screenshots-android.yml's commit-back. (Apple stays ephemeral because
+# deliver routes its many device sizes by pixel dimensions at upload time.)
 
 # fastlane — never commit credentials or generated run artifacts.
 *.p8
