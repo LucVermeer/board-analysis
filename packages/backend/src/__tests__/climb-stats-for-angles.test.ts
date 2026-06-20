@@ -95,6 +95,15 @@ describe('climbStatsForAngles resolver', () => {
     expect(entry.displayDifficulty).toBeNull();
   });
 
+  it('returns an empty array for a climb with no logged angles', async () => {
+    selectRows.rows = [];
+
+    const result = await callResolver('kilter', 'CLIMB-NONE');
+
+    expect(result).toEqual([]);
+    expect(dbReadMock.select).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects an unknown board name', async () => {
     await expect(callResolver('notaboard', 'CLIMB-1')).rejects.toThrow();
     expect(dbReadMock.select).not.toHaveBeenCalled();
