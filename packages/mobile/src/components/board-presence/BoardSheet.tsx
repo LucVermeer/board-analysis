@@ -237,6 +237,12 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   historyCountRef.current = visibleHistory.length;
 
   const lastReceivedWallClimbRef = useRef<string | null>(null);
+  // `seq` rides along in the telemetry payload but must NOT trigger the effect —
+  // a same-uuid seq bump (e.g. a backfill merge) shouldn't re-evaluate the
+  // "new climb on the wall" event. Read it from a ref so the effect keys only on
+  // the climb uuid.
+  const currentClimbSeqRef = useRef(currentClimb?.seq);
+  currentClimbSeqRef.current = currentClimb?.seq;
   const actionClimbCacheRef = useRef(new Map<string, Climb>());
   const actionClimbRequestRef = useRef(new Map<string, Promise<Climb | null>>());
   const pendingActionKeysRef = useRef(new Set<string>());
@@ -251,9 +257,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       boardId: boardPresenceBoardIdRef.current ?? undefined,
       climbUuid: currentClimbUuid,
       // `seq` lets PostHog spot gaps in the live stream (a jump = dropped pushes).
-      seq: currentClimb?.seq ?? undefined,
+      seq: currentClimbSeqRef.current ?? undefined,
     });
-  }, [currentClimb?.climbUuid, currentClimb?.seq]);
+  }, [currentClimb?.climbUuid]);
 
   const snapPoints = useMemo(() => ['55%', '92%'], []);
   const rowBoard = useMemo<BoardSheetRowBoard | null>(

@@ -529,11 +529,21 @@ describe('useBoardPresence — reconnect / foreground / manual catch-up', () => 
     return { harness, view };
   }
 
+  it('does not fire catch-up telemetry on the initial mount/backfill', async () => {
+    const onCatchUp = vi.fn();
+    // Seeding goes through the direct backfill path, NOT runCatchUp — so no
+    // telemetry should fire on mount. Guards a future refactor that routes the
+    // initial backfill through runCatchUp from silently emitting spurious events.
+    await mountSeeded(onCatchUp);
+    expect(onCatchUp).not.toHaveBeenCalled();
+  });
+
   it('registers a reconnect listener and catches up when the transport reconnects', async () => {
     const onCatchUp = vi.fn();
     const { harness } = await mountSeeded(onCatchUp);
     expect(harness.onReconnect).toHaveBeenCalledTimes(1);
     expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(1);
+    expect(onCatchUp).not.toHaveBeenCalled();
 
     // A reconnect must re-read the durable history WITHOUT waiting for a later
     // live event to reveal the gap (the whole point of the fix).
