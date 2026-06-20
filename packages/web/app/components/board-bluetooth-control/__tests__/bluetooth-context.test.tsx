@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import React from 'react';
 import { BluetoothProvider, useBluetoothContext } from '../bluetooth-context';
 import type { BoardDetails } from '@/app/lib/types';
+import type { BleSendFailureReason } from '@boardsesh/ble-protocol/connection-error';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
 vi.mock('react-i18next', () => ({
@@ -31,12 +32,18 @@ type PickerStateMock = {
   handleCancel: () => void;
 } | null;
 
+// Mirrors the ref the real hook returns. The hook sets `.current` synchronously
+// on its failing path before resolving `false`; tests pre-set it to simulate
+// that, since the AutoSender reads it right after the awaited send resolves.
+const mockSendFailureReasonRef: { current: BleSendFailureReason | null } = { current: null };
+
 let mockBluetoothState = {
   isConnected: false,
   loading: false,
   connect: mockConnect,
   disconnect: mockDisconnect,
   sendFramesToBoard: mockSendFramesToBoard,
+  lastSendFailureReasonRef: mockSendFailureReasonRef,
 };
 let mockPickerState: PickerStateMock = null;
 
@@ -208,12 +215,14 @@ describe('BluetoothProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCurrentClimbQueueItem = null;
+    mockSendFailureReasonRef.current = null;
     mockBluetoothState = {
       isConnected: false,
       loading: false,
       connect: mockConnect,
       disconnect: mockDisconnect,
       sendFramesToBoard: mockSendFramesToBoard,
+      lastSendFailureReasonRef: mockSendFailureReasonRef,
     };
     mockPickerState = null;
     lastPickerProps = null;
@@ -359,7 +368,78 @@ describe('BluetoothProvider', () => {
       });
     });
 
-    it('tracks failure analytics when send fails', async () => {
+    // The hook reports the precise cause via the ref; the AutoSender must label
+    // the failure with that reason — not the retired catch-all
+    // `characteristic_unavailable`, which hid the dominant mid-session drop.
+    const failureReasons: BleSendFailureReason[] = [
+      'disconnected',
+      'incompatible_climb',
+      'missing_led_placements',
+      'missing_mirror_data',
+      'write_failed',
+    ];
+    for (const reason of failureReasons) {
+      it(`tracks failure with the hook-reported reason: ${reason}`, async () => {
+        mockSendFailureReasonRef.current = reason;
+        mockSendFramesToBoard.mockResolvedValue(false);
+        mockCurrentClimbQueueItem = {
+          climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+        };
+        mockBluetoothState.isConnected = true;
+
+        renderHook(() => useBluetoothContext(), {
+          wrapper: createWrapper(),
+        });
+
+        await act(async () => {
+          await vi.waitFor(() => {
+            expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Failure', {
+              climbUuid: 'climb-1',
+              boardLayout: 'Original',
+              boardId: undefined,
+              failureReason: reason,
+              climbHoldCount: 1,
+            });
+          });
+        });
+
+        // The misnomer must be gone for good.
+        expect(mockTrack).not.toHaveBeenCalledWith(
+          'Climb Sent to Board Failure',
+          expect.objectContaining({ failureReason: 'characteristic_unavailable' }),
+        );
+      });
+    }
+
+    it('reads the reason the hook set at resolution time (not a hardcoded label)', async () => {
+      // Faithful to the real hook: set the ref synchronously on the failing path
+      // right before resolving false. The AutoSender reads it in the same
+      // microtask the await resolves in.
+      mockSendFramesToBoard.mockImplementation(async () => {
+        mockSendFailureReasonRef.current = 'disconnected';
+        return false;
+      });
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockTrack).toHaveBeenCalledWith(
+            'Climb Sent to Board Failure',
+            expect.objectContaining({ failureReason: 'disconnected' }),
+          );
+        });
+      });
+    });
+
+    it('falls back to "unknown" when the hook left no reason', async () => {
+      mockSendFailureReasonRef.current = null;
       mockSendFramesToBoard.mockResolvedValue(false);
       mockCurrentClimbQueueItem = {
         climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
@@ -372,13 +452,10 @@ describe('BluetoothProvider', () => {
 
       await act(async () => {
         await vi.waitFor(() => {
-          expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Failure', {
-            climbUuid: 'climb-1',
-            boardLayout: 'Original',
-            boardId: undefined,
-            failureReason: 'characteristic_unavailable',
-            climbHoldCount: 1,
-          });
+          expect(mockTrack).toHaveBeenCalledWith(
+            'Climb Sent to Board Failure',
+            expect.objectContaining({ failureReason: 'unknown' }),
+          );
         });
       });
     });
@@ -429,6 +506,52 @@ describe('BluetoothProvider', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith('Error sending climb to board:', expect.any(Error));
       consoleSpy.mockRestore();
+    });
+
+    // Part B regression: after a mid-session drop the AutoSender unmounts
+    // (isConnected → false), and on the take-back reconnect it remounts with a
+    // fresh dedup signature — which re-sends the queued climb on its own. This
+    // is the silent-drop recovery; it must fire EXACTLY ONCE per reconnect (no
+    // explicit reassert stacked on top, which would double-send and double-count
+    // analytics).
+    it('re-sends the current climb exactly once after a drop and take-back reconnect', async () => {
+      mockSendFramesToBoard.mockResolvedValue(true);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      const { rerender, result } = renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      // Initial connection: AutoSender mounts and sends the climb once.
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1));
+      });
+
+      // Board dropped: AutoSender unmounts, no further sends.
+      await act(async () => {
+        mockBluetoothState.isConnected = false;
+        rerender();
+      });
+      expect(result.current.isConnected).toBe(false);
+      expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+
+      // Take-back reconnect: AutoSender remounts (fresh dedup signature) and
+      // re-lights the same climb. Let the remount's send effect drain.
+      await act(async () => {
+        mockBluetoothState.isConnected = true;
+        rerender();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+
+      // Exactly one re-send for the unchanged climb — never a double.
+      expect(mockSendFramesToBoard).toHaveBeenCalledTimes(2);
+      expect(mockTrack).toHaveBeenCalledWith(
+        'Climb Sent to Board Success',
+        expect.objectContaining({ climbUuid: 'climb-1' }),
+      );
     });
   });
 

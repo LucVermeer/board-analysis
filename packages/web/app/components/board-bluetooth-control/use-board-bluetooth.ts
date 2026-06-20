@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
-import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
+import {
+  classifyBleFailure,
+  classifyBleFailureReason,
+  type BleSendFailureReason,
+} from '@boardsesh/ble-protocol/connection-error';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { normaliseSetIds } from '@/app/lib/ble/board-config-match';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
@@ -222,6 +227,17 @@ export function useBoardBluetooth({
   // listener on every change.
   const reconnectSerialRef = useRef<string | null>(null);
 
+  // The reason the most recent `sendFramesToBoard` returned `false`. The
+  // AutoSender reads this synchronously right after its own `await` resolves to
+  // `false` to label `Climb Sent to Board Failure` with the real cause —
+  // `disconnected` dominates, not the old catch-all `characteristic_unavailable`.
+  // Set immediately before EVERY `return false` below (never reset elsewhere);
+  // the AutoSender only reads it on the `false` branch, so a stale value left by
+  // a prior successful send is never observed. Writes serialise through
+  // `writeChainRef`, so a concurrent play-view send can't overwrite this between
+  // a failing call resolving and the AutoSender's same-microtask read.
+  const lastSendFailureReasonRef = useRef<BleSendFailureReason | null>(null);
+
   // Device picker state for custom Capacitor scanning.
   // pickerRejectRef holds the pending promise's reject so unmount cleanup
   // can drain it, which causes the adapter's finally block to call stopLEScan.
@@ -368,6 +384,7 @@ export function useBoardBluetooth({
               },
             );
             showMessage('This climb has unrecognised hold data and cannot be sent to the board.', 'error');
+            lastSendFailureReasonRef.current = 'incompatible_climb';
             return false;
           }
 
@@ -406,6 +423,7 @@ export function useBoardBluetooth({
         if (mirrored && boardDetails.supportsMirroring === true) {
           if (!boardDetails.holdsData || Object.keys(boardDetails.holdsData).length === 0) {
             console.error('Cannot mirror frames: holdsData is missing or empty');
+            lastSendFailureReasonRef.current = 'missing_mirror_data';
             return false;
           }
           framesToSend = convertToMirroredFramesString(frames, boardDetails.holdsData);
@@ -428,6 +446,7 @@ export function useBoardBluetooth({
               'Board configuration may be incorrect or LED data may need regeneration.',
           );
           showMessage('Could not send to board — LED data missing for this board configuration.', 'error');
+          lastSendFailureReasonRef.current = 'missing_led_placements';
           return false;
         }
 
@@ -459,6 +478,7 @@ export function useBoardBluetooth({
             },
           );
           showMessage('This climb is for a different board configuration.', 'error');
+          lastSendFailureReasonRef.current = 'incompatible_climb';
           return false;
         }
 
@@ -496,19 +516,26 @@ export function useBoardBluetooth({
           return;
         }
         console.error('Error sending frames to board:', error);
+        const failureReason = classifyBleFailureReason(error);
+        lastSendFailureReasonRef.current = failureReason;
         // A write that fails because the GATT link is gone (the board dropped or
         // another device grabbed it — these boards are last-connection-wins) is
         // the only signal we get when the adapter's disconnect event never
-        // fires. Mark the connection lost so the lightbulb stops showing
-        // "connected" and a deliberate reconnect can run. handleDisconnection
-        // dedups its own take-back prompt, so a burst of failing writes is safe.
-        if (isDisconnectionError(error)) {
+        // fires. Record the tug-of-war (mirrors mobile's BluetoothConnectionStolen)
+        // and mark the connection lost so the lightbulb stops showing "connected"
+        // and a deliberate reconnect can run. handleDisconnection dedups its own
+        // take-back prompt, so a burst of failing writes is safe.
+        if (failureReason === 'disconnected') {
+          track(SHARED_EVENTS.BluetoothConnectionStolen, {
+            boardLayout: `${boardDetails.layout_name}`,
+            boardId: analyticsBoardId ?? undefined,
+          });
           handleDisconnection();
         }
         return false;
       }
     },
-    [boardDetails, showMessage, ledColorOverrides, serialisedWrite, handleDisconnection],
+    [boardDetails, showMessage, ledColorOverrides, serialisedWrite, handleDisconnection, analyticsBoardId],
   );
 
   const configureConnectedBoard = useCallback(
@@ -802,6 +829,7 @@ export function useBoardBluetooth({
     connect,
     disconnect,
     sendFramesToBoard,
+    lastSendFailureReasonRef,
     pickerState,
     reconnectSerialForCurrentBoard,
   };

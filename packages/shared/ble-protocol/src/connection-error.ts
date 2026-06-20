@@ -16,6 +16,23 @@ export type BleFailureCategory =
   | 'service_missing' // connected but UART service/characteristic absent
   | 'unknown';
 
+/**
+ * Reason a *send* to the board failed, tracked on `Climb Sent to Board Failure`.
+ * The classifier below covers the thrown-during-write cases; callers also set
+ * the explicit, pre-write reasons (`incompatible_climb`, `missing_led_placements`,
+ * `missing_mirror_data`) directly at their return-false sites. Kept as one union
+ * so web and mobile emit byte-identical strings and the reliability metric is
+ * comparable across platforms.
+ */
+export type BleSendFailureReason =
+  | 'disconnected' // write threw on a dead GATT link (board dropped / stolen)
+  | 'incompatible_climb' // every placement skipped — climb is for another board
+  | 'missing_led_placements' // LED placement map empty for this board config
+  | 'missing_mirror_data' // mirroring requested but holdsData absent (pre-write)
+  | 'missing_mirror_mapping' // a hold had no mirrored id while building the mirror
+  | 'write_failed' // any other thrown write failure on a live link
+  | `dom_${string}`; // a DOMException name we don't otherwise classify
+
 function errorName(error: unknown): string | undefined {
   // Guard DOMException for non-DOM environments (native iOS adapter does the
   // same) — `instanceof DOMException` would throw a ReferenceError otherwise.
@@ -124,4 +141,23 @@ export function isDisconnectionError(error: unknown): boolean {
   return /GATT (server|operation).*(disconnect|not connected)|not connected|disconnected|peripheral.*(disconnect|unreachable)/i.test(
     message,
   );
+}
+
+/**
+ * Classify an error thrown from a *send* (BLE write) into a `failureReason` for
+ * the `Climb Sent to Board Failure` event. The dominant real cause on these
+ * last-connection-wins boards is a mid-session disconnect — surfacing it as
+ * `disconnected` (instead of a generic bucket) is what makes the reliability gap
+ * visible in analytics. Pure TS so both the web and mobile hooks share one
+ * source of truth. DOMException is feature-detected because the native iOS /
+ * Android RN adapters run where it may be undefined.
+ */
+export function classifyBleFailureReason(error: unknown): BleSendFailureReason {
+  if (isDisconnectionError(error)) return 'disconnected';
+  // `convertToMirroredFramesString` throws this when a hold has no mirrored id.
+  if (error instanceof Error && error.message.includes('Mirrored hold ID')) return 'missing_mirror_mapping';
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return `dom_${error.name || 'exception'}`;
+  }
+  return 'write_failed';
 }
