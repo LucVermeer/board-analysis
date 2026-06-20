@@ -93,6 +93,10 @@ export const GetPlaylistClimbsInputSchema = z.object({
   sizeId: z.number().int().positive().optional(),
   setIds: z.string().min(1).optional(),
   angle: z.number().int().optional(),
+  // All-boards mode only: render on-active-board climbs' grades at the user's
+  // selected angle instead of the added-at / most-ascents fallback.
+  activeBoardName: BoardNameSchema.optional(),
+  activeAngle: z.number().int().min(0).max(90).optional(),
   page: z.number().int().min(0).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
 });

@@ -408,6 +408,10 @@ export type GetPlaylistClimbsInput = {
   sizeId?: number;
   setIds?: string;
   angle?: number;
+  // All-boards mode only: render on-active-board climbs' grades at the user's
+  // selected angle instead of the added-at / most-ascents fallback.
+  activeBoardName?: string;
+  activeAngle?: number;
   page?: number;
   pageSize?: number;
 };

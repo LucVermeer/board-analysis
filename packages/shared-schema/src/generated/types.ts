@@ -1556,6 +1556,10 @@ export type GetMyPinnedPlaylistsInput = {
 
 /** Input for getting climbs in a playlist with full data. */
 export type GetPlaylistClimbsInput = {
+  /** Selected wall angle to render grades at for on-active-board climbs in all-boards mode */
+  activeAngle?: InputMaybe<Scalars['Int']['input']>;
+  /** Active board type for grade rendering in all-boards mode (omit in specific-board mode). On-board climbs render their grade at activeAngle. */
+  activeBoardName?: InputMaybe<Scalars['String']['input']>;
   /** Board angle */
   angle?: InputMaybe<Scalars['Int']['input']>;
   /** Board name for climb lookup (omit for all-boards mode) */

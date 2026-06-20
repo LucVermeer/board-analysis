@@ -245,6 +245,10 @@ export const playlistsTypeDefs = /* GraphQL */ `
     setIds: String
     "Board angle"
     angle: Int
+    "Active board type for grade rendering in all-boards mode (omit in specific-board mode). On-board climbs render their grade at activeAngle."
+    activeBoardName: String
+    "Selected wall angle to render grades at for on-active-board climbs in all-boards mode"
+    activeAngle: Int
     "Page number"
     page: Int
     "Page size"
