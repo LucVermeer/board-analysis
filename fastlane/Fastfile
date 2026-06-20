@@ -159,6 +159,33 @@ def with_upload_retries(max_attempts: 3, base_sleep: 30)
   end
 end
 
+# supply resolves a SINGLE release in the target track (default: production)
+# before it uploads listing metadata / images / screenshots — even though those
+# are app-global, not release-specific (perform_upload_meta -> fetch_track_and_release!).
+# When the production track holds more than one release (a staged or halted
+# rollout, or a new release still in review alongside the live one) it aborts with
+# "More than one release found in this track. Please specify with the :version_code
+# option to select a release." Pin it to the highest production version code so the
+# resolution is unambiguous; the app-global listing applies the same either way,
+# and skip_upload_changelogs means the selected release itself is never touched.
+# Returns nil when the track can't be read (or is empty), leaving a single-release
+# track to resolve on its own.
+def play_production_version_code(json_key_data)
+  codes = Array(
+    google_play_track_version_codes(
+      package_name: APP_IDENTIFIER,
+      json_key_data: json_key_data,
+      track: "production"
+    )
+  ).map(&:to_i)
+  return nil if codes.empty?
+  UI.message("Pinning the production version_code to #{codes.max} so supply can resolve a single release.")
+  codes.max
+rescue => error
+  UI.important("Could not read production version codes (#{error.message}); uploading without an explicit version_code.")
+  nil
+end
+
 platform :ios do
   desc "Upload App Store screenshots to App Store Connect (no binary, no metadata, no review)"
   lane :screenshots do
@@ -279,10 +306,13 @@ platform :android do
       pngs.each { |png| FileUtils.cp(png, File.join(phone_dir, File.basename(png))) }
       UI.message("Staged #{pngs.length} Play phone screenshot(s) into #{phone_dir}")
 
+      json_key_data = ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
+      version_code = play_production_version_code(json_key_data)
       with_upload_retries do
         upload_to_play_store(
-          package_name: "com.boardsesh.app",
-          json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
+          package_name: APP_IDENTIFIER,
+          json_key_data: json_key_data,
+          version_code: version_code,
           metadata_path: metadata_dir,
           skip_upload_apk: true,
           skip_upload_aab: true,
@@ -306,9 +336,11 @@ platform :android do
 
   desc "Upload Play Store listing text (title + short/full description) — no binary, no changelog, no images"
   lane :metadata do
+    json_key_data = ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
     upload_to_play_store(
       package_name: APP_IDENTIFIER,
-      json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
+      json_key_data: json_key_data,
+      version_code: play_production_version_code(json_key_data),
       metadata_path: ANDROID_METADATA_DIR,
       skip_upload_apk: true,
       skip_upload_aab: true,
@@ -337,9 +369,11 @@ platform :android do
 
   desc "Upload Play Store listing images (high-res icon, feature graphic) — no binary, no text, no screenshots"
   lane :images do
+    json_key_data = ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
     upload_to_play_store(
       package_name: APP_IDENTIFIER,
-      json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
+      json_key_data: json_key_data,
+      version_code: play_production_version_code(json_key_data),
       metadata_path: ANDROID_METADATA_DIR,
       skip_upload_apk: true,
       skip_upload_aab: true,

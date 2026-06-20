@@ -114,6 +114,16 @@ every API-committed change queues under _Publishing overview → changes ready t
 publish_ and waits for a manual "Publish" — the listing will look stale again
 even though CI is green.
 
+**Multiple production releases.** supply resolves a single release in the
+production track before it uploads the (app-global) listing, and aborts with
+_"More than one release found in this track. Please specify with the :version_code
+option"_ when the track holds more than one — e.g. a new release in review next to
+the live one, or a staged/halted rollout. The lanes handle this by pinning
+`version_code` to the highest production version code
+(`play_production_version_code` in the Fastfile); the listing applies app-wide
+regardless of which release is selected, and changelogs stay skipped so the
+release itself is untouched.
+
 **If the listing stops updating:** check the Play Console _Publishing overview_
 first. A backlog of "ready to send for review" / "ready to publish" means a
 review/publishing gate, not a broken upload — the workflow logs will show
