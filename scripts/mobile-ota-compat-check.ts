@@ -126,6 +126,52 @@ export function deriveOverall(results: readonly PlatformResult[]): Verdict {
   return 'ota-compatible';
 }
 
+export interface FingerprintPair {
+  prFingerprint: string | null;
+  baseFingerprint: string | null;
+}
+
+/**
+ * PURE (given injected resolvers): resolve a platform's PR and baseline
+ * fingerprints, confirming any difference so a flaky resolver can't surface as a
+ * false "native change". Trusts an "equal" read immediately (two independent
+ * trees won't collide on a wrong hash); on a difference, re-resolves both up to
+ * `maxConfirmations` times — returns the equal pair the moment one agrees, or
+ * stops early once the same differing pair repeats (a stable, real native change).
+ *
+ * `resolveBase` may be backed by a fixed value (the cache-hit path); then only
+ * the PR side actually changes across retries, and the PR converging to that
+ * constant is what confirms equality. Keep the two resolvers' side effects cheap
+ * and idempotent — they're each called up to `maxConfirmations + 1` times.
+ */
+export function confirmComparison(
+  resolvePr: () => string | null,
+  resolveBase: () => string | null,
+  maxConfirmations: number = MAX_DIFF_CONFIRMATIONS,
+): FingerprintPair {
+  let prFingerprint = resolvePr();
+  let baseFingerprint = resolveBase();
+
+  if (!prFingerprint || !baseFingerprint || prFingerprint === baseFingerprint) {
+    return { prFingerprint, baseFingerprint };
+  }
+
+  let previousPr = prFingerprint;
+  let previousBase = baseFingerprint;
+  for (let attempt = 0; attempt < maxConfirmations; attempt += 1) {
+    const pr = resolvePr();
+    const base = resolveBase();
+    if (pr) prFingerprint = pr;
+    if (base) baseFingerprint = base;
+    if (pr && base && pr === base) return { prFingerprint: pr, baseFingerprint: base };
+    // The same differing pair twice running → a stable, genuine native change.
+    if (pr && base && pr === previousPr && base === previousBase) break;
+    if (pr) previousPr = pr;
+    if (base) previousBase = base;
+  }
+  return { prFingerprint, baseFingerprint };
+}
+
 function shortHash(fingerprint: string | null): string {
   return fingerprint ? fingerprint.slice(0, 12) : '—';
 }
@@ -159,7 +205,7 @@ export const CHECK_TITLE: Record<Verdict, string> = {
  * arrow) so it reads as two static snapshots, not a state transition:
  *   compatible → `abc` (matches main)
  *   native     → PR `abc` · main `def`
- *   unknown    → PR `abc` · main —
+ *   unknown    → `abc` (no baseline)  /  `—` (unresolved)
  */
 function fingerprintCell(entry: PlatformResult): string {
   if (entry.verdict === 'ota-compatible') {
@@ -167,7 +213,13 @@ function fingerprintCell(entry: PlatformResult): string {
     // Secondary signal — only ever stated when confidently true.
     return entry.shippedTagExists ? `${cell} · already on a released build` : cell;
   }
-  return `PR \`${shortHash(entry.prFingerprint)}\` · main \`${shortHash(entry.baseFingerprint)}\``;
+  if (entry.verdict === 'native-change-required') {
+    return `PR \`${shortHash(entry.prFingerprint)}\` · main \`${shortHash(entry.baseFingerprint)}\``;
+  }
+  // unknown — name why we couldn't compare rather than show a bare em-dash pair.
+  return entry.baseFingerprint
+    ? `\`${shortHash(entry.prFingerprint)}\` (unresolved)`
+    : `\`${shortHash(entry.prFingerprint)}\` (no baseline)`;
 }
 
 function table(results: readonly PlatformResult[]): string {
@@ -248,41 +300,6 @@ function resolveFingerprint(mobileDir: string, platform: Platform): string | nul
   } catch {
     return null;
   }
-}
-
-/**
- * Resolve a platform's PR and baseline fingerprints, confirming any difference so
- * a flaky resolve can't surface as a false "native change". Trusts an "equal"
- * read immediately; on a difference, re-resolves both up to MAX_DIFF_CONFIRMATIONS
- * times — returns the equal pair the moment one agrees, or stops early once the
- * same differing pair repeats (a stable, real native change).
- */
-function comparePlatform(
-  platform: Platform,
-  prMobileDir: string,
-  readBaseFingerprint: () => string | null,
-): { prFingerprint: string | null; baseFingerprint: string | null } {
-  let prFingerprint = resolveFingerprint(prMobileDir, platform);
-  let baseFingerprint = readBaseFingerprint();
-
-  if (!prFingerprint || !baseFingerprint || prFingerprint === baseFingerprint) {
-    return { prFingerprint, baseFingerprint };
-  }
-
-  let previousPr = prFingerprint;
-  let previousBase = baseFingerprint;
-  for (let attempt = 0; attempt < MAX_DIFF_CONFIRMATIONS; attempt += 1) {
-    const pr = resolveFingerprint(prMobileDir, platform);
-    const base = readBaseFingerprint();
-    if (pr) prFingerprint = pr;
-    if (base) baseFingerprint = base;
-    if (pr && base && pr === base) return { prFingerprint: pr, baseFingerprint: base };
-    // The same differing pair twice running → a stable, genuine native change.
-    if (pr && base && pr === previousPr && base === previousBase) break;
-    if (pr) previousPr = pr;
-    if (base) previousBase = base;
-  }
-  return { prFingerprint, baseFingerprint };
 }
 
 /** Secondary signal: does a released binary already carry this fingerprint? */
@@ -394,7 +411,10 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       options.baseFingerprints[platform] ??
       (options.baseMobileDir ? resolveFingerprint(options.baseMobileDir, platform) : null);
 
-    const { prFingerprint, baseFingerprint } = comparePlatform(platform, options.prMobileDir, readBaseFingerprint);
+    const { prFingerprint, baseFingerprint } = confirmComparison(
+      () => resolveFingerprint(options.prMobileDir, platform),
+      readBaseFingerprint,
+    );
 
     if (!prFingerprint) {
       console.warn(
