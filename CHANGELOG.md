@@ -16,6 +16,10 @@ manual changes). See docs/mobile-ota-updates.md.
   grade shows in its real grade colour up in the corner, and the board thumbnail is
   easier to read at a glance.
 
+### Fixed
+
+- Playlist grades now match the wall angle you've dialed in, instead of a climb's most-popular angle ([#3090](https://github.com/boardsesh/boardsesh/pull/3090))
+
 ## 2026-06-19
 
 ### New

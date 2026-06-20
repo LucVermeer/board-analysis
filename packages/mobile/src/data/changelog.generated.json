@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-20T05:39:12.128Z",
+  "generatedAt": "2026-06-20T05:43:42.802Z",
   "entries": [
+    {
+      "prNumber": 3090,
+      "category": "fixed",
+      "title": "Playlist grades now match the wall angle you've dialed in, instead of a climb's most-popular angle",
+      "mergedAt": "2026-06-20T05:40:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3090"
+    },
     {
       "prNumber": 3073,
       "category": "new",
