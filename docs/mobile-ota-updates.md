@@ -73,34 +73,43 @@ so `EXPO_UPDATES_URL` must be present.
 ### Fingerprint parity — the one rule that matters
 
 The published runtimeVersion must equal the one the native build baked into the binary, or the OTA
-silently never lands. **CI pins this explicitly** instead of trusting both sides to resolve the same
-hash: the `gate` resolves the canonical fingerprint once (on Linux), the native build embeds _that_
-value in the binary via `EXPO_UPDATES_FINGERPRINT_OVERRIDE` (`app.config.ts` emits it as a literal
-runtimeVersion), and the OTA publish pins each platform to the most-recent shipped
-`fingerprint-<platform>-<hash>` tag. So binary-rv == tag == published-rv by construction, and
-publish-time fingerprint _resolution_ is no longer a correctness input for the runtimeVersion. (This
-matters because `@expo/fingerprint` is not deterministic across Linux and macOS — the iOS binary,
-baked on macOS, used to embed a different hash than the Linux gate/publish resolved, which stranded
-iOS OTAs whenever the two disagreed.)
+silently never lands — and the publish must run the **`fingerprint` policy** (resolve the _current_
+commit's hash), never a fixed value, so a native change moves the runtimeVersion and old binaries are
+correctly excluded. Two things make that hold:
 
-The fingerprint hashes the **resolved Expo config** and native files — **not** the JS bundle. With
-the runtimeVersion now pinned, the remaining reason to keep config-affecting env in sync is **bundle
-correctness**: `expo export` still bundles the resolved config and inlines `EXPO_PUBLIC_*`, so
-`GOOGLE_MAPS_API_KEY` (drives `android.config`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`,
-`EXPO_UPDATES_URL`/`EXPO_UPDATES_CHANNEL`, and the other `EXPO_PUBLIC_*` (backend/analytics) must
-still match the binary. Three mechanisms, all enforced/handled in CI:
+- **The binary embeds the _Linux_ fingerprint.** `@expo/fingerprint` is not deterministic across
+  Linux and macOS, but the iOS binary is baked on macOS while the gate and the publish run on Linux.
+  So the iOS build exports `EXPO_UPDATES_FINGERPRINT_OVERRIDE` set to the gate's Linux fingerprint;
+  `app.config.ts` emits it as a literal runtimeVersion, and prebuild bakes _that_ into the binary
+  instead of the macOS-resolved hash. (Android sets it too, for a uniform invariant.) This is what
+  previously stranded iOS OTAs: the binary embedded a macOS hash the Linux publish never published
+  under.
+- **The publish resolves fresh.** The OTA publish sets **no** override — it resolves the current
+  commit's fingerprint (`{ policy: 'fingerprint' }`) on Linux and serves the JS under it. For a
+  JS-only commit that equals the shipped binary's embedded Linux value (OTA lands); on a native
+  change it resolves the **new** hash, so old binaries (still on the old one) never receive JS that
+  needs the new native code. **Pinning the publish to a fixed value (e.g. the last shipped tag) would
+  do exactly that — a crash** — so `scripts/mobile-ci-env-parity.test.ts` asserts the publish never
+  sets the override.
 
-- **Explicit pin.** The native builds set `EXPO_UPDATES_FINGERPRINT_OVERRIDE` to the gate fingerprint;
-  the OTA publish sets it per-platform to the last shipped `fingerprint-<platform>-<hash>` tag (via
-  `git describe --match`). `scripts/mobile-ci-env-parity.test.ts` asserts this wiring across all three
-  workflows (and that no build-side re-resolve creeps back in).
+The fingerprint hashes the **resolved Expo config** and native files — **not** the JS bundle — so the
+publish must resolve `app.config.ts` to the same config the native `expo prebuild` did. The
+config-affecting env that must match is `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` (drives the google-signin
+plugin's native `iosUrlScheme`), `GOOGLE_MAPS_API_KEY` (drives `android.config`), and
+`EXPO_UPDATES_URL`/`EXPO_UPDATES_CHANNEL`. The other `EXPO_PUBLIC_*` are inlined into the JS bundle;
+they must still match so the OTA points at the right backend/analytics, but drift there is a runtime
+bug, not a delivery failure. Mechanisms, all enforced/handled in CI:
+
+- **Binary pin + fresh publish.** The native builds set `EXPO_UPDATES_FINGERPRINT_OVERRIDE` to the
+  gate fingerprint; the publish leaves it unset. `scripts/mobile-ci-env-parity.test.ts` asserts both
+  (and that no build-side re-resolve creeps back in).
 - **Env parity.** `mobile-ota-production.yml` declares the same `EXPO_PUBLIC_*` + `EXPO_UPDATES_*`
   env as `ios-testflight-rn.yml` / `android-apk-rn.yml`. The same parity test fails the build if they
   drift.
 - **Per-platform publish.** `GOOGLE_MAPS_API_KEY` is set only on the Android prebuild (iOS uses
-  Apple Maps) and it changes the resolved config for the Android bundle. So the workflow publishes
-  iOS **without** the key and Android **with** it, in separate steps, each pinned to its own
-  platform's tag. A single `--platform all` publish with one env could only ever match one side.
+  Apple Maps) and it changes the resolved config — hence the fingerprint — for the Android side. So
+  the workflow publishes iOS **without** the key and Android **with** it, in separate steps. A single
+  `--platform all` publish with one env could only ever match one side.
 
 ## Native-build gating (OTA-only when the fingerprint is unchanged)
 
@@ -120,22 +129,21 @@ runtimeversion:resolve` using the same **workflow-level** env the build uses (iO
 3. On a successful build + store upload, the build job pushes `fingerprint-<platform>-<hash>` — the
    gate value the binary embeds (see the pin below), not a re-resolved one.
 
-**Why a wrong skip — or a stranded OTA — is impossible.** The gate is the single canonical
-resolution. The native build embeds _that exact value_ in the binary via
+**Why a wrong skip is impossible.** The native build embeds the gate's exact value in the binary via
 `EXPO_UPDATES_FINGERPRINT_OVERRIDE` (the macOS runner no longer re-resolves its own, divergent hash)
 and tags it. So the tag, the binary's runtimeVersion, and the gate's skip-key are one value by
-construction: the gate can never skip a fingerprint the binary lacks, and the OTA publish (pinned to
-the tag) can never serve JS under a runtimeVersion no installed binary embeds. This replaces the
-older "tag the build-OS value and always-build on cross-OS divergence" scheme, which wasted iOS
-builds and — worse — let the Linux OTA publish strand JS under a runtimeVersion the macOS binary
-never had. Android builds on Linux like its gate, so it was never divergent; it pins the same way for
-a uniform invariant.
+construction — the gate can never skip a fingerprint the binary lacks. This replaces the older "tag
+the build-OS value and always-build on cross-OS divergence" scheme, which wasted iOS builds and —
+worse — let the Linux OTA publish strand JS under a runtimeVersion the macOS binary never had.
+Android builds on Linux like its gate, so it was never divergent; it pins the same way for a uniform
+invariant.
 
-> **Publish lag (by design).** The commit that ships a _new_ native fingerprint doesn't get its own
-> OTA under that fingerprint until the _next_ push. The OTA publish is a separate, parallel workflow,
-> so while a native build is in flight the last existing tag is still the _previous_ fingerprint, and
-> the publish pins to it. That's correct: old binaries get matching JS, and the fresh binary already
-> carries this commit's JS embedded — it picks up its own fingerprint's OTAs from the next push on.
+The OTA publish stays on the `fingerprint` policy (it does **not** read a tag or an override): it
+resolves the current commit's fingerprint and serves the JS under it. On a native-change commit it
+resolves the **new** fingerprint, so the new JS only reaches a binary built from that same commit —
+old binaries (still on the previous fingerprint) keep their embedded bundle until they store-update.
+That's the fingerprint policy working as intended; pinning the publish to the last shipped tag would
+instead serve native-dependent JS to old binaries and crash them.
 
 **Fail-safe.** If the gate can't resolve the fingerprint, it builds. A manual `workflow_dispatch`
 bypasses the tag check and always builds — for iOS that means dispatching on `main` (the iOS build
@@ -251,12 +259,13 @@ itself still ships). A fine-grained PAT from a user who's in the bypass list wor
 prebuild --platform ios --clean --no-install`, then confirm `ios/Boardsesh/Supporting/Expo.plist`
    has `EXUpdatesRequestHeaders` → `expo-channel-name=production` and an `EXUpdatesCodeSigning*`
    entry. Repeat `--platform android` and grep `AndroidManifest.xml`.
-2. **Pin parity (the critical check)** — the OTA server must serve an update under the exact
+2. **Fingerprint parity (the critical check)** — the OTA server must serve an update under the exact
    runtimeVersion the shipped binary embeds. The binary embeds the gate fingerprint (the
    `fingerprint-<platform>-<hash>` tag), baked as a literal `EXUpdatesRuntimeVersion` in `Expo.plist`
    because the build sets `EXPO_UPDATES_FINGERPRINT_OVERRIDE` (a local prebuild without that env var
    instead writes the `file:fingerprint` sentinel and computes the hash at archive time — expected).
-   Probe the manifest the way the app does, with the tag's hash as the runtime-version header:
+   The publish reaches it by resolving the same fingerprint fresh on Linux (no override). Probe the
+   manifest the way the app does, with the tag's hash as the runtime-version header:
 
    ```sh
    curl -sS -H 'expo-channel-name: production' -H 'expo-platform: ios' \

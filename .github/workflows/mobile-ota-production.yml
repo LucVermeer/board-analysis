@@ -144,28 +144,6 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Pin each platform's OTA to the runtimeVersion the INSTALLED binaries embed
-      # = the most-recent ancestor fingerprint-<platform>-<hash> tag (pushed by the
-      # native build workflows when a store binary shipped). The publish steps below
-      # export this as EXPO_UPDATES_FINGERPRINT_OVERRIDE; app.config.ts turns it into
-      # a literal runtimeVersion that `eoas publish` resolves verbatim, so the bundle
-      # is served under exactly the binary's runtimeVersion — no Linux-vs-binary
-      # resolution mismatch can strand it. On a native-change commit the NEW
-      # fingerprint's tag may not exist yet (the native build runs as a separate,
-      # parallel workflow), so the publish pins to the PREVIOUS fingerprint: correct,
-      # since old binaries get matching JS and the fresh binary already carries this
-      # commit's JS embedded (it picks up its own fingerprint's OTA on the next push).
-      - name: Resolve OTA fingerprint pins from shipped native tags
-        id: pins
-        if: steps.gate.outputs.configured == 'true'
-        run: |
-          set -uo pipefail
-          ios_fp="$(git describe --tags --abbrev=0 --match 'fingerprint-ios-*' 2>/dev/null | sed 's/^fingerprint-ios-//' || true)"
-          android_fp="$(git describe --tags --abbrev=0 --match 'fingerprint-android-*' 2>/dev/null | sed 's/^fingerprint-android-//' || true)"
-          echo "ios_fp=$ios_fp" >> "$GITHUB_OUTPUT"
-          echo "android_fp=$android_fp" >> "$GITHUB_OUTPUT"
-          echo "::notice::OTA pins — iOS=${ios_fp:-<none>} Android=${android_fp:-<none>} (most-recent ancestor fingerprint tags)."
-
       - name: Write .env for Expo build-time inlining
         if: steps.gate.outputs.configured == 'true'
         working-directory: packages/mobile
@@ -229,16 +207,14 @@ jobs:
       - name: Publish iOS OTA
         id: publish_ios
         if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'ios')
-        env:
-          # Pin the published runtimeVersion to the last shipped iOS binary's
-          # fingerprint so the bundle actually reaches it. app.config.ts emits this
-          # as a literal runtimeVersion; eoas publishes under it verbatim.
-          EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${{ steps.pins.outputs.ios_fp }}
+        # No EXPO_UPDATES_FINGERPRINT_OVERRIDE here: the publish resolves the CURRENT
+        # commit's fingerprint (app.config's `fingerprint` policy) and serves the JS
+        # under it. That matches the shipped binary — which embeds the same Linux gate
+        # fingerprint (set at build time, ios-testflight-rn.yml) — for a JS-only
+        # commit, and on a native change it resolves the NEW fingerprint, so old
+        # binaries (still on the old one) never receive JS that needs the new native
+        # code. Pinning to the last tag instead would do exactly that — a crash.
         run: |
-          if [ -z "$EXPO_UPDATES_FINGERPRINT_OVERRIDE" ]; then
-            echo "::warning::No fingerprint-ios-* tag reachable — no shipped iOS binary to target; skipping iOS OTA."
-            exit 0
-          fi
           args=(--channel production --platform ios)
           if [ -n "$INPUT_MESSAGE" ]; then args+=(--message "$INPUT_MESSAGE"); fi
           vp run mobile:publish -- "${args[@]}"
@@ -247,19 +223,12 @@ jobs:
         id: publish_android
         if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'android')
         env:
-          # Kept for env parity with the Android native prebuild (android-apk-rn.yml)
-          # so `expo export` sees the same resolved android.config the binary did.
-          # The runtimeVersion is now pinned by the override below (not derived from
-          # this key), but parity keeps the bundled config aligned with the binary.
+          # Must match the Android native prebuild (android-apk-rn.yml) so the
+          # resolved android.config.googleMaps block — and the freshly-resolved
+          # fingerprint — agree with the binary. (No fingerprint override: see the
+          # iOS publish step; the publish resolves the current commit's fingerprint.)
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-          # Pin the published runtimeVersion to the last shipped Android binary's
-          # fingerprint so the bundle actually reaches it.
-          EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${{ steps.pins.outputs.android_fp }}
         run: |
-          if [ -z "$EXPO_UPDATES_FINGERPRINT_OVERRIDE" ]; then
-            echo "::warning::No fingerprint-android-* tag reachable — no shipped Android binary to target; skipping Android OTA."
-            exit 0
-          fi
           args=(--channel production --platform android)
           if [ -n "$INPUT_MESSAGE" ]; then args+=(--message "$INPUT_MESSAGE"); fi
           vp run mobile:publish -- "${args[@]}"

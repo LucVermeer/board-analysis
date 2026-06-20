@@ -133,20 +133,18 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
     expect(android).toMatch(/fingerprint-android-/);
   });
 
-  it('pins ONE fingerprint end to end (gate value into the binaries, shipped-tag value into the OTA)', () => {
-    // The gate is the single canonical resolution. The native builds embed that
-    // exact value in the binary via EXPO_UPDATES_FINGERPRINT_OVERRIDE (app.config
-    // emits it as a literal runtimeVersion), and the OTA publish pins each platform
-    // to the most-recent shipped fingerprint-<platform>-<hash> tag. So binary-rv ==
-    // tag == published-rv by construction — no Linux/macOS resolution can diverge
-    // and strand an OTA. If any of these wires breaks, the OTA silently stops
-    // landing, so assert them all.
+  it('forces the binary onto the gate fingerprint, and the OTA publish resolves fresh (never pinned)', () => {
+    // The iOS binary is baked on macOS but the gate/publish run on Linux, and
+    // @expo/fingerprint is not deterministic across the two. The native builds set
+    // EXPO_UPDATES_FINGERPRINT_OVERRIDE to the gate's Linux fingerprint so the binary
+    // embeds the *Linux* value (app.config emits it as a literal runtimeVersion) —
+    // which the Linux publish then matches.
     const ios = readWorkflow(NATIVE_IOS);
     const android = readWorkflow(NATIVE_ANDROID);
     const ota = readWorkflow(OTA);
     const gatePin = /EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*needs\.gate\.outputs\.fingerprint\s*\}\}/;
 
-    // Native builds embed the gate's canonical fingerprint.
+    // Native builds embed the gate's canonical (Linux) fingerprint.
     expect(ios, 'iOS build must pin the binary to the gate fingerprint').toMatch(gatePin);
     expect(android, 'Android build must pin the binary to the gate fingerprint').toMatch(gatePin);
 
@@ -156,13 +154,17 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
     expect(ios.match(/runtimeversion:resolve --platform ios/g)?.length ?? 0).toBe(1);
     expect(android.match(/runtimeversion:resolve --platform android/g)?.length ?? 0).toBe(1);
 
-    // The OTA publish pins each platform to its last shipped native tag.
-    expect(ota).toMatch(/git describe --tags --abbrev=0 --match 'fingerprint-ios-\*'/);
-    expect(ota).toMatch(/git describe --tags --abbrev=0 --match 'fingerprint-android-\*'/);
-    expect(ota).toMatch(/EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*steps\.pins\.outputs\.ios_fp\s*\}\}/);
-    expect(ota).toMatch(/EXPO_UPDATES_FINGERPRINT_OVERRIDE:\s*\$\{\{\s*steps\.pins\.outputs\.android_fp\s*\}\}/);
-    // The publish needs local tags to resolve those pins.
-    expect(ota).toMatch(/fetch-tags:\s*true/);
+    // CRITICAL: the OTA publish must NEVER pin the fingerprint. It resolves the
+    // CURRENT commit's fingerprint fresh and publishes under it. Pinning to a fixed
+    // value (e.g. the last shipped tag) would, on a native-change commit, serve the
+    // new JS to OLD binaries under the old runtimeVersion — bypassing the fingerprint
+    // compatibility check and crashing installs that lack the new native code.
+    // Match a real YAML env-key line (`KEY:`), not a comment that names the var.
+    expect(
+      /^\s*EXPO_UPDATES_FINGERPRINT_OVERRIDE:/m.test(ota),
+      'The OTA publish must not set EXPO_UPDATES_FINGERPRINT_OVERRIDE — it resolves the current ' +
+        'fingerprint fresh. Pinning it would deliver native-dependent JS to incompatible old binaries.',
+    ).toBe(false);
   });
 
   it('resolves the iOS fingerprint without GOOGLE_MAPS_API_KEY and Android with it', () => {
