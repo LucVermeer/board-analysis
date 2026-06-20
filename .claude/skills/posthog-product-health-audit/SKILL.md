@@ -21,7 +21,7 @@ Read-only against PostHog. The only writes are the GitHub issues you create in P
 Workflow({ scriptPath: ".claude/skills/posthog-product-health-audit/audit-workflow.js" })
 ```
 
-Optional `args`: `{ project: "412845", repo: "boardsesh/boardsesh", lookbackDays: 30 }`. The workflow returns structured findings and **drafts** issue specs — it does not file. You review `issueSpecs`, then file (Phase 4). This keeps a human checkpoint before anything lands on a public repo.
+Optional `args`: `{ project, repo, lookbackDays }` — defaults (`412845` / `boardsesh/boardsesh` / `30`) live in `audit-workflow.js`; that file is the source of truth if these drift. The workflow returns structured findings and **drafts** issue specs — it does not file. You review `issueSpecs`, then file (Phase 4). This keeps a human checkpoint before anything lands on a public repo.
 
 The workflow runs in the background; you get notified on completion. Watch live with `/workflows`.
 
@@ -86,3 +86,9 @@ Key tools: `query-error-tracking-issues-list`, `query-error-tracking-issue`, `qu
 ## Re-running
 
 Safe to re-run on a schedule. The dedup gate keeps it from re-filing anything already tracked, so each run only surfaces genuinely new problems. Bump `lookbackDays` for a wider sweep; the first collector pass auto-discovers fresh top errors, so no seed list is needed.
+
+**Watch-outs on re-run** (the pipeline logic isn't unit-tested — verify by eye):
+
+- The dedup gate is keyword-driven `gh search`. On a large tracker, skim `issueSpecs` against `gh issue list --label from-posthog` before filing to confirm nothing already-tracked slipped through — especially issues phrased differently from the error string.
+- A finding marked `keep: "drop"` skips dedup entirely (intended — dropped items are never filed). A finding marked `hygiene` that the dedup gate flags as a duplicate is excluded from the bundle and routed to `duplicates`.
+- When every candidate is dropped/deduped, `issueSpecs` is `{ issues: [], hygiene: null }` and no synth agent runs — a clean run with nothing to file is a valid outcome, not an error.

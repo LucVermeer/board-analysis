@@ -24,7 +24,8 @@ export const meta = {
 
 const PROJECT = args && args.project ? String(args.project) : '412845';
 const REPO = args && args.repo ? String(args.repo) : 'boardsesh/boardsesh';
-const LOOKBACK = String((args && parseInt(args.lookbackDays, 10)) || 30); // numeric days; falls back to 30 on missing/non-numeric input
+const LOOKBACK_DAYS = args && args.lookbackDays != null ? parseInt(args.lookbackDays, 10) : NaN;
+const LOOKBACK = String(Number.isFinite(LOOKBACK_DAYS) && LOOKBACK_DAYS > 0 ? LOOKBACK_DAYS : 30); // positive integer days; 0/negative/non-numeric → 30
 
 const MCP_PREAMBLE = `You are auditing Boardsesh's PostHog project (id ${PROJECT}, base https://us.posthog.com). To use PostHog: first call ToolSearch with query "select:mcp__posthog__exec" to load the tool, then drive it CLI-style via mcp__posthog__exec({command, context}). HARD RULE: run \`info <tool>\` before \`call <tool>\`, and for query-* tools drill \`schema <tool> <field>\` before populating array fields. Confirm any event name exists with \`call read-data-schema {"query":{"kind":"events"}}\` — never guess event names. The \`context\` arg must be 15-25 words, third person, no first person. Test accounts must be filtered out (filterTestAccounts/filter_test_accounts true).`;
 
@@ -194,10 +195,12 @@ Decide keep: "issue" only if it is a real, actionable, user-facing bug with enou
     r.refute.keep === 'drop'
       ? r
       : agent(
-          `DEDUP GATE. Confirm whether this finding is ALREADY tracked as a GitHub issue in ${REPO} before it gets filed. Use Bash gh:
-- gh issue list --repo ${REPO} --state all --limit 80 --search "<keywords>"
-- gh search issues --repo ${REPO} "<other keywords>" --state all
-Try several keyword sets (the error string, the feature, the symptom).
+          `DEDUP GATE. Confirm whether this finding is ALREADY tracked as a GitHub issue in ${REPO} before it gets filed. Use Bash gh.
+PRIMARY (full-text, searches ALL issues regardless of age — use this first, with several keyword sets):
+- gh search issues --repo ${REPO} "<keywords>" --state all --limit 100
+FALLBACK / corroboration (note: --limit caps the result set, so always pair with --search and never rely on the default recency window):
+- gh issue list --repo ${REPO} --state all --search "<keywords>" --limit 500
+Try several keyword sets (the exact error string, the feature, the user-facing symptom). A low limit on a plain (unsearched) list silently returns only the most-recent issues and misses older duplicates — so search, do not just list.
 
 FINDING (JSON):
 ${JSON.stringify({ key: r.key, title: r.title, evidence: r.evidence, platform: r.platform, classify: r.classify, refute: r.refute }, null, 2)}
