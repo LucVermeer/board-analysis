@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-20T11:21:40.780Z",
+  "generatedAt": "2026-06-20T11:44:52.759Z",
   "entries": [
+    {
+      "prNumber": 3101,
+      "category": "new",
+      "title": "See when a new app version landed — What's New now flags store updates, so you can tell what arrived over the air from what needs an app update.",
+      "mergedAt": "2026-06-20T11:43:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3101",
+      "body": "Tap \"Check for updates\" in What's New to grab the latest fixes on the spot."
+    },
     {
       "prNumber": 3076,
       "category": "new",
@@ -65,6 +73,85 @@
       "title": "See what's new right in the app — a What's New page now lives under Settings, with a \"New\" dot when there's an update you haven't read yet.",
       "mergedAt": "2026-06-19T22:04:35Z",
       "prUrl": "https://github.com/boardsesh/boardsesh/pull/3066"
+    }
+  ],
+  "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-20T15:40:50+10:00",
+      "sha": "b9050dc89ea5b5b629ab71c6760e08b214f7edc6",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "3982ea77e49f5971c9de673fc1f03a54b3dc44c2"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-20T15:37:59+10:00",
+      "sha": "686bd6ed1be8c3d0ea2558976e9315866722f8bb",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "9ea455192fc20704baccb85cfd60caf866cd37bb"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-20T12:43:16+10:00",
+      "sha": "2a8c0a4900533bb631c9dff19c305c5376f4762a",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "8f7bf0dd9f4fd29e8d740e9f0edc9ddaecc4f84b"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-20T11:30:15+10:00",
+      "sha": "8fbe7fdc0e7e099704fe4ee16d8495bdf862e096",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "d73fb5d3b3c2c27697816c0e09d612c9092707cc"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-20T07:11:25+10:00",
+      "sha": "14692386fe1e5ccc629ad7931970bfda83f8dd75",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "2bdcf2ae9394c6c51c31f2d862ff756826e29195"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-19T22:26:38+10:00",
+      "sha": "7efb4121635c3662c6f2a8b46cb5abd1e4e02c04",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "cad4c427b64e35a914270fcb670d8271d8212a4f"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-19T19:26:12+10:00",
+      "sha": "a2590a60ede29dfb62cbf8d09cc33c581179908e",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "fa41de4f25b58ae917d339445afce27ae30ef09e"
+      }
     }
   ]
 }

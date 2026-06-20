@@ -6,8 +6,14 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-06-20
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ### New
 
+- See when a new app version landed — What's New now flags store updates, so you can tell what arrived over the air from what needs an app update. ([#3101](https://github.com/boardsesh/boardsesh/pull/3101))
+  Tap "Check for updates" in What's New to grab the latest fixes on the spot.
 - See a climber's recent beta videos right on their profile — swipe through the shelf or tap See all for the full grid. ([#3076](https://github.com/boardsesh/boardsesh/pull/3076))
 - Drive your board from the Android session notification ([#3073](https://github.com/boardsesh/boardsesh/pull/3073))
   The session notification now shows your current climb with its grade, angle, and your spot in the queue, and draws the board art right on your phone. Previous and Next move the board through your queue without opening the app, and the lightbulb shows when you're connected. When a crewmate takes the board, the card steps back to show what's on the wall.
@@ -28,6 +34,10 @@ manual changes). See docs/mobile-ota-updates.md.
 - Playlist grades now match the wall angle you've dialed in, instead of a climb's most-popular angle ([#3090](https://github.com/boardsesh/boardsesh/pull/3090))
 
 ## 2026-06-19
+
+### App update
+
+A new version shipped to the App Store and Play Store.
 
 ### New
 
