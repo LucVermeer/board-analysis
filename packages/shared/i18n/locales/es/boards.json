@@ -140,6 +140,7 @@
       "searchPlaceholder": "Busca una ciudad, gimnasio o tabla",
       "showingPlace": "Mostrando {{place}}",
       "clearSearch": "Borrar búsqueda",
+      "closeMap": "Cerrar",
       "otherBoardsTitle": "Tablas cercanas"
     }
   },

@@ -140,6 +140,7 @@
       "searchPlaceholder": "Search a city, gym, or board",
       "showingPlace": "Showing {{place}}",
       "clearSearch": "Clear search",
+      "closeMap": "Close",
       "otherBoardsTitle": "Boards nearby"
     }
   },

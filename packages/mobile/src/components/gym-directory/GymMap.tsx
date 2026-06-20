@@ -1,4 +1,4 @@
-import { Component, memo, type ReactNode } from 'react';
+import { Component, forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
 import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 export type GymMapMarker = {
@@ -8,11 +8,30 @@ export type GymMapMarker = {
   name: string;
 };
 
+type LatLng = { latitude: number; longitude: number };
+
+/** Imperative handle so the screen can recenter the camera on a place search. */
+export type GymMapHandle = {
+  setCenter: (coords: LatLng) => void;
+};
+
 type GymMapProps = {
-  center: { latitude: number; longitude: number };
+  center: LatLng;
   markers: GymMapMarker[];
+  // Fired (already debounced upstream) when the user pans/zooms the map, so the
+  // screen can re-query gyms for the new viewport.
+  onRegionChange?: (center: LatLng) => void;
   style?: StyleProp<ViewStyle>;
 };
+
+// The slice of the native expo-maps view ref we use. Both AppleMaps.View and
+// GoogleMaps.View expose `setCameraPosition`; typing it narrowly avoids leaking
+// platform-specific handle types up to callers.
+type NativeMapHandle = {
+  setCameraPosition?: (config: { coordinates: LatLng; zoom?: number }) => void;
+};
+
+const DEFAULT_ZOOM = 10;
 
 // Lazy-require so a native build that predates the expo-maps module degrades to
 // "no map" instead of crashing. The gym list is the primary interaction, so a
@@ -43,7 +62,44 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
-function NativeGymMap({ center, markers, style }: GymMapProps) {
+const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap(
+  { center, markers, onRegionChange, style },
+  ref,
+) {
+  // Keep a ref to the native view so the imperative handle can drive the camera.
+  const nativeRef = useRef<NativeMapHandle | null>(null);
+  // The camera position is *initial-only*: capture the first center so parent
+  // re-renders (and the panned query center) never snap the camera back while
+  // the user is dragging. Search relocations go through the imperative handle.
+  const initialCameraRef = useRef(center);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setCenter: (coords: LatLng) => {
+        nativeRef.current?.setCameraPosition?.({ coordinates: coords, zoom: DEFAULT_ZOOM });
+      },
+    }),
+    [],
+  );
+
+  // A callback ref typed against `unknown` is assignable to either platform
+  // view's ref slot (params are contravariant) without an explicit cast.
+  const assignNativeRef = useCallback((instance: unknown) => {
+    nativeRef.current = (instance as NativeMapHandle | null) ?? null;
+  }, []);
+
+  // Markers only change on a refetch; rebuild the native marker array then, not
+  // on the re-renders a changing `center` prop triggers during a pan.
+  const mapMarkers = useMemo(
+    () =>
+      markers.map((marker) => ({
+        coordinates: { latitude: marker.latitude, longitude: marker.longitude },
+        title: marker.name,
+      })),
+    [markers],
+  );
+
   if (!Maps) return null;
   // requireNativeView can hand back a component that exists in JS but throws on
   // mount when the native side is absent — the boundary above is the real guard;
@@ -52,31 +108,48 @@ function NativeGymMap({ center, markers, style }: GymMapProps) {
   if (!MapView) return null;
 
   const cameraPosition = {
-    coordinates: { latitude: center.latitude, longitude: center.longitude },
-    zoom: 10,
+    coordinates: initialCameraRef.current,
+    zoom: DEFAULT_ZOOM,
   };
-  const mapMarkers = markers.map((marker) => ({
-    coordinates: { latitude: marker.latitude, longitude: marker.longitude },
-    title: marker.name,
-  }));
 
-  return <MapView style={[styles.map, style]} cameraPosition={cameraPosition} markers={mapMarkers} />;
-}
+  // expo-maps types the camera coordinates as optional; only forward a complete
+  // pair so the screen never re-queries around a half-defined center.
+  const handleCameraMove = onRegionChange
+    ? (event: { coordinates: { latitude?: number; longitude?: number } }) => {
+        const { latitude, longitude } = event.coordinates;
+        if (latitude != null && longitude != null) onRegionChange({ latitude, longitude });
+      }
+    : undefined;
+
+  return (
+    <MapView
+      ref={assignNativeRef}
+      style={[styles.map, style]}
+      cameraPosition={cameraPosition}
+      markers={mapMarkers}
+      onCameraMove={handleCameraMove}
+    />
+  );
+});
 
 /**
  * Renders nearby gyms as pins on the platform map (Apple Maps on iOS, Google
  * Maps on Android — the latter needs GOOGLE_MAPS_API_KEY + a native build, else
  * blank). Marker taps aren't wired: selection happens in the gym list so the
  * flow works identically whether or not the map renders, and a missing/broken
- * native map never crashes the screen.
+ * native map never crashes the screen. Panning the map fires `onRegionChange`;
+ * a place search drives the camera via the {@link GymMapHandle} ref. Both no-op
+ * when the native map is unavailable, so the list-only fallback still works.
  */
-export const GymMap = memo(function GymMap({ center, markers, style }: GymMapProps) {
-  return (
-    <MapErrorBoundary>
-      <NativeGymMap center={center} markers={markers} style={style} />
-    </MapErrorBoundary>
-  );
-});
+export const GymMap = memo(
+  forwardRef<GymMapHandle, GymMapProps>(function GymMap({ center, markers, onRegionChange, style }, ref) {
+    return (
+      <MapErrorBoundary>
+        <NativeGymMap ref={ref} center={center} markers={markers} onRegionChange={onRegionChange} style={style} />
+      </MapErrorBoundary>
+    );
+  }),
+);
 
 const styles = StyleSheet.create({
   map: {

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type {
   UserBoard,
   UserBoardConnection,
@@ -236,6 +236,11 @@ export function useNearbyBoards(
       }),
     select: (data) => data.searchBoards,
     enabled: coords !== null,
+    // Keep the previous boards visible while a new center/filter loads so the
+    // gym-finder map doesn't blank its pins/list on every pan (the queryKey
+    // changes when `coords` moves). Harmless for the "Near you" carousel, whose
+    // key rarely changes.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -249,6 +254,9 @@ export function useNearbyGyms(coords: { latitude: number; longitude: number } | 
       }),
     select: (data) => data.searchGyms,
     enabled: coords !== null,
+    // See useNearbyBoards: keep prior gyms on screen while a panned center
+    // refetches so markers/list don't flicker.
+    placeholderData: keepPreviousData,
   });
 }
 
