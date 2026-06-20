@@ -209,7 +209,7 @@ Return duplicate=true ONLY if an existing issue clearly covers the same root cau
 
 const triagedOk = triaged.filter(Boolean);
 const toFile = triagedOk.filter((r) => r.refute?.keep === 'issue' && !r.dedup?.duplicate);
-const hygiene = triagedOk.filter((r) => r.refute?.keep === 'hygiene');
+const hygiene = triagedOk.filter((r) => r.refute?.keep === 'hygiene' && !r.dedup?.duplicate);
 const duplicates = triagedOk.filter((r) => r.dedup?.duplicate);
 const dropped = triagedOk.filter((r) => r.refute?.keep === 'drop');
 log(
