@@ -121,4 +121,10 @@ describe('OtaUpdateTracker', () => {
     render(createElement(OtaUpdateTracker));
     expect(trackCallsFor('OTA Update Downloaded')).toHaveLength(0);
   });
+
+  it('does not report a download when pending but no bundle is downloaded yet', () => {
+    updates.current = { isUpdatePending: true, downloadedUpdate: undefined };
+    render(createElement(OtaUpdateTracker));
+    expect(trackCallsFor('OTA Update Downloaded')).toHaveLength(0);
+  });
 });

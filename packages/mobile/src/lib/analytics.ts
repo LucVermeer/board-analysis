@@ -48,14 +48,10 @@ export function getAnalyticsClient(): PostHog | null {
 export function registerSuperProperties(properties: Record<string, string | number | boolean | null>): void {
   const client = getClient();
   if (!client) return;
-  const registrable = client as unknown as { register?: (props: Record<string, unknown>) => void };
-  if (typeof registrable.register === 'function') {
-    registrable.register(properties);
-  } else if (__DEV__) {
-    // Loud in dev so an SDK API change (register() renamed/removed) surfaces
-    // instead of silently dropping super properties in production.
-    console.warn('[analytics] PostHog client exposes no register(); super properties not set', properties);
-  }
+  // PostHog.register is part of the typed API, so this is compile-time safe — no
+  // duck-typing. Fire-and-forget (it returns a Promise) to match track()'s
+  // ergonomics; no-op when analytics is disabled (getClient() returned null).
+  void client.register(properties);
 }
 
 function coerceFeatureFlagBoolean(value: unknown): boolean | undefined {
