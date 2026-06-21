@@ -12,6 +12,9 @@ export const SHARED_EVENTS = {
   LoginAttempted: 'Login Attempted',
   LoginSucceeded: 'Login Succeeded',
   LoginFailed: 'Login Failed',
+  // A user dismissing the provider sheet or the browser is intent, not a failure.
+  // Kept distinct from LoginFailed so the failure metric isn't inflated by cancels.
+  LoginCancelled: 'Login Cancelled',
   Logout: 'Logout',
   // Queue / session
   AddToQueue: 'Add to Queue',
