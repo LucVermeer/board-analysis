@@ -98,7 +98,11 @@ async function enrichRoleAssignment(role: typeof dbSchema.communityRoles.$inferS
 }
 
 export const socialRoleQueries = {
-  communityRoles: async (_: unknown, { boardType }: { boardType?: string }, _ctx: ConnectionContext) => {
+  communityRoles: async (_: unknown, { boardType }: { boardType?: string }, ctx: ConnectionContext) => {
+    // Role assignments (including who holds tester) are admin-only — the sole consumer is
+    // the admin role-management screen. Don't let unauthenticated callers enumerate them.
+    await requireAdmin(ctx);
+
     const conditions = boardType ? [eq(dbSchema.communityRoles.boardType, boardType)] : [];
 
     const roles =

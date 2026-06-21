@@ -150,8 +150,12 @@ export function ChannelSwitcherScreen() {
       const result = await performChannelReset(previousOverride, makeDeps());
       if (result.status === 'failed') {
         hapticError();
+        // The override was re-applied on the failed reset, so the build is still on the
+        // previous channel (or the build channel if there was no override). Say so.
+        const stayedOn = previousOverride ?? buildChannel;
+        const reason = result.error instanceof Error ? result.error.message : 'Could not reset channel.';
         // i18n-ignore-next-line — tester-only screen
-        Alert.alert('Reset failed', result.error instanceof Error ? result.error.message : 'Could not reset channel.');
+        Alert.alert('Reset failed', `${reason} Stayed on "${stayedOn}".`);
       } else {
         setOverride(null);
         if (result.status === 'pending-restart') {
