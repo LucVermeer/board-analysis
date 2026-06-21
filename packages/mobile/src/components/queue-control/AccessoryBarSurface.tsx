@@ -83,21 +83,32 @@ export function AccessoryBarSurface({
     // canonical nav/bottom-bar role). Docked adds a hairline top separator;
     // floating is the same tone as a lifted pill. The grade colour lives in the
     // bar's leading accent, not here. No clip on this View, so the cast shows.
-    // When you hold control, swap to the violet `secondaryContainer` tonal (the
-    // same tone the active tab pill uses) and step the cast to level-3 — M3
-    // expresses "active" through tone + elevation, not a drop-shadow glow.
-    const surfaceBackground = connected ? m3.secondaryContainer : m3SurfaceContainers.base;
+    // When you hold control, step the cast to level-3 and composite the violet
+    // `secondaryContainer` tone OVER the opaque base (this codebase maps that role
+    // to a low-alpha violet meant to layer, so painting it as the sole background
+    // would let the list bleed through). M3 expresses "active" through tone +
+    // elevation, not a drop-shadow glow.
     const surfaceElevation = connected ? materialElevation.level3 : materialElevation.level2;
     const materialSurfaceStyle: ViewStyle =
       treatment === 'docked'
         ? {
-            backgroundColor: surfaceBackground,
+            backgroundColor: m3SurfaceContainers.base,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: systemColors.separator,
             ...surfaceElevation,
           }
-        : { backgroundColor: surfaceBackground, ...surfaceElevation };
-    return <View style={[shape, materialSurfaceStyle, style]}>{children}</View>;
+        : { backgroundColor: m3SurfaceContainers.base, ...surfaceElevation };
+    return (
+      <View style={[shape, materialSurfaceStyle, style]}>
+        {connected ? (
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { backgroundColor: m3.secondaryContainer, borderRadius: radius }]}
+          />
+        ) : null}
+        {children}
+      </View>
+    );
   }
 
   // Blur / solid fallback: the surface has no intrinsic edge, so add the hairline
