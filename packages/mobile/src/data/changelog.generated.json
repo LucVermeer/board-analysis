@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-21T03:40:28.851Z",
+  "generatedAt": "2026-06-21T06:04:47.499Z",
   "entries": [
+    {
+      "prNumber": 3115,
+      "category": "new",
+      "title": "You can now see at a glance when you're driving the board: the bar lights up when you have control, shows who's driving when a crewmate has it, and lets you connect or open board controls right from the bar — no digging into the climb view.",
+      "mergedAt": "2026-06-21T06:03:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3115"
+    },
     {
       "prNumber": 3116,
       "category": "fixed",
