@@ -115,7 +115,17 @@ vi.mock('../../GlassSurface', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { label: '#111111', separator: '#cccccc', elevatedSurface: '#f0f0f0' },
+    brandColors: { primary: '#6D28D9', warning: '#FBBF24' },
   }),
+}));
+
+// The leading board control drags in the BLE stack + Icon (@expo/vector-icons);
+// these layout tests don't exercise it, so stub it (it has its own unit test).
+vi.mock('../BoardControlIndicator', () => ({ BoardControlIndicator: () => null }));
+
+// No board bound by default → no control rendered, disconnected glow state.
+vi.mock('../../ble/use-board-connection-state', () => ({
+  useBoardConnectionState: () => ({ boardConnection: 'disconnected', bluetooth: null }),
 }));
 
 vi.mock('../../../providers/queue-provider', () => ({

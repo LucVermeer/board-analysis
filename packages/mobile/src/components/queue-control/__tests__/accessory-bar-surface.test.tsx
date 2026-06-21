@@ -29,15 +29,22 @@ vi.mock('../../../providers/theme-provider', () => ({
       elevatedSurface: '#FFFFFF',
       separator: '#CCCCCC',
     },
+    m3: { secondaryContainer: '#5A4A90' },
+    brandColors: { warning: '#FBBF24' },
     m3SurfaceContainers: { lowest: '#101018', low: '#202028', base: '#2A2138', high: '#33293F', highest: '#3B2F49' },
     materialElevation: {
       level2: { elevation: 2, shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+      level3: { elevation: 3, shadowOpacity: 0.14, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
     },
   }),
 }));
 
 vi.mock('../../../theme/tokens', () => ({
   shadows: { sm: { elevation: 2 } },
+}));
+
+vi.mock('../../../theme/colors', () => ({
+  withAlpha: (color: string, alpha: number) => `${color}-${alpha}`,
 }));
 
 import { AccessoryBarSurface } from '../AccessoryBarSurface';
@@ -79,5 +86,27 @@ describe('AccessoryBarSurface', () => {
 
     expect(container.querySelector('[data-glass]')).toBeNull();
     expect(container.querySelector('[data-view]')?.getAttribute('data-style')).toContain('"backgroundColor":"#2A2138"');
+  });
+
+  it('lights the Material docked bar: opaque base + a violet tint overlay + a higher elevation when connected', () => {
+    // "You have control" reads as the active-tab violet tonal + a level-3 cast.
+    // The base stays OPAQUE so the list never bleeds through; the violet (a
+    // low-alpha role here) is composited as an overlay on top.
+    const { container } = render(
+      <AccessoryBarSurface height={48} treatment="docked" emphasis="connected">
+        child
+      </AccessoryBarSurface>,
+    );
+
+    const views = Array.from(container.querySelectorAll('[data-view]'));
+    const outerStyle = views[0]?.getAttribute('data-style') ?? '';
+    // Opaque base (NOT the translucent secondaryContainer) + the level-3 cast.
+    expect(outerStyle).toContain('"backgroundColor":"#2A2138"');
+    expect(outerStyle).toContain('"elevation":3');
+    // A separate violet overlay carries the "active" tone over the opaque base.
+    const overlay = views.find((view) =>
+      (view.getAttribute('data-style') ?? '').includes('"backgroundColor":"#5A4A90"'),
+    );
+    expect(overlay).toBeTruthy();
   });
 });

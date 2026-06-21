@@ -11,6 +11,7 @@ import { Text } from '../Text';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useAccessoryClimbTap } from './use-accessory-climb-tap';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
+import { BoardControlIndicator } from './BoardControlIndicator';
 
 type AccessoryPlacement = 'regular' | 'inline';
 
@@ -21,7 +22,8 @@ type NativeAccessoryClimbRowProps = {
 };
 
 const ACCESSORY_LEADING_INSET = spacing[1];
-const ACCESSORY_TRAILING_INSET = spacing[3];
+// Pull the tick ~20pt off the platter's right edge so it doesn't sit flush.
+const ACCESSORY_TRAILING_INSET = spacing[8];
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -82,6 +84,10 @@ export function NativeAccessoryClimbRow({ climb, placement, width }: NativeAcces
 
   return (
     <View style={[styles.row, { width, height: rowHeight }]}>
+      {/* Leading board control as a content-layer element (the platter is
+          UIKit-owned, so the glow lives here, not on the glass). Static state
+          swap; no long-press recognizer — it would fight UIKit's own gestures. */}
+      <BoardControlIndicator size={glassSize.inline} iconSize={22} />
       <GestureDetector gesture={openGesture}>
         <View style={styles.tapClip} accessibilityRole="button" accessibilityLabel={climb.name}>
           <View style={styles.labelSlot}>
