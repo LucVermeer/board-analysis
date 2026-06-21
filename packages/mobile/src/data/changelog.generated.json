@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-21T06:04:47.499Z",
+  "generatedAt": "2026-06-21T11:51:15.865Z",
   "entries": [
+    {
+      "prNumber": 3131,
+      "category": "new",
+      "title": "Stuck at sign-in? Report a bug or jump into Discord without logging in first.",
+      "mergedAt": "2026-06-21T11:50:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3131"
+    },
     {
       "prNumber": 3115,
       "category": "new",
