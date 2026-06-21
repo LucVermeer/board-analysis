@@ -1,6 +1,25 @@
 import { PostHog } from 'posthog-react-native';
 import { installGlobalErrorCapture } from './global-error-capture';
 
+// PostHog flags events with an empty User-Agent as bots, and the RN SDK sends no
+// UA it stores — so without this, real mobile traffic hides behind the bot filter.
+// Static, non-bot constant (not `react-native` Platform) to keep the RN Flow
+// barrel out of this module's graph, which would break the node-env test runner.
+export const MOBILE_USER_AGENT = 'Boardsesh Mobile';
+
+// Registers the non-bot User-Agent as a super property on every event. Exported
+// so the call site is unit-testable: getPostHogClient() returns null before
+// reaching its own call to this whenever analytics is disabled (no token, or
+// __DEV__ — both hold in the test env), so the live path can't run in tests.
+// Best-effort: a failure must never block analytics init.
+export function registerMobileUserAgent(client: Pick<PostHog, 'register'>): void {
+  try {
+    client.register({ $raw_user_agent: MOBILE_USER_AGENT });
+  } catch (error) {
+    if (__DEV__) console.warn('[analytics] failed to register $raw_user_agent super property', error);
+  }
+}
+
 // PostHog project token. Intentionally the SAME project as web so a signed-in
 // user's web + mobile activity resolves to one person. `EXPO_PUBLIC_*` vars are
 // inlined into the JS bundle at build time, so this must be set when the bundle
@@ -67,6 +86,7 @@ export function getPostHogClient(): PostHog | null {
       captureLog: true,
     },
   });
+  registerMobileUserAgent(client);
   installMobileGlobalErrorCapture();
   return client;
 }
