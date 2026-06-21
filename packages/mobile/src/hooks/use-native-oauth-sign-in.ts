@@ -91,11 +91,11 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           return;
         }
         if ('cancelled' in fallback) {
-          // The user dismissed the browser — not an error, no message shown.
-          track(SHARED_EVENTS.LoginFailed, {
+          // The user dismissed the browser — intent, not a failure. A distinct
+          // event keeps it out of the LoginFailed count.
+          track(SHARED_EVENTS.LoginCancelled, {
             auth_method: provider,
             flow: 'web_fallback',
-            failure_reason: 'cancel',
             duration_ms: Date.now() - fallbackStartedAt,
             ...registrationProps,
           });
@@ -126,23 +126,27 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           return;
         }
         if ('cancelled' in result) {
-          // The user dismissed the provider sheet — not an error, no message shown.
-          track(SHARED_EVENTS.LoginFailed, {
+          // The user dismissed the provider sheet — intent, not a failure. A
+          // distinct event keeps it out of the LoginFailed count.
+          track(SHARED_EVENTS.LoginCancelled, {
             auth_method: provider,
             flow: 'native',
-            failure_reason: 'cancel',
             duration_ms: Date.now() - attemptStartedAt,
             ...registrationProps,
           });
           return;
         }
-        // A real backend/token failure carrying the server's status + error.
+        // A real backend/token failure carrying the server's status + error. On
+        // iOS the browser fallback runs next, so this native failure is
+        // recoverable and shouldn't count toward the terminal failure metric;
+        // on Android it dead-ends and is terminal.
         const oauthFailureReason = classifyNativeAuthFailureReason(result, 'oauth');
         track(SHARED_EVENTS.LoginFailed, {
           auth_method: provider,
           flow: 'native',
           failure_reason: oauthFailureReason,
           failure_detail: result.error,
+          recoverable: Platform.OS === 'ios',
           duration_ms: Date.now() - attemptStartedAt,
           ...registrationProps,
         });
@@ -168,11 +172,14 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
         // signing/client-id mismatch, …). Prefer the native `.code` for
         // failure_detail — far more actionable than the opaque message.
         const nativeErrorCode = nativeSignInErrorCode(oauthError);
+        // On iOS the browser fallback runs next (recoverable); on Android the
+        // native throw dead-ends and is terminal.
         track(SHARED_EVENTS.LoginFailed, {
           auth_method: provider,
           flow: 'native',
           failure_reason: 'exception',
           failure_detail: nativeErrorCode ?? (oauthError instanceof Error ? oauthError.message : undefined),
+          recoverable: Platform.OS === 'ios',
           duration_ms: Date.now() - attemptStartedAt,
           ...registrationProps,
         });
