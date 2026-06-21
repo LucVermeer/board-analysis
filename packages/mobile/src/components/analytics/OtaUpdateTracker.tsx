@@ -14,6 +14,19 @@ import {
 // bundle (the "fetched, applies next launch" step of the funnel). Renders
 // nothing — mounted once near the app root beside AnalyticsScreenTracker. See
 // docs/mobile-ota-updates.md.
+
+// Module-scoped so the launch status fires at most once per JS runtime (= once
+// per launch) even if this subtree is ever torn down and recreated. The tracker
+// lives at the root layout and won't remount in practice, but this makes the
+// "once per launch" intent hold regardless. An OTA reload restarts the runtime,
+// clearing this, so the next launch re-reports under the new bundle's updateId.
+const reportedStatusKeys = new Set<string>();
+
+// Test-only: resets the once-per-launch guard so each render starts clean.
+export function resetOtaStatusReportedForTests(): void {
+  reportedStatusKeys.clear();
+}
+
 export function OtaUpdateTracker(): null {
   const { isUpdatePending, downloadedUpdate } = Updates.useUpdates();
   const reportedDownloadIdRef = useRef<string | null>(null);
@@ -34,6 +47,9 @@ export function OtaUpdateTracker(): null {
       isEmergencyLaunch: Updates.isEmergencyLaunch,
       emergencyLaunchReason: Updates.emergencyLaunchReason,
     });
+    const statusKey = properties.updateId ?? 'embedded';
+    if (reportedStatusKeys.has(statusKey)) return;
+    reportedStatusKeys.add(statusKey);
     track(OTA_UPDATE_STATUS_EVENT, properties);
     registerSuperProperties({
       ota_update_id: properties.updateId,

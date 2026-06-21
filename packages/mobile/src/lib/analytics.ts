@@ -51,6 +51,10 @@ export function registerSuperProperties(properties: Record<string, string | numb
   const registrable = client as unknown as { register?: (props: Record<string, unknown>) => void };
   if (typeof registrable.register === 'function') {
     registrable.register(properties);
+  } else if (__DEV__) {
+    // Loud in dev so an SDK API change (register() renamed/removed) surfaces
+    // instead of silently dropping super properties in production.
+    console.warn('[analytics] PostHog client exposes no register(); super properties not set', properties);
   }
 }
 

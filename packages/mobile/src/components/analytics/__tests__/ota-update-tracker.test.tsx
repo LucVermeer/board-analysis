@@ -11,7 +11,7 @@ const analytics = vi.hoisted(() => ({ track: vi.fn(), registerSuperProperties: v
 const updates = vi.hoisted(() => ({
   current: {
     isUpdatePending: false,
-    downloadedUpdate: undefined as undefined | { updateId?: string; createdAt: Date },
+    downloadedUpdate: undefined as undefined | { updateId?: string; createdAt?: Date },
   },
 }));
 
@@ -33,7 +33,7 @@ vi.mock('expo-updates', () => ({
 }));
 
 // Imported after the mocks (vi.mock is hoisted above imports).
-import { OtaUpdateTracker } from '../OtaUpdateTracker';
+import { OtaUpdateTracker, resetOtaStatusReportedForTests } from '../OtaUpdateTracker';
 
 function trackCallsFor(eventName: string) {
   return analytics.track.mock.calls.filter(([name]) => name === eventName);
@@ -43,6 +43,9 @@ beforeEach(() => {
   analytics.track.mockClear();
   analytics.registerSuperProperties.mockClear();
   updates.current = { isUpdatePending: false, downloadedUpdate: undefined };
+  // The status guard is module-scoped (once per launch); reset it so each test
+  // starts from a clean "nothing reported yet" state.
+  resetOtaStatusReportedForTests();
 });
 
 describe('OtaUpdateTracker', () => {
@@ -86,6 +89,31 @@ describe('OtaUpdateTracker', () => {
     expect(downloadedCalls[0][1]).toEqual({
       updateId: 'next-update-id',
       createdAtIso: '2026-06-21T00:00:00.000Z',
+    });
+  });
+
+  it('reports the launch status only once across a remount (same launch)', () => {
+    const first = render(createElement(OtaUpdateTracker));
+    first.unmount();
+    render(createElement(OtaUpdateTracker));
+
+    // Same JS runtime ⇒ same updateId ⇒ the module-scoped guard suppresses the
+    // second report.
+    expect(trackCallsFor('OTA Update Status')).toHaveLength(1);
+  });
+
+  it('coalesces a downloaded bundle with no createdAt to null', () => {
+    updates.current = {
+      isUpdatePending: true,
+      downloadedUpdate: { updateId: 'rollback-or-undated', createdAt: undefined },
+    };
+    render(createElement(OtaUpdateTracker));
+
+    const downloadedCalls = trackCallsFor('OTA Update Downloaded');
+    expect(downloadedCalls).toHaveLength(1);
+    expect(downloadedCalls[0][1]).toEqual({
+      updateId: 'rollback-or-undated',
+      createdAtIso: null,
     });
   });
 
