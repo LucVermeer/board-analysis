@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Constants from 'expo-constants';
-import { requireOptionalNativeModule } from 'expo-modules-core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
@@ -28,12 +27,7 @@ import { useConfirm } from '../providers/dialog-provider';
 import { hapticLight, hapticError } from '../lib/haptics';
 import { discoverBundlers, type DiscoveredBundler } from '../lib/metro-discovery';
 import { addSavedMetroTarget, getSavedMetroTargets, removeSavedMetroTarget } from '../lib/metro-target-store';
-
-type ExpoDevLauncherModule = {
-  loadApp(url: string): Promise<boolean>;
-};
-
-const ExpoDevLauncher = requireOptionalNativeModule<ExpoDevLauncherModule>('ExpoDevLauncher');
+import { expoDevLauncher, isDevLauncherAvailable } from '../lib/dev-launcher';
 
 function getTailscaleHosts(): string[] {
   const hosts = Constants.expoConfig?.extra?.tailscaleHosts;
@@ -89,11 +83,11 @@ export function DevServerSwitcherScreen() {
 
   const switchMutation = useMutation({
     mutationFn: async (bundler: DiscoveredBundler) => {
-      if (!ExpoDevLauncher) {
+      if (!expoDevLauncher) {
         throw new Error('Dev launcher unavailable — install expo-dev-client and rebuild');
       }
       setSwitchingUrl(bundler.url);
-      await ExpoDevLauncher.loadApp(bundler.url);
+      await expoDevLauncher.loadApp(bundler.url);
     },
     onError: (mutationError: unknown) => {
       hapticError();
@@ -247,7 +241,7 @@ export function DevServerSwitcherScreen() {
           {/* i18n-ignore-next-line */}
           <InfoRow label="Saved targets" value={String(savedTargets.length)} />
           {/* i18n-ignore-next-line */}
-          <InfoRow label="Dev launcher" value={ExpoDevLauncher ? 'available' : 'missing'} />
+          <InfoRow label="Dev launcher" value={isDevLauncherAvailable() ? 'available' : 'missing'} />
           <InfoRow
             // i18n-ignore-next-line
             label="Bundlers live"

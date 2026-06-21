@@ -23,6 +23,7 @@ import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { HoldColorAccessibilitySection } from '../../../src/components/settings/HoldColorAccessibilitySection';
 import { SessionRecordingSwitchRow } from '../../../src/components/settings/SessionRecordingSwitchRow';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
+import { isDevLauncherAvailable } from '../../../src/lib/dev-launcher';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
 import { useToast } from '../../../src/providers/toast-provider';
@@ -55,6 +56,16 @@ export default function MoreScreen() {
   // work on real (non-dev) builds where updates are enabled. Gated on the tester
   // flag so only admin-marked testers see it.
   const showChannelSwitcher = Boolean(profile?.isTester) && !__DEV__ && Updates.isEnabled;
+
+  // Live Metro dev-server switching needs expo-dev-client's native launcher, which
+  // is only linked into dev-client / Debug builds — never the App Store / TestFlight
+  // binary (where it would throw "Dev launcher unavailable"). Show the row only where
+  // it can actually work; testers on a release build get the OTA channel switcher.
+  const showDevServerSwitcher = isDevLauncherAvailable();
+
+  // Don't render an empty "Development" section header when neither tool applies
+  // (e.g. a tester on a release build with updates disabled).
+  const showDevSection = (__DEV__ || Boolean(profile?.isTester)) && (showDevServerSwitcher || showChannelSwitcher);
 
   // Whether the bundled changelog has an entry the user hasn't opened yet — drives
   // the "New" pill on the What's New row. Re-read every time this screen regains
@@ -295,18 +306,20 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      {__DEV__ || profile?.isTester ? (
+      {showDevSection ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
           <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
-            <ListRow
-              title={t('mobile.more.metroServersTitle')}
-              subtitle={t('mobile.more.metroServersSubtitle')}
-              leading={<Icon name="server" size={22} color={systemColors.secondaryLabel} />}
-              showChevron
-              showSeparator={showChannelSwitcher}
-              onPress={() => router.push('/(tabs)/profile/dev-servers')}
-            />
+            {showDevServerSwitcher ? (
+              <ListRow
+                title={t('mobile.more.metroServersTitle')}
+                subtitle={t('mobile.more.metroServersSubtitle')}
+                leading={<Icon name="server" size={22} color={systemColors.secondaryLabel} />}
+                showChevron
+                showSeparator={showChannelSwitcher}
+                onPress={() => router.push('/(tabs)/profile/dev-servers')}
+              />
+            ) : null}
             {showChannelSwitcher ? (
               <ListRow
                 // i18n-ignore-next-line — tester-only dev tooling
