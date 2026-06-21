@@ -187,7 +187,7 @@ vi.mock('../../../hooks/use-grade-format', () => ({
 vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 
 vi.mock('../../../theme/tokens', () => ({
-  spacing: { 1: 4, 2: 8, 3: 12, 10: 40 },
+  spacing: { 1: 4, 2: 8, 3: 12, 8: 32, 10: 40 },
   borderRadius: { md: 8 },
 }));
 
@@ -335,7 +335,7 @@ describe('NativeAccessoryClimbRow', () => {
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
     expect(container.querySelector('[data-icon-size="24"]')).not.toBeNull();
     expect(container.querySelector('[data-height="48"]')).not.toBeNull();
-    expect(container.querySelector('[data-padding-right="12"]')).not.toBeNull();
+    expect(container.querySelector('[data-padding-right="32"]')).not.toBeNull();
 
     const thumbnail = getCurrentThumbnail(container);
     const thumbnailSlot = thumbnail.closest('[data-width="40"][data-height="40"]');

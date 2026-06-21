@@ -22,7 +22,8 @@ type NativeAccessoryClimbRowProps = {
 };
 
 const ACCESSORY_LEADING_INSET = spacing[1];
-const ACCESSORY_TRAILING_INSET = spacing[3];
+// Pull the tick ~20pt off the platter's right edge so it doesn't sit flush.
+const ACCESSORY_TRAILING_INSET = spacing[8];
 
 type ClimbLabelProps = {
   climb: Climb;
