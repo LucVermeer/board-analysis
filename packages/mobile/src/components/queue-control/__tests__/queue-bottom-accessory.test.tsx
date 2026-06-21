@@ -22,7 +22,7 @@ vi.mock('../../../providers/queue-provider', () => ({
 }));
 vi.mock('../../../theme/layout', () => ({
   glassSize: { standard: 56, inline: 44, capsule: 52 },
-  NATIVE_BOTTOM_ACCESSORY_MAX_WIDTH: 344,
+  NATIVE_BOTTOM_ACCESSORY_MAX_WIDTH: 420,
   NATIVE_BOTTOM_ACCESSORY_SCREEN_GUTTER: 32,
 }));
 // Stub the row so the test sees exactly what QueueBottomAccessory hands down, and
@@ -76,7 +76,7 @@ describe('QueueBottomAccessory', () => {
   });
 
   it('passes the inline placement through at the same width as regular', () => {
-    // max(56*2=112, min(344, 402-32=370)) = 344, independent of placement.
+    // max(56*2=112, min(420, 402-32=370)) = 370, independent of placement.
     const regular = render(<QueueBottomAccessory />);
     const regularRowWidth = regular.container.querySelector('[data-native-row]')?.getAttribute('data-row-width');
     regular.unmount();
@@ -87,7 +87,7 @@ describe('QueueBottomAccessory', () => {
 
     expect(inlineRow?.getAttribute('data-placement')).toBe('inline');
     expect(inlineRow?.getAttribute('data-row-width')).toBe(regularRowWidth);
-    expect(inlineRow?.getAttribute('data-row-width')).toBe('344');
+    expect(inlineRow?.getAttribute('data-row-width')).toBe('370');
   });
 
   it('renders nothing without a current climb', () => {
