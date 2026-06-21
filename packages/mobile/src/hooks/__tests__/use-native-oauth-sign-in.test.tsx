@@ -186,13 +186,21 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
     expect(trackedEvents()).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
   });
 
-  it('does NOT fall back when the user cancels native Apple', async () => {
+  it('does NOT fall back when the user cancels native Apple, and logs a cancel (not a failure)', async () => {
     signInWithAppleMock.mockResolvedValue({ success: false, cancelled: true });
 
     await runSignIn('apple');
 
     expect(signInWithAppleWebMock).not.toHaveBeenCalled();
     expect(reportErrorMock).not.toHaveBeenCalled();
+    const events = trackedEvents();
+    expect(events).toContainEqual({
+      event: 'Login Cancelled',
+      flow: 'native',
+      reason: undefined,
+      recoverable: undefined,
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({ event: 'Login Failed' }));
   });
 
   it('stays silent (no error, no report) when the browser Apple sheet is cancelled', async () => {
