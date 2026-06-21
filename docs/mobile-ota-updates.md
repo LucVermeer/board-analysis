@@ -150,12 +150,20 @@ That's the fingerprint policy working as intended; pinning the publish to the la
 instead serve native-dependent JS to old binaries and crash them.
 
 **Fail-safe.** If the gate can't resolve the fingerprint, it builds. A manual `workflow_dispatch`
-bypasses the tag check and always builds — for iOS that means dispatching on `main` (the iOS build
-is `main`-only by design, since it uploads to TestFlight); the Android workflow additionally builds
-from a `workflow_dispatch` on any branch (artifact-only, matching its pre-existing behavior).
+bypasses the tag check and builds — for iOS that means dispatching on `main` (the iOS build is
+`main`-only by design, since it uploads to TestFlight). The Android workflow drives this with a
+`force_native` input (default **on**): on, it builds regardless of the fingerprint (the urgent-fix
+escape hatch below); off, it falls through to the same tag check as a push, so a dispatch can also be
+a no-op rebuild. A dispatch on any branch still produces an artifact-only APK, matching its
+pre-existing behavior.
 
 **Manual overrides.**
 
+- **Ship an urgent JS-only fix to OTA-orphaned binaries.** A JS fix merged to `main` is delivered
+  OTA-only and skips the native build when its fingerprint already shipped — but a binary whose
+  fingerprint has since drifted (heavy native churn orphans older binaries, the root cause behind
+  issue #3098) can't pull that OTA. Dispatch `android-apk-rn.yml` with `force_native` on to rebuild
+  the native app so those installs get the fix via a store update.
 - Force a rebuild of a fingerprint that already has a tag:
   `git push --delete origin fingerprint-<platform>-<hash>`, then re-push to `main` (or run the
   workflow via dispatch).
@@ -173,6 +181,29 @@ from a `workflow_dispatch` on any branch (artifact-only, matching its pre-existi
 Resolve the current fingerprint locally to predict what the gate will see: `cd packages/mobile &&
 bunx expo-updates runtimeversion:resolve --platform ios` (add the production env to match CI
 exactly — see the parity check above).
+
+## OTA observability (adoption + funnel)
+
+A JS-only fix lands OTA-only, so "did it actually reach users?" needs telemetry — without it an
+inert or broken OTA is silent (the gap that motivated issue #3098). The app reports two PostHog
+events from `OtaUpdateTracker` (`packages/mobile/src/components/analytics/OtaUpdateTracker.tsx`),
+mounted once near the root beside `AnalyticsScreenTracker`:
+
+- **`OTA Update Status`** — fired once per launch with the running bundle:
+  `{ isEnabled, isEmbeddedLaunch, updateId, channel, runtimeVersion, createdAtIso, isEmergencyLaunch,
+emergencyLaunchReason }`. `isEmbeddedLaunch === false` means the install is running an **OTA'd**
+  bundle (not the one baked into the binary); group by `updateId` to size the rollout of a specific
+  JS-only fix; `runtimeVersion` is the fingerprint cohort that can receive OTAs at all. The same
+  cohort is also registered as PostHog **super properties** (`ota_update_id`, `ota_is_embedded`,
+  `ota_runtime_version`) so any existing funnel can be sliced by OTA-vs-embedded.
+- **`OTA Update Downloaded`** — fired when a newer bundle finishes downloading in-session
+  (`{ updateId, createdAtIso }`). It applies on the **next** launch, which the following
+  `OTA Update Status` records — together they form the published → downloaded → applied funnel.
+
+Both no-op in dev / Expo Go (analytics disabled, `Updates.isEnabled` false); the `__DEV__` debug hook
+still logs `[analytics] OTA Update Status …` to Metro so you can confirm the tracker fires locally.
+In PostHog (project 412845), count distinct installs with `isEmbeddedLaunch = false` per `updateId` to
+measure how many pulled a given OTA.
 
 ## PR-time OTA-compatibility signal
 

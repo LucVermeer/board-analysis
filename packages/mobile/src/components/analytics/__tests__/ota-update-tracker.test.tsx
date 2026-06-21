@@ -1,0 +1,96 @@
+// @vitest-environment jsdom
+import { render } from '@testing-library/react';
+import { createElement } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const analytics = vi.hoisted(() => ({ track: vi.fn(), registerSuperProperties: vi.fn() }));
+
+// Drives Updates.useUpdates() per test. The constants below mirror an OTA'd
+// production launch; `current` is swapped to exercise the downloaded-bundle
+// branch (a newer bundle fetched but not yet applied).
+const updates = vi.hoisted(() => ({
+  current: {
+    isUpdatePending: false,
+    downloadedUpdate: undefined as undefined | { updateId?: string; createdAt: Date },
+  },
+}));
+
+vi.mock('../../../lib/analytics', () => ({
+  track: analytics.track,
+  registerSuperProperties: analytics.registerSuperProperties,
+}));
+
+vi.mock('expo-updates', () => ({
+  isEnabled: true,
+  isEmbeddedLaunch: false,
+  updateId: 'a1b2c3d4-0000-0000-0000-000000000000',
+  channel: 'production',
+  runtimeVersion: 'abcdef123456',
+  createdAt: new Date('2026-06-20T07:53:51.000Z'),
+  isEmergencyLaunch: false,
+  emergencyLaunchReason: null,
+  useUpdates: () => updates.current,
+}));
+
+// Imported after the mocks (vi.mock is hoisted above imports).
+import { OtaUpdateTracker } from '../OtaUpdateTracker';
+
+function trackCallsFor(eventName: string) {
+  return analytics.track.mock.calls.filter(([name]) => name === eventName);
+}
+
+beforeEach(() => {
+  analytics.track.mockClear();
+  analytics.registerSuperProperties.mockClear();
+  updates.current = { isUpdatePending: false, downloadedUpdate: undefined };
+});
+
+describe('OtaUpdateTracker', () => {
+  it('reports the running bundle once and registers the OTA cohort', () => {
+    render(createElement(OtaUpdateTracker));
+
+    const statusCalls = trackCallsFor('OTA Update Status');
+    expect(statusCalls).toHaveLength(1);
+    expect(statusCalls[0][1]).toMatchObject({
+      isEnabled: true,
+      isEmbeddedLaunch: false,
+      updateId: 'a1b2c3d4-0000-0000-0000-000000000000',
+      channel: 'production',
+      runtimeVersion: 'abcdef123456',
+      createdAtIso: '2026-06-20T07:53:51.000Z',
+    });
+    expect(analytics.registerSuperProperties).toHaveBeenCalledWith({
+      ota_update_id: 'a1b2c3d4-0000-0000-0000-000000000000',
+      ota_is_embedded: false,
+      ota_runtime_version: 'abcdef123456',
+    });
+  });
+
+  it('reports a freshly downloaded bundle, deduped on updateId', () => {
+    updates.current = {
+      isUpdatePending: true,
+      downloadedUpdate: { updateId: 'next-update-id', createdAt: new Date('2026-06-21T00:00:00.000Z') },
+    };
+    const { rerender } = render(createElement(OtaUpdateTracker));
+
+    // A new object with the same updateId — the ref dedup must suppress a second
+    // event even though the effect re-runs on the changed reference.
+    updates.current = {
+      isUpdatePending: true,
+      downloadedUpdate: { updateId: 'next-update-id', createdAt: new Date('2026-06-21T00:00:00.000Z') },
+    };
+    rerender(createElement(OtaUpdateTracker));
+
+    const downloadedCalls = trackCallsFor('OTA Update Downloaded');
+    expect(downloadedCalls).toHaveLength(1);
+    expect(downloadedCalls[0][1]).toEqual({
+      updateId: 'next-update-id',
+      createdAtIso: '2026-06-21T00:00:00.000Z',
+    });
+  });
+
+  it('does not report a download when none is pending', () => {
+    render(createElement(OtaUpdateTracker));
+    expect(trackCallsFor('OTA Update Downloaded')).toHaveLength(0);
+  });
+});

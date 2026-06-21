@@ -24,6 +24,18 @@ on:
         description: 'Added to GH run_number for versionCode (raise to clear collisions / always supersede the Capacitor app)'
         required: false
         default: '2000000'
+      # The canonical "ship an urgent JS-only fix to binaries that can no longer
+      # receive an OTA" lever (issue #3098). A JS fix merged to main is delivered
+      # OTA-only and skips the native build when its fingerprint already shipped —
+      # but a binary whose fingerprint has since drifted is orphaned from the OTA.
+      # Dispatching this workflow with force_native on rebuilds the native app so
+      # those installs get the fix via a store update. Defaults on, so a manual
+      # dispatch keeps building as before; uncheck to honour the fingerprint gate.
+      force_native:
+        description: 'Force a native build even if this fingerprint already shipped (push an urgent JS-only fix to orphaned binaries). Uncheck to honour the fingerprint gate.'
+        type: boolean
+        required: false
+        default: true
 
 concurrency:
   group: android-apk-rn-${{ github.ref }}
@@ -144,9 +156,15 @@ jobs:
             exit 0
           fi
           echo "fingerprint=$fp" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # A manual dispatch with force_native on (the default) builds regardless
+          # of the fingerprint — the escape hatch for shipping an urgent JS-only
+          # fix to OTA-orphaned binaries (issue #3098). With force_native off it
+          # falls through to the same fingerprint-tag check as a push, so a
+          # dispatch can also be a no-op rebuild when the fingerprint already
+          # shipped.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_native }}" = "true" ]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Manual dispatch — building Android regardless of fingerprint $fp."
+            echo "::notice::Manual dispatch with force_native — building Android regardless of fingerprint $fp."
             exit 0
           fi
           tag="fingerprint-android-$fp"

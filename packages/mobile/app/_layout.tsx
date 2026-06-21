@@ -59,6 +59,7 @@ import { reportError } from '../src/lib/error-reporting';
 import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
+import { OtaUpdateTracker } from '../src/components/analytics/OtaUpdateTracker';
 import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
 import { AccessoryOnboardingTip } from '../src/components/onboarding/AccessoryOnboardingTip';
 import { FreezeDebugOverlay } from '../src/components/FreezeDebugOverlay';
@@ -434,6 +435,7 @@ function RootLayout() {
                                                         </UserDrawerProvider>
                                                       </TabBarHeightProvider>
                                                       <AnalyticsScreenTracker />
+                                                      <OtaUpdateTracker />
                                                     </ShareTargetProvider>
                                                   </DeepLinkProvider>
                                                 </DrawerHostProvider>
