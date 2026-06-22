@@ -13,7 +13,7 @@ import {
   buildInitialHoldsMap,
   type SavedClimbSnapshot,
 } from '@boardsesh/create-climb-react';
-import { useBoardProvider, isDuplicateClimbError } from '@boardsesh/board-react';
+import { useBoardActions, isDuplicateClimbError } from '@boardsesh/board-react';
 import { GraphQLOperationError } from '@boardsesh/graphql-client';
 import { getLayoutName } from '@boardsesh/board-constants/product-sizes';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -95,7 +95,7 @@ export function useCreateClimbScreen({
 }: UseCreateClimbScreenArgs) {
   const router = useRouter();
   const { t } = useTranslation('climbs');
-  const { isAuthenticated, saveClimb, updateClimb } = useBoardProvider();
+  const { isAuthenticated, saveClimb, updateClimb } = useBoardActions();
   const auth = useAuth();
   const { data: profile } = useProfile();
   const { setCurrentClimb } = useQueueActions();

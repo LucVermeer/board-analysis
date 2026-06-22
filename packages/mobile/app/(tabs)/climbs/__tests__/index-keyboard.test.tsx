@@ -108,7 +108,7 @@ vi.mock('@boardsesh/climb-filters', () => ({
 }));
 
 vi.mock('@boardsesh/board-react', () => ({
-  useBoardProvider: () => ({ getLogbook: mocks.getLogbook }),
+  useBoardActions: () => ({ getLogbook: mocks.getLogbook }),
 }));
 
 vi.mock('../../../../src/components/ClimbListRow', () => ({

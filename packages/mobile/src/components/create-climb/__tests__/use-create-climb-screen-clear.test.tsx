@@ -64,7 +64,7 @@ vi.mock('@boardsesh/create-climb-react', () => ({
 }));
 
 vi.mock('@boardsesh/board-react', () => ({
-  useBoardProvider: () => ({
+  useBoardActions: () => ({
     isAuthenticated: board.isAuthenticated,
     saveClimb: board.saveClimb,
     updateClimb: board.updateClimb,

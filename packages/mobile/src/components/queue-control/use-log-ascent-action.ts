@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 import type { Climb } from '@boardsesh/queue';
-import { useOptionalBoardProvider } from '@boardsesh/board-react';
+import { useOptionalBoardActions, useOptionalBoardLogbook } from '@boardsesh/board-react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../providers/theme-provider';
 import { useQueueSessionId } from '../../providers/queue-provider';
@@ -16,7 +16,8 @@ export function useLogAscentAction(climb: Climb) {
   const { systemColors, brandColors } = useTheme();
   const { boardConfig, openLogAscent } = useDrawerHost();
   const { sessionId } = useQueueSessionId();
-  const board = useOptionalBoardProvider();
+  const boardLogbook = useOptionalBoardLogbook();
+  const boardActions = useOptionalBoardActions();
   const reduceMotion = useReduceMotion();
 
   const angle = climb.angle;
@@ -26,8 +27,8 @@ export function useLogAscentAction(climb: Climb) {
   // selector the climb-row status glyph uses, so the toolbar and the list
   // marker agree.
   const sentCount = useMemo(
-    () => (board ? countSentAscents(board.logbook, climb.uuid, angle) : 0),
-    [board, climb.uuid, angle],
+    () => (boardLogbook ? countSentAscents(boardLogbook.logbook, climb.uuid, angle) : 0),
+    [boardLogbook, climb.uuid, angle],
   );
   const isLogged = sentCount > 0;
 
@@ -35,8 +36,8 @@ export function useLogAscentAction(climb: Climb) {
   // the visible list rows the screen already fetched, so the ticked-state is
   // accurate on every tab.
   useEffect(() => {
-    if (board && climb.uuid) void board.getLogbook([climb.uuid]);
-  }, [board, climb.uuid]);
+    if (boardActions && climb.uuid) void boardActions.getLogbook([climb.uuid]);
+  }, [boardActions, climb.uuid]);
 
   // Success burst: pop once when a fresh send/flash lands for the climb the user
   // just ticked. `pendingRef` (armed on press) gates out the false positive of

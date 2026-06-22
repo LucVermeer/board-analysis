@@ -30,7 +30,7 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { selectByVariant } from '../../../src/theme/variants';
 import { useActiveClimbUuid, useQueueActions } from '../../../src/providers/queue-provider';
 import { ClimbSearchProvider, useClimbSearch, type GradeBound } from '../../../src/providers/climb-search-provider';
-import { useBoardProvider } from '@boardsesh/board-react';
+import { useBoardActions } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
 import { type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
@@ -162,7 +162,7 @@ function ClimbListInner() {
     patchFilters,
     patchBoardFilters,
   } = useClimbSearch();
-  const { getLogbook } = useBoardProvider();
+  const { getLogbook } = useBoardActions();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
   const nativeSearchRef = useRef<NativeSearchBarRef>(null);
   const visibleSearchTextRef = useRef('');
@@ -559,9 +559,19 @@ function ClimbListInner() {
   // can render flash/send/attempt without baking per-user counts into the
   // (CDN-cacheable) search query. `getLogbook` is a noop when the user is
   // anonymous or the active board hasn't resolved yet.
+  //
+  // Deferred past the active fling via `runAfterInteractions`: the resulting
+  // logbook merge re-renders every visible ascent-status glyph, so letting it
+  // land after the scroll settles (instead of mid-fling) keeps those per-row
+  // re-renders off the gesture's frames. `getLogbook`'s fetched-uuid dedupe
+  // makes the call idempotent, and cancelling on cleanup stops a fast re-fling
+  // from stacking stale fetches.
   useEffect(() => {
     if (visibleClimbs.length === 0) return;
-    void getLogbook(visibleClimbs.map((climb) => climb.uuid));
+    const handle = InteractionManager.runAfterInteractions(() => {
+      void getLogbook(visibleClimbs.map((climb) => climb.uuid));
+    });
+    return () => handle.cancel();
   }, [visibleClimbs, getLogbook]);
 
   const handleRefresh = useCallback(() => {

@@ -30,5 +30,16 @@ export { useSaveTick } from './use-save-tick';
 export { useUpdateTick, useDeleteTick } from './use-mutate-tick';
 export { useSaveClimb, useUpdateClimb } from './use-save-climb';
 
-export { BoardProvider, useBoardProvider, useOptionalBoardProvider, BoardContext } from './board-provider';
-export type { BoardContextType } from './board-provider';
+export {
+  BoardProvider,
+  useBoardProvider,
+  useOptionalBoardProvider,
+  useBoardActions,
+  useOptionalBoardActions,
+  useBoardLogbook,
+  useOptionalBoardLogbook,
+  BoardContext,
+  BoardActionsContext,
+  BoardLogbookContext,
+} from './board-provider';
+export type { BoardContextType, BoardActionsContextType, BoardLogbookContextType } from './board-provider';

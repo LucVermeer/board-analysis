@@ -63,7 +63,7 @@ vi.mock('@boardsesh/create-climb-react', () => ({
   buildInitialHoldsMap: () => ({}),
 }));
 vi.mock('@boardsesh/board-react', () => ({
-  useBoardProvider: () => ({
+  useBoardActions: () => ({
     isAuthenticated: true,
     saveClimb: vi.fn(),
     updateClimb: vi.fn(),
