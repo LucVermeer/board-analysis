@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-22T05:32:14.001Z",
+  "generatedAt": "2026-06-22T06:15:24.636Z",
   "entries": [
+    {
+      "prNumber": 3159,
+      "category": "fixed",
+      "title": "Android: if the sign-in screen won't respond to taps on a newer phone, the login screen now shows how to sign in using split-screen while we fix the freeze.",
+      "mergedAt": "2026-06-22T06:14:16Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3159"
+    },
     {
       "prNumber": 3158,
       "category": "fixed",
