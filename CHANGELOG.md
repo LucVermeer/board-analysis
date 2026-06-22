@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Sign-in on recent Android phones no longer leaves the login form unresponsive — you can tap and sign in without the split-screen workaround. ([#3158](https://github.com/boardsesh/boardsesh/pull/3158))
 - Android: fixed a freeze on some phones (Pixel 10, Galaxy S24+) where the login screen and climb list stopped responding to taps — the app stays responsive now. ([#3148](https://github.com/boardsesh/boardsesh/pull/3148))
 
 ## 2026-06-21

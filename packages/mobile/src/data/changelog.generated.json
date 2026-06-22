@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-22T02:26:13.971Z",
+  "generatedAt": "2026-06-22T05:32:14.001Z",
   "entries": [
+    {
+      "prNumber": 3158,
+      "category": "fixed",
+      "title": "Sign-in on recent Android phones no longer leaves the login form unresponsive — you can tap and sign in without the split-screen workaround.",
+      "mergedAt": "2026-06-22T05:30:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3158"
+    },
     {
       "prNumber": 3148,
       "category": "fixed",
@@ -146,6 +153,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-22T12:25:02+10:00",
+      "sha": "097e67f8dc8068a6bbb6dacd893b2f214f66be8f",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "79ee9d46847f4aad5340a2dd49f874b69c2a39ed",
+        "ios": "ce36844a7c126c25ae1608d940ea38adac375c67"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-22T10:06:46+10:00",
