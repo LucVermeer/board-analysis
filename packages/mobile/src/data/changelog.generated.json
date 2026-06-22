@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-21T11:51:15.865Z",
+  "generatedAt": "2026-06-22T00:01:26.030Z",
   "entries": [
+    {
+      "prNumber": 3140,
+      "category": "fixed",
+      "title": "Your session stats now count only your own climbs. On the You and profile Sessions tabs, your weekly sends and flashes, grade spread, and hardest send no longer fold in your crew's climbs from group sessions.",
+      "mergedAt": "2026-06-21T23:57:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3140"
+    },
     {
       "prNumber": 3131,
       "category": "new",
