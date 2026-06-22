@@ -4,6 +4,16 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-06-22
+
+### App update
+
+A new version shipped to the App Store and Play Store.
+
+### Fixed
+
+- Android: fixed a freeze on some phones (Pixel 10, Galaxy S24+) where the login screen and climb list stopped responding to taps — the app stays responsive now. ([#3148](https://github.com/boardsesh/boardsesh/pull/3148))
+
 ## 2026-06-21
 
 ### App update

@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-22T00:01:26.030Z",
+  "generatedAt": "2026-06-22T02:26:13.971Z",
   "entries": [
+    {
+      "prNumber": 3148,
+      "category": "fixed",
+      "title": "Android: fixed a freeze on some phones (Pixel 10, Galaxy S24+) where the login screen and climb list stopped responding to taps — the app stays responsive now.",
+      "mergedAt": "2026-06-22T02:25:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3148"
+    },
     {
       "prNumber": 3140,
       "category": "fixed",
@@ -139,6 +146,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-22T10:06:46+10:00",
+      "sha": "b3f44f05304e54c77f9535183637dba027700476",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "e37330f66e5eb0b3f9875836525b230f2523a8b8",
+        "ios": "d39efa046a1e1bb524704036901e3315080c7e56"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-21T11:03:57+10:00",
