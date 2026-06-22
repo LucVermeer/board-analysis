@@ -39,7 +39,5 @@ export {
   useBoardLogbook,
   useOptionalBoardLogbook,
   BoardContext,
-  BoardActionsContext,
-  BoardLogbookContext,
 } from './board-provider';
 export type { BoardContextType, BoardActionsContextType, BoardLogbookContextType } from './board-provider';

@@ -563,9 +563,10 @@ function ClimbListInner() {
   // Deferred past the active fling via `runAfterInteractions`: the resulting
   // logbook merge re-renders every visible ascent-status glyph, so letting it
   // land after the scroll settles (instead of mid-fling) keeps those per-row
-  // re-renders off the gesture's frames. `getLogbook`'s fetched-uuid dedupe
-  // makes the call idempotent, and cancelling on cleanup stops a fast re-fling
-  // from stacking stale fetches.
+  // re-renders off the gesture's frames. The cleanup cancels a still-pending
+  // callback when `visibleClimbs` changes again or the screen unmounts, so a
+  // superseded snapshot never fires its `getLogbook`. (Network-level dedupe is
+  // separate: `useLogbook`'s fetched-uuid set skips uuids already pulled.)
   useEffect(() => {
     if (visibleClimbs.length === 0) return;
     const handle = InteractionManager.runAfterInteractions(() => {

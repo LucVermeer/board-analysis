@@ -249,4 +249,7 @@ export function useOptionalBoardLogbook(): BoardLogbookContextType | null {
   return useContext(BoardLogbookContext) ?? null;
 }
 
-export { BoardContext, BoardActionsContext, BoardLogbookContext };
+// Only the full `BoardContext` is exported (web reads it directly). The split
+// contexts stay module-private so consumers go through the guarded hooks above
+// rather than a raw `useContext` that skips the within-provider invariant.
+export { BoardContext };
