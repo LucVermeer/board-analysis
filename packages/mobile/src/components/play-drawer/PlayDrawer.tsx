@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Platform, View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { Platform, View, Pressable, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
@@ -140,6 +140,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const sheetRef = useRef<BottomSheetModal>(null);
+  // The native sheet's content viewport (measured), which is shorter than the
+  // window. Drives the first-screen sizing so the below-fold peek lands.
+  const [sheetViewportHeight, setSheetViewportHeight] = useState(0);
+  const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
+    const measured = event.nativeEvent.layout.height;
+    setSheetViewportHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
+  }, []);
   const [drawerPreviewItem, setDrawerPreviewItem] = useState<ClimbQueueItem | null>(null);
   const [drawerPreviewSuggestionSource, setDrawerPreviewSuggestionSource] = useState<PlaylistSuggestionSource | null>(
     null,
@@ -550,7 +557,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // board by that inset twice.
   const firstScreenReserve =
     spacing[3] + (betaHeaderHeight > 0 ? betaHeaderHeight : DEFAULT_BETA_HEADER_HEIGHT) + spacing[2];
-  const firstScreenHeight = computeFirstScreenHeight(windowHeight, firstScreenReserve);
+  // Size the first screen from the sheet's MEASURED viewport, not the full
+  // window: the native sheet card is shorter than the window (it sits below the
+  // status bar), so windowHeight would oversize the board and push the Beta
+  // Videos peek off the fold. Falls back to windowHeight until the first layout.
+  const firstScreenHeight = computeFirstScreenHeight(sheetViewportHeight || windowHeight, firstScreenReserve);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
@@ -576,11 +587,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         <BottomSheetScrollView
           style={styles.content}
           contentContainerStyle={{ paddingBottom: insets.bottom }}
+          onLayout={handleViewportLayout}
           onScrollBeginDrag={handleScrollTowardBelowFold}
         >
           {displayedClimb && (
             <>
-              <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: insets.top }]}>
+              {/* The native sheet starts its content below the status bar, so the
+                  top row (drag grabber + close) sits at the sheet's top — no full
+                  window top inset (that double-padded and pushed the title down). */}
+              <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: spacing[2] }]}>
                 <View style={styles.topRow}>
                   <View style={sheetStyles.indicator} />
                   <Pressable
