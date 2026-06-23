@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-06-23
+
+### Fixed
+
+- Fixed the app freezing on some Android phones (Samsung S24/S25, Pixel) — if you'd changed your phone's display size, the app could open but ignore every tap and swipe. Touch works again. ([#3165](https://github.com/boardsesh/boardsesh/pull/3165))
+
 ## 2026-06-22
 
 ### App update

@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-22T06:15:24.636Z",
+  "generatedAt": "2026-06-23T02:55:55.586Z",
   "entries": [
+    {
+      "prNumber": 3165,
+      "category": "fixed",
+      "title": "Fixed the app freezing on some Android phones (Samsung S24/S25, Pixel) — if you'd changed your phone's display size, the app could open but ignore every tap and swipe. Touch works again.",
+      "mergedAt": "2026-06-23T02:54:33Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3165"
+    },
     {
       "prNumber": 3159,
       "category": "fixed",
