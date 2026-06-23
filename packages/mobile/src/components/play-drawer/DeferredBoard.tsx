@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ComponentType, type RefObject } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
@@ -31,6 +31,7 @@ type DeferredBoardProps = {
   onSwipePrevious: () => void;
   onResetZoomReady?: (resetZoom: () => void) => void;
   enabled?: boolean;
+  scrollRef?: RefObject<ComponentType | undefined | null>;
 };
 
 /**

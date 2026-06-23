@@ -121,3 +121,88 @@ export function selectPeekDirection({
 export function getEnterDirection(navigation: 'next' | 'previous'): EnterDirection {
   return navigation === 'next' ? 'from-right' : 'from-left';
 }
+
+// ── Mobile card-throw (Tinder-style) swipe animation ────────────────────────
+// Mobile-only tuning + pure helpers for the play-drawer's swipe-between-climbs
+// feel: the current board tilts as you drag, flings off-screen with rotation on
+// release, while the next climb sits stacked underneath and scales up into
+// place. Web's swipe stays a flat slide and does not import any of these.
+//
+// As with computePeekOffset, the helpers are 'worklet'-marked so the mobile
+// useAnimatedStyle closures can call them on the UI thread; in non-worklet
+// contexts (tests) the directive is a harmless no-op. Mobile GESTURE callbacks
+// (Gesture.Pan().onEnd) must still inline constants rather than call these —
+// cross-module worklet CALLS aren't reliable there — so the constants are
+// exported for that inlining and the functions exist as the tested spec.
+
+/** Tilt (deg) the card saturates to around the swipe threshold while dragging. */
+export const CARD_THROW_MAX_ROTATION_DEG = 12;
+/** Degrees of tilt per px of horizontal drag, before clamping. */
+export const CARD_THROW_ROTATION_PER_PX = 0.06;
+/** Underneath (next) card scale at rest, growing to 1 by the threshold. */
+export const STACKED_CARD_MIN_SCALE = 0.92;
+/** Underneath (next) card opacity at rest, growing to 1 by the threshold. */
+export const STACKED_CARD_MIN_OPACITY = 0.6;
+/** Underneath (next) card downward offset (px) at rest; rises to 0 by threshold. */
+export const STACKED_CARD_RISE = 12;
+/** Max downward droop (px) the outgoing card dips as it flies off. */
+export const CARD_THROW_DROOP = 40;
+/** Extra px past the screen edge the fling targets so the tilted card clears. */
+export const CARD_THROW_OFFSCREEN_PAD = 80;
+
+function clamp01(value: number): number {
+  'worklet';
+  return Math.max(0, Math.min(1, value));
+}
+
+// Tilt as a function of horizontal drag. Linear (clamped to ±MAX) while the card
+// is still on/near screen; past the board edge it whips further so the fling
+// reads as a throw. Sign-symmetric. boardWidth <= 0 (pre-layout) → no extra spin.
+export function computeCardRotation(swipeOffset: number, boardWidth: number): number {
+  'worklet';
+  const base = Math.max(
+    -CARD_THROW_MAX_ROTATION_DEG,
+    Math.min(CARD_THROW_MAX_ROTATION_DEG, swipeOffset * CARD_THROW_ROTATION_PER_PX),
+  );
+  if (boardWidth <= 0 || Math.abs(swipeOffset) <= boardWidth) return base;
+  const overshoot = Math.abs(swipeOffset) - boardWidth;
+  const extra = Math.sign(swipeOffset) * overshoot * CARD_THROW_ROTATION_PER_PX;
+  return base + extra;
+}
+
+// Downward droop of the outgoing card: 0 while it's still within the board box,
+// growing to CARD_THROW_DROOP a board-width past the edge. boardWidth <= 0 → 0.
+export function computeThrowDroop(swipeOffset: number, boardWidth: number): number {
+  'worklet';
+  if (boardWidth <= 0) return 0;
+  const over = Math.max(0, Math.abs(swipeOffset) - boardWidth);
+  return clamp01(over / boardWidth) * CARD_THROW_DROOP;
+}
+
+// Underneath (next) card scale: STACKED_CARD_MIN_SCALE at rest → 1 at the
+// threshold. `progress` is |swipeOffset| / SWIPE_THRESHOLD, clamped to [0, 1].
+export function computeStackedCardScale(progress: number): number {
+  'worklet';
+  return STACKED_CARD_MIN_SCALE + (1 - STACKED_CARD_MIN_SCALE) * clamp01(progress);
+}
+
+// Underneath (next) card opacity: STACKED_CARD_MIN_OPACITY at rest → 1 at the
+// threshold.
+export function computeStackedCardOpacity(progress: number): number {
+  'worklet';
+  return STACKED_CARD_MIN_OPACITY + (1 - STACKED_CARD_MIN_OPACITY) * clamp01(progress);
+}
+
+// Underneath (next) card vertical offset: STACKED_CARD_RISE at rest, sinking to
+// 0 as it rises into place by the threshold.
+export function computeStackedCardRise(progress: number): number {
+  'worklet';
+  return (1 - clamp01(progress)) * STACKED_CARD_RISE;
+}
+
+// Where the fling animates translateX to so the card fully clears the screen,
+// margins and tilt included.
+export function computeThrowExitTarget(screenWidth: number): number {
+  'worklet';
+  return screenWidth + CARD_THROW_OFFSCREEN_PAD;
+}

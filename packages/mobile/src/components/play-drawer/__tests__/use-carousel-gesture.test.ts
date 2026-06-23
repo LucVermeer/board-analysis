@@ -70,6 +70,7 @@ function makeOptions(overrides: Partial<Options> = {}): Options {
     canSwipeNext: true,
     canSwipePrevious: true,
     boardWidth: 320,
+    screenWidth: 390,
     ...overrides,
   };
 }

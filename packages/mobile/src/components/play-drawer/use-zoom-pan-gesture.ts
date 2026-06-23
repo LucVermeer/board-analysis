@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentType, type RefObject } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import {
   useSharedValue,
@@ -22,6 +22,11 @@ type UseZoomPanGestureOptions = {
    * slightly-sloppy stationary tap isn't stolen by the pan. Left unset, the pan
    * keeps its default activation (the play-drawer carousel relies on that). */
   panActivationOffset?: number;
+  /** RNGH ref to the surrounding scroll. Declares the pinch simultaneous with it
+   * so a 2-finger zoom isn't cancelled by the scroll (the plain RN ScrollView the
+   * play route briefly used wasn't in RNGH's tree). Typed as RNGH's GestureRef
+   * shape so the method call needs no cast. */
+  scrollRef?: RefObject<ComponentType | undefined | null>;
 };
 
 type UseZoomPanGestureReturn = {
@@ -74,6 +79,7 @@ export function useZoomPanGesture({
   containerWidth,
   containerHeight,
   panActivationOffset,
+  scrollRef,
 }: UseZoomPanGestureOptions): UseZoomPanGestureReturn {
   const scale = useSharedValue(MIN_SCALE);
   const translateX = useSharedValue(0);
@@ -129,84 +135,87 @@ export function useZoomPanGesture({
     updateZoomState(false);
   }, [scale, translateX, translateY, savedScale, savedTranslateX, savedTranslateY, updateZoomState]);
 
-  const pinchGesture = useMemo(
-    () =>
-      Gesture.Pinch()
-        .onStart((event) => {
-          'worklet';
-          if (!enabledSV.value) return;
-          // Snapshot from the live animated values so a pinch that starts
-          // mid-reset-animation picks up where the animation currently is.
+  const pinchGesture = useMemo(() => {
+    const pinch = Gesture.Pinch()
+      .onStart((event) => {
+        'worklet';
+        if (!enabledSV.value) return;
+        // Snapshot from the live animated values so a pinch that starts
+        // mid-reset-animation picks up where the animation currently is.
+        savedScale.value = scale.value;
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+        pinchFocalX.value = event.focalX;
+        pinchFocalY.value = event.focalY;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (!enabledSV.value) return;
+        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, savedScale.value * event.scale));
+
+        const focalOffsetX = pinchFocalX.value - containerWidthSV.value / 2;
+        const focalOffsetY = pinchFocalY.value - containerHeightSV.value / 2;
+        const scaleDelta = newScale / savedScale.value;
+        // Inlined from computeFocalPinchTranslation in @boardsesh/play-view
+        // — keep in sync. Direct call from worklet across module boundaries
+        // isn't reliable; the shared function exists for unit tests + spec.
+        const newTranslateX = focalOffsetX * (1 - scaleDelta) + scaleDelta * savedTranslateX.value;
+        const newTranslateY = focalOffsetY * (1 - scaleDelta) + scaleDelta * savedTranslateY.value;
+
+        const clamped = clampTranslation(
+          newTranslateX,
+          newTranslateY,
+          newScale,
+          containerWidthSV.value,
+          containerHeightSV.value,
+        );
+        scale.value = newScale;
+        translateX.value = clamped.x;
+        translateY.value = clamped.y;
+      })
+      .onEnd(() => {
+        'worklet';
+        if (!enabledSV.value) return;
+        if (scale.value < ZOOM_THRESHOLD) {
+          scale.value = withTiming(MIN_SCALE, { duration: timing.fast });
+          translateX.value = withTiming(0, { duration: timing.fast });
+          translateY.value = withTiming(0, { duration: timing.fast });
+          savedScale.value = MIN_SCALE;
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+          isZoomedSV.value = false;
+          runOnJS(updateZoomState)(false);
+        } else {
           savedScale.value = scale.value;
           savedTranslateX.value = translateX.value;
           savedTranslateY.value = translateY.value;
-          pinchFocalX.value = event.focalX;
-          pinchFocalY.value = event.focalY;
-        })
-        .onUpdate((event) => {
-          'worklet';
-          if (!enabledSV.value) return;
-          const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, savedScale.value * event.scale));
-
-          const focalOffsetX = pinchFocalX.value - containerWidthSV.value / 2;
-          const focalOffsetY = pinchFocalY.value - containerHeightSV.value / 2;
-          const scaleDelta = newScale / savedScale.value;
-          // Inlined from computeFocalPinchTranslation in @boardsesh/play-view
-          // — keep in sync. Direct call from worklet across module boundaries
-          // isn't reliable; the shared function exists for unit tests + spec.
-          const newTranslateX = focalOffsetX * (1 - scaleDelta) + scaleDelta * savedTranslateX.value;
-          const newTranslateY = focalOffsetY * (1 - scaleDelta) + scaleDelta * savedTranslateY.value;
-
-          const clamped = clampTranslation(
-            newTranslateX,
-            newTranslateY,
-            newScale,
-            containerWidthSV.value,
-            containerHeightSV.value,
-          );
-          scale.value = newScale;
-          translateX.value = clamped.x;
-          translateY.value = clamped.y;
-        })
-        .onEnd(() => {
-          'worklet';
-          if (!enabledSV.value) return;
-          if (scale.value < ZOOM_THRESHOLD) {
-            scale.value = withTiming(MIN_SCALE, { duration: timing.fast });
-            translateX.value = withTiming(0, { duration: timing.fast });
-            translateY.value = withTiming(0, { duration: timing.fast });
-            savedScale.value = MIN_SCALE;
-            savedTranslateX.value = 0;
-            savedTranslateY.value = 0;
-            isZoomedSV.value = false;
-            runOnJS(updateZoomState)(false);
-          } else {
-            savedScale.value = scale.value;
-            savedTranslateX.value = translateX.value;
-            savedTranslateY.value = translateY.value;
-            // Set the shared value synchronously on UI thread so the swipe
-            // gesture's onEnd, which fires in the same frame, sees the new
-            // value and skips navigation. runOnJS hops a tick later.
-            isZoomedSV.value = true;
-            runOnJS(updateZoomState)(true);
-          }
-        }),
-    [
-      scale,
-      translateX,
-      translateY,
-      savedScale,
-      savedTranslateX,
-      savedTranslateY,
-      pinchFocalX,
-      pinchFocalY,
-      isZoomedSV,
-      enabledSV,
-      containerWidthSV,
-      containerHeightSV,
-      updateZoomState,
-    ],
-  );
+          // Set the shared value synchronously on UI thread so the swipe
+          // gesture's onEnd, which fires in the same frame, sees the new
+          // value and skips navigation. runOnJS hops a tick later.
+          isZoomedSV.value = true;
+          runOnJS(updateZoomState)(true);
+        }
+      });
+    // Declare the pinch simultaneous with the surrounding RNGH ScrollView so a
+    // 2-finger zoom isn't cancelled by the scroll. (The zoom-pan overlay lives on
+    // a separate, zoomed-only GestureDetector and needs no scroll relation.)
+    return scrollRef ? pinch.simultaneousWithExternalGesture(scrollRef) : pinch;
+  }, [
+    scale,
+    translateX,
+    translateY,
+    savedScale,
+    savedTranslateX,
+    savedTranslateY,
+    pinchFocalX,
+    pinchFocalY,
+    isZoomedSV,
+    enabledSV,
+    containerWidthSV,
+    containerHeightSV,
+    updateZoomState,
+    scrollRef,
+  ]);
 
   // zoomPanGesture is rendered into a separate GestureDetector that only
   // mounts while zoomed (see SwipeBoardCarousel). That way it doesn't claim

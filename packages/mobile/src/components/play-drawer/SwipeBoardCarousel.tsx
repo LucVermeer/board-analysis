@@ -18,7 +18,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import { computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
+import {
+  computeCardRotation,
+  computeThrowDroop,
+  computeStackedCardScale,
+  computeStackedCardOpacity,
+  computeStackedCardRise,
+  SWIPE_THRESHOLD,
+  type PeekDirection,
+} from '@boardsesh/play-view';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Icon } from '../Icon';
@@ -59,6 +67,9 @@ type SwipeBoardCarouselProps = {
   // reset zoom before opening the tick bar.
   onResetZoomReady?: (resetZoom: () => void) => void;
   enabled?: boolean;
+  /** RNGH ref to the play-drawer scroll, so the swipe + pinch run simultaneously
+   *  with it instead of being starved by it (see use-carousel-gesture). */
+  scrollRef?: React.RefObject<React.ComponentType | undefined | null>;
 };
 
 export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
@@ -78,6 +89,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   onSwipePrevious,
   onResetZoomReady,
   enabled = true,
+  scrollRef,
 }: SwipeBoardCarouselProps) {
   const { t } = useTranslation('session');
   const { width: screenWidth } = useWindowDimensions();
@@ -111,6 +123,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     enabled,
     containerWidth: boardBox?.width ?? screenWidth,
     containerHeight: boardBox?.height ?? containerSize.height,
+    scrollRef,
   });
 
   const onResetZoomReadyRef = useRef(onResetZoomReady);
@@ -136,8 +149,10 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     canSwipeNext,
     canSwipePrevious,
     boardWidth: boardWidthForSwipe,
+    screenWidth,
     enabled,
     isZoomedSV,
+    scrollRef,
   });
 
   const resetButtonOpacity = useSharedValue(0);
@@ -149,9 +164,23 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     opacity: resetButtonOpacity.value,
   }));
 
-  const currentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
+  // The top (current) card: tracks the finger, tilts as it drags, and on release
+  // the carousel's withTiming flings translateX off-screen — rotation + droop
+  // ride along for the throw. While zoomed it's a flat pan surface (no tilt; the
+  // swipe is disabled so translateX is 0 anyway).
+  const currentStyle = useAnimatedStyle(() => {
+    if (isZoomedSV.value) {
+      return { transform: [{ translateX: translateX.value }] };
+    }
+    const tx = translateX.value;
+    return {
+      transform: [
+        { translateX: tx },
+        { translateY: computeThrowDroop(tx, boardWidthForSwipe) },
+        { rotate: `${computeCardRotation(tx, boardWidthForSwipe)}deg` },
+      ],
+    };
+  });
 
   const peekDirection = useDerivedValue<PeekDirection>(() => (translateX.value < 0 ? 'next' : 'prev'));
 
@@ -164,16 +193,17 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     [peekDirection],
   );
 
-  const peekStyle = useAnimatedStyle(() => {
-    if (translateX.value === 0) {
-      return { opacity: 0, transform: [{ translateX: boardWidthForSwipe }] };
-    }
-    const offset = computePeekOffset({
-      direction: peekDirection.value,
-      swipeOffset: translateX.value,
-      viewportWidth: boardWidthForSwipe,
-    });
-    return { opacity: 1, transform: [{ translateX: offset }] };
+  // The card stacked UNDERNEATH (the climb being swiped to). Stays centered —
+  // Tinder-style, it scales/fades up into place as the drag approaches the
+  // threshold rather than sliding in from the edge. By the time the top card
+  // flings off (progress pinned at 1), it's already full-size and opaque, so it's
+  // simply revealed.
+  const stackedStyle = useAnimatedStyle(() => {
+    const progress = Math.min(Math.abs(translateX.value) / SWIPE_THRESHOLD, 1);
+    return {
+      opacity: computeStackedCardOpacity(progress),
+      transform: [{ translateY: computeStackedCardRise(progress) }, { scale: computeStackedCardScale(progress) }],
+    };
   });
 
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
@@ -239,7 +269,9 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           </Animated.View>
         )}
 
-        <Animated.View style={[styles.peekWrapper, peekStyle]} pointerEvents="none">
+        {/* The climb being swiped to, stacked underneath the current card
+            (zIndex below it) and centered. Scales/fades up into place. */}
+        <Animated.View style={[styles.stackedWrapper, stackedStyle]} pointerEvents="none">
           {peekFrames && (
             <BoardImageNative
               frames={peekFrames}
@@ -293,8 +325,12 @@ const styles = StyleSheet.create({
   boardWrapper: {
     width: '100%',
     alignItems: 'center',
+    // Above the stacked (next) card so the current climb is the top card. Explicit
+    // because the stacked card is absolutely positioned and renders after this in
+    // source order — zIndex governs paint order on both iOS and Android.
+    zIndex: 1,
   },
-  peekWrapper: {
+  stackedWrapper: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -302,6 +338,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 0,
   },
   zoomPanOverlay: {
     position: 'absolute',

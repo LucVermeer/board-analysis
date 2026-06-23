@@ -427,14 +427,19 @@ function RootLayout() {
                                                       lingered stacked under the live one (doubled climb name) and
                                                       churned the docked search field. The player paints its own
                                                       opaque backing (see app/play.tsx) so the live tabs screen
-                                                      doesn't show through the glass. Swipe-down dismiss; covers the
-                                                      tab bar. */}
+                                                      doesn't show through the glass. Custom pull-down dismiss; covers
+                                                      the tab bar. */}
                                                               <Stack.Screen
                                                                 name="play"
                                                                 options={{
                                                                   presentation: 'transparentModal',
                                                                   headerShown: false,
-                                                                  gestureEnabled: true,
+                                                                  // Native interactive dismiss OFF — it lives outside
+                                                                  // RNGH so it couldn't negotiate with the board
+                                                                  // swipe/pinch (only fired on the grabber). A custom
+                                                                  // RNGH pull-down (use-drawer-dismiss-gesture) drives
+                                                                  // dismissal from the whole surface instead.
+                                                                  gestureEnabled: false,
                                                                   animation: 'slide_from_bottom',
                                                                 }}
                                                               />

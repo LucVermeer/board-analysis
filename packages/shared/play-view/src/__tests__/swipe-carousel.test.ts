@@ -5,6 +5,18 @@ import {
   evaluateSwipeOutcome,
   selectPeekDirection,
   getEnterDirection,
+  computeCardRotation,
+  computeThrowDroop,
+  computeStackedCardScale,
+  computeStackedCardOpacity,
+  computeStackedCardRise,
+  computeThrowExitTarget,
+  CARD_THROW_MAX_ROTATION_DEG,
+  CARD_THROW_DROOP,
+  CARD_THROW_OFFSCREEN_PAD,
+  STACKED_CARD_MIN_SCALE,
+  STACKED_CARD_MIN_OPACITY,
+  STACKED_CARD_RISE,
   SWIPE_THRESHOLD,
   DIRECTION_THRESHOLD,
 } from '../swipe-carousel';
@@ -113,5 +125,94 @@ describe('getEnterDirection', () => {
 
   it('maps previous-navigation to from-left', () => {
     expect(getEnterDirection('previous')).toBe('from-left');
+  });
+});
+
+describe('computeCardRotation', () => {
+  it('is flat when the finger has not moved', () => {
+    expect(computeCardRotation(0, 400)).toBe(0);
+  });
+
+  it('tracks the drag linearly within the board bounds', () => {
+    expect(computeCardRotation(80, 400)).toBeCloseTo(4.8, 5);
+    expect(computeCardRotation(-80, 400)).toBeCloseTo(-4.8, 5);
+  });
+
+  it('clamps to ±MAX once the linear tilt would exceed it, while on screen', () => {
+    // 300 * 0.06 = 18, clamped to 12; |300| <= boardWidth so no extra spin.
+    expect(computeCardRotation(300, 400)).toBe(CARD_THROW_MAX_ROTATION_DEG);
+    expect(computeCardRotation(-300, 400)).toBe(-CARD_THROW_MAX_ROTATION_DEG);
+  });
+
+  it('whips further than MAX once the card flies past the board edge', () => {
+    const past = computeCardRotation(500, 400); // base 12 + (100 * 0.06) = 18
+    expect(past).toBeGreaterThan(CARD_THROW_MAX_ROTATION_DEG);
+    expect(computeCardRotation(600, 400)).toBeGreaterThan(past);
+  });
+
+  it('is sign-symmetric', () => {
+    expect(computeCardRotation(-220, 380)).toBeCloseTo(-computeCardRotation(220, 380), 5);
+    expect(computeCardRotation(-700, 380)).toBeCloseTo(-computeCardRotation(700, 380), 5);
+  });
+
+  it('adds no extra spin before layout (boardWidth 0)', () => {
+    // Falls back to the clamped linear tilt; never the past-edge branch.
+    expect(computeCardRotation(800, 0)).toBe(CARD_THROW_MAX_ROTATION_DEG);
+  });
+});
+
+describe('computeThrowDroop', () => {
+  it('does not droop while the card is still within the board box', () => {
+    expect(computeThrowDroop(0, 400)).toBe(0);
+    expect(computeThrowDroop(300, 400)).toBe(0);
+    expect(computeThrowDroop(-400, 400)).toBe(0);
+  });
+
+  it('grows past the edge and caps at CARD_THROW_DROOP a board-width beyond', () => {
+    expect(computeThrowDroop(600, 400)).toBeCloseTo(CARD_THROW_DROOP * 0.5, 5);
+    expect(computeThrowDroop(800, 400)).toBe(CARD_THROW_DROOP);
+    expect(computeThrowDroop(2000, 400)).toBe(CARD_THROW_DROOP);
+  });
+
+  it('returns 0 before layout (boardWidth 0)', () => {
+    expect(computeThrowDroop(500, 0)).toBe(0);
+  });
+});
+
+describe('computeStackedCardScale', () => {
+  it('rests at the min scale and reaches 1 at the threshold', () => {
+    expect(computeStackedCardScale(0)).toBe(STACKED_CARD_MIN_SCALE);
+    expect(computeStackedCardScale(1)).toBe(1);
+  });
+
+  it('interpolates and stays monotonic', () => {
+    expect(computeStackedCardScale(0.5)).toBeCloseTo(0.96, 5);
+    expect(computeStackedCardScale(0.25)).toBeLessThan(computeStackedCardScale(0.75));
+  });
+
+  it('clamps out-of-range progress', () => {
+    expect(computeStackedCardScale(-1)).toBe(STACKED_CARD_MIN_SCALE);
+    expect(computeStackedCardScale(2)).toBe(1);
+  });
+});
+
+describe('computeStackedCardOpacity', () => {
+  it('rests at the min opacity and reaches 1 at the threshold', () => {
+    expect(computeStackedCardOpacity(0)).toBe(STACKED_CARD_MIN_OPACITY);
+    expect(computeStackedCardOpacity(1)).toBe(1);
+    expect(computeStackedCardOpacity(0.5)).toBeCloseTo(0.8, 5);
+  });
+});
+
+describe('computeStackedCardRise', () => {
+  it('starts raised and sinks into place by the threshold', () => {
+    expect(computeStackedCardRise(0)).toBe(STACKED_CARD_RISE);
+    expect(computeStackedCardRise(1)).toBe(0);
+  });
+});
+
+describe('computeThrowExitTarget', () => {
+  it('targets the screen width plus the off-screen pad', () => {
+    expect(computeThrowExitTarget(390)).toBe(390 + CARD_THROW_OFFSCREEN_PAD);
   });
 });

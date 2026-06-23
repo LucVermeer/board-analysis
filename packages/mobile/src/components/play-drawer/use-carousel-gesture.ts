@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type ComponentType, type RefObject } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
-import { SWIPE_THRESHOLD, DIRECTION_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
+import {
+  SWIPE_THRESHOLD,
+  DIRECTION_THRESHOLD,
+  EXIT_DURATION,
+  CLIP_EXIT_DURATION,
+  CARD_THROW_OFFSCREEN_PAD,
+} from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
 
@@ -10,9 +16,18 @@ type UseCarouselGestureOptions = {
   onSwipePrevious: () => void;
   canSwipeNext: boolean;
   canSwipePrevious: boolean;
+  /** Width the slide-off is measured in (the contained board width). */
   boardWidth: number;
+  /** Full screen width — the card flings to ±(screenWidth + pad) so the tilted
+   *  card fully clears the viewport (Tinder throw), past its letterbox margins. */
+  screenWidth: number;
   enabled?: boolean;
   isZoomedSV?: SharedValue<boolean>;
+  /** RNGH ref to the surrounding scroll. Declares the swipe Pan simultaneous with
+   *  it so vertical drags reach the scroll while horizontal ones drive the
+   *  carousel. Typed as RNGH's GestureRef shape so the method call needs no cast;
+   *  at runtime it holds the RN ScrollView instance. */
+  scrollRef?: RefObject<ComponentType | undefined | null>;
   /** When true (Reduce Motion), commit the swap instantly with no slide-off /
    *  spring snap-back. The gesture still works; only the animation is dropped. */
   reduceMotion?: boolean;
@@ -32,8 +47,10 @@ export function useCarouselGesture({
   canSwipeNext,
   canSwipePrevious,
   boardWidth,
+  screenWidth,
   enabled = true,
   isZoomedSV,
+  scrollRef,
   reduceMotion = false,
 }: UseCarouselGestureOptions): UseCarouselGestureReturn {
   const translateX = useSharedValue(0);
@@ -62,6 +79,15 @@ export function useCarouselGesture({
   useEffect(() => {
     boardWidthSV.value = boardWidth;
   }, [boardWidth, boardWidthSV]);
+
+  // Fling distance rides the FULL screen width (+ pad) so the tilted card clears
+  // the viewport, while the slide-off snap-back still uses board width. Mirrored
+  // for the same reason as boardWidth — a layout change must not rebuild the
+  // gesture.
+  const screenWidthSV = useSharedValue(screenWidth);
+  useEffect(() => {
+    screenWidthSV.value = screenWidth;
+  }, [screenWidth, screenWidthSV]);
 
   // Mirror swipe availability into shared values for the same reason — these
   // flip at queue boundaries (and on queue mutations during the commit window),
@@ -131,112 +157,124 @@ export function useCarouselGesture({
   const startTouchX = useSharedValue(0);
   const startTouchY = useSharedValue(0);
 
-  const gesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .manualActivation(true)
-        .onTouchesDown((event) => {
-          'worklet';
-          directionLock.value = 0;
-          const touch = event.allTouches[0];
-          if (touch) {
-            startTouchX.value = touch.absoluteX;
-            startTouchY.value = touch.absoluteY;
-          }
-        })
-        .onTouchesMove((event, state) => {
-          'worklet';
-          if (!enabledSV.value || isZoomedSV?.value) {
-            state.fail();
-            return;
-          }
-          if (directionLock.value === 1) {
-            state.activate();
-            return;
-          }
-          if (directionLock.value === -1) {
-            state.fail();
-            return;
-          }
-          const touch = event.allTouches[0];
-          if (!touch) return;
-          const dx = touch.absoluteX - startTouchX.value;
-          const dy = touch.absoluteY - startTouchY.value;
-          const absX = Math.abs(dx);
-          const absY = Math.abs(dy);
-          if (absX <= DIRECTION_THRESHOLD && absY <= DIRECTION_THRESHOLD) return;
-          if (absX > absY) {
-            directionLock.value = 1;
-            state.activate();
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .manualActivation(true)
+      .onTouchesDown((event) => {
+        'worklet';
+        directionLock.value = 0;
+        const touch = event.allTouches[0];
+        if (touch) {
+          startTouchX.value = touch.absoluteX;
+          startTouchY.value = touch.absoluteY;
+        }
+      })
+      .onTouchesMove((event, state) => {
+        'worklet';
+        if (!enabledSV.value || isZoomedSV?.value) {
+          state.fail();
+          return;
+        }
+        if (directionLock.value === 1) {
+          state.activate();
+          return;
+        }
+        if (directionLock.value === -1) {
+          state.fail();
+          return;
+        }
+        const touch = event.allTouches[0];
+        if (!touch) return;
+        const dx = touch.absoluteX - startTouchX.value;
+        const dy = touch.absoluteY - startTouchY.value;
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+        if (absX <= DIRECTION_THRESHOLD && absY <= DIRECTION_THRESHOLD) return;
+        if (absX > absY) {
+          directionLock.value = 1;
+          state.activate();
+        } else {
+          directionLock.value = -1;
+          state.fail();
+        }
+      })
+      .onStart(() => {
+        'worklet';
+        hasTriggeredHaptic.value = false;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (isAnimating.value) return;
+
+        let offset = event.translationX;
+
+        if (offset < 0 && !canSwipeNextSV.value) offset = 0;
+        if (offset > 0 && !canSwipePreviousSV.value) offset = 0;
+
+        translateX.value = offset;
+
+        if (Math.abs(offset) >= SWIPE_THRESHOLD && !hasTriggeredHaptic.value) {
+          hasTriggeredHaptic.value = true;
+          runOnJS(triggerHaptic)();
+        }
+      })
+      .onEnd(() => {
+        'worklet';
+        if (isAnimating.value) return;
+
+        const offset = translateX.value;
+        const skipAnimation = reduceMotionSV.value;
+
+        if (offset < -SWIPE_THRESHOLD && canSwipeNextSV.value) {
+          if (skipAnimation) {
+            translateX.value = 0;
+            runOnJS(commitImmediate)('next');
           } else {
-            directionLock.value = -1;
-            state.fail();
+            isAnimating.value = true;
+            // Fling fully off-screen (Tinder throw) — past the screen edge so
+            // the tilt/letterbox clears; the new climb swaps in at CLIP_EXIT.
+            translateX.value = withTiming(-(screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD), {
+              duration: EXIT_DURATION,
+            });
+            runOnJS(scheduleCommit)('next');
           }
-        })
-        .onStart(() => {
-          'worklet';
-          hasTriggeredHaptic.value = false;
-        })
-        .onUpdate((event) => {
-          'worklet';
-          if (isAnimating.value) return;
-
-          let offset = event.translationX;
-
-          if (offset < 0 && !canSwipeNextSV.value) offset = 0;
-          if (offset > 0 && !canSwipePreviousSV.value) offset = 0;
-
-          translateX.value = offset;
-
-          if (Math.abs(offset) >= SWIPE_THRESHOLD && !hasTriggeredHaptic.value) {
-            hasTriggeredHaptic.value = true;
-            runOnJS(triggerHaptic)();
-          }
-        })
-        .onEnd(() => {
-          'worklet';
-          if (isAnimating.value) return;
-
-          const offset = translateX.value;
-          const skipAnimation = reduceMotionSV.value;
-
-          if (offset < -SWIPE_THRESHOLD && canSwipeNextSV.value) {
-            if (skipAnimation) {
-              translateX.value = 0;
-              runOnJS(commitImmediate)('next');
-            } else {
-              isAnimating.value = true;
-              translateX.value = withTiming(-boardWidthSV.value, { duration: EXIT_DURATION });
-              runOnJS(scheduleCommit)('next');
-            }
-          } else if (offset > SWIPE_THRESHOLD && canSwipePreviousSV.value) {
-            if (skipAnimation) {
-              translateX.value = 0;
-              runOnJS(commitImmediate)('previous');
-            } else {
-              isAnimating.value = true;
-              translateX.value = withTiming(boardWidthSV.value, { duration: EXIT_DURATION });
-              runOnJS(scheduleCommit)('previous');
-            }
+        } else if (offset > SWIPE_THRESHOLD && canSwipePreviousSV.value) {
+          if (skipAnimation) {
+            translateX.value = 0;
+            runOnJS(commitImmediate)('previous');
           } else {
-            translateX.value = skipAnimation ? 0 : withSpring(0, springs.interactive);
+            isAnimating.value = true;
+            translateX.value = withTiming(screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD, {
+              duration: EXIT_DURATION,
+            });
+            runOnJS(scheduleCommit)('previous');
           }
-        }),
-    [
-      canSwipeNextSV,
-      canSwipePreviousSV,
-      boardWidthSV,
-      translateX,
-      isAnimating,
-      hasTriggeredHaptic,
-      isZoomedSV,
-      enabledSV,
-      reduceMotionSV,
-      directionLock,
-      startTouchX,
-      startTouchY,
-    ],
-  );
+        } else {
+          translateX.value = skipAnimation ? 0 : withSpring(0, springs.interactive);
+        }
+      });
+    // Declare the swipe Pan simultaneous with the surrounding RNGH ScrollView so a
+    // horizontal swipe runs without the scroll cancelling it, while a vertical drag
+    // (the Pan fails on its direction-lock) still reaches the scroll. The plain RN
+    // ScrollView the play route briefly used after the gorhom removal wasn't in
+    // RNGH's tree, so this Pan had no peer to negotiate with and went dead.
+    return scrollRef ? pan.simultaneousWithExternalGesture(scrollRef) : pan;
+  }, [
+    canSwipeNextSV,
+    canSwipePreviousSV,
+    boardWidthSV,
+    screenWidthSV,
+    translateX,
+    isAnimating,
+    hasTriggeredHaptic,
+    isZoomedSV,
+    enabledSV,
+    reduceMotionSV,
+    directionLock,
+    startTouchX,
+    startTouchY,
+    scrollRef,
+  ]);
 
   return { gesture, translateX, isAnimating };
 }
