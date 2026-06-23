@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { View, StyleSheet, type TextStyle } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { SwitchRow } from '../SwitchRow';

@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { SessionDetailTick, SessionFeedParticipant, SocialEntityType } from '@boardsesh/shared-schema';
 import { formatTickAbsoluteTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';

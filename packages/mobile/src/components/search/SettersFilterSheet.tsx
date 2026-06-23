@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, TextInput } from 'react-native';
-import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
-import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
+import type { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardSearchConfig } from '@boardsesh/climb-filters';
 import { ModalSheet } from '../ModalSheet';

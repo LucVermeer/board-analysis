@@ -1,32 +1,16 @@
-// A bottom sheet that renders ABOVE the persistent queue bar. The bar is
-// rendered after the screen Stack in app/_layout (so it floats over screens),
-// which means an in-tree `Sheet` (gorhom `BottomSheet`) draws *under* it. This
-// uses `BottomSheetModal` + a `FullWindowOverlay` container on iOS (mirroring
-// `LogAscentSheet`) so the sheet portals over the bar. Same prop surface as
-// `Sheet`, driven imperatively via ref (`present()` / `dismiss()`).
+// Modal bottom sheet, presented imperatively via ref (`present()` / `dismiss()`).
+// Migrated off @gorhom/bottom-sheet to Expo's native bottom sheet (#3167): the
+// native modal already presents above root chrome (the queue bar), so the old
+// FullWindowOverlay container is gone, and the native sheet supplies the scrim,
+// handle and (iOS 26) glass background — retiring SheetBackdrop / GlassSheetBackground.
 
 import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from './SheetBackdrop';
-import { FullWindowOverlay } from 'react-native-screens';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { BottomSheetModal, BottomSheetScrollView, type BottomSheetMethods } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassSheetBackground } from './GlassSheetBackground';
 import { hapticMedium } from '../lib/haptics';
-import { sheetStyles, spacing } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
-
-// iOS renders the modal in a native window overlay so it sits above the queue
-// bar; Android's modal portal already covers it.
-function ModalSheetContainer({ children }: { children?: ReactNode }) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-const modalContainerComponent = Platform.OS === 'ios' ? ModalSheetContainer : undefined;
 
 type ModalSheetProps = {
   children: ReactNode;
@@ -39,17 +23,13 @@ type ModalSheetProps = {
   scrollable?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
   footer?: ReactNode;
-  // How this modal behaves when presented over another open modal. `push`
-  // (default) stacks above it (so the Play Drawer stays beneath); `replace`
-  // dismisses the one below.
+  // Legacy gorhom knobs kept for source-compatibility; the native sheet handles
+  // stacking, keyboard avoidance and the background itself, so these no-op now.
   stackBehavior?: 'push' | 'replace' | 'switch';
-  // Frosted Liquid-Glass background (the same material the Play Drawer uses).
-  // Default. Opt out (`glass={false}`) for the flat opaque secondary-background
-  // surface.
   glass?: boolean;
 };
 
-export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function ModalSheet(
+export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(function ModalSheet(
   {
     children,
     snapPoints: customSnapPoints,
@@ -60,27 +40,12 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
     scrollable = false,
     contentContainerStyle,
     footer,
-    stackBehavior = 'push',
-    glass = true,
   },
   ref,
 ) {
   const { systemColors, sheet } = useTheme();
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
-
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={sheet.scrimOpacity}
-        pressBehavior="close"
-      />
-    ),
-    [sheet.scrimOpacity],
-  );
 
   const handleChange = useCallback(
     (index: number) => {
@@ -90,19 +55,21 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
     [onChange],
   );
 
-  const backgroundStyle = {
-    ...sheetStyles.background,
-    ...sheet.corners,
-    backgroundColor: systemColors.secondaryBackground,
-  };
+  const body = scrollable ? (
+    <BottomSheetScrollView
+      style={styles.content}
+      contentContainerStyle={contentContainerStyle}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
+      {children}
+    </BottomSheetScrollView>
+  ) : (
+    <View style={[styles.content, contentContainerStyle]}>{children}</View>
+  );
 
-  // FOLLOW-UP: this still renders the scrollable body and footer as flex siblings
-  // inside a single BottomSheetView — the anti-pattern Sheet.tsx moved away from
-  // (it now uses gorhom's native sticky footer via `footerComponent`). Nesting the
-  // scrollview inside a BottomSheetView breaks single-finger scrolling on Android
-  // and lets the body overflow the footer. PlaylistFormSheet hits this path with
-  // footer + scrollable. Port ModalSheet to the same `footerComponent` pattern.
-  const footerNode = footer ? (
+  const footerBar = footer ? (
     <View
       style={[
         styles.footer,
@@ -124,48 +91,18 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
       snapPoints={enableDynamicSizing ? undefined : snapPoints}
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
-      stackBehavior={stackBehavior}
-      backdropComponent={renderBackdrop}
-      backgroundComponent={glass ? GlassSheetBackground : undefined}
-      backgroundStyle={glass ? undefined : backgroundStyle}
       handleIndicatorStyle={sheet.handleStyle}
-      containerComponent={modalContainerComponent}
       onChange={handleChange}
       onDismiss={onDismiss}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
       style={styles.sheet}
     >
       {footer ? (
-        <BottomSheetView style={styles.content}>
-          {scrollable ? (
-            <BottomSheetScrollView
-              style={styles.scrollView}
-              contentContainerStyle={contentContainerStyle}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-            >
-              {children}
-            </BottomSheetScrollView>
-          ) : (
-            children
-          )}
-          {footerNode}
-        </BottomSheetView>
-      ) : scrollable ? (
-        <BottomSheetScrollView
-          style={styles.content}
-          contentContainerStyle={contentContainerStyle}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          {children}
-        </BottomSheetScrollView>
+        <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {body}
+          {footerBar}
+        </KeyboardAvoidingView>
       ) : (
-        <BottomSheetView style={styles.content}>{children}</BottomSheetView>
+        body
       )}
     </BottomSheetModal>
   );
@@ -185,16 +122,15 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  content: {
+  fill: {
     flex: 1,
   },
-  scrollView: {
+  content: {
     flex: 1,
   },
   footer: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
-    // borderTopColor is applied inline from systemColors.separator (scheme-aware).
   },
 });

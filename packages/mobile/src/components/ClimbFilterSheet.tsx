@@ -1,19 +1,12 @@
-import { useCallback, useMemo, useRef, useState, useEffect, type PropsWithChildren, type SetStateAction } from 'react';
-import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import { useCallback, useMemo, useRef, useState, useEffect, type ComponentRef, type SetStateAction } from 'react';
+import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
 // react-native-gesture-handler's ScrollView (not the bare RN one) for the
 // horizontal sort-by chip rail: nested inside the sheet's vertical
 // BottomSheetScrollView, a plain RN ScrollView won't scroll on Android because
 // the parent scroll/pan gestures capture the touch. The gesture-handler
 // scrollable coordinates nested scrolling correctly.
 import { ScrollView } from 'react-native-gesture-handler';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  type BottomSheetBackdropProps,
-  type BottomSheetScrollViewMethods,
-} from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from './SheetBackdrop';
-import { FullWindowOverlay } from 'react-native-screens';
+import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -37,7 +30,6 @@ import {
   type BoardSearchConfig,
 } from '@boardsesh/climb-filters';
 import { Text } from './Text';
-import { GlassSheetBackground } from './GlassSheetBackground';
 import { Button } from './Button';
 import { SegmentedControl } from './SegmentedControl';
 import { StarRating } from './StarRating';
@@ -92,12 +84,6 @@ const STATUS_OPTIONS_UI = ['any', 'drafts', 'projects'] as const;
 // status into one control. undefined = Any; 2 = Established (≥2 ascents).
 const POPULARITY_BUCKETS: ReadonlyArray<number | undefined> = [undefined, 2, 10, 100, 1000];
 const PREWARM_BOARD_HOLDS_AFTER_REFINE_EXPAND_MS = 150;
-
-// Portal the sheet above the tab bar / persistent queue bar on iOS.
-function FilterSheetContainer({ children }: PropsWithChildren) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-const modalContainerComponent = Platform.OS === 'ios' ? FilterSheetContainer : undefined;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -156,7 +142,7 @@ export function ClimbFilterSheet({
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
-  const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
+  const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
   const refinePrewarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLocalDraftEditsRef = useRef(false);
   const boardName = boardConfig?.boardName ?? '';
@@ -386,13 +372,6 @@ export function ClimbFilterSheet({
     setSectionResetKey((key) => key + 1);
   }, [updateLocalBoardFilters, updateLocalFilters]);
 
-  const renderBackdrop = useCallback(
-    (backdropProps: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...backdropProps} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
-    ),
-    [],
-  );
-
   const openSetters = useCallback(() => {
     if (!boardConfig) return;
     setMountedChildSheet('setters');
@@ -548,19 +527,14 @@ export function ClimbFilterSheet({
     <>
       <BottomSheetModal
         ref={sheetRef}
-        name="climb-filter"
         index={0}
         snapPoints={snapPoints}
         enableDynamicSizing={false}
-        stackBehavior="push"
-        containerComponent={modalContainerComponent}
         enablePanDownToClose={!childSheetOpen}
         enableContentPanningGesture={!childSheetOpen}
         enableHandlePanningGesture={!childSheetOpen}
-        backdropComponent={renderBackdrop}
         onDismiss={handleSheetDismiss}
         handleIndicatorStyle={styles.indicator}
-        backgroundComponent={GlassSheetBackground}
       >
         <View style={styles.header}>
           <Text variant="title3">{t('mobile.filter.title')}</Text>

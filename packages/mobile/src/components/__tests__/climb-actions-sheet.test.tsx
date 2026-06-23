@@ -19,7 +19,7 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
 }));
 
-vi.mock('@gorhom/bottom-sheet', () => ({ BottomSheetModal: function BottomSheetModal() {} }));
+vi.mock('@expo/ui/community/bottom-sheet', () => ({ BottomSheetModal: function BottomSheetModal() {} }));
 
 vi.mock('../ModalSheet', async () => {
   const React = await vi.importActual<typeof import('react')>('react');

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import BottomSheet, { BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from './SheetBackdrop';
+import BottomSheet, { BottomSheetView } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
@@ -37,11 +36,6 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
     }
   }, [mounted]);
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => <SheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
-    [],
-  );
-
   const handleClose = useCallback(() => {
     setMounted(false);
     onDismiss();
@@ -58,7 +52,6 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
       enableDynamicSizing
       enablePanDownToClose
       onClose={handleClose}
-      backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: systemColors.secondaryBackground }}
       handleIndicatorStyle={sheetStyles.indicator}
     >

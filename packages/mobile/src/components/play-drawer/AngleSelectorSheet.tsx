@@ -1,14 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
-import { View, Pressable, StyleSheet, Platform } from 'react-native';
-import { BottomSheetModal, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
-import { FullWindowOverlay } from 'react-native-screens';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { BottomSheetModal, BottomSheetView } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { ANGLES } from '@boardsesh/board-config';
 import { Text } from '../Text';
-import { GlassSheetBackground } from '../GlassSheetBackground';
 import { useClimbStatsHistory } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { buildAngleStatsMap, type AngleStats } from './community-utils';
@@ -29,14 +26,6 @@ type AngleSelectorSheetProps = {
   currentAngle: number;
   onAngleChange: (angle: number) => void;
 };
-
-// Render the modal in a FullWindowOverlay on iOS so it portals above the play
-// drawer + tab/queue bars — the proven recipe shared by ModalSheet and
-// LogAscentSheet (BottomSheetModal + stackBehavior=push + static BottomSheetView).
-function AngleSelectorModalContainer({ children }: PropsWithChildren) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-const modalContainerComponent = Platform.OS === 'ios' ? AngleSelectorModalContainer : undefined;
 
 export const AngleSelectorSheet = memo(function AngleSelectorSheet({
   visible,
@@ -66,8 +55,8 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
   // diagram, grade, stars and sends all reflect this as the user slides.
   const [selectedAngle, setSelectedAngle] = useState(currentAngle);
 
-  // The sheet stays mounted as a PlayDrawer sibling (stackBehavior=push needs an
-  // always-mounted modal), so gate the stats-history fetch on the sheet actually
+  // The sheet stays mounted as a PlayDrawer sibling (imperative present()/dismiss()
+  // model), so gate the stats-history fetch on the sheet actually
   // being presented — otherwise CLIMB_STATS_HISTORY would fire for every climb the
   // user swipes through in the drawer, even when they never open the angle selector
   // (mirrors the QueueList active-gate). React Query's 5-min staleTime keeps stats
@@ -104,26 +93,14 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
     onClose();
   }, [onAngleChange, selectedAngle, onClose]);
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
-    ),
-    [],
-  );
-
   return (
     <BottomSheetModal
       ref={sheetRef}
-      name="angle-selector"
       index={0}
-      stackBehavior="push"
       snapPoints={snapPoints}
-      containerComponent={modalContainerComponent}
       enablePanDownToClose
       onDismiss={handleDismiss}
-      backdropComponent={renderBackdrop}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundComponent={GlassSheetBackground}
     >
       <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom + spacing[4] }]}>
         <Text variant="headline" style={styles.title}>

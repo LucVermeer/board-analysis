@@ -29,7 +29,7 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
-vi.mock('@gorhom/bottom-sheet', () => ({
+vi.mock('@expo/ui/community/bottom-sheet', () => ({
   BottomSheetModal: function BottomSheetModal() {
     return null;
   },

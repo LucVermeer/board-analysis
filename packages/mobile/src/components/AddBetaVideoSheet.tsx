@@ -9,7 +9,7 @@
 // can present above the play drawer's own modal via stackBehavior="push".
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { BottomSheetTextInput, type BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput, type BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';

@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, Platform, StyleSheet } from 'react-native';
-import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput, type BottomSheet } from '@expo/ui/community/bottom-sheet';
 import DateTimePicker, {
   DateTimePickerAndroid,
   type DateTimePickerEvent,

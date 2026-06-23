@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import { BottomSheetFlatList, type BottomSheetFlatListMethods } from '@gorhom/bottom-sheet';
+import { View, Pressable, StyleSheet, type FlatList } from 'react-native';
+import { BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { getPlaylistSuggestedClimbs, createPlaylistSuggestionSource, getQueueBoardKey } from '@boardsesh/queue';
@@ -84,7 +84,7 @@ export function QueueList({
 }: QueueListProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
-  const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
+  const flatListRef = useRef<FlatList<QueueListRow> | null>(null);
 
   const { flatRows, currentItemFlatIndex } = useMemo(
     () =>

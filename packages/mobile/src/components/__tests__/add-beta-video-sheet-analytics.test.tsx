@@ -40,7 +40,7 @@ vi.mock('react-native', () => ({
 // The paste field is a gorhom `BottomSheetTextInput` (so the host sheet lifts it
 // above the keyboard). Mock it here to capture onChangeText and to keep the real
 // module — which pulls in reanimated — out of the jsdom run.
-vi.mock('@gorhom/bottom-sheet', () => ({
+vi.mock('@expo/ui/community/bottom-sheet', () => ({
   BottomSheetTextInput: ({ onChangeText }: { onChangeText?: (text: string) => void }) => {
     captured.onChangeText = onChangeText ?? null;
     return createElement('input');

@@ -49,7 +49,7 @@ type BottomSheetFlatListMockProps = {
   keyExtractor?: (item: SetterStat) => string;
 };
 
-vi.mock('@gorhom/bottom-sheet', () => ({
+vi.mock('@expo/ui/community/bottom-sheet', () => ({
   BottomSheetFlatList: ({ data = [], extraData, renderItem, keyExtractor }: BottomSheetFlatListMockProps) => {
     flatListSnapshots.push({ renderItem, extraData });
     return createElement(

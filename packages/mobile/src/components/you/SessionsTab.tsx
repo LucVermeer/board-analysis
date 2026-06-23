@@ -3,7 +3,7 @@ import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { SessionFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { ScreenTitle } from '../ScreenTitle';

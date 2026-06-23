@@ -10,7 +10,7 @@ vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
-vi.mock('@gorhom/bottom-sheet', () => ({ BottomSheetModal: function BottomSheetModal() {} }));
+vi.mock('@expo/ui/community/bottom-sheet', () => ({ BottomSheetModal: function BottomSheetModal() {} }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../ModalSheet', async () => {
   const React = await vi.importActual<typeof import('react')>('react');

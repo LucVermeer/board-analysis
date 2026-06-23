@@ -31,10 +31,7 @@ type SheetMockProps = {
   snapPoints?: (string | number)[];
 };
 type SheetViewMockProps = { children?: ReactNode; style?: unknown };
-// SheetBackdrop pulls in react-native-gesture-handler + reanimated; this suite
-// stubs the whole sheet, so stub the backdrop too (it isn't exercised here).
-vi.mock('../SheetBackdrop', () => ({ SheetBackdrop: () => null }));
-vi.mock('@gorhom/bottom-sheet', () => ({
+vi.mock('@expo/ui/community/bottom-sheet', () => ({
   default: forwardRef(({ children, enableDynamicSizing, snapPoints }: SheetMockProps, ref: Ref<unknown>) => {
     useImperativeHandle(ref, () => ({ expand: sheet.expand }));
     return createElement(

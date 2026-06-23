@@ -2,13 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { Platform, View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  type BottomSheetBackdropProps,
-  type BottomSheetBackgroundProps,
-} from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
+import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
@@ -32,7 +26,6 @@ import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
 import { useBleControlSheet } from '../../providers/ble-control-sheet-provider';
-import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
@@ -129,10 +122,6 @@ const SNAP_POINTS = ['100%'];
 // Fallback used for the first-screen reserve before the Beta Videos header has
 // been measured, so the board fits without a visible jump on first open.
 const DEFAULT_BETA_HEADER_HEIGHT = 52;
-// No gorhom handle — at topInset 0 it would sit under the notch. A grabber is
-// rendered inside the content instead; swipe-to-close still works via
-// enablePanDownToClose + enableContentPanningGesture.
-const renderNoHandle = () => null;
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
   {
@@ -359,13 +348,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [requestOpen],
   );
 
-  const handleSheetAnimate = useCallback(
-    (_fromIndex: number, toIndex: number) => {
-      handleSheetAnimateIndex(toIndex);
-    },
-    [handleSheetAnimateIndex],
-  );
-
   const handleClose = useCallback(() => {
     setDrawerPreviewItem(null);
     setDrawerPreviewSuggestionSource(null);
@@ -559,22 +541,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [addToQueue, setCurrentClimb],
   );
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
-    ),
-    [],
-  );
-
-  // Glass background with squared-off top corners so the sheet reads as a
-  // full-screen takeover, not a rounded panel. `opaqueMaterial` makes the
-  // takeover a denser, more opaque surface than the lighter glass on the other
-  // sheets, while staying light in light mode.
-  const renderBackground = useCallback(
-    (props: BottomSheetBackgroundProps) => <GlassSheetBackground {...props} flatTop opaqueMaterial />,
-    [],
-  );
-
   // The first screen is sized so the action bar stays visible and the Beta
   // Videos header teases at the bottom across board sizes — the carousel fits
   // the leftover space (SwipeBoardCarousel contains the board). Reserve the
@@ -596,14 +562,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         ref={sheetRef}
         snapPoints={SNAP_POINTS}
         index={0}
-        topInset={0}
         enablePanDownToClose
         enableContentPanningGesture={!subDrawerOpen}
         enableHandlePanningGesture={!subDrawerOpen}
-        backdropComponent={renderBackdrop}
-        backgroundComponent={renderBackground}
-        handleComponent={renderNoHandle}
-        onAnimate={handleSheetAnimate}
+        // PlayDrawer draws its own close affordance in content, so hide the
+        // native drag indicator (the native sheet owns the scrim + glass background).
+        handleComponent={null}
+        // The native sheet has no onAnimate; onChange settles at the new index,
+        // which is when the deferred-open machinery should flush heavy content.
+        onChange={handleSheetAnimateIndex}
         onDismiss={handleClose}
       >
         <BottomSheetScrollView

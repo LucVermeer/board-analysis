@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import BottomSheet from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, HoldState, LitUpHoldsMap } from '@boardsesh/shared-schema';
 import { Sheet } from '../Sheet';

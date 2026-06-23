@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import { ModalSheet } from '../ModalSheet';
@@ -59,9 +59,9 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
   const [error, setError] = useState<string | null>(null);
 
   // Seed (edit) or clear (create) the fields when the sheet opens, then drive
-  // the gorhom modal off the `visible` prop. `isPresentedRef` guards against
-  // calling dismiss() on a not-presented modal (which makes the next present()
-  // a no-op) and is reset in onDismiss so a swipe-dismiss + reopen works.
+  // the modal off the `visible` prop. `isPresentedRef` guards against calling
+  // dismiss() on a not-presented modal (which makes the next present() a no-op)
+  // and is reset in onDismiss so a swipe-dismiss + reopen works.
   const isPresentedRef = useRef(false);
   useEffect(() => {
     if (visible && !isPresentedRef.current) {

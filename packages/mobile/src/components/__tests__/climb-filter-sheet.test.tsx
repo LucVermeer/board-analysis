@@ -80,7 +80,7 @@ vi.mock('react-native-gesture-handler', () => ({
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 
-vi.mock('@gorhom/bottom-sheet', () => ({
+vi.mock('@expo/ui/community/bottom-sheet', () => ({
   BottomSheetModal: forwardRef<BottomSheetModalHandle, { children?: ReactNode }>(function BottomSheetModal(
     { children, ...props },
     ref,
@@ -183,7 +183,6 @@ vi.mock('../../theme/tokens', () => ({
 vi.mock('../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../GlassSheetBackground', () => ({ GlassSheetBackground: () => null }));
 vi.mock('../Button', () => ({
   Button: ({ title, onPress }: { title: string; onPress?: () => void }) =>
     createElement('button', { onClick: onPress }, title),

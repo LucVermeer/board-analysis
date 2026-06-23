@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import BottomSheet, {
-  BottomSheetScrollView,
-  BottomSheetHandle,
-  type BottomSheetBackdropProps,
-  type BottomSheetHandleProps,
-} from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
+// Migrated off @gorhom/bottom-sheet to Expo's native bottom sheet (#3167). The
+// native sheet draws its own scrim + drag handle, so the measured-handle peek
+// machinery is replaced by a small fixed reserve for the native grabber.
+import BottomSheet, { BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing, sheetStyles } from '../../theme/tokens';
@@ -48,6 +45,11 @@ type CreateDrawerProps = {
 // peek snap itself is measured from the real above-fold height).
 const ABOVE_FOLD_CHROME = 300;
 
+// The native sheet's drag grabber sits in the sheet chrome above the content;
+// reserve a small fixed amount for it in the peek snap-point (replaces the old
+// runtime-measured gorhom handle height).
+const NATIVE_HANDLE_RESERVE = spacing[6];
+
 /**
  * The create-climb drawer — one Play Drawer-style bottom sheet. Peek shows the
  * header (editable name + start/finish), the board, and the two-row action bar
@@ -69,9 +71,8 @@ export function CreateDrawer({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const sheetRef = useRef<BottomSheet>(null);
 
-  // Measured contributors to the peek snap-point — same runtime-measurement
-  // approach as the Play Drawer rather than hardcoded heights.
-  const [handleHeight, setHandleHeight] = useState(0);
+  // Measured above-fold height drives the peek snap-point (the native grabber is
+  // a fixed reserve now, not a measured custom handle).
   const [aboveFoldHeight, setAboveFoldHeight] = useState(0);
   // Live snap index, kept current via onChange so the re-snap below targets the
   // index the user is actually at (not a one-shot reset that breaks on rotation).
@@ -95,19 +96,15 @@ export function CreateDrawer({
   const setHeightIfChanged = (setter: (updater: (prev: number) => number) => void, measured: number) => {
     setter((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
   };
-  const handleHandleLayout = useCallback((event: LayoutChangeEvent) => {
-    setHeightIfChanged(setHandleHeight, event.nativeEvent.layout.height);
-  }, []);
   const handleAboveFoldLayout = useCallback((event: LayoutChangeEvent) => {
     setHeightIfChanged(setAboveFoldHeight, event.nativeEvent.layout.height);
   }, []);
 
-  // handle + content paddingTop + above-fold (header + board + action bar) +
-  // bottom safe area + a reveal margin so a hint of the below-fold form peeks.
+  // native grabber reserve + content paddingTop + above-fold (header + board +
+  // action bar) + bottom safe area + a reveal margin so a hint of the below-fold
+  // form peeks.
   const peekHeight =
-    handleHeight > 0 && aboveFoldHeight > 0
-      ? handleHeight + spacing[2] + aboveFoldHeight + insets.bottom + spacing[3]
-      : 0;
+    aboveFoldHeight > 0 ? NATIVE_HANDLE_RESERVE + spacing[2] + aboveFoldHeight + insets.bottom + spacing[3] : 0;
 
   // Re-snap to the current index whenever the peek height changes: the first
   // measurement (fallback → measured peek) and any re-layout (rotation resizes
@@ -127,24 +124,6 @@ export function CreateDrawer({
     [peekHeight],
   );
 
-  // Dim the scene behind at every snap. Tapping the backdrop or swiping down
-  // dismisses the drawer (autosave keeps any in-progress draft).
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
-    ),
-    [],
-  );
-
-  const HandleComponent = useMemo(
-    () => (props: BottomSheetHandleProps) => (
-      <View onLayout={handleHandleLayout}>
-        <BottomSheetHandle {...props} indicatorStyle={sheetStyles.indicator} />
-      </View>
-    ),
-    [handleHandleLayout],
-  );
-
   const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
   return (
@@ -152,16 +131,12 @@ export function CreateDrawer({
       ref={sheetRef}
       index={0}
       snapPoints={snapPoints}
-      topInset={insets.top}
       enablePanDownToClose
       enableContentPanningGesture={!subSheetOpen}
       enableHandlePanningGesture={!subSheetOpen}
-      backdropComponent={renderBackdrop}
-      handleComponent={HandleComponent}
       backgroundStyle={backgroundStyle}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
       onChange={handleChange}
       onClose={onClose}
     >

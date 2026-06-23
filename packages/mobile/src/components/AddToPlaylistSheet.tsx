@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View, StyleSheet } from 'react-native';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { ModalSheet } from './ModalSheet';
@@ -51,7 +51,7 @@ function AddToPlaylistSheet({
   const [createVisible, setCreateVisible] = useState(false);
   const [creating, setCreating] = useState(false);
   const sheetRef = useRef<BottomSheetModal>(null);
-  // Track presented state so we never dismiss() a not-presented modal (gorhom
+  // Track presented state so we never dismiss() a not-presented modal (which
   // then no-ops the next present()). Mirrors LogAscentSheet.
   const isPresentedRef = useRef(false);
   const createRequestIdRef = useRef(0);

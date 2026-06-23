@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type BottomSheet from '@expo/ui/community/bottom-sheet';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../src/lib/graphql/hooks';
 import { useActiveBoard, useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
