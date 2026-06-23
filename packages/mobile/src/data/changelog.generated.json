@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-23T02:55:55.586Z",
+  "generatedAt": "2026-06-23T15:59:08.791Z",
   "entries": [
+    {
+      "prNumber": 3117,
+      "category": "new",
+      "title": "Bring your Instagram climbing beta into Boardsesh. On your Instagram profile, run the quick scan, paste it into Import Beta, and Boardsesh shows which of your filmed climbs aren't linked yet. Attach the missing ones in a couple of taps and your videos show up as beta on those climbs for the whole crew. Works with Kilter and Tension.",
+      "mergedAt": "2026-06-23T15:57:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3117"
+    },
     {
       "prNumber": 3165,
       "category": "fixed",
