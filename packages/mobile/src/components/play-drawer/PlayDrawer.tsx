@@ -19,7 +19,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { ScrollView, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +35,7 @@ import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
+import { SwipeableHeader } from './SwipeableHeader';
 import { PlayDrawerPreviewBanner } from './PlayDrawerPreviewBanner';
 import { PlayDrawerOnWallBanner } from './PlayDrawerOnWallBanner';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
@@ -169,7 +170,7 @@ export function PlayDrawer({
 }: PlayDrawerProps) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // The route is mounted only while the player is open, so the player is "open"
   // for this component's whole lifetime — this gates the board render, favorite
   // fetch, wake lock, and below-fold sections. Intentionally a constant, NOT
@@ -226,10 +227,46 @@ export function PlayDrawer({
   const { gesture: dismissGesture, translateY: dismissTranslateY } = useDrawerDismissGesture({
     onDismiss: handleDismiss,
     scrollYSV,
+    scrollRef: scrollGestureRef,
   });
   const dismissAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: dismissTranslateY.value }],
   }));
+
+  // The header (title + grade) rides this exact value as the board so they swipe
+  // in lockstep; the carousel's gesture writes into it (externalTranslateX). The
+  // direction (which climb the header peek shows) tracks the swipe sign.
+  const swipeTranslateX = useSharedValue(0);
+  // Fling-in-progress flag the gesture sets. PlayDrawer (the host) owns the reset:
+  // it leaves translateX where the fling left it (card off-screen, incoming peek
+  // covering centre) and snaps it back to 0 only once the new climb has actually
+  // rendered — so the swap is invisible instead of flashing the old climb.
+  const swipeIsAnimating = useSharedValue(false);
+  const [swipeDirection, setSwipeDirection] = useState<'next' | 'prev'>('next');
+  useAnimatedReaction(
+    () => (swipeTranslateX.value < 0 ? 'next' : 'prev'),
+    (direction, previous) => {
+      if (direction !== previous) runOnJS(setSwipeDirection)(direction);
+    },
+  );
+  // Freeze the header peek's climb for the fling+commit window, mirroring the
+  // board's peek freeze (SwipeBoardCarousel), so the hand-off shows the right
+  // title/grade at centre rather than the new climb's neighbour. `peekClimbRef`
+  // holds the live value (assigned once peekClimb is computed below) so the
+  // capture reads it without making it a callback dep.
+  const peekClimbRef = useRef<Climb | null>(null);
+  const [isSwipeCommitting, setIsSwipeCommitting] = useState(false);
+  const [frozenPeekClimb, setFrozenPeekClimb] = useState<Climb | null>(null);
+  const handleSwipeAnimatingChange = useCallback((animating: boolean) => {
+    if (animating) setFrozenPeekClimb(peekClimbRef.current);
+    setIsSwipeCommitting(animating);
+  }, []);
+  useAnimatedReaction(
+    () => swipeIsAnimating.value,
+    (animating, previous) => {
+      if (animating !== previous) runOnJS(handleSwipeAnimatingChange)(animating);
+    },
+  );
 
   // Beta Videos section-header height feeds the first-screen reserve so the
   // header teases at the bottom of the full-screen view (the cue that there's
@@ -305,6 +342,27 @@ export function PlayDrawer({
     () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),
     [state.queue, displayedQueueItem, navigationSuggestionSource],
   );
+
+  // The climb the header peek shows while swiping — the one being swiped toward.
+  const peekClimb =
+    swipeDirection === 'next' ? (navigationState.nextItem?.climb ?? null) : (navigationState.prevItem?.climb ?? null);
+  peekClimbRef.current = peekClimb;
+  // During the commit hand-off use the frozen climb (captured at fling start) so
+  // the peek doesn't jump to the new climb's neighbour mid-swap.
+  const headerPeekClimb = isSwipeCommitting ? frozenPeekClimb : peekClimb;
+
+  // Host-owned post-fling reset: once the swiped-to climb has actually rendered
+  // (the displayed queue item changes), snap the shared swipe offset back to 0 and
+  // clear the fling flag. Doing it here — after the new content is on screen —
+  // means the frozen incoming peek covered the swap, so there's no flash. Keyed on
+  // the queue ITEM uuid (unique per position) so duplicate climbs still reset.
+  const displayedQueueItemUuid = displayedQueueItem?.uuid;
+  useEffect(() => {
+    if (swipeIsAnimating.value) {
+      swipeTranslateX.value = 0;
+      swipeIsAnimating.value = false;
+    }
+  }, [displayedQueueItemUuid, swipeIsAnimating, swipeTranslateX]);
 
   // Multi-frame route playback (animation + BLE + party-sync). Boulders
   // short-circuit inside the hook (isAnimatable === false), so nothing renders
@@ -607,6 +665,11 @@ export function PlayDrawer({
           <ScrollView
             ref={scrollRef}
             nestedScrollEnabled
+            // No top/bottom rubber-band: at the top, a downward drag is the
+            // dismiss (the drawer translates) — a simultaneous scroll bounce would
+            // fight it and read as double movement.
+            bounces={false}
+            overScrollMode="never"
             style={styles.content}
             contentContainerStyle={{ paddingBottom: insets.bottom }}
             onLayout={handleViewportLayout}
@@ -632,19 +695,41 @@ export function PlayDrawer({
                     </Pressable>
                   </View>
 
-                  <PlayDrawerHeader
-                    name={displayedClimb.name}
-                    difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
-                    rawDifficulty={displayedClimb.difficulty}
-                    qualityAverage={displayedClimb.quality_average}
-                    ascensionistCount={displayedClimb.ascensionist_count}
-                    setterUsername={displayedClimb.setter_username}
-                    isNoMatch={displayedClimb.is_no_match}
-                    benchmarkDifficulty={displayedClimb.benchmark_difficulty}
-                    // The accessory-bar wall climb is physically lit right now, so its
-                    // read-only "on the wall" status rides in the header's leading slot
-                    // (left of the name, opposite the grade) rather than as a banner.
-                    leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
+                  {/* Title + grade swipe with the board: same translateX, same
+                      tilt/fling; the next climb's header slides in edge-adjacent. */}
+                  <SwipeableHeader
+                    swipeTranslateX={swipeTranslateX}
+                    viewportWidth={windowWidth}
+                    current={
+                      <PlayDrawerHeader
+                        name={displayedClimb.name}
+                        difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
+                        rawDifficulty={displayedClimb.difficulty}
+                        qualityAverage={displayedClimb.quality_average}
+                        ascensionistCount={displayedClimb.ascensionist_count}
+                        setterUsername={displayedClimb.setter_username}
+                        isNoMatch={displayedClimb.is_no_match}
+                        benchmarkDifficulty={displayedClimb.benchmark_difficulty}
+                        // The accessory-bar wall climb is physically lit right now, so its
+                        // read-only "on the wall" status rides in the header's leading slot
+                        // (left of the name, opposite the grade) rather than as a banner.
+                        leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
+                      />
+                    }
+                    peek={
+                      headerPeekClimb ? (
+                        <PlayDrawerHeader
+                          name={headerPeekClimb.name}
+                          difficulty={formatGrade(headerPeekClimb.difficulty) ?? headerPeekClimb.difficulty}
+                          rawDifficulty={headerPeekClimb.difficulty}
+                          qualityAverage={headerPeekClimb.quality_average}
+                          ascensionistCount={headerPeekClimb.ascensionist_count}
+                          setterUsername={headerPeekClimb.setter_username}
+                          isNoMatch={headerPeekClimb.is_no_match}
+                          benchmarkDifficulty={headerPeekClimb.benchmark_difficulty}
+                        />
+                      ) : null
+                    }
                   />
 
                   {isPreview && !drawerPreviewIsWallClimb ? (
@@ -675,6 +760,8 @@ export function PlayDrawer({
                         onResetZoomReady={handleResetZoomReady}
                         enabled={!isTickBarActive}
                         scrollRef={scrollGestureRef}
+                        swipeTranslateX={swipeTranslateX}
+                        swipeIsAnimating={swipeIsAnimating}
                       />
                     ) : (
                       <BoardRenderUnavailable

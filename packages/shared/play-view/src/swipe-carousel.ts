@@ -124,9 +124,10 @@ export function getEnterDirection(navigation: 'next' | 'previous'): EnterDirecti
 
 // ── Mobile card-throw (Tinder-style) swipe animation ────────────────────────
 // Mobile-only tuning + pure helpers for the play-drawer's swipe-between-climbs
-// feel: the current board tilts as you drag, flings off-screen with rotation on
-// release, while the next climb sits stacked underneath and scales up into
-// place. Web's swipe stays a flat slide and does not import any of these.
+// feel: the OUTGOING (current) board tilts as you drag and flings off-screen with
+// rotation on release. The INCOMING (next) board slides in edge-adjacent via the
+// shared computePeekOffset, so it enters from the swipe direction. Web's swipe
+// stays a flat slide and does not import any of these.
 //
 // As with computePeekOffset, the helpers are 'worklet'-marked so the mobile
 // useAnimatedStyle closures can call them on the UI thread; in non-worklet
@@ -139,12 +140,6 @@ export function getEnterDirection(navigation: 'next' | 'previous'): EnterDirecti
 export const CARD_THROW_MAX_ROTATION_DEG = 12;
 /** Degrees of tilt per px of horizontal drag, before clamping. */
 export const CARD_THROW_ROTATION_PER_PX = 0.06;
-/** Underneath (next) card scale at rest, growing to 1 by the threshold. */
-export const STACKED_CARD_MIN_SCALE = 0.92;
-/** Underneath (next) card opacity at rest, growing to 1 by the threshold. */
-export const STACKED_CARD_MIN_OPACITY = 0.6;
-/** Underneath (next) card downward offset (px) at rest; rises to 0 by threshold. */
-export const STACKED_CARD_RISE = 12;
 /** Max downward droop (px) the outgoing card dips as it flies off. */
 export const CARD_THROW_DROOP = 40;
 /** Extra px past the screen edge the fling targets so the tilted card clears. */
@@ -177,27 +172,6 @@ export function computeThrowDroop(swipeOffset: number, boardWidth: number): numb
   if (boardWidth <= 0) return 0;
   const over = Math.max(0, Math.abs(swipeOffset) - boardWidth);
   return clamp01(over / boardWidth) * CARD_THROW_DROOP;
-}
-
-// Underneath (next) card scale: STACKED_CARD_MIN_SCALE at rest → 1 at the
-// threshold. `progress` is |swipeOffset| / SWIPE_THRESHOLD, clamped to [0, 1].
-export function computeStackedCardScale(progress: number): number {
-  'worklet';
-  return STACKED_CARD_MIN_SCALE + (1 - STACKED_CARD_MIN_SCALE) * clamp01(progress);
-}
-
-// Underneath (next) card opacity: STACKED_CARD_MIN_OPACITY at rest → 1 at the
-// threshold.
-export function computeStackedCardOpacity(progress: number): number {
-  'worklet';
-  return STACKED_CARD_MIN_OPACITY + (1 - STACKED_CARD_MIN_OPACITY) * clamp01(progress);
-}
-
-// Underneath (next) card vertical offset: STACKED_CARD_RISE at rest, sinking to
-// 0 as it rises into place by the threshold.
-export function computeStackedCardRise(progress: number): number {
-  'worklet';
-  return (1 - clamp01(progress)) * STACKED_CARD_RISE;
 }
 
 // Where the fling animates translateX to so the card fully clears the screen,

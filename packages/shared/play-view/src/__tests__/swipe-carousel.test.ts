@@ -7,16 +7,10 @@ import {
   getEnterDirection,
   computeCardRotation,
   computeThrowDroop,
-  computeStackedCardScale,
-  computeStackedCardOpacity,
-  computeStackedCardRise,
   computeThrowExitTarget,
   CARD_THROW_MAX_ROTATION_DEG,
   CARD_THROW_DROOP,
   CARD_THROW_OFFSCREEN_PAD,
-  STACKED_CARD_MIN_SCALE,
-  STACKED_CARD_MIN_OPACITY,
-  STACKED_CARD_RISE,
   SWIPE_THRESHOLD,
   DIRECTION_THRESHOLD,
 } from '../swipe-carousel';
@@ -176,38 +170,6 @@ describe('computeThrowDroop', () => {
 
   it('returns 0 before layout (boardWidth 0)', () => {
     expect(computeThrowDroop(500, 0)).toBe(0);
-  });
-});
-
-describe('computeStackedCardScale', () => {
-  it('rests at the min scale and reaches 1 at the threshold', () => {
-    expect(computeStackedCardScale(0)).toBe(STACKED_CARD_MIN_SCALE);
-    expect(computeStackedCardScale(1)).toBe(1);
-  });
-
-  it('interpolates and stays monotonic', () => {
-    expect(computeStackedCardScale(0.5)).toBeCloseTo(0.96, 5);
-    expect(computeStackedCardScale(0.25)).toBeLessThan(computeStackedCardScale(0.75));
-  });
-
-  it('clamps out-of-range progress', () => {
-    expect(computeStackedCardScale(-1)).toBe(STACKED_CARD_MIN_SCALE);
-    expect(computeStackedCardScale(2)).toBe(1);
-  });
-});
-
-describe('computeStackedCardOpacity', () => {
-  it('rests at the min opacity and reaches 1 at the threshold', () => {
-    expect(computeStackedCardOpacity(0)).toBe(STACKED_CARD_MIN_OPACITY);
-    expect(computeStackedCardOpacity(1)).toBe(1);
-    expect(computeStackedCardOpacity(0.5)).toBeCloseTo(0.8, 5);
-  });
-});
-
-describe('computeStackedCardRise', () => {
-  it('starts raised and sinks into place by the threshold', () => {
-    expect(computeStackedCardRise(0)).toBe(STACKED_CARD_RISE);
-    expect(computeStackedCardRise(1)).toBe(0);
   });
 });
 

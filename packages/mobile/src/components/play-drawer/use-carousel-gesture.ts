@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef, type ComponentType, type RefObject } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
-import {
-  SWIPE_THRESHOLD,
-  DIRECTION_THRESHOLD,
-  EXIT_DURATION,
-  CLIP_EXIT_DURATION,
-  CARD_THROW_OFFSCREEN_PAD,
-} from '@boardsesh/play-view';
+import { SWIPE_THRESHOLD, DIRECTION_THRESHOLD, EXIT_DURATION, CARD_THROW_OFFSCREEN_PAD } from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
 
@@ -28,6 +22,15 @@ type UseCarouselGestureOptions = {
    *  carousel. Typed as RNGH's GestureRef shape so the method call needs no cast;
    *  at runtime it holds the RN ScrollView instance. */
   scrollRef?: RefObject<ComponentType | undefined | null>;
+  /** Optional external translateX. Pass one so a sibling rendered OUTSIDE this
+   *  carousel (the play-drawer header) can swipe off the exact same value as the
+   *  board. Falls back to an internal shared value. */
+  externalTranslateX?: SharedValue<number>;
+  /** Optional external isAnimating flag. When provided, the gesture does NOT reset
+   *  translateX/isAnimating after the fling — the host owns that, resetting once
+   *  the new climb has actually rendered (so the incoming peek covers the swap and
+   *  there's no flash). Falls back to an internal flag + self-reset when absent. */
+  externalIsAnimating?: SharedValue<boolean>;
   /** When true (Reduce Motion), commit the swap instantly with no slide-off /
    *  spring snap-back. The gesture still works; only the animation is dropped. */
   reduceMotion?: boolean;
@@ -51,12 +54,19 @@ export function useCarouselGesture({
   enabled = true,
   isZoomedSV,
   scrollRef,
+  externalTranslateX,
+  externalIsAnimating,
   reduceMotion = false,
 }: UseCarouselGestureOptions): UseCarouselGestureReturn {
-  const translateX = useSharedValue(0);
-  const isAnimating = useSharedValue(false);
+  // Use the caller's shared values when provided so the header can ride the same
+  // swipe and the host can own the post-render reset; otherwise own them.
+  // useSharedValue must run unconditionally.
+  const internalTranslateX = useSharedValue(0);
+  const translateX = externalTranslateX ?? internalTranslateX;
+  const internalIsAnimating = useSharedValue(false);
+  const isAnimating = externalIsAnimating ?? internalIsAnimating;
+  const hostDrivesReset = externalIsAnimating != null;
   const hasTriggeredHaptic = useSharedValue(false);
-  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Mirror enabled into a shared value so the gesture useMemo doesn't rebuild
   // when it flips — recomposing mid-session left RNGH stuck on iOS.
@@ -104,27 +114,16 @@ export function useCarouselGesture({
   const callbacksRef = useRef({ onSwipeNext, onSwipePrevious });
   callbacksRef.current = { onSwipeNext, onSwipePrevious };
 
-  useEffect(
-    () => () => {
-      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-    },
-    [],
-  );
-
-  // The three JS callbacks below are captured ONCE by the gesture memo (it
-  // composes a single time per mount) — they must only close over refs and
-  // shared values. Route any new render-scoped value through callbacksRef.
+  // The JS callbacks below are captured ONCE by the gesture memo (it composes a
+  // single time per mount) — they must only close over refs and shared values.
+  // Route any new render-scoped value through callbacksRef.
   const triggerHaptic = () => {
     hapticMedium();
   };
 
   // Reduce Motion: the worklet already snapped translateX to 0, so just fire the
-  // navigation callback with no slide-off / clip delay.
+  // navigation callback with no slide-off.
   const commitImmediate = (direction: 'next' | 'previous') => {
-    if (commitTimerRef.current) {
-      clearTimeout(commitTimerRef.current);
-      commitTimerRef.current = null;
-    }
     if (direction === 'next') {
       callbacksRef.current.onSwipeNext();
     } else {
@@ -132,19 +131,23 @@ export function useCarouselGesture({
     }
   };
 
-  const scheduleCommit = (direction: 'next' | 'previous') => {
-    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-    commitTimerRef.current = setTimeout(() => {
-      commitTimerRef.current = null;
-      // Hard-set cancels the in-flight withTiming on the UI thread.
+  // Fired from the fling's withTiming completion — i.e. once the outgoing card is
+  // fully OFF-SCREEN and the incoming peek board has slid to centre. We commit the
+  // navigation here, but DON'T reset translateX yet when a host is wired up: the
+  // host keeps the (frozen) peek covering centre and resets translateX only after
+  // the new climb has actually rendered, so the swap is invisible. Resetting here
+  // (the standalone fallback) hides the peek a frame before the new content lands,
+  // which flickers the old climb back at centre.
+  const commitAtEnd = (direction: 'next' | 'previous') => {
+    if (direction === 'next') {
+      callbacksRef.current.onSwipeNext();
+    } else {
+      callbacksRef.current.onSwipePrevious();
+    }
+    if (!hostDrivesReset) {
       translateX.value = 0;
       isAnimating.value = false;
-      if (direction === 'next') {
-        callbacksRef.current.onSwipeNext();
-      } else {
-        callbacksRef.current.onSwipePrevious();
-      }
-    }, CLIP_EXIT_DURATION);
+    }
   };
 
   // Lock direction on first significant move — matches the web pattern in
@@ -231,12 +234,17 @@ export function useCarouselGesture({
             runOnJS(commitImmediate)('next');
           } else {
             isAnimating.value = true;
-            // Fling fully off-screen (Tinder throw) — past the screen edge so
-            // the tilt/letterbox clears; the new climb swaps in at CLIP_EXIT.
-            translateX.value = withTiming(-(screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD), {
-              duration: EXIT_DURATION,
-            });
-            runOnJS(scheduleCommit)('next');
+            // Fling fully off-screen (Tinder throw) — past the screen edge so the
+            // tilt/letterbox clears. Commit on COMPLETION (card off-screen, peek at
+            // centre) so the translateX reset is an invisible hand-off, not a snap.
+            translateX.value = withTiming(
+              -(screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD),
+              { duration: EXIT_DURATION },
+              (finished) => {
+                'worklet';
+                if (finished) runOnJS(commitAtEnd)('next');
+              },
+            );
           }
         } else if (offset > SWIPE_THRESHOLD && canSwipePreviousSV.value) {
           if (skipAnimation) {
@@ -244,10 +252,14 @@ export function useCarouselGesture({
             runOnJS(commitImmediate)('previous');
           } else {
             isAnimating.value = true;
-            translateX.value = withTiming(screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD, {
-              duration: EXIT_DURATION,
-            });
-            runOnJS(scheduleCommit)('previous');
+            translateX.value = withTiming(
+              screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD,
+              { duration: EXIT_DURATION },
+              (finished) => {
+                'worklet';
+                if (finished) runOnJS(commitAtEnd)('previous');
+              },
+            );
           }
         } else {
           translateX.value = skipAnimation ? 0 : withSpring(0, springs.interactive);

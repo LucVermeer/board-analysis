@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, type ComponentType, type RefObject } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
 import { springs } from '../../theme/animations';
@@ -10,20 +10,34 @@ import { springs } from '../../theme/animations';
 // RNGH Pan lives in the same gesture tree as the scroll + board, so it can yield
 // to them and drive a dismiss from the WHOLE surface. The route sets
 // `gestureEnabled: false`; dismissal is `router.dismiss()` past the threshold.
+//
+// Key wiring: the Pan is an ANCESTOR of the RNGH ScrollView, so it MUST declare
+// `.simultaneousWithExternalGesture(scrollRef)` — otherwise the native scroll
+// wins the gesture by default and the dismiss only fires in the gaps (the
+// "can't dismiss easily" bug). It activates on a downward drag (`activeOffsetY`)
+// and bails on a horizontal one (`failOffsetX`) so the carousel keeps L/R
+// swipes. To avoid a jump when a scroll-to-top rolls into a dismiss, it only
+// engages when the gesture BEGAN at the top of the scroll.
 
-/** Downward travel (px) before the dismiss takes over from the scroll. */
-const DISMISS_ACTIVATE_OFFSET = 12;
+/** Downward travel (px) before the dismiss activates. */
+const DISMISS_ACTIVATE_OFFSET = 14;
+/** Horizontal travel (px) that bails to the carousel instead. */
+const DISMISS_FAIL_OFFSET_X = 24;
 /** Drag distance (px) that commits a dismiss on release. */
-const DISMISS_DISTANCE_THRESHOLD = 120;
+const DISMISS_DISTANCE_THRESHOLD = 110;
 /** Downward fling velocity (px/s) that commits a dismiss even on a short drag. */
-const DISMISS_VELOCITY_THRESHOLD = 800;
+const DISMISS_VELOCITY_THRESHOLD = 600;
 
 type UseDrawerDismissGestureOptions = {
   /** Dismiss the route (e.g. `router.dismiss`). */
   onDismiss: () => void;
-  /** Live scroll offset of the drawer's ScrollView. The dismiss only engages at
-   *  the very top (<= 0); anywhere else a downward drag is a scroll. */
+  /** Live scroll offset of the drawer's ScrollView. The dismiss only engages when
+   *  the gesture starts at the very top (<= 0); anywhere else it's a scroll. */
   scrollYSV: SharedValue<number>;
+  /** RNGH ref to that ScrollView so this ancestor Pan runs simultaneously with it
+   *  (without it the native scroll wins by default and the dismiss barely fires).
+   *  Typed as RNGH's GestureRef shape so the method call needs no cast. */
+  scrollRef?: RefObject<ComponentType | undefined | null>;
 };
 
 type UseDrawerDismissGestureReturn = {
@@ -35,14 +49,13 @@ type UseDrawerDismissGestureReturn = {
 export function useDrawerDismissGesture({
   onDismiss,
   scrollYSV,
+  scrollRef,
 }: UseDrawerDismissGestureOptions): UseDrawerDismissGestureReturn {
   const translateY = useSharedValue(0);
   const isDismissing = useSharedValue(false);
-  const startX = useSharedValue(0);
-  const startY = useSharedValue(0);
-  // 0 = undecided, 1 = dismissing (vertical-down at top), -1 = failed (yield to
-  // the scroll / carousel for this touch).
-  const directionLock = useSharedValue<0 | 1 | -1>(0);
+  // Captured at touch-down: only a gesture that STARTS at the top can dismiss, so
+  // a scroll-up that reaches the top doesn't suddenly yank the drawer down.
+  const startedAtTop = useSharedValue(false);
 
   // Captured ONCE by the gesture memo — must only close over the ref so a later
   // render's onDismiss is still reached (mirrors use-carousel-gesture).
@@ -52,78 +65,43 @@ export function useDrawerDismissGesture({
     onDismissRef.current();
   };
 
-  const gesture = useMemo(
-    () =>
-      Gesture.Pan()
-        // A 2-finger pinch must never read as a dismiss — fail the moment a
-        // second finger lands so zoom stays with the board's pinch gesture.
-        .maxPointers(1)
-        .manualActivation(true)
-        .onTouchesDown((event) => {
-          'worklet';
-          directionLock.value = 0;
-          const touch = event.allTouches[0];
-          if (touch) {
-            startX.value = touch.absoluteX;
-            startY.value = touch.absoluteY;
-          }
-        })
-        .onTouchesMove((event, state) => {
-          'worklet';
-          if (isDismissing.value) return;
-          if (directionLock.value === 1) {
-            state.activate();
-            return;
-          }
-          if (directionLock.value === -1) {
-            state.fail();
-            return;
-          }
-          // Only at the very top of the scroll — otherwise the drag scrolls.
-          if (scrollYSV.value > 0) {
-            directionLock.value = -1;
-            state.fail();
-            return;
-          }
-          const touch = event.allTouches[0];
-          if (!touch) return;
-          const dx = touch.absoluteX - startX.value;
-          const dy = touch.absoluteY - startY.value;
-          // Horizontal-dominant → the carousel owns it.
-          if (Math.abs(dx) > Math.abs(dy)) {
-            directionLock.value = -1;
-            state.fail();
-            return;
-          }
-          // Upward → a scroll into the below-fold content.
-          if (dy < 0) {
-            directionLock.value = -1;
-            state.fail();
-            return;
-          }
-          if (dy > DISMISS_ACTIVATE_OFFSET) {
-            directionLock.value = 1;
-            state.activate();
-          }
-        })
-        .onUpdate((event) => {
-          'worklet';
-          // Follow the finger downward only; an upward drag can't lift the drawer.
-          translateY.value = Math.max(0, event.translationY);
-        })
-        .onEnd((event) => {
-          'worklet';
-          if (translateY.value > DISMISS_DISTANCE_THRESHOLD || event.velocityY > DISMISS_VELOCITY_THRESHOLD) {
-            // Hand off to the native route's slide-out; leave translateY where it
-            // is so the dismiss continues from the dragged position.
-            isDismissing.value = true;
-            runOnJS(commitDismiss)();
-          } else {
-            translateY.value = withSpring(0, springs.interactive);
-          }
-        }),
-    [translateY, isDismissing, startX, startY, directionLock, scrollYSV],
-  );
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      // A 2-finger pinch must never read as a dismiss — fail the moment a second
+      // finger lands so zoom stays with the board's pinch gesture.
+      .maxPointers(1)
+      // Activate on a downward drag; bail on a horizontal one so the carousel
+      // keeps L/R swipes.
+      .activeOffsetY([-DISMISS_ACTIVATE_OFFSET, DISMISS_ACTIVATE_OFFSET])
+      .failOffsetX([-DISMISS_FAIL_OFFSET_X, DISMISS_FAIL_OFFSET_X])
+      .onBegin(() => {
+        'worklet';
+        startedAtTop.value = scrollYSV.value <= 0;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (isDismissing.value) return;
+        // Follow the finger only when the gesture began at the top and is heading
+        // down; otherwise it's a scroll (the ScrollView, running simultaneously,
+        // handles it) and the drawer stays put.
+        translateY.value = startedAtTop.value && event.translationY > 0 ? event.translationY : 0;
+      })
+      .onEnd((event) => {
+        'worklet';
+        const committed =
+          startedAtTop.value &&
+          (translateY.value > DISMISS_DISTANCE_THRESHOLD || event.velocityY > DISMISS_VELOCITY_THRESHOLD);
+        if (committed) {
+          // Hand off to the native route's slide-out; leave translateY where it is
+          // so the dismiss continues from the dragged position.
+          isDismissing.value = true;
+          runOnJS(commitDismiss)();
+        } else {
+          translateY.value = withSpring(0, springs.interactive);
+        }
+      });
+    return scrollRef ? pan.simultaneousWithExternalGesture(scrollRef) : pan;
+  }, [translateY, isDismissing, startedAtTop, scrollYSV, scrollRef]);
 
   return { gesture, translateY };
 }

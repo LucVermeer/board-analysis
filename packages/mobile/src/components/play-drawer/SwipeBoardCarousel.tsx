@@ -15,18 +15,11 @@ import Animated, {
   useSharedValue,
   withTiming,
   runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import {
-  computeCardRotation,
-  computeThrowDroop,
-  computeStackedCardScale,
-  computeStackedCardOpacity,
-  computeStackedCardRise,
-  SWIPE_THRESHOLD,
-  type PeekDirection,
-} from '@boardsesh/play-view';
+import { computeCardRotation, computeThrowDroop, computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Icon } from '../Icon';
@@ -70,6 +63,13 @@ type SwipeBoardCarouselProps = {
   /** RNGH ref to the play-drawer scroll, so the swipe + pinch run simultaneously
    *  with it instead of being starved by it (see use-carousel-gesture). */
   scrollRef?: React.RefObject<React.ComponentType | undefined | null>;
+  /** Shared value the gesture writes translateX into, so the play-drawer header
+   *  (rendered above this carousel) can swipe off the same value. */
+  swipeTranslateX?: SharedValue<number>;
+  /** Shared "fling in progress" flag. When set, the host owns the post-fling
+   *  reset (it resets translateX once the new climb has rendered). The carousel
+   *  uses it to keep the incoming peek frozen + covering centre until then. */
+  swipeIsAnimating?: SharedValue<boolean>;
 };
 
 export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
@@ -90,6 +90,8 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   onResetZoomReady,
   enabled = true,
   scrollRef,
+  swipeTranslateX,
+  swipeIsAnimating,
 }: SwipeBoardCarouselProps) {
   const { t } = useTranslation('session');
   const { width: screenWidth } = useWindowDimensions();
@@ -153,6 +155,8 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     enabled,
     isZoomedSV,
     scrollRef,
+    externalTranslateX: swipeTranslateX,
+    externalIsAnimating: swipeIsAnimating,
   });
 
   const resetButtonOpacity = useSharedValue(0);
@@ -193,20 +197,48 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     [peekDirection],
   );
 
-  // The card stacked UNDERNEATH (the climb being swiped to). Stays centered —
-  // Tinder-style, it scales/fades up into place as the drag approaches the
-  // threshold rather than sliding in from the edge. By the time the top card
-  // flings off (progress pinned at 1), it's already full-size and opaque, so it's
-  // simply revealed.
-  const stackedStyle = useAnimatedStyle(() => {
-    const progress = Math.min(Math.abs(translateX.value) / SWIPE_THRESHOLD, 1);
-    return {
-      opacity: computeStackedCardOpacity(progress),
-      transform: [{ translateY: computeStackedCardRise(progress) }, { scale: computeStackedCardScale(progress) }],
-    };
+  // The climb being swiped to slides in from the side you're swiping toward
+  // (filmstrip-style): it tracks the finger edge-adjacent to the current card, so
+  // it enters from the natural direction rather than growing from behind. It sits
+  // OFF-SCREEN at rest (offset == board width), so it's invisible until a swipe
+  // begins. On release the carousel flings translateX past the screen edge; the
+  // peek offset clamps at 0 (centered) and the new climb settles into place.
+  const peekStyle = useAnimatedStyle(() => {
+    if (translateX.value === 0) {
+      return { opacity: 0, transform: [{ translateX: boardWidthForSwipe }] };
+    }
+    const offset = computePeekOffset({
+      direction: peekDirection.value,
+      swipeOffset: translateX.value,
+      viewportWidth: boardWidthForSwipe,
+    });
+    return { opacity: 1, transform: [{ translateX: offset }] };
   });
 
-  const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
+  const livePeekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
+
+  // Freeze the incoming peek's frames for the duration of a fling+commit. The
+  // peek sits at centre showing the new climb while the fling lands; without the
+  // freeze, the commit updates nextFrames/prevFrames to the NEW climb's
+  // neighbours mid-hand-off, so the peek would flash the wrong board at centre.
+  // Captured when the fling starts (isAnimating → true) and held until the host
+  // resets isAnimating (after the new climb has rendered).
+  const livePeekFramesRef = useRef(livePeekFrames);
+  livePeekFramesRef.current = livePeekFrames;
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [frozenPeekFrames, setFrozenPeekFrames] = useState<string | null>(null);
+  const handleAnimatingChange = useCallback((animating: boolean) => {
+    if (animating) setFrozenPeekFrames(livePeekFramesRef.current);
+    setIsCommitting(animating);
+  }, []);
+  useAnimatedReaction(
+    () => (swipeIsAnimating ? swipeIsAnimating.value : false),
+    (animating, previous) => {
+      if (animating !== previous) runOnJS(handleAnimatingChange)(animating);
+    },
+    [swipeIsAnimating],
+  );
+  const peekFrames = isCommitting ? frozenPeekFrames : livePeekFrames;
 
   // Outer composition: pinch + swipe always. zoomPan is rendered separately
   // as a conditional overlay when zoomed (see below) so it doesn't claim
@@ -269,9 +301,9 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           </Animated.View>
         )}
 
-        {/* The climb being swiped to, stacked underneath the current card
-            (zIndex below it) and centered. Scales/fades up into place. */}
-        <Animated.View style={[styles.stackedWrapper, stackedStyle]} pointerEvents="none">
+        {/* The climb being swiped to, sliding in edge-adjacent from the swipe
+            direction (below the current card's zIndex). Off-screen at rest. */}
+        <Animated.View style={[styles.peekWrapper, peekStyle]} pointerEvents="none">
           {peekFrames && (
             <BoardImageNative
               frames={peekFrames}
@@ -330,7 +362,7 @@ const styles = StyleSheet.create({
     // source order — zIndex governs paint order on both iOS and Android.
     zIndex: 1,
   },
-  stackedWrapper: {
+  peekWrapper: {
     position: 'absolute',
     top: 0,
     left: 0,
