@@ -1,4 +1,4 @@
-export { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from './PlayDrawer';
+export { PlayDrawer, type PlayDrawerOpenOptions, type PlayDrawerOpenTarget } from './PlayDrawer';
 export { PlayDrawerHeader } from './PlayDrawerHeader';
 export { PlayDrawerActionBar } from './PlayDrawerActionBar';
 export { SwipeBoardCarousel } from './SwipeBoardCarousel';

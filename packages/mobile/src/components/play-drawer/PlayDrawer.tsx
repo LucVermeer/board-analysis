@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   View,
@@ -8,13 +8,9 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { PlayDrawerOverlay } from './PlayDrawerOverlay';
-import { useReduceMotion } from '../../hooks/use-reduce-motion';
-import { springs, timing } from '../../theme/animations';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
@@ -22,6 +18,7 @@ import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { GlassSurface } from '../GlassSurface';
 import { DeferredBoard } from './DeferredBoard';
 import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
@@ -43,19 +40,20 @@ import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-pro
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
+import { useTheme } from '../../providers/theme-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
-import { useDeferredSheetOpen } from './use-deferred-sheet-open';
 import { resolveFavoriteRollback } from './favorite-rollback';
 import { buildPlayDrawerBoardLayout } from './lightbulb-control';
 import { getViewOnlyPreviewNavigationTarget } from './play-drawer-navigation';
 import { useLightbulbControl } from '../ble/use-lightbulb-control';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
+import { playDrawerMaterialTint } from '../../theme/colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
 
 type BoardConfig = {
@@ -102,9 +100,15 @@ export type PlayDrawerOpenOptions = {
   playlistSuggestionSource?: PlaylistSuggestionSource | null;
 };
 
-export type PlayDrawerHandle = {
-  open: (climb: Climb, options?: PlayDrawerOpenOptions) => void;
-  close: () => void;
+/**
+ * The climb the route wants the player to show. `nonce` is bumped by the host on
+ * every open request so this re-applies even when navigation is a no-op (the user
+ * re-tapping a climb while the player route is already mounted).
+ */
+export type PlayDrawerOpenTarget = {
+  climb: Climb;
+  options?: PlayDrawerOpenOptions;
+  nonce: number;
 };
 
 type PlayDrawerProps = {
@@ -112,8 +116,9 @@ type PlayDrawerProps = {
   onAngleChange?: (angle: number) => void;
   /** When false, the board's angle is fixed — the angle pill is hidden. */
   isAngleAdjustable?: boolean;
-  /** Open the queue list sheet (provided by DrawerHostProvider; passed as a prop
-   *  rather than read via useDrawerHost to avoid a host↔PlayDrawer require cycle). */
+  /** Open the queue list sheet (the route hosts its own QueueSheet instance so it
+   *  stacks above the player; passed as a prop rather than read via useDrawerHost,
+   *  which would target the host's closed-player instance). */
   onOpenQueue: () => void;
   /** When true, the displayed climb belongs to a board other than the user's
    *  active board — render the switch-board overlay over the controls. */
@@ -122,40 +127,48 @@ type PlayDrawerProps = {
   mismatchBoardLabel?: string;
   /** Switch to the climb's board (one-tap if owned, else the board picker). */
   onSwitchBoard?: () => void;
-  /** Opens the climb reaction menu (DrawerHostProvider's openClimbActions, passed as a
-   *  prop to avoid a host↔PlayDrawer require cycle). On iOS the ellipsis uses this
-   *  instead of the in-drawer bottom sheet. */
+  /** Opens the climb reaction menu (DrawerHostProvider's openClimbActions). On iOS
+   *  the ellipsis uses this instead of the in-drawer bottom sheet. */
   onOpenClimbActions?: (climb: Climb) => void;
+  /** The climb to show; applied on mount and whenever `nonce` changes. */
+  openTarget: PlayDrawerOpenTarget | null;
 };
 
 // Fallback used for the first-screen reserve before the Beta Videos header has
 // been measured, so the board fits without a visible jump on first open.
 const DEFAULT_BETA_HEADER_HEIGHT = 52;
 
-export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  {
-    boardConfig,
-    onAngleChange,
-    isAngleAdjustable = true,
-    onOpenQueue,
-    boardMismatch = false,
-    mismatchBoardLabel,
-    onSwitchBoard,
-    onOpenClimbActions,
-  },
-  ref,
-) {
+/**
+ * Full-screen "now playing" player (Spotify-style track view). Rendered as the
+ * content of the `app/play.tsx` modal route (`presentation: 'fullScreenModal'`):
+ * the native modal VC gives the slide-up present, the swipe-down dismiss, and —
+ * crucially — a view-controller stack that the sub-drawers / queue / share sheet
+ * present ABOVE (the FullWindowOverlay it replaced could not, since native sheets
+ * present off the key window beneath it).
+ */
+export function PlayDrawer({
+  boardConfig,
+  onAngleChange,
+  isAngleAdjustable = true,
+  onOpenQueue,
+  boardMismatch = false,
+  mismatchBoardLabel,
+  onSwitchBoard,
+  onOpenClimbActions,
+  openTarget,
+}: PlayDrawerProps) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const reduceMotion = useReduceMotion();
-  // Full-screen overlay lifecycle: `mounted` gates the overlay render (kept true
-  // through the slide-out), `progress` (0=off-screen, 1=open) drives the slide
-  // and the drag-to-dismiss gesture.
-  const [mounted, setMounted] = useState(false);
-  const progress = useSharedValue(0);
-  // Measured viewport of the overlay's scroll container; drives first-screen
-  // sizing so the below-fold (Beta Videos) peek lands.
+  const { systemColors, colorScheme } = useTheme();
+  // The route is mounted only while the player is open, so the player is "open"
+  // for this component's whole lifetime — this gates the board render, favorite
+  // fetch, wake lock, and below-fold sections. Intentionally a constant, NOT
+  // useIsFocused: a presented sub-drawer / queue sheet must not drop the wake
+  // lock or blank the board mid-tick.
+  const isSheetOpen = true;
+  // Measured viewport of the scroll container; drives first-screen sizing so the
+  // below-fold (Beta Videos) peek lands.
   const [sheetViewportHeight, setSheetViewportHeight] = useState(0);
   const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
     const measured = event.nativeEvent.layout.height;
@@ -175,7 +188,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // Cleared on every climb change so the next climb shows its real status.
   const [favoriteOverride, setFavoriteOverride] = useState<boolean | null>(null);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
@@ -275,13 +287,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setFavoriteOverride(null);
   }, [displayedClimbUuid]);
 
-  // Once the user has requested below-fold content in an open sheet, keep it
-  // mounted across climb changes because the scroll view stays below the fold.
-  // Reset only after close so the next fresh open starts cheap again.
-  useEffect(() => {
-    if (!isSheetOpen) setBelowFoldContentRequested(false);
-  }, [isSheetOpen]);
-
   // When the board angle changes, drop the locally-pinned climb so the drawer
   // re-derives the displayed climb from currentClimbQueueItem — which the queue
   // re-grade effect patches with the new angle's grade. Without this, the header
@@ -328,7 +333,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       // (server) favorite status rather than a leftover from the last climb.
       setFavoriteOverride(null);
       setIsTickBarActive(false);
-      setIsSheetOpen(true);
       setActiveSubDrawer('none');
       if (!previewItem && !options?.committedExternally) {
         // Fresh active open (search / list / LogbookTab / accessory-of-current):
@@ -340,77 +344,23 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
         }
       }
-      // Mount the overlay; the slide-in animation runs from the `mounted` effect.
-      setMounted(true);
     },
     [state.currentClimbQueueItem, setCurrentClimb],
   );
 
-  // Serialize open() against the sheet's dismiss animation: presenting
-  // mid-dismiss races gorhom's onDismiss, which then fires AFTER the re-present
-  // and wipes isSheetOpen — leaving the sheet visibly open with the board gated
-  // off forever (the intermittent blank-board-on-reopen bug). The hook stashes
-  // an open requested mid-dismiss and replays it once the dismissal settles.
-  const openDrawerFromArgs = useCallback(
-    (args: { climb: Climb; options?: PlayDrawerOpenOptions }) => openDrawer(args.climb, args.options),
-    [openDrawer],
-  );
-  const { requestOpen, onAnimate: handleSheetAnimateIndex, flushOnDismiss } = useDeferredSheetOpen(openDrawerFromArgs);
-
-  // Runs once the slide-out has fully completed (the analog of gorhom's
-  // onDismiss): resets transient state, unmounts the overlay, and replays any
-  // open() that arrived mid-dismiss (the re-present is now clean).
-  const handleClose = useCallback(() => {
-    setDrawerPreviewItem(null);
-    setDrawerPreviewSuggestionSource(null);
-    setDrawerPreviewIsWallClimb(false);
-    setIsMirrored(false);
-    setIsTickBarActive(false);
-    setIsSheetOpen(false);
-    setActiveSubDrawer('none');
-    setMounted(false);
-    flushOnDismiss();
-  }, [flushOnDismiss]);
-
-  // Slide the player off-screen, then reset (handleClose). Marks the serializer
-  // dismissing first, so an open() during the slide-out is deferred + replayed.
-  const runCloseAnimation = useCallback(() => {
-    handleSheetAnimateIndex(-1);
-    if (reduceMotion) {
-      handleClose();
-      return;
-    }
-    progress.value = withTiming(0, { duration: timing.normal }, (finished) => {
-      if (finished) runOnJS(handleClose)();
-    });
-  }, [handleSheetAnimateIndex, reduceMotion, progress, handleClose]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
-        requestOpen({ climb: selectedClimb, options });
-      },
-      close: () => {
-        runCloseAnimation();
-      },
-    }),
-    [requestOpen, runCloseAnimation],
-  );
-
-  // Slide in when the overlay mounts (open). The deferred-open hook is told we
-  // settled on-screen on finish (clears any stale dismissing stash).
+  // Apply the host's open target. A new target is a fresh object with a bumped
+  // nonce, so its identity changes on every open request — this fires on mount
+  // (first open) AND when the user re-taps a climb while the route is already up
+  // (where `router.navigate('/play')` is a no-op). Defined AFTER the `[angle]`
+  // preview-clear effect so that on a board-override open (angle + target both
+  // change) the preview this sets wins over that effect's clear. The ref keeps
+  // the latest `openDrawer` without making it a dep (we key only on the target).
+  const openDrawerRef = useRef(openDrawer);
+  openDrawerRef.current = openDrawer;
   useEffect(() => {
-    if (!mounted) return;
-    if (reduceMotion) {
-      progress.value = 1;
-      handleSheetAnimateIndex(0);
-      return;
-    }
-    progress.value = withSpring(1, springs.gentle, (finished) => {
-      if (finished) runOnJS(handleSheetAnimateIndex)(0);
-    });
-  }, [mounted, reduceMotion, progress, handleSheetAnimateIndex]);
+    if (!openTarget) return;
+    openDrawerRef.current(openTarget.climb, openTarget.options);
+  }, [openTarget]);
 
   const handlePrev = useCallback(() => {
     const previewTarget = getViewOnlyPreviewNavigationTarget({
@@ -601,226 +551,191 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // board by that inset twice.
   const firstScreenReserve =
     spacing[3] + (betaHeaderHeight > 0 ? betaHeaderHeight : DEFAULT_BETA_HEADER_HEIGHT) + spacing[2];
-  // Size the first screen from the MEASURED viewport (the overlay's scroll
-  // container fills the full window), falling back to windowHeight pre-layout.
-  // The reserve leaves the Beta Videos header peeking below the fold.
+  // Size the first screen from the MEASURED viewport (the scroll container fills
+  // the full window), falling back to windowHeight pre-layout. The reserve leaves
+  // the Beta Videos header peeking below the fold.
   const firstScreenHeight = computeFirstScreenHeight(sheetViewportHeight || windowHeight, firstScreenReserve);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
-  const subDrawerOpen = activeSubDrawer !== 'none';
-
-  // Drag release decision: past ~25% of the window or a fast flick → dismiss;
-  // otherwise spring back to fully open (and tell the serializer we're staying).
-  const onDragEnd = useCallback(
-    (translationY: number, velocityY: number) => {
-      if (translationY > windowHeight * 0.25 || velocityY > 800) {
-        runCloseAnimation();
-      } else {
-        progress.value = withSpring(1, springs.gentle);
-        handleSheetAnimateIndex(0);
-      }
-    },
-    [windowHeight, runCloseAnimation, progress, handleSheetAnimateIndex],
-  );
-
-  // Interactive drag-to-dismiss (Spotify-style): dragging the top grabber tracks
-  // the finger via `progress`; release past a distance/velocity threshold slides
-  // out, else springs back. Scoped to the top region + failOffsetX so it never
-  // fights the board's horizontal swipe or the scroll view; disabled while a
-  // sub-drawer is open.
-  const dragToDismiss = useMemo(
-    () =>
-      Gesture.Pan()
-        .enabled(!subDrawerOpen)
-        .activeOffsetY(12)
-        .failOffsetX([-16, 16])
-        .onUpdate((event) => {
-          'worklet';
-          const dragged = Math.max(0, event.translationY);
-          progress.value = 1 - Math.min(dragged / windowHeight, 1);
-        })
-        .onEnd((event) => {
-          'worklet';
-          runOnJS(onDragEnd)(event.translationY, event.velocityY);
-        }),
-    [subDrawerOpen, windowHeight, progress, onDragEnd],
-  );
-
-  if (!mounted) return null;
 
   return (
-    <>
-      <PlayDrawerOverlay progress={progress} onRequestClose={runCloseAnimation}>
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={{ paddingBottom: insets.bottom }}
-          onLayout={handleViewportLayout}
-          onScrollBeginDrag={handleScrollTowardBelowFold}
-        >
-          {displayedClimb && (
-            <>
-              {/* Full-window overlay: the firstScreen container owns the top safe
-                  area, so the grabber + close + climb name sit at the very top. */}
-              <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: insets.top + spacing[2] }]}>
-                <GestureDetector gesture={dragToDismiss}>
-                  <View style={styles.topRow}>
-                    <View style={sheetStyles.indicator} />
-                    <Pressable
-                      onPress={runCloseAnimation}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('playView.closeAria')}
-                      style={styles.closeButton}
-                      hitSlop={8}
-                    >
-                      <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
-                    </Pressable>
-                  </View>
-                </GestureDetector>
-
-                <PlayDrawerHeader
-                  name={displayedClimb.name}
-                  difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
-                  rawDifficulty={displayedClimb.difficulty}
-                  qualityAverage={displayedClimb.quality_average}
-                  ascensionistCount={displayedClimb.ascensionist_count}
-                  setterUsername={displayedClimb.setter_username}
-                  isNoMatch={displayedClimb.is_no_match}
-                  benchmarkDifficulty={displayedClimb.benchmark_difficulty}
-                  // The accessory-bar wall climb is physically lit right now, so its
-                  // read-only "on the wall" status rides in the header's leading slot
-                  // (left of the name, opposite the grade) rather than as a banner.
-                  leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
-                />
-
-                {isPreview && !drawerPreviewIsWallClimb ? (
-                  // Cross-board previews use the switch-board overlay instead, so
-                  // hide "Set active" there — promoting a foreign-board climb would
-                  // only spill it into the queue.
-                  <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
-                ) : null}
-
-                <View style={styles.boardSection}>
-                  {boardRenderData ? (
-                    <DeferredBoard
-                      open={isSheetOpen}
-                      boardName={boardName as BoardName}
-                      boardRenderData={boardRenderData}
-                      layoutId={layoutId}
-                      sizeId={sizeId}
-                      setIds={setIds}
-                      currentFrames={displayedClimb.frames}
-                      currentFrameOverride={playback.isAnimatable ? playback.currentFrameString : null}
-                      nextFrames={navigationState.nextItem?.climb.frames ?? null}
-                      prevFrames={navigationState.prevItem?.climb.frames ?? null}
-                      mirrored={isMirrored}
-                      canSwipeNext={navigationState.canNext}
-                      canSwipePrevious={navigationState.canPrevious}
-                      onSwipeNext={handleNext}
-                      onSwipePrevious={handlePrev}
-                      onResetZoomReady={handleResetZoomReady}
-                      enabled={!isTickBarActive}
-                    />
-                  ) : (
-                    <BoardRenderUnavailable
-                      boardName={boardName}
-                      layoutId={layoutId}
-                      sizeId={sizeId}
-                      setIds={setIds}
-                      climbUuid={displayedClimb.uuid}
-                      climbName={displayedClimb.name}
-                    />
-                  )}
-                </View>
-
-                {/* Controls region — gated by the switch-board overlay when the
-                    displayed climb is on a board the user isn't currently on.
-                    Board art + swipe above stay interactive for viewing. The
-                    controls are wrapped so assistive tech can't reach them while
-                    gated (on BOTH platforms — the scrim's accessibilityViewIsModal
-                    is iOS-only); the overlay itself stays a sibling so its
-                    "Switch board" action remains focusable. */}
-                <View style={styles.controlsRegion}>
-                  <View
-                    accessibilityElementsHidden={boardMismatch}
-                    importantForAccessibility={boardMismatch ? 'no-hide-descendants' : 'auto'}
-                  >
-                    {playback.isAnimatable && (
-                      <PlaybackControls
-                        frameIndex={playback.frameIndex}
-                        frameCount={playback.frameCount}
-                        isPlaying={playback.isPlaying}
-                        speed={playback.speed}
-                        paceMs={playback.paceMs}
-                        onPlay={playback.play}
-                        onPause={playback.pause}
-                        onSeek={playback.seek}
-                        onSpeedChange={playback.setSpeed}
-                      />
-                    )}
-
-                    <PlayDrawerActionBar
-                      canSwipePrevious={navigationState.canPrevious}
-                      canSwipeNext={navigationState.canNext}
-                      isMirrored={isMirrored}
-                      supportsMirroring={supportsMirroring}
-                      isFavorited={isFavorited}
-                      remainingQueueCount={navigationState.remainingCount}
-                      lightbulbActive={lightbulbActive}
-                      lightbulbConnected={bluetoothConnected}
-                      lightbulbPending={lightbulbPending}
-                      lightbulbLongPressEnabled={bluetoothConnected}
-                      // The on-wall banner owns the driver's face in the header
-                      // when it's up; suppress the lightbulb pip so the same
-                      // avatar never shows twice in the drawer.
-                      showHolderBadge={!(isPreview && drawerPreviewIsWallClimb)}
-                      ascentCount={ascentCount}
-                      onPrevClick={handlePrev}
-                      onNextClick={handleNext}
-                      onMirror={handleMirror}
-                      onToggleFavorite={handleToggleFavorite}
-                      onLightbulb={handleLightbulb}
-                      onLightbulbLongPress={handleLightbulbLongPress}
-                      onOpenActions={handleOpenActions}
-                      onOpenQueue={onOpenQueue}
-                      onShare={handleShare}
-                      onTickPress={handleTickFabPress}
-                      onTickLongPress={handleTickFabLongPress}
-                      currentAngle={angle}
-                      onOpenAngleSelector={isAngleAdjustable ? handleOpenAngleSelector : undefined}
-                    />
-                  </View>
-
-                  {boardMismatch && onSwitchBoard ? (
-                    <SwitchBoardOverlay boardLabel={mismatchBoardLabel ?? ''} onSwitchBoard={onSwitchBoard} />
-                  ) : null}
-                </View>
+    <View style={styles.root}>
+      {/* Edge-to-edge glass/material background with NO radius — full-screen, not
+          a card. GlassSurface resolves Liquid Glass / blur / Material / Reduce-
+          Transparency-solid per device, so this works on every variant. */}
+      <GlassSurface
+        style={StyleSheet.absoluteFill}
+        glassEffectStyle="regular"
+        role="low"
+        fallbackColor={systemColors.secondaryBackground}
+        tintColor={playDrawerMaterialTint[colorScheme]}
+      />
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
+        onLayout={handleViewportLayout}
+        onScrollBeginDrag={handleScrollTowardBelowFold}
+      >
+        {displayedClimb && (
+          <>
+            {/* The firstScreen container owns the top safe area, so the grabber +
+                close + climb name sit at the very top. */}
+            <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: insets.top + spacing[2] }]}>
+              <View style={styles.topRow}>
+                <View style={sheetStyles.indicator} />
+                <Pressable
+                  onPress={() => router.dismiss()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('playView.closeAria')}
+                  style={styles.closeButton}
+                  hitSlop={8}
+                >
+                  <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
+                </Pressable>
               </View>
 
-              {/* Below-fold deferred sections */}
-              <DeferredSections
-                climb={displayedClimb}
-                boardName={boardName}
-                layoutId={layoutId}
-                sizeId={sizeId}
-                setIds={setIds}
-                angle={angle}
-                enabled={isSheetOpen}
-                contentEnabled={belowFoldContentRequested}
-                onSimilarClimbPress={handleSimilarClimbPress}
-                onBetaHeaderLayout={handleBetaHeaderLayout}
-                onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
+              <PlayDrawerHeader
+                name={displayedClimb.name}
+                difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
+                rawDifficulty={displayedClimb.difficulty}
+                qualityAverage={displayedClimb.quality_average}
+                ascensionistCount={displayedClimb.ascensionist_count}
+                setterUsername={displayedClimb.setter_username}
+                isNoMatch={displayedClimb.is_no_match}
+                benchmarkDifficulty={displayedClimb.benchmark_difficulty}
+                // The accessory-bar wall climb is physically lit right now, so its
+                // read-only "on the wall" status rides in the header's leading slot
+                // (left of the name, opposite the grade) rather than as a banner.
+                leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
               />
-            </>
-          )}
-        </ScrollView>
-      </PlayDrawerOverlay>
 
-      {/* Sub-drawers render as siblings of the overlay (NOT inside it): their
-          @expo/ui native .sheet() presents off the main window and floats over the
-          player's overlay window. On iOS the ellipsis routes to ClimbReactionMenu
-          via onOpenClimbActions, so activeSubDrawer never becomes 'actions' there.
-          Always mounted, toggled via `visible`. */}
+              {isPreview && !drawerPreviewIsWallClimb ? (
+                // Cross-board previews use the switch-board overlay instead, so
+                // hide "Set active" there — promoting a foreign-board climb would
+                // only spill it into the queue.
+                <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
+              ) : null}
+
+              <View style={styles.boardSection}>
+                {boardRenderData ? (
+                  <DeferredBoard
+                    open={isSheetOpen}
+                    boardName={boardName as BoardName}
+                    boardRenderData={boardRenderData}
+                    layoutId={layoutId}
+                    sizeId={sizeId}
+                    setIds={setIds}
+                    currentFrames={displayedClimb.frames}
+                    currentFrameOverride={playback.isAnimatable ? playback.currentFrameString : null}
+                    nextFrames={navigationState.nextItem?.climb.frames ?? null}
+                    prevFrames={navigationState.prevItem?.climb.frames ?? null}
+                    mirrored={isMirrored}
+                    canSwipeNext={navigationState.canNext}
+                    canSwipePrevious={navigationState.canPrevious}
+                    onSwipeNext={handleNext}
+                    onSwipePrevious={handlePrev}
+                    onResetZoomReady={handleResetZoomReady}
+                    enabled={!isTickBarActive}
+                  />
+                ) : (
+                  <BoardRenderUnavailable
+                    boardName={boardName}
+                    layoutId={layoutId}
+                    sizeId={sizeId}
+                    setIds={setIds}
+                    climbUuid={displayedClimb.uuid}
+                    climbName={displayedClimb.name}
+                  />
+                )}
+              </View>
+
+              {/* Controls region — gated by the switch-board overlay when the
+                  displayed climb is on a board the user isn't currently on.
+                  Board art + swipe above stay interactive for viewing. The
+                  controls are wrapped so assistive tech can't reach them while
+                  gated (on BOTH platforms — the scrim's accessibilityViewIsModal
+                  is iOS-only); the overlay itself stays a sibling so its
+                  "Switch board" action remains focusable. */}
+              <View style={styles.controlsRegion}>
+                <View
+                  accessibilityElementsHidden={boardMismatch}
+                  importantForAccessibility={boardMismatch ? 'no-hide-descendants' : 'auto'}
+                >
+                  {playback.isAnimatable && (
+                    <PlaybackControls
+                      frameIndex={playback.frameIndex}
+                      frameCount={playback.frameCount}
+                      isPlaying={playback.isPlaying}
+                      speed={playback.speed}
+                      paceMs={playback.paceMs}
+                      onPlay={playback.play}
+                      onPause={playback.pause}
+                      onSeek={playback.seek}
+                      onSpeedChange={playback.setSpeed}
+                    />
+                  )}
+
+                  <PlayDrawerActionBar
+                    canSwipePrevious={navigationState.canPrevious}
+                    canSwipeNext={navigationState.canNext}
+                    isMirrored={isMirrored}
+                    supportsMirroring={supportsMirroring}
+                    isFavorited={isFavorited}
+                    remainingQueueCount={navigationState.remainingCount}
+                    lightbulbActive={lightbulbActive}
+                    lightbulbConnected={bluetoothConnected}
+                    lightbulbPending={lightbulbPending}
+                    lightbulbLongPressEnabled={bluetoothConnected}
+                    // The on-wall banner owns the driver's face in the header
+                    // when it's up; suppress the lightbulb pip so the same
+                    // avatar never shows twice in the drawer.
+                    showHolderBadge={!(isPreview && drawerPreviewIsWallClimb)}
+                    ascentCount={ascentCount}
+                    onPrevClick={handlePrev}
+                    onNextClick={handleNext}
+                    onMirror={handleMirror}
+                    onToggleFavorite={handleToggleFavorite}
+                    onLightbulb={handleLightbulb}
+                    onLightbulbLongPress={handleLightbulbLongPress}
+                    onOpenActions={handleOpenActions}
+                    onOpenQueue={onOpenQueue}
+                    onShare={handleShare}
+                    onTickPress={handleTickFabPress}
+                    onTickLongPress={handleTickFabLongPress}
+                    currentAngle={angle}
+                    onOpenAngleSelector={isAngleAdjustable ? handleOpenAngleSelector : undefined}
+                  />
+                </View>
+
+                {boardMismatch && onSwitchBoard ? (
+                  <SwitchBoardOverlay boardLabel={mismatchBoardLabel ?? ''} onSwitchBoard={onSwitchBoard} />
+                ) : null}
+              </View>
+            </View>
+
+            {/* Below-fold deferred sections */}
+            <DeferredSections
+              climb={displayedClimb}
+              boardName={boardName}
+              layoutId={layoutId}
+              sizeId={sizeId}
+              setIds={setIds}
+              angle={angle}
+              enabled={isSheetOpen}
+              contentEnabled={belowFoldContentRequested}
+              onSimilarClimbPress={handleSimilarClimbPress}
+              onBetaHeaderLayout={handleBetaHeaderLayout}
+              onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
+            />
+          </>
+        )}
+      </ScrollView>
+
+      {/* Sub-drawers: @expo/ui native .sheet()s presented from within the player
+          route's view controller, so they stack ABOVE it. On iOS the ellipsis
+          routes to ClimbReactionMenu via onOpenClimbActions, so activeSubDrawer
+          never becomes 'actions' there. Always mounted, toggled via `visible`. */}
       <ClimbActionsSheet
         visible={activeSubDrawer === 'actions'}
         climb={displayedClimb ?? null}
@@ -868,7 +783,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       />
 
       {/* Tick sheet — a 60% sub-drawer so the climb image stays visible while
-          logging. Sibling of the overlay; presents over it. */}
+          logging. Presents over the player route. */}
       {displayedClimb && (
         <LogAscentSheet
           visible={isTickBarActive}
@@ -885,11 +800,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           consensusGradeName={displayedClimb.difficulty}
         />
       )}
-    </>
+    </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   content: {
     flex: 1,
   },

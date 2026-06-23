@@ -417,6 +417,20 @@ function RootLayout() {
                                                                   animation: 'fade',
                                                                 }}
                                                               />
+                                                              {/* Full-screen "now playing" player. A real modal VC so the
+                                                      sub-drawers / queue / share sheet opened from inside it
+                                                      stack ABOVE it (the FullWindowOverlay it replaced sat in a
+                                                      higher window, so native sheets rendered behind). Swipe-down
+                                                      dismiss via the native gesture; covers the tab bar. */}
+                                                              <Stack.Screen
+                                                                name="play"
+                                                                options={{
+                                                                  presentation: 'fullScreenModal',
+                                                                  headerShown: false,
+                                                                  gestureEnabled: true,
+                                                                  animation: 'slide_from_bottom',
+                                                                }}
+                                                              />
                                                             </Stack>
                                                           </ThemedNavigation>
                                                           <PersistentQueueBar />

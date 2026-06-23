@@ -1,0 +1,114 @@
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { View, StyleSheet } from 'react-native';
+import type { BoardName } from '@boardsesh/shared-schema';
+import { PlayDrawer } from '../src/components/play-drawer';
+import { QueueSheet, type QueueSheetHandle } from '../src/components/play-drawer/QueueSheet';
+import { useQueueSheetHandlers } from '../src/components/play-drawer/use-queue-sheet-handlers';
+import type { QueueItemRowBoard } from '../src/components/QueueItemRow';
+import { useDrawerHost, usePlayDrawerRoute } from '../src/providers/drawer-host-provider';
+import { useQueueActions, useQueueSessionControls } from '../src/providers/queue-provider';
+import { useTheme } from '../src/providers/theme-provider';
+
+/**
+ * Full-screen "now playing" player route (`presentation: 'fullScreenModal'`,
+ * registered in app/_layout.tsx). Replaces the old FullWindowOverlay: as a real
+ * modal view controller, everything presented from inside its React tree — the
+ * sub-drawers, the share sheet, and this route's own QueueSheet — stacks ABOVE
+ * it instead of behind it.
+ *
+ * The host (DrawerHostProvider) owns the open target + board override and exposes
+ * them via usePlayDrawerRoute; this route renders PlayDrawer against them and runs
+ * the host's close-reset on unmount. It hosts its OWN QueueSheet instance (the
+ * host keeps one for the closed-player snackbar path) so the queue stacks over the
+ * player — both share queue state via QueueProvider and never present at once.
+ */
+export default function PlayScreen() {
+  const {
+    activeBoardConfig,
+    isAngleAdjustable,
+    boardMismatch,
+    mismatchBoardLabel,
+    onAngleChange,
+    onSwitchBoard,
+    onPlayDrawerClosed,
+    playTarget,
+  } = usePlayDrawerRoute();
+  const { boardConfig: storedBoardConfig, openPlayDrawer, openClimbActions, openLogAscent } = useDrawerHost();
+  const { setCurrentClimb } = useQueueActions();
+  const { sessionId } = useQueueSessionControls();
+  const { systemColors } = useTheme();
+
+  const queueSheetRef = useRef<QueueSheetHandle>(null);
+  const presentQueue = useCallback(() => queueSheetRef.current?.present(), []);
+  const requestCloseQueue = useCallback(() => queueSheetRef.current?.dismiss(), []);
+
+  // Drop the board override + open target when the route unmounts (any dismiss:
+  // chevron, swipe, back, or programmatic). A ref calls the latest callback
+  // without re-running the unmount effect.
+  const onClosedRef = useRef(onPlayDrawerClosed);
+  onClosedRef.current = onPlayDrawerClosed;
+  useEffect(() => () => onClosedRef.current(), []);
+
+  // The queue renders climbs against the stored active board (thumbnails + tick),
+  // same as the host's instance.
+  const queueBoard = useMemo<QueueItemRowBoard | null>(() => {
+    if (!storedBoardConfig) return null;
+    return {
+      boardName: storedBoardConfig.boardName as BoardName,
+      layoutId: storedBoardConfig.layoutId,
+      sizeId: storedBoardConfig.sizeId,
+      setIds: storedBoardConfig.setIds,
+      angle: storedBoardConfig.angle,
+    };
+  }, [storedBoardConfig]);
+
+  const { handleClimbPress, handleOpenActions, handleSuggestionPress, handleTickHistory } = useQueueSheetHandlers({
+    setCurrentClimb,
+    openPlayDrawer,
+    openClimbActions,
+    openLogAscent,
+    storedBoardConfig,
+    sessionId,
+    requestCloseQueueSheet: requestCloseQueue,
+  });
+
+  // Board still resolving (rare — usually loaded before a climb can be tapped).
+  // Paint an opaque background so the modal isn't see-through; the player renders
+  // as soon as the board commits.
+  if (!activeBoardConfig) {
+    return <View style={[styles.loading, { backgroundColor: systemColors.secondaryBackground }]} />;
+  }
+
+  return (
+    <>
+      <PlayDrawer
+        boardConfig={activeBoardConfig}
+        onAngleChange={onAngleChange}
+        isAngleAdjustable={isAngleAdjustable}
+        onOpenQueue={presentQueue}
+        boardMismatch={boardMismatch}
+        mismatchBoardLabel={mismatchBoardLabel}
+        onSwitchBoard={onSwitchBoard}
+        onOpenClimbActions={openClimbActions}
+        openTarget={playTarget}
+      />
+      {queueBoard ? (
+        <QueueSheet
+          ref={queueSheetRef}
+          board={queueBoard}
+          onClose={requestCloseQueue}
+          onClimbPress={handleClimbPress}
+          onOpenActions={handleOpenActions}
+          onSuggestionPress={handleSuggestionPress}
+          onTickHistory={handleTickHistory}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+  },
+});
