@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../providers/theme-provider';
-import { isTabsRoute } from '../lib/route-segments';
+import { isTabsChromeRoute } from '../lib/route-segments';
 import { useStickyAccessoryPresence } from './use-sticky-accessory-presence';
 import { useNativeAccessoryActive, useNativeTabBar } from './use-bottom-accessory';
 import { computeBottomChromeMetrics } from './bottom-chrome-metrics';
@@ -24,7 +24,10 @@ export function useBottomChromeMetrics() {
   // accessory host actually shows (incl. its brief presence-blip hold).
   const hasCurrentClimb = useStickyAccessoryPresence();
   const { variant } = useTheme();
-  const insideTabs = isTabsRoute(segments);
+  // Treat the player route as chrome-mounted (it's a modal over the tabs) so the
+  // accessory + tab-bar metrics don't churn across its open/close — see
+  // isTabsChromeRoute. Other root surfaces still read as outside-tabs.
+  const insideTabs = isTabsChromeRoute(segments);
   const nativeAccessoryActive = useNativeAccessoryActive();
   const nativeAccessoryMounted = insideTabs && nativeAccessoryActive;
   const nativeTabBar = useNativeTabBar();

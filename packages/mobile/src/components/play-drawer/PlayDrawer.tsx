@@ -18,7 +18,6 @@ import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { GlassSurface } from '../GlassSurface';
 import { DeferredBoard } from './DeferredBoard';
 import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
@@ -40,7 +39,6 @@ import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-pro
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
-import { useTheme } from '../../providers/theme-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useShareClimb } from '../../hooks/use-share-climb';
@@ -53,7 +51,6 @@ import { getViewOnlyPreviewNavigationTarget } from './play-drawer-navigation';
 import { useLightbulbControl } from '../ble/use-lightbulb-control';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { playDrawerMaterialTint } from '../../theme/colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
 
 type BoardConfig = {
@@ -160,7 +157,6 @@ export function PlayDrawer({
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const { systemColors, colorScheme } = useTheme();
   // The route is mounted only while the player is open, so the player is "open"
   // for this component's whole lifetime — this gates the board render, favorite
   // fetch, wake lock, and below-fold sections. Intentionally a constant, NOT
@@ -560,17 +556,10 @@ export function PlayDrawer({
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
 
   return (
+    // Transparent root — the play route paints the full-screen GlassSurface
+    // behind this on its cheap first frame (so the native present can start
+    // before this heavier content mounts). See app/play.tsx.
     <View style={styles.root}>
-      {/* Edge-to-edge glass/material background with NO radius — full-screen, not
-          a card. GlassSurface resolves Liquid Glass / blur / Material / Reduce-
-          Transparency-solid per device, so this works on every variant. */}
-      <GlassSurface
-        style={StyleSheet.absoluteFill}
-        glassEffectStyle="regular"
-        role="low"
-        fallbackColor={systemColors.secondaryBackground}
-        tintColor={playDrawerMaterialTint[colorScheme]}
-      />
       <ScrollView
         style={styles.content}
         contentContainerStyle={{ paddingBottom: insets.bottom }}

@@ -49,6 +49,9 @@ vi.mock('expo-router', () => ({ useSegments: () => [] }));
 vi.mock('../../../lib/route-segments', () => ({
   isClimbsTabRoute: () => cfg.onClimbsTab,
   isTabsRoute: () => cfg.insideTabs,
+  // The player route counts as chrome-mounted; these tests don't exercise /play,
+  // so it tracks the same `insideTabs` config as the tab-chrome predicate.
+  isTabsChromeRoute: () => cfg.insideTabs,
   isGymDiscoveryRoute: () => cfg.onGymDiscovery,
   isAuthRoute: () => cfg.onAuthRoute,
 }));

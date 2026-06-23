@@ -13,10 +13,32 @@ const TABS_GROUP = '(tabs)';
 const CLIMBS_TAB = 'climbs';
 const GYMS_ROUTE = 'gyms';
 const AUTH_GROUP = 'auth';
+const PLAYER_ROUTE = 'play';
 
 /** True when the focused route lives inside the bottom-tab navigator. */
 export function isTabsRoute(segments: Segments): boolean {
   return segments[0] === TABS_GROUP;
+}
+
+/**
+ * True when the native bottom tab chrome (tab bar + `NativeTabs.BottomAccessory` +
+ * the search field) should stay mounted and STABLE — inside the tabs, OR under the
+ * player route (`/play`).
+ *
+ * The player is a `transparentModal` (app/_layout.tsx): the tabs screen stays LIVE
+ * behind it, so UIKit never snapshots the presenting view controller. That lets the
+ * accessory + tab-bar metrics stay put across the player's open/close instead of
+ * churning — keeping the host mounted under a transparent modal is snapshot-free
+ * (no doubled climb name) AND avoids the native tab-bar height change that would
+ * otherwise shove the docked Climbs search field.
+ *
+ * Used by `useInsideTabs` (the accessory host mount gate) and `useBottomChromeMetrics`
+ * (the underlying-screen layout). Other root surfaces (boards / share-beta /
+ * onboarding) are NOT included — they're opaque pushes/modals that should still
+ * unmount the accessory.
+ */
+export function isTabsChromeRoute(segments: Segments): boolean {
+  return segments[0] === TABS_GROUP || segments[0] === PLAYER_ROUTE;
 }
 
 /**

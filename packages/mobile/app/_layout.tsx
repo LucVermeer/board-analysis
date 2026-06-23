@@ -417,15 +417,22 @@ function RootLayout() {
                                                                   animation: 'fade',
                                                                 }}
                                                               />
-                                                              {/* Full-screen "now playing" player. A real modal VC so the
-                                                      sub-drawers / queue / share sheet opened from inside it
-                                                      stack ABOVE it (the FullWindowOverlay it replaced sat in a
-                                                      higher window, so native sheets rendered behind). Swipe-down
-                                                      dismiss via the native gesture; covers the tab bar. */}
+                                                              {/* Full-screen "now playing" player. A modal VC so the
+                                                      sub-drawers / queue / share sheet opened from inside it stack
+                                                      ABOVE it (the FullWindowOverlay it replaced sat in a higher
+                                                      window, so native sheets rendered behind). transparentModal —
+                                                      NOT fullScreenModal — so the iOS 26 native tab bar + its bottom
+                                                      accessory stay LIVE behind it: a fullScreenModal snapshots the
+                                                      presenting VC, and that snapshot of the glass accessory platter
+                                                      lingered stacked under the live one (doubled climb name) and
+                                                      churned the docked search field. The player paints its own
+                                                      opaque backing (see app/play.tsx) so the live tabs screen
+                                                      doesn't show through the glass. Swipe-down dismiss; covers the
+                                                      tab bar. */}
                                                               <Stack.Screen
                                                                 name="play"
                                                                 options={{
-                                                                  presentation: 'fullScreenModal',
+                                                                  presentation: 'transparentModal',
                                                                   headerShown: false,
                                                                   gestureEnabled: true,
                                                                   animation: 'slide_from_bottom',
