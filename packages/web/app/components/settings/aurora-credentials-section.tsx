@@ -39,16 +39,17 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Trans, useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
-  createKilterHandoffStartUrl,
   deleteAuroraCredential,
   finalizeKilterCredential,
   getAuroraCredentials,
   getAuroraUnsyncedCounts,
   resolveAuroraBackendTransport,
   saveAuroraCredential,
+  saveKilterCredentialViaPassword,
   type AuroraCredentialStatus,
   type UnsyncedCounts,
 } from '@/app/lib/aurora-credentials/client';
+import { useFeatureFlag } from '@/app/components/providers/feature-flags-provider';
 import type { ImportResult } from '@/app/lib/data-sync/aurora/json-import';
 import { streamImport } from '@/app/lib/data-sync/aurora/json-import-stream';
 import {
@@ -110,46 +111,48 @@ function buildKilterDataRequestMailto(
   return `mailto:peter@auroraclimbing.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+// Kilter renders two cards: `kilterAurora` for the legacy Aurora-built app (JSON
+// import + data request) and `kilterNew` for the new Kilter Grips account, which
+// links via username/password (ROPC). Every other board is a single `aurora` card.
+export type BoardCredentialCardVariant = 'aurora' | 'kilterAurora' | 'kilterNew';
+
 export type BoardCredentialCardProps = {
   boardType: AuroraBoardName;
+  variant: BoardCredentialCardVariant;
   credential: AuroraCredentialStatus | null;
   unsyncedCounts: BoardUnsyncedCounts;
   onAdd: () => void;
   onRemove: () => void;
   onImportJson: () => void;
-  onConnectKilter?: () => void;
   isRemoving: boolean;
   isImporting: boolean;
-  isConnectingKilter?: boolean;
   userName?: string | null;
   userEmail?: string | null;
-  /**
-   * When true and the user has no Kilter credential yet, render the
-   * "Connect Kilter account" OAuth button instead of the shut-down notice.
-   * Allowlist-gated by the backend's credential status response.
-   */
-  kilterSyncEnabled?: boolean;
 };
 
 export function BoardCredentialCard({
   boardType,
+  variant,
   credential,
   unsyncedCounts,
   onAdd,
   onRemove,
   onImportJson,
-  onConnectKilter,
   isRemoving,
   isImporting,
-  isConnectingKilter = false,
   userName,
   userEmail,
-  kilterSyncEnabled = false,
 }: BoardCredentialCardProps) {
   const { t } = useTranslation('settings');
   const boardName = boardType.charAt(0).toUpperCase() + boardType.slice(1);
   const totalUnsynced = unsyncedCounts.ascents + unsyncedCounts.climbs;
-  const isKilter = boardType === 'kilter';
+  const isExpired = credential?.syncStatus === 'expired';
+  const cardTitle =
+    variant === 'kilterAurora'
+      ? t('aurora.card.kilterAuroraTitle')
+      : variant === 'kilterNew'
+        ? t('aurora.card.kilterNewTitle')
+        : `${boardName} ${t('aurora.card.boardSuffix')}`;
 
   const getSyncStatusTag = () => {
     if (!credential) return null;
@@ -180,52 +183,71 @@ export function BoardCredentialCard({
         <CardContent>
           <div className={styles.cardHeader}>
             <Typography variant="h5" sx={{ margin: 0 }}>
-              {boardName} {t('aurora.card.boardSuffix')}
+              {cardTitle}
             </Typography>
           </div>
-          {isKilter ? (
-            <Typography variant="body2" component="span" color="text.secondary" className={styles.notConnectedText}>
-              {kilterSyncEnabled ? t('aurora.card.kilterConnectCopy') : t('aurora.card.kilterShutdown')}
-            </Typography>
+          {variant === 'kilterNew' ? (
+            <>
+              <Typography variant="body2" component="span" color="text.secondary" className={styles.notConnectedText}>
+                {t('aurora.card.kilterNewCopy')}
+              </Typography>
+              <div className={styles.buttonRowStacked}>
+                <Button variant="contained" startIcon={<LinkOutlined />} onClick={onAdd}>
+                  {t('aurora.card.kilterSignIn')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}
+                  onClick={onImportJson}
+                  disabled={isImporting}
+                >
+                  {t('aurora.card.import')}
+                </Button>
+              </div>
+            </>
+          ) : variant === 'kilterAurora' ? (
+            <>
+              <Typography variant="body2" component="span" color="text.secondary" className={styles.notConnectedText}>
+                {t('aurora.card.kilterAuroraCopy')}
+              </Typography>
+              <div className={styles.buttonRowStacked}>
+                <Button
+                  variant="contained"
+                  startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}
+                  onClick={onImportJson}
+                  disabled={isImporting}
+                >
+                  {t('aurora.card.import')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<EmailOutlined />}
+                  href={buildKilterDataRequestMailto(t, userName, userEmail)}
+                >
+                  {t('aurora.card.requestData')}
+                </Button>
+              </div>
+            </>
           ) : (
-            <Typography variant="body2" component="span" color="text.secondary" className={styles.notConnectedText}>
-              {t('aurora.card.notConnected', { boardName })}
-            </Typography>
+            <>
+              <Typography variant="body2" component="span" color="text.secondary" className={styles.notConnectedText}>
+                {t('aurora.card.notConnected', { boardName })}
+              </Typography>
+              <div className={styles.buttonRow}>
+                <Button variant="contained" startIcon={<LinkOutlined />} onClick={onAdd}>
+                  {t('aurora.card.link')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}
+                  onClick={onImportJson}
+                  disabled={isImporting}
+                >
+                  {t('aurora.card.import')}
+                </Button>
+              </div>
+            </>
           )}
-          <div className={isKilter ? styles.buttonRowStacked : styles.buttonRow}>
-            {!isKilter && (
-              <Button variant="contained" startIcon={<LinkOutlined />} onClick={onAdd}>
-                {t('aurora.card.link')}
-              </Button>
-            )}
-            {isKilter && kilterSyncEnabled && (
-              <Button
-                variant="contained"
-                startIcon={isConnectingKilter ? <CircularProgress size={16} /> : <LinkOutlined />}
-                onClick={onConnectKilter}
-                disabled={isConnectingKilter || !onConnectKilter}
-              >
-                {t('aurora.card.kilterConnectButton')}
-              </Button>
-            )}
-            <Button
-              variant={isKilter && !kilterSyncEnabled ? 'contained' : 'outlined'}
-              startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}
-              onClick={onImportJson}
-              disabled={isImporting}
-            >
-              {t('aurora.card.import')}
-            </Button>
-            {isKilter && !kilterSyncEnabled && (
-              <Button
-                variant="outlined"
-                startIcon={<EmailOutlined />}
-                href={buildKilterDataRequestMailto(t, userName, userEmail)}
-              >
-                {t('aurora.card.requestData')}
-              </Button>
-            )}
-          </div>
         </CardContent>
       </Card>
     );
@@ -236,7 +258,7 @@ export function BoardCredentialCard({
       <CardContent>
         <div className={styles.cardHeader}>
           <Typography variant="h5" sx={{ margin: 0 }}>
-            {boardName} {t('aurora.card.boardSuffix')}
+            {cardTitle}
           </Typography>
           {getSyncStatusTag()}
         </div>
@@ -292,6 +314,11 @@ export function BoardCredentialCard({
               {t('aurora.card.unlink')}
             </Button>
           </ConfirmPopover>
+          {isExpired && (
+            <Button variant="contained" startIcon={<LinkOutlined />} onClick={onAdd}>
+              {t('aurora.card.reconnect')}
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}
@@ -359,7 +386,7 @@ export default function AuroraCredentialsSection() {
   const [loading, setLoading] = useState(true);
   const [credentialsLoadError, setCredentialsLoadError] = useState(false);
   const [kilterSyncAllowed, setKilterSyncAllowed] = useState(false);
-  const [connectingKilter, setConnectingKilter] = useState(false);
+  const kilterOauthLinkingEnabled = useFeatureFlag('kilter-oauth-linking') === true;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<AuroraBoardName>('kilter');
   const [isSaving, setIsSaving] = useState(false);
@@ -487,11 +514,18 @@ export default function AuroraCredentialsSection() {
       const transport = resolveAuroraBackendTransport(authToken);
       if (!transport) throw new Error(t('aurora.linkDialog.linkError'));
 
-      await saveAuroraCredential(transport, {
-        boardType: selectedBoard,
-        username: values.username,
-        password: values.password,
-      });
+      if (selectedBoard === 'kilter') {
+        await saveKilterCredentialViaPassword(transport, {
+          username: values.username,
+          password: values.password,
+        });
+      } else {
+        await saveAuroraCredential(transport, {
+          boardType: selectedBoard,
+          username: values.username,
+          password: values.password,
+        });
+      }
 
       showMessage(t('aurora.linkDialog.linkSuccess', { boardName: selectedBoardName }), 'success');
       setIsModalOpen(false);
@@ -522,22 +556,6 @@ export default function AuroraCredentialsSection() {
       showMessage(error instanceof Error ? error.message : t('aurora.unlinkError'), 'error');
     } finally {
       setRemovingBoard(null);
-    }
-  };
-
-  const handleConnectKilter = async () => {
-    setConnectingKilter(true);
-    try {
-      const transport = resolveAuroraBackendTransport(authToken);
-      if (!transport) throw new Error(t('aurora.mobile.kilterConnectFailed'));
-
-      const returnUrl =
-        typeof window === 'undefined' ? '/settings' : `${window.location.origin}${window.location.pathname}`;
-      const startUrl = await createKilterHandoffStartUrl(transport, returnUrl);
-      window.location.assign(startUrl);
-    } catch (error) {
-      showMessage(error instanceof Error ? error.message : t('aurora.mobile.kilterConnectFailed'), 'error');
-      setConnectingKilter(false);
     }
   };
 
@@ -680,6 +698,22 @@ export default function AuroraCredentialsSection() {
     return credentials.find((credential) => credential.boardType === boardType) || null;
   };
 
+  // Show the new Kilter card when the flag + backend gate are on, or whenever a
+  // Kilter account is already linked (so it stays manageable if the flag flips off).
+  const showKilterNew = (kilterOauthLinkingEnabled && kilterSyncAllowed) || getCredentialForBoard('kilter') !== null;
+  const cardConfigs = AURORA_BOARDS.flatMap<{
+    key: string;
+    boardType: AuroraBoardName;
+    variant: BoardCredentialCardVariant;
+  }>((boardType) => {
+    if (boardType !== 'kilter') return [{ key: boardType, boardType, variant: 'aurora' }];
+    const kilterCards: { key: string; boardType: AuroraBoardName; variant: BoardCredentialCardVariant }[] = [
+      { key: 'kilter-aurora', boardType: 'kilter', variant: 'kilterAurora' },
+    ];
+    if (showKilterNew) kilterCards.push({ key: 'kilter-new', boardType: 'kilter', variant: 'kilterNew' });
+    return kilterCards;
+  });
+
   const isImporting = importPhase === 'importing';
   const isImportDialogOpen =
     importPhase === 'preview' || importPhase === 'importing' || importPhase === 'complete' || importPhase === 'error';
@@ -750,30 +784,24 @@ export default function AuroraCredentialsSection() {
           </Typography>
 
           <Stack spacing={2} className={styles.cardsContainer}>
-            {AURORA_BOARDS.map((boardType) => {
-              const kilterProps =
-                boardType === 'kilter'
-                  ? {
-                      onConnectKilter: handleConnectKilter,
-                      isConnectingKilter: connectingKilter,
-                      userName: session?.user?.name ?? null,
-                      userEmail: session?.user?.email ?? null,
-                      kilterSyncEnabled: kilterSyncAllowed,
-                    }
-                  : {};
-
+            {cardConfigs.map(({ key, boardType, variant }) => {
+              // The legacy "Kilter (Aurora)" card never owns the linked-account state —
+              // that belongs to the new card.
+              const credential = variant === 'kilterAurora' ? null : getCredentialForBoard(boardType);
               return (
                 <BoardCredentialCard
-                  key={boardType}
+                  key={key}
                   boardType={boardType}
-                  credential={getCredentialForBoard(boardType)}
+                  variant={variant}
+                  credential={credential}
                   unsyncedCounts={unsyncedCounts?.[boardType] ?? { ascents: 0, climbs: 0 }}
                   onAdd={() => handleAddClick(boardType)}
                   onRemove={() => handleRemove(boardType)}
                   onImportJson={() => handleImportClick(boardType)}
                   isRemoving={removingBoard === boardType}
                   isImporting={isImporting && importingBoard === boardType}
-                  {...kilterProps}
+                  userName={boardType === 'kilter' ? (session?.user?.name ?? null) : null}
+                  userEmail={boardType === 'kilter' ? (session?.user?.email ?? null) : null}
                 />
               );
             })}
@@ -793,10 +821,16 @@ export default function AuroraCredentialsSection() {
 
       {/* Link Account Dialog */}
       <Dialog open={isModalOpen} onClose={handleModalCancel} maxWidth="sm" fullWidth>
-        <DialogTitle>{t('aurora.linkDialog.title', { boardName: selectedBoardName })}</DialogTitle>
+        <DialogTitle>
+          {selectedBoard === 'kilter'
+            ? t('aurora.kilterLinkDialog.title')
+            : t('aurora.linkDialog.title', { boardName: selectedBoardName })}
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" component="span" color="text.secondary" className={styles.modalDescription}>
-            {t('aurora.linkDialog.description', { boardName: selectedBoardName })}
+            {selectedBoard === 'kilter'
+              ? t('aurora.kilterLinkDialog.description')
+              : t('aurora.linkDialog.description', { boardName: selectedBoardName })}
           </Typography>
           <Box
             component="form"

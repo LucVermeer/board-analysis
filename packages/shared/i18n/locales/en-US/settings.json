@@ -170,9 +170,12 @@
       "username": "Username:",
       "lastSynced": "Last synced:",
       "never": "Never",
-      "kilterShutdown": "Direct sync with Kilter is rolling out gradually. In the meantime, import a JSON export from the Kilter app, or email Aurora Climbing to request your data.",
-      "kilterConnectCopy": "Hook up your Kilter account to pull your sends, attempts, ratings and circuits into Boardsesh. Pushing changes back to Kilter is coming soon.",
-      "kilterConnectButton": "Connect Kilter account",
+      "kilterAuroraTitle": "Kilter (Aurora)",
+      "kilterAuroraCopy": "Used the old Kilter app built by Aurora? Import a JSON export, or email Aurora Climbing to request your data.",
+      "kilterNewTitle": "Kilter (new)",
+      "kilterNewCopy": "Sign in with your Kilter username and password to pull your sends, attempts, ratings and circuits into Boardsesh.",
+      "kilterSignIn": "Sign in to Kilter",
+      "reconnect": "Reconnect",
       "notConnected": "Not connected. Link your {{boardName}} account to import your Aurora data, or import from a JSON export file.",
       "link": "Link",
       "import": "Import",
@@ -209,6 +212,11 @@
       "submitting": "Linking...",
       "linkError": "Failed to link account",
       "linkSuccess": "{{boardName}} account linked. Your data will show up within 12 hours."
+    },
+    "kilterLinkDialog": {
+      "title": "Sign in to Kilter",
+      "description": "Enter your Kilter username and password. Your password is exchanged for a secure token and never stored. Your sends sync within a few hours.",
+      "passwordHelp": "Works with your existing Kilter login. Two-factor or social-login-only accounts can't sign in this way — use Import instead."
     },
     "unlinkSuccess": "Account unlinked successfully",
     "unlinkError": "Failed to unlink account",

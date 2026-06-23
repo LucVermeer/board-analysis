@@ -115,8 +115,9 @@ describe('BoardImportPrompt', () => {
 
       render(<BoardImportPrompt boardType="kilter" />);
 
+      // The board-import prompt surfaces the legacy "Kilter (Aurora)" import card.
       await waitFor(() => {
-        expect(screen.getByText('Kilter Board')).toBeTruthy();
+        expect(screen.getByText('Kilter (Aurora)')).toBeTruthy();
       });
 
       expect(screen.getByText('Import')).toBeTruthy();

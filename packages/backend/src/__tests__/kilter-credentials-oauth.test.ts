@@ -7,11 +7,25 @@ const verifyKeycloakTokenMock = vi.fn();
 const validateTokenMock = vi.fn();
 const isKilterSyncAllowedMock = vi.fn();
 const saveKilterCredentialMock = vi.fn();
+const saveKilterCredentialViaPasswordMock = vi.fn();
+
+// Mirror the real KilterApiError so the handler's `instanceof` error mapping works.
+const KilterApiErrorMock = class KilterApiError extends Error {
+  code: string;
+  httpStatus?: number;
+  constructor(code: string, message: string, httpStatus?: number) {
+    super(message);
+    this.code = code;
+    this.httpStatus = httpStatus;
+    this.name = 'KilterApiError';
+  }
+};
 
 vi.mock('@boardsesh/kilter-sync/api', () => ({
   exchangeAuthorizationCode: exchangeAuthorizationCodeMock,
   KILTER_BOARD_TYPE: 'kilter',
   KILTER_OAUTH_AUTH_URL: 'https://kilter.example/auth',
+  KilterApiError: KilterApiErrorMock,
   verifyKeycloakToken: verifyKeycloakTokenMock,
 }));
 
@@ -22,6 +36,7 @@ vi.mock('../middleware/auth', () => ({
 vi.mock('../services/aurora-credentials', () => ({
   isKilterSyncAllowed: isKilterSyncAllowedMock,
   saveKilterCredential: saveKilterCredentialMock,
+  saveKilterCredentialViaPassword: saveKilterCredentialViaPasswordMock,
 }));
 
 vi.mock('../redis/client', () => ({
@@ -195,5 +210,109 @@ describe('Kilter credential OAuth handlers', () => {
       kilterUserId: 'kilter-user',
       username: 'kilter-name',
     });
+  });
+
+  it('password rejects unauthenticated requests', async () => {
+    const request = makeRequest({
+      method: 'POST',
+      body: JSON.stringify({ username: 'climber', password: 'secret' }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+
+    expect(response.statusCode).toBe(401);
+    expect(saveKilterCredentialViaPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it('password rejects accounts without Kilter sync access', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'pw-blocked-user' });
+    isKilterSyncAllowedMock.mockReturnValue(false);
+    const request = makeRequest({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: JSON.stringify({ username: 'climber', password: 'secret' }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+
+    expect(response.statusCode).toBe(403);
+    expect(saveKilterCredentialViaPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it('password rejects an invalid body', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'pw-invalid-user' });
+    const request = makeRequest({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: JSON.stringify({ username: 'climber' }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+
+    expect(response.statusCode).toBe(400);
+    expect(saveKilterCredentialViaPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it('password links the Kilter account on success', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'pw-ok-user' });
+    saveKilterCredentialViaPasswordMock.mockResolvedValue(undefined);
+    const request = makeRequest({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: JSON.stringify({ username: 'climber', password: 'secret' }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ success: true });
+    expect(saveKilterCredentialViaPasswordMock).toHaveBeenCalledWith({
+      userId: 'pw-ok-user',
+      username: 'climber',
+      password: 'secret',
+    });
+  });
+
+  it('password returns a generic 401 on bad Kilter credentials', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'pw-bad-creds-user' });
+    saveKilterCredentialViaPasswordMock.mockRejectedValue(
+      new KilterApiErrorMock('invalid_grant', 'Account does not exist or password is wrong'),
+    );
+    const request = makeRequest({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: JSON.stringify({ username: 'climber', password: 'wrong' }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+
+    expect(response.statusCode).toBe(401);
+    // Generic message — never leaks whether the username exists, and matches the
+    // string the mobile client maps to `invalid_credentials`.
+    expect(JSON.parse(response.body)).toEqual({ error: 'Invalid Aurora credentials' });
+  });
+
+  it('password rate-limits repeated attempts', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'pw-rate-limit-user' });
+    saveKilterCredentialViaPasswordMock.mockResolvedValue(undefined);
+
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const request = makeRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token' },
+        body: JSON.stringify({ username: 'climber', password: 'secret' }),
+      });
+      const response = makeResponse();
+      await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+      lastStatus = response.statusCode;
+    }
+
+    expect(lastStatus).toBe(429);
   });
 });

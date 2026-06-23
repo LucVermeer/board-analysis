@@ -21,6 +21,7 @@ import {
   handleKilterCredentialsCallback,
   handleKilterCredentialsFinalize,
   handleKilterCredentialsHandoff,
+  handleKilterCredentialsPassword,
   handleKilterCredentialsStart,
 } from './handlers/kilter-credentials-oauth';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
@@ -366,6 +367,14 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (
+        pathname === '/api/board-credentials/kilter/password' &&
+        (req.method === 'POST' || req.method === 'OPTIONS')
+      ) {
+        await handleKilterCredentialsPassword(req, res);
+        return;
+      }
+
       if (pathname === '/board-credentials/kilter/start' && req.method === 'GET') {
         await handleKilterCredentialsStart(req, res, url);
         return;
@@ -535,6 +544,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Aurora credentials: ${httpScheme}://0.0.0.0:${PORT}/api/aurora-credentials`);
     logger.info(`  Aurora import: ${httpScheme}://0.0.0.0:${PORT}/api/aurora-import`);
     logger.info(`  Kilter credential OAuth: ${httpScheme}://0.0.0.0:${PORT}/board-credentials/kilter/start`);
+    logger.info(`  Kilter credential password: ${httpScheme}://0.0.0.0:${PORT}/api/board-credentials/kilter/password`);
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
     logger.info(`  Widget take-control: ${httpScheme}://0.0.0.0:${PORT}/api/widget/take-control`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
