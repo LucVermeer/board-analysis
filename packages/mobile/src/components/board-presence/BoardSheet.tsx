@@ -13,8 +13,9 @@
 
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl, StyleSheet, View, type ColorValue } from 'react-native';
-import { BottomSheetModal, BottomSheetFlatList, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
+// SPIKE(spike/expo-bottom-sheet): swap gorhom -> Expo's native drop-in. The native
+// sheet draws its own scrim, so SheetBackdrop + stackBehavior are dropped.
+import { BottomSheetModal, BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
@@ -25,7 +26,6 @@ import {
 } from '@boardsesh/board-presence-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { BoardName, BoardPresenceClimb, BoardPresenceHardestSend, Climb } from '@boardsesh/shared-schema';
-import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
@@ -468,19 +468,6 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     },
   }));
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={sheet.scrimOpacity}
-        pressBehavior="close"
-      />
-    ),
-    [sheet.scrimOpacity],
-  );
-
   const renderHistoryItem = useCallback(
     ({ item }: { item: BoardPresenceClimb }) => {
       const formattedGrade = item.grade ? formatGrade(item.grade) : null;
@@ -664,12 +651,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       // content sizing — it doesn't play well with a BottomSheetFlatList (no
       // bounded content height to measure).
       enableDynamicSizing={false}
-      stackBehavior="push"
       enablePanDownToClose
-      backdropComponent={renderBackdrop}
       onDismiss={handleDismissed}
       handleIndicatorStyle={sheet.handleStyle}
-      backgroundComponent={GlassSheetBackground}
       style={styles.sheet}
     >
       <View style={[styles.header, { borderBottomColor: systemColors.separator }]}>

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
-import BottomSheet, { BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
+// SPIKE(spike/expo-bottom-sheet): swap gorhom -> Expo's native drop-in. The native
+// sheet renders its own scrim, so the custom SheetBackdrop wiring is dropped.
+import BottomSheet, { BottomSheetView } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
@@ -50,11 +51,6 @@ export function InviteSheet({ visible, onDismiss, sessionId }: InviteSheetProps)
 
   const snapPoints = useMemo(() => ['60%'], []);
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => <SheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
-    [],
-  );
-
   const handleClose = useCallback(() => {
     setMounted(false);
     onDismiss();
@@ -80,7 +76,6 @@ export function InviteSheet({ visible, onDismiss, sessionId }: InviteSheetProps)
       snapPoints={snapPoints}
       enablePanDownToClose
       onClose={handleClose}
-      backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: systemColors.secondaryBackground }}
       handleIndicatorStyle={sheetStyles.indicator}
     >
