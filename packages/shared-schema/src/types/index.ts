@@ -22,3 +22,4 @@ export * from './controller';
 export * from './device-logging';
 export * from './feedback';
 export * from './integrations';
+export * from './instagram-beta-import';

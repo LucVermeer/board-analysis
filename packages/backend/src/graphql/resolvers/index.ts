@@ -53,6 +53,7 @@ import { feedbackMutations } from './feedback/mutations';
 import { integrationQueries } from './integrations/queries';
 import { integrationMutations } from './integrations/mutations';
 import { betaLinkQueries } from './beta-videos/queries';
+import { instagramBetaImportQueries } from './beta-videos/instagram-beta-import';
 import { isNoMatchClimb } from './shared/helpers';
 
 export const resolvers = {
@@ -86,6 +87,7 @@ export const resolvers = {
     ...socialCommunitySettingsQueries,
     ...newClimbSubscriptionResolvers.Query,
     ...betaLinkQueries,
+    ...instagramBetaImportQueries,
     ...boardPresenceResolvers.Query,
     ...integrationQueries,
   },

@@ -646,6 +646,13 @@ export const queriesTypeDefs = /* GraphQL */ `
     userBetaLinks(userId: String!, limit: Int = 50, offset: Int = 0): [RecentBetaLink!]!
 
     """
+    Resolve scraped Instagram posts against Boardsesh: which beta videos are
+    missing, already linked, ambiguous, or unmatched. Read-only — the client
+    attaches the missing ones via the attachBetaLink mutation.
+    """
+    instagramBetaScan(input: InstagramBetaScanInput!): InstagramBetaScanResult!
+
+    """
     Live preview metadata for a shared Instagram/TikTok URL, before it's
     attached. Powers the mobile share flow: shows the post thumbnail/caption and
     lets the client auto-match the climb from the caption. Best-effort — returns
