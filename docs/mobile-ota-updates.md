@@ -190,8 +190,8 @@ events from `OtaUpdateTracker` (`packages/mobile/src/components/analytics/OtaUpd
 mounted once near the root beside `AnalyticsScreenTracker`:
 
 - **`OTA Update Status`** — fired once per launch with the running bundle:
-  `{ isEnabled, isEmbeddedLaunch, updateId, channel, runtimeVersion, createdAtIso, isEmergencyLaunch,
-emergencyLaunchReason }`. `isEmbeddedLaunch === false` means the install is running an **OTA'd**
+  `{ isEnabled, isEmbeddedLaunch, updateId, channel, runtimeVersion, createdAtIso, isEmergencyLaunch, emergencyLaunchReason }`.
+  `isEmbeddedLaunch === false` means the install is running an **OTA'd**
   bundle (not the one baked into the binary); group by `updateId` to size the rollout of a specific
   JS-only fix; `runtimeVersion` is the fingerprint cohort that can receive OTAs at all. The same
   cohort is also registered as PostHog **super properties** (`ota_update_id`, `ota_is_embedded`,

@@ -37,6 +37,8 @@ export function OtaUpdateTracker(): null {
   // from the imperative Updates.* constants because useUpdates()' currentlyRunning
   // omits runtimeVersion.
   useEffect(() => {
+    if (hasReportedStatus) return;
+    hasReportedStatus = true;
     const properties = buildOtaStatusProperties({
       isEnabled: Updates.isEnabled,
       isEmbeddedLaunch: Updates.isEmbeddedLaunch,
@@ -47,8 +49,6 @@ export function OtaUpdateTracker(): null {
       isEmergencyLaunch: Updates.isEmergencyLaunch,
       emergencyLaunchReason: Updates.emergencyLaunchReason,
     });
-    if (hasReportedStatus) return;
-    hasReportedStatus = true;
     track(OTA_UPDATE_STATUS_EVENT, properties);
     registerSuperProperties({
       ota_update_id: properties.updateId,
