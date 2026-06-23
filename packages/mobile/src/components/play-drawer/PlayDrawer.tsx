@@ -1,8 +1,20 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Platform, View, Pressable, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import {
+  Platform,
+  View,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { PlayDrawerOverlay } from './PlayDrawerOverlay';
+import { useReduceMotion } from '../../hooks/use-reduce-motion';
+import { springs, timing } from '../../theme/animations';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
@@ -116,9 +128,6 @@ type PlayDrawerProps = {
   onOpenClimbActions?: (climb: Climb) => void;
 };
 
-// Full-screen now-playing takeover: a single 100% snap, no peek detent. The
-// mini-player (PersistentQueueBar) is the collapsed state, like Spotify.
-const SNAP_POINTS = ['100%'];
 // Fallback used for the first-screen reserve before the Beta Videos header has
 // been measured, so the board fits without a visible jump on first open.
 const DEFAULT_BETA_HEADER_HEIGHT = 52;
@@ -139,9 +148,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const sheetRef = useRef<BottomSheetModal>(null);
-  // The native sheet's content viewport (measured), which is shorter than the
-  // window. Drives the first-screen sizing so the below-fold peek lands.
+  const reduceMotion = useReduceMotion();
+  // Full-screen overlay lifecycle: `mounted` gates the overlay render (kept true
+  // through the slide-out), `progress` (0=off-screen, 1=open) drives the slide
+  // and the drag-to-dismiss gesture.
+  const [mounted, setMounted] = useState(false);
+  const progress = useSharedValue(0);
+  // Measured viewport of the overlay's scroll container; drives first-screen
+  // sizing so the below-fold (Beta Videos) peek lands.
   const [sheetViewportHeight, setSheetViewportHeight] = useState(0);
   const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
     const measured = event.nativeEvent.layout.height;
@@ -326,7 +340,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
         }
       }
-      sheetRef.current?.present();
+      // Mount the overlay; the slide-in animation runs from the `mounted` effect.
+      setMounted(true);
     },
     [state.currentClimbQueueItem, setCurrentClimb],
   );
@@ -342,19 +357,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   );
   const { requestOpen, onAnimate: handleSheetAnimateIndex, flushOnDismiss } = useDeferredSheetOpen(openDrawerFromArgs);
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
-        requestOpen({ climb: selectedClimb, options });
-      },
-      close: () => {
-        sheetRef.current?.dismiss();
-      },
-    }),
-    [requestOpen],
-  );
-
+  // Runs once the slide-out has fully completed (the analog of gorhom's
+  // onDismiss): resets transient state, unmounts the overlay, and replays any
+  // open() that arrived mid-dismiss (the re-present is now clean).
   const handleClose = useCallback(() => {
     setDrawerPreviewItem(null);
     setDrawerPreviewSuggestionSource(null);
@@ -363,10 +368,49 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
     setIsSheetOpen(false);
     setActiveSubDrawer('none');
-    // Replay an open() that arrived while this dismissal was animating — the
-    // modal is now fully dismissed, so the re-present is clean.
+    setMounted(false);
     flushOnDismiss();
   }, [flushOnDismiss]);
+
+  // Slide the player off-screen, then reset (handleClose). Marks the serializer
+  // dismissing first, so an open() during the slide-out is deferred + replayed.
+  const runCloseAnimation = useCallback(() => {
+    handleSheetAnimateIndex(-1);
+    if (reduceMotion) {
+      handleClose();
+      return;
+    }
+    progress.value = withTiming(0, { duration: timing.normal }, (finished) => {
+      if (finished) runOnJS(handleClose)();
+    });
+  }, [handleSheetAnimateIndex, reduceMotion, progress, handleClose]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
+        requestOpen({ climb: selectedClimb, options });
+      },
+      close: () => {
+        runCloseAnimation();
+      },
+    }),
+    [requestOpen, runCloseAnimation],
+  );
+
+  // Slide in when the overlay mounts (open). The deferred-open hook is told we
+  // settled on-screen on finish (clears any stale dismissing stash).
+  useEffect(() => {
+    if (!mounted) return;
+    if (reduceMotion) {
+      progress.value = 1;
+      handleSheetAnimateIndex(0);
+      return;
+    }
+    progress.value = withSpring(1, springs.gentle, (finished) => {
+      if (finished) runOnJS(handleSheetAnimateIndex)(0);
+    });
+  }, [mounted, reduceMotion, progress, handleSheetAnimateIndex]);
 
   const handlePrev = useCallback(() => {
     const previewTarget = getViewOnlyPreviewNavigationTarget({
@@ -557,34 +601,58 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // board by that inset twice.
   const firstScreenReserve =
     spacing[3] + (betaHeaderHeight > 0 ? betaHeaderHeight : DEFAULT_BETA_HEADER_HEIGHT) + spacing[2];
-  // Size the first screen from the sheet's MEASURED viewport, not the full
-  // window: the native sheet card is shorter than the window (it sits below the
-  // status bar), so windowHeight would oversize the board and push the Beta
-  // Videos peek off the fold. Falls back to windowHeight until the first layout.
+  // Size the first screen from the MEASURED viewport (the overlay's scroll
+  // container fills the full window), falling back to windowHeight pre-layout.
+  // The reserve leaves the Beta Videos header peeking below the fold.
   const firstScreenHeight = computeFirstScreenHeight(sheetViewportHeight || windowHeight, firstScreenReserve);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
   const subDrawerOpen = activeSubDrawer !== 'none';
 
+  // Drag release decision: past ~25% of the window or a fast flick → dismiss;
+  // otherwise spring back to fully open (and tell the serializer we're staying).
+  const onDragEnd = useCallback(
+    (translationY: number, velocityY: number) => {
+      if (translationY > windowHeight * 0.25 || velocityY > 800) {
+        runCloseAnimation();
+      } else {
+        progress.value = withSpring(1, springs.gentle);
+        handleSheetAnimateIndex(0);
+      }
+    },
+    [windowHeight, runCloseAnimation, progress, handleSheetAnimateIndex],
+  );
+
+  // Interactive drag-to-dismiss (Spotify-style): dragging the top grabber tracks
+  // the finger via `progress`; release past a distance/velocity threshold slides
+  // out, else springs back. Scoped to the top region + failOffsetX so it never
+  // fights the board's horizontal swipe or the scroll view; disabled while a
+  // sub-drawer is open.
+  const dragToDismiss = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!subDrawerOpen)
+        .activeOffsetY(12)
+        .failOffsetX([-16, 16])
+        .onUpdate((event) => {
+          'worklet';
+          const dragged = Math.max(0, event.translationY);
+          progress.value = 1 - Math.min(dragged / windowHeight, 1);
+        })
+        .onEnd((event) => {
+          'worklet';
+          runOnJS(onDragEnd)(event.translationY, event.velocityY);
+        }),
+    [subDrawerOpen, windowHeight, progress, onDragEnd],
+  );
+
+  if (!mounted) return null;
+
   return (
     <>
-      <BottomSheetModal
-        ref={sheetRef}
-        snapPoints={SNAP_POINTS}
-        index={0}
-        enablePanDownToClose
-        enableContentPanningGesture={!subDrawerOpen}
-        enableHandlePanningGesture={!subDrawerOpen}
-        // PlayDrawer draws its own close affordance in content, so hide the
-        // native drag indicator (the native sheet owns the scrim + glass background).
-        handleComponent={null}
-        // The native sheet has no onAnimate; onChange settles at the new index,
-        // which is when the deferred-open machinery should flush heavy content.
-        onChange={handleSheetAnimateIndex}
-        onDismiss={handleClose}
-      >
-        <BottomSheetScrollView
+      <PlayDrawerOverlay progress={progress} onRequestClose={runCloseAnimation}>
+        <ScrollView
           style={styles.content}
           contentContainerStyle={{ paddingBottom: insets.bottom }}
           onLayout={handleViewportLayout}
@@ -592,22 +660,23 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         >
           {displayedClimb && (
             <>
-              {/* The native sheet starts its content below the status bar, so the
-                  top row (drag grabber + close) sits at the sheet's top — no full
-                  window top inset (that double-padded and pushed the title down). */}
-              <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: spacing[2] }]}>
-                <View style={styles.topRow}>
-                  <View style={sheetStyles.indicator} />
-                  <Pressable
-                    onPress={() => sheetRef.current?.dismiss()}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('playView.closeAria')}
-                    style={styles.closeButton}
-                    hitSlop={8}
-                  >
-                    <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
-                  </Pressable>
-                </View>
+              {/* Full-window overlay: the firstScreen container owns the top safe
+                  area, so the grabber + close + climb name sit at the very top. */}
+              <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: insets.top + spacing[2] }]}>
+                <GestureDetector gesture={dragToDismiss}>
+                  <View style={styles.topRow}>
+                    <View style={sheetStyles.indicator} />
+                    <Pressable
+                      onPress={runCloseAnimation}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('playView.closeAria')}
+                      style={styles.closeButton}
+                      hitSlop={8}
+                    >
+                      <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
+                    </Pressable>
+                  </View>
+                </GestureDetector>
 
                 <PlayDrawerHeader
                   name={displayedClimb.name}
@@ -744,16 +813,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
               />
             </>
           )}
-        </BottomSheetScrollView>
-      </BottomSheetModal>
+        </ScrollView>
+      </PlayDrawerOverlay>
 
-      {/* Sub-drawer: Climb actions — the Android / fallback path. On iOS the ellipsis
-          routes to ClimbReactionMenu via onOpenClimbActions (see handleOpenActions), so
-          activeSubDrawer never becomes 'actions' there and this sheet stays idle.
-          Always mounted and toggled via `visible` (it presents as a BottomSheetModal
-          with stackBehavior=push, the only way to render above the play drawer's own
-          modal — same as the angle selector and tick sheet). A conditionally-mounted
-          modal here would drop its present() over the already-open play drawer. */}
+      {/* Sub-drawers render as siblings of the overlay (NOT inside it): their
+          @expo/ui native .sheet() presents off the main window and floats over the
+          player's overlay window. On iOS the ellipsis routes to ClimbReactionMenu
+          via onOpenClimbActions, so activeSubDrawer never becomes 'actions' there.
+          Always mounted, toggled via `visible`. */}
       <ClimbActionsSheet
         visible={activeSubDrawer === 'actions'}
         climb={displayedClimb ?? null}
@@ -775,8 +842,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         onClose={handleCloseSubDrawer}
       />
 
-      {/* Sub-drawer: Share your beta. Sibling modal (stackBehavior=push) so it
-          stacks above the play drawer, opened from the action sheet's "Add beta
+      {/* Sub-drawer: Share your beta — opened from the action sheet's "Add beta
           video" row or the Beta Videos section "+" button. */}
       <AddBetaVideoSheet
         visible={addBetaVideoOpen}
@@ -787,10 +853,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         onClose={handleCloseAddBetaVideo}
       />
 
-      {/* Sub-drawer: Angle selector. Always mounted and toggled via `visible`
-          (it presents as a BottomSheetModal with stackBehavior=push, the only
-          way to render above the play drawer's own modal — same as the tick
-          sheet below). A plain BottomSheet here would open behind this modal. */}
+      {/* Sub-drawer: Angle selector. Always mounted, toggled via `visible`. */}
       <AngleSelectorSheet
         visible={activeSubDrawer === 'angleSelector'}
         onClose={handleCloseSubDrawer}
@@ -804,9 +867,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         }}
       />
 
-      {/* Tick sheet — sibling of the PlayDrawer modal so it renders above
-          (gorhom `BottomSheetModal` with stackBehavior=push). Snap-point is
-          60% so the climb image above stays visible while logging. */}
+      {/* Tick sheet — a 60% sub-drawer so the climb image stays visible while
+          logging. Sibling of the overlay; presents over it. */}
       {displayedClimb && (
         <LogAscentSheet
           visible={isTickBarActive}
