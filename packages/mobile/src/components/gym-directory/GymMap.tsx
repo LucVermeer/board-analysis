@@ -1,4 +1,14 @@
-import { Component, forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
+import {
+  Component,
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 export type GymMapMarker = {
@@ -21,6 +31,18 @@ type GymMapProps = {
   // Fired (already debounced upstream) when the user pans/zooms the map, so the
   // screen can re-query gyms for the new viewport.
   onRegionChange?: (center: LatLng) => void;
+  // Fired with the marker id when a pin is tapped. Selection lives in the list, so
+  // this is a map→list convenience (scroll to + expand the row), never a hard
+  // dependency — the screen works the same when the map can't surface taps.
+  onMarkerPress?: (id: string) => void;
+  // The currently-selected marker id (mirrors the list selection). Tinted with
+  // `selectedTint` where the platform supports a marker colour (Apple Maps).
+  selectedId?: string;
+  selectedTint?: string;
+  // Fired once when the native map can't render at all (expo-maps module or the
+  // platform view is absent, or a mount throw). The screen biases the panel
+  // toward a list-only layout instead of peeking over a dead grey rectangle.
+  onMapUnavailable?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -46,15 +68,17 @@ try {
 /**
  * Catches a render/mount throw from the native map (e.g. the expo-maps native
  * view isn't linked in this build) so it degrades to no-map instead of taking
- * the whole gym screen down with a red box.
+ * the whole gym screen down with a red box. Reports the loss via `onUnavailable`
+ * so the screen can lay out as a list-only surface.
  */
-class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class MapErrorBoundary extends Component<{ children: ReactNode; onUnavailable?: () => void }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
   }
   componentDidCatch(error: unknown) {
     console.warn('[gym-map] native map unavailable, falling back to list-only:', error);
+    this.props.onUnavailable?.();
   }
   render() {
     if (this.state.failed) return null;
@@ -63,7 +87,7 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 }
 
 const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap(
-  { center, markers, onRegionChange, style },
+  { center, markers, onRegionChange, onMarkerPress, selectedId, selectedTint, onMapUnavailable, style },
   ref,
 ) {
   // Keep a ref to the native view so the imperative handle can drive the camera.
@@ -89,23 +113,35 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
     nativeRef.current = (instance as NativeMapHandle | null) ?? null;
   }, []);
 
-  // Markers only change on a refetch; rebuild the native marker array then, not
-  // on the re-renders a changing `center` prop triggers during a pan.
+  const MapView = Platform.OS === 'ios' ? Maps?.AppleMaps?.View : Maps?.GoogleMaps?.View;
+
+  // Report a missing native map exactly once (the module or platform view is
+  // absent — e.g. a build without expo-maps). Read through a ref so the effect
+  // stays mount-only and isn't torn down by a changing callback identity.
+  const onMapUnavailableRef = useRef(onMapUnavailable);
+  onMapUnavailableRef.current = onMapUnavailable;
+  useEffect(() => {
+    if (!Maps || !MapView) onMapUnavailableRef.current?.();
+    // Intentionally mount-only: availability is fixed for the component's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Markers only change on a refetch (or a selection change); rebuild the native
+  // marker array then, not on the re-renders a changing `center` prop triggers
+  // during a pan. The selected marker gets a brand tint where the platform takes
+  // one (Apple Maps); selection still reads in the list regardless.
   const mapMarkers = useMemo(
     () =>
       markers.map((marker) => ({
+        id: marker.id,
         coordinates: { latitude: marker.latitude, longitude: marker.longitude },
         title: marker.name,
+        ...(selectedTint && marker.id === selectedId ? { tintColor: selectedTint } : {}),
       })),
-    [markers],
+    [markers, selectedId, selectedTint],
   );
 
-  if (!Maps) return null;
-  // requireNativeView can hand back a component that exists in JS but throws on
-  // mount when the native side is absent — the boundary above is the real guard;
-  // this short-circuits the obvious "undefined component" case.
-  const MapView = Platform.OS === 'ios' ? Maps.AppleMaps?.View : Maps.GoogleMaps?.View;
-  if (!MapView) return null;
+  if (!Maps || !MapView) return null;
 
   const cameraPosition = {
     coordinates: initialCameraRef.current,
@@ -121,6 +157,13 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
       }
     : undefined;
 
+  // Both AppleMapsMarker and GoogleMapsMarker echo back the tapped marker's `id`.
+  const handleMarkerClick = onMarkerPress
+    ? (event: { id?: string }) => {
+        if (event.id) onMarkerPress(event.id);
+      }
+    : undefined;
+
   return (
     <MapView
       ref={assignNativeRef}
@@ -128,6 +171,7 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
       cameraPosition={cameraPosition}
       markers={mapMarkers}
       onCameraMove={handleCameraMove}
+      onMarkerClick={handleMarkerClick}
     />
   );
 });
@@ -135,17 +179,31 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
 /**
  * Renders nearby gyms as pins on the platform map (Apple Maps on iOS, Google
  * Maps on Android — the latter needs GOOGLE_MAPS_API_KEY + a native build, else
- * blank). Marker taps aren't wired: selection happens in the gym list so the
- * flow works identically whether or not the map renders, and a missing/broken
- * native map never crashes the screen. Panning the map fires `onRegionChange`;
- * a place search drives the camera via the {@link GymMapHandle} ref. Both no-op
- * when the native map is unavailable, so the list-only fallback still works.
+ * blank). Marker taps drive `onMarkerPress` (a map→list convenience); selection
+ * itself lives in the gym list so the flow works identically whether or not the
+ * map renders, and a missing/broken native map never crashes the screen (it
+ * reports `onMapUnavailable` so the screen lays out list-only). Panning the map
+ * fires `onRegionChange`; a place search drives the camera via the
+ * {@link GymMapHandle} ref. Both no-op when the native map is unavailable.
  */
 export const GymMap = memo(
-  forwardRef<GymMapHandle, GymMapProps>(function GymMap({ center, markers, onRegionChange, style }, ref) {
+  forwardRef<GymMapHandle, GymMapProps>(function GymMap(
+    { center, markers, onRegionChange, onMarkerPress, selectedId, selectedTint, onMapUnavailable, style },
+    ref,
+  ) {
     return (
-      <MapErrorBoundary>
-        <NativeGymMap ref={ref} center={center} markers={markers} onRegionChange={onRegionChange} style={style} />
+      <MapErrorBoundary onUnavailable={onMapUnavailable}>
+        <NativeGymMap
+          ref={ref}
+          center={center}
+          markers={markers}
+          onRegionChange={onRegionChange}
+          onMarkerPress={onMarkerPress}
+          selectedId={selectedId}
+          selectedTint={selectedTint}
+          onMapUnavailable={onMapUnavailable}
+          style={style}
+        />
       </MapErrorBoundary>
     );
   }),
