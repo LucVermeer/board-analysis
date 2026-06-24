@@ -1,0 +1,55 @@
+name: Branch Cleanup
+
+# Weekly: delete stale `origin` branches whose PR has already merged. GitHub's
+# "Automatically delete head branches" setting handles new merges going forward;
+# this drains anything that setting misses (branches merged before it was enabled,
+# or merged via the API) so the branch list doesn't creep back up. The script is
+# conservative — merged-only, never an open-PR/protected/diverged branch — and
+# aborts without deleting if it can't gather a complete PR/branch picture.
+on:
+  schedule:
+    - cron: '0 5 * * 1' # 05:00 UTC every Monday (off the acknowledgements job at 07:00)
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Actually delete branches (unchecked = dry-run preview)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: write # delete branch refs via `git push origin --delete`
+  pull-requests: read # `gh pr list`
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Scheduled runs always apply. A manual dispatch only applies when the `apply`
+      # input is checked, so a human can preview the list first.
+      - name: Clean up merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.apply }}" == "true" ]]; then
+            vp run cleanup:branches -- --apply
+          else
+            vp run cleanup:branches
+          fi
