@@ -1,11 +1,11 @@
 import { memo, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import { computeCardRotation, computeThrowDroop, computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
+import { computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
 
 type SwipeableHeaderProps = {
   /** The carousel's swipe offset — the header rides the EXACT same value as the
-   *  board, so the title/grade slide and tilt in lockstep with the climb. */
+   *  board, so the title/grade slide in lockstep with the climb. */
   swipeTranslateX: SharedValue<number>;
   /** The header's own width (screen width). The current header flings past this
    *  and the peek slides in by it, so each clears the viewport. */
@@ -18,11 +18,10 @@ type SwipeableHeaderProps = {
 };
 
 /**
- * Wraps the play-drawer's title + grade so they swipe with the board. The current
- * header tracks the finger and tilts/flings exactly like the current board card
- * (same `swipeTranslateX`, same rotation/droop helpers); the next climb's header
- * slides in edge-adjacent via `computePeekOffset`, matching the board's peek. Off
- * at rest (peek off-screen, current centred), so it's invisible until a swipe.
+ * Wraps the play-drawer's title + grade so they swipe with the board: the current
+ * header slides horizontally off the same `swipeTranslateX` as the board, and the
+ * next climb's header slides in edge-adjacent via `computePeekOffset`. Off at rest
+ * (peek off-screen, current centred), so it's invisible until a swipe.
  */
 export const SwipeableHeader = memo(function SwipeableHeader({
   swipeTranslateX,
@@ -30,16 +29,9 @@ export const SwipeableHeader = memo(function SwipeableHeader({
   current,
   peek,
 }: SwipeableHeaderProps) {
-  const currentStyle = useAnimatedStyle(() => {
-    const tx = swipeTranslateX.value;
-    return {
-      transform: [
-        { translateX: tx },
-        { translateY: computeThrowDroop(tx, viewportWidth) },
-        { rotate: `${computeCardRotation(tx, viewportWidth)}deg` },
-      ],
-    };
-  });
+  const currentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: swipeTranslateX.value }],
+  }));
 
   const peekStyle = useAnimatedStyle(() => {
     const tx = swipeTranslateX.value;

@@ -122,61 +122,20 @@ export function getEnterDirection(navigation: 'next' | 'previous'): EnterDirecti
   return navigation === 'next' ? 'from-right' : 'from-left';
 }
 
-// ── Mobile card-throw (Tinder-style) swipe animation ────────────────────────
-// Mobile-only tuning + pure helpers for the play-drawer's swipe-between-climbs
-// feel: the OUTGOING (current) board tilts as you drag and flings off-screen with
-// rotation on release. The INCOMING (next) board slides in edge-adjacent via the
-// shared computePeekOffset, so it enters from the swipe direction. Web's swipe
-// stays a flat slide and does not import any of these.
-//
-// As with computePeekOffset, the helpers are 'worklet'-marked so the mobile
-// useAnimatedStyle closures can call them on the UI thread; in non-worklet
-// contexts (tests) the directive is a harmless no-op. Mobile GESTURE callbacks
-// (Gesture.Pan().onEnd) must still inline constants rather than call these —
-// cross-module worklet CALLS aren't reliable there — so the constants are
-// exported for that inlining and the functions exist as the tested spec.
+// ── Mobile swipe-between-climbs animation ───────────────────────────────────
+// Mobile-only tuning + helper for the play-drawer's horizontal swipe: the current
+// board + climb name slide with the finger and, on release past the threshold,
+// fling off-screen while the next climb slides in edge-adjacent (computePeekOffset
+// above). A flat horizontal slide — no tilt, no droop. Web's swipe matches.
 
-/** Tilt (deg) the card saturates to around the swipe threshold while dragging. */
-export const CARD_THROW_MAX_ROTATION_DEG = 12;
-/** Degrees of tilt per px of horizontal drag, before clamping. */
-export const CARD_THROW_ROTATION_PER_PX = 0.06;
-/** Max downward droop (px) the outgoing card dips as it flies off. */
-export const CARD_THROW_DROOP = 40;
-/** Extra px past the screen edge the fling targets so the tilted card clears. */
-export const CARD_THROW_OFFSCREEN_PAD = 80;
-
-function clamp01(value: number): number {
-  'worklet';
-  return Math.max(0, Math.min(1, value));
-}
-
-// Tilt as a function of horizontal drag. Linear (clamped to ±MAX) while the card
-// is still on/near screen; past the board edge it whips further so the fling
-// reads as a throw. Sign-symmetric. boardWidth <= 0 (pre-layout) → no extra spin.
-export function computeCardRotation(swipeOffset: number, boardWidth: number): number {
-  'worklet';
-  const base = Math.max(
-    -CARD_THROW_MAX_ROTATION_DEG,
-    Math.min(CARD_THROW_MAX_ROTATION_DEG, swipeOffset * CARD_THROW_ROTATION_PER_PX),
-  );
-  if (boardWidth <= 0 || Math.abs(swipeOffset) <= boardWidth) return base;
-  const overshoot = Math.abs(swipeOffset) - boardWidth;
-  const extra = Math.sign(swipeOffset) * overshoot * CARD_THROW_ROTATION_PER_PX;
-  return base + extra;
-}
-
-// Downward droop of the outgoing card: 0 while it's still within the board box,
-// growing to CARD_THROW_DROOP a board-width past the edge. boardWidth <= 0 → 0.
-export function computeThrowDroop(swipeOffset: number, boardWidth: number): number {
-  'worklet';
-  if (boardWidth <= 0) return 0;
-  const over = Math.max(0, Math.abs(swipeOffset) - boardWidth);
-  return clamp01(over / boardWidth) * CARD_THROW_DROOP;
-}
+/** Extra px past the screen edge the fling targets so the card fully clears. */
+export const SWIPE_OFFSCREEN_PAD = 80;
 
 // Where the fling animates translateX to so the card fully clears the screen,
-// margins and tilt included.
-export function computeThrowExitTarget(screenWidth: number): number {
+// margins included. The mobile gesture inlines `screenWidth + SWIPE_OFFSCREEN_PAD`
+// (cross-module worklet CALLS aren't reliable in gesture callbacks); this is the
+// canonical spec / test target.
+export function computeSwipeExitTarget(screenWidth: number): number {
   'worklet';
-  return screenWidth + CARD_THROW_OFFSCREEN_PAD;
+  return screenWidth + SWIPE_OFFSCREEN_PAD;
 }

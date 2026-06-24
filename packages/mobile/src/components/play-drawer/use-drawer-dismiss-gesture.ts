@@ -99,6 +99,16 @@ export function useDrawerDismissGesture({
         } else {
           translateY.value = withSpring(0, springs.interactive);
         }
+      })
+      // The route normally unmounts after a committed dismiss, but a
+      // dismiss/re-navigate race on this live-behind `transparentModal` could
+      // leave the gesture alive with `isDismissing` stuck true — `onUpdate` would
+      // then early-return forever and the drawer could never be dragged again.
+      // Reset on finalize so the next drag always starts clean. (translateY is
+      // left as-is so a committed dismiss keeps sliding from the dragged offset.)
+      .onFinalize(() => {
+        'worklet';
+        isDismissing.value = false;
       });
     return scrollRef ? pan.simultaneousWithExternalGesture(scrollRef) : pan;
   }, [translateY, isDismissing, startedAtTop, scrollYSV, scrollRef]);

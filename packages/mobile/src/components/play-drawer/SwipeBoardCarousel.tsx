@@ -19,7 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
-import { computeCardRotation, computeThrowDroop, computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
+import { computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Icon } from '../Icon';
@@ -168,23 +168,12 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     opacity: resetButtonOpacity.value,
   }));
 
-  // The top (current) card: tracks the finger, tilts as it drags, and on release
-  // the carousel's withTiming flings translateX off-screen — rotation + droop
-  // ride along for the throw. While zoomed it's a flat pan surface (no tilt; the
-  // swipe is disabled so translateX is 0 anyway).
-  const currentStyle = useAnimatedStyle(() => {
-    if (isZoomedSV.value) {
-      return { transform: [{ translateX: translateX.value }] };
-    }
-    const tx = translateX.value;
-    return {
-      transform: [
-        { translateX: tx },
-        { translateY: computeThrowDroop(tx, boardWidthForSwipe) },
-        { rotate: `${computeCardRotation(tx, boardWidthForSwipe)}deg` },
-      ],
-    };
-  });
+  // The current board: slides horizontally with the finger, and on release the
+  // carousel's withTiming flings translateX off-screen. While zoomed the swipe is
+  // disabled so translateX is 0 (the board stays put under the zoom transform).
+  const currentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   const peekDirection = useDerivedValue<PeekDirection>(() => (translateX.value < 0 ? 'next' : 'prev'));
 

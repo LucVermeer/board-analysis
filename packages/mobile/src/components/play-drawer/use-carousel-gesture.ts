@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, type ComponentType, type RefObject } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
-import { SWIPE_THRESHOLD, DIRECTION_THRESHOLD, EXIT_DURATION, CARD_THROW_OFFSCREEN_PAD } from '@boardsesh/play-view';
+import { SWIPE_THRESHOLD, DIRECTION_THRESHOLD, EXIT_DURATION, SWIPE_OFFSCREEN_PAD } from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
 
@@ -12,8 +12,8 @@ type UseCarouselGestureOptions = {
   canSwipePrevious: boolean;
   /** Width the slide-off is measured in (the contained board width). */
   boardWidth: number;
-  /** Full screen width — the card flings to ±(screenWidth + pad) so the tilted
-   *  card fully clears the viewport (Tinder throw), past its letterbox margins. */
+  /** Full screen width — the card flings to ±(screenWidth + pad) so it fully
+   *  clears the viewport on release, past its letterbox margins. */
   screenWidth: number;
   enabled?: boolean;
   isZoomedSV?: SharedValue<boolean>;
@@ -90,10 +90,9 @@ export function useCarouselGesture({
     boardWidthSV.value = boardWidth;
   }, [boardWidth, boardWidthSV]);
 
-  // Fling distance rides the FULL screen width (+ pad) so the tilted card clears
-  // the viewport, while the slide-off snap-back still uses board width. Mirrored
-  // for the same reason as boardWidth — a layout change must not rebuild the
-  // gesture.
+  // Fling distance rides the FULL screen width (+ pad) so the card fully clears
+  // the viewport, while the spring snap-back still uses board width. Mirrored for
+  // the same reason as boardWidth — a layout change must not rebuild the gesture.
   const screenWidthSV = useSharedValue(screenWidth);
   useEffect(() => {
     screenWidthSV.value = screenWidth;
@@ -238,7 +237,7 @@ export function useCarouselGesture({
             // tilt/letterbox clears. Commit on COMPLETION (card off-screen, peek at
             // centre) so the translateX reset is an invisible hand-off, not a snap.
             translateX.value = withTiming(
-              -(screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD),
+              -(screenWidthSV.value + SWIPE_OFFSCREEN_PAD),
               { duration: EXIT_DURATION },
               (finished) => {
                 'worklet';
@@ -253,7 +252,7 @@ export function useCarouselGesture({
           } else {
             isAnimating.value = true;
             translateX.value = withTiming(
-              screenWidthSV.value + CARD_THROW_OFFSCREEN_PAD,
+              screenWidthSV.value + SWIPE_OFFSCREEN_PAD,
               { duration: EXIT_DURATION },
               (finished) => {
                 'worklet';
@@ -264,6 +263,21 @@ export function useCarouselGesture({
         } else {
           translateX.value = skipAnimation ? 0 : withSpring(0, springs.interactive);
         }
+      })
+      // manualActivation hands the touch lifecycle to these worklets, so a touch
+      // cancelled mid-swipe (a sheet/route presents over the board, the OS steals
+      // the touch) must explicitly fail — otherwise the activated Pan stays latched
+      // holding the responder, and every Pressable tap dies app-wide while the
+      // simultaneous scroll still works (the "frozen, scroll-but-no-tap" bug).
+      .onTouchesCancelled((_event, stateManager) => {
+        'worklet';
+        stateManager.fail();
+      })
+      // Catch-all terminal reset: on any end/fail/cancel, clear the direction lock
+      // so a finalized gesture never leaves stale manual state behind.
+      .onFinalize(() => {
+        'worklet';
+        directionLock.value = 0;
       });
     // Declare the swipe Pan simultaneous with the surrounding RNGH ScrollView so a
     // horizontal swipe runs without the scroll cancelling it, while a vertical drag
