@@ -34,6 +34,7 @@ import { useToast } from './toast-provider';
 import { toClimbInput } from '../lib/climb-to-queue-item';
 import { hapticSuccess } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
+import { BlePickerHostContext, type BlePickerHostValue } from './ble-picker-host';
 import { track } from '../lib/analytics';
 import { getBluetoothColorOverrides, useHoldColorOverrides } from '../lib/hold-color-overrides';
 
@@ -768,6 +769,11 @@ export function BluetoothProvider({
     };
   }, [boardName, layoutId, sizeId, setIds]);
 
+  // True while a route hosts its own picker (the play route) so the app-root
+  // picker below stays suppressed — a root picker would otherwise land behind the
+  // modal route, and presenting it forces the route to dismiss.
+  const [pickerHostedExternally, setPickerHostedExternally] = useState(false);
+
   // handlePickerSelect, handleMismatchSwitch and the auto-connect effect all
   // need the latest pickerState / resolvedPickerBoards / currentBoardConfig, but
   // pickerState is a fresh object on every scan-progress push. Listing it in a
@@ -1177,6 +1183,19 @@ export function BluetoothProvider({
     ],
   );
 
+  // Dedicated picker context (volatile pickerState kept OFF the main bluetooth
+  // context) so a route can host its own picker sheet that stacks above the modal
+  // route. Only DevicePickerSheetHost consumes this.
+  const pickerHostValue = useMemo<BlePickerHostValue>(
+    () => ({
+      pickerState,
+      onSelect: handlePickerSelect,
+      currentBoardConfig,
+      setHostedExternally: setPickerHostedExternally,
+    }),
+    [pickerState, handlePickerSelect, currentBoardConfig],
+  );
+
   return (
     <BluetoothContext.Provider value={value}>
       {/* Holder model: anyone connected writes the wall (always-take), so the
@@ -1193,8 +1212,11 @@ export function BluetoothProvider({
           onSkipSpillClimb={handleSkipSpillClimb}
         />
       )}
-      {children}
-      {pickerState && (
+      <BlePickerHostContext.Provider value={pickerHostValue}>{children}</BlePickerHostContext.Provider>
+      {/* App-root picker, for connects off the tab screens / accessory bar.
+          Suppressed while a route (the player) hosts its own — see
+          DevicePickerSheetHost. */}
+      {pickerState && !pickerHostedExternally && (
         <DevicePickerSheet
           devices={pickerState.devices}
           onSelect={handlePickerSelect}

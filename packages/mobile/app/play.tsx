@@ -4,6 +4,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { GlassSurface } from '../src/components/GlassSurface';
 import { PlayDrawer } from '../src/components/play-drawer';
 import { QueueSheet, type QueueSheetHandle } from '../src/components/play-drawer/QueueSheet';
+import { DevicePickerSheetHost } from '../src/components/ble/DevicePickerSheetHost';
 import { useQueueSheetHandlers } from '../src/components/play-drawer/use-queue-sheet-handlers';
 import type { QueueItemRowBoard } from '../src/components/QueueItemRow';
 import { useDrawerHost, usePlayDrawerRoute } from '../src/providers/drawer-host-provider';
@@ -136,6 +137,10 @@ export default function PlayScreen() {
           ) : null}
         </>
       ) : null}
+      {/* Host the BLE device picker from inside this route so a connect from the
+          player's lightbulb (when disconnected) presents OVER the player. Claims
+          the picker, suppressing the app-root instance while mounted. */}
+      <DevicePickerSheetHost registerExternal />
     </View>
   );
 }

@@ -3,17 +3,15 @@
 // the user-testing gap) and the connect CONTROL, mirroring the in-drawer
 // lightbulb so the two surfaces share one vocabulary and one connect path.
 //
-// Tap, per connection state:
+// Tap, per connection state — in line with the drawer + toolbar lightbulbs:
 //   disconnected   → connect (relight the remembered board; shared connect path)
-//   connectedByMe  → open the labelled BleControlSheet (Re-light / Turn off /
-//                    Disconnect) — destructive Disconnect stays behind a label,
-//                    never a stray tap on this large surface
+//   connectedByMe  → disconnect (shared path). The destructive Disconnect's
+//                    confirmation lives in the long-press controls sheet now.
 //   heldByPeer     → open the read-only "Now on the wall" view (a teammate drives)
 //
-// Long-press (JS bar only — never the iOS 26 UIKit platter, where a custom
-// recognizer would fight system gestures) is a power-user shortcut into the same
-// BleControlSheet. State is read from the single `useBoardConnectionState` source,
-// so the bar can never disagree with the drawer bulb or the Live Activity.
+// Long-press is a power-user shortcut into the BleControlSheet (Re-light / Turn
+// off / Disconnect). State is read from the single `useBoardConnectionState`
+// source, so the bar can never disagree with the drawer bulb or the Live Activity.
 
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, type AccessibilityActionEvent } from 'react-native';
@@ -50,24 +48,21 @@ export function BoardControlIndicator({
   const { systemColors, brandColors } = useTheme();
   const { boardConnection, holderDisplayName, bluetooth } = useBoardConnectionState();
   const { open: openBoardControls } = useBleControlSheet();
-  // Reuse the shared connect path so analytics + undo-arming match the lightbulb.
-  // Only invoked from `disconnected` (where it connects); never from the
-  // connected state, so it never disconnects on a stray tap.
-  const { onPress: connectFromShared } = useLightbulbControl({ source: 'lightbulb_toolbar' });
+  // Shared connect/disconnect path so analytics + undo-arming match the drawer +
+  // toolbar lightbulbs: connectedByMe → disconnect, disconnected → connect.
+  const { onPress: lightbulbPress } = useLightbulbControl({ source: 'lightbulb_toolbar' });
   const { openPlay } = useAccessoryClimbTap();
 
   const handlePress = useCallback(() => {
-    if (boardConnection === 'connectedByMe') {
-      hapticMedium();
-      openBoardControls();
-      return;
-    }
+    // A teammate drives the wall → open the read-only "Now on the wall" view.
     if (boardConnection === 'heldByPeer') {
       openPlay();
       return;
     }
-    connectFromShared();
-  }, [boardConnection, openBoardControls, openPlay, connectFromShared]);
+    // connectedByMe → disconnect; disconnected → connect. The destructive
+    // Disconnect's confirmation moved to the long-press controls sheet.
+    lightbulbPress();
+  }, [boardConnection, openPlay, lightbulbPress]);
 
   const handleLongPress = useCallback(() => {
     // Only meaningful when this device holds the link — the sheet self-guards too.

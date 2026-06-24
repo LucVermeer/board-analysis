@@ -114,7 +114,9 @@ export function NativeAccessoryClimbRow({ climb, placement, width }: NativeAcces
           full 44pt tap target is never stolen by the climb-row tap — the same
           leading-control treatment the Android ClimbCapsule uses. */}
       <View style={styles.controlSlot} pointerEvents="box-none">
-        <BoardControlIndicator size={glassSize.inline} iconSize={22} />
+        {/* Long-press → controls sheet, so this platter matches the other
+            lightbulbs now that a short press disconnects. */}
+        <BoardControlIndicator size={glassSize.inline} iconSize={22} enableLongPress />
       </View>
     </View>
   );

@@ -47,7 +47,7 @@ import { useDrawerDismissGesture } from './use-drawer-dismiss-gesture';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
-import { useBleControlSheet } from '../../providers/ble-control-sheet-provider';
+import { BleControlSheetHost } from '../ble/BleControlSheetHost';
 import { Icon } from '../Icon';
 import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
@@ -284,9 +284,11 @@ export function PlayDrawer({
   const { isAuthenticated } = useAuth();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
-  // Opens the shared, app-root BLE controls sheet (same instance the persistent
-  // bar's board control uses), so there's one Re-light / Disconnect menu.
-  const { open: openBleControlSheet } = useBleControlSheet();
+  // The play route hosts its OWN BLE controls sheet (below) rather than the
+  // app-root one — a native sheet presented from root lands BEHIND this modal
+  // route. Local visibility, opened by the lightbulb long-press.
+  const [bleControlVisible, setBleControlVisible] = useState(false);
+  const handleCloseBleControl = useCallback(() => setBleControlVisible(false), []);
 
   usePlayDrawerWakeLock(isSheetOpen);
 
@@ -567,10 +569,10 @@ export function PlayDrawer({
 
   const handleLightbulbLongPress = useCallback(() => {
     if (!bluetooth?.isConnected) return;
-    // Reveal the shared BLE controls (Re-light / Disconnect) rather than
-    // disconnecting blind — keeps the destructive action behind a labelled menu.
-    openBleControlSheet();
-  }, [bluetooth, openBleControlSheet]);
+    // Reveal the BLE controls (Re-light / Disconnect) rather than disconnecting
+    // blind — keeps the destructive action behind a labelled menu.
+    setBleControlVisible(true);
+  }, [bluetooth]);
 
   const handleOpenActions = useCallback(() => {
     // iOS: open the floating reaction menu (over the drawer) instead of the in-drawer
@@ -927,6 +929,11 @@ export function PlayDrawer({
           consensusGradeName={displayedClimb.difficulty}
         />
       )}
+
+      {/* BLE controls (Re-light / Turn off all lights / Disconnect), opened by the
+          lightbulb long-press. Hosted here so it presents ABOVE the player route
+          (the app-root instance would land behind it). */}
+      <BleControlSheetHost visible={bleControlVisible} onClose={handleCloseBleControl} />
     </View>
   );
 }

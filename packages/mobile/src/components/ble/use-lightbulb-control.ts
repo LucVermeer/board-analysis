@@ -13,6 +13,13 @@ type UseLightbulbControlOptions = {
   boardLayout?: string;
   /** Climb the bulb is acting on, for analytics. Null when none is in view. */
   climbUuid?: string | null;
+  /**
+   * Opens the BLE controls sheet (Re-light / Turn off all lights / Disconnect).
+   * Wired to the returned `onLongPress` so every lightbulb shares one gesture
+   * vocabulary: short press connects/disconnects, long press (when connected)
+   * opens the labelled controls. Omit on surfaces with no long-press affordance.
+   */
+  onOpenControls?: () => void;
 };
 
 export type LightbulbControl = {
@@ -33,6 +40,12 @@ export type LightbulbControl = {
   pending: boolean;
   /** Connect (relighting the remembered board) / disconnect toggle. */
   onPress: () => void;
+  /**
+   * Long-press: opens the BLE controls sheet when this device holds the link.
+   * No-op when disconnected (short press connects) or when no `onOpenControls`
+   * was supplied.
+   */
+  onLongPress: () => void;
 };
 
 /**
@@ -47,7 +60,7 @@ export type LightbulbControl = {
  * controls and board-presence controls are always present under the tab tree.
  */
 export function useLightbulbControl(options: UseLightbulbControlOptions): LightbulbControl {
-  const { source, boardLayout, climbUuid } = options;
+  const { source, boardLayout, climbUuid, onOpenControls } = options;
   // Ownership/lit derivation is shared with the Live Activity bridge via this
   // hook so the in-app bulb and the lock-screen bulb can never disagree.
   const { bluetooth, lit, localConnected, pending, sessionId } = useBoardConnectionState();
@@ -81,5 +94,13 @@ export function useLightbulbControl(options: UseLightbulbControlOptions): Lightb
     void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
   }, [bluetooth, source, sessionId, boardLayout, climbUuid]);
 
-  return { bluetooth, lit, localConnected, pending, onPress };
+  const onLongPress = useCallback(() => {
+    // Long-press is a power-user shortcut into the controls sheet; only meaningful
+    // while THIS device holds the link (the sheet self-guards too). Disconnected,
+    // long-press does nothing — short press connects.
+    if (!localConnected) return;
+    onOpenControls?.();
+  }, [localConnected, onOpenControls]);
+
+  return { bluetooth, lit, localConnected, pending, onPress, onLongPress };
 }

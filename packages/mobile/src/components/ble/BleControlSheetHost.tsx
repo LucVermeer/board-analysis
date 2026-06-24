@@ -1,0 +1,57 @@
+import { useCallback, useEffect } from 'react';
+import { toBoardName } from '@boardsesh/board-config';
+import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
+import { useActiveBoard } from '../../lib/graphql/use-active-board';
+import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
+import { BleControlSheet } from './BleControlSheet';
+
+type BleControlSheetHostProps = {
+  visible: boolean;
+  onClose: () => void;
+};
+
+/**
+ * Renders the BLE controls sheet (Re-light / Turn off all lights / Disconnect)
+ * with its standard handlers, leaving visible/onClose to the caller. Hosted in
+ * TWO places so the menu presents from the right view controller:
+ *   - app root (BleControlSheetProvider) for the persistent accessory bar, and
+ *   - inside the play route (PlayDrawer) so the lightbulb's sheet presents ABOVE
+ *     the route instead of behind it (an @expo/ui sheet presents off the VC that
+ *     owns its subtree; a root-only instance lands under the modal player).
+ * supportsClearLights keys off the CONNECTED (active) board's protocol, not the
+ * displayed climb's board, so it's correct wherever this is mounted.
+ */
+export function BleControlSheetHost({ visible, onClose }: BleControlSheetHostProps) {
+  const bluetooth = useOptionalBluetoothContext();
+  const { data: activeBoard } = useActiveBoard();
+  const isConnected = bluetooth?.isConnected ?? false;
+
+  // Close if the link drops while the sheet is open — otherwise it lingers
+  // showing Re-light / Disconnect actions that no-op on a dead link.
+  useEffect(() => {
+    if (!isConnected && visible) onClose();
+  }, [isConnected, visible, onClose]);
+
+  const handleReassert = useCallback(() => {
+    bluetooth?.armUndoWallChangeToast();
+    bluetooth?.reassertWall();
+  }, [bluetooth]);
+
+  const handleClearLights = useCallback(() => {
+    void bluetooth?.clearBoard();
+  }, [bluetooth]);
+
+  if (!bluetooth) return null;
+
+  return (
+    <BleControlSheet
+      visible={visible}
+      onReassert={handleReassert}
+      onClearLights={handleClearLights}
+      // MoonBoard's protocol has no clear-all frame; hide the row there.
+      supportsClearLights={toBoardName(activeBoard?.boardType) !== 'moonboard'}
+      onDisconnect={disconnectAllBluetooth}
+      onClose={onClose}
+    />
+  );
+}
