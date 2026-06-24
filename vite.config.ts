@@ -302,6 +302,10 @@ export default defineConfig({
         command: 'node --import tsx scripts/generate-changelog.ts --check',
         cache: false,
       },
+      'cleanup:branches': {
+        command: 'node --import tsx scripts/cleanup-merged-branches.ts',
+        cache: false,
+      },
       'check:commit-message': {
         command: 'tsx scripts/check-commit-message.ts',
         cache: false,
