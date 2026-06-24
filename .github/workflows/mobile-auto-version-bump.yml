@@ -1,0 +1,100 @@
+name: Mobile Auto Version Bump
+
+# Polls App Store Connect hourly. When the current marketing version in
+# packages/mobile/app.config.ts has been accepted by Apple (PENDING_DEVELOPER_RELEASE,
+# PENDING_APPLE_RELEASE, PROCESSING_FOR_APP_STORE, or READY_FOR_SALE), this workflow
+# bumps the patch version and pushes directly to main via the OTA push-back app token,
+# bypassing the PR requirement. The commit carries [skip ci] to prevent a spurious OTA
+# publish (the version change busts the fingerprint; no binary can pull such an OTA).
+#
+# Minor version bumps are intentionally excluded — those are a manual decision.
+
+on:
+  schedule:
+    - cron: '0 * * * *' # hourly; App Review approval is not time-critical
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Log what would change without writing or pushing'
+        type: boolean
+        default: true
+
+concurrency:
+  group: mobile-auto-version-bump
+  cancel-in-progress: false
+
+jobs:
+  check-and-bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: Production
+    permissions:
+      contents: write # needed for push-back; the app token is what actually bypasses branch protection
+    steps:
+      # Mint a token for the GitHub App that is in main's PR-bypass list.
+      # The checkout action persists this in git's credential store so the
+      # later push authenticates as the app, not github-actions[bot] (which
+      # would be rejected by the branch protection rule).
+      - name: Mint push token
+        id: push_token
+        if: vars.OTA_PUSH_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.OTA_PUSH_APP_ID }}
+          private-key: ${{ secrets.OTA_PUSH_APP_PRIVATE_KEY }}
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.push_token.outputs.token || github.token }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      # No bun install needed — the script only uses built-in node:crypto / node:fs.
+      - name: Check ASC and bump version if accepted
+        id: bump
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: bun scripts/mobile-auto-version-bump.ts
+
+      - name: Commit and push version bump to main
+        if: steps.bump.outputs.bumped == 'true' && vars.OTA_PUSH_APP_ID != ''
+        run: |
+          set -euo pipefail
+          git config user.name "boardsesh-repo-bot[bot]"
+          git config user.email "boardsesh-repo-bot[bot]@users.noreply.github.com"
+          git add packages/mobile/app.config.ts
+          git commit -m "chore(mobile): auto-bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+
+          # Rebase-and-retry in case another commit landed on main since checkout.
+          # Hard-reset to main then re-apply our file, same pattern as the OTA
+          # changelog push-back — avoids merge conflicts on unrelated changes.
+          saved_version="${{ steps.bump.outputs.new_version }}"
+          for attempt in 1 2 3; do
+            git fetch origin main
+
+            # Idempotent: skip if main already has our version (shouldn't happen, but safe).
+            main_version="$(git show origin/main:packages/mobile/app.config.ts | grep -oP "version: '\\K[^']+")"
+            if [ "$main_version" = "$saved_version" ]; then
+              echo "main already has version $saved_version — nothing to push."
+              exit 0
+            fi
+
+            git reset --hard origin/main
+            sed -i "s/version: '[0-9]*\.[0-9]*\.[0-9]*'/version: '$saved_version'/" packages/mobile/app.config.ts
+            git add packages/mobile/app.config.ts
+            git commit -m "chore(mobile): auto-bump version to $saved_version [skip ci]"
+
+            if git push origin HEAD:main; then
+              echo "Pushed version bump to main."
+              exit 0
+            fi
+            echo "Push rejected (main advanced); retry ${attempt}/3…"
+          done
+          echo "::error::Could not push version bump to main after 3 attempts."
+          exit 1
