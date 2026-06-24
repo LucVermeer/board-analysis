@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-24T21:38:48.462Z",
+  "generatedAt": "2026-06-24T21:43:02.708Z",
   "entries": [
+    {
+      "prNumber": 3180,
+      "category": "improved",
+      "title": "https://claude.ai/code/session_0169kjQT2BwqYRfTXGwZ4srZ",
+      "mergedAt": "2026-06-24T21:39:04Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3180"
+    },
     {
       "prNumber": 3178,
       "category": "new",

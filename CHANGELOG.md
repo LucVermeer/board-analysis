@@ -21,6 +21,10 @@ A new version shipped to the Play Store.
 - Find a gym by board type ([#3178](https://github.com/boardsesh/boardsesh/pull/3178))
   Filter the map to gyms that have a Kilter, Tension, or MoonBoard.
 
+### Improved
+
+- https://claude.ai/code/session_0169kjQT2BwqYRfTXGwZ4srZ ([#3180](https://github.com/boardsesh/boardsesh/pull/3180))
+
 ## 2026-06-23
 
 ### New
