@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { ANGLES } from '@boardsesh/board-config';
 import { Text } from '../Text';
+import { androidSafeSnapPoints } from '../sheet-snap-points';
 import { useClimbStatsHistory } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { buildAngleStatsMap, type AngleStats } from './community-utils';
@@ -45,7 +46,8 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
 
   // Single large snap point so the sheet always opens at full "big" size with
   // room for the diagram, stats, slider and Done button above the home indicator.
-  const snapPoints = useMemo(() => ['90%'], []);
+  // (androidSafeSnapPoints leaves a >= 75% detent as-is, so Android keeps this big.)
+  const snapPoints = useMemo(() => androidSafeSnapPoints(['90%']), []);
 
   // Valid angles come from the static per-board table (what web uses) — robust
   // and offline, unlike a per-board query.

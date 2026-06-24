@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
+import { androidSafeSnapPoints } from '../sheet-snap-points';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { BleBoardConfig } from '../../lib/ble/board-config-match';
 import { Text } from '../Text';
@@ -36,7 +37,7 @@ export function DevicePickerSheet({
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
 
-  const snapPoints = useMemo(() => ['72%'], []);
+  const snapPoints = useMemo(() => androidSafeSnapPoints(['72%']), []);
 
   useEffect(() => {
     sheetRef.current?.present();

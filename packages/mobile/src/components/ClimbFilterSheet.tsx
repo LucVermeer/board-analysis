@@ -38,6 +38,7 @@ import { RadioGroup, type RadioOption } from './RadioGroup';
 import { SwitchRow } from './SwitchRow';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
+import { androidSafeSnapPoints } from './sheet-snap-points';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { buildFilterLabels, formatSettersLabel } from '../lib/filter-labels';
@@ -177,7 +178,7 @@ export function ClimbFilterSheet({
     };
   }, []);
 
-  const snapPoints = useMemo(() => ['90%'], []);
+  const snapPoints = useMemo(() => androidSafeSnapPoints(['90%']), []);
   const isKilter = boardName === 'kilter';
   const childSheetOpen = activeChildSheet != null;
 

@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
+import { androidSafeSnapPoints } from './sheet-snap-points';
 
 type ModalSheetProps = {
   children: ReactNode;
@@ -46,6 +47,10 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
   const { systemColors, sheet } = useTheme();
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
+
+  // Single-detent sheets jump to full screen on @expo/ui's Android sheet — give
+  // them a partial state instead (see androidSafeSnapPoints).
+  const effectiveSnapPoints = useMemo(() => androidSafeSnapPoints(snapPoints), [snapPoints]);
 
   const handleChange = useCallback(
     (index: number) => {
@@ -88,7 +93,7 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
     <BottomSheetModal
       ref={ref}
       index={0}
-      snapPoints={enableDynamicSizing ? undefined : snapPoints}
+      snapPoints={enableDynamicSizing ? undefined : effectiveSnapPoints}
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
       handleIndicatorStyle={sheet.handleStyle}

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
+import { androidSafeSnapPoints } from './sheet-snap-points';
 
 type SheetProps = {
   children: ReactNode;
@@ -95,7 +96,7 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
     <BottomSheet
       ref={ref}
       index={-1}
-      snapPoints={enableDynamicSizing ? undefined : snapPoints}
+      snapPoints={enableDynamicSizing ? undefined : androidSafeSnapPoints(snapPoints)}
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
       onChange={handleChange}
