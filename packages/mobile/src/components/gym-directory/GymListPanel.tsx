@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatBoardDisplayName } from '@boardsesh/board-config';
 import type { Gym, UserBoard } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -248,6 +249,11 @@ const GymRow = memo(function GymRow({
           <Text variant="subheadline" color={systemColors.secondaryLabel}>
             {subtitle}
           </Text>
+          {gym.boardTypes.length > 0 ? (
+            <Text variant="caption1" color={systemColors.tertiaryLabel}>
+              {gym.boardTypes.map(formatBoardDisplayName).join(' · ')}
+            </Text>
+          ) : null}
         </View>
         <Icon name={expanded ? 'minus' : 'add'} size={20} color={systemColors.tertiaryLabel} />
       </PressableSurface>

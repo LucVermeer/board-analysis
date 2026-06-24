@@ -842,7 +842,7 @@ export const socialBoardQueries = {
   searchBoards: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, 20, 'searchBoards');
     const validatedInput = validateInput(SearchBoardsInputSchema, input, 'input');
-    const { query, boardType, latitude, longitude, radiusKm } = validatedInput;
+    const { query, boardType, boardTypes, latitude, longitude, radiusKm } = validatedInput;
     const limit = validatedInput.limit ?? 20;
     const offset = validatedInput.offset ?? 0;
     const useProximity = latitude !== undefined && longitude !== undefined;
@@ -879,6 +879,9 @@ export const socialBoardQueries = {
 
       if (boardType) {
         conditions.push(eq(dbSchema.userBoards.boardType, boardType));
+      }
+      if (boardTypes && boardTypes.length > 0) {
+        conditions.push(inArray(dbSchema.userBoards.boardType, boardTypes));
       }
       if (query) {
         const escapedQuery = query.replace(/[%_\\]/g, '\\$&');
@@ -928,6 +931,10 @@ export const socialBoardQueries = {
 
     if (boardType) {
       conditions.push(eq(dbSchema.userBoards.boardType, boardType));
+    }
+
+    if (boardTypes && boardTypes.length > 0) {
+      conditions.push(inArray(dbSchema.userBoards.boardType, boardTypes));
     }
 
     if (query) {

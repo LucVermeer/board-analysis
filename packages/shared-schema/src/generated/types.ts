@@ -1841,6 +1841,8 @@ export type Gym = {
   address?: Maybe<Scalars['String']['output']>;
   /** Number of linked boards */
   boardCount: Scalars['Int']['output'];
+  /** Distinct board types at this gym (kilter, tension, ...) — for filtering and badges */
+  boardTypes: Array<Scalars['String']['output']>;
   /** Number of comments */
   commentCount: Scalars['Int']['output'];
   /** Contact email */
@@ -4570,6 +4572,8 @@ export type SaveTickInput = {
 export type SearchBoardsInput = {
   /** Filter by board type */
   boardType?: InputMaybe<Scalars['String']['input']>;
+  /** Filter by board type (OR) — multi-select; composes with boardType if both are set */
+  boardTypes?: InputMaybe<Array<Scalars['String']['input']>>;
   /** Latitude for proximity search */
   latitude?: InputMaybe<Scalars['Float']['input']>;
   /** Max results to return */
@@ -4586,6 +4590,8 @@ export type SearchBoardsInput = {
 
 /** Input for searching gyms. */
 export type SearchGymsInput = {
+  /** Filter to gyms that have a board of one of these types (OR) */
+  boardTypes?: InputMaybe<Array<Scalars['String']['input']>>;
   /** Latitude for proximity search */
   latitude?: InputMaybe<Scalars['Float']['input']>;
   /** Max results to return */
@@ -7515,6 +7521,7 @@ export type GymResolvers<
 > = ResolversObject<{
   address?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   contactEmail?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   contactPhone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;

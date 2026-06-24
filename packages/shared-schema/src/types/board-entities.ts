@@ -127,6 +127,7 @@ export type FollowBoardInput = {
 export type SearchBoardsInput = {
   query?: string;
   boardType?: string;
+  boardTypes?: string[];
   latitude?: number;
   longitude?: number;
   radiusKm?: number;

@@ -3,7 +3,7 @@ import { Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Gym, UserBoard } from '@boardsesh/shared-schema';
+import type { BoardName, Gym, UserBoard } from '@boardsesh/shared-schema';
 import { useNearbyBoards, useNearbyGyms } from '../../src/lib/graphql/hooks';
 import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
 import { useDeviceLocation, type Coords } from '../../src/lib/use-device-location';
@@ -18,6 +18,7 @@ import { Button } from '../../src/components/Button';
 import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import { GymMap, type GymMapHandle, type GymMapMarker } from '../../src/components/gym-directory/GymMap';
 import { GymListPanel, type GymListPanelHandle } from '../../src/components/gym-directory/GymListPanel';
+import { BoardTypeChips } from '../../src/components/gym-directory/BoardTypeChips';
 import { buildGymListRows } from '../../src/components/gym-directory/gym-list-rows';
 import { DEFAULT_WALL_FINDER_FILTER, type WallFinderFilter } from '../../src/lib/wall-finder-filter';
 import { spacing, borderRadius, shadows } from '../../src/theme/tokens';
@@ -71,7 +72,7 @@ export default function GymDiscovery() {
   const panelRef = useRef<GymListPanelHandle>(null);
 
   // `inputText` is the raw field; `appliedFilter` is the applied filter sent to the
-  // backend (name only for now; board-type chips will populate `boardTypes` later).
+  // backend (name + the board-type chips' selected `boardTypes`).
   // `viewCenter` is the authoritative map/query center (a searched place or a panned
   // location); `searchLabel` drives the "Showing X" caption. Filters apply on submit
   // so typing doesn't fire a request per keystroke.
@@ -110,8 +111,13 @@ export default function GymDiscovery() {
     [],
   );
 
-  const { data: gymConnection, isLoading: gymsLoading } = useNearbyGyms(center, 50, appliedFilter.name);
-  const { data: boardConnection } = useNearbyBoards(center, 50, appliedFilter.name, 50);
+  const { data: gymConnection, isLoading: gymsLoading } = useNearbyGyms(
+    center,
+    50,
+    appliedFilter.name,
+    appliedFilter.boardTypes,
+  );
+  const { data: boardConnection } = useNearbyBoards(center, 50, appliedFilter.name, 50, appliedFilter.boardTypes);
 
   const gyms = useMemo(
     () => (gymConnection?.gyms ?? []).filter((gym) => gym.latitude != null && gym.longitude != null),
@@ -289,10 +295,35 @@ export default function GymDiscovery() {
     if (deviceCoords) moveCameraTo(deviceCoords);
   }, [moveCameraTo]);
 
+  // Toggle a board type in the filter (multi-select OR). It ANDs with the name
+  // filter + viewport and re-queries via the hooks' query keys; orthogonal to a
+  // place search (a place relocates, it isn't a filter term).
+  const onToggleBoardType = useCallback((boardType: BoardName) => {
+    setAppliedFilter((prev) => {
+      const current = prev.boardTypes ?? [];
+      const next = current.includes(boardType) ? current.filter((type) => type !== boardType) : [...current, boardType];
+      return { ...prev, boardTypes: next.length > 0 ? next : undefined };
+    });
+  }, []);
+
+  const onClearBoardTypes = useCallback(() => {
+    setAppliedFilter((prev) => ({ ...prev, boardTypes: undefined }));
+  }, []);
+
   const closeScreen = useCallback(() => {
     if (router.canGoBack()) router.back();
     else router.dismissTo(boardReturnTo);
   }, [router, boardReturnTo]);
+
+  // Board-type chips live in the panel header. Only meaningful once we have a
+  // place to query, so hide them in the pre-location prompt state.
+  const filterSlot = center ? (
+    <BoardTypeChips
+      selected={appliedFilter.boardTypes ?? []}
+      onToggle={onToggleBoardType}
+      onClear={onClearBoardTypes}
+    />
+  ) : undefined;
 
   // The root stack hides headers globally; this screen draws its own floating
   // close button over the map. The title is kept for the back/breadcrumb affordance.
@@ -406,6 +437,7 @@ export default function GymDiscovery() {
         noBoardsLabel={t('mobile.gyms.noBoards')}
         searchSlot={searchField}
         placeCaption={placeCaption}
+        filterSlot={filterSlot}
         locationPrompt={locationPrompt}
       />
 

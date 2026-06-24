@@ -44,6 +44,8 @@ export const gymsTypeDefs = /* GraphQL */ `
     createdAt: String!
     "Number of linked boards"
     boardCount: Int!
+    "Distinct board types at this gym (kilter, tension, ...) — for filtering and badges"
+    boardTypes: [String!]!
     "Number of members"
     memberCount: Int!
     "Number of followers"
@@ -200,6 +202,8 @@ export const gymsTypeDefs = /* GraphQL */ `
   input SearchGymsInput {
     "Search query"
     query: String
+    "Filter to gyms that have a board of one of these types (OR)"
+    boardTypes: [String!]
     "Latitude for proximity search"
     latitude: Float
     "Longitude for proximity search"

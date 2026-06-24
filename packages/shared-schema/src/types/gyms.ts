@@ -19,6 +19,7 @@ export type Gym = {
   imageUrl?: string | null;
   createdAt: string;
   boardCount: number;
+  boardTypes: string[];
   memberCount: number;
   followerCount: number;
   commentCount: number;
@@ -97,6 +98,7 @@ export type MyGymsInput = {
 
 export type SearchGymsInput = {
   query?: string;
+  boardTypes?: string[];
   latitude?: number;
   longitude?: number;
   radiusKm?: number;

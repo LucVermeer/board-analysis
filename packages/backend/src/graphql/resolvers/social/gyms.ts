@@ -97,6 +97,7 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
   const [
     ownerResult,
     boardCountResult,
+    boardTypesResult,
     memberCountResult,
     followerCountResult,
     commentCountResult,
@@ -119,6 +120,12 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     // Count linked boards
     db
       .select({ count: count() })
+      .from(dbSchema.userBoards)
+      .where(and(eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt))),
+
+    // Distinct board types at this gym (for filtering + badges)
+    db
+      .selectDistinct({ boardType: dbSchema.userBoards.boardType })
       .from(dbSchema.userBoards)
       .where(and(eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt))),
 
@@ -160,6 +167,7 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
 
   const ownerInfo = ownerResult[0];
   const boardCount = Number(boardCountResult[0]?.count || 0);
+  const boardTypes = boardTypesResult.map((row) => row.boardType);
   const memberCount = Number(memberCountResult[0]?.count || 0);
   const followerCount = Number(followerCountResult[0]?.count || 0);
   const commentCount = Number(commentCountResult[0]?.count || 0);
@@ -188,6 +196,7 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     imageUrl: gym.imageUrl,
     createdAt: gym.createdAt.toISOString(),
     boardCount,
+    boardTypes,
     memberCount,
     followerCount,
     commentCount,
@@ -315,10 +324,21 @@ export const socialGymQueries = {
 
   searchGyms: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     const validatedInput = validateInput(SearchGymsInputSchema, input, 'input');
-    const { query, latitude, longitude, radiusKm } = validatedInput;
+    const { query, boardTypes, latitude, longitude, radiusKm } = validatedInput;
     const limit = validatedInput.limit ?? 20;
     const offset = validatedInput.offset ?? 0;
     const useProximity = latitude !== undefined && longitude !== undefined;
+
+    // Filter to gyms that HAVE a board of one of the selected types (OR). A raw
+    // fragment so it composes into both the PostGIS proximity SQL and the
+    // text-only Drizzle path; empty when no board-type filter is active.
+    const boardTypeClause =
+      boardTypes && boardTypes.length > 0
+        ? sql` AND EXISTS (SELECT 1 FROM user_boards ub WHERE ub.gym_id = gyms.id AND ub.deleted_at IS NULL AND ub.board_type IN (${sql.join(
+            boardTypes.map((boardType) => sql`${boardType}`),
+            sql`, `,
+          )}))`
+        : sql.empty();
 
     if (useProximity) {
       const radiusMeters = (radiusKm ?? 50) * 1000;
@@ -330,15 +350,15 @@ export const socialGymQueries = {
 
       const countRows = await db.execute(
         likePattern
-          ? sql`SELECT count(*)::int as count FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters}) AND (name ILIKE ${likePattern} OR address ILIKE ${likePattern})`
-          : sql`SELECT count(*)::int as count FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters})`,
+          ? sql`SELECT count(*)::int as count FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters}) AND (name ILIKE ${likePattern} OR address ILIKE ${likePattern})${boardTypeClause}`
+          : sql`SELECT count(*)::int as count FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters})${boardTypeClause}`,
       );
       const totalCount = Number(rowsFromResult<Record<string, unknown>>(countRows)[0]?.count || 0);
 
       const gymRows = await db.execute(
         likePattern
-          ? sql`SELECT *, ST_Distance(location, ST_MakePoint(${lon}, ${lat})::geography) as distance_meters FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters}) AND (name ILIKE ${likePattern} OR address ILIKE ${likePattern}) ORDER BY distance_meters ASC LIMIT ${limit} OFFSET ${offset}`
-          : sql`SELECT *, ST_Distance(location, ST_MakePoint(${lon}, ${lat})::geography) as distance_meters FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters}) ORDER BY distance_meters ASC LIMIT ${limit} OFFSET ${offset}`,
+          ? sql`SELECT *, ST_Distance(location, ST_MakePoint(${lon}, ${lat})::geography) as distance_meters FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters}) AND (name ILIKE ${likePattern} OR address ILIKE ${likePattern})${boardTypeClause} ORDER BY distance_meters ASC LIMIT ${limit} OFFSET ${offset}`
+          : sql`SELECT *, ST_Distance(location, ST_MakePoint(${lon}, ${lat})::geography) as distance_meters FROM gyms WHERE is_public = true AND deleted_at IS NULL AND location IS NOT NULL AND ST_DWithin(location, ST_MakePoint(${lon}, ${lat})::geography, ${radiusMeters})${boardTypeClause} ORDER BY distance_meters ASC LIMIT ${limit} OFFSET ${offset}`,
       );
       const rows = rowsFromResult<Record<string, unknown>>(gymRows);
 
@@ -362,6 +382,15 @@ export const socialGymQueries = {
       const escapedQuery = query.replace(/[%_\\]/g, '\\$&');
       conditions.push(
         or(ilike(dbSchema.gyms.name, `%${escapedQuery}%`), ilike(dbSchema.gyms.address, `%${escapedQuery}%`))!,
+      );
+    }
+
+    if (boardTypes && boardTypes.length > 0) {
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM user_boards ub WHERE ub.gym_id = ${dbSchema.gyms.id} AND ub.deleted_at IS NULL AND ub.board_type IN (${sql.join(
+          boardTypes.map((boardType) => sql`${boardType}`),
+          sql`, `,
+        )}))`,
       );
     }
 
