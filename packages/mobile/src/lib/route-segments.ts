@@ -63,3 +63,18 @@ export function isClimbsTabRoute(segments: Segments): boolean {
 export function isGymDiscoveryRoute(segments: Segments): boolean {
   return segments[0] === GYMS_ROUTE;
 }
+
+/**
+ * True when the full-screen now-playing player route (`/play`) is focused. The
+ * player is a self-contained surface with its own queue UI, so the persistent
+ * climb accessory / queue bar must not float over it.
+ *
+ * On iOS the native bottom accessory is deliberately kept mounted under the
+ * transparent player (see `isTabsChromeRoute`) and stays occluded behind it, so
+ * the JS bar is already suppressed there via `nativeAccessoryMounted`. Android
+ * has no native accessory, so the JS bar needs this explicit gate or it shows
+ * over the player.
+ */
+export function isPlayerRoute(segments: Segments): boolean {
+  return segments[0] === PLAYER_ROUTE;
+}

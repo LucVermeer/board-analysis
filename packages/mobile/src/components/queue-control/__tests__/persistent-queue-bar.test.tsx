@@ -10,6 +10,7 @@ const cfg = vi.hoisted(() => ({
   insideTabs: true,
   onGymDiscovery: false,
   onAuthRoute: false,
+  onPlayerRoute: false,
   currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
   wallClimb: null as null | { uuid: string; angle: number },
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
@@ -54,6 +55,7 @@ vi.mock('../../../lib/route-segments', () => ({
   isTabsChromeRoute: () => cfg.insideTabs,
   isGymDiscoveryRoute: () => cfg.onGymDiscovery,
   isAuthRoute: () => cfg.onAuthRoute,
+  isPlayerRoute: () => cfg.onPlayerRoute,
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
@@ -140,6 +142,7 @@ describe('PersistentQueueBar', () => {
     cfg.insideTabs = true;
     cfg.onGymDiscovery = false;
     cfg.onAuthRoute = false;
+    cfg.onPlayerRoute = false;
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
     cfg.wallClimb = null;
     cfg.variant = 'liquidGlass';
@@ -173,6 +176,16 @@ describe('PersistentQueueBar', () => {
     // Pre-auth screens have no user to tick for — a leftover queued or "on the
     // wall" climb must not float a tick bar over the login screen.
     cfg.onAuthRoute = true;
+    const { container } = render(<PersistentQueueBar />);
+    expect(container.querySelector('[data-capsule]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
+  });
+
+  it('renders nothing on the full-screen player route', () => {
+    // The /play player owns the whole surface (with its own queue UI). On iOS the
+    // native accessory hides this, but on Android (no native accessory) the bar
+    // would otherwise float over the player, so it's suppressed by route.
+    cfg.onPlayerRoute = true;
     const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
