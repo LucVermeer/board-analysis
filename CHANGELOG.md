@@ -4,6 +4,17 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-06-24
+
+### App update
+
+A new version shipped to the Play Store.
+
+### New
+
+- Find a gym by board type ([#3178](https://github.com/boardsesh/boardsesh/pull/3178))
+  Filter the map to gyms that have a Kilter, Tension, or MoonBoard.
+
 ## 2026-06-23
 
 ### New

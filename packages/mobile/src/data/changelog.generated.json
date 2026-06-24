@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-23T15:59:08.791Z",
+  "generatedAt": "2026-06-24T21:04:37.829Z",
   "entries": [
+    {
+      "prNumber": 3178,
+      "category": "new",
+      "title": "Find a gym by board type",
+      "mergedAt": "2026-06-24T21:04:06Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3178",
+      "body": "Filter the map to gyms that have a Kilter, Tension, or MoonBoard."
+    },
     {
       "prNumber": 3117,
       "category": "new",
@@ -174,6 +182,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-24T20:55:30+10:00",
+      "sha": "377b3b3fd36c4f1d96f1409651d72d2ee60702c4",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "30ed4104e868ea886e8bfed98161407d995212e1"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-22T12:25:02+10:00",
