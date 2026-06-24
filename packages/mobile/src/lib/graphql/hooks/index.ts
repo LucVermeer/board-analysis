@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type {
+  BoardName,
   UserBoard,
   UserBoardConnection,
   Climb,
@@ -224,15 +225,25 @@ export function useNearbyBoards(
   // would falsely show "no boards" for a gym whose boards fell outside the top
   // 20). The "Near you" carousel keeps the small default.
   limit = 20,
+  // Filter to these board types (OR). Empty/undefined means no board-type filter.
+  boardTypes?: BoardName[],
 ) {
   // Empty string means "no name filter" to the resolver; normalise to undefined
   // so the cache key and the request payload stay clean.
   const nameFilter = query && query.trim().length > 0 ? query.trim() : undefined;
+  const typeFilter = boardTypes && boardTypes.length > 0 ? boardTypes : undefined;
   return useQuery({
-    queryKey: ['nearbyBoards', coords, radiusKm, nameFilter, limit],
+    queryKey: ['nearbyBoards', coords, radiusKm, nameFilter, limit, typeFilter ?? null],
     queryFn: () =>
       getHttpClient().request<SearchBoardsQueryResponse>(SEARCH_BOARDS, {
-        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit, query: nameFilter },
+        input: {
+          latitude: coords?.latitude,
+          longitude: coords?.longitude,
+          radiusKm,
+          limit,
+          query: nameFilter,
+          boardTypes: typeFilter,
+        },
       }),
     select: (data) => data.searchBoards,
     enabled: coords !== null,
@@ -244,13 +255,27 @@ export function useNearbyBoards(
   });
 }
 
-export function useNearbyGyms(coords: { latitude: number; longitude: number } | null, radiusKm = 50, query?: string) {
+export function useNearbyGyms(
+  coords: { latitude: number; longitude: number } | null,
+  radiusKm = 50,
+  query?: string,
+  // Filter to gyms that have a board of one of these types (OR).
+  boardTypes?: BoardName[],
+) {
   const nameFilter = query && query.trim().length > 0 ? query.trim() : undefined;
+  const typeFilter = boardTypes && boardTypes.length > 0 ? boardTypes : undefined;
   return useQuery({
-    queryKey: ['nearbyGyms', coords, radiusKm, nameFilter],
+    queryKey: ['nearbyGyms', coords, radiusKm, nameFilter, typeFilter ?? null],
     queryFn: () =>
       getHttpClient().request<SearchGymsQueryResponse>(SEARCH_GYMS, {
-        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 50, query: nameFilter },
+        input: {
+          latitude: coords?.latitude,
+          longitude: coords?.longitude,
+          radiusKm,
+          limit: 50,
+          query: nameFilter,
+          boardTypes: typeFilter,
+        },
       }),
     select: (data) => data.searchGyms,
     enabled: coords !== null,

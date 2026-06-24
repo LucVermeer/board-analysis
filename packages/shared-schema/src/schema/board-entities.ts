@@ -277,6 +277,8 @@ export const boardEntitiesTypeDefs = /* GraphQL */ `
     query: String
     "Filter by board type"
     boardType: String
+    "Filter by board type (OR) — multi-select; composes with boardType if both are set"
+    boardTypes: [String!]
     "Latitude for proximity search"
     latitude: Float
     "Longitude for proximity search"

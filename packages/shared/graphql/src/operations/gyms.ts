@@ -35,6 +35,7 @@ const GYM_FIELDS = `
   imageUrl
   createdAt
   boardCount
+  boardTypes
   memberCount
   followerCount
   commentCount

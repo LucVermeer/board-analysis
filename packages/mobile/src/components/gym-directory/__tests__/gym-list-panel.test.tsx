@@ -102,9 +102,19 @@ vi.mock('../../../providers/theme-provider', () => ({
   }),
 }));
 
+vi.mock('@boardsesh/board-config', () => ({
+  formatBoardDisplayName: (boardType: string) => boardType.charAt(0).toUpperCase() + boardType.slice(1),
+}));
+
 import { GymListPanel } from '../GymListPanel';
 
-const gym = { uuid: 'g1', name: 'Movement', address: '1 Crag St', boardCount: 1 } as unknown as Gym;
+const gym = {
+  uuid: 'g1',
+  name: 'Movement',
+  address: '1 Crag St',
+  boardCount: 1,
+  boardTypes: ['kilter', 'tension'],
+} as unknown as Gym;
 
 function makeData(): GymListRow[] {
   return [
@@ -134,6 +144,8 @@ describe('GymListPanel', () => {
     expect(getByTestId('search')).toBeTruthy();
     expect(getByText('Movement')).toBeTruthy();
     expect(getByText('1 Crag St')).toBeTruthy();
+    // Board-type badges render from Gym.boardTypes.
+    expect(getByText('Kilter · Tension')).toBeTruthy();
   });
 
   it('invokes onPressGym with the gym when its row is tapped', () => {

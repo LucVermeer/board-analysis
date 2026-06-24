@@ -2313,6 +2313,8 @@ input SearchBoardsInput {
   query: String
   "Filter by board type"
   boardType: String
+  "Filter by board type (OR) — multi-select; composes with boardType if both are set"
+  boardTypes: [String!]
   "Latitude for proximity search"
   latitude: Float
   "Longitude for proximity search"
@@ -2450,6 +2452,8 @@ type Gym {
   createdAt: String!
   "Number of linked boards"
   boardCount: Int!
+  "Distinct board types at this gym (kilter, tension, ...) — for filtering and badges"
+  boardTypes: [String!]!
   "Number of members"
   memberCount: Int!
   "Number of followers"
@@ -2606,6 +2610,8 @@ Input for searching gyms.
 input SearchGymsInput {
   "Search query"
   query: String
+  "Filter to gyms that have a board of one of these types (OR)"
+  boardTypes: [String!]
   "Latitude for proximity search"
   latitude: Float
   "Longitude for proximity search"

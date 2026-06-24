@@ -99,6 +99,7 @@ export const FollowBoardInputSchema = z.object({
 export const SearchBoardsInputSchema = z.object({
   query: z.string().max(200).optional(),
   boardType: BoardNameSchema.optional(),
+  boardTypes: z.array(BoardNameSchema).max(10).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   radiusKm: z.number().min(0.1).max(500).optional().default(50),
