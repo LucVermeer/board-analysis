@@ -1,6 +1,6 @@
 import { type RefObject, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { BOARD_TYPES, type UnifiedTimeframeType } from '@boardsesh/profile-stats';
 import { formatBoardDisplayName } from '@boardsesh/board-config';

@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { UserBoard } from '@boardsesh/shared-schema';
+import type { Gym, UserBoard } from '@boardsesh/shared-schema';
 import { useNearbyBoards, useNearbyGyms } from '../../src/lib/graphql/hooks';
 import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
 import { useDeviceLocation, type Coords } from '../../src/lib/use-device-location';
@@ -18,6 +17,9 @@ import { Icon } from '../../src/components/Icon';
 import { Button } from '../../src/components/Button';
 import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import { GymMap, type GymMapHandle, type GymMapMarker } from '../../src/components/gym-directory/GymMap';
+import { GymListPanel, type GymListPanelHandle } from '../../src/components/gym-directory/GymListPanel';
+import { buildGymListRows } from '../../src/components/gym-directory/gym-list-rows';
+import { DEFAULT_WALL_FINDER_FILTER, type WallFinderFilter } from '../../src/lib/wall-finder-filter';
 import { spacing, borderRadius, shadows } from '../../src/theme/tokens';
 
 // How long the camera must be still after a pan before we re-query the new
@@ -28,8 +30,8 @@ import { spacing, borderRadius, shadows } from '../../src/theme/tokens';
 const REGION_DEBOUNCE_MS = 500;
 const MIN_MOVE_DEG = 0.04;
 
-// The floating close button is a fixed square; the "Showing <place>" pill aligns
-// under the search field by clearing the button + the row gap.
+// The floating close button is a fixed square; it's the only chrome left over the
+// map now that search lives in the panel header.
 const CLOSE_BUTTON_SIZE = 44;
 
 function movedEnough(a: Coords, b: Coords): boolean {
@@ -39,19 +41,20 @@ function movedEnough(a: Coords, b: Coords): boolean {
 }
 
 /**
- * Gym-first board discovery: a full-screen map with a draggable gym list sheet.
- * The floating search bar geocodes a typed place ("Blackheath NSW") so you can
- * browse anywhere — not just your GPS fix — and the same text filters gyms/boards
- * by name. Panning the map re-queries gyms for the new viewport (debounced, with
- * the previous results kept on screen so pins/list don't flicker). The list is
- * the primary interaction, so the flow still works where the native map is blank
- * (Android without a Google Maps key). Selecting a board makes it active.
+ * Gym-first board discovery: a full-screen map with a NON-MODAL draggable gym
+ * panel pinned over it. The panel is a plain sibling (no scrim), so the uncovered
+ * map above it stays pannable — panning re-queries gyms for the new viewport
+ * (debounced, previous results kept so pins/list don't flicker). The search field
+ * lives in the panel header: a typed place ("Blackheath NSW") geocodes and
+ * relocates the map; otherwise the text filters gyms/boards by name. The list is
+ * the primary interaction, so the flow works even where the native map is blank.
+ * Selecting a board makes it active.
  */
 export default function GymDiscovery() {
   const router = useRouter();
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const location = useDeviceLocation();
   const { geocode, isGeocoding } = useGeocodePlace();
@@ -59,31 +62,26 @@ export default function GymDiscovery() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const boardReturnTo = resolveBoardReturnTo(returnTo);
   const [expandedGymUuid, setExpandedGymUuid] = useState<string | null>(null);
+  // The selected gym/board mirrors the map pin and drives the row accent. Set by a
+  // row tap (→ recenter the map) or a pin tap (→ scroll the row into view).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // When the native map can't render at all, lay out as a list-only surface.
+  const [mapAvailable, setMapAvailable] = useState(true);
   const mapRef = useRef<GymMapHandle>(null);
+  const panelRef = useRef<GymListPanelHandle>(null);
 
-  // `inputText` is the field; `query` is the applied name filter sent to the
-  // backend; `viewCenter` is the authoritative map/query center (a searched place
-  // or a panned location); `searchLabel` drives the "Showing X" caption. Both
-  // filters apply on submit so typing doesn't fire a request per keystroke.
+  // `inputText` is the raw field; `appliedFilter` is the applied filter sent to the
+  // backend (name only for now; board-type chips will populate `boardTypes` later).
+  // `viewCenter` is the authoritative map/query center (a searched place or a panned
+  // location); `searchLabel` drives the "Showing X" caption. Filters apply on submit
+  // so typing doesn't fire a request per keystroke.
   const [inputText, setInputText] = useState('');
-  const [query, setQuery] = useState('');
+  const [appliedFilter, setAppliedFilter] = useState<WallFinderFilter>(DEFAULT_WALL_FINDER_FILTER);
   const [viewCenter, setViewCenter] = useState<Coords | null>(null);
   const [searchLabel, setSearchLabel] = useState<string | null>(null);
 
   // A chosen view (searched or panned) wins; fall back to the device fix.
   const center = viewCenter ?? location.coords;
-
-  // Stable sheet chrome styles so they don't allocate a new object each render.
-  const sheetBackgroundStyle = useMemo(
-    () => ({ backgroundColor: systemColors.secondaryBackground }),
-    [systemColors.secondaryBackground],
-  );
-  const sheetHandleStyle = useMemo(
-    () => ({ backgroundColor: systemColors.tertiaryLabel }),
-    [systemColors.tertiaryLabel],
-  );
-  // Clear the home indicator / gesture bar at the bottom of the list.
-  const listContentStyle = useMemo(() => [styles.list, { paddingBottom: insets.bottom + spacing[6] }], [insets.bottom]);
 
   // Refs mirror state so the stable, debounced region handler reads fresh values
   // without being torn down and rebuilt on every pan.
@@ -112,14 +110,14 @@ export default function GymDiscovery() {
     [],
   );
 
-  const { data: gymConnection, isLoading: gymsLoading } = useNearbyGyms(center, 50, query);
-  const { data: boardConnection } = useNearbyBoards(center, 50, query, 50);
+  const { data: gymConnection, isLoading: gymsLoading } = useNearbyGyms(center, 50, appliedFilter.name);
+  const { data: boardConnection } = useNearbyBoards(center, 50, appliedFilter.name, 50);
 
   const gyms = useMemo(
     () => (gymConnection?.gyms ?? []).filter((gym) => gym.latitude != null && gym.longitude != null),
     [gymConnection?.gyms],
   );
-  const boards = boardConnection?.boards ?? [];
+  const boards = useMemo(() => boardConnection?.boards ?? [], [boardConnection?.boards]);
 
   // Boards not attached to a gym still deserve discovery — surface them as their
   // own pins + list section so consolidating onto the gym map loses nothing.
@@ -127,6 +125,19 @@ export default function GymDiscovery() {
     () => boards.filter((board) => board.gymUuid == null && board.latitude != null && board.longitude != null),
     [boards],
   );
+
+  // Pre-index a gym's boards ONCE per data change (O(1) per row, never a per-row
+  // filter scan that FlashList recycling would re-run).
+  const boardsByGym = useMemo(() => {
+    const map = new Map<string, UserBoard[]>();
+    for (const board of boards) {
+      if (board.gymUuid == null) continue;
+      const existing = map.get(board.gymUuid);
+      if (existing) existing.push(board);
+      else map.set(board.gymUuid, [board]);
+    }
+    return map;
+  }, [boards]);
 
   const markers = useMemo<GymMapMarker[]>(
     () => [
@@ -146,7 +157,24 @@ export default function GymDiscovery() {
     [gyms, standaloneBoards],
   );
 
-  const boardsForGym = useCallback((gymUuid: string) => boards.filter((board) => board.gymUuid === gymUuid), [boards]);
+  const rows = useMemo(
+    () =>
+      buildGymListRows({
+        gyms,
+        boardsByGym,
+        standaloneBoards,
+        expandedGymUuid,
+        selectedId,
+        gymsLoading,
+        labels: {
+          gymsSection: t('mobile.gyms.subtitle'),
+          otherBoards: t('mobile.gyms.otherBoardsTitle'),
+          empty: t('mobile.gyms.empty'),
+          boardCount: (count: number) => t('mobile.gyms.boardCount', { count }),
+        },
+      }),
+    [gyms, boardsByGym, standaloneBoards, expandedGymUuid, selectedId, gymsLoading, t],
+  );
 
   // Move the camera to a point we chose (search result / reset) and remember the
   // target so its settle is ignored by the pan handler.
@@ -188,6 +216,43 @@ export default function GymDiscovery() {
     [setActiveBoard, router, boardReturnTo, showToast, t],
   );
 
+  // Tap/expand a gym row: toggle its boards, select it, and recenter the map on it
+  // (no-op when the map is blank — the row just expands).
+  const onPressGym = useCallback(
+    (gym: Gym) => {
+      setExpandedGymUuid((prev) => (prev === gym.uuid ? null : gym.uuid));
+      setSelectedId(gym.uuid);
+      if (gym.latitude != null && gym.longitude != null) {
+        moveCameraTo({ latitude: gym.latitude, longitude: gym.longitude });
+      }
+    },
+    [moveCameraTo],
+  );
+
+  // Latest gyms for the marker-tap handler without rebuilding it (and re-rendering
+  // the map) on every refetch.
+  const gymsRef = useRef(gyms);
+  gymsRef.current = gyms;
+
+  // Tap a map pin: select it, scroll its row into view, expand it if it's a gym,
+  // and nudge the panel up from the Low detent so the row is visible. Pure
+  // map→list polish — every selection is also reachable by scrolling the list.
+  const onMarkerPress = useCallback((id: string) => {
+    setSelectedId(id);
+    const isGym = gymsRef.current.some((gym) => gym.uuid === id);
+    if (isGym) setExpandedGymUuid(id);
+    panelRef.current?.ensureVisible();
+    panelRef.current?.scrollToRowKey(isGym ? `gym:${id}` : `std:${id}`);
+  }, []);
+
+  const handleMapUnavailable = useCallback(() => setMapAvailable(false), []);
+
+  // Once we learn the native map can't render, bias the panel up to its full-list
+  // detent — a half-height list over a blank background reads as broken.
+  useEffect(() => {
+    if (!mapAvailable) panelRef.current?.snapTo('high');
+  }, [mapAvailable]);
+
   // One bar, two jobs: if the text resolves to a place, relocate there and show
   // everything nearby; otherwise treat it as a name filter at the current spot.
   // We deliberately don't AND the two — a place name ("Tokyo") would otherwise
@@ -195,29 +260,31 @@ export default function GymDiscovery() {
   const onSubmitSearch = useCallback(async () => {
     const text = inputText.trim();
     setExpandedGymUuid(null);
+    setSelectedId(null);
     if (!text) {
       setSearchLabel(null);
-      setQuery('');
+      setAppliedFilter(DEFAULT_WALL_FINDER_FILTER);
       return;
     }
     const coords = await geocode(text);
     if (coords) {
       setViewCenter(coords);
       setSearchLabel(text);
-      setQuery('');
+      setAppliedFilter(DEFAULT_WALL_FINDER_FILTER);
       moveCameraTo(coords);
     } else {
-      setQuery(text);
+      setAppliedFilter({ name: text });
     }
   }, [inputText, geocode, moveCameraTo]);
 
   // Clear everything and snap back to the device location.
   const clearSearch = useCallback(() => {
     setInputText('');
-    setQuery('');
+    setAppliedFilter(DEFAULT_WALL_FINDER_FILTER);
     setSearchLabel(null);
     setViewCenter(null);
     setExpandedGymUuid(null);
+    setSelectedId(null);
     const deviceCoords = locationCoordsRef.current;
     if (deviceCoords) moveCameraTo(deviceCoords);
   }, [moveCameraTo]);
@@ -227,20 +294,32 @@ export default function GymDiscovery() {
     else router.dismissTo(boardReturnTo);
   }, [router, boardReturnTo]);
 
+  // The root stack hides headers globally; this screen draws its own floating
+  // close button over the map. The title is kept for the back/breadcrumb affordance.
+  const screen = <Stack.Screen options={{ title: t('mobile.gyms.title') }} />;
+
+  // Floating close button over the map (the only chrome left over the map). `box-none`
+  // on its wrapper lets map pans land in the gaps around it.
   const closeButton = (
-    <Pressable
-      onPress={closeScreen}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={t('mobile.gyms.closeMap')}
-      style={[styles.closeButton, shadows.sm, { backgroundColor: systemColors.secondaryBackground }]}
-    >
-      <Icon name="close" size={20} color={systemColors.label} />
-    </Pressable>
+    <View style={[styles.closeWrap, { paddingTop: insets.top + spacing[2] }]} pointerEvents="box-none">
+      <Pressable
+        onPress={closeScreen}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={t('mobile.gyms.closeMap')}
+        style={[styles.closeButton, shadows.sm, { backgroundColor: systemColors.secondaryBackground }]}
+      >
+        <Icon name="close" size={20} color={systemColors.label} />
+      </Pressable>
+    </View>
   );
 
+  // The search field, pinned in the panel header so it travels with the sheet and
+  // survives a blank map.
   const searchField = (
-    <View style={[styles.searchField, shadows.sm, { backgroundColor: systemColors.secondaryBackground }]}>
+    <View
+      style={[styles.searchField, { backgroundColor: systemColors.background, borderColor: systemColors.separator }]}
+    >
       <Icon name="search" size={18} color={systemColors.secondaryLabel} />
       <TextInput
         value={inputText}
@@ -266,194 +345,86 @@ export default function GymDiscovery() {
     </View>
   );
 
-  // Floating top chrome over the map: close button + search field + place caption.
-  // `box-none` lets pans land on the map in the gaps around the controls.
-  const topBar = (
-    <View style={[styles.topBar, { paddingTop: insets.top + spacing[2] }]} pointerEvents="box-none">
-      <View style={styles.topRow} pointerEvents="box-none">
-        {closeButton}
-        <View style={styles.searchColumn}>{searchField}</View>
-      </View>
-      {searchLabel ? (
-        <View style={[styles.placePill, { backgroundColor: systemColors.secondaryBackground }]}>
-          <Text variant="caption1" color={systemColors.secondaryLabel}>
-            {t('mobile.gyms.showingPlace', { place: searchLabel })}
-          </Text>
-        </View>
-      ) : null}
+  const placeCaption = searchLabel ? (
+    <View style={[styles.placePill, { backgroundColor: systemColors.background }]}>
+      <Text variant="caption1" color={systemColors.secondaryLabel}>
+        {t('mobile.gyms.showingPlace', { place: searchLabel })}
+      </Text>
     </View>
-  );
+  ) : null;
 
-  // The root stack hides headers globally; this screen draws its own floating
-  // top bar over the map. The title is kept for the back/breadcrumb affordance.
-  const screen = <Stack.Screen options={{ title: t('mobile.gyms.title') }} />;
-
-  // No place to show yet: prompt for location (the search bar above still works
-  // for browsing a typed place without granting it).
-  if (!center) {
-    const waiting = location.status === 'idle' || location.status === 'loading';
-    return (
-      <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
-        {screen}
-        {topBar}
-        <View style={styles.center}>
-          {waiting ? (
-            <ActivityIndicator size="large" />
-          ) : (
-            <>
-              <Icon name="location" size={40} color={systemColors.tertiaryLabel} />
-              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.centerText}>
-                {t('mobile.gyms.locationNeeded')}
-              </Text>
-              <Button
-                title={t('mobile.gyms.grantLocation')}
-                variant="outlined"
-                // After a denial the one-shot hook won't re-prompt (iOS only
-                // asks once), so send the user to Settings instead of a no-op.
-                onPress={() => {
-                  if (location.status === 'denied') {
-                    void Linking.openSettings();
-                  } else {
-                    void location.request();
-                  }
-                }}
-                style={styles.centerButton}
-              />
-            </>
-          )}
-        </View>
-      </View>
-    );
-  }
+  // No place to show yet: prompt for location inside the panel (the header search
+  // still works for browsing a typed place without granting it).
+  const waitingForLocation = location.status === 'idle' || location.status === 'loading';
+  const locationPrompt = !center ? (
+    waitingForLocation ? (
+      <ActivityIndicator size="large" />
+    ) : (
+      <>
+        <Icon name="location" size={40} color={systemColors.tertiaryLabel} />
+        <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.centerText}>
+          {t('mobile.gyms.locationNeeded')}
+        </Text>
+        <Button
+          title={t('mobile.gyms.grantLocation')}
+          variant="outlined"
+          // After a denial the one-shot hook won't re-prompt (iOS only asks once),
+          // so send the user to Settings instead of a no-op.
+          onPress={() => {
+            if (location.status === 'denied') void Linking.openSettings();
+            else void location.request();
+          }}
+          style={styles.centerButton}
+        />
+      </>
+    )
+  ) : undefined;
 
   return (
     <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
       {screen}
-      <GymMap
-        ref={mapRef}
-        center={center}
-        markers={markers}
-        onRegionChange={handleRegionChange}
-        style={StyleSheet.absoluteFill}
+      {center ? (
+        <GymMap
+          ref={mapRef}
+          center={center}
+          markers={markers}
+          onRegionChange={handleRegionChange}
+          onMarkerPress={onMarkerPress}
+          onMapUnavailable={handleMapUnavailable}
+          selectedId={selectedId ?? undefined}
+          selectedTint={brandColors.primary}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+
+      <GymListPanel
+        ref={panelRef}
+        data={rows}
+        mapAvailable={mapAvailable}
+        onPressGym={onPressGym}
+        onActivateBoard={activate}
+        noBoardsLabel={t('mobile.gyms.noBoards')}
+        searchSlot={searchField}
+        placeCaption={placeCaption}
+        locationPrompt={locationPrompt}
       />
 
-      <BottomSheet
-        index={1}
-        snapPoints={SNAP_POINTS}
-        enablePanDownToClose={false}
-        backgroundStyle={sheetBackgroundStyle}
-        handleIndicatorStyle={sheetHandleStyle}
-      >
-        <BottomSheetScrollView contentContainerStyle={listContentStyle} showsVerticalScrollIndicator={false}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-            {t('mobile.gyms.subtitle')}
-          </Text>
-
-          {gymsLoading && gyms.length === 0 ? <ActivityIndicator style={styles.listSpinner} /> : null}
-
-          {!gymsLoading && gyms.length === 0 ? (
-            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.empty}>
-              {t('mobile.gyms.empty')}
-            </Text>
-          ) : null}
-
-          {gyms.map((gym) => {
-            const expanded = expandedGymUuid === gym.uuid;
-            const gymBoards = boardsForGym(gym.uuid);
-            return (
-              <View key={gym.uuid} style={[styles.gymBlock, { borderColor: systemColors.separator }]}>
-                <Pressable onPress={() => setExpandedGymUuid(expanded ? null : gym.uuid)} style={styles.gymRow}>
-                  <Icon name="pin" size={20} color={systemColors.label} />
-                  <View style={styles.gymText}>
-                    <Text variant="headline">{gym.name}</Text>
-                    <Text variant="subheadline" color={systemColors.secondaryLabel}>
-                      {gym.address ?? t('mobile.gyms.boardCount', { count: gym.boardCount ?? gymBoards.length })}
-                    </Text>
-                  </View>
-                  <Icon name={expanded ? 'minus' : 'add'} size={20} color={systemColors.tertiaryLabel} />
-                </Pressable>
-
-                {expanded ? (
-                  gymBoards.length > 0 ? (
-                    gymBoards.map((board) => (
-                      <Pressable
-                        key={board.uuid}
-                        onPress={() => void activate(board)}
-                        style={[styles.boardRow, { borderTopColor: systemColors.separator }]}
-                      >
-                        <Icon name="boards" size={18} color={systemColors.secondaryLabel} />
-                        <View style={styles.gymText}>
-                          <Text variant="subheadline">{board.name}</Text>
-                          <Text variant="caption1" color={systemColors.tertiaryLabel}>
-                            {board.boardType}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))
-                  ) : (
-                    <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.noBoards}>
-                      {t('mobile.gyms.noBoards')}
-                    </Text>
-                  )
-                ) : null}
-              </View>
-            );
-          })}
-
-          {standaloneBoards.length > 0 ? (
-            <>
-              <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-                {t('mobile.gyms.otherBoardsTitle')}
-              </Text>
-              {standaloneBoards.map((board) => (
-                <Pressable
-                  key={board.uuid}
-                  onPress={() => void activate(board)}
-                  style={[styles.gymBlock, styles.standaloneRow, { borderColor: systemColors.separator }]}
-                >
-                  <Icon name="boards" size={20} color={systemColors.label} />
-                  <View style={styles.gymText}>
-                    <Text variant="headline">{board.name}</Text>
-                    <Text variant="subheadline" color={systemColors.secondaryLabel}>
-                      {board.locationName ?? board.boardType}
-                    </Text>
-                  </View>
-                  <Icon name="chevron.right" size={18} color={systemColors.tertiaryLabel} />
-                </Pressable>
-              ))}
-            </>
-          ) : null}
-        </BottomSheetScrollView>
-      </BottomSheet>
-
-      {topBar}
+      {closeButton}
     </View>
   );
 }
-
-// Drag the sheet down to ~a quarter to see a big map; mid is the default; up
-// covers most of the screen for browsing a long list.
-const SNAP_POINTS = ['25%', '55%', '90%'];
 
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  topBar: {
+  closeWrap: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     paddingHorizontal: spacing[4],
-    gap: spacing[2],
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  searchColumn: {
-    flex: 1,
+    alignItems: 'flex-start',
   },
   closeButton: {
     width: CLOSE_BUTTON_SIZE,
@@ -469,6 +440,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     height: 44,
     borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   searchInput: {
     flex: 1,
@@ -479,69 +451,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     borderRadius: borderRadius.full,
-    marginLeft: CLOSE_BUTTON_SIZE + spacing[2],
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[3],
-    padding: spacing[6],
   },
   centerText: {
     textAlign: 'center',
   },
   centerButton: {
     marginTop: spacing[2],
-  },
-  list: {
-    padding: spacing[4],
-    gap: spacing[2],
-  },
-  sectionLabel: {
-    textTransform: 'uppercase',
-    marginBottom: spacing[1],
-    marginTop: spacing[2],
-  },
-  listSpinner: {
-    marginTop: spacing[4],
-  },
-  empty: {
-    marginTop: spacing[4],
-    textAlign: 'center',
-  },
-  gymBlock: {
-    borderRadius: borderRadius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  gymRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    padding: spacing[3],
-  },
-  gymText: {
-    flex: 1,
-  },
-  boardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[3],
-    paddingLeft: spacing[6],
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  standaloneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    padding: spacing[3],
-  },
-  noBoards: {
-    paddingHorizontal: spacing[3],
-    paddingBottom: spacing[3],
-    paddingLeft: spacing[6],
   },
 });

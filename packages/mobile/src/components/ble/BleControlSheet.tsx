@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheetMethods } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { Sheet } from '../Sheet';
+import { ModalSheet } from '../ModalSheet';
 import { ListRow } from '../ListRow';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
@@ -41,15 +41,27 @@ function BleControlSheet({
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
   const { brandColors, systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheet>(null);
-
+  const sheetRef = useRef<BottomSheetMethods>(null);
+  // Present/dismiss imperatively via ModalSheet (BottomSheetModal): it presents as
+  // its OWN modal view controller so it stacks ABOVE the play route. The old
+  // declarative `Sheet` (regular BottomSheet) presented inline and dismissed the
+  // route instead. The presented-state guard avoids dismiss()-ing a not-presented
+  // modal (which would wedge present() — the "nothing happens" bug).
+  const isPresentedRef = useRef(false);
   useEffect(() => {
-    if (visible) {
-      sheetRef.current?.snapToIndex(0);
-    } else {
-      sheetRef.current?.close();
+    if (visible && !isPresentedRef.current) {
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if (!visible && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
     }
   }, [visible]);
+
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
+    onClose();
+  }, [onClose]);
 
   const handleReassert = useCallback(() => {
     onReassert();
@@ -69,7 +81,7 @@ function BleControlSheet({
   const snapPoints = useMemo(() => ['32%'], []);
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>
       <View style={styles.content}>
         <ListRow
           title={tSettings('ble.relightBoard')}
@@ -92,7 +104,7 @@ function BleControlSheet({
           showSeparator={false}
         />
       </View>
-    </Sheet>
+    </ModalSheet>
   );
 }
 

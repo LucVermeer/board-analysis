@@ -1,6 +1,6 @@
 import { forwardRef, useEffect } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type BottomSheet from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { useBoardScan } from '../../lib/ble/use-board-scan';

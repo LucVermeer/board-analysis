@@ -14,12 +14,6 @@ const queue = vi.hoisted(() => ({
   setSessionBoardPath: vi.fn(async () => {}),
 }));
 
-const playDrawer = vi.hoisted(() => ({
-  props: null as null | { onSwitchBoard?: () => void },
-  open: vi.fn(),
-  close: vi.fn(),
-}));
-
 const analytics = vi.hoisted(() => ({
   track: vi.fn(),
 }));
@@ -112,27 +106,17 @@ vi.mock('react-native', () => ({
     createElement('button', { onClick: onPress }, children),
 }));
 
-vi.mock('react-native-screens', () => ({
-  FullWindowOverlay: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-}));
-
 vi.mock('expo-crypto', () => ({
   randomUUID: () => 'test-uuid',
 }));
 
-vi.mock('../../components/play-drawer', async () => {
-  const React = await vi.importActual<typeof import('react')>('react');
-  return {
-    PlayDrawer: React.forwardRef((props: { onSwitchBoard?: () => void }, ref) => {
-      playDrawer.props = props;
-      React.useImperativeHandle(ref, () => ({
-        open: playDrawer.open,
-        close: playDrawer.close,
-      }));
-      return React.createElement('div', { 'data-play-drawer': 'true' });
-    }),
-  };
-});
+// PlayDrawer is no longer rendered by the host — it's the content of the
+// `app/play.tsx` route — so the host only needs the barrel to resolve (it imports
+// type-only symbols from it). A no-op keeps the real, native-heavy PlayDrawer out
+// of jsdom.
+vi.mock('../../components/play-drawer', () => ({
+  PlayDrawer: () => null,
+}));
 
 vi.mock('../../components/play-drawer/QueueSheet', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
@@ -204,7 +188,7 @@ vi.mock('../../components/board-presence/UndoWallChangeSnackbar', () => ({
 }));
 
 vi.mock('expo-router', () => ({
-  router: { push: vi.fn() },
+  router: { push: vi.fn(), navigate: vi.fn(), dismiss: vi.fn() },
 }));
 
 vi.mock('@boardsesh/board-presence-react', () => ({
@@ -278,10 +262,15 @@ vi.mock('../../lib/climb-to-queue-item', () => ({
 }));
 
 import { router } from 'expo-router';
-import { DrawerHostProvider, useDrawerHost, type BoardConfig } from '../drawer-host-provider';
+import { DrawerHostProvider, useDrawerHost, usePlayDrawerRoute, type BoardConfig } from '../drawer-host-provider';
 import type { BoardSheetClimbAction } from '../../components/board-presence/BoardSheet';
 
 const routerPush = router.push as unknown as ReturnType<typeof vi.fn>;
+const routerNavigate = router.navigate as unknown as ReturnType<typeof vi.fn>;
+const routerDismiss = router.dismiss as unknown as ReturnType<typeof vi.fn>;
+
+type HostValue = ReturnType<typeof useDrawerHost>;
+type RouteValue = ReturnType<typeof usePlayDrawerRoute>;
 
 function makeQueueItem(uuid: string, climbUuid = uuid): ClimbQueueItem {
   return {
@@ -302,16 +291,20 @@ function makeQueueItem(uuid: string, climbUuid = uuid): ClimbQueueItem {
   };
 }
 
-function Probe({ onHost }: { onHost: (host: ReturnType<typeof useDrawerHost>) => void }) {
+function Probe({ onHost, onRoute }: { onHost: (host: HostValue) => void; onRoute: (route: RouteValue) => void }) {
   const host = useDrawerHost();
+  const route = usePlayDrawerRoute();
   useEffect(() => {
     onHost(host);
   }, [host, onHost]);
+  useEffect(() => {
+    onRoute(route);
+  }, [route, onRoute]);
   return null;
 }
 
-function renderHost(onHost: (host: ReturnType<typeof useDrawerHost>) => void) {
-  return render(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
+function renderHost(onHost: (host: HostValue) => void, onRoute: (route: RouteValue) => void = () => {}) {
+  return render(createElement(DrawerHostProvider, null, createElement(Probe, { onHost, onRoute })));
 }
 
 beforeEach(() => {
@@ -319,9 +312,9 @@ beforeEach(() => {
   activeBoard.setActiveBoard.mockClear();
   myBoards.boards = [];
   analytics.track.mockClear();
-  playDrawer.props = null;
-  playDrawer.open.mockClear();
-  playDrawer.close.mockClear();
+  routerPush.mockClear();
+  routerNavigate.mockClear();
+  routerDismiss.mockClear();
   presence.enabled = false;
   presence.boardId = null;
   presence.resolveAndBindBoard.mockClear();
@@ -333,7 +326,7 @@ beforeEach(() => {
 describe('DrawerHostProvider board presence binding', () => {
   it('resolves board presence from the selected active board without Bluetooth', async () => {
     presence.enabled = true;
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -347,7 +340,7 @@ describe('DrawerHostProvider board presence binding', () => {
   it('resets board presence when no active board is selected', async () => {
     presence.enabled = true;
     activeBoard.stored = null;
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -359,8 +352,8 @@ describe('DrawerHostProvider board presence binding', () => {
 
   it('resets board presence when the selected active board is cleared', async () => {
     presence.enabled = true;
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    const onHost = (host: ReturnType<typeof useDrawerHost>) => hosts.push(host);
+    const hosts: Array<HostValue> = [];
+    const onHost = (host: HostValue) => hosts.push(host);
     const { rerender } = renderHost(onHost);
     await waitFor(() => {
       expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
@@ -369,7 +362,7 @@ describe('DrawerHostProvider board presence binding', () => {
     presence.resolveAndBindBoardByUuid.mockClear();
     presence.resetPresence.mockClear();
     activeBoard.stored = null;
-    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
+    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost, onRoute: () => {} })));
 
     await waitFor(() => {
       expect(presence.resetPresence).toHaveBeenCalledTimes(1);
@@ -379,8 +372,8 @@ describe('DrawerHostProvider board presence binding', () => {
 
   it('rebinds board presence when the selected active board changes', async () => {
     presence.enabled = true;
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    const onHost = (host: ReturnType<typeof useDrawerHost>) => hosts.push(host);
+    const hosts: Array<HostValue> = [];
+    const onHost = (host: HostValue) => hosts.push(host);
     const { rerender } = renderHost(onHost);
     await waitFor(() => {
       expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
@@ -393,7 +386,7 @@ describe('DrawerHostProvider board presence binding', () => {
       slug: 'board-2',
       name: 'Second board',
     };
-    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
+    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost, onRoute: () => {} })));
 
     await waitFor(() => {
       expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-2' });
@@ -437,8 +430,6 @@ describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
     queue.addToQueue.mockClear();
     queue.setSessionBoardPath.mockClear();
     activeBoard.setActiveBoard.mockClear();
-    playDrawer.open.mockClear();
-    playDrawer.close.mockClear();
     queueSheet.props = null;
     queueSheet.present.mockClear();
     queueSheet.dismiss.mockClear();
@@ -450,8 +441,12 @@ describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
   });
 
   it('broadcasts queued climb selection for every session member', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
+    const hosts: Array<HostValue> = [];
+    const routes: Array<RouteValue> = [];
+    renderHost(
+      (host) => hosts.push(host),
+      (route) => routes.push(route),
+    );
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     act(() => {
@@ -465,12 +460,24 @@ describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
     });
 
     expect(queue.setCurrentClimb).toHaveBeenCalledWith(item);
-    expect(playDrawer.open).toHaveBeenCalledWith(item.climb, { committedExternally: true });
+    // Tapping a queue item navigates to the player route with the climb as the
+    // open target (committedExternally — the queue already set it current).
+    expect(routerNavigate).toHaveBeenCalledWith('/play');
+    await waitFor(() => {
+      expect(routes.at(-1)?.playTarget?.climb).toBe(item.climb);
+    });
+    expect(routes.at(-1)?.playTarget?.options).toEqual({ committedExternally: true });
+    // The queue sheet that was tapped dismisses behind the player.
+    expect(queueSheet.dismiss).toHaveBeenCalledTimes(1);
   });
 
   it('broadcasts suggestion selection for every session member while anchoring drawer navigation to that item', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
+    const hosts: Array<HostValue> = [];
+    const routes: Array<RouteValue> = [];
+    renderHost(
+      (host) => hosts.push(host),
+      (route) => routes.push(route),
+    );
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     act(() => {
@@ -499,9 +506,11 @@ describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
     expect(queue.setCurrentClimb).toHaveBeenCalledWith(suggestedItem, {
       playlistSuggestionSource,
     });
-    expect(playDrawer.open).toHaveBeenCalledWith(suggestion, {
-      committedExternally: true,
+    expect(routerNavigate).toHaveBeenCalledWith('/play');
+    await waitFor(() => {
+      expect(routes.at(-1)?.playTarget?.climb).toBe(suggestion);
     });
+    expect(routes.at(-1)?.playTarget?.options).toEqual({ committedExternally: true });
   });
 });
 
@@ -511,7 +520,6 @@ describe('DrawerHostProvider board sheet climb actions', () => {
     queue.participantId = 'participant-self';
     queue.setCurrentClimb.mockClear();
     queue.addToQueue.mockClear();
-    playDrawer.open.mockClear();
     climbActions.props = null;
     playlistSheet.props = null;
     boardSheet.props = null;
@@ -520,8 +528,12 @@ describe('DrawerHostProvider board sheet climb actions', () => {
   });
 
   it('sets current and opens the drawer when any session member taps a board-sheet climb', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
+    const hosts: Array<HostValue> = [];
+    const routes: Array<RouteValue> = [];
+    renderHost(
+      (host) => hosts.push(host),
+      (route) => routes.push(route),
+    );
     await waitFor(() => expect(boardSheet.props).not.toBeNull());
 
     const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
@@ -531,11 +543,13 @@ describe('DrawerHostProvider board sheet climb actions', () => {
     });
 
     expect(queue.setCurrentClimb).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'wall-queue-x', climb }));
-    await waitFor(() =>
-      expect(playDrawer.open).toHaveBeenCalledWith(climb, {
-        committedExternally: true,
-      }),
-    );
+    expect(routerNavigate).toHaveBeenCalledWith('/play');
+    await waitFor(() => {
+      expect(routes.at(-1)?.playTarget?.climb).toBe(climb);
+    });
+    expect(routes.at(-1)?.playTarget?.options).toEqual({ committedExternally: true });
+    // The board-sheet climb is on the stored active board (no override), so both
+    // the host's stored boardConfig and the queue sheet's board stay on it.
     await waitFor(() => {
       expect(hosts.at(-1)?.boardConfig).toMatchObject({
         boardName: 'kilter',
@@ -564,7 +578,7 @@ describe('DrawerHostProvider board sheet climb actions', () => {
   });
 
   it('reuses queue, playlist, and climb-actions handlers for board-sheet climbs', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(boardSheet.props).not.toBeNull());
 
@@ -614,7 +628,7 @@ describe('DrawerHostProvider queue sheet open / re-open', () => {
   });
 
   it('stays mounted and presents via the imperative handle on open', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -631,7 +645,7 @@ describe('DrawerHostProvider queue sheet open / re-open', () => {
   });
 
   it('dismisses via the imperative handle on close, then re-presents on re-open without remounting', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -672,7 +686,7 @@ describe('DrawerHostProvider climb actions', () => {
   });
 
   it('opens the climb reaction menu for a climb against the active board, then closes it', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -700,7 +714,7 @@ describe('DrawerHostProvider climb actions', () => {
   it('opens add-to-playlist against the active board snapshot', async () => {
     // The reaction menu opens the playlist picker via the provider's openAddToPlaylist;
     // assert that opener directly.
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -724,7 +738,7 @@ describe('DrawerHostProvider climb actions', () => {
   it('opens add beta video against the active board snapshot', async () => {
     // The reaction menu opens the share-your-beta sheet via openAddBetaVideo; assert
     // that opener snapshots the active board config onto the sheet.
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -746,7 +760,7 @@ describe('DrawerHostProvider climb actions', () => {
 
 describe('DrawerHostProvider play drawer open analytics source', () => {
   it('tags a climb-view open with source:climb_view', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -763,7 +777,7 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
   });
 
   it('defaults a queue-nav open (committedExternally, no source) to current_queue_item', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const hosts: Array<HostValue> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
@@ -778,9 +792,13 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
     );
   });
 
-  it('does not leak source into PlayDrawer.open', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
+  it('does not leak source (or boardConfig) into the open target', async () => {
+    const hosts: Array<HostValue> = [];
+    const routes: Array<RouteValue> = [];
+    renderHost(
+      (host) => hosts.push(host),
+      (route) => routes.push(route),
+    );
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     const climb = makeQueueItem('queue-x', 'climb-view-2').climb as unknown as Climb;
@@ -788,20 +806,21 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
       hosts.at(-1)?.openPlayDrawer(climb, { committedExternally: true, source: 'climb_view' });
     });
 
-    // No board override → the drawer opens synchronously with only the queue
-    // options; `source` was pulled out and must not reach PlayDrawer.open.
-    expect(playDrawer.open).toHaveBeenCalledWith(climb, { committedExternally: true });
+    // No board override → no override set; `source` was pulled out and must not
+    // reach the open target the route applies.
+    await waitFor(() => expect(routes.at(-1)?.playTarget?.climb).toBe(climb));
+    expect(routes.at(-1)?.playTarget?.options).toEqual({ committedExternally: true });
   });
 });
 
 describe('DrawerHostProvider play drawer board overrides', () => {
-  beforeEach(() => {
-    playDrawer.open.mockClear();
-  });
-
-  it('reopens immediately when the requested override already matches the active drawer override', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
+  it('applies the override board and updates the open target on each open', async () => {
+    const hosts: Array<HostValue> = [];
+    const routes: Array<RouteValue> = [];
+    renderHost(
+      (host) => hosts.push(host),
+      (route) => routes.push(route),
+    );
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     const override: BoardConfig = {
@@ -820,13 +839,15 @@ describe('DrawerHostProvider play drawer board overrides', () => {
         boardConfig: override,
       });
     });
-    await waitFor(() =>
-      expect(playDrawer.open).toHaveBeenCalledWith(firstClimb, {
-        previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'same-override-1' }) }),
-      }),
-    );
+    // The override differs from the stored board → the route's drawer board
+    // becomes the override, and the open target carries the first climb.
+    await waitFor(() => {
+      expect(routes.at(-1)?.activeBoardConfig).toMatchObject(override);
+      expect(routes.at(-1)?.playTarget?.climb).toBe(firstClimb);
+    });
+    expect(routerNavigate).toHaveBeenCalledWith('/play');
+    const firstNonce = routes.at(-1)?.playTarget?.nonce;
 
-    playDrawer.open.mockClear();
     act(() => {
       hosts.at(-1)?.openPlayDrawer(secondClimb, {
         previewQueueItem: makeQueueItem('preview-y', 'same-override-2'),
@@ -834,25 +855,22 @@ describe('DrawerHostProvider play drawer board overrides', () => {
       });
     });
 
-    expect(playDrawer.open).toHaveBeenCalledWith(secondClimb, {
-      previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'same-override-2' }) }),
+    // Second open in place: a bumped nonce re-applies the new climb (navigate is
+    // a no-op when /play is already up — the nonce is what re-runs the route).
+    await waitFor(() => {
+      expect(routes.at(-1)?.playTarget?.climb).toBe(secondClimb);
     });
+    expect(routes.at(-1)?.playTarget?.nonce).not.toBe(firstNonce);
+    expect(routes.at(-1)?.activeBoardConfig).toMatchObject(override);
   });
 });
 
 describe('DrawerHostProvider switch board keeps the climb angle', () => {
   beforeEach(() => {
     activeBoard.setActiveBoard.mockClear();
-    playDrawer.open.mockClear();
-    playDrawer.close.mockClear();
     routerPush.mockClear();
+    routerDismiss.mockClear();
   });
-
-  function getOnSwitchBoard(): () => void {
-    const onSwitchBoard = playDrawer.props?.onSwitchBoard;
-    if (!onSwitchBoard) throw new Error('PlayDrawer.onSwitchBoard was not provided');
-    return onSwitchBoard;
-  }
 
   // Owned board loosely-matches the opened climb (same board name + layout) but
   // boardLooselyMatches IGNORES angle — the owned board sits at a different angle
@@ -870,13 +888,27 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
     isAngleAdjustable: true,
   };
 
-  it('switches to the owned board carrying the climb override angle, not the board stored angle', async () => {
-    myBoards.boards = [ownedAdjustable];
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
+  async function openWithOverride(override: BoardConfig, climbUuid: string): Promise<() => void> {
+    const hosts: Array<HostValue> = [];
+    const routes: Array<RouteValue> = [];
+    renderHost(
+      (host) => hosts.push(host),
+      (route) => routes.push(route),
+    );
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
-    const climb = makeQueueItem('queue-x', 'climb-switch-1').climb as unknown as Climb;
+    const climb = makeQueueItem('queue-x', climbUuid).climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
+    });
+    await waitFor(() => expect(routes.at(-1)?.activeBoardConfig).toMatchObject(override));
+    const onSwitchBoard = routes.at(-1)?.onSwitchBoard;
+    if (!onSwitchBoard) throw new Error('route onSwitchBoard was not provided');
+    return onSwitchBoard;
+  }
+
+  it('switches to the owned board carrying the climb override angle, not the board stored angle', async () => {
+    myBoards.boards = [ownedAdjustable];
     const override: BoardConfig = {
       boardName: 'tension',
       layoutId: 8,
@@ -884,13 +916,10 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       setIds: '5,6',
       angle: 55,
     };
-    act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
-    });
-    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+    const onSwitchBoard = await openWithOverride(override, 'climb-switch-1');
 
     act(() => {
-      getOnSwitchBoard()();
+      onSwitchBoard();
     });
 
     expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(
@@ -909,11 +938,6 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       isAngleAdjustable: false,
     };
     myBoards.boards = [ownedFixed];
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
-
-    const climb = makeQueueItem('queue-x', 'climb-switch-2').climb as unknown as Climb;
     const override: BoardConfig = {
       boardName: 'tension',
       layoutId: 8,
@@ -921,13 +945,10 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       setIds: '5,6',
       angle: 55,
     };
-    act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
-    });
-    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+    const onSwitchBoard = await openWithOverride(override, 'climb-switch-2');
 
     act(() => {
-      getOnSwitchBoard()();
+      onSwitchBoard();
     });
 
     expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(
@@ -939,11 +960,6 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
     // Owned board is a genuinely different model (board name + layout) than the
     // climb's override, so boardLooselyMatches finds nothing to switch to.
     myBoards.boards = [ownedAdjustable];
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
-
-    const climb = makeQueueItem('queue-x', 'climb-switch-unowned').climb as unknown as Climb;
     const override: BoardConfig = {
       boardName: 'kilter',
       layoutId: 1,
@@ -951,17 +967,15 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       setIds: '1,2',
       angle: 55,
     };
-    act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
-    });
-    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+    const onSwitchBoard = await openWithOverride(override, 'climb-switch-unowned');
 
     act(() => {
-      getOnSwitchBoard()();
+      onSwitchBoard();
     });
 
-    // No owned match → close the drawer and send the user to the board picker.
-    expect(playDrawer.close).toHaveBeenCalledTimes(1);
+    // No owned match → dismiss the player route and send the user to the board
+    // picker.
+    expect(routerDismiss).toHaveBeenCalledTimes(1);
     expect(routerPush).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/boards' }));
     expect(activeBoard.setActiveBoard).not.toHaveBeenCalled();
   });

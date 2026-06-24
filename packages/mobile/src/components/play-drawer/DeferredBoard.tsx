@@ -1,5 +1,6 @@
-import { memo } from 'react';
+import { memo, type ComponentType, type RefObject } from 'react';
 import { View, StyleSheet } from 'react-native';
+import type { SharedValue } from 'react-native-reanimated';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -31,6 +32,9 @@ type DeferredBoardProps = {
   onSwipePrevious: () => void;
   onResetZoomReady?: (resetZoom: () => void) => void;
   enabled?: boolean;
+  scrollRef?: RefObject<ComponentType | undefined | null>;
+  swipeTranslateX?: SharedValue<number>;
+  swipeIsAnimating?: SharedValue<boolean>;
 };
 
 /**

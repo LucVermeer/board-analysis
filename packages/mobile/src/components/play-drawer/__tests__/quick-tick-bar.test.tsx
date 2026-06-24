@@ -23,7 +23,7 @@ vi.mock('react-native', () => ({
     createElement('button', { 'data-label': accessibilityLabel }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
-vi.mock('@gorhom/bottom-sheet', () => ({ BottomSheetTextInput: () => null }));
+vi.mock('@expo/ui/community/bottom-sheet', () => ({ BottomSheetTextInput: () => null }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 

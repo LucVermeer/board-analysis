@@ -18,7 +18,7 @@ import {
 } from 'expo-router';
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider } from '@expo/ui/community/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
 import { ThemeProvider, useTheme } from '../src/providers/theme-provider';
 import { MaterialThemeProvider } from '../src/providers/material-theme-provider';
@@ -416,6 +416,32 @@ function RootLayout() {
                                                                   headerShown: false,
                                                                   gestureEnabled: false,
                                                                   animation: 'fade',
+                                                                }}
+                                                              />
+                                                              {/* Full-screen "now playing" player. A modal VC so the
+                                                      sub-drawers / queue / share sheet opened from inside it stack
+                                                      ABOVE it (the FullWindowOverlay it replaced sat in a higher
+                                                      window, so native sheets rendered behind). transparentModal —
+                                                      NOT fullScreenModal — so the iOS 26 native tab bar + its bottom
+                                                      accessory stay LIVE behind it: a fullScreenModal snapshots the
+                                                      presenting VC, and that snapshot of the glass accessory platter
+                                                      lingered stacked under the live one (doubled climb name) and
+                                                      churned the docked search field. The player paints its own
+                                                      opaque backing (see app/play.tsx) so the live tabs screen
+                                                      doesn't show through the glass. Custom pull-down dismiss; covers
+                                                      the tab bar. */}
+                                                              <Stack.Screen
+                                                                name="play"
+                                                                options={{
+                                                                  presentation: 'transparentModal',
+                                                                  headerShown: false,
+                                                                  // Native interactive dismiss OFF — it lives outside
+                                                                  // RNGH so it couldn't negotiate with the board
+                                                                  // swipe/pinch (only fired on the grabber). A custom
+                                                                  // RNGH pull-down (use-drawer-dismiss-gesture) drives
+                                                                  // dismissal from the whole surface instead.
+                                                                  gestureEnabled: false,
+                                                                  animation: 'slide_from_bottom',
                                                                 }}
                                                               />
                                                             </Stack>

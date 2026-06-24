@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { ModalSheet } from '../ModalSheet';
 import { ListRow } from '../ListRow';
@@ -37,8 +37,8 @@ export function PlaylistActionsMenu({
   const { actionColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   // Track presented state so we never call dismiss() on a not-presented modal
-  // (which leaves gorhom in a state where the next present() is a no-op — the
-  // "nothing happens" bug). Mirrors LogAscentSheet.
+  // (which can leave the next present() a no-op — the "nothing happens" bug).
+  // Mirrors LogAscentSheet.
   const isPresentedRef = useRef(false);
   // 36% leaves room for the three rows on short screens (e.g. iPhone SE landscape).
   const snapPoints = useMemo(() => ['36%'], []);

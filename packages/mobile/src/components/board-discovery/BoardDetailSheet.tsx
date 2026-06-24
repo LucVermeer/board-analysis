@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet, type ColorValue } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import BottomSheet from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { Sheet } from '../Sheet';
@@ -28,7 +28,7 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
 
   // Always-mounted sheet: open/close imperatively off the visible+board state.
   // Selecting a different board while the sheet is open re-runs snapToIndex(0)
-  // (board is a dep) — harmless; gorhom no-ops if already at that stop.
+  // (board is a dep) — harmless; the sheet no-ops if already at that stop.
   useEffect(() => {
     if (visible && board) {
       sheetRef.current?.snapToIndex(0);

@@ -1,6 +1,6 @@
 import { type RefObject, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput, type BottomSheet } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';

@@ -49,11 +49,13 @@ export function GlassActionToolbar({ actionCount, children }: { actionCount: num
 /** One action target inside a `GlassActionToolbar` (create +, angle, light). */
 export function GlassToolbarAction({
   onPress,
+  onLongPress,
   accessibilityLabel,
   accessibilityHint,
   children,
 }: {
   onPress: () => void;
+  onLongPress?: () => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
   children: ReactNode;
@@ -61,6 +63,7 @@ export function GlassToolbarAction({
   return (
     <PressableSurface
       onPress={onPress}
+      onLongPress={onLongPress}
       feedback="opacity"
       hitSlop={4}
       accessibilityRole="button"

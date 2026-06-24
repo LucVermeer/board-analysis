@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { BottomSheetModal, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { ModalSheet } from '../ModalSheet';
 import { Text } from '../Text';

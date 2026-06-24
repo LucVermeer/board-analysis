@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../providers/theme-provider';
 import { useLightbulbControl } from '../ble/use-lightbulb-control';
+import { useBleControlSheet } from '../../providers/ble-control-sheet-provider';
 import { hapticLight } from '../../lib/haptics';
 import { Icon } from '../Icon';
 import { GlassToolbarAction } from './GlassActionToolbar';
@@ -21,7 +22,11 @@ export function LightbulbToolbarAction() {
   const { systemColors, brandColors } = useTheme();
   const { t: tCommon } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
-  const { bluetooth, lit, localConnected, onPress } = useLightbulbControl({ source: 'lightbulb_toolbar' });
+  const { open: openControls } = useBleControlSheet();
+  const { bluetooth, lit, localConnected, onPress, onLongPress } = useLightbulbControl({
+    source: 'lightbulb_toolbar',
+    onOpenControls: openControls,
+  });
 
   const handlePress = useCallback(() => {
     hapticLight();
@@ -33,6 +38,9 @@ export function LightbulbToolbarAction() {
   return (
     <GlassToolbarAction
       onPress={handlePress}
+      // Short press connects/disconnects; long press (connected) opens the
+      // controls sheet — same as the drawer + accessory-bar lightbulbs.
+      onLongPress={localConnected ? onLongPress : undefined}
       // The label reflects what tapping does (keyed on this device's link), not
       // the fill — the bulb can read lit because a peer holds the wall.
       accessibilityLabel={localConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}

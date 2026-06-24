@@ -10,7 +10,6 @@ export { SectionHeader } from './SectionHeader';
 export { Sheet } from './Sheet';
 export { ModalSheet } from './ModalSheet';
 export { GlassSurface } from './GlassSurface';
-export { GlassSheetBackground } from './GlassSheetBackground';
 export { Icon } from './Icon';
 export { type IconName } from './icon-map';
 export { ClimbListRow } from './ClimbListRow';

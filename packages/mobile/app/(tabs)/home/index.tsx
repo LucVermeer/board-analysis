@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';

@@ -1,14 +1,11 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View, Pressable, Platform, StyleSheet } from 'react-native';
-import { BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
-import { FullWindowOverlay } from 'react-native-screens';
+import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList } from './QueueList';
-import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Text } from '../Text';
 import type { QueueItemRowBoard } from '../QueueItemRow';
 import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
@@ -17,14 +14,6 @@ import { hapticMedium, hapticWarning } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
-
-// iOS renders the modal in a native window overlay so it sits above the
-// persistent queue bar (mirrors ModalSheet / LogAscentSheet); Android's modal
-// portal already covers it.
-function ModalSheetContainer({ children }: { children?: ReactNode }) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-const modalContainerComponent = Platform.OS === 'ios' ? ModalSheetContainer : undefined;
 
 type QueueSheetProps = {
   board: QueueItemRowBoard;
@@ -42,12 +31,9 @@ type QueueSheetProps = {
 };
 
 /**
- * Imperative handle exposed to DrawerHostProvider. gorhom `present()` driven
- * from a `visible`-prop effect is a silent no-op in this app (RN 0.79 / Expo
- * SDK 56 / @gorhom/bottom-sheet v5 / react-native-screens): the effect runs and
- * `present()` is called, but gorhom never fires `onAnimate`/`onChange` and the
- * sheet never appears. Calling `present()` synchronously from the tap handler —
- * the same pattern PlayDrawer uses — fixes it.
+ * Imperative handle exposed to DrawerHostProvider. The sheet is opened by calling
+ * `present()` synchronously from the tap handler (the same pattern PlayDrawer
+ * uses) rather than driving it from a `visible`-prop effect.
  */
 export type QueueSheetHandle = {
   present: () => void;
@@ -161,19 +147,6 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
     [removeFromQueue],
   );
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={sheet.scrimOpacity}
-        pressBehavior="close"
-      />
-    ),
-    [sheet.scrimOpacity],
-  );
-
   const viewOnlyMode = queue.length === 0;
 
   return (
@@ -181,19 +154,13 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
       ref={sheetRef}
       index={0}
       snapPoints={snapPoints}
-      // Stack above the play drawer (when opened from its queue button) instead
-      // of replacing it, so closing the queue sheet reveals the drawer again.
-      stackBehavior="push"
       enablePanDownToClose
       // Freeze the sheet pan while a row is being dragged so scroll-to-expand
       // never fights the reorder gesture.
       enableContentPanningGesture={!isDragging}
       enableHandlePanningGesture={!isDragging}
-      backdropComponent={renderBackdrop}
-      containerComponent={modalContainerComponent}
       onDismiss={handleDismissed}
       handleIndicatorStyle={sheet.handleStyle}
-      backgroundComponent={GlassSheetBackground}
       style={styles.sheet}
     >
       <QueueSheetHeader

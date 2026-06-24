@@ -14,6 +14,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
 import { hapticLight } from '../../lib/haptics';
 import { useLightbulbControl } from '../ble/use-lightbulb-control';
+import { useBleControlSheet } from '../../providers/ble-control-sheet-provider';
 import { Text } from '../Text';
 import { iconMap } from '../icon-map';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
@@ -73,7 +74,11 @@ export function MaterialLightbulbAction() {
   const { systemColors, brandColors } = useTheme();
   const { t: tCommon } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
-  const { bluetooth, lit, localConnected, onPress } = useLightbulbControl({ source: 'lightbulb_toolbar' });
+  const { open: openControls } = useBleControlSheet();
+  const { bluetooth, lit, localConnected, onPress, onLongPress } = useLightbulbControl({
+    source: 'lightbulb_toolbar',
+    onOpenControls: openControls,
+  });
 
   const handlePress = useCallback(() => {
     hapticLight();
@@ -90,6 +95,9 @@ export function MaterialLightbulbAction() {
       icon={iconName}
       color={iconColor as string}
       onPress={handlePress}
+      // Short press connects/disconnects; long press (connected) opens the
+      // controls sheet — same as the drawer + accessory-bar lightbulbs.
+      onLongPress={localConnected ? onLongPress : undefined}
       // The label reflects what tapping does (this device's link), not the fill —
       // the bulb can read lit because a session peer holds the wall.
       accessibilityLabel={localConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}

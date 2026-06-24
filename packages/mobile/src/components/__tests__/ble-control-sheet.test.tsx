@@ -9,13 +9,13 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
 }));
 
-vi.mock('@gorhom/bottom-sheet', () => ({ default: function BottomSheet() {} }));
+vi.mock('@expo/ui/community/bottom-sheet', () => ({ default: function BottomSheet() {} }));
 
-vi.mock('../Sheet', async () => {
+vi.mock('../ModalSheet', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
   return {
-    Sheet: React.forwardRef(({ children }: { children?: ReactNode }, ref: Ref<unknown>) => {
-      React.useImperativeHandle(ref, () => ({ snapToIndex: vi.fn(), close: vi.fn() }));
+    ModalSheet: React.forwardRef(({ children }: { children?: ReactNode }, ref: Ref<unknown>) => {
+      React.useImperativeHandle(ref, () => ({ present: vi.fn(), dismiss: vi.fn() }));
       return React.createElement('div', { 'data-sheet': 'true' }, children);
     }),
   };

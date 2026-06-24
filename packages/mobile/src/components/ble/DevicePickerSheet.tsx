@@ -1,23 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
-import { View, ActivityIndicator, Platform, StyleSheet } from 'react-native';
-import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetFlatList,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from '../SheetBackdrop';
-import { FullWindowOverlay } from 'react-native-screens';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { BottomSheetModal, BottomSheetView, BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
+import { androidSafeSnapPoints } from '../sheet-snap-points';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { BleBoardConfig } from '../../lib/ble/board-config-match';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
-import { GlassSheetBackground } from '../GlassSheetBackground';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -30,12 +23,6 @@ type DevicePickerSheetProps = {
   resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
   currentBoardConfig?: BleBoardConfig;
 };
-
-function DevicePickerModalContainer({ children }: PropsWithChildren) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-
-const modalContainerComponent = Platform.OS === 'ios' ? DevicePickerModalContainer : undefined;
 
 export function DevicePickerSheet({
   devices,
@@ -50,7 +37,7 @@ export function DevicePickerSheet({
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
 
-  const snapPoints = useMemo(() => ['72%'], []);
+  const snapPoints = useMemo(() => androidSafeSnapPoints(['72%']), []);
 
   useEffect(() => {
     sheetRef.current?.present();
@@ -63,13 +50,6 @@ export function DevicePickerSheet({
   const deviceSerials = useMemo(
     () => new Map(devices.map((device) => [device.deviceId, parseSerialNumber(device.name)])),
     [devices],
-  );
-
-  const renderBackdrop = useCallback(
-    (backdropProps: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...backdropProps} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
-    ),
-    [],
   );
 
   const renderDeviceItem = useCallback(
@@ -103,16 +83,11 @@ export function DevicePickerSheet({
   return (
     <BottomSheetModal
       ref={sheetRef}
-      name="ble-device-picker"
       index={0}
-      stackBehavior="push"
       snapPoints={snapPoints}
-      containerComponent={modalContainerComponent}
       enablePanDownToClose
-      backdropComponent={renderBackdrop}
       onDismiss={onDismiss}
       handleIndicatorStyle={styles.indicator}
-      backgroundComponent={GlassSheetBackground}
     >
       <BottomSheetView style={styles.header}>
         <Text variant="title3" color={systemColors.label}>

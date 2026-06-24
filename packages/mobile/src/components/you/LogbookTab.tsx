@@ -3,7 +3,7 @@ import { View, RefreshControl, Pressable, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';

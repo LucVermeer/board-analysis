@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, useSegments } from 'expo-router';
-import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { openDiscordInvite } from '../../lib/discord';
@@ -51,6 +51,11 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
   const drawerWidth = Math.min(DRAWER_MAX_WIDTH, windowDimensions.width * DRAWER_SCREEN_FRACTION);
   const drawerProgress = useSharedValue(0);
   const [drawerMounted, setDrawerMounted] = useState(false);
+  // A navigation to run only AFTER the drawer's RN Modal has fully unmounted.
+  // Presenting a `presentation: 'modal'` route (e.g. /boards) while the drawer
+  // Modal is still on screen makes iOS try to present two modals at once — the
+  // push is dropped and the UI freezes. Closing the drawer first avoids it.
+  const pendingNavRef = useRef<(() => void) | null>(null);
   const feedbackSheetRef = useRef<BottomSheetModal>(null);
   const [feedbackMode, setFeedbackMode] = useState<FeedbackSheetMode>('rating');
   const [feedbackOpenNonce, setFeedbackOpenNonce] = useState(0);
@@ -88,6 +93,18 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     feedbackSheetRef.current?.present();
   }, [feedbackOpenNonce]);
 
+  // Run a queued navigation once the drawer Modal has unmounted (one frame after
+  // drawerMounted flips false), so a modal route never presents over the still-up
+  // drawer Modal.
+  useEffect(() => {
+    if (drawerMounted) return;
+    const nav = pendingNavRef.current;
+    if (!nav) return;
+    pendingNavRef.current = null;
+    const raf = requestAnimationFrame(nav);
+    return () => cancelAnimationFrame(raf);
+  }, [drawerMounted]);
+
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: drawerProgress.value,
   }));
@@ -96,17 +113,20 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     transform: [{ translateX: -drawerWidth + drawerWidth * drawerProgress.value }],
   }));
 
+  // /boards is a `presentation: 'modal'` route — defer the push until the drawer
+  // Modal has closed (see pendingNavRef) so two modals never present at once.
   const openBoards = useCallback(() => {
-    closeUserDrawer();
     const returnTo = currentBoardReturnTo(segments);
-    router.push({ pathname: '/boards', params: { returnTo } });
+    pendingNavRef.current = () => router.push({ pathname: '/boards', params: { returnTo } });
+    closeUserDrawer();
   }, [closeUserDrawer, segments]);
 
   // "My Boards" is now a management screen (edit / delete owned, unfollow
-  // followed), distinct from the board picker that "Change Board" opens.
+  // followed), distinct from the board picker that "Change Board" opens. Also a
+  // modal route, so it defers the same way.
   const openManageBoards = useCallback(() => {
+    pendingNavRef.current = () => router.push('/boards/manage');
     closeUserDrawer();
-    router.push('/boards/manage');
   }, [closeUserDrawer]);
 
   const openProfileSettings = useCallback(() => {

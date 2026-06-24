@@ -4,7 +4,7 @@
 // pickers + save row.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, type TextStyle } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {

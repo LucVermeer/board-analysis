@@ -1,22 +1,18 @@
 // Bottom-sheet wrapper around QuickTickBar. Used by every ticking entry
 // point — the play drawer's tick button, the persistent queue bar, the
 // climb detail screen — so the form, dismissal model (handle + pan-down +
-// backdrop tap), and keyboard handling stay identical across surfaces.
+// native scrim tap), and keyboard handling stay identical across surfaces.
 //
-// Uses `BottomSheetModal` (not the regular `BottomSheet`) so it renders in
-// a portal above the play drawer's own modal. `FullWindowOverlay` on iOS
-// lifts the sheet above the tab bar — same pattern as DevicePickerSheet.
-import { useCallback, useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import { BottomSheetModal, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import { SheetBackdrop } from './SheetBackdrop';
-import { FullWindowOverlay } from 'react-native-screens';
+// Uses `BottomSheetModal` (not the regular `BottomSheet`) so it presents as
+// a native modal above the play drawer's own modal.
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { Icon } from './Icon';
-import { GlassSheetBackground } from './GlassSheetBackground';
 import { QuickTickBar } from './play-drawer/QuickTickBar';
 
 type LogAscentSheetProps = {
@@ -34,12 +30,6 @@ type LogAscentSheetProps = {
   consensusGradeName?: string;
 };
 
-function LogAscentModalContainer({ children }: PropsWithChildren) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-
-const modalContainerComponent = Platform.OS === 'ios' ? LogAscentModalContainer : undefined;
-
 export function LogAscentSheet({
   visible,
   onDismiss,
@@ -55,13 +45,10 @@ export function LogAscentSheet({
   consensusGradeName,
 }: LogAscentSheetProps) {
   const sheetRef = useRef<BottomSheetModal>(null);
-  // Tracks whether the modal is currently *presented* (mounted into the
-  // gorhom modal stack), independent of the external `visible` prop. After
-  // a pan-down dismiss, gorhom unregisters the modal internally before
-  // `onDismiss` fires — calling `dismiss()` from our `visible` effect at
-  // that moment leaves the modal in an inconsistent state where a later
-  // `present()` is a no-op (the bug: tap tick → swipe down → tap tick →
-  // nothing happens).
+  // Tracks whether the modal is currently *presented*, independent of the
+  // external `visible` prop, so we never call `dismiss()` on an already-closed
+  // sheet (or `present()` on an already-open one) when a pan-down dismiss and
+  // our `visible` effect race.
   const isPresentedRef = useRef(false);
   const { systemColors } = useTheme();
   const { t } = useTranslation('session');
@@ -83,36 +70,22 @@ export function LogAscentSheet({
 
   // Default to 60% so the climb image stays visible above the sheet (the
   // UX review flagged full-cover + carousel-disabled as the wrong
-  // tradeoff). The 92% snap is the keyboard-extended state: when the
-  // comment `BottomSheetTextInput` gains focus, gorhom auto-snaps to the
-  // last point so the input and save buttons stay above the keyboard.
+  // tradeoff). The 92% snap is the keyboard-extended state; the native sheet
+  // keeps the focused input and save buttons above the keyboard.
   const snapPoints = useMemo(() => ['60%', '92%'], []);
-
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
-    ),
-    [],
-  );
 
   return (
     <BottomSheetModal
       ref={sheetRef}
-      name="log-ascent"
       index={0}
-      stackBehavior="push"
       snapPoints={snapPoints}
-      containerComponent={modalContainerComponent}
       enablePanDownToClose
       onDismiss={handleSheetDismiss}
-      backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.indicator}
-      backgroundComponent={GlassSheetBackground}
       keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
     >
-      <BottomSheetView style={styles.content}>
+      <View style={styles.content}>
         <View style={styles.closeButtonRow}>
           <Pressable
             onPress={onDismiss}
@@ -141,7 +114,7 @@ export function LogAscentSheet({
           consensusGradeName={consensusGradeName}
           onDismiss={onDismiss}
         />
-      </BottomSheetView>
+      </View>
     </BottomSheetModal>
   );
 }

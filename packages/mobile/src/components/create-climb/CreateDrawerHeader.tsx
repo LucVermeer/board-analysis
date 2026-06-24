@@ -1,6 +1,6 @@
-import { memo, useEffect, useRef, type ComponentProps } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { View, StyleSheet, Pressable, type TextInput } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -68,9 +68,9 @@ export const CreateDrawerHeader = memo(function CreateDrawerHeader({
 
       <View style={styles.center}>
         <BottomSheetTextInput
-          // gorhom types its ref as a gesture-handler-wrapped TextInput; cast to
-          // the component's own ref prop type and keep a plain TextInput ref for focus().
-          ref={inputRef as unknown as ComponentProps<typeof BottomSheetTextInput>['ref']}
+          // The native drop-in re-exports BottomSheetTextInput as RN's TextInput,
+          // so the ref is a plain TextInput ref (used for focus()).
+          ref={inputRef}
           value={name}
           onChangeText={onChangeName}
           placeholder={t('mobile.create.header.newClimb')}

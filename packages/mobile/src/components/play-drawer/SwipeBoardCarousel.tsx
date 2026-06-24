@@ -15,6 +15,7 @@ import Animated, {
   useSharedValue,
   withTiming,
   runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
@@ -59,6 +60,16 @@ type SwipeBoardCarouselProps = {
   // reset zoom before opening the tick bar.
   onResetZoomReady?: (resetZoom: () => void) => void;
   enabled?: boolean;
+  /** RNGH ref to the play-drawer scroll, so the swipe + pinch run simultaneously
+   *  with it instead of being starved by it (see use-carousel-gesture). */
+  scrollRef?: React.RefObject<React.ComponentType | undefined | null>;
+  /** Shared value the gesture writes translateX into, so the play-drawer header
+   *  (rendered above this carousel) can swipe off the same value. */
+  swipeTranslateX?: SharedValue<number>;
+  /** Shared "fling in progress" flag. When set, the host owns the post-fling
+   *  reset (it resets translateX once the new climb has rendered). The carousel
+   *  uses it to keep the incoming peek frozen + covering centre until then. */
+  swipeIsAnimating?: SharedValue<boolean>;
 };
 
 export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
@@ -78,6 +89,9 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   onSwipePrevious,
   onResetZoomReady,
   enabled = true,
+  scrollRef,
+  swipeTranslateX,
+  swipeIsAnimating,
 }: SwipeBoardCarouselProps) {
   const { t } = useTranslation('session');
   const { width: screenWidth } = useWindowDimensions();
@@ -111,6 +125,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     enabled,
     containerWidth: boardBox?.width ?? screenWidth,
     containerHeight: boardBox?.height ?? containerSize.height,
+    scrollRef,
   });
 
   const onResetZoomReadyRef = useRef(onResetZoomReady);
@@ -136,8 +151,12 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     canSwipeNext,
     canSwipePrevious,
     boardWidth: boardWidthForSwipe,
+    screenWidth,
     enabled,
     isZoomedSV,
+    scrollRef,
+    externalTranslateX: swipeTranslateX,
+    externalIsAnimating: swipeIsAnimating,
   });
 
   const resetButtonOpacity = useSharedValue(0);
@@ -149,6 +168,9 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     opacity: resetButtonOpacity.value,
   }));
 
+  // The current board: slides horizontally with the finger, and on release the
+  // carousel's withTiming flings translateX off-screen. While zoomed the swipe is
+  // disabled so translateX is 0 (the board stays put under the zoom transform).
   const currentStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
@@ -164,6 +186,12 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     [peekDirection],
   );
 
+  // The climb being swiped to slides in from the side you're swiping toward
+  // (filmstrip-style): it tracks the finger edge-adjacent to the current card, so
+  // it enters from the natural direction rather than growing from behind. It sits
+  // OFF-SCREEN at rest (offset == board width), so it's invisible until a swipe
+  // begins. On release the carousel flings translateX past the screen edge; the
+  // peek offset clamps at 0 (centered) and the new climb settles into place.
   const peekStyle = useAnimatedStyle(() => {
     if (translateX.value === 0) {
       return { opacity: 0, transform: [{ translateX: boardWidthForSwipe }] };
@@ -176,7 +204,30 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     return { opacity: 1, transform: [{ translateX: offset }] };
   });
 
-  const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
+  const livePeekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
+
+  // Freeze the incoming peek's frames for the duration of a fling+commit. The
+  // peek sits at centre showing the new climb while the fling lands; without the
+  // freeze, the commit updates nextFrames/prevFrames to the NEW climb's
+  // neighbours mid-hand-off, so the peek would flash the wrong board at centre.
+  // Captured when the fling starts (isAnimating → true) and held until the host
+  // resets isAnimating (after the new climb has rendered).
+  const livePeekFramesRef = useRef(livePeekFrames);
+  livePeekFramesRef.current = livePeekFrames;
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [frozenPeekFrames, setFrozenPeekFrames] = useState<string | null>(null);
+  const handleAnimatingChange = useCallback((animating: boolean) => {
+    if (animating) setFrozenPeekFrames(livePeekFramesRef.current);
+    setIsCommitting(animating);
+  }, []);
+  useAnimatedReaction(
+    () => (swipeIsAnimating ? swipeIsAnimating.value : false),
+    (animating, previous) => {
+      if (animating !== previous) runOnJS(handleAnimatingChange)(animating);
+    },
+    [swipeIsAnimating],
+  );
+  const peekFrames = isCommitting ? frozenPeekFrames : livePeekFrames;
 
   // Outer composition: pinch + swipe always. zoomPan is rendered separately
   // as a conditional overlay when zoomed (see below) so it doesn't claim
@@ -239,6 +290,8 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           </Animated.View>
         )}
 
+        {/* The climb being swiped to, sliding in edge-adjacent from the swipe
+            direction (below the current card's zIndex). Off-screen at rest. */}
         <Animated.View style={[styles.peekWrapper, peekStyle]} pointerEvents="none">
           {peekFrames && (
             <BoardImageNative
@@ -293,6 +346,10 @@ const styles = StyleSheet.create({
   boardWrapper: {
     width: '100%',
     alignItems: 'center',
+    // Above the stacked (next) card so the current climb is the top card. Explicit
+    // because the stacked card is absolutely positioned and renders after this in
+    // source order — zIndex governs paint order on both iOS and Android.
+    zIndex: 1,
   },
   peekWrapper: {
     position: 'absolute',
@@ -302,6 +359,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 0,
   },
   zoomPanOverlay: {
     position: 'absolute',

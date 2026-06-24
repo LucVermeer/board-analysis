@@ -44,9 +44,7 @@ vi.mock('../../Sheet', () => ({
   Sheet: ({ children, footer }: { children?: ReactNode; footer?: ReactNode }) =>
     createElement('div', null, children, footer),
 }));
-vi.mock('@gorhom/bottom-sheet', () => ({
-  __esModule: true,
-  default: () => null,
+vi.mock('@expo/ui/community/bottom-sheet', () => ({
   BottomSheetTextInput: ({
     value,
     onChangeText,
