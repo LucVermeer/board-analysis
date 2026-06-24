@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-24T21:04:37.829Z",
+  "generatedAt": "2026-06-24T21:38:48.462Z",
   "entries": [
     {
       "prNumber": 3178,
@@ -182,6 +182,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-25T07:04:19+10:00",
+      "sha": "570cb75169fa96d920577656688dd1c49c8a9cf4",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "d6f78af723067d91af20456d2bbc9cd7f65f937b"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-24T20:55:30+10:00",
