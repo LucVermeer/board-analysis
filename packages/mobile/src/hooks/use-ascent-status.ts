@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { logbookClimbAngleKey, useOptionalBoardProvider } from '@boardsesh/board-react';
+import { logbookClimbAngleKey, useOptionalBoardLogbook } from '@boardsesh/board-react';
 import { normalizeAscentStatus, pickHighestAscentStatus, type AscentStatusValue } from '../lib/ascent-status-utils';
 
 /**
@@ -14,8 +14,8 @@ import { normalizeAscentStatus, pickHighestAscentStatus, type AscentStatusValue 
  * `logbook.filter(...)` made the climbs list O(rows × logbook) on every merge.
  */
 export function useAscentStatus(climbUuid: string, angle: number, isMirror?: boolean): AscentStatusValue | null {
-  const board = useOptionalBoardProvider();
-  const entries = board?.logbookByClimbAngle.get(logbookClimbAngleKey(climbUuid, angle));
+  const logbook = useOptionalBoardLogbook();
+  const entries = logbook?.logbookByClimbAngle.get(logbookClimbAngleKey(climbUuid, angle));
   return useMemo<AscentStatusValue | null>(() => {
     if (!entries || entries.length === 0) return null;
     const matching = isMirror === undefined ? entries : entries.filter((entry) => entry.is_mirror === isMirror);

@@ -46,7 +46,29 @@ export type BoardContextType = {
   updateClimb: (input: UpdateClimbInput) => Promise<UpdateClimbResponse>;
 };
 
+/**
+ * The stable half of the board context: identity, auth/init flags, and the
+ * callbacks. Excludes `logbook`/`logbookByClimbAngle`, so its value identity
+ * does NOT change when the logbook merges — a consumer that only needs
+ * `getLogbook`/`saveTick`/`saveClimb`/`updateClimb` (or `boardName`/auth) reads
+ * this via `useBoardActions()` and skips the per-merge re-render cascade.
+ */
+export type BoardActionsContextType = Omit<BoardContextType, 'logbook' | 'logbookByClimbAngle'>;
+
+/**
+ * The volatile half: the logbook and its prebuilt `${climb_uuid}:${angle}`
+ * index. Identity changes on every logbook merge, so only the per-row
+ * ascent-status reader (`useAscentStatus`) and the tick forms subscribe to it
+ * via `useBoardLogbook()` — they SHOULD re-render when ticks change.
+ */
+export type BoardLogbookContextType = Pick<BoardContextType, 'logbook' | 'logbookByClimbAngle'>;
+
+// Full context kept for back-compat: web and any consumer wanting everything
+// still use `useBoardProvider()`. Its value still changes on a logbook merge
+// (it contains the logbook), which is fine for those consumers.
 const BoardContext = createContext<BoardContextType | undefined>(undefined);
+const BoardActionsContext = createContext<BoardActionsContextType | undefined>(undefined);
+const BoardLogbookContext = createContext<BoardLogbookContextType | undefined>(undefined);
 
 export function BoardProvider({
   boardName,
@@ -144,7 +166,10 @@ export function BoardProvider({
     return updateClimbMutateRef.current(input);
   }, []);
 
-  const value = useMemo<BoardContextType>(
+  // Stable slice: NO logbook deps, so its identity holds steady across logbook
+  // merges. Consumers reading only callbacks/identity (via `useBoardActions`)
+  // don't re-render when the user scrolls and ticks merge in mid-fling.
+  const actionsValue = useMemo<BoardActionsContextType>(
     () => ({
       boardName,
       boardUuid: boardUuid ?? null,
@@ -152,29 +177,32 @@ export function BoardProvider({
       isLoading: isAuthLoading,
       error: null,
       isInitialized,
-      logbook,
-      logbookByClimbAngle,
       getLogbook,
       saveTick,
       saveClimb,
       updateClimb,
     }),
-    [
-      boardName,
-      boardUuid,
-      isAuthenticated,
-      isAuthLoading,
-      isInitialized,
-      logbook,
-      logbookByClimbAngle,
-      getLogbook,
-      saveTick,
-      saveClimb,
-      updateClimb,
-    ],
+    [boardName, boardUuid, isAuthenticated, isAuthLoading, isInitialized, getLogbook, saveTick, saveClimb, updateClimb],
   );
 
-  return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
+  // Volatile slice: changes on every merge. Only the ascent-status reader and
+  // tick forms subscribe to it.
+  const logbookValue = useMemo<BoardLogbookContextType>(
+    () => ({ logbook, logbookByClimbAngle }),
+    [logbook, logbookByClimbAngle],
+  );
+
+  // Full value derived from the two slices so back-compat `useBoardProvider()`
+  // consumers keep seeing every field (and the latest logbook).
+  const value = useMemo<BoardContextType>(() => ({ ...actionsValue, ...logbookValue }), [actionsValue, logbookValue]);
+
+  return (
+    <BoardContext.Provider value={value}>
+      <BoardActionsContext.Provider value={actionsValue}>
+        <BoardLogbookContext.Provider value={logbookValue}>{children}</BoardLogbookContext.Provider>
+      </BoardActionsContext.Provider>
+    </BoardContext.Provider>
+  );
 }
 
 export function useBoardProvider(): BoardContextType {
@@ -189,4 +217,39 @@ export function useOptionalBoardProvider(): BoardContextType | null {
   return useContext(BoardContext) ?? null;
 }
 
+/**
+ * Stable board context: identity, auth/init flags, and callbacks — never the
+ * logbook. Prefer this over `useBoardProvider()` whenever a component reads only
+ * callbacks/identity, so a logbook merge doesn't re-render it.
+ */
+export function useBoardActions(): BoardActionsContextType {
+  const context = useContext(BoardActionsContext);
+  if (context === undefined) {
+    throw new Error('useBoardActions must be used within a BoardProvider');
+  }
+  return context;
+}
+
+export function useOptionalBoardActions(): BoardActionsContextType | null {
+  return useContext(BoardActionsContext) ?? null;
+}
+
+/** Volatile logbook context — `logbook` + the `logbookByClimbAngle` index.
+ *  Subscribing here re-renders on every logbook merge; only read it where that
+ *  is the intent (per-row ascent status, tick forms). */
+export function useBoardLogbook(): BoardLogbookContextType {
+  const context = useContext(BoardLogbookContext);
+  if (context === undefined) {
+    throw new Error('useBoardLogbook must be used within a BoardProvider');
+  }
+  return context;
+}
+
+export function useOptionalBoardLogbook(): BoardLogbookContextType | null {
+  return useContext(BoardLogbookContext) ?? null;
+}
+
+// Only the full `BoardContext` is exported (web reads it directly). The split
+// contexts stay module-private so consumers go through the guarded hooks above
+// rather than a raw `useContext` that skips the within-provider invariant.
 export { BoardContext };

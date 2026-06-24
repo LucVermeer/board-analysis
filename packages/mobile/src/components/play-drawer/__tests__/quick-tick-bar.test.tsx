@@ -56,9 +56,13 @@ vi.mock('../../../theme/tokens', () => ({ spacing: new Proxy({}, { get: () => 0 
 // plus a populated `logbookByClimbAngle` Map (the correct O(1) index).
 vi.mock('@boardsesh/board-react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@boardsesh/board-react')>();
+  // QuickTickBar reads `getLogbook` from the stable actions context and the
+  // `logbookByClimbAngle` index from the volatile logbook context. The fixture
+  // object carries both fields, so both hooks resolve to it.
   return {
     ...actual,
-    useOptionalBoardProvider: () => boardState.current,
+    useOptionalBoardActions: () => boardState.current,
+    useOptionalBoardLogbook: () => boardState.current,
     useSaveTick: () => ({ mutate: vi.fn(), isPending: false }),
   };
 });

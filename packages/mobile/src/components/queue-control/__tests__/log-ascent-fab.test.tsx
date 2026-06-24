@@ -27,7 +27,13 @@ vi.mock('react-native-reanimated', () => ({
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock('@boardsesh/board-react', () => ({ useOptionalBoardProvider: () => boardProvider.value }));
+// useLogAscentAction reads `logbook` from the volatile logbook context and
+// `getLogbook` from the stable actions context. The fixture carries both, so
+// both hooks resolve to it (and both are null together when there's no provider).
+vi.mock('@boardsesh/board-react', () => ({
+  useOptionalBoardLogbook: () => boardProvider.value,
+  useOptionalBoardActions: () => boardProvider.value,
+}));
 
 // GlassIconButton → button exposing the wiring + the colour signals under test.
 type GlassIconButtonMockProps = {

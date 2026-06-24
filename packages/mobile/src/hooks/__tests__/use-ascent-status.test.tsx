@@ -14,7 +14,7 @@ type Entry = {
 const ctrl = vi.hoisted(() => ({ board: null as { logbookByClimbAngle: Map<string, Entry[]> } | null }));
 
 vi.mock('@boardsesh/board-react', () => ({
-  useOptionalBoardProvider: () => ctrl.board,
+  useOptionalBoardLogbook: () => ctrl.board,
   logbookClimbAngleKey: (climbUuid: string, angle: number) => `${climbUuid}:${angle}`,
 }));
 // Stub the pure utils so the test exercises the hook's filtering/delegation, not

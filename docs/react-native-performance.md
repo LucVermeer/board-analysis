@@ -38,11 +38,17 @@ an automated gate.
 
 **Examples in this repo:**
 
-- `packages/shared/board-react/src/board-provider.tsx` — the `value` is `useMemo`'d over
-  `[boardName, isAuthenticated, …, logbook, logbookByClimbAngle, getLogbook, saveTick, …]`. The
-  mutation callbacks (`saveTick`/`saveClimb`/`updateClimb`) are kept stable via the
-  ref-updated-in-`useEffect` + empty-dep-`useCallback` pattern (lines 90–116), so a React Query
-  `mutateAsync` reference change does not churn the context.
+- `packages/shared/board-react/src/board-provider.tsx` — splits into **three** contexts (#3152):
+  `BoardActionsContext` (the **stable** half — identity, auth/init flags, `getLogbook`/`saveTick`/
+  `saveClimb`/`updateClimb`; its `useMemo` deps deliberately exclude the logbook, so a merge never
+  changes its identity), `BoardLogbookContext` (the **volatile** `logbook` + `logbookByClimbAngle`
+  index, read only by the per-row `useAscentStatus` and the tick forms), and the full back-compat
+  `BoardContext` (`{ ...actionsValue, ...logbookValue }`) that web still consumes via
+  `useBoardProvider()`. A callback-only consumer (`climbs/index.tsx` reading just `getLogbook`,
+  the create-climb screen reading the mutations) subscribes via `useBoardActions()` and skips the
+  per-merge re-render entirely. The mutation callbacks stay stable via the
+  ref-updated-in-`useEffect` + empty-dep-`useCallback` pattern, so a React Query `mutateAsync`
+  reference change does not churn the context either.
 - `packages/mobile/src/providers/queue-provider.tsx` — splits into **two** contexts:
   `QueueContext` (full state + actions) and `QueueSessionControlContext` (just the wall-control
   state + callbacks). A component that only drives take/release control subscribes to the smaller

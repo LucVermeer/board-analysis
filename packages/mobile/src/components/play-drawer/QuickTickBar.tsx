@@ -21,7 +21,12 @@ import { InlineTriesPicker } from './InlineTriesPicker';
 import { GradeSingleSelectRail } from '../grade';
 import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
-import { useOptionalBoardProvider, useSaveTick, logbookClimbAngleKey } from '@boardsesh/board-react';
+import {
+  useOptionalBoardActions,
+  useOptionalBoardLogbook,
+  useSaveTick,
+  logbookClimbAngleKey,
+} from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useToast } from '../../providers/toast-provider';
@@ -93,15 +98,17 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   // the raw `logbook` array — otherwise every logbook merge while this
   // sheet is open (own tick saves, list paging, peer ticks in a session)
   // re-runs an O(logbook) scan. Same index `useAscentStatus` reads.
-  const board = useOptionalBoardProvider();
+  const boardActions = useOptionalBoardActions();
+  const boardLogbook = useOptionalBoardLogbook();
   useEffect(() => {
-    if (!board) return;
-    void board.getLogbook([climbUuid]);
-  }, [board, climbUuid]);
+    if (!boardActions) return;
+    void boardActions.getLogbook([climbUuid]);
+  }, [boardActions, climbUuid]);
   const hasPriorHistory = useMemo(() => {
-    if (!board) return true;
-    return (board.logbookByClimbAngle.get(logbookClimbAngleKey(climbUuid, angle))?.length ?? 0) > 0;
-  }, [board, climbUuid, angle]);
+    // No provider → assume history so the label stays `Send` (failure mode 1).
+    if (!boardLogbook) return true;
+    return (boardLogbook.logbookByClimbAngle.get(logbookClimbAngleKey(climbUuid, angle))?.length ?? 0) > 0;
+  }, [boardLogbook, climbUuid, angle]);
 
   const [tickState, setTickState] = useState(createInitialTickState);
   const [comment, setComment] = useState('');
