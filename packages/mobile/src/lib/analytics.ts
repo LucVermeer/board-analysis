@@ -39,6 +39,21 @@ export function getAnalyticsClient(): PostHog | null {
   return getClient();
 }
 
+// Register PostHog super properties — values stamped onto every subsequent event
+// from this client until unregistered / reset. OtaUpdateTracker uses this to tag
+// the OTA cohort (update id, embedded-vs-OTA, fingerprint) onto all events so any
+// existing funnel can be sliced by it. Guarded like the optional feature-flag
+// methods: no-op when analytics is disabled (dev / no key) or the SDK build
+// lacks register().
+export function registerSuperProperties(properties: Record<string, string | number | boolean | null>): void {
+  const client = getClient();
+  if (!client) return;
+  // PostHog.register is part of the typed API, so this is compile-time safe — no
+  // duck-typing. Fire-and-forget (it returns a Promise) to match track()'s
+  // ergonomics; no-op when analytics is disabled (getClient() returned null).
+  void client.register(properties);
+}
+
 function coerceFeatureFlagBoolean(value: unknown): boolean | undefined {
   if (typeof value === 'boolean') return value;
   if (value === 'true') return true;
