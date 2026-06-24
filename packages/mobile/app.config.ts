@@ -197,7 +197,7 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
     name: appName,
     slug: 'boardsesh',
     owner: 'boardsesh',
-    version: '2.0.0',
+    version: '2.0.1',
     scheme: 'com.boardsesh.app',
     orientation: 'portrait',
     icon: iconPath,
