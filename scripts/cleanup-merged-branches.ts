@@ -31,7 +31,10 @@ const REPO_SLUG = `${REPO_OWNER}/${REPO_NAME}`;
 // count; if a run ever hits this cap it warns, and the only effect is that some of
 // the oldest branches are kept (never wrongly deleted). Bump if the repo outgrows it.
 const MERGED_PR_FETCH_LIMIT = 6000;
-const OPEN_PR_FETCH_LIMIT = 500;
+// Upper bound on OPEN PRs fetched. Unlike the merged cap, hitting this one is
+// UNSAFE — a dropped open PR's branch would wrongly become eligible — so the run
+// aborts (see fetchOpenHeads) rather than warning. Sized well above the current count.
+const OPEN_PR_FETCH_LIMIT = 2000;
 
 // Never delete these, regardless of merge state. The default branch is added at
 // runtime. These are defense-in-depth: a branch with no merged PR is already kept,
@@ -95,7 +98,9 @@ function resolveDefaultBranch(): string {
   try {
     return gh(['api', `repos/${REPO_SLUG}`, '--jq', '.default_branch']).trim() || 'main';
   } catch {
-    // Fall back to `main` — it's protected either way, so a wrong guess is harmless.
+    // Fall back to `main`. A wrong guess is harmless in practice: the default
+    // branch is never the head of a merged PR (PRs merge *into* it), so it can't
+    // be selected, and `master` is already in PROTECTED_NAMES regardless.
     return 'main';
   }
 }
@@ -115,6 +120,13 @@ function fetchOpenHeads(): string[] {
     'headRefName,isCrossRepository',
   ]);
   const prs = JSON.parse(raw) as RawOpenPr[];
+  // Hitting the cap means we may not have every open PR — and a missing open PR
+  // would let its still-active branch be deleted. Refuse to run on a partial list.
+  if (prs.length >= OPEN_PR_FETCH_LIMIT) {
+    throw new Error(
+      `open-PR fetch hit the cap of ${OPEN_PR_FETCH_LIMIT}; the open-PR list may be incomplete. Bump OPEN_PR_FETCH_LIMIT.`,
+    );
+  }
   return prs.filter((pr) => !pr.isCrossRepository).map((pr) => pr.headRefName);
 }
 

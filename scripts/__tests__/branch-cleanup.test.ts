@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { selectBranchesToDelete, isProtected, type MergedPr } from '../lib/branch-cleanup';
 
-const PROTECTED_NAMES = ['main', 'master', 'gh-pages', 'production', 'staging'];
+// Mirror how the CLI composes the protected list: a static set, plus the resolved
+// default branch appended at runtime. `main` is NOT in the static set — it is only
+// protected because the default branch gets added. The tests below assert both
+// halves of that contract so a refactor dropping the dynamic add fails here.
+const DEFAULT_BRANCH = 'main';
+const STATIC_PROTECTED_NAMES = ['master', 'gh-pages', 'production', 'staging'];
+const PROTECTED_NAMES = [...STATIC_PROTECTED_NAMES, DEFAULT_BRANCH];
 const PROTECTED_PREFIXES = ['pr-screenshots/', 'dependabot/', 'renovate/', 'release/'];
 
 function merged(number: number, headRefName: string, mergedAt: string, headRefOid: string): MergedPr {
@@ -10,8 +16,13 @@ function merged(number: number, headRefName: string, mergedAt: string, headRefOi
 
 describe('isProtected', () => {
   it('matches exact protected names', () => {
-    expect(isProtected('main', PROTECTED_NAMES, PROTECTED_PREFIXES)).toBe(true);
+    expect(isProtected('master', PROTECTED_NAMES, PROTECTED_PREFIXES)).toBe(true);
     expect(isProtected('gh-pages', PROTECTED_NAMES, PROTECTED_PREFIXES)).toBe(true);
+  });
+
+  it('protects the default branch only once it is appended (not statically)', () => {
+    expect(isProtected('main', STATIC_PROTECTED_NAMES, PROTECTED_PREFIXES)).toBe(false);
+    expect(isProtected('main', PROTECTED_NAMES, PROTECTED_PREFIXES)).toBe(true);
   });
 
   it('matches protected prefixes', () => {
