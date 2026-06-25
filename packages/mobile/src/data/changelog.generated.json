@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-25T00:18:07.221Z",
+  "generatedAt": "2026-06-25T01:00:37.249Z",
   "entries": [
+    {
+      "prNumber": 3171,
+      "category": "new",
+      "title": "MoonBoard problems now carry their style — footless, footless + kickboard, and no-kickboard show as tags right on the climb, and you can pick one when you set a problem. Benchmarks are now set by the crew that curates them, not anyone with the create screen open. Under the hood, \"no matching\" is proper climb data now instead of a note buried in the description.",
+      "mergedAt": "2026-06-25T00:59:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3171"
+    },
     {
       "prNumber": 3186,
       "category": "fixed",
@@ -196,6 +203,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-25T10:17:19+10:00",
+      "sha": "5115666b42cf890cd44946ef8c2a2f8af575b29a",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "a0587df8b6dce0ccb8c978f845266c0c3bfe2e34"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-25T07:04:19+10:00",

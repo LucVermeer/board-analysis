@@ -10,6 +10,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### New
+
+- MoonBoard problems now carry their style — footless, footless + kickboard, and no-kickboard show as tags right on the climb, and you can pick one when you set a problem. Benchmarks are now set by the crew that curates them, not anyone with the create screen open. Under the hood, "no matching" is proper climb data now instead of a note buried in the description. ([#3171](https://github.com/boardsesh/boardsesh/pull/3171))
+
 ### Fixed
 
 - Tap a climb on a flaky Bluetooth link and the wall now re-lights itself instead of staying dark — no more re-tapping a climb that didn't show up. ([#3186](https://github.com/boardsesh/boardsesh/pull/3186))
