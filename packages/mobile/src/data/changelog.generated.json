@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-25T08:04:50.184Z",
+  "generatedAt": "2026-06-25T08:41:56.131Z",
   "entries": [
+    {
+      "prNumber": 3200,
+      "category": "new",
+      "title": "Logbook search and filters are tucked away while we put the finishing touches on them",
+      "mergedAt": "2026-06-25T08:40:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3200"
+    },
     {
       "prNumber": 3199,
       "category": "new",
