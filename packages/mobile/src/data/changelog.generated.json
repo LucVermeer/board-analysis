@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-25T05:41:41.491Z",
+  "generatedAt": "2026-06-25T08:04:50.184Z",
   "entries": [
+    {
+      "prNumber": 3199,
+      "category": "new",
+      "title": "Testers can now flip feature flags on or off right in the app, no new build needed",
+      "mergedAt": "2026-06-25T08:04:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3199"
+    },
     {
       "prNumber": 3179,
       "category": "new",
