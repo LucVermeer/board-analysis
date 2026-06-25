@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Your logbook is searchable again on mobile. Head to You → Logbook to find a climb by name, narrow by grade, angle, date, or sends/attempts, and sort by **Latest** or **Hardest** so your hardest ticks rise to the top. The filter button is amber, so you always know you're searching your logbook, not the whole board. ([#3179](https://github.com/boardsesh/boardsesh/pull/3179))
 - The full MoonBoard 2024 catalog is now on Boardsesh — every problem shows its style (footless, footless + kickboard, no-kickboard) as a tag. ([#3151](https://github.com/boardsesh/boardsesh/pull/3151))
 - Forgot your password? Now you can reset it — tap "Forgot password?" on the login screen and we'll email you a secure reset link. Works on web and mobile. ([#3185](https://github.com/boardsesh/boardsesh/pull/3185))
 - MoonBoard problems now carry their style — footless, footless + kickboard, and no-kickboard show as tags right on the climb, and you can pick one when you set a problem. Benchmarks are now set by the crew that curates them, not anyone with the create screen open. Under the hood, "no matching" is proper climb data now instead of a note buried in the description. ([#3171](https://github.com/boardsesh/boardsesh/pull/3171))

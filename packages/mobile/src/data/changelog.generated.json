@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-25T05:37:09.269Z",
+  "generatedAt": "2026-06-25T05:41:41.491Z",
   "entries": [
+    {
+      "prNumber": 3179,
+      "category": "new",
+      "title": "Your logbook is searchable again on mobile. Head to You → Logbook to find a climb by name, narrow by grade, angle, date, or sends/attempts, and sort by **Latest** or **Hardest** so your hardest ticks rise to the top. The filter button is amber, so you always know you're searching your logbook, not the whole board.",
+      "mergedAt": "2026-06-25T05:38:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3179"
+    },
     {
       "prNumber": 3195,
       "category": "fixed",
