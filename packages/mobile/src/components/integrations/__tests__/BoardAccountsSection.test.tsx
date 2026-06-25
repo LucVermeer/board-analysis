@@ -38,7 +38,7 @@ type MutationOptions = {
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: mocks.invalidate }),
   useQuery: (opts: { queryKey: readonly unknown[] }) => {
-    const isCredentials = opts.queryKey.length === 1;
+    const isCredentials = opts.queryKey[0] === 'auroraCredentials' && opts.queryKey[1] !== 'unsynced';
     return {
       data: isCredentials
         ? ({ credentials: mocks.credentials, kilterSyncAllowed: mocks.kilterSyncAllowed } as AuroraCredentialsResponse)

@@ -298,6 +298,11 @@ export function BoardCredentialCard({
           )}
         </div>
         <div className={styles.buttonRow}>
+          {isExpired && (
+            <Button variant="contained" startIcon={<LinkOutlined />} onClick={onAdd}>
+              {t('aurora.card.reconnect')}
+            </Button>
+          )}
           <ConfirmPopover
             title={t('aurora.card.unlinkConfirm.title')}
             description={t('aurora.card.unlinkConfirm.description', { boardName })}
@@ -314,11 +319,6 @@ export function BoardCredentialCard({
               {t('aurora.card.unlink')}
             </Button>
           </ConfirmPopover>
-          {isExpired && (
-            <Button variant="contained" startIcon={<LinkOutlined />} onClick={onAdd}>
-              {t('aurora.card.reconnect')}
-            </Button>
-          )}
           <Button
             variant="outlined"
             startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}

@@ -12,6 +12,7 @@ import { getPlatform, isNativeApp } from '@/app/lib/ble/capacitor-utils';
 import { openExternalUrl } from '@/app/lib/open-external-url';
 import { storeSchemeUrlForPlatform } from '@/app/lib/store-urls';
 import { useFeatureFlag } from '@/app/components/providers/feature-flags-provider';
+import { CAPACITOR_UPDATE_BANNER_FLAG } from '@/app/flags';
 import { isUpdateBannerSnoozed, snoozeUpdateBanner } from '@/app/lib/capacitor-update-banner-db';
 import styles from './capacitor-update-banner.module.css';
 
@@ -55,7 +56,7 @@ const CapacitorUpdateBannerBody: React.FC<BannerBodyProps> = ({ onDismiss, onUpd
  * (which doesn't render the web UI), so it can't affect non-Capacitor users.
  */
 export const CapacitorUpdateBanner: React.FC = () => {
-  const flagEnabled = useFeatureFlag('capacitor-update-banner') === true;
+  const flagEnabled = useFeatureFlag(CAPACITOR_UPDATE_BANNER_FLAG) === true;
   const [open, setOpen] = useState(false);
   const titleId = useId();
 

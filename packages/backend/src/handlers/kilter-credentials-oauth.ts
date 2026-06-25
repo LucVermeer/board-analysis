@@ -617,8 +617,8 @@ const PASSWORD_RATE_LIMIT_MAX = 5;
 const PASSWORD_RATE_LIMIT_WINDOW_MS = 60_000;
 
 const kilterPasswordSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
+  username: z.string().min(1).max(255),
+  password: z.string().min(1).max(255),
 });
 
 function kilterPasswordErrorStatus(error: unknown): number {
