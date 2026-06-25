@@ -8,7 +8,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### App update
 
-A new version shipped to the App Store.
+A new version shipped to the App Store and Play Store.
+
+### Fixed
+
+- Tap a climb on a flaky Bluetooth link and the wall now re-lights itself instead of staying dark — no more re-tapping a climb that didn't show up. ([#3186](https://github.com/boardsesh/boardsesh/pull/3186))
 
 ## 2026-06-24
 

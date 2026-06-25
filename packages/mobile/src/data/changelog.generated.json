@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-24T21:43:02.708Z",
+  "generatedAt": "2026-06-25T00:18:07.221Z",
   "entries": [
+    {
+      "prNumber": 3186,
+      "category": "fixed",
+      "title": "Tap a climb on a flaky Bluetooth link and the wall now re-lights itself instead of staying dark — no more re-tapping a climb that didn't show up.",
+      "mergedAt": "2026-06-25T00:17:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3186"
+    },
     {
       "prNumber": 3180,
       "category": "improved",
@@ -198,6 +205,17 @@
       ],
       "fingerprints": {
         "ios": "d6f78af723067d91af20456d2bbc9cd7f65f937b"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-25T07:03:44+10:00",
+      "sha": "f4a52f09a7e78354209d3477661d35a41d2a1be5",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "7e6a0538ec9b4273edde042409b6cb1504c4102e"
       }
     },
     {
