@@ -1,0 +1,115 @@
+import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
+import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+import { getDb } from '@/app/lib/db/db';
+import * as schema from '@/app/lib/db/schema';
+import { sendPasswordResetEmail } from '@/app/lib/email/email-service';
+import { checkRateLimit, getClientIp } from '@/app/lib/auth/rate-limiter';
+import { getPasswordResetIdentifier, hashResetToken, consistentDelay } from '@/app/lib/auth/password-reset';
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email address'),
+});
+
+const MIN_RESPONSE_TIME_MS = 1500;
+
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  const genericMessage = 'If an account exists for this email, a reset link will be sent.';
+
+  try {
+    const clientIp = getClientIp(request);
+    // NOTE: checkRateLimit is in-memory and not shared across serverless instances.
+    // This provides best-effort protection only. Add Redis/Upstash rate limiting
+    // before relying on this as a production security control.
+    const rateLimitResult = checkRateLimit(`forgot-password:${clientIp}`, 5, 60_000);
+
+    if (rateLimitResult.limited) {
+      await consistentDelay(startTime, MIN_RESPONSE_TIME_MS);
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimitResult.retryAfterSeconds),
+          },
+        },
+      );
+    }
+
+    const body = await request.json();
+    const validationResult = forgotPasswordSchema.safeParse(body);
+
+    if (!validationResult.success) {
+      await consistentDelay(startTime, MIN_RESPONSE_TIME_MS);
+      return NextResponse.json({ error: validationResult.error.issues[0].message }, { status: 400 });
+    }
+
+    const { email } = validationResult.data;
+    const db = getDb();
+
+    const user = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.email, email))
+      .limit(1);
+
+    if (user.length === 0) {
+      await consistentDelay(startTime, MIN_RESPONSE_TIME_MS);
+      return NextResponse.json({ message: genericMessage }, { status: 200 });
+    }
+
+    const hasCredentials = await db
+      .select({ userId: schema.userCredentials.userId })
+      .from(schema.userCredentials)
+      .where(eq(schema.userCredentials.userId, user[0].id))
+      .limit(1);
+
+    if (hasCredentials.length === 0) {
+      await consistentDelay(startTime, MIN_RESPONSE_TIME_MS);
+      return NextResponse.json({ message: genericMessage }, { status: 200 });
+    }
+
+    const token = crypto.randomUUID();
+    const tokenHash = hashResetToken(token);
+    const expires = new Date(Date.now() + 60 * 60 * 1000);
+    const identifier = getPasswordResetIdentifier(email);
+
+    await db.transaction(async (tx) => {
+      await tx.delete(schema.verificationTokens).where(eq(schema.verificationTokens.identifier, identifier));
+
+      // Store the hash, not the raw token — raw token is only in the email link.
+      await tx.insert(schema.verificationTokens).values({
+        identifier,
+        token: tokenHash,
+        expires,
+      });
+    });
+
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    // Email is sent outside the transaction intentionally (nodemailer is not transactional).
+    // If this throws, the token remains in the DB but unreachable to the user — the
+    // delete-before-insert at the start of the next attempt cleans it up automatically.
+    // Return the generic message even on SMTP failure to avoid user enumeration
+    // ("account exists but email failed" vs "no account").
+    try {
+      await sendPasswordResetEmail(email, token, baseUrl);
+    } catch (emailError) {
+      // Swallow so the response stays generic (no user enumeration), but surface
+      // the failure to Sentry — a misconfigured SMTP credential would otherwise
+      // fail silently for every user with no signal in observability tooling.
+      console.error('Failed to send password reset email:', emailError);
+      Sentry.captureException(emailError, {
+        tags: { area: 'auth', flow: 'forgot-password', phase: 'send-email' },
+      });
+    }
+
+    await consistentDelay(startTime, MIN_RESPONSE_TIME_MS);
+    return NextResponse.json({ message: genericMessage }, { status: 200 });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    await consistentDelay(startTime, MIN_RESPONSE_TIME_MS);
+    return NextResponse.json({ error: 'Failed to process password reset request' }, { status: 500 });
+  }
+}

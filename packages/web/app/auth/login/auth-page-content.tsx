@@ -36,6 +36,7 @@ import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
 import { track, setPersonProperties } from '@/app/lib/analytics';
 import { authMethodFromError, safeAuthError } from './auth-error-classification';
+import LocaleLink from '@/app/components/i18n/locale-link';
 
 export default function AuthPageContent() {
   const { t } = useTranslation('auth');
@@ -333,6 +334,10 @@ export default function AuthPageContent() {
                   size="large"
                 >
                   {t('login.submit.signIn')}
+                </Button>
+
+                <Button component={LocaleLink} variant="text" href="/auth/forgot-password">
+                  {t('login.links.forgotPassword')}
                 </Button>
               </Box>
             </TabPanel>
