@@ -13,6 +13,10 @@ import {
   type MoonBoardMove,
 } from './moonboard-helpers.js';
 import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
+// Import the dependency-free `./characteristics` subpath (not the package root,
+// which pulls in graphql) so this resolves in the isolated dev-db image build,
+// where shared-schema is dropped into node_modules without its deps installed.
+import { moonBoardMethodToCharacteristic } from '@boardsesh/shared-schema/characteristics';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -176,6 +180,10 @@ async function importMoonBoardProblems() {
 
         const uuid = uuidv5(`moonboard:${problem.apiId}`, MOONBOARD_UUID_NAMESPACE);
         const frames = movesToFrames(problem.moves);
+        // MoonBoard problem "method" (footless / footless+kickboard / no-kickboard)
+        // becomes a structured characteristic; the default "feet follow hands"
+        // maps to null (no token).
+        const methodCharacteristic = moonBoardMethodToCharacteristic(problem.method);
 
         climbRecords.push({
           uuid,
@@ -200,6 +208,7 @@ async function importMoonBoardProblems() {
           synced: true,
           syncError: null,
           userId: null,
+          characteristics: methodCharacteristic ? [methodCharacteristic] : null,
         });
 
         statsRecords.push({
@@ -237,7 +246,16 @@ async function importMoonBoardProblems() {
       console.info(`   Inserting ${climbRecords.length} climbs...`);
       for (let i = 0; i < climbRecords.length; i += BATCH_SIZE) {
         const batch = climbRecords.slice(i, i + BATCH_SIZE);
-        await db.insert(boardClimbs).values(batch).onConflictDoNothing();
+        // Upsert only the characteristics column so a re-run backfills method
+        // tags onto climbs imported before characteristics existed, without
+        // disturbing any other field (name, frames, setter, etc.).
+        await db
+          .insert(boardClimbs)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: boardClimbs.uuid,
+            set: { characteristics: sql`excluded.characteristics` },
+          });
         if ((i + BATCH_SIZE) % 5000 === 0 || i + BATCH_SIZE >= climbRecords.length) {
           process.stdout.write(`\r   Climbs: ${Math.min(i + BATCH_SIZE, climbRecords.length)}/${climbRecords.length}`);
         }

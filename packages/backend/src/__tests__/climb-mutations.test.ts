@@ -303,6 +303,101 @@ describe('climb mutations', () => {
     });
   });
 
+  it('rejects isBenchmark for a user without an admin/leader role', async () => {
+    // requireAdminOrLeader's community_roles lookup returns nothing → the gate
+    // throws before any climb/stats row is written.
+    mockDb.select.mockReturnValueOnce(createMockChain([]));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await expect(
+      climbMutations.saveMoonBoardClimb(
+        {},
+        {
+          input: {
+            boardType: 'moonboard',
+            layoutId: 3,
+            name: 'Sneaky Benchmark',
+            description: '',
+            holds: { start: ['A1'], hand: ['B2'], finish: ['C3'] },
+            angle: 40,
+            isDraft: false,
+            userGrade: '6A+',
+            isBenchmark: true,
+          },
+        },
+        makeCtx(),
+      ),
+    ).rejects.toThrow(/admin or community leader/i);
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it('lets a community leader set isBenchmark and records benchmarkDifficulty', async () => {
+    mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockDb.select
+      .mockReturnValueOnce(createMockChain([{ role: 'community_leader', boardType: null }]))
+      .mockReturnValueOnce(
+        createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
+      )
+      .mockReturnValueOnce(createMockChain([{ difficulty: 17 }]));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveMoonBoardClimb(
+      {},
+      {
+        input: {
+          boardType: 'moonboard',
+          layoutId: 3,
+          name: 'Real Benchmark',
+          description: '',
+          holds: { start: ['A1'], hand: ['B2'], finish: ['C3'] },
+          angle: 40,
+          isDraft: false,
+          userGrade: '6A+',
+          isBenchmark: true,
+        },
+      },
+      makeCtx(),
+    );
+
+    expect(insertCalls[2].values).toMatchObject({ benchmarkDifficulty: 17 });
+  });
+
+  it('stores the MoonBoard method as a characteristic on the climb row', async () => {
+    mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockDb.select
+      .mockReturnValueOnce(
+        createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
+      )
+      .mockReturnValueOnce(createMockChain([{ difficulty: 17 }]));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveMoonBoardClimb(
+      {},
+      {
+        input: {
+          boardType: 'moonboard',
+          layoutId: 3,
+          name: 'Footless Problem',
+          description: '',
+          holds: { start: ['A1'], hand: ['B2'], finish: ['C3'] },
+          angle: 40,
+          isDraft: false,
+          userGrade: '6A+',
+          method: 'method_footless',
+        },
+      },
+      makeCtx(),
+    );
+
+    expect(insertCalls[0].values).toMatchObject({ characteristics: ['method_footless'] });
+  });
+
   it('seeds a stats row for MoonBoard climbs saved without a grade', async () => {
     mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     mockDb.select.mockReturnValueOnce(
@@ -483,6 +578,139 @@ describe('climb mutations', () => {
         }),
       }),
     );
+  });
+
+  it('updateClimb syncs the no_match characteristic from the description on Aurora boards', async () => {
+    let updateSet: Record<string, unknown> | undefined;
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([
+        {
+          uuid: 'climb-1',
+          userId: 'user-123',
+          isDraft: true,
+          publishedAt: null,
+          createdAt: '2026-05-14T20:00:00.000Z',
+          angle: 35,
+          layoutId: 8,
+          frames: 'p1r1',
+          framesCount: 1,
+          setterUsername: 'Alice Setter',
+          characteristics: null,
+        },
+      ]),
+    );
+    // updateClimb does `await tx.update(...).set(...).where(...)` but ignores the
+    // result, so the chain doesn't need to be thenable — `.where()` returns a
+    // plain object and `await` resolves it as-is. (Avoids a `then` literal, which
+    // oxlint flags as an accidental thenable.)
+    const updateChain: Record<string, unknown> = {
+      set: vi.fn((values: Record<string, unknown>) => {
+        updateSet = values;
+        return updateChain;
+      }),
+      where: vi.fn(() => updateChain),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChain);
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.updateClimb(
+      {},
+      { input: { boardType: 'kilter', uuid: 'climb-1', description: 'No match\nbeta' } },
+      makeCtx(),
+    );
+
+    expect(updateSet?.characteristics).toEqual(['no_match']);
+  });
+
+  it('updateClimb clears no_match (to null) when the Aurora description prefix is removed', async () => {
+    let updateSet: Record<string, unknown> | undefined;
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([
+        {
+          uuid: 'climb-2',
+          userId: 'user-123',
+          isDraft: true,
+          publishedAt: null,
+          createdAt: '2026-05-14T20:00:00.000Z',
+          angle: 35,
+          layoutId: 8,
+          frames: 'p1r1',
+          framesCount: 1,
+          setterUsername: 'Alice Setter',
+          characteristics: ['no_match'],
+        },
+      ]),
+    );
+    const updateChain: Record<string, unknown> = {
+      set: vi.fn((values: Record<string, unknown>) => {
+        updateSet = values;
+        return updateChain;
+      }),
+      where: vi.fn(() => updateChain),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChain);
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.updateClimb(
+      {},
+      { input: { boardType: 'kilter', uuid: 'climb-2', description: 'just a regular climb now' } },
+      makeCtx(),
+    );
+
+    // Token removed → stored as null (not an empty array).
+    expect(updateSet?.characteristics).toBeNull();
+  });
+
+  it('updateClimb never derives no_match for MoonBoard, preserving the method token', async () => {
+    let updateSet: Record<string, unknown> | undefined;
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([
+        {
+          uuid: 'mb-1',
+          userId: 'user-123',
+          isDraft: true,
+          publishedAt: null,
+          createdAt: '2026-05-14T20:00:00.000Z',
+          angle: 40,
+          layoutId: 3,
+          frames: 'p1r1',
+          framesCount: 1,
+          setterUsername: 'Alice Setter',
+          characteristics: ['method_footless'],
+        },
+      ]),
+    );
+    // updateClimb does `await tx.update(...).set(...).where(...)` but ignores the
+    // result, so the chain doesn't need to be thenable — `.where()` returns a
+    // plain object and `await` resolves it as-is. (Avoids a `then` literal, which
+    // oxlint flags as an accidental thenable.)
+    const updateChain: Record<string, unknown> = {
+      set: vi.fn((values: Record<string, unknown>) => {
+        updateSet = values;
+        return updateChain;
+      }),
+      where: vi.fn(() => updateChain),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChain);
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.updateClimb(
+      {},
+      // A MoonBoard description that *looks* like the Aurora "no match" prefix.
+      { input: { boardType: 'moonboard', uuid: 'mb-1', description: 'no match for the feet here' } },
+      makeCtx(),
+    );
+
+    // The guard skips the no_match derivation entirely — characteristics is not
+    // in the update set, so the stored method_footless token is untouched.
+    expect(updateSet).toBeDefined();
+    expect(updateSet).not.toHaveProperty('characteristics');
   });
 
   it('throws when publishing a draft without an angle', async () => {

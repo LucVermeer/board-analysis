@@ -177,10 +177,11 @@ describe('findExactDuplicateMatch', () => {
     }
   });
 
-  it("excludes Aurora 'No match' placeholder climbs from the gate", async () => {
-    // Aurora ships placeholder rows whose descriptions start with "No match".
-    // Without this filter a real setter typing in the same holds as a
-    // placeholder gets a false-positive duplicate error citing the placeholder.
+  it("excludes 'No match' placeholder climbs from the gate via the characteristic", async () => {
+    // "No match" placeholder climbs are not real routes. Without this filter a
+    // real setter typing in the same holds as a placeholder gets a false-positive
+    // duplicate error citing the placeholder. The filter reads the structured
+    // no_match characteristic (backfilled from the Aurora description convention).
     mockDb.execute.mockResolvedValueOnce([]);
     await findExactDuplicateMatch({
       boardType: 'kilter',
@@ -188,9 +189,11 @@ describe('findExactDuplicateMatch', () => {
       signature: '1:STARTING',
     });
     const [query] = mockDb.execute.mock.calls[0];
-    const { sql: rendered, params } = new PgDialect().sqlToQuery(query as SQL);
-    expect(rendered).toContain("NOT LIKE 'no match%'");
-    expect(params).not.toContain('no match%');
+    const { sql: rendered } = new PgDialect().sqlToQuery(query as SQL);
+    expect(rendered).toContain("@> ARRAY['no_match']");
+    // ...plus the description-prefix fallback for rows synced in the window
+    // between the backfill migration and this code deploy.
+    expect(rendered).toContain("LIKE 'no match%'");
   });
 });
 

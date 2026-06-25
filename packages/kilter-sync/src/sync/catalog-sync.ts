@@ -10,6 +10,7 @@ import {
   type NewBoardClimb,
 } from '@boardsesh/db/schema';
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
+import { isNoMatchClimb, CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
 
 import type { KilterTokenProvider } from '../api/token-provider';
 import {
@@ -317,6 +318,9 @@ async function syncBoardLayoutGroup(
         setterUsername: climb.username,
         name: climb.name,
         description: climb.description ?? '',
+        // Derive the structured no_match characteristic from the Aurora "No match"
+        // description convention (carried through the Kilter Grips catalog too).
+        characteristics: isNoMatchClimb(climb.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
         edgeLeft: climb.edgeLeft,
         edgeRight: climb.edgeRight,
         edgeBottom: climb.edgeBottom,
@@ -359,6 +363,19 @@ async function syncBoardLayoutGroup(
             set: {
               holdFingerprint: sql`COALESCE(${boardClimbs.holdFingerprint}, excluded.hold_fingerprint)`,
               frames: sql`COALESCE(${boardClimbs.frames}, excluded.frames)`,
+              // Track the latest derived no_match on a re-sync that reaches this
+              // branch (the dedup path normally skips existing UUIDs). Overwrite
+              // (not COALESCE) so a "No match" prefix removed upstream actually
+              // clears the token — matching aurora-sync's excluded.characteristics.
+              //
+              // ASSUMPTION: Kilter/Tension characteristics currently only carry
+              // `no_match`; method tags are MoonBoard-only. A blind overwrite is
+              // therefore safe — the incoming value is either ['no_match'] or null,
+              // and we want null to clear a stale token. If Kilter ever gains its
+              // own characteristic tokens (e.g. board-specific flags), switch this
+              // to a merge expression (e.g. array_cat + dedup) so that tokens not
+              // managed by this sync path aren't silently dropped.
+              characteristics: sql`excluded.characteristics`,
             },
           });
       });

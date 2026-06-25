@@ -44,6 +44,7 @@ import { useCreateClimb } from '@boardsesh/create-climb-react';
 import { useMoonBoardCreateClimb } from './use-moonboard-create-climb';
 import { useOptionalBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
 import type { MoonBoardClimbDuplicateMatch, UpdateClimbInput } from '@boardsesh/shared-schema';
+import { CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
 import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
 import { convertLitUpHoldsStringToMap } from '../board-renderer/util';
 import type { LitUpHoldsMap } from '../board-renderer/types';
@@ -84,6 +85,15 @@ import {
   type SaveMoonBoardClimbMutationResponse,
 } from '@boardsesh/graphql/operations/new-climb-feed';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
+import { GET_MY_ROLES } from '@boardsesh/graphql/operations/proposals';
+import type { CommunityRoleAssignment } from '@boardsesh/shared-schema';
+
+// The three mutually-exclusive MoonBoard method tokens (the create form's
+// selectable methods). The "feet follow hands" default is the empty selection.
+type MoonBoardMethodToken =
+  | typeof CLIMB_CHARACTERISTICS.METHOD_FOOTLESS
+  | typeof CLIMB_CHARACTERISTICS.METHOD_FOOTLESS_KICKBOARD
+  | typeof CLIMB_CHARACTERISTICS.METHOD_NO_KICKBOARD;
 
 const SETTINGS_DRAWER_STYLES = {
   wrapper: { height: 'auto', maxHeight: '70vh' },
@@ -151,6 +161,28 @@ export default function CreateClimbForm({
   // Determine which auth check to use based on board type
   const isLoggedIn = boardType === 'aurora' ? isAuthenticated : !!session?.user?.id;
   const hasMoonBoardSessionUser = !!session?.user;
+
+  // Check if the current user can set benchmarks on MoonBoard. Only admins and
+  // community leaders may flag a climb as a benchmark at creation time — the
+  // backend enforces this, so hide the toggle upfront to avoid a confusing
+  // server error for regular users.
+  const { data: myRoles } = useQuery({
+    queryKey: ['myRoles', session?.user?.id],
+    enabled: boardType === 'moonboard' && !!session?.user?.id,
+    queryFn: async (): Promise<CommunityRoleAssignment[]> => {
+      const client = createGraphQLHttpClient();
+      const result = await client.request<{ myRoles: CommunityRoleAssignment[] }>(GET_MY_ROLES);
+      return result.myRoles;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const canSetBenchmark =
+    boardType === 'moonboard' &&
+    !!myRoles?.some(
+      (r) =>
+        (r.role === 'admin' || r.role === 'community_leader') && (r.boardType === null || r.boardType === 'moonboard'),
+    );
 
   // Convert fork frames to initial holds map if provided (Aurora only)
   const initialHoldsMap = useMemo(() => {
@@ -317,6 +349,8 @@ export default function CreateClimbForm({
   const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
   const [userGrade, setUserGrade] = useState<string | undefined>(undefined);
   const [isBenchmark, setIsBenchmark] = useState(false);
+  // MoonBoard method as a characteristic token; '' = the "feet follow hands" default.
+  const [method, setMethod] = useState<MoonBoardMethodToken | ''>('');
   const userGradeLabel = useMemo(() => (userGrade ? getMoonBoardGradeLabel(userGrade) : undefined), [userGrade]);
   const [selectedAngle, setSelectedAngle] = useState<number>(angle);
   const [moonBoardDuplicateMatch, setMoonBoardDuplicateMatch] = useState<MoonBoardClimbDuplicateMatch | null>(null);
@@ -532,6 +566,7 @@ export default function CreateClimbForm({
     if (boardType === 'moonboard') {
       setUserGrade(undefined);
       setIsBenchmark(false);
+      setMethod('');
       setOcrError(null);
       setOcrWarnings([]);
       setMoonBoardDuplicateMatch(null);
@@ -1071,6 +1106,7 @@ export default function CreateClimbForm({
           isDraft: isDraft,
           userGrade,
           isBenchmark,
+          method: method || undefined,
           setter: undefined,
         },
       };
@@ -1130,6 +1166,7 @@ export default function CreateClimbForm({
     description,
     userGrade,
     isBenchmark,
+    method,
     isDraft,
     selectedAngle,
     wsAuthToken,
@@ -1936,13 +1973,37 @@ export default function CreateClimbForm({
                 </MuiSelect>
               </div>
               <div className={styles.settingsField}>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                  <MuiSwitch size="small" checked={isBenchmark} onChange={(_, checked) => setIsBenchmark(checked)} />
-                  <Typography variant="body2" component="span">
-                    {t('createClimbForm.fields.benchmark')}
-                  </Typography>
-                </Box>
+                <Typography variant="body2" component="span" color="text.secondary" className={styles.settingsLabel}>
+                  {t('createClimbForm.fields.method')}
+                </Typography>
+                <MuiSelect
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value as MoonBoardMethodToken | '')}
+                  className={styles.settingsGradeField}
+                  size="small"
+                >
+                  <MenuItem value="">{t('createClimbForm.methodOptions.feetFollowHands')}</MenuItem>
+                  <MenuItem value={CLIMB_CHARACTERISTICS.METHOD_FOOTLESS}>
+                    {t('createClimbForm.methodOptions.footless')}
+                  </MenuItem>
+                  <MenuItem value={CLIMB_CHARACTERISTICS.METHOD_FOOTLESS_KICKBOARD}>
+                    {t('createClimbForm.methodOptions.footlessKickboard')}
+                  </MenuItem>
+                  <MenuItem value={CLIMB_CHARACTERISTICS.METHOD_NO_KICKBOARD}>
+                    {t('createClimbForm.methodOptions.noKickboard')}
+                  </MenuItem>
+                </MuiSelect>
               </div>
+              {canSetBenchmark && (
+                <div className={styles.settingsField}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <MuiSwitch size="small" checked={isBenchmark} onChange={(_, checked) => setIsBenchmark(checked)} />
+                    <Typography variant="body2" component="span">
+                      {t('createClimbForm.fields.benchmark')}
+                    </Typography>
+                  </Box>
+                </div>
+              )}
             </>
           )}
           {/* Common: Description */}
