@@ -12,11 +12,15 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- The full MoonBoard 2024 catalog is now on Boardsesh — every problem shows its style (footless, footless + kickboard, no-kickboard) as a tag. ([#3151](https://github.com/boardsesh/boardsesh/pull/3151))
 - Forgot your password? Now you can reset it — tap "Forgot password?" on the login screen and we'll email you a secure reset link. Works on web and mobile. ([#3185](https://github.com/boardsesh/boardsesh/pull/3185))
 - MoonBoard problems now carry their style — footless, footless + kickboard, and no-kickboard show as tags right on the climb, and you can pick one when you set a problem. Benchmarks are now set by the crew that curates them, not anyone with the create screen open. Under the hood, "no matching" is proper climb data now instead of a note buried in the description. ([#3171](https://github.com/boardsesh/boardsesh/pull/3171))
 
 ### Fixed
 
+- Flick through climbs in the player without the view accidentally sliding shut mid-swipe. ([#3195](https://github.com/boardsesh/boardsesh/pull/3195))
+  On Android, the next climb now lands cleanly at the end of a swipe — no more flash.
+- Fixed password reset emails linking to `localhost:3000` instead of `www.boardsesh.com` — the reset link in your inbox will now take you to the right place. ([#3196](https://github.com/boardsesh/boardsesh/pull/3196))
 - Tap a climb on a flaky Bluetooth link and the wall now re-lights itself instead of staying dark — no more re-tapping a climb that didn't show up. ([#3186](https://github.com/boardsesh/boardsesh/pull/3186))
 
 ## 2026-06-24

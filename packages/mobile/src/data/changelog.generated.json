@@ -1,6 +1,28 @@
 {
-  "generatedAt": "2026-06-25T02:07:46.401Z",
+  "generatedAt": "2026-06-25T05:37:09.269Z",
   "entries": [
+    {
+      "prNumber": 3195,
+      "category": "fixed",
+      "title": "Flick through climbs in the player without the view accidentally sliding shut mid-swipe.",
+      "mergedAt": "2026-06-25T05:36:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3195",
+      "body": "On Android, the next climb now lands cleanly at the end of a swipe — no more flash."
+    },
+    {
+      "prNumber": 3196,
+      "category": "fixed",
+      "title": "Fixed password reset emails linking to `localhost:3000` instead of `www.boardsesh.com` — the reset link in your inbox will now take you to the right place.",
+      "mergedAt": "2026-06-25T04:59:00Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3196"
+    },
+    {
+      "prNumber": 3151,
+      "category": "new",
+      "title": "The full MoonBoard 2024 catalog is now on Boardsesh — every problem shows its style (footless, footless + kickboard, no-kickboard) as a tag.",
+      "mergedAt": "2026-06-25T03:19:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3151"
+    },
     {
       "prNumber": 3185,
       "category": "new",
@@ -210,6 +232,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-25T12:06:58+10:00",
+      "sha": "5dfd398c38658f44572d5a0a4cd6a42e14807cf0",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "34118e9bf19b2b295e2b37d70f0837c8abaa9e79",
+        "ios": "b820167e44e988590b9d58b4d9e2a85aef2f367b"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-25T10:17:19+10:00",
