@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
-import { toAscentFeedInput } from '@boardsesh/logbook';
+import { toAscentFeedInput, DEFAULT_LOGBOOK_FILTERS, DEFAULT_LOGBOOK_SORT } from '@boardsesh/logbook';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { Text } from '../Text';
@@ -23,6 +23,7 @@ import { tickToClimb } from '../../lib/tick-to-climb';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { useFeatureFlag } from '../../providers/feature-flags-provider';
 import { normalizeSearchName } from '../../lib/search-name';
 import { hapticSelection } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -50,6 +51,8 @@ type LogbookTabProps = {
 export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenTitle }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
+  // Temporary kill switch while the search + filter UI is unfinished.
+  const logbookFiltersEnabled = useFeatureFlag('logbook-filters') === true;
   const router = useRouter();
   const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
@@ -95,11 +98,24 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
 
   // The query input is rebuilt only when the committed filters/sort/name change,
   // so the React Query key (and the FlashList data identity downstream) is stable
-  // between unrelated re-renders.
-  const feedInput = useMemo(() => toAscentFeedInput({ filters, sort, name }), [filters, sort, name]);
+  // between unrelated re-renders. When the flag is off the toolbar is hidden, so
+  // ignore any persisted filter/sort/name and feed defaults — otherwise prefs
+  // saved during a prior flag-on session would silently narrow the list.
+  const feedInput = useMemo(
+    () =>
+      toAscentFeedInput(
+        logbookFiltersEnabled
+          ? { filters, sort, name }
+          : { filters: DEFAULT_LOGBOOK_FILTERS, sort: DEFAULT_LOGBOOK_SORT, name: '' },
+      ),
+    [logbookFiltersEnabled, filters, sort, name],
+  );
 
   // Gate on `hydrated` so the feed fetches once with the restored prefs rather
-  // than once with defaults then again after persistence loads.
+  // than once with defaults then again after persistence loads. (With the flag
+  // off `feedInput` already ignores persisted prefs, so this just fetches the
+  // defaults once hydration settles. Keeping the gate while the flag is still
+  // resolving avoids an early default fetch for the flag-on cohort.)
   const feed = useUserAscentsFeed(userId, feedInput, { enabled: hydrated });
   // Stabilise the FlashList `data` identity so it doesn't re-diff every render.
   const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
@@ -186,34 +202,36 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
           floating chrome. Sibling of the list, so list virtualization is intact. */}
       <View style={[styles.toolbar, { paddingTop: topInset }]}>
         {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
-        <View style={styles.toolbarRow}>
-          <SearchHeader
-            ref={searchHeaderRef}
-            placeholder={t('mobile.logbook.searchPlaceholder')}
-            onChangeText={handleSearchChange}
-            initialValue={name}
-            height={40}
-          />
-          <Pressable
-            onPress={handleOpenFilters}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.logbook.filter')}
-            style={({ pressed }) => [
-              styles.filterButton,
-              { backgroundColor: brandColors.accent },
-              pressed && styles.filterButtonPressed,
-            ]}
-          >
-            <Icon name="filter" size={18} color={iosSystemColors.black} />
-            {activeFilterCount > 0 ? (
-              <View style={[styles.filterBadge, { backgroundColor: iosSystemColors.black }]}>
-                <Text variant="caption2" color={brandColors.accent} style={styles.filterBadgeText}>
-                  {activeFilterCount}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-        </View>
+        {logbookFiltersEnabled ? (
+          <View style={styles.toolbarRow}>
+            <SearchHeader
+              ref={searchHeaderRef}
+              placeholder={t('mobile.logbook.searchPlaceholder')}
+              onChangeText={handleSearchChange}
+              initialValue={name}
+              height={40}
+            />
+            <Pressable
+              onPress={handleOpenFilters}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.logbook.filter')}
+              style={({ pressed }) => [
+                styles.filterButton,
+                { backgroundColor: brandColors.accent },
+                pressed && styles.filterButtonPressed,
+              ]}
+            >
+              <Icon name="filter" size={18} color={iosSystemColors.black} />
+              {activeFilterCount > 0 ? (
+                <View style={[styles.filterBadge, { backgroundColor: iosSystemColors.black }]}>
+                  <Text variant="caption2" color={brandColors.accent} style={styles.filterBadgeText}>
+                    {activeFilterCount}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       {feed.isPending ? (
@@ -280,7 +298,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
         <LogbookEditSheet sheetRef={editSheetRef} ascent={editAscent} onClose={() => setEditAscent(null)} />
       ) : null}
 
-      {filterSheetOpen ? (
+      {logbookFiltersEnabled && filterSheetOpen ? (
         <LogbookFilterSheet
           onDismiss={handleCloseFilters}
           currentFilters={filters}
