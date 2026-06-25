@@ -2,10 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyBleFailure,
   classifyBleFailureReason,
+  isBleWriteRecoveryFailedError,
+  isBleWriteTimeoutError,
   isDisconnectionError,
   type BleFailureCategory,
   type BleSendFailureReason,
 } from '../connection-error';
+
+const WRITE_RECOVERY_FAILED_MESSAGE =
+  'BLE write failed; board stopped accepting data and recovery attempts were exhausted';
 
 // Mimics a react-native-ble-plx BleError: an Error subclass whose `name` is
 // 'BleError' (so the predicate classifies from the message, not the name).
@@ -143,6 +148,11 @@ describe('isDisconnectionError', () => {
     },
     // Picker-dismissed.
     { name: 'NotFoundError', error: new DOMException('No device chosen', 'NotFoundError') },
+    // The write-stall recovery give-up message (#3181) must NOT classify as a
+    // disconnect: that path settles the failed write so JS surfaces a real
+    // failure, but the JS write-failure handler must NOT call native disconnect()
+    // (which would clear the stored board the lightbulb reconnects to).
+    { name: 'write-recovery give-up', error: new Error(WRITE_RECOVERY_FAILED_MESSAGE) },
     // Validation-shaped messages from the write path.
     { name: 'LED data missing', error: new Error('LED placement map is empty') },
     { name: 'incompatible climb', error: new Error('climb incompatible with board') },
@@ -162,6 +172,59 @@ describe('isDisconnectionError', () => {
   for (const { name, error } of notDisconnects) {
     it(`treats as non-disconnect: ${name}`, () => {
       expect(isDisconnectionError(error)).toBe(false);
+    });
+  }
+});
+
+describe('isBleWriteTimeoutError', () => {
+  it('matches the native iOS write-resume timeout message', () => {
+    expect(isBleWriteTimeoutError(new Error('BLE write timed out waiting for the board to accept data'))).toBe(true);
+  });
+
+  it('is NOT a disconnection error (JS keeps isConnected=true while native recovers — #3181)', () => {
+    expect(isDisconnectionError(new Error('BLE write timed out waiting for the board to accept data'))).toBe(false);
+  });
+
+  const notWriteTimeouts: Array<{ name: string; error: unknown }> = [
+    // A connect timeout is a different failure — must not be downgraded as a
+    // self-healing write stall.
+    { name: 'connect timeout', error: new Error('Bluetooth connection timed out') },
+    { name: 'disconnect', error: new Error('Device disconnected during write') },
+    // The recovery give-up is a hard failure, not a self-healing timeout.
+    { name: 'write-recovery give-up', error: new Error(WRITE_RECOVERY_FAILED_MESSAGE) },
+    { name: 'validation', error: new Error('LED placement map is empty') },
+    { name: 'opaque', error: new Error('something opaque') },
+    { name: 'plain string', error: 'a plain string' },
+  ];
+
+  for (const { name, error } of notWriteTimeouts) {
+    it(`treats as non-write-timeout: ${name}`, () => {
+      expect(isBleWriteTimeoutError(error)).toBe(false);
+    });
+  }
+});
+
+describe('isBleWriteRecoveryFailedError', () => {
+  it('matches the native recovery give-up message', () => {
+    expect(isBleWriteRecoveryFailedError(new Error(WRITE_RECOVERY_FAILED_MESSAGE))).toBe(true);
+  });
+
+  it('does not match a plain write-resume timeout (the recoverable case)', () => {
+    expect(isBleWriteTimeoutError(new Error(WRITE_RECOVERY_FAILED_MESSAGE))).toBe(false);
+    expect(isBleWriteRecoveryFailedError(new Error('BLE write timed out waiting for the board to accept data'))).toBe(
+      false,
+    );
+  });
+
+  const notRecoveryFailures: Array<{ name: string; error: unknown }> = [
+    { name: 'disconnect', error: new Error('Device disconnected during write') },
+    { name: 'generic write failure', error: new Error('something opaque') },
+    { name: 'plain string', error: 'a plain string' },
+  ];
+
+  for (const { name, error } of notRecoveryFailures) {
+    it(`treats as non-recovery-failure: ${name}`, () => {
+      expect(isBleWriteRecoveryFailedError(error)).toBe(false);
     });
   }
 });
@@ -189,6 +252,20 @@ describe('classifyBleFailureReason', () => {
       expected: 'dom_OperationError',
     },
     { name: 'DOMException with empty name', error: new DOMException('boom', ''), expected: 'dom_exception' },
+    // Native write-resume timeout gets its own bucket so #3181 recovery is
+    // measurable instead of hiding in write_failed.
+    {
+      name: 'write-resume timeout',
+      error: new Error('BLE write timed out waiting for the board to accept data'),
+      expected: 'write_timeout',
+    },
+    // The recovery give-up (#3181) gets its own terminal bucket so the give-up
+    // rate is measurable separately from generic write failures.
+    {
+      name: 'write-recovery give-up',
+      error: new Error(WRITE_RECOVERY_FAILED_MESSAGE),
+      expected: 'write_recovery_failed',
+    },
     // Anything else thrown on a live link.
     { name: 'opaque write error', error: new Error('something opaque'), expected: 'write_failed' },
     { name: 'plain string', error: 'a plain string', expected: 'write_failed' },
