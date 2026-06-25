@@ -213,6 +213,7 @@
         "@boardsesh/graphql-client": "*",
         "@boardsesh/i18n": "*",
         "@boardsesh/key-value-storage": "*",
+        "@boardsesh/logbook": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/playback-react": "*",
@@ -509,6 +510,16 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/logbook": {
+      "name": "@boardsesh/logbook",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/graphql": "*",
+      },
+      "devDependencies": {
+        "typescript": "~6.0.3",
+      },
+    },
     "packages/shared/party-profile": {
       "name": "@boardsesh/party-profile",
       "version": "1.0.0",
@@ -666,6 +677,7 @@
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
         "@boardsesh/i18n": "*",
+        "@boardsesh/logbook": "*",
         "@boardsesh/moonboard-ocr": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
@@ -1097,6 +1109,8 @@
     "@boardsesh/kilter-sync": ["@boardsesh/kilter-sync@workspace:packages/kilter-sync"],
 
     "@boardsesh/location-sync": ["@boardsesh/location-sync@workspace:packages/location-sync"],
+
+    "@boardsesh/logbook": ["@boardsesh/logbook@workspace:packages/shared/logbook"],
 
     "@boardsesh/mobile": ["@boardsesh/mobile@workspace:packages/mobile"],
 

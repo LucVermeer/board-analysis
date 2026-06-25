@@ -174,6 +174,68 @@ describe('tickQueries — behavior fixes', () => {
     await cleanup();
   });
 
+  describe('userAscentsFeed — hardest sort', () => {
+    it('orders by consensus desc, then effective grade (logged, else consensus) desc', async () => {
+      // consensus / logged -> effective grade:
+      //   D 12 / -  -> 12
+      //   E 11 / 10 -> 10
+      //   A 10 / 11 -> 11
+      //   B 10 / -  -> 10   (ungraded ranks as if logged == consensus)
+      //   C 10 / 9  -> 9
+      // hardest = consensus first, then effective grade -> D, E, A, B, C
+      const seeded: Array<{ key: string; consensus: number; logged: number | null }> = [
+        { key: 'D', consensus: 12, logged: null },
+        { key: 'E', consensus: 11, logged: 10 },
+        { key: 'A', consensus: 10, logged: 11 },
+        { key: 'B', consensus: 10, logged: null },
+        { key: 'C', consensus: 10, logged: 9 },
+      ];
+      for (const climb of seeded) {
+        const climbUuid = CLIMB_PREFIX + 'hardest-' + climb.key;
+        await insertClimb(climbUuid, climb.key);
+        await insertBoardClimbStats({ climbUuid, displayDifficulty: climb.consensus });
+        await insertTick({
+          uuid: 'tick-hardest-' + climb.key,
+          climbUuid,
+          climbedAt: '2026-02-01 10:00:00',
+          status: 'send',
+          difficulty: climb.logged ?? undefined,
+        });
+      }
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'hardest' });
+
+      expect(result.items.map((item) => item.climbName)).toEqual(['D', 'E', 'A', 'B', 'C']);
+    });
+
+    it('breaks ties on ascent date (more recent first) when consensus and effective grade match', async () => {
+      // Same consensus, both ungraded (effective == consensus), so only climbedAt
+      // separates them — exercises the third ORDER BY key (climbedAt desc).
+      const older = CLIMB_PREFIX + 'tiebreak-older';
+      const newer = CLIMB_PREFIX + 'tiebreak-newer';
+      await insertClimb(older, 'Older');
+      await insertClimb(newer, 'Newer');
+      await insertBoardClimbStats({ climbUuid: older, displayDifficulty: 15 });
+      await insertBoardClimbStats({ climbUuid: newer, displayDifficulty: 15 });
+      await insertTick({
+        uuid: 'tick-tiebreak-older',
+        climbUuid: older,
+        climbedAt: '2026-02-01 10:00:00',
+        status: 'send',
+      });
+      await insertTick({
+        uuid: 'tick-tiebreak-newer',
+        climbUuid: newer,
+        climbedAt: '2026-03-15 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'hardest' });
+
+      expect(result.items.map((item) => item.climbName)).toEqual(['Newer', 'Older']);
+    });
+  });
+
   describe('userAscentsFeed — flashOnly filter', () => {
     it('returns only flashes when flashOnly=true regardless of statusMode', async () => {
       const climbUuid = CLIMB_PREFIX + 'flash-only';
