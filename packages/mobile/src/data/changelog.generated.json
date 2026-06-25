@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-25T01:00:37.249Z",
+  "generatedAt": "2026-06-25T02:07:46.401Z",
   "entries": [
+    {
+      "prNumber": 3185,
+      "category": "new",
+      "title": "Forgot your password? Now you can reset it — tap \"Forgot password?\" on the login screen and we'll email you a secure reset link. Works on web and mobile.",
+      "mergedAt": "2026-06-25T02:06:59Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3185"
+    },
     {
       "prNumber": 3171,
       "category": "new",
