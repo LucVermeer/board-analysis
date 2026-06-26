@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T08:03:12.712Z",
+  "generatedAt": "2026-06-26T08:08:08.859Z",
   "entries": [
+    {
+      "prNumber": 3214,
+      "category": "new",
+      "title": "Thousands more MoonBoard problems, now with real grades, star ratings and send counts — and the Mini 2025 and original 2010 boards join the lineup. Your 25° sessions on the 2016 and 2024 boards finally have their own graded problems too.",
+      "mergedAt": "2026-06-26T08:03:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3214"
+    },
     {
       "prNumber": 3212,
       "category": "new",

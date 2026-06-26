@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Thousands more MoonBoard problems, now with real grades, star ratings and send counts — and the Mini 2025 and original 2010 boards join the lineup. Your 25° sessions on the 2016 and 2024 boards finally have their own graded problems too. ([#3214](https://github.com/boardsesh/boardsesh/pull/3214))
 - Pick hold colours with a real colour picker — slide lightness, saturation, and hue instead of typing numbers ([#3212](https://github.com/boardsesh/boardsesh/pull/3212))
   Built for colour blindness: a lightness-first picker, plus a toggle to preview your colours through red-green and blue-yellow colour blindness
   New octagon marker shape, so every hold role can have its own distinct shape
