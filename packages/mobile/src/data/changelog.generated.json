@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-26T06:24:46.704Z",
+  "generatedAt": "2026-06-26T08:03:12.712Z",
   "entries": [
+    {
+      "prNumber": 3212,
+      "category": "new",
+      "title": "Pick hold colours with a real colour picker — slide lightness, saturation, and hue instead of typing numbers",
+      "mergedAt": "2026-06-26T08:02:17Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3212",
+      "body": "Built for colour blindness: a lightness-first picker, plus a toggle to preview your colours through red-green and blue-yellow colour blindness\nNew octagon marker shape, so every hold role can have its own distinct shape\nAccessibility hold settings now live on their own page, with a live preview on your board"
+    },
     {
       "prNumber": 3201,
       "category": "fixed",

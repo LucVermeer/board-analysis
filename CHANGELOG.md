@@ -8,6 +8,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Pick hold colours with a real colour picker — slide lightness, saturation, and hue instead of typing numbers ([#3212](https://github.com/boardsesh/boardsesh/pull/3212))
+  Built for colour blindness: a lightness-first picker, plus a toggle to preview your colours through red-green and blue-yellow colour blindness
+  New octagon marker shape, so every hold role can have its own distinct shape
+  Accessibility hold settings now live on their own page, with a live preview on your board
 - Sorting by Hardest now reads top-to-bottom the way you'd expect, and every logbook entry shows both grades — the grade you logged, plus the community consensus beside it when the crowd disagrees (and on climbs you never graded yourself). ([#3202](https://github.com/boardsesh/boardsesh/pull/3202))
 
 ### Fixed
