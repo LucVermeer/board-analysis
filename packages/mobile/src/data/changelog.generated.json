@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-06-26T12:45:14.059Z",
+  "generatedAt": "2026-06-26T22:12:10.393Z",
   "entries": [
+    {
+      "prNumber": 3170,
+      "category": "new",
+      "title": "Connect your Kilter account with your username and password to pull your sends, attempts, ratings, and circuits into Boardsesh.",
+      "mergedAt": "2026-06-26T22:11:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3170",
+      "body": "Used the old Kilter app built by Aurora? Import a JSON export or request your data from the new \"Kilter (Aurora)\" card."
+    },
+    {
+      "prNumber": 3221,
+      "category": "fixed",
+      "title": "The Ascents by angle chart now reads clearly when a climb is popular at lots of angles — angle labels stay readable and rarely-climbed angles no longer vanish next to a dominant one.",
+      "mergedAt": "2026-06-26T22:10:56Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3221"
+    },
     {
       "prNumber": 3220,
       "category": "fixed",

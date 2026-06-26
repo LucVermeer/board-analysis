@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Connect your Kilter account with your username and password to pull your sends, attempts, ratings, and circuits into Boardsesh. ([#3170](https://github.com/boardsesh/boardsesh/pull/3170))
+  Used the old Kilter app built by Aurora? Import a JSON export or request your data from the new "Kilter (Aurora)" card.
 - MoonBoard hold circles are now bigger and easier to read at a glance. ([#3218](https://github.com/boardsesh/boardsesh/pull/3218))
 - Thousands more MoonBoard problems, now with real grades, star ratings and send counts — and the Mini 2025 and original 2010 boards join the lineup. Your 25° sessions on the 2016 and 2024 boards finally have their own graded problems too. ([#3214](https://github.com/boardsesh/boardsesh/pull/3214))
 - Pick hold colours with a real colour picker — slide lightness, saturation, and hue instead of typing numbers ([#3212](https://github.com/boardsesh/boardsesh/pull/3212))
@@ -22,6 +24,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- The Ascents by angle chart now reads clearly when a climb is popular at lots of angles — angle labels stay readable and rarely-climbed angles no longer vanish next to a dominant one. ([#3221](https://github.com/boardsesh/boardsesh/pull/3221))
 - The Accessibility settings now make it clear that custom hold colours light up your board, not just the in-app markers — so the feature stops looking like it's missing. ([#3220](https://github.com/boardsesh/boardsesh/pull/3220))
 - MoonBoard on iPhone now recovers and re-lights the wall after a flaky Bluetooth moment instead of going dark, and the Dynamic Island climb controls drive a MoonBoard too. ([#3219](https://github.com/boardsesh/boardsesh/pull/3219))
 - Fixed an iOS freeze where the app could stop responding to taps after opening and closing sheets (board history, the queue, filters) or after using the sidebar. ([#3211](https://github.com/boardsesh/boardsesh/pull/3211))
