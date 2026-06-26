@@ -22,6 +22,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- MoonBoard on iPhone now recovers and re-lights the wall after a flaky Bluetooth moment instead of going dark, and the Dynamic Island climb controls drive a MoonBoard too. ([#3219](https://github.com/boardsesh/boardsesh/pull/3219))
 - Fixed an iOS freeze where the app could stop responding to taps after opening and closing sheets (board history, the queue, filters) or after using the sidebar. ([#3211](https://github.com/boardsesh/boardsesh/pull/3211))
 - Smoothed out the logbook filter: swipe down or tap outside to close it and your filters and sort apply automatically (no more Apply button), the grade picker opens at the start instead of jumping to the middle, and the Refine and Advanced sections start tucked away so it opens tidy. ([#3201](https://github.com/boardsesh/boardsesh/pull/3201))
 

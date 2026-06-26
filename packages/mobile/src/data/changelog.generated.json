@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T10:26:32.183Z",
+  "generatedAt": "2026-06-26T11:45:47.284Z",
   "entries": [
+    {
+      "prNumber": 3219,
+      "category": "fixed",
+      "title": "MoonBoard on iPhone now recovers and re-lights the wall after a flaky Bluetooth moment instead of going dark, and the Dynamic Island climb controls drive a MoonBoard too.",
+      "mergedAt": "2026-06-26T11:44:52Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3219"
+    },
     {
       "prNumber": 3218,
       "category": "new",
