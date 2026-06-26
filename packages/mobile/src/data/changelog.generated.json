@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T22:12:10.393Z",
+  "generatedAt": "2026-06-26T23:16:22.302Z",
   "entries": [
+    {
+      "prNumber": 3045,
+      "category": "fixed",
+      "title": "Pinch-to-zoom now works first try when setting a climb or filtering holds on Android, instead of taking several tries or swiping the sheet shut",
+      "mergedAt": "2026-06-26T23:15:13Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3045"
+    },
     {
       "prNumber": 3170,
       "category": "new",
