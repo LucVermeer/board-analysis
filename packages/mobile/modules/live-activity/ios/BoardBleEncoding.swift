@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 
 struct BoardBleConfiguration: Codable, Equatable {
@@ -17,6 +18,18 @@ struct BoardBlePacketResult: Equatable {
 }
 
 enum BoardBleEncoding {
+    /// Picks the CoreBluetooth write type for a Nordic UART RX characteristic
+    /// from its advertised properties. Aurora (Kilter/Tension) controllers
+    /// advertise `.writeWithoutResponse` — the fast, unacknowledged path.
+    /// The original MoonBoard LED box advertises only `.write`; CoreBluetooth
+    /// SILENTLY DROPS a `.withoutResponse` write to a characteristic that lacks
+    /// the property, which left the MoonBoard wall dark on iOS while Android
+    /// (whose GATT stack sends no-response writes regardless) worked fine. So
+    /// fall back to `.withResponse` whenever `.writeWithoutResponse` is absent.
+    static func preferredWriteType(for properties: CBCharacteristicProperties) -> CBCharacteristicWriteType {
+        properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+    }
+
     private struct HoldRoleInfo {
         let state: String
         let color: String

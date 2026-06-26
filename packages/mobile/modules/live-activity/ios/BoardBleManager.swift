@@ -127,6 +127,11 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var isWriting = false
     private var pendingWriteResume: (() -> Void)?
     private var pendingWriteResumeWatchdog: DispatchWorkItem?
+    // Write-WITH-response pacing (the original MoonBoard LED box, whose UART RX
+    // characteristic advertises only `.write`). The `didWriteValueFor` ack is
+    // the resume signal — the with-response analogue of `pendingWriteResume`.
+    private var pendingWriteAck: (() -> Void)?
+    private var pendingWriteAckWatchdog: DispatchWorkItem?
     // Write-stall recovery (#3181). `writeStallRecoveries` counts consecutive
     // stalls (reset on any drained write). `writeStallRecoveringPeripheralId` is
     // the board whose congested link we deliberately cycled; it is set across the
@@ -967,6 +972,36 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         resume?()
     }
 
+    // The ack for the write-WITH-response path. Mirrors `peripheralIsReady`:
+    // cancel the stall watchdog, then capture-and-nil the parked continuation
+    // BEFORE invoking it so a duplicate callback (or one racing a teardown that
+    // already nil'd it) no-ops. Stale-generation acks are caught by
+    // `writeChunk`'s generation guard when the continuation re-enters.
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        pendingWriteAckWatchdog?.cancel()
+        pendingWriteAckWatchdog = nil
+        let ack = pendingWriteAck
+        pendingWriteAck = nil
+        if let error {
+            // Fail ONLY the in-flight queued write; don't proactively disconnect.
+            // A genuine link drop is owned by didDisconnectPeripheral (which runs
+            // failQueuedWrites + onDisconnect); a transient ATT error shouldn't
+            // tear down the link. Mirrors the mid-write `notConnected` handling.
+            logger.error("BLE write-with-response failed: \(error.localizedDescription, privacy: .public)")
+            guard !writeQueue.isEmpty else {
+                isWriting = false
+                processWriteQueue()
+                return
+            }
+            let request = writeQueue.removeFirst()
+            request.completion(error)
+            isWriting = false
+            processWriteQueue()
+            return
+        }
+        ack?()
+    }
+
     // MARK: - Private
 
     private func runOnBleQueue(_ operation: @escaping () -> Void) {
@@ -1103,32 +1138,52 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        guard peripheral.canSendWriteWithoutResponse else {
-            pendingWriteResume = { [weak self] in
+        let writeType = BoardBleEncoding.preferredWriteType(for: characteristic.properties)
+
+        if writeType == .withoutResponse {
+            guard peripheral.canSendWriteWithoutResponse else {
+                pendingWriteResume = { [weak self] in
+                    self?.writeChunk(
+                        requestIndex: requestIndex,
+                        chunkIndex: chunkIndex,
+                        connectionGeneration: connectionGeneration,
+                        writeGeneration: writeGeneration
+                    )
+                }
+                // Watchdog: peripheralIsReady is the ONLY resume signal, and a
+                // marginal link can simply never deliver it (without ever
+                // disconnecting either). Unbounded, `isWriting` would stay true
+                // forever and the wall would freeze until a manual disconnect.
+                let watchdog = DispatchWorkItem { [weak self] in
+                    guard let self, self.pendingWriteResume != nil else { return }
+                    self.logger.error("BLE write stalled: peripheral never became ready for write-without-response; attempting recovery")
+                    self.handleWriteStall()
+                }
+                pendingWriteResumeWatchdog?.cancel()
+                pendingWriteResumeWatchdog = watchdog
+                bleQueue.asyncAfter(deadline: .now() + writeResumeTimeout, execute: watchdog)
+                return
+            }
+
+            peripheral.writeValue(request.chunks[chunkIndex], for: characteristic, type: .withoutResponse)
+            bleQueue.asyncAfter(deadline: .now() + chunkDelay) { [weak self] in
                 self?.writeChunk(
                     requestIndex: requestIndex,
-                    chunkIndex: chunkIndex,
+                    chunkIndex: chunkIndex + 1,
                     connectionGeneration: connectionGeneration,
                     writeGeneration: writeGeneration
                 )
             }
-            // Watchdog: peripheralIsReady is the ONLY resume signal, and a
-            // marginal link can simply never deliver it (without ever
-            // disconnecting either). Unbounded, `isWriting` would stay true
-            // forever and the wall would freeze until a manual disconnect.
-            let watchdog = DispatchWorkItem { [weak self] in
-                guard let self, self.pendingWriteResume != nil else { return }
-                self.logger.error("BLE write stalled: peripheral never became ready for write-without-response; attempting recovery")
-                self.handleWriteStall()
-            }
-            pendingWriteResumeWatchdog?.cancel()
-            pendingWriteResumeWatchdog = watchdog
-            bleQueue.asyncAfter(deadline: .now() + writeResumeTimeout, execute: watchdog)
             return
         }
 
-        peripheral.writeValue(request.chunks[chunkIndex], for: characteristic, type: .withoutResponse)
-        bleQueue.asyncAfter(deadline: .now() + chunkDelay) { [weak self] in
+        // Write-WITH-response path (e.g. the original MoonBoard LED box, whose
+        // UART RX characteristic advertises only `.write`). CoreBluetooth would
+        // silently drop a `.withoutResponse` write to it — so pace on the
+        // `didWriteValueFor` ack instead of `canSendWriteWithoutResponse` /
+        // `peripheralIsReady`. The ack is itself the backpressure signal, so the
+        // fixed `chunkDelay` isn't needed here.
+        pendingWriteAck = { [weak self] in
             self?.writeChunk(
                 requestIndex: requestIndex,
                 chunkIndex: chunkIndex + 1,
@@ -1136,6 +1191,17 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                 writeGeneration: writeGeneration
             )
         }
+        // Watchdog mirrors the without-response stall path: if the board never
+        // acks within writeResumeTimeout, recover by cycling the link (#3181).
+        let ackWatchdog = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingWriteAck != nil else { return }
+            self.logger.error("BLE write stalled: peripheral never acked write-with-response; attempting recovery")
+            self.handleWriteStall()
+        }
+        pendingWriteAckWatchdog?.cancel()
+        pendingWriteAckWatchdog = ackWatchdog
+        bleQueue.asyncAfter(deadline: .now() + writeResumeTimeout, execute: ackWatchdog)
+        peripheral.writeValue(request.chunks[chunkIndex], for: characteristic, type: .withResponse)
     }
 
     private func failQueuedWrites(_ error: Error) {
@@ -1146,6 +1212,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         pendingWriteResume = nil
         pendingWriteResumeWatchdog?.cancel()
         pendingWriteResumeWatchdog = nil
+        pendingWriteAck = nil
+        pendingWriteAckWatchdog?.cancel()
+        pendingWriteAckWatchdog = nil
         for request in queuedWrites {
             request.completion(error)
         }
