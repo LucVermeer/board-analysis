@@ -1,8 +1,8 @@
-import React, { useMemo, type ReactNode } from 'react';
+import React, { useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, StyleSheet, Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import type { BoardName, LitUpHoldsMap } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Text } from '../Text';
@@ -66,10 +66,15 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
   overlay,
 }: InteractiveCreateBoardProps) {
   const { t } = useTranslation('common');
+  // Shared with the per-hold detectors and the zoomed overlay so they mark
+  // themselves simultaneous with the pinch — otherwise two fingers landing on
+  // two hold targets each claim a pointer and pinch-to-zoom stalls on Android.
+  const pinchRef = useRef<GestureType | undefined>(undefined);
   const {
     pinchGesture,
     zoomPanGesture,
     isZoomed,
+    isPinchingSV,
     scaleSV,
     translateXSV,
     translateYSV,
@@ -82,6 +87,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
     containerWidth: renderWidth,
     containerHeight: renderHeight,
     panActivationOffset: PAN_ACTIVATION_OFFSET,
+    pinchRef,
   });
 
   const holdById = useMemo(() => {
@@ -107,6 +113,8 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
     hitTargets,
     onTap: onPaint,
     onLongPress: onLongPressHold,
+    pinchRef,
+    isPinchingSV,
   });
 
   return (
@@ -138,6 +146,8 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
               showAllHolds={showAllHolds}
               onPaint={onPaint}
               onLongPress={onLongPressHold}
+              pinchRef={pinchRef}
+              isPinchingSV={isPinchingSV}
             />
             <PaintedHoldsLayer
               litUpHoldsMap={litUpHoldsMap}

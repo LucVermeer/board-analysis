@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type MutableRefObject,
+  type RefObject,
+} from 'react';
 import type { ViewStyle } from 'react-native';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import {
@@ -28,6 +36,13 @@ type UseZoomPanGestureOptions = {
    * play route briefly used wasn't in RNGH's tree). Typed as RNGH's GestureRef
    * shape so the method call needs no cast. */
   scrollRef?: RefObject<ComponentType | undefined | null>;
+  /** When set, the pinch gesture is tagged with this ref so the interactive
+   * boards' per-hold tap/long-press detectors can mark themselves
+   * `simultaneousWithExternalGesture(pinchRef)`. Without that relation, two
+   * fingers landing on two different per-hold detectors each claim a pointer and
+   * the ancestor pinch can't acquire both — pinch-to-zoom stalls on Android.
+   * The play-drawer board has no per-hold detectors, so it leaves this unset. */
+  pinchRef?: MutableRefObject<GestureType | undefined>;
 };
 
 type UseZoomPanGestureReturn = {
@@ -35,6 +50,12 @@ type UseZoomPanGestureReturn = {
   zoomPanGesture: GestureType;
   isZoomed: boolean;
   isZoomedSV: SharedValue<boolean>;
+  /** True while a 2-finger pinch is in progress. The interactive boards gate
+   * their per-hold tap/long-press on this: those legs are
+   * `simultaneousWithExternalGesture(pinchRef)`, so RNGH no longer fails them
+   * when the pinch activates — without the gate a small or slow pinch could also
+   * paint a hold or open the role sheet. Stays false on boards with no pinchRef. */
+  isPinchingSV: SharedValue<boolean>;
   /** Live zoom scale on the UI thread, so an overlay inside the transform can
    * convert screen-pixel drag deltas into unscaled board-pixel deltas. */
   scaleSV: SharedValue<number>;
@@ -81,6 +102,7 @@ export function useZoomPanGesture({
   containerHeight,
   panActivationOffset,
   scrollRef,
+  pinchRef,
 }: UseZoomPanGestureOptions): UseZoomPanGestureReturn {
   const scale = useSharedValue(MIN_SCALE);
   const translateX = useSharedValue(0);
@@ -99,6 +121,9 @@ export function useZoomPanGesture({
   // also starts at 0 and updates after first onLayout; reading from a shared
   // value keeps the gesture objects stable across that one-shot update.
   const isZoomedSV = useSharedValue(false);
+  // See isPinchingSV in the return type. Only the interactive boards (pinchRef
+  // set) drive it; it stays false everywhere else.
+  const isPinchingSV = useSharedValue(false);
   const enabledSV = useSharedValue(enabled);
   const containerWidthSV = useSharedValue(containerWidth);
   const containerHeightSV = useSharedValue(containerHeight);
@@ -197,10 +222,30 @@ export function useZoomPanGesture({
           runOnJS(updateZoomState)(true);
         }
       });
+    // Tag the pinch so per-hold detectors can declare themselves simultaneous
+    // with it (see pinchRef doc above). Only the interactive boards pass a ref.
+    if (pinchRef) {
+      pinch.withRef(pinchRef);
+      // Drive isPinchingSV off the ancestor pinch's pointer stream — it sees
+      // every finger on the board, including those landing on per-hold targets.
+      // Set on the 2nd finger; cleared only when a fresh single-finger touch
+      // begins, never on pinch end. That way a hold's tap, which recognizes on
+      // finger-lift, still sees the pinch as active and bails (the lift would
+      // otherwise race the pinch's onEnd and leak a paint).
+      pinch.onTouchesDown((event) => {
+        'worklet';
+        if (event.numberOfTouches >= 2) {
+          isPinchingSV.value = true;
+        } else if (event.numberOfTouches === 1) {
+          isPinchingSV.value = false;
+        }
+      });
+    }
     // Declare the pinch simultaneous with the surrounding RNGH ScrollView so a
     // 2-finger zoom isn't cancelled by the scroll. (The zoom-pan overlay lives on
     // a separate, zoomed-only GestureDetector and needs no scroll relation.)
-    return scrollRef ? pinch.simultaneousWithExternalGesture(scrollRef) : pinch;
+    if (scrollRef) pinch.simultaneousWithExternalGesture(scrollRef);
+    return pinch;
   }, [
     scale,
     translateX,
@@ -211,11 +256,13 @@ export function useZoomPanGesture({
     pinchFocalX,
     pinchFocalY,
     isZoomedSV,
+    isPinchingSV,
     enabledSV,
     containerWidthSV,
     containerHeightSV,
     updateZoomState,
     scrollRef,
+    pinchRef,
   ]);
 
   // zoomPanGesture is rendered into a separate GestureDetector that only
@@ -279,6 +326,7 @@ export function useZoomPanGesture({
     zoomPanGesture,
     isZoomed,
     isZoomedSV,
+    isPinchingSV,
     scaleSV: scale,
     translateXSV: translateX,
     translateYSV: translateY,

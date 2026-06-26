@@ -84,10 +84,15 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   renderInTransform,
 }: InteractiveFilterBoardProps) {
   const { t } = useTranslation('common');
+  // Shared with the per-hold detectors and the rest/zoom tap overlays so they
+  // mark themselves simultaneous with the pinch — same Android pinch-stall fix
+  // as the create board (two fingers on two hold targets must not block pinch).
+  const pinchRef = useRef<GestureType | undefined>(undefined);
   const {
     pinchGesture,
     zoomPanGesture,
     isZoomed,
+    isPinchingSV,
     scaleSV,
     translateXSV,
     translateYSV,
@@ -100,6 +105,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     containerWidth: renderWidth,
     containerHeight: renderHeight,
     panActivationOffset: PAN_ACTIVATION_OFFSET,
+    pinchRef,
   });
 
   // The picker uses a long-press-style commit, but holds here only need a single
@@ -135,16 +141,24 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
       .maxDistance(TAP_MAX_DISTANCE_PX)
       .onStart((event) => {
         'worklet';
+        // Bail if a pinch is active (see isPinchingSV) so a small pinch over the
+        // board doesn't also open the hold picker on release.
+        if (isPinchingSV?.value) return;
         runOnJS(handleRestHoldTap)(event.x, event.y);
       });
     const longPress = Gesture.LongPress()
       .minDuration(LONG_PRESS_MIN_DURATION_MS)
       .onStart((event) => {
         'worklet';
+        if (isPinchingSV?.value) return;
         runOnJS(handleRestHoldTap)(event.x, event.y);
       });
+    // Let the ancestor pinch recognize even while a finger sits on this overlay
+    // — applied per-leg (the relation method is on the individual gestures).
+    tap.simultaneousWithExternalGesture(pinchRef);
+    longPress.simultaneousWithExternalGesture(pinchRef);
     return Gesture.Exclusive(longPress, tap);
-  }, [hasHoldTap, handleRestHoldTap]);
+  }, [hasHoldTap, handleRestHoldTap, isPinchingSV]);
 
   const overlayGesture = useZoomedHoldTapGesture({
     zoomPanGesture,
@@ -157,6 +171,8 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     // Long-press falls back to onTap in the hook, so a held hold opens the
     // picker too — same as HoldTargetLayer wiring both to onHoldTap at rest.
     onTap: onHoldTap,
+    pinchRef,
+    isPinchingSV,
   });
 
   const holdById = useMemo(() => {
@@ -230,6 +246,8 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
                 showHoldMarkers={showHoldMarkers}
                 onPaint={onHoldTap}
                 onLongPress={onHoldTap}
+                pinchRef={pinchRef}
+                isPinchingSV={isPinchingSV}
               />
             ) : null}
             {!isZoomed && restHoldTapGesture ? (

@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { type MutableRefObject, useMemo } from 'react';
 import { View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
+import { runOnJS, type SharedValue } from 'react-native-reanimated';
 
 type HoldTargetProps = {
   holdId: number;
@@ -14,6 +14,15 @@ type HoldTargetProps = {
   dotColor: string;
   onPaint: (holdId: number) => void;
   onLongPress: (holdId: number) => void;
+  /** The board's ancestor pinch, so this per-hold tap/long-press declares itself
+   *  simultaneous with it. Without that, two fingers on two hold targets each
+   *  claim a pointer and the pinch can't acquire both — zoom stalls on Android. */
+  pinchRef?: MutableRefObject<GestureType | undefined>;
+  /** True while a pinch is in progress. Because the tap/long-press are
+   *  simultaneous with the pinch (above), RNGH no longer fails them when the
+   *  pinch activates, so a small/slow pinch could otherwise paint a hold or open
+   *  the role sheet — gate both callbacks on this. */
+  isPinchingSV?: SharedValue<boolean>;
 };
 
 /**
@@ -36,6 +45,8 @@ export const HoldTarget = React.memo(function HoldTarget({
   dotColor,
   onPaint,
   onLongPress,
+  pinchRef,
+  isPinchingSV,
 }: HoldTargetProps) {
   const gesture = useMemo(() => {
     const tap = Gesture.Tap()
@@ -43,17 +54,29 @@ export const HoldTarget = React.memo(function HoldTarget({
       .maxDistance(15)
       .onStart(() => {
         'worklet';
+        // Bail if a pinch is active — see isPinchingSV. The tap recognizes on
+        // finger-lift, so without this a finger that's part of a small pinch
+        // would paint the hold it happened to be resting on.
+        if (isPinchingSV?.value) return;
         runOnJS(onPaint)(holdId);
       });
     const longPress = Gesture.LongPress()
       .minDuration(400)
       .onStart(() => {
         'worklet';
+        if (isPinchingSV?.value) return;
         runOnJS(onLongPress)(holdId);
       });
+    // Let the ancestor pinch recognize even while this finger sits on the hold —
+    // applied per-leg because the relation method lives on the individual
+    // gestures, not the Exclusive composite.
+    if (pinchRef) {
+      tap.simultaneousWithExternalGesture(pinchRef);
+      longPress.simultaneousWithExternalGesture(pinchRef);
+    }
     // Long-press wins; tap fires only if the long-press fails (released early).
     return Gesture.Exclusive(longPress, tap);
-  }, [holdId, onPaint, onLongPress]);
+  }, [holdId, onPaint, onLongPress, pinchRef, isPinchingSV]);
 
   return (
     <GestureDetector gesture={gesture}>

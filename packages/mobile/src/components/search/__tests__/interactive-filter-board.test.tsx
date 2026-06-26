@@ -35,6 +35,7 @@ vi.mock('react-native-gesture-handler', () => {
       maxDistance: () => gesture,
       minDuration: () => gesture,
       onStart: () => gesture,
+      simultaneousWithExternalGesture: () => gesture,
     };
     return gesture;
   };
