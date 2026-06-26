@@ -92,6 +92,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     pinchGesture,
     zoomPanGesture,
     isZoomed,
+    isPinchingSV,
     scaleSV,
     translateXSV,
     translateYSV,
@@ -140,12 +141,16 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
       .maxDistance(TAP_MAX_DISTANCE_PX)
       .onStart((event) => {
         'worklet';
+        // Bail if a pinch is active (see isPinchingSV) so a small pinch over the
+        // board doesn't also open the hold picker on release.
+        if (isPinchingSV?.value) return;
         runOnJS(handleRestHoldTap)(event.x, event.y);
       });
     const longPress = Gesture.LongPress()
       .minDuration(LONG_PRESS_MIN_DURATION_MS)
       .onStart((event) => {
         'worklet';
+        if (isPinchingSV?.value) return;
         runOnJS(handleRestHoldTap)(event.x, event.y);
       });
     // Let the ancestor pinch recognize even while a finger sits on this overlay
@@ -153,7 +158,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     tap.simultaneousWithExternalGesture(pinchRef);
     longPress.simultaneousWithExternalGesture(pinchRef);
     return Gesture.Exclusive(longPress, tap);
-  }, [hasHoldTap, handleRestHoldTap]);
+  }, [hasHoldTap, handleRestHoldTap, isPinchingSV]);
 
   const overlayGesture = useZoomedHoldTapGesture({
     zoomPanGesture,
@@ -167,6 +172,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     // picker too — same as HoldTargetLayer wiring both to onHoldTap at rest.
     onTap: onHoldTap,
     pinchRef,
+    isPinchingSV,
   });
 
   const holdById = useMemo(() => {
@@ -241,6 +247,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
                 onPaint={onHoldTap}
                 onLongPress={onHoldTap}
                 pinchRef={pinchRef}
+                isPinchingSV={isPinchingSV}
               />
             ) : null}
             {!isZoomed && restHoldTapGesture ? (

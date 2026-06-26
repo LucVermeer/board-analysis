@@ -74,6 +74,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
     pinchGesture,
     zoomPanGesture,
     isZoomed,
+    isPinchingSV,
     scaleSV,
     translateXSV,
     translateYSV,
@@ -113,6 +114,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
     onTap: onPaint,
     onLongPress: onLongPressHold,
     pinchRef,
+    isPinchingSV,
   });
 
   return (
@@ -145,6 +147,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
               onPaint={onPaint}
               onLongPress={onLongPressHold}
               pinchRef={pinchRef}
+              isPinchingSV={isPinchingSV}
             />
             <PaintedHoldsLayer
               litUpHoldsMap={litUpHoldsMap}

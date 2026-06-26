@@ -40,6 +40,11 @@ type UseZoomedHoldTapGestureOptions = {
    *  simultaneous with it so a pinch-to-zoom-further while already zoomed isn't
    *  blocked by this overlay. */
   pinchRef?: MutableRefObject<GestureType | undefined>;
+  /** True while a pinch is in progress. Since the overlay's tap/long-press are
+   *  simultaneous with the pinch (pinchRef), RNGH won't fail them when a re-pinch
+   *  activates, so gate both callbacks on this to avoid painting / opening the
+   *  role sheet mid-pinch. */
+  isPinchingSV?: SharedValue<boolean>;
 };
 
 /**
@@ -78,6 +83,7 @@ export function useZoomedHoldTapGesture({
   onTap,
   onLongPress,
   pinchRef,
+  isPinchingSV,
 }: UseZoomedHoldTapGestureOptions): ComposedGesture | GestureType {
   const hasTap = onTap != null;
 
@@ -107,6 +113,9 @@ export function useZoomedHoldTapGesture({
       .maxDistance(TAP_MAX_DISTANCE_PX)
       .onStart((event) => {
         'worklet';
+        // Bail if a pinch is active (see isPinchingSV) so a re-pinch while
+        // zoomed doesn't also paint the hold under a finger.
+        if (isPinchingSV?.value) return;
         // Inverse of animatedZoomStyle ([translate, scale], center origin). The
         // tested twin is inverseTransformPoint in holdLayout.ts — keep in sync.
         const cx = containerWidthSV.value / 2;
@@ -120,6 +129,7 @@ export function useZoomedHoldTapGesture({
       .minDuration(LONG_PRESS_MIN_DURATION_MS)
       .onStart((event) => {
         'worklet';
+        if (isPinchingSV?.value) return;
         const cx = containerWidthSV.value / 2;
         const cy = containerHeightSV.value / 2;
         const boardX = (event.x - translateXSV.value - cx) / scaleSV.value + cx;
@@ -138,5 +148,15 @@ export function useZoomedHoldTapGesture({
     // handleTap/handleLongPress are intentionally not deps — captured once and
     // read render-scoped values through callbacksRef (see use-carousel-gesture).
     return Gesture.Race(zoomPanGesture, longPress, tap);
-  }, [hasTap, zoomPanGesture, scaleSV, translateXSV, translateYSV, containerWidthSV, containerHeightSV, pinchRef]);
+  }, [
+    hasTap,
+    zoomPanGesture,
+    scaleSV,
+    translateXSV,
+    translateYSV,
+    containerWidthSV,
+    containerHeightSV,
+    pinchRef,
+    isPinchingSV,
+  ]);
 }
