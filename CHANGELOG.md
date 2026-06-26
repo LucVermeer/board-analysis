@@ -24,6 +24,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- MoonBoard holds now light up on iPhone — connect and your problem shows on the wall. ([#3225](https://github.com/boardsesh/boardsesh/pull/3225))
 - Pinch-to-zoom now works first try when setting a climb or filtering holds on Android, instead of taking several tries or swiping the sheet shut ([#3045](https://github.com/boardsesh/boardsesh/pull/3045))
 - The Ascents by angle chart now reads clearly when a climb is popular at lots of angles — angle labels stay readable and rarely-climbed angles no longer vanish next to a dominant one. ([#3221](https://github.com/boardsesh/boardsesh/pull/3221))
 - The Accessibility settings now make it clear that custom hold colours light up your board, not just the in-app markers — so the feature stops looking like it's missing. ([#3220](https://github.com/boardsesh/boardsesh/pull/3220))
