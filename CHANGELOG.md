@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Tap any climb in a circuit or playlist and the whole list drops into your queue in order — swipe right or hit back to revisit the boulders above, not just jump to the next one. ([#2773](https://github.com/boardsesh/boardsesh/pull/2773))
+  A heads-up before a playlist takes over your queue, so you don't lose climbs you'd lined up.
 - Connect your Kilter account with your username and password to pull your sends, attempts, ratings, and circuits into Boardsesh. ([#3170](https://github.com/boardsesh/boardsesh/pull/3170))
   Used the old Kilter app built by Aurora? Import a JSON export or request your data from the new "Kilter (Aurora)" card.
 - MoonBoard hold circles are now bigger and easier to read at a glance. ([#3218](https://github.com/boardsesh/boardsesh/pull/3218))

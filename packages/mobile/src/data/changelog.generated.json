@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-26T23:46:29.874Z",
+  "generatedAt": "2026-06-26T23:51:31.572Z",
   "entries": [
+    {
+      "prNumber": 2773,
+      "category": "new",
+      "title": "Tap any climb in a circuit or playlist and the whole list drops into your queue in order — swipe right or hit back to revisit the boulders above, not just jump to the next one.",
+      "mergedAt": "2026-06-26T23:49:54Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/2773",
+      "body": "A heads-up before a playlist takes over your queue, so you don't lose climbs you'd lined up."
+    },
     {
       "prNumber": 3225,
       "category": "fixed",
