@@ -4,6 +4,16 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-06-26
+
+### New
+
+- Sorting by Hardest now reads top-to-bottom the way you'd expect, and every logbook entry shows both grades — the grade you logged, plus the community consensus beside it when the crowd disagrees (and on climbs you never graded yourself). ([#3202](https://github.com/boardsesh/boardsesh/pull/3202))
+
+### Fixed
+
+- Smoothed out the logbook filter: swipe down or tap outside to close it and your filters and sort apply automatically (no more Apply button), the grade picker opens at the start instead of jumping to the middle, and the Refine and Advanced sections start tucked away so it opens tidy. ([#3201](https://github.com/boardsesh/boardsesh/pull/3201))
+
 ## 2026-06-25
 
 ### App update

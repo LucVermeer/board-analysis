@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-06-25T08:41:56.131Z",
+  "generatedAt": "2026-06-26T06:24:46.704Z",
   "entries": [
+    {
+      "prNumber": 3201,
+      "category": "fixed",
+      "title": "Smoothed out the logbook filter: swipe down or tap outside to close it and your filters and sort apply automatically (no more Apply button), the grade picker opens at the start instead of jumping to the middle, and the Refine and Advanced sections start tucked away so it opens tidy.",
+      "mergedAt": "2026-06-26T06:20:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3201"
+    },
+    {
+      "prNumber": 3202,
+      "category": "new",
+      "title": "Sorting by Hardest now reads top-to-bottom the way you'd expect, and every logbook entry shows both grades — the grade you logged, plus the community consensus beside it when the crowd disagrees (and on climbs you never graded yourself).",
+      "mergedAt": "2026-06-26T06:19:41Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3202"
+    },
     {
       "prNumber": 3200,
       "category": "new",
