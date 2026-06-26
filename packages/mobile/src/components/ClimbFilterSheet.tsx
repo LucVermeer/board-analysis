@@ -38,6 +38,7 @@ import { RadioGroup, type RadioOption } from './RadioGroup';
 import { SwitchRow } from './SwitchRow';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
+import { useManagedSheet } from '../providers/sheet-presentation-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
@@ -85,6 +86,12 @@ const STATUS_OPTIONS_UI = ['any', 'drafts', 'projects'] as const;
 // status into one control. undefined = Any; 2 = Established (≥2 ascents).
 const POPULARITY_BUCKETS: ReadonlyArray<number | undefined> = [undefined, 2, 10, 100, 1000];
 const PREWARM_BOARD_HOLDS_AFTER_REFINE_EXPAND_MS = 150;
+
+// This sheet's child editors (setters / holds / zone) stack ON TOP of it and
+// present off the default `root` group. Keep this sheet in its own presenter
+// group so the coordinator doesn't treat a stacked child as an exclusive
+// hand-off and dismiss the filter sheet out from under it.
+const CLIMB_FILTER_PRESENTER_GROUP = 'climb-filter';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -167,10 +174,6 @@ export function ClimbFilterSheet({
     setLocalFilters(normalizeRetiredStatus(currentFilters));
     setLocalBoardFilters(currentBoardFilters);
   }, [currentFilters, currentBoardFilters]);
-
-  useEffect(() => {
-    sheetRef.current?.present();
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -356,6 +359,10 @@ export function ClimbFilterSheet({
   const handleApply = useCallback(() => {
     hasLocalDraftEditsRef.current = false;
     onApply(localFilters, localBoardFilters);
+    // Dismiss the raw native ref directly (not via the coordinator handle). This
+    // is intentional and safe: the resulting native onChange(-1) routes back
+    // through managed.onChange → coordinator.notifyClosed, which opens the settle
+    // window. Keep it that way — don't assume the coordinator drove this close.
     sheetRef.current?.dismiss();
   }, [localFilters, localBoardFilters, onApply]);
 
@@ -363,6 +370,18 @@ export function ClimbFilterSheet({
     hasLocalDraftEditsRef.current = false;
     onDismiss();
   }, [onDismiss]);
+
+  // The parent mounts this sheet only while it should be open, so present/dismiss
+  // route through the coordinator (serialized, no overlapping native
+  // transitions). `onClose` (handleSheetDismiss) clears the parent's open state
+  // on a user pan-down / backdrop. See CLIMB_FILTER_PRESENTER_GROUP for why this
+  // sheet keeps its own group instead of the default `root`.
+  const managed = useManagedSheet({
+    open: true,
+    sheetRef,
+    onClose: handleSheetDismiss,
+    group: CLIMB_FILTER_PRESENTER_GROUP,
+  });
 
   const handleReset = useCallback(() => {
     hapticSelection();
@@ -534,7 +553,7 @@ export function ClimbFilterSheet({
         enablePanDownToClose={!childSheetOpen}
         enableContentPanningGesture={!childSheetOpen}
         enableHandlePanningGesture={!childSheetOpen}
-        onDismiss={handleSheetDismiss}
+        onChange={managed.onChange}
         handleIndicatorStyle={styles.indicator}
       >
         <View style={styles.header}>
