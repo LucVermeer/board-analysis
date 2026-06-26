@@ -15,7 +15,7 @@ export const CAPACITOR_UPDATE_BANNER_FLAG = 'capacitor-update-banner';
 
 // Keys read from PostHog by FeatureFlagsProvider. Each must have a matching
 // PostHog feature flag; values stay `undefined` (OFF) until that flag resolves.
-export const FEATURE_FLAG_KEYS = [CAPACITOR_UPDATE_BANNER_FLAG] as const;
+export const FEATURE_FLAG_KEYS = [CAPACITOR_UPDATE_BANNER_FLAG, 'kilter-oauth-linking'] as const;
 
 // Vercel's flags discovery endpoint expects an allFlags export.
 export const allFlags: Array<{ key: string }> = FEATURE_FLAG_KEYS.map((key) => ({ key }));

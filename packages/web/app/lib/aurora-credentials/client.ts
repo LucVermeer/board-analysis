@@ -142,3 +142,18 @@ export async function finalizeKilterCredential(
     body: JSON.stringify({ completion }),
   });
 }
+
+/**
+ * Link a Kilter account from a username + password (Keycloak ROPC). Used instead
+ * of the OAuth handoff because Kilter hasn't registered a redirect URI for us. The
+ * password is exchanged for a refresh token server-side and never stored.
+ */
+export async function saveKilterCredentialViaPassword(
+  transport: AuroraBackendTransport,
+  input: { username: string; password: string },
+): Promise<{ success: true }> {
+  return requestBackendJson<{ success: true }>(transport, '/api/board-credentials/kilter/password', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

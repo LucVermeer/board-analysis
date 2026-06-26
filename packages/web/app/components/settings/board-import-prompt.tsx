@@ -327,7 +327,8 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
     <>
       <BoardCredentialCard
         boardType={boardType}
-        credential={credential}
+        variant={boardType === 'kilter' ? 'kilterAurora' : 'aurora'}
+        credential={boardType === 'kilter' ? null : credential}
         unsyncedCounts={{ ascents: 0, climbs: 0 }}
         onAdd={handleAddClick}
         onRemove={handleRemove}

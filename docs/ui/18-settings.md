@@ -107,16 +107,24 @@ The mobile More tab contains appearance and UI-style controls that have no direc
 **Web component:** `AuroraCredentialsSection`
 **Mobile component:** `BoardAccountsSection` on Connected apps
 
-Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
+Card for each board type (iterates `AURORA_BOARDS`). Kilter renders **two** cards:
+"Kilter (Aurora)" for the legacy Aurora-built app (JSON import + data request) and
+"Kilter (new)" for the new Kilter Grips account, which links via username/password.
+The "Kilter (new)" card shows when the `kilter-oauth-linking` PostHog flag **and**
+the backend `kilterSyncAllowed` gate are on, or whenever a Kilter account is already
+linked.
 
 **Not Connected state:**
 
-- Board name + "Board" suffix as title.
-- Description text (Kilter has special "shutdown" text).
+- Board name + "Board" suffix as title (or "Kilter (Aurora)" / "Kilter (new)").
+- Description text.
 - Buttons:
-  - "Link Account" contained button (non-Kilter only): Opens link dialog.
+  - "Link Account" contained button (non-Kilter boards): Opens link dialog.
+  - "Sign in to Kilter" contained button (Kilter new card): Opens the Kilter
+    username/password dialog, which links via the ROPC password grant.
   - "Import JSON" outlined button: Opens file picker.
-  - "Request Data" outlined button (Kilter only): Opens pre-filled mailto link to Aurora Climbing.
+  - "Request Data" outlined button (Kilter Aurora card): Opens pre-filled mailto
+    link to Aurora Climbing.
 
 **Connected state:**
 
@@ -132,9 +140,15 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 
 **Link Account Dialog:**
 
-- Title: "Link <Board> Account"
-- Username + password text fields.
+- Title: "Link <Board> Account" (or "Sign in to Kilter" for Kilter).
+- Username + password text fields. For Kilter the submit calls the ROPC password
+  endpoint; the password is exchanged for a refresh token server-side and never
+  stored.
 - "Link Account" contained button.
+
+**Reconnect:** a connected card whose `syncStatus` is `expired` shows a
+"Reconnect" button that reopens the same link dialog (re-submitting resets the
+credential to `pending` so the daemon picks it up again).
 
 **Import Flow** (unified dialog with phase transitions):
 
@@ -151,9 +165,13 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 - Route: `packages/mobile/app/(tabs)/profile/integrations.tsx`.
 - Board account cards render above platform/device integration cards.
 - Uses backend REST endpoints instead of Next internal routes.
-- Kilter can connect through OAuth only when `KILTER_SYNC_ALLOWED_USER_IDS`
-  allows the current user; otherwise the card offers JSON import and data
-  request actions.
+- Kilter links via the username/password (ROPC) "Sign in to Kilter" card when
+  `KILTER_SYNC_ALLOWED_USER_IDS` allows the current user (set it to `*` to open
+  it to everyone) and the `kilter-oauth-linking` flag is on; otherwise only the
+  "Kilter (Aurora)" JSON-import / data-request card shows. The username/password
+  path also serves users for whom the dormant OAuth flow can't run (no
+  Kilter-registered redirect URI). Two-factor or social-login-only Kilter
+  accounts can't use ROPC and must fall back to JSON import.
 - Non-Kilter boards use the same username/password link dialog semantics as
   web.
 - JSON import reads a local file with `expo-document-picker`, previews the

@@ -3,7 +3,13 @@ import { AuroraClimbingClient } from '@boardsesh/aurora-sync/api';
 import { decrypt, encrypt } from '@boardsesh/crypto';
 import { auroraCredentials, boardClimbs, boardseshTicks, userBoardMappings } from '@boardsesh/db/schema';
 import { AURORA_BOARDS, type AuroraBoardName } from '@boardsesh/shared-schema';
-import { KILTER_BOARD_TYPE, revokeRefreshToken } from '@boardsesh/kilter-sync/api';
+import {
+  KILTER_BOARD_TYPE,
+  KilterApiError,
+  passwordGrant,
+  revokeRefreshToken,
+  verifyKeycloakToken,
+} from '@boardsesh/kilter-sync/api';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 
@@ -39,6 +45,11 @@ export function isAuroraBoardType(value: string | null | undefined): value is Au
 
 export function isKilterSyncAllowed(userId: string): boolean {
   if (!KILTER_SYNC_ALLOWED_USER_IDS) return false;
+
+  // `*` opens Kilter linking to every signed-in user. The env var stays the
+  // kill switch: unset/empty disables everyone, an explicit comma-separated
+  // list restricts to those user IDs.
+  if (KILTER_SYNC_ALLOWED_USER_IDS.trim() === '*') return true;
 
   return KILTER_SYNC_ALLOWED_USER_IDS.split(',')
     .map((allowedUserId) => allowedUserId.trim())
@@ -376,6 +387,54 @@ export async function saveKilterCredential(input: {
         boardUsername: input.username ?? null,
       });
     }
+  });
+}
+
+/**
+ * Link a Kilter account from a username + password using Keycloak's
+ * Resource-Owner-Password-Credentials grant. This is the path we use because
+ * Kilter hasn't registered an OAuth client / redirect URI for us — ROPC rides
+ * on the same public `kilter` client the catalog sync already uses, so it needs
+ * no Kilter-side registration. We mint a refresh token and hand it to the same
+ * `saveKilterCredential` the OAuth callback uses; the password itself is never
+ * stored.
+ */
+export async function saveKilterCredentialViaPassword(input: {
+  userId: string;
+  username: string;
+  password: string;
+}): Promise<void> {
+  if (!KILTER_OAUTH_CLIENT_ID) {
+    throw new KilterApiError('invalid_client', 'Kilter OAuth client is not configured');
+  }
+
+  const client = {
+    clientId: KILTER_OAUTH_CLIENT_ID,
+    ...(KILTER_OAUTH_CLIENT_SECRET ? { clientSecret: KILTER_OAUTH_CLIENT_SECRET } : {}),
+  };
+
+  const tokens = await passwordGrant({ username: input.username, password: input.password, client });
+
+  if (!tokens.refresh_token) {
+    // `offline_access` is requested, so a missing refresh token means the realm
+    // didn't grant one — treat it as a credential/realm failure, not a success.
+    throw new KilterApiError('invalid_grant', 'Kilter did not return a refresh token');
+  }
+
+  // Resolve the Keycloak user UUID (`sub`). Unlike the browser flow there's no
+  // nonce/redirect binding to lean on, and some realm configs emit an id_token
+  // whose `aud` is an array or omits the client — so we verify signature + iss
+  // (host-allowlisted) + exp only, without `expectedAudience`. The access token
+  // is a signed JWT from the same realm and is the fallback if no id_token came
+  // back.
+  const tokenToVerify = tokens.id_token ?? tokens.access_token;
+  const { sub, preferredUsername } = await verifyKeycloakToken(tokenToVerify);
+
+  await saveKilterCredential({
+    userId: input.userId,
+    refreshToken: tokens.refresh_token,
+    kilterUserId: sub,
+    username: preferredUsername ?? input.username,
   });
 }
 

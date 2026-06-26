@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createHash, randomBytes } from 'crypto';
+import { z } from 'zod';
 import {
   exchangeAuthorizationCode,
   KILTER_BOARD_TYPE,
   KILTER_OAUTH_AUTH_URL,
+  KilterApiError,
   verifyKeycloakToken,
 } from '@boardsesh/kilter-sync/api';
 import { decrypt, encrypt } from '@boardsesh/crypto';
@@ -18,7 +20,13 @@ import {
   verifyBoardCredentialHandoff,
   verifyBoardCredentialState,
 } from '../services/board-credential-state';
-import { isKilterSyncAllowed, saveKilterCredential } from '../services/aurora-credentials';
+import {
+  isKilterSyncAllowed,
+  saveKilterCredential,
+  saveKilterCredentialViaPassword,
+} from '../services/aurora-credentials';
+import { checkRateLimitRedis } from '../utils/redis-rate-limiter';
+import { RateLimitError } from '../utils/rate-limiter';
 import { logger } from '../utils/logger';
 
 const KILTER_OAUTH_CLIENT_ID = process.env.KILTER_OAUTH_CLIENT_ID;
@@ -603,4 +611,99 @@ export async function handleKilterCredentialsFinalize(req: IncomingMessage, res:
   }
 
   sendJson(res, 200, { success: true });
+}
+
+const PASSWORD_RATE_LIMIT_MAX = 5;
+const PASSWORD_RATE_LIMIT_WINDOW_MS = 60_000;
+
+const kilterPasswordSchema = z.object({
+  username: z.string().min(1).max(255),
+  password: z.string().min(1).max(255),
+});
+
+function kilterPasswordErrorStatus(error: unknown): number {
+  if (error instanceof KilterApiError) {
+    if (error.code === 'invalid_grant' || error.code === 'unauthorized') return 401;
+    if (error.code === 'rate_limited') return 429;
+    if (error.code === 'invalid_client') return 500;
+  }
+  return 502;
+}
+
+function kilterPasswordErrorMessage(error: unknown): string {
+  if (error instanceof KilterApiError) {
+    // Reuse the Aurora bad-credentials string verbatim: the mobile client keys
+    // its `invalid_credentials` mapping off this exact value, and it never
+    // reaches the user untranslated (web/mobile both localise on status/code).
+    if (error.code === 'invalid_grant' || error.code === 'unauthorized') return 'Invalid Aurora credentials';
+    if (error.code === 'rate_limited') return 'Too many login attempts. Please try again later.';
+    if (error.code === 'invalid_client') return 'Kilter sync is not configured';
+  }
+  return 'Kilter is unavailable. Please try again later.';
+}
+
+/**
+ * Link a Kilter account from a username + password (Keycloak ROPC). Used because
+ * Kilter hasn't registered an OAuth client/redirect URI for us; the public
+ * `kilter` client allows the password grant, so this path needs no Kilter-side
+ * setup. Auth-gated, allowlist-gated, and per-user rate-limited so it can't be
+ * abused as a credential-testing oracle against Kilter's Keycloak.
+ */
+export async function handleKilterCredentialsPassword(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  const userId = await authenticate(req, res);
+  if (!userId) return;
+
+  if (!isKilterSyncAllowed(userId)) {
+    sendJson(res, 403, { error: 'Kilter sync is not enabled for this account' });
+    return;
+  }
+
+  try {
+    await checkRateLimitRedis(userId, 'kilter-password', PASSWORD_RATE_LIMIT_MAX, PASSWORD_RATE_LIMIT_WINDOW_MS);
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      sendJson(res, 429, { error: 'Too many login attempts. Please try again later.' });
+      return;
+    }
+    throw error;
+  }
+
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, error instanceof Error && error.message === 'Request body too large' ? 413 : 400, {
+      error: error instanceof Error ? error.message : 'Invalid request body',
+    });
+    return;
+  }
+
+  const validationResult = kilterPasswordSchema.safeParse(body);
+  if (!validationResult.success) {
+    sendJson(res, 400, { error: 'Invalid request body', details: validationResult.error.flatten() });
+    return;
+  }
+
+  try {
+    await saveKilterCredentialViaPassword({
+      userId,
+      username: validationResult.data.username,
+      password: validationResult.data.password,
+    });
+    sendJson(res, 200, { success: true });
+  } catch (error) {
+    // Log the failure shape but never the credentials or raw Keycloak body.
+    logger.warn(
+      '[BoardCredentials] Kilter password login failed:',
+      error instanceof KilterApiError ? `${error.code}: ${error.message}` : error,
+    );
+    sendJson(res, kilterPasswordErrorStatus(error), { error: kilterPasswordErrorMessage(error) });
+  }
 }

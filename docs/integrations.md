@@ -153,11 +153,29 @@ Next internal routes:
   per-board credentials. Non-Kilter boards use Aurora username/password login.
 - `GET /api/aurora-credentials/unsynced` returns pending local ticks/climbs
   that have not synced back to the upstream board account.
+- `POST /api/board-credentials/kilter/password` links a Kilter account from a
+  username + password via Keycloak's Resource-Owner-Password-Credentials (ROPC)
+  grant. This is the primary Kilter path: it rides the public `kilter` client and
+  needs no Kilter-registered redirect URI. The backend exchanges the credentials
+  for a refresh token, verifies the returned JWT (`sub` = Keycloak user id), and
+  hands it to the same `saveKilterCredential` the OAuth callback uses — the
+  password itself is never stored. Auth-gated, allowlist-gated, and per-user
+  rate-limited (5/min) so it can't be used as a credential-testing oracle.
 - `POST /api/board-credentials/kilter/handoff` creates a short-lived signed
   OAuth handoff, then `/board-credentials/kilter/start` and
   `/board-credentials/kilter/callback` return a completion token to the app.
+  This authorization-code flow is **dormant** — it needs Kilter to register a
+  redirect URI for us, which they have not. Kept for when they do.
 - `POST /api/board-credentials/kilter/finalize` verifies that completion token
   against the signed-in user and saves the Kilter account link.
+
+Both Kilter link paths are gated by `isKilterSyncAllowed` (the
+`KILTER_SYNC_ALLOWED_USER_IDS` env var: unset/empty disables everyone, `*` opens
+it to all signed-in users, or a comma-separated list restricts to those ids) and
+the `kilter-oauth-linking` PostHog flag on the client. The gate is enforced only
+at link time on the backend — the kilter-sync daemon syncs whatever lands in
+`aurora_credentials`, so the kill switch lives on the write path.
+
 - `POST /api/aurora-import` streams newline-delimited progress events while
   importing Aurora JSON export chunks through the shared importer.
 

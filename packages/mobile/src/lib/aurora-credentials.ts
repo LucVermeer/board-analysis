@@ -130,6 +130,20 @@ export async function deleteAuroraCredential(boardType: AuroraBoardName): Promis
   });
 }
 
+/**
+ * Link a Kilter account from a username + password (Keycloak ROPC). Used instead
+ * of the OAuth handoff because Kilter hasn't registered a redirect URI for us.
+ * The password is exchanged for a refresh token server-side and never stored.
+ * A 401 with the `Invalid Aurora credentials` body maps to `invalid_credentials`
+ * via `errorCodeForResponse`.
+ */
+export async function saveKilterCredentialViaPassword(input: { username: string; password: string }): Promise<void> {
+  await requestJson<{ success: true }>('/api/board-credentials/kilter/password', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 async function createKilterHandoffStartUrl(): Promise<string> {
   const response = await requestJson<{ startUrl: string }>('/api/board-credentials/kilter/handoff', {
     method: 'POST',

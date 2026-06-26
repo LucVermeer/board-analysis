@@ -37,6 +37,11 @@ export const FEATURE_FLAG_DEFINITIONS = [
     label: 'Logbook filters',
     description: 'Search box and filter sheet on the logbook (unfinished UI).',
   },
+  {
+    key: 'kilter-oauth-linking',
+    label: 'Kilter account linking',
+    description: 'Show the Kilter username/password sign-in card in Integrations.',
+  },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 // The literal key union (e.g. `'strava-integration'`), preserved via the
