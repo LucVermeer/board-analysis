@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T09:04:05.212Z",
+  "generatedAt": "2026-06-26T09:37:57.494Z",
   "entries": [
+    {
+      "prNumber": 3211,
+      "category": "fixed",
+      "title": "Fixed an iOS freeze where the app could stop responding to taps after opening and closing sheets (board history, the queue, filters) or after using the sidebar.",
+      "mergedAt": "2026-06-26T09:37:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3211"
+    },
     {
       "prNumber": 3214,
       "category": "new",
