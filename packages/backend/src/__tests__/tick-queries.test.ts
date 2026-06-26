@@ -175,14 +175,14 @@ describe('tickQueries — behavior fixes', () => {
   });
 
   describe('userAscentsFeed — hardest sort', () => {
-    it('orders by consensus desc, then effective grade (logged, else consensus) desc', async () => {
-      // consensus / logged -> effective grade:
+    it('orders by effective grade (logged, else consensus) desc, date breaking ties', async () => {
+      // consensus / logged -> effective grade (logged, else consensus):
       //   D 12 / -  -> 12
       //   E 11 / 10 -> 10
       //   A 10 / 11 -> 11
       //   B 10 / -  -> 10   (ungraded ranks as if logged == consensus)
       //   C 10 / 9  -> 9
-      // hardest = consensus first, then effective grade -> D, E, A, B, C
+      // hardest = effective grade desc, date breaks ties -> D, A, E, B, C
       const seeded: Array<{ key: string; consensus: number; logged: number | null }> = [
         { key: 'D', consensus: 12, logged: null },
         { key: 'E', consensus: 11, logged: 10 },
@@ -205,12 +205,12 @@ describe('tickQueries — behavior fixes', () => {
 
       const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'hardest' });
 
-      expect(result.items.map((item) => item.climbName)).toEqual(['D', 'E', 'A', 'B', 'C']);
+      expect(result.items.map((item) => item.climbName)).toEqual(['D', 'A', 'E', 'B', 'C']);
     });
 
-    it('breaks ties on ascent date (more recent first) when consensus and effective grade match', async () => {
+    it('breaks ties on ascent date (more recent first) when the effective grade matches', async () => {
       // Same consensus, both ungraded (effective == consensus), so only climbedAt
-      // separates them — exercises the third ORDER BY key (climbedAt desc).
+      // separates them — exercises the climbedAt tiebreaker after the effective-grade key.
       const older = CLIMB_PREFIX + 'tiebreak-older';
       const newer = CLIMB_PREFIX + 'tiebreak-newer';
       await insertClimb(older, 'Older');
@@ -233,6 +233,63 @@ describe('tickQueries — behavior fixes', () => {
       const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'hardest' });
 
       expect(result.items.map((item) => item.climbName)).toEqual(['Newer', 'Older']);
+    });
+  });
+
+  describe('userAscentsFeed — easiest sort', () => {
+    it('orders by effective grade asc, so ungraded ticks sort by consensus not last', async () => {
+      // All ungraded, so effective grade == consensus. Before the fix, easiest
+      // sorted by the (NULL) logged grade and these would tie/float; effective
+      // grade orders them by consensus.
+      const seeded: Array<{ key: string; consensus: number }> = [
+        { key: 'Hard', consensus: 15 },
+        { key: 'Easy', consensus: 5 },
+        { key: 'Mid', consensus: 10 },
+      ];
+      for (const climb of seeded) {
+        const climbUuid = CLIMB_PREFIX + 'easiest-' + climb.key;
+        await insertClimb(climbUuid, climb.key);
+        await insertBoardClimbStats({ climbUuid, displayDifficulty: climb.consensus });
+        await insertTick({
+          uuid: 'tick-easiest-' + climb.key,
+          climbUuid,
+          climbedAt: '2026-02-01 10:00:00',
+          status: 'send',
+        });
+      }
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'easiest' });
+
+      expect(result.items.map((item) => item.climbName)).toEqual(['Easy', 'Mid', 'Hard']);
+    });
+
+    it('interleaves a graded and an ungraded tick by effective grade', async () => {
+      // The graded tick logs hard (12); the ungraded one's consensus is easy (5).
+      // effective-grade asc puts the ungraded (5) first — the old loggedGrade asc
+      // would have floated the NULL-logged ungraded tick to the end instead.
+      const graded = CLIMB_PREFIX + 'easiest-mixed-graded';
+      const ungraded = CLIMB_PREFIX + 'easiest-mixed-ungraded';
+      await insertClimb(graded, 'Graded');
+      await insertClimb(ungraded, 'Ungraded');
+      await insertBoardClimbStats({ climbUuid: graded, displayDifficulty: 8 });
+      await insertBoardClimbStats({ climbUuid: ungraded, displayDifficulty: 5 });
+      await insertTick({
+        uuid: 'tick-easiest-mixed-graded',
+        climbUuid: graded,
+        climbedAt: '2026-02-01 10:00:00',
+        status: 'send',
+        difficulty: 12,
+      });
+      await insertTick({
+        uuid: 'tick-easiest-mixed-ungraded',
+        climbUuid: ungraded,
+        climbedAt: '2026-02-01 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'easiest' });
+
+      expect(result.items.map((item) => item.climbName)).toEqual(['Ungraded', 'Graded']);
     });
   });
 

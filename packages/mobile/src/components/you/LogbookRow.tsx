@@ -20,6 +20,7 @@ import { type IconName } from '../icon-map';
 import { ClimbListItemContent, type ClimbListItemClimb } from '../ClimbListItemContent';
 import { useSwipeArm } from '../use-swipe-arm';
 import { gradeBadgeColor } from './profile-chart-colors';
+import { deriveLogbookGradeDisplay } from '@boardsesh/logbook';
 import { brandColors, withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -120,6 +121,18 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
     formatGrade(rawGradeLabel) ??
     rawGradeLabel;
   const gradeColor = gradeLabel ? gradeBadgeColor(rawGradeLabel ?? gradeLabel) : undefined;
+  // Dual grade: the big grade is what you logged (or consensus when ungraded);
+  // surface the consensus as a small `people`-marked secondary only when the
+  // crowd disagrees, and mark an ungraded row's grade as consensus-sourced.
+  const { showConsensusSecondary, gradeIsConsensus } = deriveLogbookGradeDisplay(
+    ascent.difficulty,
+    ascent.consensusDifficulty,
+  );
+  const consensusGradeLabel = showConsensusSecondary
+    ? (formatGradeByDifficultyId(ascent.consensusDifficulty) ??
+      formatGrade(ascent.consensusDifficultyName) ??
+      ascent.consensusDifficultyName)
+    : null;
   const layoutName = getLayoutDisplayName(ascent.boardType, ascent.layoutId);
   const boardLabel = ascent.boardDisplayName ?? layoutName;
   const triesLabel = t('mobile.logbook.tries', { count: ascent.attemptCount });
@@ -251,6 +264,8 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
           angle={ascent.angle}
           subtitleDetailParts={subtitleParts}
           showAscentStatus={false}
+          consensusGrade={consensusGradeLabel}
+          gradeIsConsensus={gradeIsConsensus}
         />
       </View>
     ) : (
@@ -268,9 +283,20 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
         </View>
         <View style={styles.trailing}>
           {gradeLabel && gradeColor ? (
-            <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
-              <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
-                {gradeLabel}
+            <View style={styles.iconGradeRow}>
+              {gradeIsConsensus ? <Icon name="people" size={11} color={systemColors.secondaryLabel} /> : null}
+              <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
+                <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
+                  {gradeLabel}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {consensusGradeLabel ? (
+            <View style={styles.iconGradeRow}>
+              <Icon name="people" size={10} color={systemColors.secondaryLabel} />
+              <Text variant="caption2" color={systemColors.secondaryLabel}>
+                {consensusGradeLabel}
               </Text>
             </View>
           ) : null}
@@ -371,6 +397,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
+  },
+  iconGradeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   gradeText: { fontWeight: '700' },
   swipeAction: {
