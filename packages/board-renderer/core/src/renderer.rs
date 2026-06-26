@@ -4,25 +4,75 @@ use tiny_skia::{Color as SkiaColor, FillRule, Paint, PathBuilder, Pixmap, Stroke
 use crate::frames_parser::parse_frames;
 use crate::types::{HoldData, HoldMarkerShape, HoldRenderStyle, RenderConfig};
 
-fn marker_shape_path(shape: HoldMarkerShape, cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
+// Per-shape scale so every shape covers the same filled AREA as a circle of the
+// given radius (issue #3204). MUST stay in sync with SHAPE_AREA_SCALE in
+// packages/mobile/src/components/board-renderer/HoldMarkerShape.tsx.
+fn shape_area_scale(shape: HoldMarkerShape) -> f32 {
+    match shape {
+        HoldMarkerShape::TriangleUp | HoldMarkerShape::TriangleDown => 1.5552,
+        HoldMarkerShape::Square => 1.0808,
+        HoldMarkerShape::Diamond => 1.2533,
+        HoldMarkerShape::Octagon => 1.0539,
+        HoldMarkerShape::Circle | HoldMarkerShape::Unknown => 1.0,
+    }
+}
+
+// Fraction of the (scaled) circumradius used to round triangle corners — matches
+// TRIANGLE_CORNER_RATIO in the JS renderer.
+const TRIANGLE_CORNER_RATIO: f32 = 0.2;
+
+// A point `dist` along the edge from `from` toward `to`.
+fn towards(from: (f32, f32), to: (f32, f32), dist: f32) -> (f32, f32) {
+    let dx = to.0 - from.0;
+    let dy = to.1 - from.1;
+    let len = (dx * dx + dy * dy).sqrt().max(f32::EPSILON);
+    (from.0 + dx / len * dist, from.1 + dy / len * dist)
+}
+
+// Rounded-corner path for a convex polygon: stop short of each corner and
+// quad-curve through it (control = the true vertex). Matches roundedPolygonPath
+// in the JS renderer.
+fn rounded_polygon_path(vertices: &[(f32, f32)], corner_radius: f32) -> Option<tiny_skia::Path> {
+    let count = vertices.len();
+    let mut builder = PathBuilder::new();
+    for i in 0..count {
+        let prev = vertices[(i + count - 1) % count];
+        let curr = vertices[i];
+        let next = vertices[(i + 1) % count];
+        let entry = towards(curr, prev, corner_radius);
+        let exit = towards(curr, next, corner_radius);
+        if i == 0 {
+            builder.move_to(entry.0, entry.1);
+        } else {
+            builder.line_to(entry.0, entry.1);
+        }
+        builder.quad_to(curr.0, curr.1, exit.0, exit.1);
+    }
+    builder.close();
+    builder.finish()
+}
+
+fn marker_shape_path(shape: HoldMarkerShape, cx: f32, cy: f32, base_r: f32) -> Option<tiny_skia::Path> {
+    // Equal-area scaling — circle is the reference (scale 1.0), others grow.
+    let r = base_r * shape_area_scale(shape);
     match shape {
         HoldMarkerShape::Circle => PathBuilder::from_circle(cx, cy, r),
-        HoldMarkerShape::TriangleUp => {
-            let mut builder = PathBuilder::new();
-            builder.move_to(cx, cy - r);
-            builder.line_to(cx + r * 0.866, cy + r * 0.5);
-            builder.line_to(cx - r * 0.866, cy + r * 0.5);
-            builder.close();
-            builder.finish()
-        }
-        HoldMarkerShape::TriangleDown => {
-            let mut builder = PathBuilder::new();
-            builder.move_to(cx - r * 0.866, cy - r * 0.5);
-            builder.line_to(cx + r * 0.866, cy - r * 0.5);
-            builder.line_to(cx, cy + r);
-            builder.close();
-            builder.finish()
-        }
+        HoldMarkerShape::TriangleUp => rounded_polygon_path(
+            &[
+                (cx, cy - r),
+                (cx + r * 0.866, cy + r * 0.5),
+                (cx - r * 0.866, cy + r * 0.5),
+            ],
+            r * TRIANGLE_CORNER_RATIO,
+        ),
+        HoldMarkerShape::TriangleDown => rounded_polygon_path(
+            &[
+                (cx - r * 0.866, cy - r * 0.5),
+                (cx + r * 0.866, cy - r * 0.5),
+                (cx, cy + r),
+            ],
+            r * TRIANGLE_CORNER_RATIO,
+        ),
         HoldMarkerShape::Square => {
             let half_side = r * 0.82;
             let mut builder = PathBuilder::new();
@@ -42,6 +92,25 @@ fn marker_shape_path(shape: HoldMarkerShape, cx: f32, cy: f32, r: f32) -> Option
             builder.close();
             builder.finish()
         }
+        // Regular octagon, flat top/bottom (stop-sign orientation): vertices at
+        // angle = π/8 + i·π/4. Shared geometry with the JS SVG renderer.
+        HoldMarkerShape::Octagon => {
+            let mut builder = PathBuilder::new();
+            for i in 0..8 {
+                let angle = std::f32::consts::PI / 8.0 + (i as f32) * std::f32::consts::PI / 4.0;
+                let x = cx + r * angle.cos();
+                let y = cy + r * angle.sin();
+                if i == 0 {
+                    builder.move_to(x, y);
+                } else {
+                    builder.line_to(x, y);
+                }
+            }
+            builder.close();
+            builder.finish()
+        }
+        // Unknown future shape from a newer JS bundle: fall back to a circle.
+        HoldMarkerShape::Unknown => PathBuilder::from_circle(cx, cy, r),
     }
 }
 
@@ -306,6 +375,7 @@ mod tests {
             HoldMarkerShape::TriangleDown,
             HoldMarkerShape::Square,
             HoldMarkerShape::Diamond,
+            HoldMarkerShape::Octagon,
         ] {
             let data = render_single_shape(shape);
             assert!(
@@ -349,6 +419,37 @@ mod tests {
         let (large_data, _, _) = render_overlay(&large_config).unwrap();
 
         assert_ne!(small_data, large_data);
+    }
+
+    #[test]
+    fn test_octagon_shape_deserialises() {
+        let info: HoldStateInfo = serde_json::from_str(r##"{"color":"#00FF00","shape":"octagon"}"##).unwrap();
+        assert_eq!(info.shape, HoldMarkerShape::Octagon);
+    }
+
+    #[test]
+    fn test_unknown_shape_falls_back_instead_of_failing_parse() {
+        // A newer JS bundle could send a shape this binary doesn't know; it must
+        // deserialise to Unknown (rendered as a circle), not error the whole config.
+        let info: HoldStateInfo =
+            serde_json::from_str(r##"{"color":"#00FF00","shape":"hexagram-from-the-future"}"##).unwrap();
+        assert_eq!(info.shape, HoldMarkerShape::Unknown);
+        let data = render_single_shape(HoldMarkerShape::Unknown);
+        assert!(data.chunks(4).any(|pixel| pixel[3] > 0));
+    }
+
+    #[test]
+    fn test_equal_area_triangle_close_to_circle() {
+        // After #3204's equal-area normalization a triangle marker covers a
+        // comparable filled area to the circle (it was ~40% before). Loose bounds
+        // because the triangle's longer perimeter adds stroke pixels.
+        let count = |data: &[u8]| data.chunks(4).filter(|pixel| pixel[3] > 0).count() as f32;
+        let circle = count(&render_single_shape(HoldMarkerShape::Circle));
+        let triangle = count(&render_single_shape(HoldMarkerShape::TriangleUp));
+        assert!(
+            triangle > 0.7 * circle && triangle < 1.6 * circle,
+            "triangle area {triangle} should be close to circle {circle}"
+        );
     }
 
     fn render_single_shape(shape: HoldMarkerShape) -> Vec<u8> {
