@@ -18,7 +18,7 @@
       "metroServersSubtitle": "Basculer entre les bundlers Tailnet",
       "accessibility": {
         "title": "Accessibilité",
-        "description": "Choisis des couleurs de prises plus faciles à distinguer. Par défaut utilise les couleurs normales de chaque board et n'envoie aucune surcharge Bluetooth.",
+        "description": "Choisis des couleurs de prises et des formes de marqueurs plus faciles à distinguer. Les changements de couleur allument aussi ton board ; la forme, la taille et l'épaisseur ne modifient que la superposition de l'app.",
         "rowSubtitleShort": "Couleurs et formes des prises pour la vision des couleurs",
         "markersTitle": "Marqueurs de prise",
         "resetAll": "Réinitialiser les marqueurs de prise",
