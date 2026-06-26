@@ -216,7 +216,7 @@
       "metroServersSubtitle": "Cambia entre bundlers de Tailnet",
       "accessibility": {
         "title": "Accesibilidad",
-        "description": "Elige colores de presas que sean más fáciles de distinguir. Predeterminado usa los colores normales de cada plafón y no envía cambios por Bluetooth.",
+        "description": "Elige colores de presas y formas de marcadores más fáciles de distinguir. Los cambios de color también encienden tu plafón; la forma, el tamaño y el grosor solo cambian la superposición de la app.",
         "rowSubtitleShort": "Colores y formas de presas para la visión del color",
         "markersTitle": "Marcadores de presa",
         "resetAll": "Restablecer marcadores de presa",
