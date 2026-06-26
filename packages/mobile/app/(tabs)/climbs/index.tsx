@@ -618,7 +618,7 @@ function ClimbListInner() {
   const handleClimbPress = useCallback(
     (climb: Climb) => {
       blurSearchInputs();
-      void activateClimbListClimb(toQueueClimb(climb));
+      void activateClimbListClimb.activate(toQueueClimb(climb));
     },
     [activateClimbListClimb, blurSearchInputs],
   );

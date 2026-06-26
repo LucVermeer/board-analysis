@@ -189,6 +189,7 @@ type Snapshot = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   addToQueue: ReturnType<typeof useQueue>['addToQueue'];
   removeFromQueue: ReturnType<typeof useQueue>['removeFromQueue'];
+  setQueue: ReturnType<typeof useQueue>['setQueue'];
   setCurrentClimb: ReturnType<typeof useQueue>['setCurrentClimb'];
   nextClimb: ReturnType<typeof useQueue>['nextClimb'];
   setPlaylistSuggestionSource: ReturnType<typeof useQueue>['setPlaylistSuggestionSource'];
@@ -283,6 +284,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
       playlistSuggestionSource,
       addToQueue: queue.addToQueue,
       removeFromQueue: queue.removeFromQueue,
+      setQueue: queue.setQueue,
       setCurrentClimb: queue.setCurrentClimb,
       nextClimb: queue.nextClimb,
       setPlaylistSuggestionSource: queue.setPlaylistSuggestionSource,
@@ -301,6 +303,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     playlistSuggestionSource,
     queue.addToQueue,
     queue.removeFromQueue,
+    queue.setQueue,
     queue.setCurrentClimb,
     queue.nextClimb,
     queue.setPlaylistSuggestionSource,
@@ -1255,6 +1258,35 @@ describe('QueueProvider mutation-failure resync', () => {
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
     // Solo's "Action failed" toast must NOT fire in a party session.
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('resyncs when setQueue fails in a session', async () => {
+    const snapshots: Snapshot[] = [];
+    const serverCurrent = makeQueueItem('server-current', 'climb-server-current');
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([serverCurrent], serverCurrent), {
+      onQueueStateCall: () => (queueStateCalls += 1),
+    });
+    queueMutations.setQueue.mockRejectedValueOnce(new Error('set queue failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      const localCurrent = makeQueueItem('local-current', 'climb-local-current');
+      snapshot.setQueue([localCurrent], localCurrent);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('server-current');
+    });
+    expect(queueStateCalls).toBe(1);
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
   });
 
   it('does not resync or toast when a mutation fails with no active session', async () => {

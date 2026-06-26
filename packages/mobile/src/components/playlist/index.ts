@@ -15,4 +15,5 @@ export { PlaylistFollowButton } from './PlaylistFollowButton';
 export { PlaylistEditDoneButton } from './PlaylistEditDoneButton';
 export { PlaylistOwnerToolbar } from './PlaylistOwnerToolbar';
 export { PlaylistActionsMenu } from './PlaylistActionsMenu';
+export { PlaylistQueueReplaceSheet } from './PlaylistQueueReplaceSheet';
 export { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';

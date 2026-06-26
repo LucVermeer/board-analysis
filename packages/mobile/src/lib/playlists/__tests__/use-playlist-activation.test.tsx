@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
-import type { Climb } from '@boardsesh/queue';
+import { renderHook, act, waitFor } from '@testing-library/react';
+import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
 import type { UsePlaylistClimbActivationOptions } from '@boardsesh/playlists-react';
 import { usePlaylistActivation } from '../use-playlist-activation';
 
@@ -14,14 +14,19 @@ type ActiveBoard = { boardType: string; layoutId: number; sizeId: number; setIds
 
 type SuggestionSource = { playlistUuid: string; activatedClimbUuid: string; boardKey: string } | null;
 
+type QueueState = { queue: ClimbQueueItem[]; currentClimbQueueItem: ClimbQueueItem | null };
+
 const mocks = vi.hoisted(() => ({
   setCurrentClimb: vi.fn(),
   setPlaylistSuggestionSource: vi.fn(),
   refreshPlaylistSuggestionSource: vi.fn(),
+  setQueue: vi.fn(),
+  showToast: vi.fn(),
   openPlayDrawer: vi.fn(),
   activeBoard: { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
   activeClimbUuid: null as string | null,
   suggestionSource: null as SuggestionSource,
+  queueState: { queue: [], currentClimbQueueItem: null } as QueueState,
   activate: vi.fn<(climb: Climb) => Promise<void>>(),
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
@@ -36,18 +41,28 @@ vi.mock('@boardsesh/playlists-react', () => ({
     return mocks.activate;
   },
   fetchPlaylistSuggestionClimbs: (args: unknown) => mocks.fetchSuggestion(args),
+  isAbortError: (error: unknown) => error instanceof Error && error.name === 'AbortError',
+  PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE: 100,
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueueActions: () => ({
     setCurrentClimb: mocks.setCurrentClimb,
     setPlaylistSuggestionSource: mocks.setPlaylistSuggestionSource,
     refreshPlaylistSuggestionSource: mocks.refreshPlaylistSuggestionSource,
+    setQueue: mocks.setQueue,
+    getQueueSnapshot: () => mocks.queueState,
   }),
   useActiveClimbUuid: () => mocks.activeClimbUuid,
   usePlaylistSuggestionSource: () => mocks.suggestionSource,
 }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: mocks.openPlayDrawer }),
+}));
+vi.mock('../../../providers/toast-provider', () => ({
+  useToast: () => ({ showToast: mocks.showToast }),
+}));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock('../../graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: mocks.activeBoard }),
@@ -78,12 +93,17 @@ function makeClimb(uuid: string): Climb {
   };
 }
 
+function makeQueueItem(uuid: string, climbUuid: string, suggested = false): ClimbQueueItem {
+  return { uuid, suggested, climb: makeClimb(climbUuid) } as unknown as ClimbQueueItem;
+}
+
 function renderActivation(
   fetchPage = vi.fn(),
   options: {
     allClimbs?: Climb[];
     sourceId?: string;
     viewOnlyBoard?: typeof VIEW_ONLY_BOARD | ((climb: Climb) => typeof VIEW_ONLY_BOARD | null) | null;
+    replaceQueueOnActivate?: boolean;
   } = {},
 ) {
   return renderHook(() =>
@@ -93,6 +113,7 @@ function renderActivation(
       fetchPage,
       viewOnlyBoard: options.viewOnlyBoard,
       refreshErrorMessage: 'refresh failed:',
+      replaceQueueOnActivate: options.replaceQueueOnActivate,
     }),
   );
 }
@@ -107,9 +128,15 @@ beforeEach(() => {
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
   mocks.activeClimbUuid = null;
   mocks.suggestionSource = null;
+  mocks.queueState = { queue: [], currentClimbQueueItem: null };
   mocks.captured = undefined;
   mocks.activate.mockResolvedValue(undefined);
   mocks.queueItemCounter = 0;
+  // Mirror real setQueue: it commits the new queue, so a later getQueueSnapshot
+  // reflects it (the replacement path re-checks the queue after seeding it).
+  mocks.setQueue.mockImplementation((queue: ClimbQueueItem[], currentClimbQueueItem?: ClimbQueueItem | null) => {
+    mocks.queueState = { queue, currentClimbQueueItem: currentClimbQueueItem ?? null };
+  });
 });
 
 describe('usePlaylistActivation (mobile wrapper)', () => {
@@ -139,7 +166,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
   it('opens the play drawer immediately on activate, before the queue state updates', async () => {
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
     // The drawer opens FIRST — before the shared activation's setCurrentClimb +
     // suggestion-source work — so BottomSheetModal.present() fires on the same
     // frame as the tap. `committedExternally` tells the drawer the caller already
@@ -154,7 +181,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
   it('dispatches the exact item the activation pinned', async () => {
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
 
     // The first dispatch reuses the item pinned during activate (same climb uuid),
     // so the drawer's nav anchor and the queue entry share one uuid.
@@ -166,7 +193,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
   it('reuses the pinned item once — a second dispatch builds a fresh item', async () => {
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
 
     const first = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
     const second = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
@@ -176,7 +203,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
   it('ignores the pinned item when the dispatched climb differs', async () => {
     const { result } = renderActivation();
-    await result.current(makeClimb('a'));
+    await result.current.activate(makeClimb('a'));
 
     const climbB = makeClimb('b');
     const item = await captured().queueApi!.setCurrentClimb(climbB, { playlistSuggestionSource: null });
@@ -186,7 +213,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
   it('activates through the shared queue on every tap (always-live, no preview gate)', async () => {
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
 
     // Every tap drives the shared activation — there is no non-driver preview
     // branch that skips it anymore.
@@ -200,7 +227,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     mocks.suggestionSource = { playlistUuid: 'playlist:pl-1', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
 
     // Pure reopen — the shared activation does NOT run (re-activating would
     // duplicate it in the queue / pointlessly rebuild the same source).
@@ -215,7 +242,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     mocks.suggestionSource = { playlistUuid: 'climblist', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
 
     expect(mocks.activate).toHaveBeenCalledWith(climb);
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
@@ -241,7 +268,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     mocks.activeClimbUuid = 'b';
     const { result } = renderActivation();
     const climb = makeClimb('a');
-    await result.current(climb);
+    await result.current.activate(climb);
 
     // 'a' is not the active climb ('b' is), so this still starts a fresh pass.
     expect(mocks.activate).toHaveBeenCalledWith(climb);
@@ -254,7 +281,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     const fetchPage = vi.fn();
     const { result } = renderActivation(fetchPage, { allClimbs: [climbA, climbB], viewOnlyBoard: VIEW_ONLY_BOARD });
 
-    await result.current(climbA);
+    await result.current.activate(climbA);
 
     const viewOnlyOptions = mocks.openPlayDrawer.mock.calls[0][1];
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climbA, {
@@ -281,7 +308,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     );
     const { result } = renderActivation(vi.fn(), { allClimbs: [climb], viewOnlyBoard: viewOnlyResolver });
 
-    await result.current(climb);
+    await result.current.activate(climb);
 
     expect(viewOnlyResolver).toHaveBeenCalledWith(climb);
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
@@ -321,8 +348,124 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     mocks.activate.mockRejectedValue(new Error('boom'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { result } = renderActivation();
-    await expect(result.current(makeClimb('a'))).resolves.toBeUndefined();
+    await expect(result.current.activate(makeClimb('a'))).resolves.toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  describe('queue replacement (replaceQueueOnActivate)', () => {
+    it('seeds the tapped climb, then replaces the queue with the full playlist order', async () => {
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [makeClimb('a'), tapped, makeClimb('c')], hasMore: false });
+      const { result } = renderActivation(fetchPage, { replaceQueueOnActivate: true });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      // The tapped climb is committed immediately (the drawer renders it), then
+      // the queue expands to the whole ordered playlist around it.
+      expect(mocks.openPlayDrawer).toHaveBeenCalledWith(tapped, { committedExternally: true });
+      await waitFor(() => {
+        const lastSetQueue = mocks.setQueue.mock.calls.at(-1);
+        expect(lastSetQueue?.[0].map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['a', 'b', 'c']);
+        expect(lastSetQueue?.[1].climb.uuid).toBe('b');
+      });
+      expect(fetchPage).toHaveBeenCalled();
+      expect(result.current.queueReplaceSheet.visible).toBe(false);
+    });
+
+    it('warns instead of replacing when the queue has manual future items', async () => {
+      const current = makeQueueItem('q-current', 'current');
+      const future = makeQueueItem('q-future', 'future');
+      mocks.queueState = { queue: [current, future], currentClimbQueueItem: current };
+      const fetchPage = vi.fn();
+      const { result } = renderActivation(fetchPage, { replaceQueueOnActivate: true });
+
+      await act(async () => {
+        await result.current.activate(makeClimb('b'));
+      });
+
+      expect(result.current.queueReplaceSheet.visible).toBe(true);
+      expect(result.current.queueReplaceSheet.futureQueueCount).toBe(1);
+      expect(mocks.setQueue).not.toHaveBeenCalled();
+      expect(fetchPage).not.toHaveBeenCalled();
+    });
+
+    it('warns for suggested future queue items because replacement still clears them', async () => {
+      const current = makeQueueItem('q-current', 'current');
+      const suggestedFuture = makeQueueItem('q-suggested', 'suggested', true);
+      mocks.queueState = { queue: [current, suggestedFuture], currentClimbQueueItem: current };
+      const { result } = renderActivation(vi.fn(), { replaceQueueOnActivate: true });
+
+      await act(async () => {
+        await result.current.activate(makeClimb('b'));
+      });
+
+      expect(result.current.queueReplaceSheet.visible).toBe(true);
+      expect(result.current.queueReplaceSheet.futureQueueCount).toBe(1);
+      expect(mocks.setQueue).not.toHaveBeenCalled();
+    });
+
+    it('replaces the queue once the user confirms the warning', async () => {
+      const current = makeQueueItem('q-current', 'current');
+      const future = makeQueueItem('q-future', 'future');
+      mocks.queueState = { queue: [current, future], currentClimbQueueItem: current };
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [tapped, makeClimb('c')], hasMore: false });
+      const { result } = renderActivation(fetchPage, { replaceQueueOnActivate: true });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+      expect(result.current.queueReplaceSheet.visible).toBe(true);
+
+      await act(async () => {
+        result.current.queueReplaceSheet.onConfirm();
+      });
+
+      await waitFor(() => {
+        expect(mocks.setQueue).toHaveBeenCalled();
+      });
+      const lastSetQueue = mocks.setQueue.mock.calls.at(-1);
+      expect(lastSetQueue?.[0].map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['b', 'c']);
+      await waitFor(() => {
+        expect(result.current.queueReplaceSheet.visible).toBe(false);
+      });
+    });
+
+    it('cancelling the warning leaves the queue untouched', async () => {
+      const current = makeQueueItem('q-current', 'current');
+      const future = makeQueueItem('q-future', 'future');
+      mocks.queueState = { queue: [current, future], currentClimbQueueItem: current };
+      const { result } = renderActivation(vi.fn(), { replaceQueueOnActivate: true });
+
+      await act(async () => {
+        await result.current.activate(makeClimb('b'));
+      });
+      expect(result.current.queueReplaceSheet.visible).toBe(true);
+
+      act(() => {
+        result.current.queueReplaceSheet.onCancel();
+      });
+
+      expect(result.current.queueReplaceSheet.visible).toBe(false);
+      expect(mocks.setQueue).not.toHaveBeenCalled();
+    });
+
+    it('keeps the queue unchanged and shows a toast when the full playlist fetch fails', async () => {
+      const fetchPage = vi.fn().mockRejectedValue(new Error('network'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderActivation(fetchPage, { replaceQueueOnActivate: true });
+
+      await act(async () => {
+        await result.current.activate(makeClimb('b'));
+      });
+
+      await waitFor(() => {
+        expect(mocks.showToast).toHaveBeenCalledWith('detail.queueReplace.loadFailed', 'error');
+      });
+      errorSpy.mockRestore();
+    });
   });
 });

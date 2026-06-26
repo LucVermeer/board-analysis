@@ -128,6 +128,14 @@
     "shareError": "Impossible de partager",
     "deleted": "Playlist supprimée",
     "deleteFailed": "Impossible de supprimer la playlist",
+    "queueReplace": {
+      "title": "Lancer la playlist ?",
+      "message_one": "Cela supprimera {{count}} bloc en file après votre bloc actuel.",
+      "message_other": "Cela supprimera {{count}} blocs en file après votre bloc actuel.",
+      "cancel": "Garder la file",
+      "confirm": "Lancer la playlist",
+      "loadFailed": "Impossible de lancer la playlist. Réessayez."
+    },
     "deleteConfirm": {
       "title": "Supprimer la playlist ?",
       "message": "Cela supprime définitivement « {{name}} » et ses voies. Cette action est irréversible.",

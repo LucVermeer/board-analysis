@@ -128,6 +128,14 @@
     "shareError": "No se pudo compartir",
     "deleted": "Playlist eliminada",
     "deleteFailed": "No se pudo eliminar la playlist",
+    "queueReplace": {
+      "title": "¿Iniciar playlist?",
+      "message_one": "Esto borrará {{count}} bloque en cola después de tu bloque actual.",
+      "message_other": "Esto borrará {{count}} bloques en cola después de tu bloque actual.",
+      "cancel": "Mantener cola",
+      "confirm": "Iniciar playlist",
+      "loadFailed": "No se pudo iniciar la playlist. Inténtalo de nuevo."
+    },
     "deleteConfirm": {
       "title": "¿Eliminar playlist?",
       "message": "Esto elimina \"{{name}}\" y sus bloques de forma permanente. No se puede deshacer.",

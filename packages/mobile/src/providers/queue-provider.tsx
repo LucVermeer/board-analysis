@@ -127,6 +127,14 @@ type QueueContextValue = {
   clearQueue: () => void;
   /** Replace the entire queue (optimistic local UPDATE_QUEUE + best-effort party sync). */
   setQueue: (queue: ClimbQueueItem[], currentClimbQueueItem?: ClimbQueueItem | null) => void;
+  /**
+   * Read the live queue + current climb without subscribing to state. Stable
+   * identity (backed by the internal stateRef), so action-only consumers — e.g.
+   * playlist activation deciding whether replacing the queue would clear future
+   * items — can read the latest queue at tap time without re-rendering on every
+   * queue change.
+   */
+  getQueueSnapshot: () => { queue: ClimbQueueItem[]; currentClimbQueueItem: ClimbQueueItem | null };
   setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
   previousClimb: () => void;
@@ -1410,18 +1418,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [mutations, resyncQueueAfterMutationFailure]);
 
   // Replace the whole queue in one shot: optimistic local UPDATE_QUEUE (the
-  // source of truth for the user's queue) + a best-effort SET_QUEUE sync that
-  // no-ops in solo and broadcasts to party peers when a session exists. Same
-  // best-effort model as addToQueue — a sync failure leaves the local queue
-  // correct, so it must not toast.
+  // source of truth for the user's queue) + SET_QUEUE sync that no-ops in solo
+  // and broadcasts to party peers when a session exists. In party mode a sync
+  // failure would leave peers on the old queue, so reconcile like other failed
+  // session mutations.
   const setQueue = useCallback(
     (queue: ClimbQueueItem[], currentClimbQueueItem?: ClimbQueueItem | null) => {
       dispatch({ type: 'UPDATE_QUEUE', payload: { queue, currentClimbQueueItem: currentClimbQueueItem ?? null } });
       mutations.setQueue(queue, currentClimbQueueItem ?? undefined).catch((error) => {
         if (__DEV__) console.warn('[queue] setQueue sync failed', error);
+        void resyncQueueAfterMutationFailure();
       });
     },
-    [mutations],
+    [mutations, resyncQueueAfterMutationFailure],
+  );
+
+  // Stable live read of the queue + current climb (see QueueContextValue). Reads
+  // stateRef so callers get the latest without subscribing to state re-renders.
+  const getQueueSnapshot = useCallback(
+    () => ({ queue: stateRef.current.queue, currentClimbQueueItem: stateRef.current.currentClimbQueueItem }),
+    [],
   );
 
   // Optimistic local dispatch + correlated SET_CURRENT_CLIMB mutation. The
@@ -1632,6 +1648,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       reorderQueue,
       clearQueue,
       setQueue,
+      getQueueSnapshot,
       setCurrentClimb,
       nextClimb,
       previousClimb,
@@ -1655,6 +1672,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       reorderQueue,
       clearQueue,
       setQueue,
+      getQueueSnapshot,
       setCurrentClimb,
       nextClimb,
       previousClimb,

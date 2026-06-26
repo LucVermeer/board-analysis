@@ -128,6 +128,14 @@
     "shareError": "Failed to share",
     "deleted": "Playlist deleted",
     "deleteFailed": "Failed to delete playlist",
+    "queueReplace": {
+      "title": "Start playlist?",
+      "message_one": "This will clear {{count}} queued climb after your current climb.",
+      "message_other": "This will clear {{count}} queued climbs after your current climb.",
+      "cancel": "Keep queue",
+      "confirm": "Start playlist",
+      "loadFailed": "Couldn't start playlist. Try again."
+    },
     "deleteConfirm": {
       "title": "Delete playlist?",
       "message": "This permanently deletes \"{{name}}\" and its climbs. This can't be undone.",
