@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- MoonBoard hold circles are now bigger and easier to read at a glance. ([#3218](https://github.com/boardsesh/boardsesh/pull/3218))
 - Thousands more MoonBoard problems, now with real grades, star ratings and send counts — and the Mini 2025 and original 2010 boards join the lineup. Your 25° sessions on the 2016 and 2024 boards finally have their own graded problems too. ([#3214](https://github.com/boardsesh/boardsesh/pull/3214))
 - Pick hold colours with a real colour picker — slide lightness, saturation, and hue instead of typing numbers ([#3212](https://github.com/boardsesh/boardsesh/pull/3212))
   Built for colour blindness: a lightness-first picker, plus a toggle to preview your colours through red-green and blue-yellow colour blindness

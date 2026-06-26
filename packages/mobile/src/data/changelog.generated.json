@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T09:37:57.494Z",
+  "generatedAt": "2026-06-26T10:26:32.183Z",
   "entries": [
+    {
+      "prNumber": 3218,
+      "category": "new",
+      "title": "MoonBoard hold circles are now bigger and easier to read at a glance.",
+      "mergedAt": "2026-06-26T10:25:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3218"
+    },
     {
       "prNumber": 3211,
       "category": "fixed",
