@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T11:45:47.284Z",
+  "generatedAt": "2026-06-26T12:45:14.059Z",
   "entries": [
+    {
+      "prNumber": 3220,
+      "category": "fixed",
+      "title": "The Accessibility settings now make it clear that custom hold colours light up your board, not just the in-app markers — so the feature stops looking like it's missing.",
+      "mergedAt": "2026-06-26T12:44:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3220"
+    },
     {
       "prNumber": 3219,
       "category": "fixed",
@@ -303,6 +310,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-26T21:44:52+10:00",
+      "sha": "e23af7b308324f8c5786cc3e13890fbdfa853a84",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "ae4b7ac845045786d687182f5031a64a9a6c1ab1"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-26T18:03:12+10:00",
