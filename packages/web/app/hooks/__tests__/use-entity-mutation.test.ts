@@ -260,6 +260,37 @@ describe('useEntityMutation', () => {
     expect(mockShowMessage).not.toHaveBeenCalled();
   });
 
+  it('awaits an async onError so its side-effects are visible before execute resolves', async () => {
+    mockUseWsAuthToken.mockReturnValue({
+      token: 'test-token',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    mockRequest.mockRejectedValue(new Error('Network error'));
+
+    const sideEffect = vi.fn();
+    const onError = vi.fn().mockImplementation(async () => {
+      await Promise.resolve();
+      sideEffect();
+    });
+
+    const { result } = renderHook(() =>
+      useEntityMutation('SOME_MUTATION', {
+        errorMessage: 'Failed',
+        onError,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.execute({ input: 'test' });
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(sideEffect).toHaveBeenCalledTimes(1);
+  });
+
   it('returns token from useWsAuthToken', () => {
     mockUseWsAuthToken.mockReturnValue({
       token: 'my-token-abc',

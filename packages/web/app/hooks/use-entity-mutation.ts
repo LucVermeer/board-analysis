@@ -18,7 +18,7 @@ type UseEntityMutationOptions = {
   // have a board with this configuration"), otherwise null. When provided, the
   // caller owns the error toast; otherwise the hook shows `serverMessage` (when
   // present) and falls back to the generic `errorMessage`.
-  onError?: (error: unknown, serverMessage: string | null) => void;
+  onError?: (error: unknown, serverMessage: string | null) => void | Promise<void>;
 };
 
 export function useEntityMutation<TResponse, TVariables extends Variables = Variables>(
@@ -48,7 +48,7 @@ export function useEntityMutation<TResponse, TVariables extends Variables = Vari
         console.error(errorMessage, error);
         const serverMessage = extractGraphQLErrorMessage(error);
         if (onError) {
-          onError(error, serverMessage);
+          await onError(error, serverMessage);
         } else {
           showMessage(serverMessage ?? errorMessage, 'error');
         }

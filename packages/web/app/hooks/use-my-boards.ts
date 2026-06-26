@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@boardsesh/graphql/operations';
@@ -11,13 +11,21 @@ import type { UserBoard } from '@boardsesh/shared-schema';
  * When `initialBoards` is provided (from SSR), they are used as the initial state
  * so the UI renders immediately without a loading skeleton. The client-side fetch
  * still runs to refresh the data.
+ *
+ * Call `loadMore` to fetch the next page; `hasMore` indicates whether more pages exist.
  */
 export function useMyBoards(enabled: boolean, limit = 50, initialBoards?: UserBoard[] | null) {
   const hasInitialData = initialBoards != null && initialBoards.length > 0;
   const { token, isAuthenticated } = useWsAuthToken();
   const [boards, setBoards] = useState<UserBoard[]>(initialBoards ?? []);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const offsetRef = useRef(0);
+  // Synchronous guard prevents double-fires from the IntersectionObserver
+  const isFetchingMoreRef = useRef(false);
 
   // Track whether we already have data (from SSR or a prior fetch) to avoid
   // re-showing the loading skeleton on refetches. Using a ref instead of reading
@@ -33,6 +41,7 @@ export function useMyBoards(enabled: boolean, limit = 50, initialBoards?: UserBo
       setIsLoading(true);
     }
     setError(null);
+    offsetRef.current = 0;
 
     const client = createGraphQLHttpClient(token);
     client
@@ -40,6 +49,8 @@ export function useMyBoards(enabled: boolean, limit = 50, initialBoards?: UserBo
       .then((data) => {
         if (!cancelled) {
           setBoards(data.myBoards.boards);
+          setHasMore(data.myBoards.hasMore);
+          offsetRef.current = data.myBoards.boards.length;
           hasDataRef.current = true;
         }
       })
@@ -57,5 +68,28 @@ export function useMyBoards(enabled: boolean, limit = 50, initialBoards?: UserBo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, isAuthenticated, token, limit]);
 
-  return { boards, isLoading, error };
+  const loadMore = useCallback(() => {
+    if (!hasMore || isFetchingMoreRef.current || !token || !isAuthenticated) return;
+
+    isFetchingMoreRef.current = true;
+    setIsFetchingMore(true);
+    const offset = offsetRef.current;
+    const client = createGraphQLHttpClient(token);
+    client
+      .request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, { input: { limit, offset } })
+      .then((data) => {
+        setBoards((prev) => [...prev, ...data.myBoards.boards]);
+        setHasMore(data.myBoards.hasMore);
+        offsetRef.current = offset + data.myBoards.boards.length;
+      })
+      .catch((err) => {
+        console.error('Failed to load more boards:', err);
+      })
+      .finally(() => {
+        isFetchingMoreRef.current = false;
+        setIsFetchingMore(false);
+      });
+  }, [hasMore, token, isAuthenticated, limit]);
+
+  return { boards, isLoading, isFetchingMore, hasMore, loadMore, error };
 }

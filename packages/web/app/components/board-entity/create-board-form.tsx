@@ -29,16 +29,23 @@ type BoardConfig = { boardType: string; layoutId: number; sizeId: number; setIds
 async function findBoardForConfig(token: string, config: BoardConfig): Promise<UserBoard | null> {
   try {
     const client = createGraphQLHttpClient(token);
-    const data = await client.request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, { input: { limit: 50, offset: 0 } });
-    return (
-      data.myBoards.boards.find(
+    const pageSize = 50;
+    const maxPages = 20;
+    for (let page = 0; page < maxPages; page++) {
+      const data = await client.request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, {
+        input: { limit: pageSize, offset: page * pageSize },
+      });
+      const match = data.myBoards.boards.find(
         (board) =>
           board.boardType === config.boardType &&
           board.layoutId === config.layoutId &&
           board.sizeId === config.sizeId &&
           board.setIds === config.setIds,
-      ) ?? null
-    );
+      );
+      if (match) return match;
+      if (!data.myBoards.hasMore) return null;
+    }
+    return null;
   } catch {
     return null;
   }
