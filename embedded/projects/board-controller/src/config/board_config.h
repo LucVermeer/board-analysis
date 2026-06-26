@@ -33,7 +33,9 @@
 #endif
 
 // BLE configuration
-#define BLE_DEVICE_NAME "Kilter Boardsesh"
+// Match the Aurora/Kilter board name format so the official app discovers this
+// debug controller as a test board.
+#define BLE_DEVICE_NAME "Kilter Board#123456@3"
 
 // Backend configuration (defaults)
 #define DEFAULT_BACKEND_HOST "ws.boardsesh.com"
@@ -42,6 +44,13 @@
 #ifndef DEFAULT_RENDER_BASE_URL
 #define DEFAULT_RENDER_BASE_URL "https://www.boardsesh.com"
 #endif
+
+// Local BLE preview configuration for the 2.1" debug controller.
+// These values can be overridden from the ESP32 configuration page.
+#define DEFAULT_PREVIEW_BOARD_NAME "kilter"
+#define DEFAULT_PREVIEW_LAYOUT_ID 8
+#define DEFAULT_PREVIEW_SIZE_ID 25
+#define DEFAULT_PREVIEW_SET_IDS "26,27,28,29"
 
 // Web server
 #define WEB_SERVER_PORT 80
