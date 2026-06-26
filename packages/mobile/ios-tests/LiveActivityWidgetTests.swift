@@ -1,3 +1,4 @@
+import CoreBluetooth
 import XCTest
 
 @available(iOS 17.0, *)
@@ -187,5 +188,21 @@ final class LiveActivityWidgetTests: XCTestCase {
         // 2.0: the thumbnail is composited server-side (matches the Capacitor app);
         // the on-device bundled-art compositing is deferred to the revisit issue.
         XCTAssertTrue(url?.absoluteString.contains("include_background=1") ?? false)
+    }
+
+    // Regression for the iOS-only "MoonBoard connects but LEDs stay dark" bug:
+    // CoreBluetooth silently drops a `.withoutResponse` write to a characteristic
+    // that lacks the property. Aurora UART advertises `.writeWithoutResponse`
+    // (fast path); the original MoonBoard LED box advertises only `.write`, so it
+    // must use `.withResponse`.
+    func testPreferredWriteTypeSelectsByCharacteristicProperties() {
+        // Aurora (Kilter/Tension): supports write-without-response → fast path.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .writeWithoutResponse), .withoutResponse)
+        // Original MoonBoard LED box: write-with-response only.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write), .withResponse)
+        // Supports both → prefer the unacknowledged fast path.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.write, .writeWithoutResponse]), .withoutResponse)
+        // Defensive default when neither write property is advertised.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.read]), .withResponse)
     }
 }
