@@ -10,6 +10,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store.
 
+### New
+
+- Internal/ops change — no user-facing behavior change. Adds a non-blocking post-publish health check for production OTA updates and a documented rollback runbook. The health gate ships inert and activates once the `POSTHOG_PERSONAL_API_KEY` repo secret is added to the Production environment. ([#3243](https://github.com/boardsesh/boardsesh/pull/3243))
+
 ### Improved
 
 - Internal CI/build hygiene — no user-facing change. ([#3238](https://github.com/boardsesh/boardsesh/pull/3238))

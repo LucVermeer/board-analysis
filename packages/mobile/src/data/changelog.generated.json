@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-27T07:50:55.835Z",
+  "generatedAt": "2026-06-27T08:04:33.989Z",
   "entries": [
+    {
+      "prNumber": 3243,
+      "category": "new",
+      "title": "Internal/ops change — no user-facing behavior change. Adds a non-blocking post-publish health check for production OTA updates and a documented rollback runbook. The health gate ships inert and activates once the `POSTHOG_PERSONAL_API_KEY` repo secret is added to the Production environment.",
+      "mergedAt": "2026-06-27T08:03:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3243"
+    },
     {
       "prNumber": 3240,
       "category": "fixed",
