@@ -1,6 +1,38 @@
 import { useState, type ReactNode } from 'react';
-import { QueryCache, QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
+import { AppState, Platform } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
+import {
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+  MutationCache,
+  focusManager,
+  onlineManager,
+} from '@tanstack/react-query';
 import { reportHandledError } from '../lib/error-reporting';
+
+// React Query keys `refetchOnReconnect` / `refetchOnWindowFocus` off a browser's
+// `navigator.onLine` and window-focus events, neither of which exists on React
+// Native — so without these bridges it treats the app as permanently online and
+// focused and neither refetch ever fires. Both `onlineManager` and
+// `focusManager` are process-wide singletons, wired once here at module load
+// (the canonical Expo offline-support pattern). A single root QueryProvider
+// lives for the whole app, so there's nothing to tear down.
+//
+// NetInfo is a native module, so this JS reaches devices only via the next
+// native build — the fingerprint runtimeVersion policy gates the OTA so old
+// binaries never receive code importing a missing native module.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected ?? true);
+  }),
+);
+
+if (Platform.OS !== 'web') {
+  AppState.addEventListener('change', (status) => {
+    focusManager.setFocused(status === 'active');
+  });
+}
 
 // The serialized failing request, trimmed for triage. queryKey/mutationKey are
 // the React Query identity (e.g. ['searchClimbs', params]); pulling them into

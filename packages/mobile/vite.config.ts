@@ -55,6 +55,15 @@ export default defineConfig({
         find: '@react-native-community/blur',
         replacement: fileURLToPath(new URL('./test/community-blur-stub.tsx', import.meta.url)),
       },
+      // @react-native-community/netinfo is a native module that can't load under
+      // vitest's node env. The query provider wires it into React Query's
+      // onlineManager at module load, so any suite that transitively imports the
+      // provider would crash without this stub. Suites that assert connectivity
+      // behaviour register their own vi.mock, which takes precedence.
+      {
+        find: '@react-native-community/netinfo',
+        replacement: fileURLToPath(new URL('./test/netinfo-stub.ts', import.meta.url)),
+      },
       // @sentry/react-native's real entry pulls in react-native's Promise.js,
       // which imports `promise/setimmediate/es6-extensions` (no extension) and
       // fails to resolve under vitest's node ESM env — breaking every suite that

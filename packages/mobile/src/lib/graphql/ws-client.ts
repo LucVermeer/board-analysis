@@ -1,5 +1,7 @@
 import { createGraphQLClient, type Client } from '@boardsesh/graphql-client';
 import { getAuthToken } from '../auth-store';
+import { deduplicatedRefresh, ensureFreshToken } from '../auth-interceptor';
+import { reportHandledError } from '../error-reporting';
 import { BACKEND_URL } from '../env';
 
 function getWsUrl(): string {
@@ -30,7 +32,45 @@ class NativeAppWebSocket extends (WebSocket as unknown as RNWebSocketCtor) {
   }
 }
 
+// The backend closes the socket with 4401 when it rejects our auth token —
+// expired, or revoked server-side while still within its lifetime.
+const AUTH_REJECTED_CLOSE_CODE = 4401;
+
+function isAuthRejectedClose(errOrCloseEvent: unknown): boolean {
+  return (
+    typeof errOrCloseEvent === 'object' &&
+    errOrCloseEvent !== null &&
+    'code' in errOrCloseEvent &&
+    (errOrCloseEvent as { code: number }).code === AUTH_REJECTED_CLOSE_CODE
+  );
+}
+
 let wsClient: Client | null = null;
+
+// Guards the refresh-and-recreate so a burst of 4401 closes (one per active
+// subscription) triggers a single token refresh and a single client teardown,
+// not a reconnect storm. Reset once the cycle settles so a later, genuinely new
+// auth failure can refresh again.
+let handlingAuthRejection = false;
+
+// Mirror of the HTTP path's 401 branch (auth-interceptor.authenticatedFetch):
+// force a refresh, then drop the client so the next getWsClient() rebuilds one
+// whose connectionParams read the new token. We force the refresh via
+// deduplicatedRefresh rather than ensureFreshToken because the server may have
+// revoked a token that hasn't expired yet — the expiry check would skip the
+// refresh and we'd reconnect with the same dead token. A failed refresh (the
+// refresh token is gone too) is left to the HTTP 401 path, which drives the
+// single forced sign-out; duplicating it here would double-revoke.
+async function refreshAuthAndRecreateClient(): Promise<void> {
+  if (handlingAuthRejection) return;
+  handlingAuthRejection = true;
+  try {
+    await deduplicatedRefresh();
+  } finally {
+    disposeWsClient();
+    handlingAuthRejection = false;
+  }
+}
 
 export function getWsClient(): Client {
   if (!wsClient) {
@@ -38,12 +78,21 @@ export function getWsClient(): Client {
       url: getWsUrl(),
       webSocketImpl: NativeAppWebSocket as unknown as typeof WebSocket,
       connectionParams: async () => {
+        // Refresh a soon-to-expire token before the handshake, matching the
+        // HTTP path's up-front ensureFreshToken() in authenticatedFetch.
+        await ensureFreshToken();
         const token = await getAuthToken();
         return token ? { authToken: token } : {};
       },
       shouldRetry: (errOrCloseEvent) => {
-        if (typeof errOrCloseEvent === 'object' && errOrCloseEvent !== null && 'code' in errOrCloseEvent) {
-          return (errOrCloseEvent as { code: number }).code !== 4401;
+        if (isAuthRejectedClose(errOrCloseEvent)) {
+          // Don't let graphql-ws retry the doomed connection with the same
+          // token. Refresh + drop the client so the next subscription rebuilds
+          // a fresh client and reconnects with a valid token. deduplicatedRefresh
+          // reports its own network failures; this catch only traces an
+          // unexpected teardown error so the path is never completely silent.
+          refreshAuthAndRecreateClient().catch(reportHandledError);
+          return false;
         }
         return true;
       },
