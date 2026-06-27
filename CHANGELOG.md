@@ -10,8 +10,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store.
 
+### Improved
+
+- Internal CI/build hygiene — no user-facing change. ([#3238](https://github.com/boardsesh/boardsesh/pull/3238))
+
 ### Fixed
 
+- Party-mode realtime now reconnects after an auth refresh, and queries pause offline and refetch when the connection returns. ([#3242](https://github.com/boardsesh/boardsesh/pull/3242))
 - Kilter and Tension boards light up reliably again on iPhone — climbs send to the wall instead of the board connecting but staying dark. ([#3228](https://github.com/boardsesh/boardsesh/pull/3228))
 
 ## 2026-06-26

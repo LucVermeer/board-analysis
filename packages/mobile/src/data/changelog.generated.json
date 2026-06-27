@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-06-27T05:15:23.185Z",
+  "generatedAt": "2026-06-27T07:45:12.178Z",
   "entries": [
+    {
+      "prNumber": 3238,
+      "category": "improved",
+      "title": "Internal CI/build hygiene — no user-facing change.",
+      "mergedAt": "2026-06-27T07:45:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3238"
+    },
+    {
+      "prNumber": 3242,
+      "category": "fixed",
+      "title": "Party-mode realtime now reconnects after an auth refresh, and queries pause offline and refetch when the connection returns.",
+      "mergedAt": "2026-06-27T07:43:36Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3242"
+    },
     {
       "prNumber": 3228,
       "category": "fixed",
@@ -354,6 +368,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-27T15:45:06+10:00",
+      "sha": "a1f91ff872fb1d752c667943592658b891cdef10",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "b4d15911f0f04d28efc37ba5fe00a27fada1ce50"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-27T09:49:54+10:00",
