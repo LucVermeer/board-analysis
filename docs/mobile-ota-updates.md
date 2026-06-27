@@ -437,7 +437,8 @@ repo-level secret for the Android fingerprint).
 ## Deferred
 
 - **`beta` channel**: TestFlight on `beta`, App Store on `production`, promote at GA.
-- **In-app `BranchSwitcher`** (`src/lib/eas-api.ts`) still lists EAS-hosted branches for the
-  dev-client preview build. The store-binary preview flow now rides self-hosted `pr-<number>`
-  channels (above); migrating the dev-client switcher off EAS too would drop the Expo dependency
-  entirely.
+- **In-app `BranchSwitcher`** (`src/components/BranchSwitcherScreen.tsx`, gated on
+  `isPreviewBuild()` in `src/lib/preview-build.ts`) switches branches **device-locally** on a preview
+  build — it overrides the `expo-channel-name` request header via the same `channel-switch.ts` state
+  machine as the tester Channel Switcher, with no EAS API token and no project-wide channel remap.
+  The store-binary preview flow rides self-hosted `pr-<number>` channels (above).
