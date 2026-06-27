@@ -1,6 +1,7 @@
 import { createGraphQLClient, type Client } from '@boardsesh/graphql-client';
 import { getAuthToken } from '../auth-store';
 import { deduplicatedRefresh, ensureFreshToken } from '../auth-interceptor';
+import { reportHandledError } from '../error-reporting';
 import { BACKEND_URL } from '../env';
 
 function getWsUrl(): string {
@@ -87,8 +88,10 @@ export function getWsClient(): Client {
         if (isAuthRejectedClose(errOrCloseEvent)) {
           // Don't let graphql-ws retry the doomed connection with the same
           // token. Refresh + drop the client so the next subscription rebuilds
-          // a fresh client and reconnects with a valid token.
-          void refreshAuthAndRecreateClient();
+          // a fresh client and reconnects with a valid token. deduplicatedRefresh
+          // reports its own network failures; this catch only traces an
+          // unexpected teardown error so the path is never completely silent.
+          refreshAuthAndRecreateClient().catch(reportHandledError);
           return false;
         }
         return true;

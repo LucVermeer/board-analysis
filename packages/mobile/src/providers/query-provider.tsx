@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { AppState, type AppStateStatus, Platform } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { AppState, Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {
   QueryCache,
@@ -11,26 +11,27 @@ import {
 } from '@tanstack/react-query';
 import { reportHandledError } from '../lib/error-reporting';
 
-// React Query assumes a browser's `navigator.onLine` to know when it's online;
-// React Native has no such signal, so without this it treats the app as
-// permanently online and `refetchOnReconnect` never fires. Bridge NetInfo's
-// connectivity into React Query so queries pause offline and refetch when the
-// connection returns. NetInfo is a native module, so this only reaches devices
-// via the next native build — the fingerprint runtimeVersion policy gates the
-// OTA accordingly. Registered at module load (a process-wide singleton); the
-// setup runs once and NetInfo manages its own listener lifecycle.
+// React Query keys `refetchOnReconnect` / `refetchOnWindowFocus` off a browser's
+// `navigator.onLine` and window-focus events, neither of which exists on React
+// Native — so without these bridges it treats the app as permanently online and
+// focused and neither refetch ever fires. Both `onlineManager` and
+// `focusManager` are process-wide singletons, wired once here at module load
+// (the canonical Expo offline-support pattern). A single root QueryProvider
+// lives for the whole app, so there's nothing to tear down.
+//
+// NetInfo is a native module, so this JS reaches devices only via the next
+// native build — the fingerprint runtimeVersion policy gates the OTA so old
+// binaries never receive code importing a missing native module.
 onlineManager.setEventListener((setOnline) =>
   NetInfo.addEventListener((state) => {
     setOnline(state.isConnected ?? true);
   }),
 );
 
-// Bridge RN's foreground/background lifecycle into React Query's focus signal so
-// `refetchOnWindowFocus` works on native (where there's no window focus event).
-function handleAppStateChange(status: AppStateStatus): void {
-  if (Platform.OS !== 'web') {
+if (Platform.OS !== 'web') {
+  AppState.addEventListener('change', (status) => {
     focusManager.setFocused(status === 'active');
-  }
+  });
 }
 
 // The serialized failing request, trimmed for triage. queryKey/mutationKey are
@@ -86,11 +87,6 @@ export function createQueryClient(): QueryClient {
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, []);
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
