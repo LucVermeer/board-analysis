@@ -1,7 +1,6 @@
-Your Kilter logbook now comes with you, the full MoonBoard catalog is in, and boards light up more reliably on iPhone.
+The full MoonBoard catalog is in, hold colours are yours to tune, and boards light up more reliably on iPhone.
 
 New:
-- Sign in with your Kilter username and password to pull your sends, attempts, ratings and circuits straight into Boardsesh.
 - The full MoonBoard catalog landed: thousands more problems with real grades, star ratings and send counts, plus the Mini 2025 and original 2010 boards. Original MoonBoard LED hardware lights up over Bluetooth too.
 - Tap any climb in a circuit or playlist and the whole list drops into your queue in order. Swipe back to revisit the boulders above, not just jump to the next.
 - Mix your own hold colours with a real colour picker, preview them through red-green and blue-yellow colour blindness, and pick a new octagon marker shape. MoonBoard hold circles are bigger and easier to read, too.

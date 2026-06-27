@@ -1,7 +1,6 @@
-Ton logbook Kilter te suit maintenant, le catalogue MoonBoard complet est là, et les boards s'allument plus fiablement sur iPhone.
+Le catalogue MoonBoard complet est là, tu règles les couleurs de prises à ta main, et les boards s'allument plus fiablement sur iPhone.
 
 Nouveau :
-- Connecte-toi avec ton identifiant et ton mot de passe Kilter pour rapatrier tes sends, essais, notes et circuits directement dans Boardsesh.
 - Le catalogue MoonBoard complet est arrivé : des milliers de blocs en plus avec de vraies cotations, des notes en étoiles et le nombre de sends, plus le Mini 2025 et l'original de 2010. Le matériel LED du MoonBoard d'origine s'allume aussi en Bluetooth.
 - Touche n'importe quelle voie d'un circuit ou d'une playlist et toute la liste passe dans ta file dans l'ordre. Reviens en arrière d'un glissement pour repasser sur les blocs précédents, pas seulement sauter au suivant.
 - Compose tes propres couleurs de prise avec un vrai sélecteur de couleur, prévisualise-les en daltonisme rouge-vert et bleu-jaune, et choisis une nouvelle forme de marqueur octogonale. Les cercles des prises MoonBoard sont aussi plus gros et plus lisibles.
