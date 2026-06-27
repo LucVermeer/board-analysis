@@ -34,6 +34,13 @@ type PlaylistFormSheetProps = {
   submitting?: boolean;
   /** Seed values for edit mode. */
   playlist?: Playlist | null;
+  /**
+   * Inline submit failure from the parent's mutation (e.g. create/update
+   * rejected). Surfaced in this sheet's error slot — never via the root toast,
+   * which renders behind the native sheet and would be invisible. The parent
+   * keeps the sheet open on failure so the user can correct and retry.
+   */
+  submitError?: string | null;
   onSubmit: (values: PlaylistFormValues) => void;
   onClose: () => void;
 };
@@ -45,7 +52,15 @@ type PlaylistFormSheetProps = {
  * an icon picker + a public/private toggle. Validation + reset-on-open mirror
  * web; the parent owns the mutation, toasts, and cache refresh.
  */
-export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmit, onClose }: PlaylistFormSheetProps) {
+export function PlaylistFormSheet({
+  mode,
+  visible,
+  submitting,
+  playlist,
+  submitError,
+  onSubmit,
+  onClose,
+}: PlaylistFormSheetProps) {
   const { t } = useTranslation('playlists');
   const { systemColors, brandColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -57,6 +72,14 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [isPublic, setIsPublic] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A parent submit failure shows until the user edits a field (a signal they're
+  // acting on it) or retries, so a stale server error doesn't linger over an
+  // already-corrected form. Reset whenever a fresh submitError arrives.
+  const [submitErrorDismissed, setSubmitErrorDismissed] = useState(false);
+  useEffect(() => {
+    setSubmitErrorDismissed(false);
+  }, [submitError]);
+  const dismissSubmitError = useCallback(() => setSubmitErrorDismissed(true), []);
 
   // Seed (edit) or clear (create) the fields when the sheet opens, then drive
   // the modal off the `visible` prop. `isPresentedRef` guards against calling
@@ -108,6 +131,11 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
     onSubmit(result.values);
   }, [mode, name, description, color, icon, isPublic, onSubmit, t]);
 
+  // Local validation takes precedence over a parent submit failure: a fresh
+  // validation message (e.g. empty name) is the more actionable feedback, and
+  // the parent clears `submitError` at the start of each retry anyway.
+  const visibleError = error ?? (submitErrorDismissed ? null : submitError) ?? null;
+
   const title = isEdit ? t('edit.title') : t('create.drawerTitle');
   const submitLabel = isEdit
     ? submitting
@@ -148,7 +176,10 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
         </Text>
         <BottomSheetTextInput
           value={name}
-          onChangeText={setName}
+          onChangeText={(text) => {
+            dismissSubmitError();
+            setName(text);
+          }}
           placeholder={t('create.fields.namePlaceholder')}
           placeholderTextColor={systemColors.tertiaryLabel}
           maxLength={NAME_MAX}
@@ -161,7 +192,10 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
         </Text>
         <BottomSheetTextInput
           value={description}
-          onChangeText={setDescription}
+          onChangeText={(text) => {
+            dismissSubmitError();
+            setDescription(text);
+          }}
           placeholder={t('create.fields.descriptionPlaceholder')}
           placeholderTextColor={systemColors.tertiaryLabel}
           maxLength={DESCRIPTION_MAX}
@@ -211,6 +245,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
             // Store the trimmed value (capped to a single glyph by maxLength); the
             // header preview mirrors it live. Empty clears back to the generic tag.
             onChangeText={(text) => {
+              dismissSubmitError();
               const trimmed = text.trim();
               setIcon(trimmed.length > 0 ? trimmed : undefined);
             }}
@@ -278,9 +313,9 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           </View>
         ) : null}
 
-        {error ? (
+        {visibleError ? (
           <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.error}>
-            {error}
+            {visibleError}
           </Text>
         ) : null}
       </View>
