@@ -120,7 +120,9 @@ const BLE_DIAGNOSTIC_TAG_KEYS = [
 export type BleConnectionDiagnostics = {
   characteristicProperties?: number;
   supportsWriteWithoutResponse?: boolean;
-  chosenWriteType?: string;
+  // Mirrors NativeBleConnectedDevice.chosenWriteType so a new write-type string
+  // is caught at this boundary rather than silently widened.
+  chosenWriteType?: 'withoutResponse' | 'withResponse';
   maxWriteWithResponse?: number;
   maxWriteWithoutResponse?: number;
 };
@@ -168,13 +170,14 @@ const bleTagScope: BleTagScope = { setTag: (key, value) => Sentry.setTag(key, va
  * per-event `withScope` tags) so they ride later `ble-send` error reports —
  * which is the point: a `write_timeout`/`write_recovery_failed` report can then
  * show whether the board advertised write-without-response and which write type
- * was chosen. Cleared on disconnect via clearBleDiagnosticsTags. No-op when
- * Sentry is disabled or no diagnostics are available (Android / web / a binary
- * too old to report them).
+ * was chosen. Cleared on disconnect via clearBleDiagnosticsTags. Passing
+ * null/undefined diagnostics clears too — so the adopt path (which resolves to
+ * null on a binary that can't report them) drops any stale tags rather than
+ * leaving the previous connection's behind. No-op when Sentry is disabled.
  */
 export function setBleDiagnosticsTags(diagnostics: BleConnectionDiagnostics | null | undefined): void {
-  if (!isSentryEnabled || !diagnostics) return;
-  applyBleDiagnosticsToScope(bleTagScope, diagnostics);
+  if (!isSentryEnabled) return;
+  applyBleDiagnosticsToScope(bleTagScope, diagnostics ?? null);
 }
 
 /**
