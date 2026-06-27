@@ -27,6 +27,17 @@ export type NativeBleConnectedEvent = {
 export type NativeBleConnectedDevice = {
   deviceId: string;
   name?: string;
+  /**
+   * Connect-time BLE write diagnostics. Only present on binaries new enough to
+   * report them (gate on a field being defined, not just on `getConnectedDevice`
+   * existing). Used to diagnose write stalls: whether the UART RX characteristic
+   * advertised write-without-response, and which write type was chosen.
+   */
+  characteristicProperties?: number;
+  supportsWriteWithoutResponse?: boolean;
+  chosenWriteType?: 'withoutResponse' | 'withResponse';
+  maxWriteWithResponse?: number;
+  maxWriteWithoutResponse?: number;
 };
 
 export type NativeBleConfigureBoardOptions = {

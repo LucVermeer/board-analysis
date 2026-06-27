@@ -33,6 +33,7 @@ import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 import { reportHandledError } from '../error-reporting';
+import { setBleDiagnosticsTags } from '../sentry';
 import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
 
 // Exported for testing. Decides how a connect-failure category reaches error
@@ -731,6 +732,13 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
+        // Connect-time BLE write diagnostics (iOS native adapter only; null on
+        // Android/web and on binaries too old to report them). Set as global
+        // Sentry tags so they ride any later write-stall report, and recorded on
+        // the success event so PostHog can correlate the chosen write type with
+        // send failures (#3181 follow-up).
+        const connectionDiagnostics = await getNativeBleConnectedDevice();
+        setBleDiagnosticsTags(connectionDiagnostics);
         // apiLevel is the level parseApiLevel actually picked; deviceNamePresent
         // records whether an advertised name was even available. parseApiLevel
         // silently defaults to v2 when the name is missing/unparseable, and v2
@@ -745,6 +753,9 @@ export function useBoardBluetooth({
           deviceNamePresent: !!connection.deviceName,
           boardId: analyticsBoardId ?? undefined,
           connectedViaMismatchOverride: getConnectedViaMismatchOverride?.() ?? false,
+          bleChosenWriteType: connectionDiagnostics?.chosenWriteType,
+          bleSupportsWithoutResponse: connectionDiagnostics?.supportsWriteWithoutResponse,
+          bleCharProperties: connectionDiagnostics?.characteristicProperties,
         });
         return true;
       } catch (error) {
@@ -951,6 +962,9 @@ export function useBoardBluetooth({
       setIsConnected(true);
       onConnectionChange?.(true);
       onConnectSuccess?.(serial);
+      // Surface this adopted connection's write diagnostics to Sentry too
+      // (widget reconnect / state restoration paths, not just JS connect).
+      void getNativeBleConnectedDevice().then(setBleDiagnosticsTags);
     };
 
     const connectedSubscription = subscribeNativeBleConnected((payload) => {

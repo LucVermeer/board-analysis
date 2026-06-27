@@ -107,6 +107,42 @@ export function captureToSentry(error: unknown, context?: ErrorReportContext): v
   });
 }
 
+/**
+ * BLE write diagnostics captured at connect, kept as GLOBAL scope tags (not the
+ * per-event `withScope` tags) so they ride later `ble-send` error reports —
+ * which is the point: a `write_timeout`/`write_recovery_failed` report can then
+ * show whether the board advertised write-without-response and which write type
+ * was chosen. No-op when Sentry is disabled or no diagnostics are available
+ * (Android / web / a binary too old to report them).
+ */
+export function setBleDiagnosticsTags(
+  diagnostics:
+    | {
+        characteristicProperties?: number;
+        supportsWriteWithoutResponse?: boolean;
+        chosenWriteType?: string;
+        maxWriteWithResponse?: number;
+        maxWriteWithoutResponse?: number;
+      }
+    | null
+    | undefined,
+): void {
+  if (!isSentryEnabled || !diagnostics) return;
+  if (diagnostics.chosenWriteType !== undefined) Sentry.setTag('ble_chosen_write_type', diagnostics.chosenWriteType);
+  if (diagnostics.supportsWriteWithoutResponse !== undefined) {
+    Sentry.setTag('ble_supports_without_response', diagnostics.supportsWriteWithoutResponse);
+  }
+  if (diagnostics.characteristicProperties !== undefined) {
+    Sentry.setTag('ble_char_properties', diagnostics.characteristicProperties);
+  }
+  if (diagnostics.maxWriteWithResponse !== undefined) {
+    Sentry.setTag('ble_max_with_response', diagnostics.maxWriteWithResponse);
+  }
+  if (diagnostics.maxWriteWithoutResponse !== undefined) {
+    Sentry.setTag('ble_max_without_response', diagnostics.maxWriteWithoutResponse);
+  }
+}
+
 /** Best-effort flush so a report survives a later hard crash. */
 export function flushSentry(): Promise<boolean> {
   return isSentryEnabled ? Sentry.flush() : Promise.resolve(true);
