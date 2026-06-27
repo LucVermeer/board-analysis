@@ -2,8 +2,10 @@
 
 **Source app**: Kilter Board (`com.kiltergrips.kilter_board_app`) **v2.5.2** (build 48)
 **Distribution**: APKPure (XAPK), analysed 2026-06-27
-**Stack**: Flutter (Dart AOT, engine Dart `3.10.4` stable) + [`flutter_blue_plus`](https://pub.dev/packages/flutter_blue_plus); backend is PowerSync + Keycloak OIDC (`idp.kiltergrips.com`)
+**Stack**: Flutter (Dart AOT, engine Dart `3.10.4` stable) + [`flutter_blue_plus`](https://pub.dev/packages/flutter_blue_plus)
 **Transport**: Bluetooth Low Energy (BLE), Nordic UART Service
+
+> **Legal basis & scope.** This analysis is limited to the **BLE interoperability interface** — the unencrypted Bluetooth protocol used to drive the Kilter Board's LEDs — and was produced solely to build and verify a compatible client for the same hardware. That purpose is the interoperability rationale set out in [`LEGAL.md`](../LEGAL.md) (§ Interoperability & Hardware Compatibility; _Sega v. Accolade_, EU Directive 2009/24/EC Art. 6), the same basis as [`AURORA_BLUETOOTH_PROTOCOL_SPEC.md`](./AURORA_BLUETOOTH_PROTOCOL_SPEC.md). It documents only the LED-control protocol; the app's accounts, backend services, and other internals are out of scope and intentionally omitted. "Kilter Board" is a trademark of its owner; Boardsesh is not affiliated with or endorsed by the manufacturer.
 
 ---
 
@@ -252,7 +254,7 @@ Colour comes from the placement role's 6-hex LED colour (`_colorFromHex`); unkno
 
 ## 7. Data pipeline: climb → LED positions
 
-✅ The app ships a bundled SQLite board database (via PowerSync). Relevant `walls` schema captured from `libapp.so`:
+✅ The app ships a bundled SQLite board database. Relevant `walls` schema captured from `libapp.so`:
 
 ```sql
 CREATE TABLE walls(
@@ -347,5 +349,4 @@ App identity:
 package   com.kiltergrips.kilter_board_app
 version   2.5.2 (48)   minSdk 24   targetSdk 36
 engine    Dart 3.10.4 (stable)     BLE  flutter_blue_plus
-backend   PowerSync  +  Keycloak OIDC (idp.kiltergrips.com)
 ```
