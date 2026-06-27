@@ -2,6 +2,7 @@ import type { BoardName } from '@/app/lib/types';
 import { AURORA_REQUEST_DEVICE_OPTIONS } from '@/app/components/board-bluetooth-control/bluetooth-aurora';
 import { MOONBOARD_REQUEST_DEVICE_OPTIONS } from '@/app/components/board-bluetooth-control/bluetooth-moonboard';
 import {
+  getMoonboardWriteCharacteristic,
   getUartCharacteristic,
   requestBluetoothDevice,
   splitMessages,
@@ -30,7 +31,12 @@ export class WebBluetoothAdapter implements BluetoothAdapter {
       this.boardName === 'moonboard' ? MOONBOARD_REQUEST_DEVICE_OPTIONS : AURORA_REQUEST_DEVICE_OPTIONS;
 
     const device = await requestBluetoothDevice(requestOptions);
-    const characteristic = await getUartCharacteristic(device);
+    // MoonBoard spans two controller generations (Nordic UART + original
+    // RedBearLab), so probe both; Aurora boards are always Nordic UART.
+    const characteristic =
+      this.boardName === 'moonboard'
+        ? await getMoonboardWriteCharacteristic(device)
+        : await getUartCharacteristic(device);
 
     if (!characteristic) {
       throw new Error('Failed to get UART characteristic');
@@ -61,7 +67,11 @@ export class WebBluetoothAdapter implements BluetoothAdapter {
       throw new Error('Not connected');
     }
     const messages = splitMessages(data);
-    await writeCharacteristicSeries(this.characteristic, messages, signal);
+    // Only MoonBoard may fall back to write-with-response (original RedBearLab
+    // box); Aurora is always write-without-response.
+    await writeCharacteristicSeries(this.characteristic, messages, signal, {
+      allowWithResponseFallback: this.boardName === 'moonboard',
+    });
   }
 
   onDisconnect(callback: () => void): () => void {

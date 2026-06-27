@@ -302,25 +302,18 @@ Used when `getAPILevel() < 3` (or API level not specified in device name, defaul
 Byte 1 (POS_LO): Position[7:0]
                   Lower 8 bits of LED position
 
-Byte 2 (COLOR):  Position[9:8] | Green[1:0] | Red[1:0] | Blue[1:0]
+Byte 2 (COLOR):  Red[1:0] | Green[1:0] | Blue[1:0] | Position[9:8]
 
-  Bit layout of Byte 2:
-  +----+----+----+----+----+----+----+----+
-  | R1 | R0 | G1 | G0 | -- | -- | B1 | B0 |
-  +----+----+----+----+----+----+----+----+
-    7    6    5    4    3    2    1    0
-
-  Actually (from code):
-  color_byte = (scaled_red << 6) | (scaled_green << 4) | position_hi | (scaled_blue << 2)
+  color_byte = (scaled_red << 6) | (scaled_green << 4) | (scaled_blue << 2) | position_hi
 
   Where:
-  - position_hi = (position >> 8) & 0x03   (bits 1:0)
   - scaled_red << 6                        (bits 7:6)
   - scaled_green << 4                      (bits 5:4)
   - scaled_blue << 2                       (bits 3:2)
+  - position_hi = (position >> 8) & 0x03   (bits 1:0)
 ```
 
-**Bit layout of Byte 2 (corrected):**
+**Bit layout of Byte 2:**
 
 ```
   Bit 7   Bit 6   Bit 5   Bit 4   Bit 3   Bit 2   Bit 1   Bit 0
@@ -880,7 +873,7 @@ pos_hi = (10 >> 8) & 0x03 = 0x00
 R = floor(0x00 * 1.0) / 64 = 0
 G = floor(0xFF * 1.0) / 64 = 3
 B = floor(0x00 * 1.0) / 64 = 0
-color_byte = (0 << 6) | (3 << 4) | 0x00 | (0 << 2) = 0x30
+color_byte = (0 << 6) | (3 << 4) | (0 << 2) | 0x00 = 0x30
 bytes: [0x0A, 0x30]
 ```
 
@@ -890,7 +883,7 @@ LED 2 (pos=256, color="0000FF"):
 pos_lo = 256 & 0xFF = 0x00
 pos_hi = (256 >> 8) & 0x03 = 0x01
 R = 0, G = 0, B = floor(0xFF * 1.0) / 64 = 3
-color_byte = (0 << 6) | (0 << 4) | 0x01 | (3 << 2) = 0x0D
+color_byte = (0 << 6) | (0 << 4) | (3 << 2) | 0x01 = 0x0D
 bytes: [0x00, 0x0D]
 ```
 
@@ -901,7 +894,7 @@ pos_lo = 500 & 0xFF = 0xF4
 pos_hi = (500 >> 8) & 0x03 = 0x01
 R = floor(0xFF * 1.0) / 64 = 3
 G = 0, B = 0
-color_byte = (3 << 6) | (0 << 4) | 0x01 | (0 << 2) = 0xC1
+color_byte = (3 << 6) | (0 << 4) | (0 << 2) | 0x01 = 0xC1
 bytes: [0xF4, 0xC1]
 ```
 
@@ -915,14 +908,14 @@ payload = [0x50, 0x0A, 0x30, 0x00, 0x0D, 0xF4, 0xC1]
 **Step 3: Checksum**
 
 ```
-sum = (0x50 + 0x0A + 0x30 + 0x00 + 0x0D + 0xF4 + 0xC1) & 0xFF = 0x56
-checksum = ~0x56 & 0xFF = 0xA9
+sum = (0x50 + 0x0A + 0x30 + 0x00 + 0x0D + 0xF4 + 0xC1) & 0xFF = 0x4C
+checksum = ~0x4C & 0xFF = 0xB3
 ```
 
 **Step 4: Frame**
 
 ```
-[0x01, 0x07, 0xA9, 0x02, 0x50, 0x0A, 0x30, 0x00, 0x0D, 0xF4, 0xC1, 0x03]
+[0x01, 0x07, 0xB3, 0x02, 0x50, 0x0A, 0x30, 0x00, 0x0D, 0xF4, 0xC1, 0x03]
  SOH   LEN   CHK   STX   P     ---------- LED data ----------        ETX
 ```
 
