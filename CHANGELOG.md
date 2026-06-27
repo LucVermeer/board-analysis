@@ -8,7 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### App update
 
-A new version shipped to the App Store.
+A new version shipped to the App Store and Play Store.
 
 ### New
 
@@ -16,6 +16,7 @@ A new version shipped to the App Store.
 
 ### Improved
 
+- App Store metadata copy + version bump only; no in-app behaviour changes. ([#3246](https://github.com/boardsesh/boardsesh/pull/3246))
 - Internal CI/build hygiene — no user-facing change. ([#3238](https://github.com/boardsesh/boardsesh/pull/3238))
 
 ### Fixed

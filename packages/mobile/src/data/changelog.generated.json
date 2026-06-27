@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-27T08:09:56.486Z",
+  "generatedAt": "2026-06-27T12:40:44.287Z",
   "entries": [
+    {
+      "prNumber": 3246,
+      "category": "improved",
+      "title": "App Store metadata copy + version bump only; no in-app behaviour changes.",
+      "mergedAt": "2026-06-27T12:39:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3246"
+    },
     {
       "prNumber": 3241,
       "category": "fixed",
@@ -399,6 +406,17 @@
   "nativeReleases": [
     {
       "kind": "native-release",
+      "date": "2026-06-27T18:06:36+10:00",
+      "sha": "4e9487a23e47735fa26103989fc09ff922a7c6ff",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "9b8d01b1a54bef278824102e696928ef2c0922a7"
+      }
+    },
+    {
+      "kind": "native-release",
       "date": "2026-06-27T17:47:07+10:00",
       "sha": "9909886749e3ff332e34cb41b032a0b9f691b981",
       "platforms": [
@@ -406,6 +424,17 @@
       ],
       "fingerprints": {
         "ios": "d2a3f2708ae6acef5e21b075b30909380d3ba59d"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-06-27T17:43:36+10:00",
+      "sha": "b9e6c79430d5dceb92a2015d7d36d74ff72adc21",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "bdec87922d757fd64036b28401a1d2eabc510b0c"
       }
     },
     {
