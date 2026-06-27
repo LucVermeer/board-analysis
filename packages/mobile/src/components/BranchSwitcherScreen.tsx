@@ -189,6 +189,8 @@ export function BranchSwitcherScreen() {
   }
 
   const branches = buildChannelList(override);
+  const trimmedCustomBranch = customBranch.trim();
+  const customBranchDisabled = isSwitching || trimmedCustomBranch.length === 0;
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic">
@@ -294,20 +296,19 @@ export function BranchSwitcherScreen() {
             />
             <Pressable
               onPress={() => {
-                const trimmed = customBranch.trim();
-                if (trimmed) void switchToBranch(trimmed);
+                if (trimmedCustomBranch) void switchToBranch(trimmedCustomBranch);
               }}
-              disabled={isSwitching || customBranch.trim().length === 0}
+              disabled={customBranchDisabled}
               accessibilityRole="button"
               // i18n-ignore-next-line
               accessibilityLabel="Switch to the entered branch"
-              accessibilityState={{ disabled: isSwitching || customBranch.trim().length === 0 }}
+              accessibilityState={{ disabled: customBranchDisabled }}
               style={[
                 styles.goButton,
                 {
                   backgroundColor: systemColors.tertiaryBackground,
                   borderRadius: borderRadius.md,
-                  opacity: isSwitching || customBranch.trim().length === 0 ? 0.5 : 1,
+                  opacity: customBranchDisabled ? 0.5 : 1,
                 },
               ]}
             >

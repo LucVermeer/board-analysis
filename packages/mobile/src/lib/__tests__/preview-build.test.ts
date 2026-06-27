@@ -38,6 +38,11 @@ describe('isPreviewBuild', () => {
     expect(isPreviewBuild()).toBe(false);
   });
 
+  it('is false on a bare "preview" channel (no suffix dash)', () => {
+    updates.channel = 'preview';
+    expect(isPreviewBuild()).toBe(false);
+  });
+
   it('is false when there is no channel (dev / Expo Go)', () => {
     updates.channel = null;
     expect(isPreviewBuild()).toBe(false);
