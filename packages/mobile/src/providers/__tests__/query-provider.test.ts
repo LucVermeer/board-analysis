@@ -1,4 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// query-provider now wires React Query to RN connectivity/lifecycle, so it
+// imports `react-native` (AppState/Platform). The real entry is Flow source
+// Rolldown can't parse — stub the two members it touches. NetInfo is aliased to
+// a stub in vite.config.ts.
+vi.mock('react-native', () => ({
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Platform: { OS: 'ios' },
+}));
+
 import { reportMutationFailure, reportQueryFailure } from '../query-provider';
 import { reportHandledError } from '../../lib/error-reporting';
 

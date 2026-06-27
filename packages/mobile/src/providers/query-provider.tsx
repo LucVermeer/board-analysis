@@ -1,6 +1,37 @@
-import { useState, type ReactNode } from 'react';
-import { QueryCache, QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AppState, type AppStateStatus, Platform } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
+import {
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+  MutationCache,
+  focusManager,
+  onlineManager,
+} from '@tanstack/react-query';
 import { reportHandledError } from '../lib/error-reporting';
+
+// React Query assumes a browser's `navigator.onLine` to know when it's online;
+// React Native has no such signal, so without this it treats the app as
+// permanently online and `refetchOnReconnect` never fires. Bridge NetInfo's
+// connectivity into React Query so queries pause offline and refetch when the
+// connection returns. NetInfo is a native module, so this only reaches devices
+// via the next native build — the fingerprint runtimeVersion policy gates the
+// OTA accordingly. Registered at module load (a process-wide singleton); the
+// setup runs once and NetInfo manages its own listener lifecycle.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected ?? true);
+  }),
+);
+
+// Bridge RN's foreground/background lifecycle into React Query's focus signal so
+// `refetchOnWindowFocus` works on native (where there's no window focus event).
+function handleAppStateChange(status: AppStateStatus): void {
+  if (Platform.OS !== 'web') {
+    focusManager.setFocused(status === 'active');
+  }
+}
 
 // The serialized failing request, trimmed for triage. queryKey/mutationKey are
 // the React Query identity (e.g. ['searchClimbs', params]); pulling them into
@@ -55,6 +86,11 @@ export function createQueryClient(): QueryClient {
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, []);
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }

@@ -53,7 +53,11 @@ async function refreshTokens(): Promise<boolean> {
   }
 }
 
-function deduplicatedRefresh(): Promise<boolean> {
+// Exported so the GraphQL-WS client can force a refresh on a 4401 close, the
+// realtime mirror of the HTTP 401 branch below. Both go through the same
+// in-flight promise, so a simultaneous HTTP 401 and WS 4401 hit the refresh
+// endpoint exactly once.
+export function deduplicatedRefresh(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = refreshTokens().finally(() => {
       refreshPromise = null;
