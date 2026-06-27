@@ -9,11 +9,6 @@ const queue = vi.hoisted(() => ({
 
 const drawer = vi.hoisted(() => ({ openPlayDrawer: vi.fn() }));
 
-// The accessory shows the wall's lit climb when a feed is live, else the local
-// head — `useWallOrQueueCurrentClimb` mirrors that here so we can assert tap opens
-// whatever the bar is showing.
-const wall = vi.hoisted(() => ({ climb: null as Climb | null }));
-
 // Capture the tap's onEnd worklet so a test can fire it like a real tap.
 const tap = vi.hoisted(() => ({ onEnd: null as ((...args: unknown[]) => unknown) | null }));
 
@@ -25,13 +20,7 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: drawer.openPlayDrawer }),
 }));
 
-vi.mock('../use-wall-or-queue-climb', () => ({
-  useWallOrQueueCurrentClimb: (localClimb: Climb | null) => wall.climb ?? localClimb,
-}));
-
 vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn() }));
-
-vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
 
 vi.mock('react-native-reanimated', () => ({
   runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
@@ -75,7 +64,6 @@ describe('useAccessoryClimbTap', () => {
     drawer.openPlayDrawer.mockClear();
     queue.state.currentClimbQueueItem = makeItem('head');
     queue.state.queue = [queue.state.currentClimbQueueItem];
-    wall.climb = null;
     tap.onEnd = null;
   });
 
@@ -84,31 +72,16 @@ describe('useAccessoryClimbTap', () => {
     expect(result.current.currentItem?.uuid).toBe('head');
   });
 
-  it('opens the local queue head active on tap (it already is current)', () => {
+  it('opens the local queue head active on tap (it already is current — never the wall climb)', () => {
     renderHook(() => useAccessoryClimbTap());
     tap.onEnd?.();
-    // The bar shows the current climb, so it opens active — no preview.
     expect(drawer.openPlayDrawer).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-head' }), {
       source: 'current_queue_item',
     });
   });
 
-  it('opens a peer-driven wall climb as a read-only "Now on the wall" view when a board feed is live', () => {
-    wall.climb = makeClimb('wall');
-    renderHook(() => useAccessoryClimbTap());
-    tap.onEnd?.();
-    // The wall climb isn't the local current and is physically lit, so it opens
-    // view-only with `previewIsWallClimb` (no "Set active" takeover).
-    expect(drawer.openPlayDrawer).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-wall' }), {
-      previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'climb-wall' }) }),
-      previewIsWallClimb: true,
-      source: 'current_queue_item',
-    });
-  });
-
-  it('does nothing on tap when there is no climb to open', () => {
+  it('does nothing on tap when there is no queue head to open', () => {
     queue.state.currentClimbQueueItem = null;
-    wall.climb = null;
     renderHook(() => useAccessoryClimbTap());
     tap.onEnd?.();
     expect(drawer.openPlayDrawer).not.toHaveBeenCalled();

@@ -1158,9 +1158,10 @@ function ClimbListInner() {
 
       <ClimbTopChrome
         searchMode={useNativeSearch ? 'native' : 'custom'}
-        // With the chip row on, the active filters live in the token row, so the
-        // centre title drops the filter summary and reads as a plain header.
-        title={showFilterChips ? t('mobile.search.allClimbs') : searchTitle}
+        // With the chip row on, the active filters live in the token row and the
+        // tab itself names the screen, so the centre title is dropped entirely —
+        // the redundant "All climbs" label added nothing.
+        title={showFilterChips ? undefined : searchTitle}
         canCreate={isAuthenticated && hasBoardConfig}
         onCreate={handleCreateClimb}
         onOpenBoardDetail={handleOpenBoardDetail}

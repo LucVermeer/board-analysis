@@ -19,7 +19,6 @@ import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-pro
 import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useAccessoryClimbTap } from './use-accessory-climb-tap';
-import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 import { useBoardConnectionState } from '../ble/use-board-connection-state';
 import { BoardControlIndicator } from './BoardControlIndicator';
 
@@ -86,9 +85,8 @@ export function ClimbCapsule({
   // Read from the single source so the bar can't disagree with the drawer bulb.
   const { boardConnection, bluetooth } = useBoardConnectionState();
 
-  // Source-of-truth flip: show the wall's lit climb when a board feed is live
-  // (flag-gated), else the local queue head.
-  const currentClimb = useWallOrQueueCurrentClimb(currentItem?.climb ?? null);
+  // Queue head only — the wall's lit climb lives in the top "On the wall" strip.
+  const currentClimb = currentItem?.climb ?? null;
   // Board art needs the active board config; matches the iOS 26 native accessory.
   const showThumbnail = boardConfig != null;
   // Show the connect control once a board is bound (the BLE context exists).

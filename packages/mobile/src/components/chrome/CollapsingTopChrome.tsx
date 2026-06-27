@@ -38,6 +38,9 @@ type CollapsingTopChromeProps = {
   onHeightChange: (height: number) => void;
   /** Optional persistent plain centre title (Climbs filter summary). */
   centerTitle?: string;
+  /** Optional interactive element for the centre slot (Climbs "On the wall"
+   *  capsule), taking precedence over `centerTitle`. */
+  centerContent?: ReactNode;
   /** Optional glass action(s) docked at the far right of the right toolbar (e.g. the
    *  Record tab's share/invite + End controls). Discover/Climbs pass none. */
   trailingAction?: ReactNode;
@@ -82,6 +85,7 @@ export function CollapsingTopChrome({
   boardBadge = false,
   onHeightChange,
   centerTitle,
+  centerContent,
   trailingAction,
   trailingActionCount,
   leadingAction,
@@ -146,19 +150,24 @@ export function CollapsingTopChrome({
   // A fragment/element of leading actions reads as one element, so callers passing
   // several supply the explicit count; otherwise reserve a slot only for a real one.
   const leadingActions = leadingActionCount ?? (isValidElement(leadingAction) ? 1 : 0);
-  const leftActionCount = 1 + leadingActions + (canCreate ? 1 : 0) + (canOpenAngle ? 1 : 0);
+  // Left island = identity + authoring: avatar (+ optional leading) + create. The
+  // angle moved to the right island with the board glyph (both board-config
+  // controls that act on the displayed list), so it's no longer counted here.
+  const leftActionCount = 1 + leadingActions + (canCreate ? 1 : 0);
 
-  // The right glass toolbar holds the board glyph, the lightbulb, and an optional
-  // trailing action — a fixed-width island sized to whichever of those are live.
+  // The right glass toolbar holds the angle, the board glyph, the lightbulb, and an
+  // optional trailing action — a fixed-width island sized to whichever are live.
   // The board glyph shows whenever a board is set; the lightbulb is hidden when
-  // `hideLight` (e.g. the active-session header).
+  // `hideLight` (e.g. the active-session header / climbs tab). The angle slot is
+  // counted only when adjustable so fixed-angle boards don't get a phantom slot.
+  const angleActions = canOpenAngle ? 1 : 0;
   const boardActions = activeBoard ? 1 : 0;
   const lightActions = bluetooth && !hideLight ? 1 : 0;
   // Reserve a slot only for a real element — a `false`/`null` from a `cond && <…>`
   // caller must not widen the toolbar by a phantom 48px. Callers passing a fragment
   // of several actions supply `trailingActionCount` explicitly.
   const trailingActions = trailingActionCount ?? (isValidElement(trailingAction) ? 1 : 0);
-  const rightActionCount = boardActions + lightActions + trailingActions;
+  const rightActionCount = angleActions + boardActions + lightActions + trailingActions;
   const rightToolbarWidth = rightActionCount * TOP_ACTION_SIZE;
 
   const leftActions = (
@@ -170,13 +179,13 @@ export function CollapsingTopChrome({
           <Icon name="plus" size={24} color={systemColors.label} />
         </GlassToolbarAction>
       ) : null}
-      <AngleToolbarAction />
     </GlassActionToolbar>
   );
 
-  // Right glass toolbar: board glyph + lightbulb (+ optional trailing action),
-  // fixed width. Order reads board → light → trailing (session controls furthest
-  // right).
+  // Right glass toolbar: angle + board glyph + lightbulb (+ optional trailing
+  // action), fixed width. Order reads angle → board → light → trailing — the angle
+  // sits inboard (less-extreme corner for a frequently-tapped control) next to the
+  // board glyph (both board-config controls), board keeps its trailing anchor.
   const rightActions =
     rightToolbarWidth > 0 ? (
       <View
@@ -195,6 +204,7 @@ export function CollapsingTopChrome({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+        <AngleToolbarAction />
         {activeBoard ? (
           <BoardToolbarAction
             onPress={onOpenBoardSwitcher}
@@ -210,6 +220,7 @@ export function CollapsingTopChrome({
   return (
     <CollapsingLargeTitleHeader
       centerTitle={centerTitle}
+      centerContent={centerContent}
       onHeightChange={onHeightChange}
       leftActions={leftActions}
       rightActions={rightActions}

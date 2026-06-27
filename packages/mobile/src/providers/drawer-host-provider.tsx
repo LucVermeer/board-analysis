@@ -94,7 +94,7 @@ export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
    *  `previewQueueItem`, so the default `current_queue_item`/`mobile` heuristic
    *  can't tell them apart. Pulled out before the rest of the options reach
    *  `PlayDrawer.open`, so it never leaks into the drawer itself. */
-  source?: 'climb_view' | 'current_queue_item' | 'mobile';
+  source?: 'climb_view' | 'current_queue_item' | 'mobile' | 'board_presence';
 };
 
 type DrawerHostValue = {
