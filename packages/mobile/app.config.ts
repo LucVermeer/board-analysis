@@ -203,6 +203,23 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
     icon: iconPath,
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    // PILOT (draft — measure before merge): React Compiler auto-memoization.
+    // SDK 56's babel-preset-expo enables babel-plugin-react-compiler when Expo
+    // CLI sees experiments.reactCompiler — it forwards it as the metro
+    // `customTransformOptions.reactCompiler` flag, which the babel transformer
+    // turns into the `supportsReactCompiler` babel caller the preset reads. No
+    // babel.config.js is required (the project has none; the preset is applied
+    // by Expo's metro transformer). Requires New Architecture (enabled above)
+    // and is compiler-safe-by-default: it skips any component that violates the
+    // Rules of React rather than miscompiling it. We don't use NativeWind (the
+    // one SDK 56 incompatibility). This is a structural attack on the
+    // missed-memoization re-render cliffs in the Android-16 freeze work, but it
+    // changes memoization behaviour app-wide, so it MUST be measured on a
+    // preview build (compiler on vs off) before this draft is promoted.
+    experiments: {
+      ...config.experiments,
+      reactCompiler: true,
+    },
     // Mobile-only; opting out of web keeps `expo export --platform=all` from
     // failing on missing `react-native-web` during EAS Update publishes.
     platforms: ['ios', 'android'],
