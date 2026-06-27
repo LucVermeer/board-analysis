@@ -668,7 +668,17 @@
       "gradeOpenHint": "Ouvre le sélecteur de cotation",
       "gradeCloseHint": "Ferme le sélecteur de cotation",
       "boardSwitcherHint": "Ouvre le sélecteur de board",
-      "allClimbs": "Toutes les voies"
+      "allClimbs": "Toutes les voies",
+      "clearRecentSearches": "Effacer les recherches récentes",
+      "chips": {
+        "show": "Afficher",
+        "filtersWithCount": "Filtres · {{count}}",
+        "tall": "Hautes",
+        "wide": "Larges",
+        "lock": "Verrouiller",
+        "unlock": "Déverrouiller"
+      },
+      "removeFilterAria": "Retirer {{filter}}"
     },
     "gradeRail": {
       "setFilterAria": "Filtrer par cotation {{grade}}",

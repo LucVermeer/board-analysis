@@ -668,7 +668,17 @@
       "gradeOpenHint": "Opens the grade picker",
       "gradeCloseHint": "Closes the grade picker",
       "boardSwitcherHint": "Opens the board switcher",
-      "allClimbs": "All climbs"
+      "allClimbs": "All climbs",
+      "clearRecentSearches": "Clear recent searches",
+      "chips": {
+        "show": "Show",
+        "filtersWithCount": "Filters · {{count}}",
+        "tall": "Tall",
+        "wide": "Wide",
+        "lock": "Lock",
+        "unlock": "Unlock"
+      },
+      "removeFilterAria": "Remove {{filter}}"
     },
     "gradeRail": {
       "setFilterAria": "Set grade filter to {{grade}}",

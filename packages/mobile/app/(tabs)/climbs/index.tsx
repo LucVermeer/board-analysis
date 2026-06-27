@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect, type ComponentProps } from 'react';
-import { View, StyleSheet, RefreshControl, Keyboard, InteractionManager } from 'react-native';
+import { View, StyleSheet, RefreshControl, Keyboard, InteractionManager, Pressable } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,11 @@ import {
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
 } from '@boardsesh/climb-filters';
+import {
+  KILTER_HOMEWALL_LAYOUT_ID,
+  isKilterHomewallTallSizeId,
+  isKilterHomewallWideSizeId,
+} from '@boardsesh/board-constants';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ClimbListRowSkeleton } from '../../../src/components/ClimbListRowSkeleton';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
@@ -23,8 +28,14 @@ import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
 import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
-import { ClimbFilterFab } from '../../../src/components/search/ClimbFilterFab';
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
+import { FilterChipRow } from '../../../src/components/search/FilterChipRow';
+import type { DimensionChip } from '../../../src/components/search/FilterChipRow.types';
+import { FilterTokenRow } from '../../../src/components/search/FilterTokenRow';
+import { GradeRangeRail } from '../../../src/components/grade';
+import { applyPopularityBucket } from '../../../src/lib/filter-chip-menus';
+import { useDimensionLocks, useDimensionRepin } from '../../../src/lib/dimension-lock-store';
+import { hapticMedium } from '../../../src/lib/haptics';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { selectByVariant } from '../../../src/theme/variants';
@@ -63,7 +74,6 @@ import { normalizeSearchName, visibleSearchTextNeedsSync } from '../../../src/li
 import { track } from '../../../src/lib/analytics';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
-import { glassSize } from '../../../src/theme/layout';
 import { timing } from '../../../src/theme/animations';
 
 const PAGE_SIZE = 30;
@@ -80,6 +90,12 @@ const FOOTER_SKELETON_ROW_COUNT = 6;
 // thrash secure-store.
 const SAVE_DEBOUNCE_MS = 600;
 const PREWARM_BOARD_HOLDS_DELAY_MS = 1200;
+
+// Filters that have a dedicated facet chip in the persistent chip row. They are
+// excluded from the removable token row so an active filter is never worded
+// twice — the chip shows/changes it, the token row is the receipt for the
+// long-tail (sheet-only) filters that have no chip.
+const CHIP_BACKED_TOKEN_KEYS = new Set<string>(['grade', 'minAscents', 'minRating', 'hideCompleted', 'benchmark']);
 
 type NativeSearchBarRef = {
   focus: () => void;
@@ -181,19 +197,12 @@ function ClimbListInner() {
     listBottomSpacerHeight.value = withTiming(listPaddingBottom, { duration: timing.normal });
   }, [listBottomSpacerHeight, listPaddingBottom]);
   const listBottomSpacerStyle = useAnimatedStyle(() => ({ height: listBottomSpacerHeight.value }));
-  const filterFabNativeAccessoryDrop = bottomChrome.nativeAccessoryVisible ? glassSize.standard * 2 : 0;
-  const filterFabMinimumBottom = bottomChrome.nativeAccessoryVisible
-    ? insets.bottom + spacing[2]
-    : bottomChrome.tabBarBottom + spacing[2];
-  const filterFabBottom = Math.max(
-    filterFabMinimumBottom,
-    bottomChrome.floatingControlBottom + spacing[2] - filterFabNativeAccessoryDrop,
-  );
-
-  // On the Material variant the filter lives in the top-right toolbar (next to
-  // the light/bluetooth button) inside ClimbTopChrome, so the bottom filter FAB
-  // is not rendered here.
+  // Material keeps its filter button in the top-right toolbar
+  // (features.filtersInTopChrome). Liquid Glass shows the persistent native
+  // filter-chip row instead — the chips own filtering there, so the centre
+  // filter-summary is suppressed. (The Material chip row is a follow-up.)
   const filterInTopChrome = features.filtersInTopChrome;
+  const showFilterChips = !filterInTopChrome;
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -797,6 +806,156 @@ function ClimbListInner() {
     return { label: t('mobile.filter.gradeRange'), active: false };
   }, [gradeFilterToken, t]);
 
+  // --- Persistent filter chips (Liquid Glass) ---
+  // Each facet chip commits live through the search-provider patch actions. The
+  // Popularity chip routes through applyPopularityBucket so it clears a
+  // conflicting projects/drafts status, exactly like the filter sheet.
+  // Bare patch, mirroring the sheet's StarRating (which also doesn't conflict-clear
+  // status for minRating); keeps the chip, token, and sheet divergence-free.
+  const handleChangeRating = useCallback(
+    (value: number | undefined) => patchFilters({ minRating: value }),
+    [patchFilters],
+  );
+  const handleChangePopularity = useCallback(
+    (bucket: number | undefined) => patchFilters(applyPopularityBucket(filters, bucket)),
+    [patchFilters, filters],
+  );
+  const handleToggleHideCompleted = useCallback(
+    (next: boolean) => patchFilters({ hideCompleted: next || undefined }),
+    [patchFilters],
+  );
+  const handleToggleBenchmarks = useCallback(
+    (next: boolean) => patchBoardFilters({ onlyBenchmarks: next || undefined }),
+    [patchBoardFilters],
+  );
+  // Tall/Wide chips: only on the Kilter homewall sizes where they apply, mirroring
+  // web (isKilterHomewall{Tall,Wide}SizeId) — Wide on 10x10, Tall on 8x12, both on
+  // 10x12. Tap toggles the filter; long-press locks it (persisted) so it survives
+  // clears — the re-pin effects below re-apply a locked filter whenever it's cleared.
+  const { locks: dimensionLocks, setLock: setDimensionLock } = useDimensionLocks();
+  const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
+  const showTallChip = isKilterHomewall && isKilterHomewallTallSizeId(sizeId);
+  const showWideChip = isKilterHomewall && isKilterHomewallWideSizeId(sizeId);
+  const dimensionChips = useMemo<DimensionChip[]>(() => {
+    const chips: DimensionChip[] = [];
+    if (showTallChip) {
+      const locked = dimensionLocks.tall;
+      chips.push({
+        key: 'tall',
+        active: locked || !!filters.onlyTallClimbs,
+        locked,
+        // A locked chip ignores tap — only a long-press unlock frees it.
+        onToggle: () => {
+          if (locked) return;
+          patchFilters({ onlyTallClimbs: filters.onlyTallClimbs ? undefined : true });
+        },
+        onToggleLock: () => {
+          hapticMedium();
+          const next = !locked;
+          setDimensionLock('tall', next);
+          if (next) patchFilters({ onlyTallClimbs: true });
+        },
+      });
+    }
+    if (showWideChip) {
+      const locked = dimensionLocks.wide;
+      chips.push({
+        key: 'wide',
+        active: locked || !!filters.onlyWideClimbs,
+        locked,
+        onToggle: () => {
+          if (locked) return;
+          patchFilters({ onlyWideClimbs: filters.onlyWideClimbs ? undefined : true });
+        },
+        onToggleLock: () => {
+          hapticMedium();
+          const next = !locked;
+          setDimensionLock('wide', next);
+          if (next) patchFilters({ onlyWideClimbs: true });
+        },
+      });
+    }
+    return chips;
+  }, [
+    showTallChip,
+    showWideChip,
+    dimensionLocks.tall,
+    dimensionLocks.wide,
+    filters.onlyTallClimbs,
+    filters.onlyWideClimbs,
+    patchFilters,
+    setDimensionLock,
+  ]);
+  // A locked dimension stays active through any clear (sheet Reset, FAB clear,
+  // recent re-apply): re-pin its filter whenever it's been cleared while locked.
+  const pinTall = useCallback(() => patchFilters({ onlyTallClimbs: true }), [patchFilters]);
+  const pinWide = useCallback(() => patchFilters({ onlyWideClimbs: true }), [patchFilters]);
+  useDimensionRepin(showTallChip, dimensionLocks.tall, !!filters.onlyTallClimbs, pinTall);
+  useDimensionRepin(showWideChip, dimensionLocks.wide, !!filters.onlyWideClimbs, pinWide);
+  // Token row = the receipt for the long tail only; the chip-backed facets show
+  // and clear themselves, so they're excluded to avoid wording a filter twice.
+  // Tall/Wide are chip-backed only on the homewall sizes where their chip shows;
+  // elsewhere they stay a removable token.
+  const sheetOnlyFilterTokens = useMemo(
+    () =>
+      filterTokens.filter((token) => {
+        if (CHIP_BACKED_TOKEN_KEYS.has(token.key)) return false;
+        if (token.key === 'tall' && showTallChip) return false;
+        if (token.key === 'wide' && showWideChip) return false;
+        return true;
+      }),
+    [filterTokens, showTallChip, showWideChip],
+  );
+  const filterChrome = useMemo(() => {
+    if (!showFilterChips) return null;
+    return (
+      <>
+        <FilterChipRow
+          activeFilterCount={activeFilterCount}
+          onOpenFilters={handleOpenFilters}
+          recentFilters={recentFilters}
+          currentFilters={filters}
+          currentSearchText={name}
+          onApplyRecent={handleApplyRecentFilter}
+          onClearRecent={handleClearRecentFilters}
+          gradeLabel={gradeChip.label}
+          gradeActive={gradeChip.active}
+          onOpenGrade={handleOpenGrade}
+          dimensionChips={dimensionChips}
+          minAscents={filters.minAscents}
+          onChangePopularity={handleChangePopularity}
+          minRating={filters.minRating}
+          onChangeRating={handleChangeRating}
+          hideCompleted={!!filters.hideCompleted}
+          onToggleHideCompleted={handleToggleHideCompleted}
+          onlyBenchmarks={!!boardFilters.onlyBenchmarks}
+          onToggleBenchmarks={handleToggleBenchmarks}
+          canHideCompleted={isAuthenticated}
+        />
+        <FilterTokenRow tokens={sheetOnlyFilterTokens} />
+      </>
+    );
+  }, [
+    showFilterChips,
+    activeFilterCount,
+    handleOpenFilters,
+    recentFilters,
+    filters,
+    name,
+    handleApplyRecentFilter,
+    handleClearRecentFilters,
+    gradeChip,
+    handleOpenGrade,
+    dimensionChips,
+    handleChangePopularity,
+    handleChangeRating,
+    handleToggleHideCompleted,
+    handleToggleBenchmarks,
+    boardFilters.onlyBenchmarks,
+    isAuthenticated,
+    sheetOnlyFilterTokens,
+  ]);
+
   // Memoized so FlashList doesn't re-measure/re-render the header on every
   // ClimbListInner render — only when the title, pills, or filters change.
   const listHeader = useMemo(
@@ -999,7 +1158,9 @@ function ClimbListInner() {
 
       <ClimbTopChrome
         searchMode={useNativeSearch ? 'native' : 'custom'}
-        title={searchTitle}
+        // With the chip row on, the active filters live in the token row, so the
+        // centre title drops the filter summary and reads as a plain header.
+        title={showFilterChips ? t('mobile.search.allClimbs') : searchTitle}
         canCreate={isAuthenticated && hasBoardConfig}
         onCreate={handleCreateClimb}
         onOpenBoardDetail={handleOpenBoardDetail}
@@ -1025,21 +1186,31 @@ function ClimbListInner() {
         gradeChip={gradeChip}
         onOpenGrade={handleOpenGrade}
         onGradeChange={handleGradeChange}
+        filterChrome={filterChrome}
       />
 
-      {filterInTopChrome ? null : (
-        <ClimbFilterFab
-          activeFilterCount={activeFilterCount}
-          bottom={filterFabBottom}
-          bound={gradeBound}
-          grades={grades}
-          gradeRailVisible={showGrade}
-          onOpenFilters={handleOpenFilters}
-          onOpenGrade={handleOpenGrade}
-          onCloseGrade={handleDismissGrade}
-          onGradeChange={handleGradeChange}
-        />
-      )}
+      {/* On Liquid Glass the Grade chip opens a top-anchored range rail +
+          dismiss layer, just below the measured chrome. (Material renders its
+          own grade rail inside ClimbTopChrome.) */}
+      {showFilterChips && showGrade ? (
+        <>
+          <Pressable
+            style={styles.chipGradeDismiss}
+            onPress={handleDismissGrade}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+          <View pointerEvents="box-none" style={[styles.chipGradeRailSlot, { top: searchBarHeight + spacing[2] }]}>
+            <GradeRangeRail
+              grades={grades}
+              bound={gradeBound}
+              onChange={handleGradeChange}
+              onRequestClose={handleDismissGrade}
+              dismissible={false}
+            />
+          </View>
+        </>
+      ) : null}
 
       {showFilters ? (
         <ClimbFilterSheet
@@ -1072,6 +1243,23 @@ function ClimbListSkeletonRows({ count }: { count: number }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  // Top-anchored grade rail for the persistent chip row (the FAB's bottom rail
+  // is suppressed when chips are on). The dismiss layer sits below the rail so a
+  // tap outside closes it without stealing the rail's own touches.
+  chipGradeDismiss: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 24,
+  },
+  chipGradeRailSlot: {
+    position: 'absolute',
+    left: spacing[4],
+    right: spacing[4],
+    zIndex: 25,
   },
   loadingContainer: {
     flex: 1,

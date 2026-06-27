@@ -668,7 +668,17 @@
       "gradeOpenHint": "Abre el selector de grado",
       "gradeCloseHint": "Cierra el selector de grado",
       "boardSwitcherHint": "Abre el selector de plafón",
-      "allClimbs": "Todas las vías"
+      "allClimbs": "Todas las vías",
+      "clearRecentSearches": "Borrar búsquedas recientes",
+      "chips": {
+        "show": "Mostrar",
+        "filtersWithCount": "Filtros · {{count}}",
+        "tall": "Altas",
+        "wide": "Anchas",
+        "lock": "Bloquear",
+        "unlock": "Desbloquear"
+      },
+      "removeFilterAria": "Quitar {{filter}}"
     },
     "gradeRail": {
       "setFilterAria": "Filtrar por grado {{grade}}",

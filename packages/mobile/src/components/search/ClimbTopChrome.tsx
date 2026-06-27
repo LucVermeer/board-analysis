@@ -7,7 +7,7 @@
 // persistently in the centre. The Material variant keeps a dedicated
 // Appbar.Header with the board as its subtitle plus grade / filter quick chips.
 
-import { type RefObject, useCallback } from 'react';
+import { type ReactNode, type RefObject, useCallback } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,13 +20,7 @@ import { selectByVariant } from '../../theme/variants';
 import { spacing } from '../../theme/tokens';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { iconMap } from '../icon-map';
-import {
-  BoardSwitcherButton,
-  CollapsingTopChrome,
-  MaterialAngleAction,
-  MaterialLightbulbAction,
-  TOP_ACTION_SIZE,
-} from '../chrome';
+import { BoardSwitcherButton, CollapsingTopChrome, MaterialAngleAction, TOP_ACTION_SIZE } from '../chrome';
 import { GradeRangeRail } from '../grade';
 import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 import { FilterButton } from './FilterButton';
@@ -71,6 +65,11 @@ type ClimbTopChromeProps = {
   gradeChip?: { label: string; active: boolean; onClear?: () => void };
   onOpenGrade?: () => void;
   onGradeChange?: (grade: GradeBound) => void;
+  /** Persistent native filter-chip row + token row, rendered under the title on
+   *  Liquid Glass, independent of search focus; null on the Material path. The
+   *  caller composes it so every filter handler and the search-provider state
+   *  stay in the screen, not drilled through here. */
+  filterChrome?: ReactNode;
 };
 
 export function ClimbTopChrome({
@@ -97,6 +96,7 @@ export function ClimbTopChrome({
   gradeChip,
   onOpenGrade,
   onGradeChange,
+  filterChrome,
 }: ClimbTopChromeProps) {
   const { t } = useTranslation('climbs');
   const { systemColors, variant } = useTheme();
@@ -168,7 +168,9 @@ export function ClimbTopChrome({
             />
           ) : null}
           <MaterialAngleAction />
-          <MaterialLightbulbAction />
+          {/* No toolbar lightbulb on the climbs tab — board-LED control lives on
+              the queue bar / current-climb pill (BoardControlIndicator). Keeps
+              the Material path in step with the glass `hideLight` above. */}
         </Appbar.Header>
 
         {usesCustomSearch ? (
@@ -244,6 +246,12 @@ export function ClimbTopChrome({
   // progressive blur) with the climbs-only search row as its below-row content.
   // Climbs is the one tab that keeps a header title — the filter summary sits
   // persistently in the centre via `centerTitle`.
+  //
+  // `hideLight`: the climbs tab suppresses the toolbar BLE lightbulb. Board-LED
+  // control already lives on the queue bar / current-climb pill
+  // (BoardControlIndicator); a second bulb in the top-right island reads like a
+  // list/filter affordance next to the filter chips and confused users. Discover
+  // and the other chromes keep their bulb.
   return (
     <CollapsingTopChrome
       centerTitle={title}
@@ -253,6 +261,7 @@ export function ClimbTopChrome({
       onOpenBoardSwitcher={onOpenBoardDetail}
       boardBadge={showBoardBadge}
       onHeightChange={onHeightChange}
+      hideLight
     >
       {usesCustomSearch ? (
         <View pointerEvents="box-none" style={styles.searchStack}>
@@ -271,6 +280,10 @@ export function ClimbTopChrome({
           </View>
         </View>
       ) : null}
+      {/* Persistent filter chips sit under the title on every glass path —
+          including the iOS 26 native-search path (no custom search row) — so
+          filtering is always glanceable, never gated behind keyboard focus. */}
+      {filterChrome}
     </CollapsingTopChrome>
   );
 }
