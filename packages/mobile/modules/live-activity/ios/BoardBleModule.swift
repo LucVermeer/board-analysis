@@ -139,9 +139,16 @@ public class BoardBleModule: Module {
         // connection adoption) — see BoardBleNativeModule in src/index.ts.
         AsyncFunction("getConnectedDevice") { () -> [String: Any]? in
             guard let device = BoardBleManager.shared.connectedDeviceInfo else { return nil }
+            let diagnostics = device.diagnostics
             return [
                 "deviceId": device.deviceId,
-                "name": device.name ?? ""
+                "name": device.name ?? "",
+                // Write diagnostics (additive; older JS bundles ignore them).
+                "characteristicProperties": diagnostics.characteristicProperties,
+                "supportsWriteWithoutResponse": diagnostics.supportsWriteWithoutResponse,
+                "chosenWriteType": diagnostics.chosenWriteType,
+                "maxWriteWithResponse": diagnostics.maxWriteWithResponse,
+                "maxWriteWithoutResponse": diagnostics.maxWriteWithoutResponse
             ]
         }
 

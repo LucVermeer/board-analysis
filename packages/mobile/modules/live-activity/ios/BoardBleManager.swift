@@ -13,6 +13,19 @@ struct BoardBleScanResult {
     let serviceUuids: [String]
 }
 
+/// Connect-time BLE write diagnostics, surfaced to JS (Sentry tags + analytics)
+/// so a "bulb lights but the board doesn't respond" report can be diagnosed
+/// without Console.app: we can see whether the characteristic advertised
+/// `.writeWithoutResponse` (firmware) or not (which on iOS 26.x routed Aurora to
+/// the stalling write-with-response path), and the negotiated write lengths.
+struct BoardBleConnectionDiagnostics {
+    let characteristicProperties: Int   // CBCharacteristicProperties.rawValue
+    let supportsWriteWithoutResponse: Bool
+    let chosenWriteType: String         // "withoutResponse" | "withResponse"
+    let maxWriteWithResponse: Int
+    let maxWriteWithoutResponse: Int
+}
+
 enum BoardBleError: LocalizedError {
     case bluetoothUnavailable
     case deviceNotFound
@@ -188,11 +201,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     /// nil. Exposed to JS as `getConnectedDevice` so a foregrounding app can
     /// adopt a connection established while it was backgrounded (widget
     /// reconnect) even if the `connected` event was missed.
-    var connectedDeviceInfo: (deviceId: String, name: String?)? {
+    var connectedDeviceInfo: (deviceId: String, name: String?, diagnostics: BoardBleConnectionDiagnostics)? {
         runOnBleQueueSync {
-            guard let peripheral = connectedPeripheral, writeCharacteristic != nil else { return nil }
+            guard let peripheral = connectedPeripheral, let characteristic = writeCharacteristic else { return nil }
             let deviceId = peripheral.identifier.uuidString
-            return (deviceId, discoveredNames[deviceId] ?? peripheral.name)
+            let diagnostics = connectionDiagnosticsOnBleQueue(peripheral: peripheral, characteristic: characteristic)
+            return (deviceId, discoveredNames[deviceId] ?? peripheral.name, diagnostics)
         }
     }
 
@@ -947,6 +961,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         persistLastConnectedPeripheral(peripheral)
         completePendingConnect(.success(()))
         logger.info("Connected to board BLE peripheral \(peripheral.identifier.uuidString, privacy: .public)")
+        // One-time write diagnostics (#3181 follow-up): records what the UART RX
+        // characteristic actually advertises and which write type we'll use, so a
+        // stalling board can be diagnosed from Console.app (also surfaced to JS →
+        // Sentry via connectedDeviceInfo / getConnectedDevice).
+        let connectionDiagnostics = connectionDiagnosticsOnBleQueue(peripheral: peripheral, characteristic: characteristic)
+        logger.info("BLE write diagnostics for \(peripheral.identifier.uuidString, privacy: .public): properties=\(connectionDiagnostics.characteristicProperties, privacy: .public) supportsWriteWithoutResponse=\(connectionDiagnostics.supportsWriteWithoutResponse, privacy: .public) chosenWriteType=\(connectionDiagnostics.chosenWriteType, privacy: .public) maxWriteWithResponse=\(connectionDiagnostics.maxWriteWithResponse, privacy: .public) maxWriteWithoutResponse=\(connectionDiagnostics.maxWriteWithoutResponse, privacy: .public)")
         // Tell JS the link is usable. This is the single success point for
         // every connect path (JS connect, widget reconnect, state
         // restoration), so the JS layer can adopt connections it didn't
@@ -1048,6 +1068,21 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         drainWaiters.signalAll()
     }
 
+    private func connectionDiagnosticsOnBleQueue(
+        peripheral: CBPeripheral,
+        characteristic: CBCharacteristic
+    ) -> BoardBleConnectionDiagnostics {
+        let properties = characteristic.properties
+        let writeType = BoardBleEncoding.preferredWriteType(for: properties, boardName: configuration?.boardName)
+        return BoardBleConnectionDiagnostics(
+            characteristicProperties: Int(properties.rawValue),
+            supportsWriteWithoutResponse: properties.contains(.writeWithoutResponse),
+            chosenWriteType: writeType == .withoutResponse ? "withoutResponse" : "withResponse",
+            maxWriteWithResponse: peripheral.maximumWriteValueLength(for: .withResponse),
+            maxWriteWithoutResponse: peripheral.maximumWriteValueLength(for: .withoutResponse)
+        )
+    }
+
     private func apiLevelOnBleQueue(configuration: BoardBleConfiguration) -> Int {
         let connectedDeviceName: String?
         if let connectedPeripheral {
@@ -1138,7 +1173,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        let writeType = BoardBleEncoding.preferredWriteType(for: characteristic.properties)
+        let writeType = BoardBleEncoding.preferredWriteType(
+            for: characteristic.properties,
+            boardName: configuration?.boardName
+        )
 
         if writeType == .withoutResponse {
             guard peripheral.canSendWriteWithoutResponse else {

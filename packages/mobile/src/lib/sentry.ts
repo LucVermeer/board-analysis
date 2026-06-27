@@ -107,6 +107,88 @@ export function captureToSentry(error: unknown, context?: ErrorReportContext): v
   });
 }
 
+// The global-scope tag keys written on connect, cleared together on disconnect
+// so a non-BLE error firing afterwards can't carry stale BLE tags.
+const BLE_DIAGNOSTIC_TAG_KEYS = [
+  'ble_chosen_write_type',
+  'ble_supports_without_response',
+  'ble_char_properties',
+  'ble_max_with_response',
+  'ble_max_without_response',
+] as const;
+
+export type BleConnectionDiagnostics = {
+  characteristicProperties?: number;
+  supportsWriteWithoutResponse?: boolean;
+  // Mirrors NativeBleConnectedDevice.chosenWriteType so a new write-type string
+  // is caught at this boundary rather than silently widened.
+  chosenWriteType?: 'withoutResponse' | 'withResponse';
+  maxWriteWithResponse?: number;
+  maxWriteWithoutResponse?: number;
+};
+
+// A scope whose tags accept `undefined` (the clear value) — wider than
+// SentryScopeLike, which only models the set path. Structural so the mapping is
+// unit-testable with a plain fake, like applyErrorContextToScope.
+type BleTagScope = { setTag: (key: string, value: string | number | boolean | undefined) => void };
+
+/**
+ * Pure mapping of BLE diagnostics onto a scope's tags. `null` diagnostics =
+ * clear: every BLE key is set to `undefined`, which drops it from serialized
+ * events (this SDK's Scope exposes no `removeTag`; `setTag(key, undefined)` is
+ * the supported clear). Extracted (no enablement gate, no SDK) so the set/clear
+ * + boolean-stringify behaviour is directly unit-testable.
+ */
+export function applyBleDiagnosticsToScope(scope: BleTagScope, diagnostics: BleConnectionDiagnostics | null): void {
+  if (!diagnostics) {
+    for (const key of BLE_DIAGNOSTIC_TAG_KEYS) scope.setTag(key, undefined);
+    return;
+  }
+  if (diagnostics.chosenWriteType !== undefined) scope.setTag('ble_chosen_write_type', diagnostics.chosenWriteType);
+  // Sentry stores/queries tag values as strings; stringify the boolean so a
+  // filter reads `true`/`false` rather than a coerced primitive.
+  if (diagnostics.supportsWriteWithoutResponse !== undefined) {
+    scope.setTag('ble_supports_without_response', String(diagnostics.supportsWriteWithoutResponse));
+  }
+  if (diagnostics.characteristicProperties !== undefined) {
+    scope.setTag('ble_char_properties', diagnostics.characteristicProperties);
+  }
+  if (diagnostics.maxWriteWithResponse !== undefined) {
+    scope.setTag('ble_max_with_response', diagnostics.maxWriteWithResponse);
+  }
+  if (diagnostics.maxWriteWithoutResponse !== undefined) {
+    scope.setTag('ble_max_without_response', diagnostics.maxWriteWithoutResponse);
+  }
+}
+
+// Adapts the top-level functional API to a BleTagScope. `Sentry.setTag` accepts
+// `undefined` (Primitive), so it carries the clear path too.
+const bleTagScope: BleTagScope = { setTag: (key, value) => Sentry.setTag(key, value) };
+
+/**
+ * BLE write diagnostics captured at connect, kept as GLOBAL scope tags (not the
+ * per-event `withScope` tags) so they ride later `ble-send` error reports —
+ * which is the point: a `write_timeout`/`write_recovery_failed` report can then
+ * show whether the board advertised write-without-response and which write type
+ * was chosen. Cleared on disconnect via clearBleDiagnosticsTags. Passing
+ * null/undefined diagnostics clears too — so the adopt path (which resolves to
+ * null on a binary that can't report them) drops any stale tags rather than
+ * leaving the previous connection's behind. No-op when Sentry is disabled.
+ */
+export function setBleDiagnosticsTags(diagnostics: BleConnectionDiagnostics | null | undefined): void {
+  if (!isSentryEnabled) return;
+  applyBleDiagnosticsToScope(bleTagScope, diagnostics ?? null);
+}
+
+/**
+ * Drop the global BLE diagnostic tags set on connect, so a non-BLE error firing
+ * after a board drop doesn't carry stale `ble_*` tags from the previous link.
+ */
+export function clearBleDiagnosticsTags(): void {
+  if (!isSentryEnabled) return;
+  applyBleDiagnosticsToScope(bleTagScope, null);
+}
+
 /** Best-effort flush so a report survives a later hard crash. */
 export function flushSentry(): Promise<boolean> {
   return isSentryEnabled ? Sentry.flush() : Promise.resolve(true);

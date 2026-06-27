@@ -190,19 +190,31 @@ final class LiveActivityWidgetTests: XCTestCase {
         XCTAssertTrue(url?.absoluteString.contains("include_background=1") ?? false)
     }
 
-    // Regression for the iOS-only "MoonBoard connects but LEDs stay dark" bug:
-    // CoreBluetooth silently drops a `.withoutResponse` write to a characteristic
-    // that lacks the property. Aurora UART advertises `.writeWithoutResponse`
-    // (fast path); the original MoonBoard LED box advertises only `.write`, so it
-    // must use `.withResponse`.
-    func testPreferredWriteTypeSelectsByCharacteristicProperties() {
-        // Aurora (Kilter/Tension): supports write-without-response → fast path.
-        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .writeWithoutResponse), .withoutResponse)
-        // Original MoonBoard LED box: write-with-response only.
-        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write), .withResponse)
-        // Supports both → prefer the unacknowledged fast path.
-        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.write, .writeWithoutResponse]), .withoutResponse)
-        // Defensive default when neither write property is advertised.
-        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.read]), .withResponse)
+    // The write type is gated on board family. Aurora (Kilter/Tension) drove the
+    // wall with write-without-response through the entire Capacitor era and the
+    // first RN port, so it ALWAYS takes that path — even when iOS reports the
+    // characteristic without the `.writeWithoutResponse` bit (seen on iOS 26.x,
+    // which routed Aurora to a stalling write-with-response path). Only the
+    // original MoonBoard LED box (UART advertises `.write` only; CoreBluetooth
+    // silently drops a `.withoutResponse` write to it) falls back to
+    // `.withResponse`.
+    func testPreferredWriteTypeIsMoonboardGated() {
+        // Aurora: always without-response, regardless of advertised properties.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .writeWithoutResponse, boardName: "kilter"), .withoutResponse)
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write, boardName: "kilter"), .withoutResponse)
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write, boardName: "tension"), .withoutResponse)
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.read], boardName: "tension"), .withoutResponse)
+        // Unknown / nil board (e.g. a JS write before configureBoard): safe
+        // without-response default, never the stalling with-response path.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write, boardName: nil), .withoutResponse)
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.read], boardName: nil), .withoutResponse)
+        // MoonBoard: choose from the advertised properties (the 00bda53a2 fix).
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write, boardName: "moonboard"), .withResponse)
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .writeWithoutResponse, boardName: "moonboard"), .withoutResponse)
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.write, .writeWithoutResponse], boardName: "moonboard"), .withoutResponse)
+        // Defensive default: a characteristic advertising neither write property
+        // can't be written either way (CoreBluetooth drops/ rejects the write and
+        // the wall stays dark) — we just don't pick the unacknowledged path for it.
+        XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.read], boardName: "moonboard"), .withResponse)
     }
 }

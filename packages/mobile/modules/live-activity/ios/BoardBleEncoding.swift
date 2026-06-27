@@ -18,16 +18,30 @@ struct BoardBlePacketResult: Equatable {
 }
 
 enum BoardBleEncoding {
-    /// Picks the CoreBluetooth write type for a Nordic UART RX characteristic
-    /// from its advertised properties. Aurora (Kilter/Tension) controllers
-    /// advertise `.writeWithoutResponse` — the fast, unacknowledged path.
-    /// The original MoonBoard LED box advertises only `.write`; CoreBluetooth
-    /// SILENTLY DROPS a `.withoutResponse` write to a characteristic that lacks
-    /// the property, which left the MoonBoard wall dark on iOS while Android
-    /// (whose GATT stack sends no-response writes regardless) worked fine. So
-    /// fall back to `.withResponse` whenever `.writeWithoutResponse` is absent.
-    static func preferredWriteType(for properties: CBCharacteristicProperties) -> CBCharacteristicWriteType {
-        properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+    /// Picks the CoreBluetooth write type for a Nordic UART RX characteristic,
+    /// gated on the board family.
+    ///
+    /// Aurora (Kilter/Tension) controllers drove the wall with write-WITHOUT-
+    /// response for the entire Capacitor era and the first RN port, and that path
+    /// is proven on the hardware — so Aurora (and an unknown / `nil` board) ALWAYS
+    /// take it, even when iOS reports the characteristic without the
+    /// `.writeWithoutResponse` property bit (observed on iOS 26.x). Routing Aurora
+    /// to write-with-response made boards whose ATT ack never arrives stall on
+    /// every write — the status LED lights but the climb never displays.
+    ///
+    /// Only the original MoonBoard LED box needs write-with-response: its UART RX
+    /// characteristic advertises only `.write`, and CoreBluetooth SILENTLY DROPS a
+    /// `.withoutResponse` write to a characteristic that lacks the property (which
+    /// left the MoonBoard wall dark on iOS while Android — whose GATT stack sends
+    /// no-response writes regardless — worked). So for MoonBoard, and only
+    /// MoonBoard, fall back to `.withResponse` whenever `.writeWithoutResponse` is
+    /// absent.
+    static func preferredWriteType(
+        for properties: CBCharacteristicProperties,
+        boardName: String?
+    ) -> CBCharacteristicWriteType {
+        guard boardName == "moonboard" else { return .withoutResponse }
+        return properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
     }
 
     private struct HoldRoleInfo {
