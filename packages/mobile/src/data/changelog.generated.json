@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-26T23:51:31.572Z",
+  "generatedAt": "2026-06-27T05:15:23.185Z",
   "entries": [
+    {
+      "prNumber": 3228,
+      "category": "fixed",
+      "title": "Kilter and Tension boards light up reliably again on iPhone — climbs send to the wall instead of the board connecting but staying dark.",
+      "mergedAt": "2026-06-27T05:14:36Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3228"
+    },
     {
       "prNumber": 2773,
       "category": "new",
@@ -347,6 +354,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-27T09:49:54+10:00",
+      "sha": "a3f3c20d5bd82c51f185ab1ae215f0e2369995e9",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "8e740cccb8e9662741ccdd021bdb1c60c8dea817"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-26T21:44:52+10:00",
