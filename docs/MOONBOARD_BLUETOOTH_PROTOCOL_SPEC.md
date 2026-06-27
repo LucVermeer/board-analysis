@@ -190,11 +190,13 @@ Each record is a one-letter **marker** followed by the LED **position**:
 
 🔁 The 11-column × 18-row board (columns A–K, rows 1–18) is wired as a single **serpentine** WS2812B string: up column A, down column B, up column C, and so on. The app converts a hold's grid coordinate to its position on that string exactly as Boardsesh's `getMoonboardSerialPosition` does:
 
+Pseudocode (`//` is integer division / floor, `%` is modulo; `#` starts a comment):
+
 ```text
 holdId    = 1..198          # row-major: A1=1, B1=2, … K1=11, A2=12, …
 z         = holdId - 1
-col       = z % 11           # 0..10
-row       = z // 11          # 0..17
+col       = z % 11          # column index 0..10  (modulo)
+row       = floor(z / 11)   # row index 0..17     (z // 11)
 
 if col is even:  position = col*18 + row
 if col is odd:   position = col*18 + (17 - row)
