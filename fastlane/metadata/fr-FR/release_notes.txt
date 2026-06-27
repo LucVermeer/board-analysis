@@ -1,12 +1,17 @@
-Boardsesh 2.0, c'est une version native entièrement repensée. Toute l'appli a été réécrite : ça file là où ça ramait avant. Les listes défilent sans accroc, la recherche est instantanée.
+Ton logbook Kilter te suit maintenant, le catalogue MoonBoard complet est là, et les boards s'allument plus fiablement sur iPhone.
 
-La même appli, juste plus rapide :
-- Cherche une voie et allume les prises en Bluetooth sur Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper et So iLL.
-- Arrive devant n'importe quel mur et vois ce qu'il y a dessus tout de suite : la voie allumée, qui l'a allumée, la cotation, l'inclinaison et l'ouvreur, en direct au fil des grimpeurs.
-- Grimpe avec ta crew dans une session live : une seule file partagée que tout le monde peut alimenter, réorganiser et piloter.
-- Pilote la session depuis ton écran verrouillé et la Dynamic Island sous iOS 17+ avec les Live Activities.
-- Monte un entraînement Volume, Pyramide, Échelle ou Cotation ciblée et envoie les voies au mur une par une.
-- Suis tes sends, tes flashs et tes essais, et regarde tes cotations se tracer dans l'onglet Progression.
-- Enregistre tes sessions dans Apple Health et importe ton ancien carnet Kilter et Tension depuis Aurora Climbing.
+Nouveau :
+- Connecte-toi avec ton identifiant et ton mot de passe Kilter pour rapatrier tes sends, essais, notes et circuits directement dans Boardsesh.
+- Le catalogue MoonBoard complet est arrivé : des milliers de blocs en plus avec de vraies cotations, des notes en étoiles et le nombre de sends, plus le Mini 2025 et l'original de 2010. Le matériel LED du MoonBoard d'origine s'allume aussi en Bluetooth.
+- Touche n'importe quelle voie d'un circuit ou d'une playlist et toute la liste passe dans ta file dans l'ordre. Reviens en arrière d'un glissement pour repasser sur les blocs précédents, pas seulement sauter au suivant.
+- Compose tes propres couleurs de prise avec un vrai sélecteur de couleur, prévisualise-les en daltonisme rouge-vert et bleu-jaune, et choisis une nouvelle forme de marqueur octogonale. Les cercles des prises MoonBoard sont aussi plus gros et plus lisibles.
+- Trie ton logbook par Plus dur de haut en bas, avec la cotation consensus de la communauté à côté de celle que tu as notée.
+
+Corrigé :
+- Kilter et Tension s'allument de façon fiable sur iPhone : les voies partent au mur au lieu de rester éteintes une fois connecté.
+- Le MoonBoard s'allume sur iPhone, récupère après un accroc Bluetooth, et se pilote maintenant depuis la Dynamic Island.
+- Corrigé un gel sur iOS où l'appli pouvait ne plus répondre aux touchers après l'ouverture et la fermeture de panneaux.
+- Filtre à nouveau par ouvreur, type de prise ou région du mur. Les sélecteurs s'ouvrent en plein écran et tout le panneau défile.
+- Les sessions live se reconnectent après le rafraîchissement de ta connexion, et se mettent en pause puis se rechargent quand tu perds le réseau puis reviens.
 
 Gratuit, sans pub, open source.

@@ -1,12 +1,17 @@
-Boardsesh 2.0 is a full native rebuild. The whole app is rewritten, so it's fast where it used to lag. Lists scroll smooth, search is instant.
+Your Kilter logbook now comes with you, the full MoonBoard catalog is in, and boards light up more reliably on iPhone.
 
-Same app, just faster:
-- Search a climb and light the holds over Bluetooth on Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL.
-- Walk up to any wall and see what's on it right now: the lit climb, who lit it, the grade, angle and setter, live as people climb.
-- Climb with your crew in a live session: one shared queue anyone can add to, reorder and drive.
-- Run the session from your lock screen and Dynamic Island on iOS 17+ with Live Activities.
-- Build a Volume, Pyramid, Ladder or Grade Focus workout and fire the climbs to the wall one at a time.
-- Track sends, flashes and attempts, and watch your grades chart out on the Progress tab.
-- Save sessions to Apple Health and import your past Kilter and Tension logbook from Aurora Climbing.
+New:
+- Sign in with your Kilter username and password to pull your sends, attempts, ratings and circuits straight into Boardsesh.
+- The full MoonBoard catalog landed: thousands more problems with real grades, star ratings and send counts, plus the Mini 2025 and original 2010 boards. Original MoonBoard LED hardware lights up over Bluetooth too.
+- Tap any climb in a circuit or playlist and the whole list drops into your queue in order. Swipe back to revisit the boulders above, not just jump to the next.
+- Mix your own hold colours with a real colour picker, preview them through red-green and blue-yellow colour blindness, and pick a new octagon marker shape. MoonBoard hold circles are bigger and easier to read, too.
+- Sort your logbook by Hardest top to bottom, with the community consensus grade shown next to the one you logged.
+
+Fixed:
+- Kilter and Tension light up reliably on iPhone: climbs send to the wall instead of the board connecting but staying dark.
+- MoonBoard lights up on iPhone, recovers after a flaky Bluetooth moment, and now drives from the Dynamic Island.
+- Fixed an iOS freeze where the app could stop responding to taps after opening and closing sheets.
+- Filter by setter, hold type or board region again. The pickers open full screen and the whole sheet scrolls.
+- Live sessions reconnect after your login refreshes, and pause then refetch when you drop offline and come back.
 
 Free, no ads, open source.

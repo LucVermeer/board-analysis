@@ -1,12 +1,17 @@
-Boardsesh 2.0 es una reconstrucción nativa completa. Toda la app está reescrita, así que va rápida donde antes se atascaba. Las listas ruedan suaves y la búsqueda es instantánea.
+Tu logbook de Kilter ahora viaja contigo, está el catálogo completo de MoonBoard y los plafones se encienden de forma más fiable en el iPhone.
 
-La misma app, solo que más rápida:
-- Busca una vía y enciende las presas por Bluetooth en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL.
-- Llégate a cualquier pared y mira lo que hay puesto ahora mismo: la vía encendida, quién la encendió, el grado, el ángulo y el aperturista, en vivo según la gente escala.
-- Escala con tu equipo en una sesión en vivo: una cola compartida a la que cualquiera añade, reordena y lleva.
-- Lleva la sesión desde la pantalla de bloqueo y el Dynamic Island en iOS 17+ con Live Activities.
-- Monta un entrenamiento de Volumen, Pirámide, Escalera o Foco en grado y envía las vías al muro de una en una.
-- Apunta encadenes, flashes e intentos y mira cómo tus grados se dibujan en la pestaña Progreso.
-- Guarda tus sesiones en Apple Health e importa tu logbook antiguo de Kilter y Tension desde Aurora Climbing.
+Nuevo:
+- Inicia sesión con tu usuario y contraseña de Kilter para traer tus encadenes, intentos, valoraciones y circuitos directamente a Boardsesh.
+- Ya está el catálogo completo de MoonBoard: miles de bloques más con grados reales, valoraciones por estrellas y número de encadenes, además del Mini 2025 y el original de 2010. El hardware LED del MoonBoard original también se enciende por Bluetooth.
+- Toca cualquier vía de un circuito o una playlist y la lista entera entra en tu cola en orden. Desliza hacia atrás para volver a los bloques anteriores, no solo saltar al siguiente.
+- Crea tus propios colores de presa con un selector de color de verdad, prevísualízalos con daltonismo rojo-verde y azul-amarillo y elige una nueva forma de marcador octogonal. Además, los círculos de las presas del MoonBoard son más grandes y fáciles de ver.
+- Ordena tu logbook por Más difícil de arriba abajo, con el grado de consenso de la comunidad junto al que tú apuntaste.
+
+Arreglado:
+- Kilter y Tension se encienden de forma fiable en el iPhone: las vías se envían al muro en vez de que el plafón conecte y se quede apagado.
+- El MoonBoard se enciende en el iPhone, se recupera tras un fallo puntual de Bluetooth y ahora se controla desde el Dynamic Island.
+- Arreglado un bloqueo en iOS en el que la app podía dejar de responder a los toques tras abrir y cerrar paneles.
+- Vuelve a filtrar por setter, tipo de presa o región del plafón. Los selectores se abren a pantalla completa y todo el panel se desplaza.
+- Las sesiones en vivo se reconectan cuando se refresca tu sesión, y se pausan y recargan cuando te quedas sin conexión y vuelves.
 
 Gratis, sin anuncios, código abierto.
