@@ -20,6 +20,7 @@ A new version shipped to the App Store.
 
 ### Fixed
 
+- Internal preview-tester tooling hardening — removes a write-capable EAS token from preview builds; the in-app branch switcher now repoints the build at a branch device-locally. No public, user-facing change. ([#3241](https://github.com/boardsesh/boardsesh/pull/3241))
 - Playlist creation errors now appear inside the sheet instead of an invisible toast behind it. ([#3240](https://github.com/boardsesh/boardsesh/pull/3240))
 - Filter climbs by setter, hold type, or board region again — these pickers were opening to a blank sheet that vanished on its own, and now open full-screen. ([#3236](https://github.com/boardsesh/boardsesh/pull/3236))
   Scroll the whole filter sheet — expanding the Refine or Advanced sections no longer hides options below the fold.
