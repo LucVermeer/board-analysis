@@ -16,6 +16,9 @@ A new version shipped to the App Store.
 
 ### Fixed
 
+- Playlist creation errors now appear inside the sheet instead of an invisible toast behind it. ([#3240](https://github.com/boardsesh/boardsesh/pull/3240))
+- Filter climbs by setter, hold type, or board region again — these pickers were opening to a blank sheet that vanished on its own, and now open full-screen. ([#3236](https://github.com/boardsesh/boardsesh/pull/3236))
+  Scroll the whole filter sheet — expanding the Refine or Advanced sections no longer hides options below the fold.
 - Party-mode realtime now reconnects after an auth refresh, and queries pause offline and refetch when the connection returns. ([#3242](https://github.com/boardsesh/boardsesh/pull/3242))
 - Kilter and Tension boards light up reliably again on iPhone — climbs send to the wall instead of the board connecting but staying dark. ([#3228](https://github.com/boardsesh/boardsesh/pull/3228))
 

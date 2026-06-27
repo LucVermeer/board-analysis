@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-06-27T07:45:12.178Z",
+  "generatedAt": "2026-06-27T07:50:55.835Z",
   "entries": [
+    {
+      "prNumber": 3240,
+      "category": "fixed",
+      "title": "Playlist creation errors now appear inside the sheet instead of an invisible toast behind it.",
+      "mergedAt": "2026-06-27T07:47:07Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3240"
+    },
+    {
+      "prNumber": 3236,
+      "category": "fixed",
+      "title": "Filter climbs by setter, hold type, or board region again — these pickers were opening to a blank sheet that vanished on its own, and now open full-screen.",
+      "mergedAt": "2026-06-27T07:45:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3236",
+      "body": "Scroll the whole filter sheet — expanding the Refine or Advanced sections no longer hides options below the fold."
+    },
     {
       "prNumber": 3238,
       "category": "improved",
