@@ -16,6 +16,7 @@ vi.mock('@sentry/react-native', () => ({
 
 import * as Sentry from '@sentry/react-native';
 import {
+  applyBleDiagnosticsToScope,
   applyErrorContextToScope,
   captureToSentry,
   flushSentry,
@@ -111,5 +112,49 @@ describe('applyErrorContextToScope', () => {
     expect(scope.setLevel).not.toHaveBeenCalled();
     expect(scope.setTag).not.toHaveBeenCalled();
     expect(scope.setExtra).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyBleDiagnosticsToScope', () => {
+  function makeScope() {
+    return { setTag: vi.fn() };
+  }
+
+  it('sets each provided tag and stringifies the boolean for filter-friendliness', () => {
+    const scope = makeScope();
+    applyBleDiagnosticsToScope(scope, {
+      chosenWriteType: 'withoutResponse',
+      supportsWriteWithoutResponse: false,
+      characteristicProperties: 12,
+      maxWriteWithResponse: 512,
+      maxWriteWithoutResponse: 185,
+    });
+    expect(scope.setTag).toHaveBeenCalledWith('ble_chosen_write_type', 'withoutResponse');
+    expect(scope.setTag).toHaveBeenCalledWith('ble_supports_without_response', 'false'); // string, not boolean
+    expect(scope.setTag).toHaveBeenCalledWith('ble_char_properties', 12);
+    expect(scope.setTag).toHaveBeenCalledWith('ble_max_with_response', 512);
+    expect(scope.setTag).toHaveBeenCalledWith('ble_max_without_response', 185);
+  });
+
+  it('skips fields that are undefined', () => {
+    const scope = makeScope();
+    applyBleDiagnosticsToScope(scope, { chosenWriteType: 'withResponse' });
+    expect(scope.setTag).toHaveBeenCalledTimes(1);
+    expect(scope.setTag).toHaveBeenCalledWith('ble_chosen_write_type', 'withResponse');
+  });
+
+  it('clears every BLE tag (sets undefined) when given null', () => {
+    const scope = makeScope();
+    applyBleDiagnosticsToScope(scope, null);
+    expect(scope.setTag).toHaveBeenCalledTimes(5);
+    for (const key of [
+      'ble_chosen_write_type',
+      'ble_supports_without_response',
+      'ble_char_properties',
+      'ble_max_with_response',
+      'ble_max_without_response',
+    ]) {
+      expect(scope.setTag).toHaveBeenCalledWith(key, undefined);
+    }
   });
 });

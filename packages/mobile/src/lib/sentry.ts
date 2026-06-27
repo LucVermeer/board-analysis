@@ -107,9 +107,8 @@ export function captureToSentry(error: unknown, context?: ErrorReportContext): v
   });
 }
 
-// The global-scope tag keys written by setBleDiagnosticsTags, cleared together
-// by clearBleDiagnosticsTags so a disconnect can't leave stale BLE tags on a
-// later unrelated event.
+// The global-scope tag keys written on connect, cleared together on disconnect
+// so a non-BLE error firing afterwards can't carry stale BLE tags.
 const BLE_DIAGNOSTIC_TAG_KEYS = [
   'ble_chosen_write_type',
   'ble_supports_without_response',
@@ -117,6 +116,52 @@ const BLE_DIAGNOSTIC_TAG_KEYS = [
   'ble_max_with_response',
   'ble_max_without_response',
 ] as const;
+
+export type BleConnectionDiagnostics = {
+  characteristicProperties?: number;
+  supportsWriteWithoutResponse?: boolean;
+  chosenWriteType?: string;
+  maxWriteWithResponse?: number;
+  maxWriteWithoutResponse?: number;
+};
+
+// A scope whose tags accept `undefined` (the clear value) — wider than
+// SentryScopeLike, which only models the set path. Structural so the mapping is
+// unit-testable with a plain fake, like applyErrorContextToScope.
+type BleTagScope = { setTag: (key: string, value: string | number | boolean | undefined) => void };
+
+/**
+ * Pure mapping of BLE diagnostics onto a scope's tags. `null` diagnostics =
+ * clear: every BLE key is set to `undefined`, which drops it from serialized
+ * events (this SDK's Scope exposes no `removeTag`; `setTag(key, undefined)` is
+ * the supported clear). Extracted (no enablement gate, no SDK) so the set/clear
+ * + boolean-stringify behaviour is directly unit-testable.
+ */
+export function applyBleDiagnosticsToScope(scope: BleTagScope, diagnostics: BleConnectionDiagnostics | null): void {
+  if (!diagnostics) {
+    for (const key of BLE_DIAGNOSTIC_TAG_KEYS) scope.setTag(key, undefined);
+    return;
+  }
+  if (diagnostics.chosenWriteType !== undefined) scope.setTag('ble_chosen_write_type', diagnostics.chosenWriteType);
+  // Sentry stores/queries tag values as strings; stringify the boolean so a
+  // filter reads `true`/`false` rather than a coerced primitive.
+  if (diagnostics.supportsWriteWithoutResponse !== undefined) {
+    scope.setTag('ble_supports_without_response', String(diagnostics.supportsWriteWithoutResponse));
+  }
+  if (diagnostics.characteristicProperties !== undefined) {
+    scope.setTag('ble_char_properties', diagnostics.characteristicProperties);
+  }
+  if (diagnostics.maxWriteWithResponse !== undefined) {
+    scope.setTag('ble_max_with_response', diagnostics.maxWriteWithResponse);
+  }
+  if (diagnostics.maxWriteWithoutResponse !== undefined) {
+    scope.setTag('ble_max_without_response', diagnostics.maxWriteWithoutResponse);
+  }
+}
+
+// Adapts the top-level functional API to a BleTagScope. `Sentry.setTag` accepts
+// `undefined` (Primitive), so it carries the clear path too.
+const bleTagScope: BleTagScope = { setTag: (key, value) => Sentry.setTag(key, value) };
 
 /**
  * BLE write diagnostics captured at connect, kept as GLOBAL scope tags (not the
@@ -127,46 +172,18 @@ const BLE_DIAGNOSTIC_TAG_KEYS = [
  * Sentry is disabled or no diagnostics are available (Android / web / a binary
  * too old to report them).
  */
-export function setBleDiagnosticsTags(
-  diagnostics:
-    | {
-        characteristicProperties?: number;
-        supportsWriteWithoutResponse?: boolean;
-        chosenWriteType?: string;
-        maxWriteWithResponse?: number;
-        maxWriteWithoutResponse?: number;
-      }
-    | null
-    | undefined,
-): void {
+export function setBleDiagnosticsTags(diagnostics: BleConnectionDiagnostics | null | undefined): void {
   if (!isSentryEnabled || !diagnostics) return;
-  if (diagnostics.chosenWriteType !== undefined) Sentry.setTag('ble_chosen_write_type', diagnostics.chosenWriteType);
-  // Sentry stores/queries tag values as strings; stringify the boolean so a
-  // filter reads `true`/`false` rather than a coerced primitive.
-  if (diagnostics.supportsWriteWithoutResponse !== undefined) {
-    Sentry.setTag('ble_supports_without_response', String(diagnostics.supportsWriteWithoutResponse));
-  }
-  if (diagnostics.characteristicProperties !== undefined) {
-    Sentry.setTag('ble_char_properties', diagnostics.characteristicProperties);
-  }
-  if (diagnostics.maxWriteWithResponse !== undefined) {
-    Sentry.setTag('ble_max_with_response', diagnostics.maxWriteWithResponse);
-  }
-  if (diagnostics.maxWriteWithoutResponse !== undefined) {
-    Sentry.setTag('ble_max_without_response', diagnostics.maxWriteWithoutResponse);
-  }
+  applyBleDiagnosticsToScope(bleTagScope, diagnostics);
 }
 
 /**
- * Drop the global BLE diagnostic tags set on connect. Called on disconnect so a
- * non-BLE error firing after a board drop doesn't carry stale `ble_*` tags from
- * the previous connection.
+ * Drop the global BLE diagnostic tags set on connect, so a non-BLE error firing
+ * after a board drop doesn't carry stale `ble_*` tags from the previous link.
  */
 export function clearBleDiagnosticsTags(): void {
   if (!isSentryEnabled) return;
-  for (const key of BLE_DIAGNOSTIC_TAG_KEYS) {
-    Sentry.setTag(key, undefined);
-  }
+  applyBleDiagnosticsToScope(bleTagScope, null);
 }
 
 /** Best-effort flush so a report survives a later hard crash. */
