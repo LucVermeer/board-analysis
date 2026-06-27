@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Filter the climb list right where you are — grade, sort, popularity, and your recent filters now sit in a chip row under the title instead of behind a button. ([#3245](https://github.com/boardsesh/boardsesh/pull/3245))
+  Home-wall boards get Tall/Wide chips; long-press to lock one so the right climbs always show.
 - Internal/ops change — no user-facing behavior change. Adds a non-blocking post-publish health check for production OTA updates and a documented rollback runbook. The health gate ships inert and activates once the `POSTHOG_PERSONAL_API_KEY` repo secret is added to the Production environment. ([#3243](https://github.com/boardsesh/boardsesh/pull/3243))
 
 ### Improved

@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-27T12:40:44.287Z",
+  "generatedAt": "2026-06-27T23:17:04.274Z",
   "entries": [
+    {
+      "prNumber": 3245,
+      "category": "new",
+      "title": "Filter the climb list right where you are — grade, sort, popularity, and your recent filters now sit in a chip row under the title instead of behind a button.",
+      "mergedAt": "2026-06-27T23:16:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3245",
+      "body": "Home-wall boards get Tall/Wide chips; long-press to lock one so the right climbs always show."
+    },
     {
       "prNumber": 3246,
       "category": "improved",
@@ -404,6 +412,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-27T22:39:45+10:00",
+      "sha": "e35970684db423998ed916e09c9cb5cde1641e66",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "bdb8c742dd4bf0d7bd80d4927276806c76b61b03",
+        "ios": "8445fea3dd3f7585f742cf2c8ae0773b5f00f93d"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-27T18:06:36+10:00",
