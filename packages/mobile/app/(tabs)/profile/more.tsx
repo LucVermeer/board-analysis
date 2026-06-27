@@ -21,7 +21,7 @@ import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { SessionRecordingSwitchRow } from '../../../src/components/settings/SessionRecordingSwitchRow';
-import { isPreviewBuild } from '../../../src/lib/eas-api';
+import { isPreviewBuild } from '../../../src/lib/preview-build';
 import { isDevLauncherAvailable } from '../../../src/lib/dev-launcher';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
