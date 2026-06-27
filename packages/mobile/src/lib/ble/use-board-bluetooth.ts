@@ -33,7 +33,7 @@ import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 import { reportHandledError } from '../error-reporting';
-import { setBleDiagnosticsTags } from '../sentry';
+import { clearBleDiagnosticsTags, setBleDiagnosticsTags } from '../sentry';
 import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
 
 // Exported for testing. Decides how a connect-failure category reaches error
@@ -385,6 +385,9 @@ export function useBoardBluetooth({
     writeChainRef.current = Promise.resolve();
     setIsConnected(false);
     onConnectionChange?.(false);
+    // Drop the connect-time BLE diagnostic tags so a later unrelated error
+    // doesn't carry stale ble_* tags from this (now-dead) connection.
+    clearBleDiagnosticsTags();
     // Two callers reach here: the adapter's own disconnect event (the adapter
     // already self-cleaned, so disconnect() is now a no-op), and the
     // write-failure drop path (isDisconnectionError). In the latter the
@@ -737,7 +740,10 @@ export function useBoardBluetooth({
         // Sentry tags so they ride any later write-stall report, and recorded on
         // the success event so PostHog can correlate the chosen write type with
         // send failures (#3181 follow-up).
-        const connectionDiagnostics = await getNativeBleConnectedDevice();
+        // Never let a diagnostics fetch failure skip the success analytics below
+        // (getNativeBleConnectedDevice already swallows native errors → null, but
+        // be explicit so analytics parity can't regress).
+        const connectionDiagnostics = await getNativeBleConnectedDevice().catch(() => null);
         setBleDiagnosticsTags(connectionDiagnostics);
         // apiLevel is the level parseApiLevel actually picked; deviceNamePresent
         // records whether an advertised name was even available. parseApiLevel
@@ -756,6 +762,10 @@ export function useBoardBluetooth({
           bleChosenWriteType: connectionDiagnostics?.chosenWriteType,
           bleSupportsWithoutResponse: connectionDiagnostics?.supportsWriteWithoutResponse,
           bleCharProperties: connectionDiagnostics?.characteristicProperties,
+          // Negotiated write lengths too, so a future MTU-related stall (vs a
+          // write-type one) is visible in PostHog (see #3230).
+          bleMaxWriteWithResponse: connectionDiagnostics?.maxWriteWithResponse,
+          bleMaxWriteWithoutResponse: connectionDiagnostics?.maxWriteWithoutResponse,
         });
         return true;
       } catch (error) {
@@ -866,6 +876,7 @@ export function useBoardBluetooth({
     writeChainRef.current = Promise.resolve();
     setIsConnected(false);
     onConnectionChange?.(false);
+    clearBleDiagnosticsTags();
     await adapter?.disconnect();
   }, [onConnectionChange]);
 
@@ -964,7 +975,10 @@ export function useBoardBluetooth({
       onConnectSuccess?.(serial);
       // Surface this adopted connection's write diagnostics to Sentry too
       // (widget reconnect / state restoration paths, not just JS connect).
-      void getNativeBleConnectedDevice().then(setBleDiagnosticsTags);
+      // Fire-and-forget; a native rejection is intentionally ignored.
+      void getNativeBleConnectedDevice()
+        .then(setBleDiagnosticsTags)
+        .catch(() => {});
     };
 
     const connectedSubscription = subscribeNativeBleConnected((payload) => {

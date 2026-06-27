@@ -212,6 +212,9 @@ final class LiveActivityWidgetTests: XCTestCase {
         XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .write, boardName: "moonboard"), .withResponse)
         XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: .writeWithoutResponse, boardName: "moonboard"), .withoutResponse)
         XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.write, .writeWithoutResponse], boardName: "moonboard"), .withoutResponse)
+        // Defensive default: a characteristic advertising neither write property
+        // can't be written either way (CoreBluetooth drops/ rejects the write and
+        // the wall stays dark) — we just don't pick the unacknowledged path for it.
         XCTAssertEqual(BoardBleEncoding.preferredWriteType(for: [.read], boardName: "moonboard"), .withResponse)
     }
 }

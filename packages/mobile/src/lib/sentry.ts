@@ -107,13 +107,25 @@ export function captureToSentry(error: unknown, context?: ErrorReportContext): v
   });
 }
 
+// The global-scope tag keys written by setBleDiagnosticsTags, cleared together
+// by clearBleDiagnosticsTags so a disconnect can't leave stale BLE tags on a
+// later unrelated event.
+const BLE_DIAGNOSTIC_TAG_KEYS = [
+  'ble_chosen_write_type',
+  'ble_supports_without_response',
+  'ble_char_properties',
+  'ble_max_with_response',
+  'ble_max_without_response',
+] as const;
+
 /**
  * BLE write diagnostics captured at connect, kept as GLOBAL scope tags (not the
  * per-event `withScope` tags) so they ride later `ble-send` error reports —
  * which is the point: a `write_timeout`/`write_recovery_failed` report can then
  * show whether the board advertised write-without-response and which write type
- * was chosen. No-op when Sentry is disabled or no diagnostics are available
- * (Android / web / a binary too old to report them).
+ * was chosen. Cleared on disconnect via clearBleDiagnosticsTags. No-op when
+ * Sentry is disabled or no diagnostics are available (Android / web / a binary
+ * too old to report them).
  */
 export function setBleDiagnosticsTags(
   diagnostics:
@@ -129,8 +141,10 @@ export function setBleDiagnosticsTags(
 ): void {
   if (!isSentryEnabled || !diagnostics) return;
   if (diagnostics.chosenWriteType !== undefined) Sentry.setTag('ble_chosen_write_type', diagnostics.chosenWriteType);
+  // Sentry stores/queries tag values as strings; stringify the boolean so a
+  // filter reads `true`/`false` rather than a coerced primitive.
   if (diagnostics.supportsWriteWithoutResponse !== undefined) {
-    Sentry.setTag('ble_supports_without_response', diagnostics.supportsWriteWithoutResponse);
+    Sentry.setTag('ble_supports_without_response', String(diagnostics.supportsWriteWithoutResponse));
   }
   if (diagnostics.characteristicProperties !== undefined) {
     Sentry.setTag('ble_char_properties', diagnostics.characteristicProperties);
@@ -140,6 +154,18 @@ export function setBleDiagnosticsTags(
   }
   if (diagnostics.maxWriteWithoutResponse !== undefined) {
     Sentry.setTag('ble_max_without_response', diagnostics.maxWriteWithoutResponse);
+  }
+}
+
+/**
+ * Drop the global BLE diagnostic tags set on connect. Called on disconnect so a
+ * non-BLE error firing after a board drop doesn't carry stale `ble_*` tags from
+ * the previous connection.
+ */
+export function clearBleDiagnosticsTags(): void {
+  if (!isSentryEnabled) return;
+  for (const key of BLE_DIAGNOSTIC_TAG_KEYS) {
+    Sentry.setTag(key, undefined);
   }
 }
 
