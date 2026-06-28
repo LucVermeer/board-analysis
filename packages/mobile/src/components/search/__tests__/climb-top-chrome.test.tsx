@@ -615,7 +615,10 @@ describe('ClimbTopChrome', () => {
     expect(switcher?.getAttribute('data-hint')).toBe('mobile.search.boardSwitcherHint');
     expect(container.querySelector('[data-icon="chevron.down"]')).not.toBeNull();
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
-    expect(container.querySelector('[data-pressable="mobile.search.gradeAction"]')?.textContent).toContain('Grade');
+    const gradeLabel = container.querySelector('[data-pressable="mobile.search.gradeAction"]')?.textContent;
+    expect(gradeLabel).toContain('Grade');
+    // The resting label is the bare "Grade", not the old "Grade range" placeholder.
+    expect(gradeLabel).not.toContain('range');
 
     fireEvent.click(capsule(container)!);
     expect(onOpenBoardDetail).toHaveBeenCalledTimes(1);
