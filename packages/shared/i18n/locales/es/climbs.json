@@ -576,6 +576,7 @@
       "both": "Ambos",
       "title": "Filtros",
       "sortBy": "Ordenar por",
+      "grade": "Grado",
       "gradeRange": "Rango de grado",
       "anyAscents": "Todos",
       "refineHint": "Tipo, equipadores, precisión de grado",

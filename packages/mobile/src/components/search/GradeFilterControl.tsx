@@ -1,7 +1,7 @@
 // The grade-range affordance in the climbs search row (Material variant). Shaped
 // as an M3 exposed-dropdown control — an outlined, field-height pill that reads as
-// a peer of the search field beside it: a label (the current selection, or "Grade
-// range") plus a trailing chevron that flips up while the inline grade rail is open.
+// a peer of the search field beside it: a label (the current selection, or the
+// resting "Grade") plus a trailing chevron that flips up while the inline grade rail is open.
 // When a range is active it swaps the chevron for a separate clear (X) button — a
 // sibling, not a nested target — so "tap body to edit" and "tap X to clear" stay
 // distinct (and independently labelled) for assistive tech.
@@ -13,7 +13,7 @@ import { Text } from '../Text';
 import { useTheme } from '../../providers/theme-provider';
 
 type GradeFilterControlProps = {
-  /** Current selection text (e.g. "V4–V6"), or the resting "Grade range" label. */
+  /** Current selection text (e.g. "V4–V6"), or the resting "Grade" label. */
   label: string;
   /** A grade range is applied — switches to the filled/clearable state. */
   active: boolean;

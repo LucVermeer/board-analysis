@@ -814,7 +814,7 @@ function ClimbListInner() {
     if (gradeFilterToken) {
       return { label: gradeFilterToken.label, active: true, onClear: gradeFilterToken.clear };
     }
-    return { label: t('mobile.filter.gradeRange'), active: false };
+    return { label: t('mobile.filter.grade'), active: false };
   }, [gradeFilterToken, t]);
 
   // --- Persistent filter chips (Liquid Glass) ---

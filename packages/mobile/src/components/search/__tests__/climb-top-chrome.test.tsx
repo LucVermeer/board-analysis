@@ -598,7 +598,7 @@ describe('ClimbTopChrome', () => {
           onOpenBoardDetail,
           onOpenFilters: vi.fn(),
           activeFilterCount: 0,
-          gradeChip: { label: 'Grade range', active: false },
+          gradeChip: { label: 'Grade', active: false },
           gradeBound: { minGradeId: undefined, maxGradeId: undefined },
           onOpenGrade: vi.fn(),
           onGradeChange: vi.fn(),
@@ -615,9 +615,7 @@ describe('ClimbTopChrome', () => {
     expect(switcher?.getAttribute('data-hint')).toBe('mobile.search.boardSwitcherHint');
     expect(container.querySelector('[data-icon="chevron.down"]')).not.toBeNull();
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
-    expect(container.querySelector('[data-pressable="mobile.search.gradeAction"]')?.textContent).toContain(
-      'Grade range',
-    );
+    expect(container.querySelector('[data-pressable="mobile.search.gradeAction"]')?.textContent).toContain('Grade');
 
     fireEvent.click(capsule(container)!);
     expect(onOpenBoardDetail).toHaveBeenCalledTimes(1);

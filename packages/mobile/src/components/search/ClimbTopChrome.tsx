@@ -152,7 +152,7 @@ export function ClimbTopChrome({
     const hasNonGradeFilters = nonGradeFilterCount > 0;
     const shouldShowFilterSummary = filterSummary != null && hasNonGradeFilters;
     const visibleFilterSummary = shouldShowFilterSummary ? filterSummary : null;
-    const visibleGradeLabel = gradeChip?.label ?? t('mobile.filter.gradeRange');
+    const visibleGradeLabel = gradeChip?.label ?? t('mobile.filter.grade');
 
     return (
       <View
