@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-28T10:51:14.076Z",
+  "generatedAt": "2026-06-28T12:31:31.106Z",
   "entries": [
+    {
+      "prNumber": 3260,
+      "category": "new",
+      "title": "See which playlists a climb is in, right from the list. Turn on **Show playlist tags** under More → Display.",
+      "mergedAt": "2026-06-28T12:30:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3260"
+    },
     {
       "prNumber": 3264,
       "category": "fixed",
