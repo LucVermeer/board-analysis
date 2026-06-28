@@ -2,6 +2,7 @@ Le catalogue MoonBoard complet est là, tu règles les couleurs de prises à ta 
 
 Nouveau :
 - Le catalogue MoonBoard complet est arrivé : des milliers de blocs en plus avec de vraies cotations, des notes en étoiles et le nombre de sends, plus le Mini 2025 et l'original de 2010. Le matériel LED du MoonBoard d'origine s'allume aussi en Bluetooth.
+- Vois d'un coup d'œil qui est sur le mur : quand un pote allume une autre voie, son visage et cette voie s'affichent dans une capsule en haut, pendant que la barre du bas reste ta propre file.
 - Touche n'importe quelle voie d'un circuit ou d'une playlist et toute la liste passe dans ta file dans l'ordre. Reviens en arrière d'un glissement pour repasser sur les blocs précédents, pas seulement sauter au suivant.
 - Compose tes propres couleurs de prise avec un vrai sélecteur de couleur, prévisualise-les en daltonisme rouge-vert et bleu-jaune, et choisis une nouvelle forme de marqueur octogonale. Les cercles des prises MoonBoard sont aussi plus gros et plus lisibles.
 - Trie ton logbook par Plus dur de haut en bas, avec la cotation consensus de la communauté à côté de celle que tu as notée.
