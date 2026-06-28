@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Curious what's coming? Open What's New and tap **Try a preview** to load an upcoming change before it ships — then reset to jump back to the shipped version anytime. ([#3258](https://github.com/boardsesh/boardsesh/pull/3258))
 - The current climb's bar now stays on your main tabs and gets out of the way on detail, filter, and settings screens. ([#3253](https://github.com/boardsesh/boardsesh/pull/3253))
 - See who's on the wall at a glance — when a crewmate lights up a different climb, their face and the climb show in a capsule up top, and the bottom bar stays your own queue. ([#3247](https://github.com/boardsesh/boardsesh/pull/3247))
 
