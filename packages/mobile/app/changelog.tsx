@@ -232,7 +232,7 @@ const TryPreviewButton = memo(function TryPreviewButton() {
   return (
     <Button
       title={t('mobile.previewChannels.entryTitle')}
-      onPress={() => router.push('/(tabs)/profile/channel-switcher')}
+      onPress={() => router.push('/channel-switcher')}
       variant="text"
       size="small"
       icon="branch"
