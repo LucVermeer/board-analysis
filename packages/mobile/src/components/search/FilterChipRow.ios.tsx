@@ -109,7 +109,11 @@ function FilterChipRowComponent({
   return (
     <Host matchContents={{ vertical: true }} style={styles.host}>
       <ScrollView axes="horizontal" showsIndicators={false}>
-        <HStack spacing={spacing[2]} modifiers={[padding({ horizontal: spacing[4] })]}>
+        {/* Vertical padding gives the Liquid Glass press-expansion room inside the
+            host. `matchContents={{ vertical: true }}` fixes the host to the chips'
+            resting height and the SwiftUI ScrollView clips to it, so without slack
+            a pressed chip's growing glass lens is cut off top/bottom. */}
+        <HStack spacing={spacing[2]} modifiers={[padding({ horizontal: spacing[4], vertical: spacing[2] })]}>
           {/* Filters · N → the long-tail sheet. A button, not a menu. */}
           <Button
             label={filtersLabel}
