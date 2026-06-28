@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-28T02:35:48.642Z",
+  "generatedAt": "2026-06-28T03:25:52.096Z",
   "entries": [
+    {
+      "prNumber": 3253,
+      "category": "new",
+      "title": "The current climb's bar now stays on your main tabs and gets out of the way on detail, filter, and settings screens.",
+      "mergedAt": "2026-06-28T03:21:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3253"
+    },
     {
       "prNumber": 3247,
       "category": "new",
