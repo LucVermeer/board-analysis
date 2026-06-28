@@ -20,6 +20,10 @@ A new version shipped to the App Store and Play Store.
 - Internal CI change — no user-facing or runtime behavior change. Wires the existing mobile dependency-health check into the CI pipeline so native-module drift from the Expo SDK fails the build instead of being opt-in. ([#3248](https://github.com/boardsesh/boardsesh/pull/3248))
 - Draft pilot enabling React Compiler auto-memoization; not yet shipped — pending measurement. ([#3239](https://github.com/boardsesh/boardsesh/pull/3239))
 
+### Fixed
+
+- The grade filter now opens where you left off — on your recent grades instead of scrolled all the way back to the easy end. ([#3256](https://github.com/boardsesh/boardsesh/pull/3256))
+
 ## 2026-06-27
 
 ### App update
