@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-28T06:30:12.397Z",
+  "generatedAt": "2026-06-28T10:51:14.076Z",
   "entries": [
+    {
+      "prNumber": 3264,
+      "category": "fixed",
+      "title": "The grade filter button on the climbs screen now just says \"Grade\" until you pick a range.",
+      "mergedAt": "2026-06-28T10:50:10Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3264"
+    },
     {
       "prNumber": 3258,
       "category": "new",

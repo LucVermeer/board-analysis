@@ -23,6 +23,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- The grade filter button on the climbs screen now just says "Grade" until you pick a range. ([#3264](https://github.com/boardsesh/boardsesh/pull/3264))
 - The grade filter now opens where you left off — on your recent grades instead of scrolled all the way back to the easy end. ([#3256](https://github.com/boardsesh/boardsesh/pull/3256))
 
 ## 2026-06-27
