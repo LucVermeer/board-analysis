@@ -2,6 +2,7 @@ Está el catálogo completo de MoonBoard, puedes ajustar a tu gusto los colores 
 
 Nuevo:
 - Ya está el catálogo completo de MoonBoard: miles de bloques más con grados reales, valoraciones por estrellas y número de encadenes, además del Mini 2025 y el original de 2010. El hardware LED del MoonBoard original también se enciende por Bluetooth.
+- Mira de un vistazo quién está en el muro: cuando alguien de tu peña enciende otra vía, su cara y esa vía aparecen en una cápsula arriba, mientras la barra de abajo sigue siendo tu propia cola.
 - Toca cualquier vía de un circuito o una playlist y la lista entera entra en tu cola en orden. Desliza hacia atrás para volver a los bloques anteriores, no solo saltar al siguiente.
 - Crea tus propios colores de presa con un selector de color de verdad, previsualízalos con daltonismo rojo-verde y azul-amarillo y elige una nueva forma de marcador octogonal. Además, los círculos de las presas del MoonBoard son más grandes y fáciles de ver.
 - Ordena tu logbook por Más difícil de arriba abajo, con el grado de consenso de la comunidad junto al que tú apuntaste.
