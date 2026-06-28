@@ -387,6 +387,11 @@
     },
     "boardPresence": {
       "title": "Ahora en el muro",
+      "stripA11yLabel": "En el muro: {{name}}, {{grade}}",
+      "stripA11yLabelWithSender": "En el muro: {{name}}, {{grade}}, encendido por {{sender}}",
+      "stripA11yHint": "Abre el bloque del muro",
+      "stripAnnounce": "Ahora en el muro: {{name}}, {{grade}}",
+      "stripAnnounceWithSender": "Ahora en el muro: {{name}}, {{grade}}, encendido por {{sender}}",
       "switchBoard": "Cambiar de muro",
       "switchBoardAria": "Cambiar a otro muro",
       "close": "Cerrar",

@@ -16,13 +16,17 @@ import { Appbar, Chip } from 'react-native-paper';
 import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
+import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { selectByVariant } from '../../theme/variants';
 import { spacing } from '../../theme/tokens';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { iconMap } from '../icon-map';
-import { BoardSwitcherButton, CollapsingTopChrome, MaterialAngleAction, TOP_ACTION_SIZE } from '../chrome';
+import { BoardSwitcherButton, CollapsingTopChrome, MaterialAngleChip, TOP_ACTION_SIZE } from '../chrome';
 import { GradeRangeRail } from '../grade';
 import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
+import { WallStatusCapsule } from '../queue-control/WallStatusCapsule';
+import { useWallClimbIfDistinct } from '../queue-control/use-wall-or-queue-climb';
+import { useActiveClimbUuid } from '../../providers/queue-provider';
 import { FilterButton } from './FilterButton';
 import { GradeFilterControl } from './GradeFilterControl';
 
@@ -32,11 +36,11 @@ const MATERIAL_SEARCH_HEIGHT = 48;
 
 type ClimbTopChromeProps = {
   searchMode?: 'custom' | 'native';
-  /** The active filter summary (e.g. "V4–V6 · Quality"), or "All climbs" when no
-   *  filter is active. Shown as a plain inline title once scrolled; the caller
-   *  renders the matching large in-body title at the top of the list. (Unused by
-   *  the Material variant.) */
-  title: string;
+  /** Optional persistent plain centre title (the legacy filter summary, e.g.
+   *  "V4–V6 · Quality"). Omitted when the persistent filter chips carry the filter
+   *  state — the centre then reads empty (the redundant "All climbs" label is
+   *  dropped). Unused by the Material variant. */
+  title?: string;
   canCreate: boolean;
   onCreate: () => void;
   onOpenBoardDetail: () => void;
@@ -100,8 +104,21 @@ export function ClimbTopChrome({
 }: ClimbTopChromeProps) {
   const { t } = useTranslation('climbs');
   const { systemColors, variant } = useTheme();
+  const { data: activeBoard } = useActiveBoard();
   const insets = useSafeAreaInsets();
   const usesCustomSearch = searchMode === 'custom';
+  // The Material angle control moved out of the (over-budget) app bar into the
+  // quick row beside the grade/filter chips. Gate the quick row on it OR a filter
+  // summary so the row never renders an empty gap.
+  const angleAdjustable = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
+
+  // "On the wall" capsule: own the gate here so a falsy centre slot falls back to
+  // the title, and the capsule gets a clean mount/unmount (entering/exiting fade).
+  // Only present when a board feed lights a climb that differs from the user's own
+  // current climb (hidden in the solo case).
+  const currentClimbUuid = useActiveClimbUuid();
+  const wallClimb = useWallClimbIfDistinct(currentClimbUuid);
+  const wallCapsule = wallClimb ? <WallStatusCapsule climb={wallClimb} /> : undefined;
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => onHeightChange(event.nativeEvent.layout.height),
@@ -167,11 +184,20 @@ export function ClimbTopChrome({
               accessibilityLabel={t('mobile.create.fab.ariaLabel')}
             />
           ) : null}
-          <MaterialAngleAction />
-          {/* No toolbar lightbulb on the climbs tab — board-LED control lives on
-              the queue bar / current-climb pill (BoardControlIndicator). Keeps
-              the Material path in step with the glass `hideLight` above. */}
+          {/* Angle is a quick-row chip below (it re-grades the whole list — a list
+              param, not an app-bar action). No toolbar lightbulb on the climbs tab
+              either — board-LED control lives on the queue bar / current-climb pill
+              (BoardControlIndicator), in step with the glass `hideLight`. */}
         </Appbar.Header>
+
+        {/* "On the wall" status — a compact capsule in a slim centred row under the
+            app bar (M3 has no centre-slot in the bar), only when a board feed lights
+            a climb that differs from the user's own queue head. */}
+        {wallCapsule ? (
+          <View pointerEvents="box-none" style={styles.materialWallStatusRow}>
+            {wallCapsule}
+          </View>
+        ) : null}
 
         {usesCustomSearch ? (
           <View pointerEvents="box-none" style={styles.materialSearchStack}>
@@ -208,21 +234,24 @@ export function ClimbTopChrome({
               {onOpenFilters ? <FilterButton activeFilterCount={nonGradeFilterCount} onPress={onOpenFilters} /> : null}
             </View>
 
-            {visibleFilterSummary ? (
+            {angleAdjustable || visibleFilterSummary ? (
               <View pointerEvents="box-none" style={styles.materialQuickRow}>
-                <Chip
-                  compact
-                  mode="flat"
-                  icon={iconMap.filter.android}
-                  onPress={visibleFilterSummary.onClear}
-                  onClose={visibleFilterSummary.onClear}
-                  closeIcon={iconMap.close.android}
-                  accessibilityLabel={visibleFilterSummary.text}
-                  style={styles.materialChip}
-                  textStyle={styles.materialChipText}
-                >
-                  {visibleFilterSummary.text}
-                </Chip>
+                <MaterialAngleChip />
+                {visibleFilterSummary ? (
+                  <Chip
+                    compact
+                    mode="flat"
+                    icon={iconMap.filter.android}
+                    onPress={visibleFilterSummary.onClear}
+                    onClose={visibleFilterSummary.onClear}
+                    closeIcon={iconMap.close.android}
+                    accessibilityLabel={visibleFilterSummary.text}
+                    style={styles.materialChip}
+                    textStyle={styles.materialChipText}
+                  >
+                    {visibleFilterSummary.text}
+                  </Chip>
+                ) : null}
               </View>
             ) : null}
 
@@ -255,6 +284,11 @@ export function ClimbTopChrome({
   return (
     <CollapsingTopChrome
       centerTitle={title}
+      // "On the wall" status — a compact capsule in the centre islands slot (where
+      // the title used to sit) when a board feed lights a climb that differs from
+      // the user's own current climb; otherwise undefined, so the centre falls back
+      // to the title.
+      centerContent={wallCapsule}
       canCreate={canCreate}
       onCreate={onCreate}
       createAccessibilityLabel={t('mobile.create.fab.ariaLabel')}
@@ -316,6 +350,13 @@ const styles = StyleSheet.create({
   materialAppbar: {
     elevation: 0,
     shadowOpacity: 0,
+  },
+  materialWallStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[2],
   },
   materialSearchStack: {
     paddingHorizontal: spacing[4],

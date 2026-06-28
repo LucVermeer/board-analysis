@@ -9,7 +9,6 @@ import {
   NATIVE_BOTTOM_ACCESSORY_SCREEN_GUTTER,
 } from '../../theme/layout';
 import { NativeAccessoryClimbRow } from './NativeAccessoryClimbRow';
-import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 
 /**
  * Hold the last shown climb while this component stays mounted. The mount itself
@@ -43,10 +42,10 @@ export function QueueBottomAccessory() {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const { width: screenWidth } = useWindowDimensions();
   const { state } = useQueue();
-  // Show the accessory when there's a local queue climb OR a live wall climb
-  // (the flag-gated source flip — see useWallOrQueueCurrentClimb), retained across
-  // a presence blip so the live platter never blanks while the host is held open.
-  const resolvedClimb = useWallOrQueueCurrentClimb(state.currentClimbQueueItem?.climb ?? null);
+  // The accessory shows the local queue head only — never the wall's lit climb
+  // (that lives in the top "On the wall" strip now). Retained across a presence
+  // blip so the live platter never blanks while the host is held open.
+  const resolvedClimb = state.currentClimbQueueItem?.climb ?? null;
   const currentClimb = useRetainedAccessoryClimb(resolvedClimb);
 
   const accessoryWidth = useMemo(() => {

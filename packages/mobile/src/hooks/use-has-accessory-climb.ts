@@ -1,22 +1,24 @@
 import { useHasActiveClimb } from '../providers/queue-provider';
-import { useHasWallClimb } from '../components/queue-control/use-wall-or-queue-climb';
 
 /**
  * Presence-only signal for "the bottom accessory has a climb to show": the local
- * queue head OR a live wall (board-presence) climb. Both inputs are presence-only
- * booleans (flip on appear/disappear, not on climb-to-climb change), so the
- * combined value is too.
+ * queue head. A presence-only boolean (flips on appear/disappear, not on
+ * climb-to-climb change), so gating the native accessory mount on it doesn't churn
+ * the tab tree on queue mutations.
  *
- * Gating the native accessory mount and the bottom-chrome arbitration on THIS —
- * rather than the local-queue-only `useHasActiveClimb` — keeps the UIKit
- * `NativeTabs.BottomAccessory` host mounted while a wall climb is continuously
- * present. Without it, a board-level climb change churned local presence, the host
- * unmounted/remounted, and UIKit left a stale snapshot stacked under the new one
- * (the doubled name + grade). It also lets a wall-only climb (no local queue) show
- * the accessory at all.
+ * The accessory shows the queue head only now (the wall's lit climb moved to the
+ * top "On the wall" capsule), so this is exactly `useHasActiveClimb` — kept as a
+ * named hook so `useStickyAccessoryPresence` and the bottom-chrome arbitration have
+ * one stable import for "should the accessory be mounted."
+ *
+ * Deliberately NOT `|| useHasWallClimb()` (the old behaviour). The accessory no
+ * longer renders the wall climb, so for a spectator with no personal queue there is
+ * nothing of theirs to show — mounting it on wall presence would float an EMPTY
+ * UIKit host (`QueueBottomAccessory` reads the queue head and returns null). And
+ * because no host is mounted in that case, there is no `NativeTabs.BottomAccessory`
+ * snapshot to leave a doubled name on a presence-reconnect blip; the wall climb is
+ * surfaced by the top capsule, a plain RN view immune to that UIKit issue.
  */
 export function useHasAccessoryClimb(): boolean {
-  const hasLocalClimb = useHasActiveClimb();
-  const hasWallClimb = useHasWallClimb();
-  return hasLocalClimb || hasWallClimb;
+  return useHasActiveClimb();
 }

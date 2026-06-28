@@ -22,6 +22,7 @@ const ctrl = vi.hoisted(() => ({
   bluetooth: null as BluetoothCtx,
   setActiveBoard: vi.fn(),
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
+  wallClimb: null as { climbUuid: string; name: string } | null,
 }));
 const haptics = vi.hoisted(() => ({ light: vi.fn(), selection: vi.fn() }));
 
@@ -174,7 +175,10 @@ vi.mock('../../../providers/ble-control-sheet-provider', () => ({
 vi.mock('../../../providers/board-presence-provider', () => ({ useBoardPresenceControls: () => ({ boardId: null }) }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueueSessionControls: () => ({ isSessionWallLit: false, sessionId: null }),
+  useActiveClimbUuid: () => null,
 }));
+// No distinct wall climb in these layout tests, so the centre capsule never mounts.
+vi.mock('../../queue-control/use-wall-or-queue-climb', () => ({ useWallClimbIfDistinct: () => ctrl.wallClimb }));
 vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 
 vi.mock('../../../theme/tokens', () => ({
@@ -334,6 +338,13 @@ vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
       'data-avatar-variant': variant,
     }),
 }));
+// Stub the "On the wall" capsule (its own spec covers internals) but render a
+// marker so this test can assert the wallClimb → capsule wiring (glass
+// centerContent / Material under-app-bar row).
+vi.mock('../../queue-control/WallStatusCapsule', () => ({
+  WallStatusCapsule: ({ climb }: { climb: { climbUuid: string } }) =>
+    createElement('div', { 'data-wall-capsule': climb.climbUuid }),
+}));
 
 import { ClimbTopChrome } from '../ClimbTopChrome';
 
@@ -359,6 +370,10 @@ const createAction = (root: HTMLElement) =>
   root.querySelector('[data-pressable="mobile.create.fab.ariaLabel"]') as HTMLButtonElement | null;
 const angleAction = (root: HTMLElement) =>
   root.querySelector('[data-pressable="mobile.angleSelector.title"]') as HTMLButtonElement | null;
+// Material variant: the angle is an M3 quick-row chip (Paper Chip), not a glass
+// toolbar action — the paper mock renders it as `[data-chip="<a11y label>"]`.
+const materialAngleChip = (root: HTMLElement) =>
+  root.querySelector('[data-chip="mobile.angleSelector.title"]') as HTMLButtonElement | null;
 const lightbulb = (root: HTMLElement) =>
   (root.querySelector('[data-pressable="ble.connectBoard"]') ??
     root.querySelector('[data-pressable="lightControl.disconnect"]')) as HTMLButtonElement | null;
@@ -389,6 +404,7 @@ describe('ClimbTopChrome', () => {
     ctrl.board = null;
     ctrl.bluetooth = null;
     ctrl.variant = 'liquidGlass';
+    ctrl.wallClimb = null;
     ctrl.setActiveBoard.mockClear();
     haptics.light.mockClear();
     haptics.selection.mockClear();
@@ -432,11 +448,33 @@ describe('ClimbTopChrome', () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the angle selector as the second left toolbar button', () => {
+  it('renders the angle selector in the right toolbar group (with the board glyph)', () => {
     ctrl.board = typedBoard;
     const { container } = render(<ClimbTopChrome {...makeProps({ canCreate: true })} />);
     expect(angleAction(container)).not.toBeNull();
     expect(angleAction(container)?.textContent).toBe('40°');
+  });
+
+  it('mounts the "On the wall" capsule (glass centre slot) when a distinct wall climb is live', () => {
+    ctrl.board = typedBoard;
+    ctrl.wallClimb = { climbUuid: 'wall-9', name: 'Angel Eyes' };
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    expect(container.querySelector('[data-wall-capsule="wall-9"]')).not.toBeNull();
+  });
+
+  it('omits the "On the wall" capsule when there is no distinct wall climb', () => {
+    ctrl.board = typedBoard;
+    ctrl.wallClimb = null;
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    expect(container.querySelector('[data-wall-capsule]')).toBeNull();
+  });
+
+  it('mounts the "On the wall" capsule under the Material app bar when a wall climb is live', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    ctrl.wallClimb = { climbUuid: 'wall-9', name: 'Angel Eyes' };
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    expect(container.querySelector('[data-wall-capsule="wall-9"]')).not.toBeNull();
   });
 
   it('hides the angle selector for fixed-angle boards', () => {
@@ -513,6 +551,32 @@ describe('ClimbTopChrome', () => {
     };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
     expect(lightbulb(container)).toBeNull();
+  });
+
+  it('renders the angle as a Material quick-row chip (not an app-bar action)', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    const chip = materialAngleChip(container);
+    expect(chip).not.toBeNull();
+    expect(chip?.textContent).toContain('40°');
+  });
+
+  it('omits the Material angle chip for fixed-angle boards', () => {
+    ctrl.variant = 'material';
+    ctrl.board = { ...typedBoard, isAngleAdjustable: false };
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    expect(materialAngleChip(container)).toBeNull();
+  });
+
+  it('opens the angle sheet from the Material chip and persists the selection', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    fireEvent.click(materialAngleChip(container)!);
+    expect(container.querySelector('[data-angle-selector]')).not.toBeNull();
+    fireEvent.click(container.querySelector('[data-angle-selector]') as HTMLButtonElement);
+    expect(ctrl.setActiveBoard).toHaveBeenCalledWith({ ...typedBoard, angle: 45 });
   });
 
   it('reports its measured height through onHeightChange via onLayout', () => {

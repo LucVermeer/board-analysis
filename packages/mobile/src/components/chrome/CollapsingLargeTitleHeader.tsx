@@ -14,6 +14,12 @@ type CollapsingLargeTitleHeaderProps = {
    *  (e.g. the Climbs filter summary). Always visible when set; omit for no
    *  centred title (Discover/Profile/Record). */
   centerTitle?: string;
+  /** Optional interactive element rendered in the centre slot instead of the plain
+   *  title (e.g. the Climbs "On the wall" capsule). Takes precedence over
+   *  `centerTitle` when present. The centre is `box-none`, so this stays tappable
+   *  while empty space still falls through (status-bar scroll-to-top is unaffected
+   *  — it's a status-bar-window behaviour, not the nav row's). */
+  centerContent?: ReactNode;
   /** Report the measured chrome height so the list can inset its top padding. */
   onHeightChange: (height: number) => void;
   /** Glass island(s) anchored to the left of the islands row. */
@@ -35,6 +41,7 @@ type CollapsingLargeTitleHeaderProps = {
  */
 export function CollapsingLargeTitleHeader({
   centerTitle,
+  centerContent,
   onHeightChange,
   leftActions,
   rightActions,
@@ -66,22 +73,24 @@ export function CollapsingLargeTitleHeader({
         {/* Left island. */}
         {leftActions}
 
-        {/* Flexible centre: the optional persistent plain title (Climbs filter
-            summary) — plain text over the progressive blur, no pill; otherwise the
-            spacer that holds the right island to the edge. Non-interactive —
-            status-bar tap handles scroll-to-top. */}
-        <View pointerEvents="none" style={styles.centerSection}>
-          {centerTitle != null ? (
-            <Text
-              variant="headline"
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              color={systemColors.label}
-              style={styles.centerTitle}
-            >
-              {centerTitle}
-            </Text>
-          ) : null}
+        {/* Flexible centre: an optional interactive element (Climbs "On the wall"
+            capsule) takes precedence; otherwise the optional persistent plain title
+            (Climbs filter summary) — plain text over the progressive blur; otherwise
+            the spacer that holds the right island to the edge. `box-none` so the
+            capsule stays tappable while empty space falls through. */}
+        <View pointerEvents="box-none" style={styles.centerSection}>
+          {centerContent ??
+            (centerTitle != null ? (
+              <Text
+                variant="headline"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                color={systemColors.label}
+                style={styles.centerTitle}
+              >
+                {centerTitle}
+              </Text>
+            ) : null)}
         </View>
 
         {/* Right island. */}

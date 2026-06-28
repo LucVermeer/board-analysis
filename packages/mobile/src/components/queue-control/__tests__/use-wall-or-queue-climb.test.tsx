@@ -5,50 +5,67 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const cfg = vi.hoisted(() => ({
   enabled: true,
   boardId: 1 as number | null,
-  hasWallClimb: true,
+  isLive: true,
+  wallClimb: { climbUuid: 'wall-1', name: 'Wax On', difficulty: 15 } as {
+    climbUuid: string;
+    name: string;
+    difficulty: number;
+  } | null,
 }));
 
 vi.mock('../../../providers/board-presence-provider', () => ({
   useBoardPresenceControls: () => ({ enabled: cfg.enabled, boardId: cfg.boardId }),
 }));
 vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceHasClimb: () => cfg.hasWallClimb,
-  // Imported at module top for the sibling hooks; unused by useHasWallClimb.
-  useBoardPresenceCurrent: () => ({ currentClimb: null, isLive: false }),
-}));
-vi.mock('../../../lib/board-presence/presence-climb', () => ({
-  boardPresenceClimbToClimb: (climb: unknown) => climb,
+  useBoardPresenceCurrent: () => ({ currentClimb: cfg.wallClimb, isLive: cfg.isLive }),
 }));
 
-import { useHasWallClimb } from '../use-wall-or-queue-climb';
+import { useWallClimbIfDistinct } from '../use-wall-or-queue-climb';
 
-describe('useHasWallClimb', () => {
+describe('useWallClimbIfDistinct', () => {
   beforeEach(() => {
     cfg.enabled = true;
     cfg.boardId = 1;
-    cfg.hasWallClimb = true;
+    cfg.isLive = true;
+    cfg.wallClimb = { climbUuid: 'wall-1', name: 'Wax On', difficulty: 15 };
   });
 
-  it('is true when the feature is enabled, a board is bound, and a wall climb is live', () => {
-    const { result } = renderHook(() => useHasWallClimb());
-    expect(result.current).toBe(true);
+  it('returns the wall climb when live and it differs from the queue head', () => {
+    const { result } = renderHook(() => useWallClimbIfDistinct('queue-head'));
+    expect(result.current).toEqual(cfg.wallClimb);
   });
 
-  it('is false when the feature is disabled', () => {
+  it('returns the wall climb when the local queue is empty (null head — solo/fresh session)', () => {
+    const { result } = renderHook(() => useWallClimbIfDistinct(null));
+    expect(result.current).toEqual(cfg.wallClimb);
+  });
+
+  it('returns null when the wall climb IS the queue head (solo case)', () => {
+    const { result } = renderHook(() => useWallClimbIfDistinct('wall-1'));
+    expect(result.current).toBeNull();
+  });
+
+  it('returns null when the feature is disabled', () => {
     cfg.enabled = false;
-    const { result } = renderHook(() => useHasWallClimb());
-    expect(result.current).toBe(false);
+    const { result } = renderHook(() => useWallClimbIfDistinct('queue-head'));
+    expect(result.current).toBeNull();
   });
 
-  it('is false when no board is bound', () => {
+  it('returns null when no board is bound', () => {
     cfg.boardId = null;
-    const { result } = renderHook(() => useHasWallClimb());
-    expect(result.current).toBe(false);
+    const { result } = renderHook(() => useWallClimbIfDistinct('queue-head'));
+    expect(result.current).toBeNull();
   });
 
-  it('is false when the live feed has no current climb', () => {
-    cfg.hasWallClimb = false;
-    const { result } = renderHook(() => useHasWallClimb());
-    expect(result.current).toBe(false);
+  it('returns null when the feed is not live', () => {
+    cfg.isLive = false;
+    const { result } = renderHook(() => useWallClimbIfDistinct('queue-head'));
+    expect(result.current).toBeNull();
+  });
+
+  it('returns null when the live feed has no current climb', () => {
+    cfg.wallClimb = null;
+    const { result } = renderHook(() => useWallClimbIfDistinct('queue-head'));
+    expect(result.current).toBeNull();
   });
 });

@@ -387,6 +387,11 @@
     },
     "boardPresence": {
       "title": "Now on the wall",
+      "stripA11yLabel": "On the wall: {{name}}, {{grade}}",
+      "stripA11yLabelWithSender": "On the wall: {{name}}, {{grade}}, lit by {{sender}}",
+      "stripA11yHint": "Opens the wall climb",
+      "stripAnnounce": "Now on the wall: {{name}}, {{grade}}",
+      "stripAnnounceWithSender": "Now on the wall: {{name}}, {{grade}}, lit by {{sender}}",
       "switchBoard": "Switch board",
       "switchBoardAria": "Switch to a different board",
       "close": "Close",

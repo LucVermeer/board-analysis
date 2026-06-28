@@ -108,6 +108,19 @@ describe('CollapsingLargeTitleHeader', () => {
     expect(container.textContent).not.toContain('V4–V6 · Quality');
   });
 
+  it('renders centerContent in place of the title when both are provided', () => {
+    const { container } = render(
+      <CollapsingLargeTitleHeader
+        {...makeProps({
+          centerTitle: 'V4–V6 · Quality',
+          centerContent: createElement('div', { 'data-testid': 'center-content' }),
+        })}
+      />,
+    );
+    expect(container.querySelector('[data-testid="center-content"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('V4–V6 · Quality');
+  });
+
   it('renders the progressive blur behind the header islands', () => {
     const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
     // ProgressiveBlur renders a MaskedView wrapping the BlurView (both stubbed in

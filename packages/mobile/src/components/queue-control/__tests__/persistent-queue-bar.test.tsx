@@ -12,7 +12,6 @@ const cfg = vi.hoisted(() => ({
   onAuthRoute: false,
   onPlayerRoute: false,
   currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
-  wallClimb: null as null | { uuid: string; angle: number },
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
   measuredTabBarHeight: null as number | null,
   nativeAccessoryActive: false,
@@ -118,13 +117,6 @@ vi.mock('../ClimbCapsule', () => ({
       endAction,
     ),
 }));
-vi.mock('../use-wall-or-queue-climb', () => ({
-  useWallOrQueueCurrentClimb: (localClimb: { uuid: string; angle: number } | null) => cfg.wallClimb ?? localClimb,
-  useIsWallPinned: () => cfg.wallClimb != null,
-  // Presence-only wall signal fed into the real useBottomChromeMetrics →
-  // useHasAccessoryClimb, so the JS-vs-native arbitration is wall-aware here too.
-  useHasWallClimb: () => cfg.wallClimb != null,
-}));
 vi.mock('../LogAscentFab', () => ({
   LogAscentFab: ({ climb }: { climb: { uuid: string } }) =>
     createElement('div', { 'data-tick': 'true', 'data-climb-uuid': climb.uuid }),
@@ -144,7 +136,6 @@ describe('PersistentQueueBar', () => {
     cfg.onAuthRoute = false;
     cfg.onPlayerRoute = false;
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
-    cfg.wallClimb = null;
     cfg.variant = 'liquidGlass';
     cfg.measuredTabBarHeight = null;
     cfg.nativeAccessoryActive = false;
@@ -241,25 +232,11 @@ describe('PersistentQueueBar', () => {
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
 
-  it('uses the wall climb for the fallback tick when the local queue is empty', () => {
+  it('renders nothing when the local queue is empty — the wall climb lives in the top strip now', () => {
+    // The bar shows the user's own queue head only; a climb lit on the wall (e.g. a
+    // teammate's) is surfaced by the top "On the wall" strip, never this bottom bar.
     cfg.currentClimbQueueItem = null;
-    cfg.wallClimb = { uuid: 'wall-climb', angle: 40 };
     const { container } = render(<PersistentQueueBar />);
-    expect(container.querySelector('[data-capsule]')).not.toBeNull();
-    expect(container.querySelector('[data-tick]')?.getAttribute('data-climb-uuid')).toBe('wall-climb');
-  });
-
-  it('defers to the native accessory for a wall-only climb on glass + tabs', () => {
-    // Wall climb, no local queue: the native accessory owns the slot (it mounts on
-    // the same wall-aware presence gate), so the JS bar must stay hidden — no
-    // doubling with the native pill.
-    cfg.currentClimbQueueItem = null;
-    cfg.wallClimb = { uuid: 'wall-climb', angle: 40 };
-    cfg.nativeAccessoryActive = true;
-    cfg.insideTabs = true;
-
-    const { container } = render(<PersistentQueueBar />);
-
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
