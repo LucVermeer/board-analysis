@@ -12,23 +12,40 @@
 
 import { Host } from '@expo/ui';
 import { Toggle, Text } from '@expo/ui/swift-ui';
-import { tint, disabled as disabledModifier } from '@expo/ui/swift-ui/modifiers';
+import { tint, disabled as disabledModifier, padding } from '@expo/ui/swift-ui/modifiers';
 import { StyleSheet } from 'react-native';
 import { useTheme } from '../providers/theme-provider';
 import { brandAccentColor } from '../theme/expo-ui-modifiers';
+import { spacing } from '../theme/tokens';
 import { makeToggleHandler } from './SwitchRow.logic';
 import type { SwitchRowProps } from './SwitchRow.types';
+
+// Floor the host height in RN's layout. The native iOS Host (matchContents
+// vertical) under-reports the Toggle's intrinsic height to React Native, so a row
+// renders shorter than its content — adjacent rows with no separator (e.g. the
+// filter sheet's progress toggles) overlap. A minHeight reserves the row in Yoga;
+// the Toggle still grows taller via matchContents for an unusually long
+// description. A row with a subtitle needs more than a single-line row.
+const ROW_MIN_HEIGHT = 48;
+const ROW_MIN_HEIGHT_WITH_SUBTITLE = 64;
 
 export function SwitchRow({ label, description, value, onValueChange, disabled = false }: SwitchRowProps) {
   const { brandColors } = useTheme();
   const handleToggle = makeToggleHandler(onValueChange, disabled);
 
   return (
-    <Host matchContents={{ vertical: true }} style={styles.host}>
+    <Host
+      matchContents={{ vertical: true }}
+      style={[styles.host, { minHeight: description ? ROW_MIN_HEIGHT_WITH_SUBTITLE : ROW_MIN_HEIGHT }]}
+    >
       <Toggle
         isOn={value}
         onIsOnChange={handleToggle}
         modifiers={[
+          // Inset the row so the trailing switch isn't flush with (and clipped by)
+          // the container's right edge — matches the old row's paddingHorizontal
+          // and the Android impl's padding.
+          padding({ horizontal: spacing[4], vertical: spacing[2] }),
           // Brand on-track colour, sourced once via the theming bridge.
           tint(brandAccentColor(brandColors)),
           // SwiftUI greys the control and blocks interaction natively.

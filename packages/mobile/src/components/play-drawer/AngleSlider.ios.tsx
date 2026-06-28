@@ -29,7 +29,10 @@ export function AngleSlider({ angles, value, onChange }: AngleSliderProps) {
   const handleValueChange = makeAngleSliderHandler(angles, valueIndex, onChange);
 
   return (
-    <Host matchContents={{ vertical: true }} style={styles.host}>
+    // minHeight floors the row in RN's layout: the native iOS Host (matchContents
+    // vertical) under-reports the Slider's height, so without a floor the control
+    // collapses and overlaps adjacent content.
+    <Host matchContents={{ vertical: true }} style={[styles.host, styles.minRow]}>
       <Slider
         value={valueIndex}
         min={0}
@@ -54,5 +57,9 @@ export function AngleSlider({ angles, value, onChange }: AngleSliderProps) {
 const styles = StyleSheet.create({
   host: {
     width: '100%',
+  },
+  // iOS slider sits ~30pt; 44 gives a comfortable, non-collapsing row.
+  minRow: {
+    minHeight: 44,
   },
 });
