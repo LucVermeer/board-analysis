@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Your settings now use your phone's own native controls and layout — the More screen looks and moves like the rest of iOS and Android. ([#3261](https://github.com/boardsesh/boardsesh/pull/3261))
 - Switches, segmented pickers, and the angle slider now use your phone's own native controls, so they look and move like the rest of iOS and Android. ([#3254](https://github.com/boardsesh/boardsesh/pull/3254))
 - See which playlists a climb is in, right from the list. Turn on **Show playlist tags** under More → Display. ([#3260](https://github.com/boardsesh/boardsesh/pull/3260))
 - Curious what's coming? Open What's New and tap **Try a preview** to load an upcoming change before it ships — then reset to jump back to the shipped version anytime. ([#3258](https://github.com/boardsesh/boardsesh/pull/3258))

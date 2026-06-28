@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-28T23:45:39.239Z",
+  "generatedAt": "2026-06-28T23:53:16.722Z",
   "entries": [
+    {
+      "prNumber": 3261,
+      "category": "new",
+      "title": "Your settings now use your phone's own native controls and layout — the More screen looks and moves like the rest of iOS and Android.",
+      "mergedAt": "2026-06-28T23:52:26Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3261"
+    },
     {
       "prNumber": 3254,
       "category": "new",
