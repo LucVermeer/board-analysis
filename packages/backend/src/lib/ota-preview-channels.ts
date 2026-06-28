@@ -13,12 +13,18 @@
 // under GitHub's rate limits with just two API calls per refill.
 
 import type { OtaPreviewChannel } from '@boardsesh/shared-schema';
+import { logger } from '../utils/logger';
 
 const GITHUB_API = 'https://api.github.com';
 // owner/repo to read previews from. Overridable for forks/self-hosting.
 const REPO = process.env.OTA_PREVIEW_REPO ?? 'boardsesh/boardsesh';
 const PREVIEW_ENVIRONMENT = 'pr-preview';
+const PAGE_SIZE = 100;
 const CACHE_TTL_MS = 3 * 60 * 1000;
+// Brief negative cache so a GitHub error (e.g. a 403 rate-limit) can't amplify
+// into a request storm — callers serve [] from cache until this elapses, then
+// one refill retries.
+const ERROR_CACHE_TTL_MS = 30 * 1000;
 
 // The deployment description the workflow sets is `OTA preview pr-<n>`; match
 // the channel anywhere in it so a wording tweak doesn't silently break parsing.
@@ -76,27 +82,57 @@ async function githubGet<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-let cache: { at: number; data: OtaPreviewChannel[] } | null = null;
+type ChannelCache = { at: number; data: OtaPreviewChannel[]; isError: boolean };
+let cache: ChannelCache | null = null;
+// De-dupes concurrent refills (cold start / just-expired) onto a single fetch so
+// a burst can't fan out into parallel GitHub calls.
+let inFlight: Promise<OtaPreviewChannel[]> | null = null;
 
 /**
- * Live preview channels, cached for {@link CACHE_TTL_MS}. Two GitHub calls per
- * refill regardless of how many channels exist. The caller is responsible for
- * fail-soft behaviour (the resolver returns [] on throw).
+ * Live preview channels, cached for {@link CACHE_TTL_MS} (or {@link
+ * ERROR_CACHE_TTL_MS} after a failure). Two GitHub calls per refill regardless
+ * of how many channels exist. The caller is responsible for fail-soft behaviour
+ * (the resolver returns [] on throw).
  */
 export async function getLivePreviewChannels(now: number = Date.now()): Promise<OtaPreviewChannel[]> {
-  if (cache && now - cache.at < CACHE_TTL_MS) return cache.data;
+  const ttl = cache?.isError ? ERROR_CACHE_TTL_MS : CACHE_TTL_MS;
+  if (cache && now - cache.at < ttl) return cache.data;
+  if (inFlight) return inFlight;
 
-  const [deployments, openPullRequests] = await Promise.all([
-    githubGet<GitHubDeployment[]>(`/repos/${REPO}/deployments?environment=${PREVIEW_ENVIRONMENT}&per_page=100`),
-    githubGet<GitHubOpenPullRequest[]>(`/repos/${REPO}/pulls?state=open&per_page=100`),
-  ]);
+  inFlight = (async () => {
+    try {
+      const [deployments, openPullRequests] = await Promise.all([
+        githubGet<GitHubDeployment[]>(
+          `/repos/${REPO}/deployments?environment=${PREVIEW_ENVIRONMENT}&per_page=${PAGE_SIZE}`,
+        ),
+        githubGet<GitHubOpenPullRequest[]>(`/repos/${REPO}/pulls?state=open&per_page=${PAGE_SIZE}`),
+      ]);
+      // Deployments accumulate over time (closed PRs are marked inactive, not
+      // deleted), so a single page can eventually overflow — surface it rather
+      // than silently dropping older-but-still-open previews.
+      if (deployments.length === PAGE_SIZE || openPullRequests.length === PAGE_SIZE) {
+        logger.warn(
+          `[ota] preview channel source hit the ${PAGE_SIZE}-item page cap; some live channels may be missing`,
+        );
+      }
+      const data = buildLivePreviewChannels(deployments, openPullRequests);
+      cache = { at: now, data, isError: false };
+      return data;
+    } catch (error) {
+      // Negative-cache [] briefly so repeated calls don't re-hit a rate-limited
+      // GitHub; recovers after ERROR_CACHE_TTL_MS. Rethrow so the resolver logs.
+      cache = { at: now, data: [], isError: true };
+      throw error;
+    } finally {
+      inFlight = null;
+    }
+  })();
 
-  const data = buildLivePreviewChannels(deployments, openPullRequests);
-  cache = { at: now, data };
-  return data;
+  return inFlight;
 }
 
 /** Test-only: reset the module cache between cases. */
 export function resetLivePreviewChannelsCache(): void {
   cache = null;
+  inFlight = null;
 }

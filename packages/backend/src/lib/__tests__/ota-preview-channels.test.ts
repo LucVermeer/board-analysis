@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildLivePreviewChannels,
   parsePreviewPrNumber,
+  getLivePreviewChannels,
+  resetLivePreviewChannelsCache,
   type GitHubDeployment,
   type GitHubOpenPullRequest,
 } from '../ota-preview-channels';
@@ -51,5 +53,60 @@ describe('buildLivePreviewChannels', () => {
 
   it('returns an empty list when nothing has been deployed', () => {
     expect(buildLivePreviewChannels([], [openPr(10, 'Ten')])).toEqual([]);
+  });
+});
+
+describe('getLivePreviewChannels (cache + network)', () => {
+  beforeEach(() => resetLivePreviewChannelsCache());
+  afterEach(() => vi.restoreAllMocks());
+
+  // Returns deployments for the deployments URL, open PRs for the pulls URL.
+  const mockGitHubOk = (deployments: unknown, pulls: unknown) =>
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = input instanceof URL ? input.href : typeof input === 'string' ? input : input.url;
+      const body = url.includes('/deployments') ? deployments : pulls;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+
+  const sample = {
+    deployments: [{ description: 'OTA preview pr-7' }],
+    pulls: [{ number: 7, title: 'Seven', html_url: 'https://github.com/boardsesh/boardsesh/pull/7' }],
+  };
+
+  it('fetches, builds, and serves from cache within the TTL (one refill)', async () => {
+    const fetchSpy = mockGitHubOk(sample.deployments, sample.pulls);
+
+    const first = await getLivePreviewChannels(0);
+    expect(first).toEqual([
+      { channel: 'pr-7', prNumber: 7, title: 'Seven', url: 'https://github.com/boardsesh/boardsesh/pull/7' },
+    ]);
+
+    // Within the TTL → served from cache, no new fetch.
+    const second = await getLivePreviewChannels(1_000);
+    expect(second).toBe(first);
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // one refill = deployments + pulls
+  });
+
+  it('refetches once the cache TTL elapses', async () => {
+    const fetchSpy = mockGitHubOk(sample.deployments, sample.pulls);
+    await getLivePreviewChannels(0);
+    await getLivePreviewChannels(3 * 60 * 1000 + 1); // past CACHE_TTL_MS
+    expect(fetchSpy).toHaveBeenCalledTimes(4); // two refills
+  });
+
+  it('negative-caches [] on error so a burst does not re-hit GitHub', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('rate limited', { status: 403 }));
+
+    await expect(getLivePreviewChannels(0)).rejects.toThrow();
+    // Within the (shorter) error TTL → cached [], no further fetches.
+    await expect(getLivePreviewChannels(1_000)).resolves.toEqual([]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // only the first refill attempt
+  });
+
+  it('de-dupes concurrent refills onto a single fetch', async () => {
+    const fetchSpy = mockGitHubOk(sample.deployments, sample.pulls);
+    const [a, b] = await Promise.all([getLivePreviewChannels(0), getLivePreviewChannels(0)]);
+    expect(a).toEqual(b);
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // one shared refill, not two
   });
 });
