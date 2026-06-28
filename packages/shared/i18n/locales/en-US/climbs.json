@@ -576,6 +576,7 @@
       "both": "Both",
       "title": "Filters",
       "sortBy": "Sort by",
+      "grade": "Grade",
       "gradeRange": "Grade range",
       "anyAscents": "Any",
       "refineHint": "Climb type, setters, grade accuracy",

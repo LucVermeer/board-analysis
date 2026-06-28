@@ -34,7 +34,7 @@ export type FilterChipRowProps = {
   onApplyRecent: (filters: ClimbFilters, searchText: string) => void;
   onClearRecent: () => void;
 
-  /** Localised grade-bound label ("V4–V6") or the "Grade range" placeholder. */
+  /** Localised grade-bound label ("V4–V6") or the resting "Grade" placeholder. */
   gradeLabel: string;
   gradeActive: boolean;
   onOpenGrade: () => void;

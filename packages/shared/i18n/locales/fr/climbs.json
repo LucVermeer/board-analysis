@@ -576,6 +576,7 @@
       "both": "Les deux",
       "title": "Filtres",
       "sortBy": "Trier par",
+      "grade": "Cotation",
       "gradeRange": "Plage de cotation",
       "anyAscents": "Tous",
       "refineHint": "Type, ouvreurs, précision du niveau",
