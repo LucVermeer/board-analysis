@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-28T12:31:31.106Z",
+  "generatedAt": "2026-06-28T23:45:39.239Z",
   "entries": [
+    {
+      "prNumber": 3254,
+      "category": "new",
+      "title": "Switches, segmented pickers, and the angle slider now use your phone's own native controls, so they look and move like the rest of iOS and Android.",
+      "mergedAt": "2026-06-28T23:44:49Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3254"
+    },
     {
       "prNumber": 3260,
       "category": "new",
