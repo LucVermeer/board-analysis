@@ -25,6 +25,7 @@ import type {
   SessionGradeDistributionItem,
   SessionHealthExport,
   UserSearchConnection,
+  OtaPreviewChannel,
 } from '@boardsesh/shared-schema';
 import type { SubscriptionQueueItem } from '../queue-conversion';
 
@@ -142,6 +143,21 @@ export const GET_PROFILE = gql`
 
 export type GetProfileQueryResponse = {
   profile: UserProfile | null;
+};
+
+export const GET_OTA_PREVIEW_CHANNELS = gql`
+  query GetOtaPreviewChannels {
+    otaPreviewChannels {
+      channel
+      prNumber
+      title
+      url
+    }
+  }
+`;
+
+export type GetOtaPreviewChannelsQueryResponse = {
+  otaPreviewChannels: OtaPreviewChannel[];
 };
 
 export const UPDATE_PROFILE = gql`

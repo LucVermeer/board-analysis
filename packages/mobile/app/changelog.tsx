@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -222,6 +222,25 @@ const CheckForUpdatesButton = memo(function CheckForUpdatesButton() {
   );
 });
 
+// Visible entry into the per-PR preview channel switcher — open to everyone, not
+// just testers. Shown only on real OTA builds where switching actually works
+// (overrides are inert in dev / Expo Go), the same gate as Check-for-updates, so
+// it never appears where it can't function.
+const TryPreviewButton = memo(function TryPreviewButton() {
+  const { t } = useTranslation('common');
+  if (__DEV__ || !Updates.isEnabled) return null;
+  return (
+    <Button
+      title={t('mobile.previewChannels.entryTitle')}
+      onPress={() => router.push('/(tabs)/profile/channel-switcher')}
+      variant="text"
+      size="small"
+      icon="branch"
+      style={styles.checkButton}
+    />
+  );
+});
+
 const keyExtractor = (item: TimelineItem) => (isNativeRelease(item) ? `native-${item.sha}` : `pr-${item.prNumber}`);
 
 export default function ChangelogScreen() {
@@ -263,6 +282,7 @@ export default function ChangelogScreen() {
           <View style={styles.emptyWrap}>
             <CurrentBuildChip />
             <CheckForUpdatesButton />
+            <TryPreviewButton />
             <Text variant="body" color={systemColors.secondaryLabel} style={styles.emptyText}>
               {t('mobile.changelog.empty')}
             </Text>
@@ -288,6 +308,7 @@ export default function ChangelogScreen() {
                 <View style={styles.headerMeta}>
                   <CurrentBuildChip />
                   <CheckForUpdatesButton />
+                  <TryPreviewButton />
                 </View>
               </View>
             }

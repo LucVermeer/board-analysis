@@ -3182,6 +3182,25 @@ export type NotificationType =
   | 'vote_on_comment'
   | 'vote_on_tick';
 
+/**
+ * A live per-PR OTA preview channel. Switching a store/TestFlight build onto one
+ * loads that pull request's JS bundle before it ships, with no new build. The
+ * list is derived from the GitHub "pr-preview" deployments the
+ * mobile-ota-preview workflow publishes, so only channels that are actually live
+ * appear. See docs/mobile-ota-updates.md.
+ */
+export type OtaPreviewChannel = {
+  __typename?: 'OtaPreviewChannel';
+  /** The OTA channel name to switch onto, e.g. "pr-3253". */
+  channel: Scalars['String']['output'];
+  /** The pull request number. */
+  prNumber: Scalars['Int']['output'];
+  /** The pull request title, for display. */
+  title: Scalars['String']['output'];
+  /** The pull request web URL. */
+  url: Scalars['String']['output'];
+};
+
 /** Analysis of whether a climb's grade is an outlier compared to adjacent angles. */
 export type OutlierAnalysis = {
   __typename?: 'OutlierAnalysis';
@@ -3706,6 +3725,14 @@ export type Query = {
   newClimbFeed: NewClimbFeedResult;
   /** Get notifications for the current user. */
   notifications: NotificationConnection;
+  /**
+   * Live per-PR OTA preview channels a user can switch a store/TestFlight build
+   * onto to try a pull request before it ships. Public — no authentication.
+   * Derived from the GitHub "pr-preview" deployments the mobile-ota-preview
+   * workflow publishes, filtered to still-open PRs, newest PR first. Returns an
+   * empty list when the source is unavailable.
+   */
+  otaPreviewChannels: Array<OtaPreviewChannel>;
   /**
    * Get a specific playlist by ID.
    * Checks ownership/access permissions.
@@ -6330,6 +6357,7 @@ export type ResolversTypes = ResolversObject<{
   NotificationConnection: ResolverTypeWrapper<NotificationConnection>;
   NotificationEvent: ResolverTypeWrapper<NotificationEvent>;
   NotificationType: NotificationType;
+  OtaPreviewChannel: ResolverTypeWrapper<OtaPreviewChannel>;
   OutlierAnalysis: ResolverTypeWrapper<OutlierAnalysis>;
   PinPlaylistInput: PinPlaylistInput;
   PlaybackStateChanged: ResolverTypeWrapper<PlaybackStateChanged>;
@@ -6614,6 +6642,7 @@ export type ResolversParentTypes = ResolversObject<{
   Notification: Notification;
   NotificationConnection: NotificationConnection;
   NotificationEvent: NotificationEvent;
+  OtaPreviewChannel: OtaPreviewChannel;
   OutlierAnalysis: OutlierAnalysis;
   PinPlaylistInput: PinPlaylistInput;
   PlaybackStateChanged: PlaybackStateChanged;
@@ -8498,6 +8527,17 @@ export type NotificationEventResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type OtaPreviewChannelResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['OtaPreviewChannel'] = ResolversParentTypes['OtaPreviewChannel'],
+> = ResolversObject<{
+  channel?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  prNumber?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  url?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type OutlierAnalysisResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['OutlierAnalysis'] = ResolversParentTypes['OutlierAnalysis'],
@@ -8990,6 +9030,7 @@ export type QueryResolvers<
     ContextType,
     Partial<QueryNotificationsArgs>
   >;
+  otaPreviewChannels?: Resolver<Array<ResolversTypes['OtaPreviewChannel']>, ParentType, ContextType>;
   playlist?: Resolver<
     Maybe<ResolversTypes['Playlist']>,
     ParentType,
@@ -10217,6 +10258,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   Notification?: NotificationResolvers<ContextType>;
   NotificationConnection?: NotificationConnectionResolvers<ContextType>;
   NotificationEvent?: NotificationEventResolvers<ContextType>;
+  OtaPreviewChannel?: OtaPreviewChannelResolvers<ContextType>;
   OutlierAnalysis?: OutlierAnalysisResolvers<ContextType>;
   PlaybackStateChanged?: PlaybackStateChangedResolvers<ContextType>;
   Playlist?: PlaylistResolvers<ContextType>;

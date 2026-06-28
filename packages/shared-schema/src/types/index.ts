@@ -23,3 +23,4 @@ export * from './device-logging';
 export * from './feedback';
 export * from './integrations';
 export * from './instagram-beta-import';
+export * from './ota';

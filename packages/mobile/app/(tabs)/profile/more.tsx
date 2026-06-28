@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
-import * as Updates from 'expo-updates';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
@@ -51,11 +50,6 @@ export default function MoreScreen() {
   const { showToast } = useToast();
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
 
-  // The OTA channel switcher relies on expo-updates runtime overrides, which only
-  // work on real (non-dev) builds where updates are enabled. Gated on the tester
-  // flag so only admin-marked testers see it.
-  const showChannelSwitcher = Boolean(profile?.isTester) && !__DEV__ && Updates.isEnabled;
-
   // Live Metro dev-server switching needs expo-dev-client's native launcher, which
   // is only linked into dev-client / Debug builds — never the App Store / TestFlight
   // binary (where it would throw "Dev launcher unavailable"). Show the row only where
@@ -67,10 +61,10 @@ export default function MoreScreen() {
   // wherever the dev section is allowed — for testers and in dev.
   const showFeatureFlags = __DEV__ || Boolean(profile?.isTester);
 
-  // Don't render an empty "Development" section header when no tool applies
-  // (e.g. a tester on a release build with updates disabled).
-  const showDevSection =
-    (__DEV__ || Boolean(profile?.isTester)) && (showDevServerSwitcher || showChannelSwitcher || showFeatureFlags);
+  // Don't render an empty "Development" section header when no tool applies.
+  // (The OTA channel switcher moved to an everyone-facing "Try a preview" entry
+  // on the changelog screen, so it's no longer listed here.)
+  const showDevSection = (__DEV__ || Boolean(profile?.isTester)) && (showDevServerSwitcher || showFeatureFlags);
 
   // Whether the bundled changelog has an entry the user hasn't opened yet — drives
   // the "New" pill on the What's New row. Re-read every time this screen regains
@@ -333,20 +327,8 @@ export default function MoreScreen() {
                 subtitle={t('mobile.more.metroServersSubtitle')}
                 leading={<Icon name="server" size={22} color={systemColors.secondaryLabel} />}
                 showChevron
-                showSeparator={showChannelSwitcher || showFeatureFlags}
-                onPress={() => router.push('/(tabs)/profile/dev-servers')}
-              />
-            ) : null}
-            {showChannelSwitcher ? (
-              <ListRow
-                // i18n-ignore-next-line — tester-only dev tooling
-                title="OTA Channel Switcher"
-                // i18n-ignore-next-line
-                subtitle="Switch Expo update channel"
-                leading={<Icon name="transfer" size={22} color={systemColors.secondaryLabel} />}
-                showChevron
                 showSeparator={showFeatureFlags}
-                onPress={() => router.push('/(tabs)/profile/channel-switcher')}
+                onPress={() => router.push('/(tabs)/profile/dev-servers')}
               />
             ) : null}
             {showFeatureFlags ? (
