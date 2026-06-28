@@ -6,8 +6,17 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-06-28
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
+### New
+
+- See who's on the wall at a glance — when a crewmate lights up a different climb, their face and the climb show in a capsule up top, and the bottom bar stays your own queue. ([#3247](https://github.com/boardsesh/boardsesh/pull/3247))
+
 ### Improved
 
+- Internal CI change — no user-facing or runtime behavior change. Wires the existing mobile dependency-health check into the CI pipeline so native-module drift from the Expo SDK fails the build instead of being opt-in. ([#3248](https://github.com/boardsesh/boardsesh/pull/3248))
 - Draft pilot enabling React Compiler auto-memoization; not yet shipped — pending measurement. ([#3239](https://github.com/boardsesh/boardsesh/pull/3239))
 
 ## 2026-06-27

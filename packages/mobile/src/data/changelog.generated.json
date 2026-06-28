@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-06-28T00:06:13.645Z",
+  "generatedAt": "2026-06-28T02:35:48.642Z",
   "entries": [
+    {
+      "prNumber": 3247,
+      "category": "new",
+      "title": "See who's on the wall at a glance — when a crewmate lights up a different climb, their face and the climb show in a capsule up top, and the bottom bar stays your own queue.",
+      "mergedAt": "2026-06-28T02:34:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3247"
+    },
+    {
+      "prNumber": 3248,
+      "category": "improved",
+      "title": "Internal CI change — no user-facing or runtime behavior change. Wires the existing mobile dependency-health check into the CI pipeline so native-module drift from the Expo SDK fails the build instead of being opt-in.",
+      "mergedAt": "2026-06-28T02:15:11Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3248"
+    },
     {
       "prNumber": 3239,
       "category": "improved",
@@ -426,6 +440,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-06-28T10:01:11+10:00",
+      "sha": "b3a9f771473b8bd961e415b1dee311870f0dfd5a",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "d876c641297d5f9958af2750199baa4daceb1bd8",
+        "ios": "b9e3e1b9fac3838c44390e1b4c3222756a5321a4"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-06-27T22:39:45+10:00",
