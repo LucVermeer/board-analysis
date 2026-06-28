@@ -123,6 +123,41 @@ export default defineConfig({
         find: /^(.*\/)?search\/FilterChipRow$/,
         replacement: fileURLToPath(new URL('./test/filter-chip-row-stub.tsx', import.meta.url)),
       },
+      // SwitchRow is platform-split (SwitchRow.ios.tsx renders a native @expo/ui
+      // SwiftUI Toggle; SwitchRow.android.tsx a native Compose Switch). Vitest
+      // doesn't resolve `.ios`/`.android` extensions and can't mount either native
+      // tree, so redirect the extensionless import to a faithful passthrough stub
+      // that keeps the public API + switch accessibility role. Suites that assert
+      // SwitchRow internals register their own vi.mock (takes precedence).
+      {
+        find: /^(.*\/)?SwitchRow$/,
+        replacement: fileURLToPath(new URL('./test/switch-row-stub.tsx', import.meta.url)),
+      },
+      // SegmentedControl is platform-split (SegmentedControl.ios.tsx renders a
+      // native @expo/ui SwiftUI segmented Picker; SegmentedControl.android.tsx a
+      // native Compose SingleChoiceSegmentedButtonRow). Vitest doesn't resolve
+      // `.ios`/`.android` extensions and can't mount either native tree, so
+      // redirect the extensionless import to a faithful passthrough stub that
+      // keeps the public API + radio/radiogroup accessibility roles. Suites that
+      // assert SegmentedControl internals register their own vi.mock (takes
+      // precedence).
+      {
+        find: /^(.*\/)?SegmentedControl$/,
+        replacement: fileURLToPath(new URL('./test/segmented-control-stub.tsx', import.meta.url)),
+      },
+      // AngleSlider is platform-split (AngleSlider.ios.tsx renders a native
+      // @expo/ui SwiftUI Slider; AngleSlider.android.tsx a native Compose Slider).
+      // Vitest doesn't resolve `.ios`/`.android` extensions and can't mount either
+      // native tree, so redirect the extensionless import (it lives in
+      // play-drawer/, so consumers import `./AngleSlider` or `../play-drawer/
+      // AngleSlider` — the basename regex matches both) to a faithful passthrough
+      // stub that keeps the public API + `adjustable` accessibility role. Suites
+      // that assert AngleSlider internals register their own vi.mock (takes
+      // precedence).
+      {
+        find: /^(.*\/)?AngleSlider$/,
+        replacement: fileURLToPath(new URL('./test/angle-slider-stub.tsx', import.meta.url)),
+      },
     ],
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React

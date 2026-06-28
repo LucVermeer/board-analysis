@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
-import type { ThemeOverride, UiVariantPreference } from '@boardsesh/key-value-storage';
+import type { ThemeOverride } from '@boardsesh/key-value-storage';
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from '@boardsesh/i18n';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useLocalePreference } from '../../../src/providers/i18n-provider';
@@ -24,7 +24,6 @@ import { PlaylistTagsSwitchRow } from '../../../src/components/settings/Playlist
 import { isPreviewBuild } from '../../../src/lib/preview-build';
 import { isDevLauncherAvailable } from '../../../src/lib/dev-launcher';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
-import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
@@ -38,7 +37,7 @@ import { getLastSeenChangelogDate, hasUnseenChangelog } from '../../../src/lib/c
 const GITHUB_LOCALES_TREE_URL = 'https://github.com/boardsesh/boardsesh/tree/main/packages/shared/i18n/locales';
 
 export default function MoreScreen() {
-  const { systemColors, brandColors, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
+  const { systemColors, brandColors, themeOverride, setThemeOverride } = useTheme();
   const { t } = useTranslation('common');
   const { t: tProfile } = useTranslation('profile');
   const { t: tPlaylists } = useTranslation('playlists');
@@ -46,7 +45,6 @@ export default function MoreScreen() {
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
-  const glassCapable = useGlassCapability();
   const { localePreference, setLocalePreference } = useLocalePreference();
   const { showToast } = useToast();
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
@@ -106,20 +104,6 @@ export default function MoreScreen() {
     { key: 'light', label: t('mobile.more.appearance.light') },
     { key: 'dark', label: t('mobile.more.appearance.dark') },
   ];
-
-  const uiStyleOptions: { key: UiVariantPreference; label: string }[] = [
-    { key: 'auto', label: t('mobile.more.uiStyle.auto') },
-    { key: 'liquidGlass', label: t('mobile.more.uiStyle.liquidGlass') },
-    { key: 'material', label: t('mobile.more.uiStyle.material') },
-  ];
-  // Hint copy: capable iPhones explain the Auto behaviour; older iPhones get the
-  // iOS-26 upgrade note; Android gets a glass-fallback note without the (irrelevant)
-  // iOS-26 reference.
-  const uiStyleHint = glassCapable
-    ? t('mobile.more.uiStyle.description')
-    : Platform.OS === 'ios'
-      ? t('mobile.more.uiStyle.glassFallback')
-      : t('mobile.more.uiStyle.glassFallbackAndroid');
 
   const gradeFormatOptions: { key: GradeDisplayFormat; label: string }[] = [
     { key: 'v-grade', label: t('mobile.more.gradeFormat.vGrade') },
@@ -190,22 +174,6 @@ export default function MoreScreen() {
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.appearance.title')}
           />
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeader title={t('mobile.more.uiStyle.title')} />
-        <View style={[styles.card, styles.cardPadded, { backgroundColor: systemColors.secondaryBackground }]}>
-          <SegmentedControl
-            options={uiStyleOptions}
-            selectedKey={uiVariantPreference}
-            onSelect={(key) => void setUiVariant(key)}
-            trackColor={systemColors.fill}
-            accessibilityLabel={t('mobile.more.uiStyle.title')}
-          />
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
-            {uiStyleHint}
-          </Text>
         </View>
       </View>
 

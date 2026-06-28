@@ -550,6 +550,15 @@ export default defineConfig({
         command: 'bash scripts/mobile-variant-guard.sh',
         cache: false,
       },
+      'check:mobile-platform-imports': {
+        // Guards @expo/ui platform-specific imports to their platform file:
+        // @expo/ui/swift-ui only in *.ios.{ts,tsx}, @expo/ui/jetpack-compose only
+        // in *.android.{ts,tsx}. A misplaced import crashes the other platform at
+        // runtime ("Unable to get view config"). The .oxlintrc.json rule isn't
+        // enforced by `vp check` (reduced ruleset), so this is the real backstop.
+        command: 'bash scripts/mobile-platform-imports-check.sh',
+        cache: false,
+      },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
         cache: false,

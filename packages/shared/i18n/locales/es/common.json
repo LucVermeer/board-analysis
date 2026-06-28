@@ -289,15 +289,6 @@
         "light": "Claro",
         "dark": "Oscuro"
       },
-      "uiStyle": {
-        "title": "Estilo de interfaz",
-        "auto": "Automático",
-        "liquidGlass": "Liquid Glass",
-        "material": "Material",
-        "description": "Automático usa Liquid Glass en iPhone y Material en Android. Elige uno para anularlo.",
-        "glassFallback": "Liquid Glass usa una versión simplificada aquí. El efecto de vidrio completo requiere iOS 26.",
-        "glassFallbackAndroid": "Liquid Glass usa un aspecto simplificado de superficies sólidas en Android."
-      },
       "gradeFormat": {
         "title": "Formato de grado",
         "description": "Elige cómo se muestran los grados en la app.",
