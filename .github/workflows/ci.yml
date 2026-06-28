@@ -553,6 +553,12 @@ jobs:
       # see packages/mobile/src/theme/variants/README.md).
       - name: Check mobile variant usage
         run: vp run check:mobile-variants
+      # @expo/ui swift-ui / jetpack-compose imports must stay in their platform
+      # file (*.ios.tsx / *.android.tsx) — a misplaced one crashes the other
+      # platform at runtime. The .oxlintrc rule isn't enforced by `vp check`, so
+      # this grep guard is the real backstop. See docs/expo-ui-components.md.
+      - name: Check mobile @expo/ui platform imports
+        run: vp run check:mobile-platform-imports
       - name: Download built packages
         uses: actions/download-artifact@v4
         with:

@@ -1,90 +1,54 @@
-// @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
-import { createElement, type ReactNode } from 'react';
 
-// Controls the resolved UI variant the SwitchRow branches on for its toggle.
-const ctrl = vi.hoisted(() => ({ variant: 'material' as 'material' | 'liquidGlass' }));
+// Mock the haptics module so importing SwitchRow.logic never pulls in
+// react-native (its only transitive dependency) under the node test env, and so
+// we can assert the haptic fires — including via makeToggleHandler's default.
 const hapticSelectionMock = vi.hoisted(() => vi.fn());
-
-vi.mock('react-native', () => ({
-  StyleSheet: { create: (styles: unknown) => styles },
-  View: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-view': 'true' }, children),
-  Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
-    createElement('div', { 'data-pressable': 'true', onClick: onPress }, children),
-  // The RN Switch (Liquid Glass path) renders a distinct element.
-  Switch: (props: { value?: boolean; onValueChange?: (next: boolean) => void }) =>
-    createElement('input', {
-      'data-rn-switch': 'true',
-      type: 'checkbox',
-      checked: !!props.value,
-      onChange: () => props.onValueChange?.(!props.value),
-      readOnly: true,
-    }),
-}));
-
-// Paper Switch → <input> exposing the props the test asserts on.
-vi.mock('react-native-paper', () => ({
-  Switch: (props: { value?: boolean; onValueChange?: (next: boolean) => void; disabled?: boolean }) =>
-    createElement('input', {
-      'data-paper-switch': 'true',
-      type: 'checkbox',
-      checked: !!props.value,
-      disabled: props.disabled,
-      onChange: () => props.onValueChange?.(!props.value),
-      readOnly: true,
-    }),
-}));
-
-vi.mock('../Text', () => ({ Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children) }));
 vi.mock('../../lib/haptics', () => ({ hapticSelection: hapticSelectionMock }));
-vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { systemGray4: '#ccc' } }));
-vi.mock('../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16 } }));
-vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant, brandColors: { primaryFill: '#7C3AED' } }),
-}));
 
-import { SwitchRow } from '../SwitchRow';
+import { makeToggleHandler } from '../SwitchRow.logic';
 
-describe('SwitchRow', () => {
-  it('renders the Paper Switch on the Material variant', () => {
-    ctrl.variant = 'material';
-    const { container } = render(<SwitchRow label="Sound" value={false} onValueChange={() => {}} />);
-    expect(container.querySelector('[data-paper-switch]')).not.toBeNull();
-    expect(container.querySelector('[data-rn-switch]')).toBeNull();
-  });
-
-  it('renders the RN Switch on the Liquid Glass variant', () => {
-    ctrl.variant = 'liquidGlass';
-    const { container } = render(<SwitchRow label="Sound" value={false} onValueChange={() => {}} />);
-    expect(container.querySelector('[data-rn-switch]')).not.toBeNull();
-    expect(container.querySelector('[data-paper-switch]')).toBeNull();
-  });
-
-  it('toggles exactly once from the row press on Material (no double-fire)', () => {
-    ctrl.variant = 'material';
-    hapticSelectionMock.mockClear();
+// The SwitchRow render path is native @expo/ui (SwiftUI Toggle / Compose Switch)
+// and is exercised in screen tests via the passthrough stub (test/switch-row-stub.tsx,
+// wired through the vite alias). The toggle behaviour both platforms share lives
+// in makeToggleHandler, which is what we unit-test here.
+describe('makeToggleHandler', () => {
+  it('fires the haptic then onValueChange with the next value', () => {
+    const haptic = vi.fn();
     const onValueChange = vi.fn();
-    const { container } = render(<SwitchRow label="Sound" value={false} onValueChange={onValueChange} />);
-    // The row Pressable is the sole toggle target; the Paper Switch is a
-    // non-interactive indicator, so a single press fires the toggle once.
-    const row = container.querySelector('[data-pressable]');
-    expect(row).not.toBeNull();
-    fireEvent.click(row as Element);
-    expect(hapticSelectionMock).toHaveBeenCalledTimes(1);
+
+    makeToggleHandler(onValueChange, false, haptic)(true);
+
+    expect(haptic).toHaveBeenCalledTimes(1);
     expect(onValueChange).toHaveBeenCalledTimes(1);
     expect(onValueChange).toHaveBeenCalledWith(true);
   });
 
-  it('does not toggle from the Paper Switch itself (it is non-interactive)', () => {
-    ctrl.variant = 'material';
+  it('passes the next value straight through when toggling off', () => {
+    const onValueChange = vi.fn();
+
+    makeToggleHandler(onValueChange, false, vi.fn())(false);
+
+    expect(onValueChange).toHaveBeenCalledWith(false);
+  });
+
+  it('is a no-op when disabled — no haptic, no callback', () => {
+    const haptic = vi.fn();
+    const onValueChange = vi.fn();
+
+    makeToggleHandler(onValueChange, true, haptic)(true);
+
+    expect(haptic).not.toHaveBeenCalled();
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it('defaults the haptic to hapticSelection', () => {
     hapticSelectionMock.mockClear();
     const onValueChange = vi.fn();
-    const { container } = render(<SwitchRow label="Sound" value={false} onValueChange={onValueChange} />);
-    const toggle = container.querySelector('[data-paper-switch]') as Element;
-    // SwitchRow no longer wires onValueChange to the Paper Switch, so firing its
-    // change directly is a no-op (the row owns the toggle).
-    fireEvent.change(toggle, { target: { checked: true } });
-    expect(onValueChange).not.toHaveBeenCalled();
+
+    makeToggleHandler(onValueChange, false)(true);
+
+    expect(hapticSelectionMock).toHaveBeenCalledTimes(1);
+    expect(onValueChange).toHaveBeenCalledWith(true);
   });
 });
