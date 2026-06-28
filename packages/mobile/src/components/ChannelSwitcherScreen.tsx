@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, ScrollView, ActivityIndicator, Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import * as Updates from 'expo-updates';
 import { reportError, reportHandledError } from '../lib/error-reporting';
 import { isSentryEnabled, nativeSentryCrash } from '../lib/sentry';
+import { useOtaPreviewChannels, useProfile } from '../lib/graphql/hooks';
 import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
 import { ListRow } from './ListRow';
@@ -22,8 +24,19 @@ import {
 } from '../lib/channel-switch';
 
 export function ChannelSwitcherScreen() {
+  const { t } = useTranslation('common');
   const { systemColors, brandColors, spacing, borderRadius } = useTheme();
   const confirm = useConfirm();
+  const { data: profile } = useProfile();
+  // Live per-PR preview channels (with titles) from the backend. Public query —
+  // works for signed-out users too. Fail-soft: the backend returns [] on error,
+  // so isError is rare; we still handle it for completeness.
+  const previewQuery = useOtaPreviewChannels();
+  const previewChannels = previewQuery.data ?? [];
+  // The full developer tools (raw preset/custom channel entry, Sentry crash
+  // tests) stay tester-only; everyone else gets the friendly preview list.
+  const isTester = Boolean(profile?.isTester);
+
   const [override, setOverride] = useState<string | null>(null);
   const [customChannel, setCustomChannel] = useState('');
   const [switchingChannel, setSwitchingChannel] = useState<string | null>(null);
@@ -72,22 +85,20 @@ export function ChannelSwitcherScreen() {
     [],
   );
 
+  // `label` is the human-friendly name shown in the confirm/alert copy (a PR
+  // title for preview rows; the raw channel for the tester preset/custom rows).
   const switchToChannel = useCallback(
-    async (channel: string) => {
+    async (channel: string, label: string = channel) => {
       if (inFlightRef.current) return;
       inFlightRef.current = true;
       const previousOverride = overrideRef.current;
       try {
         hapticLight();
         const confirmed = await confirm({
-          // i18n-ignore-next-line — tester-only screen
-          title: 'Switch OTA channel',
-          // i18n-ignore-next-line — tester-only screen
-          message: `Pull the latest update from "${channel}" and restart? It must have an update published for this build's fingerprint.`,
-          // i18n-ignore-next-line — tester-only screen
-          confirmLabel: 'Switch',
-          // i18n-ignore-next-line — tester-only screen
-          cancelLabel: 'Cancel',
+          title: t('mobile.previewChannels.confirmSwitchTitle'),
+          message: t('mobile.previewChannels.confirmSwitchMessage', { label }),
+          confirmLabel: t('mobile.previewChannels.confirmSwitchConfirm'),
+          cancelLabel: t('mobile.previewChannels.cancel'),
         });
         if (!confirmed) return;
 
@@ -96,18 +107,17 @@ export function ChannelSwitcherScreen() {
         if (result.status === 'reverted') {
           hapticError();
           Alert.alert(
-            // i18n-ignore-next-line — tester-only screen
-            'Switch failed',
-            result.error instanceof Error
-              ? result.error.message
-              : 'Could not switch channel. This build may not support channel overrides.',
+            t('mobile.previewChannels.switchFailedTitle'),
+            result.error instanceof Error ? result.error.message : t('mobile.previewChannels.switchFailedFallback'),
           );
         } else {
           // 'switched' (the app reloads) or 'pending-restart' — reflect the new channel.
           setOverride(channel);
           if (result.status === 'pending-restart') {
-            // i18n-ignore-next-line — tester-only screen
-            Alert.alert('Restart to finish', `Downloaded "${channel}". Restart the app to switch onto it.`);
+            Alert.alert(
+              t('mobile.previewChannels.restartTitle'),
+              t('mobile.previewChannels.restartSwitchMessage', { label }),
+            );
           }
         }
       } finally {
@@ -115,7 +125,7 @@ export function ChannelSwitcherScreen() {
         inFlightRef.current = false;
       }
     },
-    [confirm, runtimeVersion, makeDeps],
+    [confirm, runtimeVersion, makeDeps, t],
   );
 
   const resetToBuildChannel = useCallback(async () => {
@@ -125,14 +135,10 @@ export function ChannelSwitcherScreen() {
     try {
       hapticLight();
       const confirmed = await confirm({
-        // i18n-ignore-next-line — tester-only screen
-        title: 'Reset to build channel',
-        // i18n-ignore-next-line — tester-only screen
-        message: `Clear the override and return to "${buildChannel}"? The app will restart.`,
-        // i18n-ignore-next-line — tester-only screen
-        confirmLabel: 'Reset',
-        // i18n-ignore-next-line — tester-only screen
-        cancelLabel: 'Cancel',
+        title: t('mobile.previewChannels.confirmResetTitle', { channel: buildChannel }),
+        message: t('mobile.previewChannels.confirmResetMessage', { channel: buildChannel }),
+        confirmLabel: t('mobile.previewChannels.confirmResetConfirm'),
+        cancelLabel: t('mobile.previewChannels.cancel'),
       });
       if (!confirmed) return;
 
@@ -143,21 +149,26 @@ export function ChannelSwitcherScreen() {
         // The override was re-applied on the failed reset, so the build is still on the
         // previous channel (or the build channel if there was no override). Say so.
         const stayedOn = previousOverride ?? buildChannel;
-        const reason = result.error instanceof Error ? result.error.message : 'Could not reset channel.';
-        // i18n-ignore-next-line — tester-only screen
-        Alert.alert('Reset failed', `${reason} Stayed on "${stayedOn}".`);
+        const reason =
+          result.error instanceof Error ? result.error.message : t('mobile.previewChannels.resetFailedReason');
+        Alert.alert(
+          t('mobile.previewChannels.resetFailedTitle'),
+          t('mobile.previewChannels.resetFailedMessage', { reason, channel: stayedOn }),
+        );
       } else {
         setOverride(null);
         if (result.status === 'pending-restart') {
-          // i18n-ignore-next-line — tester-only screen
-          Alert.alert('Restart to finish', `Cleared the override. Restart the app to return to "${buildChannel}".`);
+          Alert.alert(
+            t('mobile.previewChannels.restartTitle'),
+            t('mobile.previewChannels.restartResetMessage', { channel: buildChannel }),
+          );
         }
       }
     } finally {
       setSwitchingChannel(null);
       inFlightRef.current = false;
     }
-  }, [confirm, buildChannel, makeDeps]);
+  }, [confirm, buildChannel, makeDeps, t]);
 
   // --- Sentry verification (tester-only) ---
   // Sentry never sends from a dev / Metro build (gated on !__DEV__), so the only
@@ -205,182 +216,235 @@ export function ChannelSwitcherScreen() {
     nativeSentryCrash();
   }, [confirm]);
 
-  const channels = buildChannelList(override);
+  const presetChannels = buildChannelList(override);
+
+  const cardStyle = [
+    styles.card,
+    {
+      backgroundColor: systemColors.secondaryBackground,
+      borderRadius: borderRadius.lg,
+      marginHorizontal: spacing[4],
+    },
+  ];
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic">
-      {/* i18n-ignore-next-line — tester-only screen */}
-      <SectionHeader title="Current Update" />
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: systemColors.secondaryBackground,
-            borderRadius: borderRadius.lg,
-            marginHorizontal: spacing[4],
-          },
-        ]}
-      >
-        {/* i18n-ignore-next-line — tester-only screen */}
-        <InfoRow label="Build channel" value={buildChannel} />
-        {/* i18n-ignore-next-line — tester-only screen */}
-        <InfoRow label="Selected channel" value={override ?? `${buildChannel} (default)`} />
-        {/* i18n-ignore-next-line — tester-only screen */}
-        <InfoRow label="Runtime version" value={runtimeVersion} showSeparator={false} />
+      <SectionHeader title={t('mobile.previewChannels.currentSection')} />
+      <View style={cardStyle}>
+        <InfoRow label={t('mobile.previewChannels.buildChannelLabel')} value={buildChannel} />
+        <InfoRow
+          label={t('mobile.previewChannels.selectedChannelLabel')}
+          value={override ?? t('mobile.previewChannels.defaultValue', { channel: buildChannel })}
+        />
+        <InfoRow label={t('mobile.previewChannels.runtimeVersionLabel')} value={runtimeVersion} showSeparator={false} />
       </View>
 
       {!updatesUsable ? (
         <View style={[styles.notice, { marginHorizontal: spacing[4] }]}>
           <Text variant="footnote" color={systemColors.secondaryLabel}>
-            {/* i18n-ignore-next-line — tester-only screen */}
-            OTA updates are disabled in this build (development or updates not enabled), so channel switching is
-            unavailable here. Use a TestFlight/store build.
+            {t('mobile.previewChannels.unavailableNotice')}
           </Text>
         </View>
-      ) : (
+      ) : null}
+
+      {/* Friendly per-PR preview list — shown to everyone. Rows are inert when
+          switching is unavailable (dev / Expo Go) but still render so the list
+          can be reviewed and screenshotted. */}
+      <SectionHeader title={t('mobile.previewChannels.listSection')} />
+      <Text
+        variant="footnote"
+        color={systemColors.secondaryLabel}
+        style={[styles.intro, { marginHorizontal: spacing[4] }]}
+      >
+        {t('mobile.previewChannels.intro')}
+      </Text>
+      <View style={cardStyle}>
+        {previewQuery.isLoading ? (
+          <View style={styles.statusRow}>
+            <ActivityIndicator size="small" />
+            <Text variant="footnote" color={systemColors.secondaryLabel}>
+              {t('mobile.previewChannels.loading')}
+            </Text>
+          </View>
+        ) : previewQuery.isError ? (
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.statusText}>
+            {t('mobile.previewChannels.error')}
+          </Text>
+        ) : previewChannels.length === 0 ? (
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.statusText}>
+            {t('mobile.previewChannels.empty')}
+          </Text>
+        ) : (
+          previewChannels.map((preview, index) => {
+            const isActive = preview.channel === activeChannel;
+            const isThisSwitching = switchingChannel === preview.channel;
+            const isDisabled = isSwitching && !isThisSwitching;
+            const trailing = isThisSwitching ? (
+              <ActivityIndicator size="small" />
+            ) : isActive ? (
+              <Icon name="check.small" size={20} color={systemColors.label} />
+            ) : updatesUsable ? (
+              <Icon name="chevron.right" size={16} color={systemColors.tertiaryLabel} />
+            ) : null;
+            const pressable = updatesUsable && !isActive && !isDisabled;
+            return (
+              <ListRow
+                key={preview.channel}
+                title={preview.title}
+                subtitle={preview.channel}
+                trailing={trailing}
+                onPress={pressable ? () => void switchToChannel(preview.channel, preview.title) : undefined}
+                showSeparator={index < previewChannels.length - 1}
+                style={isDisabled ? styles.disabledRow : undefined}
+              />
+            );
+          })
+        )}
+      </View>
+
+      {updatesUsable ? (
         <>
-          {/* i18n-ignore-next-line — tester-only screen */}
-          <SectionHeader title="Switch Channel" />
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: systemColors.secondaryBackground,
-                borderRadius: borderRadius.lg,
-                marginHorizontal: spacing[4],
-              },
-            ]}
-          >
-            {channels.map((channel, index) => {
-              const isActive = channel === activeChannel;
-              const isThisSwitching = switchingChannel === channel;
-              const isDisabled = isSwitching && !isThisSwitching;
-              const trailing = isThisSwitching ? (
-                <ActivityIndicator size="small" />
-              ) : isActive ? (
-                <Icon name="check.small" size={20} color={systemColors.label} />
-              ) : null;
+          {isTester ? (
+            <>
+              {/* i18n-ignore-next-line — tester-only dev tooling */}
+              <SectionHeader title="Switch Channel (tester)" />
+              <View style={cardStyle}>
+                {presetChannels.map((channel, index) => {
+                  const isActive = channel === activeChannel;
+                  const isThisSwitching = switchingChannel === channel;
+                  const isDisabled = isSwitching && !isThisSwitching;
+                  const trailing = isThisSwitching ? (
+                    <ActivityIndicator size="small" />
+                  ) : isActive ? (
+                    <Icon name="check.small" size={20} color={systemColors.label} />
+                  ) : null;
 
-              return (
-                <ListRow
-                  key={channel}
-                  title={channel}
-                  trailing={trailing}
-                  onPress={isActive || isDisabled ? undefined : () => void switchToChannel(channel)}
-                  showSeparator={index < channels.length - 1}
-                  style={isDisabled ? styles.disabledRow : undefined}
+                  return (
+                    <ListRow
+                      key={channel}
+                      title={channel}
+                      trailing={trailing}
+                      onPress={isActive || isDisabled ? undefined : () => void switchToChannel(channel)}
+                      showSeparator={index < presetChannels.length - 1}
+                      style={isDisabled ? styles.disabledRow : undefined}
+                    />
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          {/* Manual channel entry: always for testers, and as a fallback for
+              everyone when the preview list fails to load — so a user is never
+              stranded without a way to switch. */}
+          {isTester || previewQuery.isError ? (
+            <>
+              <SectionHeader title={t('mobile.previewChannels.manualSection')} />
+              {previewQuery.isError ? (
+                <Text
+                  variant="footnote"
+                  color={systemColors.secondaryLabel}
+                  style={[styles.intro, { marginHorizontal: spacing[4] }]}
+                >
+                  {t('mobile.previewChannels.manualHint')}
+                </Text>
+              ) : null}
+              <View style={[styles.customRow, { marginHorizontal: spacing[4] }]}>
+                <TextInput
+                  value={customChannel}
+                  onChangeText={setCustomChannel}
+                  placeholder={t('mobile.previewChannels.manualPlaceholder')}
+                  placeholderTextColor={systemColors.secondaryLabel}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isSwitching}
+                  accessibilityLabel={t('mobile.previewChannels.manualInputA11y')}
+                  style={[
+                    styles.input,
+                    {
+                      color: systemColors.label,
+                      backgroundColor: systemColors.secondaryBackground,
+                      borderRadius: borderRadius.md,
+                    },
+                  ]}
                 />
-              );
-            })}
-          </View>
+                <Pressable
+                  onPress={() => {
+                    const trimmed = customChannel.trim();
+                    if (trimmed) void switchToChannel(trimmed);
+                  }}
+                  disabled={isSwitching || customChannel.trim().length === 0}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.previewChannels.manualSwitchA11y')}
+                  accessibilityState={{ disabled: isSwitching || customChannel.trim().length === 0 }}
+                  style={[
+                    styles.goButton,
+                    {
+                      backgroundColor: systemColors.tertiaryBackground,
+                      borderRadius: borderRadius.md,
+                      opacity: isSwitching || customChannel.trim().length === 0 ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <Icon name="transfer" size={16} color={systemColors.label} />
+                  <Text variant="footnote" color={systemColors.label}>
+                    {t('mobile.previewChannels.confirmSwitchConfirm')}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
 
-          {/* i18n-ignore-next-line — tester-only screen */}
-          <SectionHeader title="Custom Channel" />
-          <View style={[styles.customRow, { marginHorizontal: spacing[4] }]}>
-            <TextInput
-              value={customChannel}
-              onChangeText={setCustomChannel}
-              // i18n-ignore-next-line — tester-only screen
-              placeholder="channel name"
-              placeholderTextColor={systemColors.secondaryLabel}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isSwitching}
-              // i18n-ignore-next-line — tester-only screen
-              accessibilityLabel="Custom OTA channel name"
-              style={[
-                styles.input,
-                {
-                  color: systemColors.label,
-                  backgroundColor: systemColors.secondaryBackground,
-                  borderRadius: borderRadius.md,
-                },
-              ]}
-            />
-            <Pressable
-              onPress={() => {
-                const trimmed = customChannel.trim();
-                if (trimmed) void switchToChannel(trimmed);
-              }}
-              disabled={isSwitching || customChannel.trim().length === 0}
-              accessibilityRole="button"
-              // i18n-ignore-next-line — tester-only screen
-              accessibilityLabel="Switch to the entered channel"
-              accessibilityState={{ disabled: isSwitching || customChannel.trim().length === 0 }}
-              style={[
-                styles.goButton,
-                {
-                  backgroundColor: systemColors.tertiaryBackground,
-                  borderRadius: borderRadius.md,
-                  opacity: isSwitching || customChannel.trim().length === 0 ? 0.5 : 1,
-                },
-              ]}
-            >
-              <Icon name="transfer" size={16} color={systemColors.label} />
-              <Text variant="footnote" color={systemColors.label}>
-                {/* i18n-ignore-next-line — tester-only screen */}
-                Switch
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Always offered (not gated on `override`) so a native override stranded
-              after an app-data clear — when the display mirror is gone — stays
-              clearable. */}
+          {/* Reset — available to everyone, kept last as the escape hatch back to
+              the shipped version. Not gated on `override` so a native override
+              stranded after an app-data clear stays clearable. */}
           <Pressable
             onPress={() => void resetToBuildChannel()}
             disabled={isSwitching}
             accessibilityRole="button"
-            // i18n-ignore-next-line — tester-only screen
-            accessibilityLabel="Reset to build channel"
+            accessibilityLabel={t('mobile.previewChannels.reset', { channel: buildChannel })}
             accessibilityState={{ disabled: isSwitching }}
             style={[styles.resetButton, { marginHorizontal: spacing[4], opacity: isSwitching ? 0.5 : 1 }]}
           >
             <Icon name="refresh" size={16} color={systemColors.label} />
             <Text variant="footnote" color={systemColors.label}>
-              {/* i18n-ignore-next-line — tester-only screen */}
-              Reset to build channel ({buildChannel})
+              {t('mobile.previewChannels.reset', { channel: buildChannel })}
             </Text>
           </Pressable>
         </>
-      )}
+      ) : null}
 
-      {/* i18n-ignore-next-line — tester-only screen */}
-      <SectionHeader title="Test crash reporting (Sentry)" />
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: systemColors.secondaryBackground,
-            borderRadius: borderRadius.lg,
-            marginHorizontal: spacing[4],
-          },
-        ]}
-      >
-        {/* i18n-ignore-next-line — tester-only screen */}
-        <InfoRow label="Sentry" value={isSentryEnabled ? 'Active' : 'Disabled in this build'} />
-        <ListRow
-          // i18n-ignore-next-line — tester-only screen
-          title="Send test event (handled)"
-          trailing={<Icon name="send" size={18} color={systemColors.secondaryLabel} />}
-          onPress={sendSentryTestEvent}
-          showSeparator
-        />
-        <ListRow
-          // i18n-ignore-next-line — tester-only screen
-          title="Throw JS exception (uncaught)"
-          trailing={<Icon name="warning" size={18} color={brandColors.warning} />}
-          onPress={throwSentryUncaught}
-          showSeparator
-        />
-        <ListRow
-          // i18n-ignore-next-line — tester-only screen
-          title="Native crash"
-          trailing={<Icon name="flame" size={18} color={brandColors.error} />}
-          onPress={() => void triggerSentryNativeCrash()}
-          showSeparator={false}
-        />
-      </View>
+      {isTester ? (
+        <>
+          {/* i18n-ignore-next-line — tester-only screen */}
+          <SectionHeader title="Test crash reporting (Sentry)" />
+          <View style={cardStyle}>
+            {/* i18n-ignore-next-line — tester-only screen */}
+            <InfoRow label="Sentry" value={isSentryEnabled ? 'Active' : 'Disabled in this build'} />
+            <ListRow
+              // i18n-ignore-next-line — tester-only screen
+              title="Send test event (handled)"
+              trailing={<Icon name="send" size={18} color={systemColors.secondaryLabel} />}
+              onPress={sendSentryTestEvent}
+              showSeparator
+            />
+            <ListRow
+              // i18n-ignore-next-line — tester-only screen
+              title="Throw JS exception (uncaught)"
+              trailing={<Icon name="warning" size={18} color={brandColors.warning} />}
+              onPress={throwSentryUncaught}
+              showSeparator
+            />
+            <ListRow
+              // i18n-ignore-next-line — tester-only screen
+              title="Native crash"
+              trailing={<Icon name="flame" size={18} color={brandColors.error} />}
+              onPress={() => void triggerSentryNativeCrash()}
+              showSeparator={false}
+            />
+          </View>
+        </>
+      ) : null}
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
@@ -394,6 +458,19 @@ const styles = StyleSheet.create({
   },
   notice: {
     paddingVertical: 16,
+  },
+  intro: {
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  statusText: {
+    paddingVertical: 8,
   },
   customRow: {
     flexDirection: 'row',

@@ -17,7 +17,7 @@ there's no MAU/bandwidth billing.
 | Channel source | `channel` in `eas.json`                  | `expo-channel-name` request header baked in by `expo prebuild`                                                                   |
 | Publish        | `vp run mobile:publish` (→ `eas update`) | auto on push to `main` (`mobile-ota-production.yml`); manual: `vp run mobile:publish -- --channel production` (→ `eoas publish`) |
 
-A third path rides the **same self-hosted server**: per-PR `pr-<number>` channels that let a tester
+A third path rides the **same self-hosted server**: per-PR `pr-<number>` channels that let any user
 validate a specific PR on a store/TestFlight build via the in-app switcher — see
 [Per-PR preview channels](#per-pr-preview-channels-self-hosted) below.
 
@@ -432,13 +432,21 @@ prebuild --platform ios --clean --no-install`, then confirm `ios/Boardsesh/Suppo
 4. Make a trivial JS change, push to `main` (or `vp run mobile:publish -- --channel production`),
    relaunch the TestFlight app, and confirm the OTA downloads and applies.
 
-## Tester channel switcher (in-app, production builds)
+## In-app channel switcher ("Try a preview", production builds)
 
-Users granted the **`tester`** community role (admin panel → Roles; admins implicitly count as
-testers) see an extra "OTA Channel Switcher" row under **More → Development** in the app. It lets a
-tester repoint a production/TestFlight build at a different channel (e.g. `preview-2`) at runtime to
-validate a specific PR's OTA, without a per-tester build.
+**Any** user on a production/TestFlight build can repoint it at a different channel at runtime to try a
+specific PR's OTA, without a per-tester build. The entry is a visible **"Try a preview"** button on the
+**What's New** screen (`app/changelog.tsx`), next to _Check for updates_ — shown only when
+`!__DEV__ && Updates.isEnabled`. It opens the switcher screen (`src/components/ChannelSwitcherScreen.tsx`),
+which lists the **live per-PR previews by pull-request title** (not raw `pr-<n>` strings) and a
+reset-to-production action. _(It used to be a tester-only "OTA Channel Switcher" row under
+More → Development; that row was removed.)_
 
+- **Live preview list:** the screen calls the **public** `otaPreviewChannels` GraphQL query
+  (`packages/backend/src/lib/ota-preview-channels.ts`), which derives the live channels from the GitHub
+  `pr-preview` Deployments this workflow writes, intersected with still-open PRs — two cached GitHub
+  calls, fail-soft to `[]`. Optional backend `GITHUB_TOKEN` raises the rate-limit ceiling (works
+  unauthenticated on the public repo).
 - **Mechanism:** `Updates.setUpdateRequestHeadersOverride({ 'expo-channel-name': <channel> })` —
   overrides only the channel header, keeping the build's `updates.url`, so the embedded code-signing
   cert still verifies every manifest. Then `checkForUpdateAsync` → `fetchUpdateAsync` → `reloadAsync`.
@@ -451,16 +459,16 @@ validate a specific PR's OTA, without a per-tester build.
   the switcher breaks (the override throws). Keep it baked in.
 - **Constraint:** the target channel must have an OTA published at the **same fingerprint
   runtimeVersion** as the running binary, or `checkForUpdateAsync` reports nothing available.
-- **Gating:** the row shows only when `isTester && !__DEV__ && Updates.isEnabled` (overrides are inert
-  in dev/Expo Go). Logic lives in `src/lib/channel-switch.ts` (unit-tested); UI in
-  `src/components/ChannelSwitcherScreen.tsx`. The `tester` role is global-only and grants nothing
-  beyond this flag (`UserProfile.isTester`).
+- **Tester-only extras:** the raw preset/custom-channel entry (`production`, `preview-1…4`, free-text)
+  and the Sentry crash-test tools on the same screen still require the **`tester`** role
+  (`UserProfile.isTester`; admin panel → Roles, admins implicitly count). Switch logic lives in
+  `src/lib/channel-switch.ts` (unit-tested). The `tester` role grants nothing beyond these extras.
 
 ## Per-PR preview channels (self-hosted)
 
 Every PR with React Native changes can publish its JS bundle to its own self-hosted channel
-`pr-<number>`, so a `tester` switches to it on a store/TestFlight build via the switcher above — no
-per-tester build. Workflow: `.github/workflows/mobile-ota-preview.yml` (sweep:
+`pr-<number>`, which any user can switch to on a store/TestFlight build via the "Try a preview" switcher
+above — no per-tester build. Workflow: `.github/workflows/mobile-ota-preview.yml` (sweep:
 `mobile-ota-preview-sweep.yml`).
 
 - **Fingerprint parity.** The publish keeps `EXPO_UPDATES_CHANNEL=production` (so the runtimeVersion

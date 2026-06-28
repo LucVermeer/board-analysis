@@ -24,6 +24,7 @@ import { controllerTypeDefs } from './controller';
 import { feedbackTypeDefs } from './feedback';
 import { betaLinksTypeDefs } from './beta-links';
 import { integrationsTypeDefs } from './integrations';
+import { otaTypeDefs } from './ota';
 
 export const typeDefs = [
   scalarTypeDefs,
@@ -45,6 +46,7 @@ export const typeDefs = [
   newClimbFeedTypeDefs,
   betaLinksTypeDefs,
   integrationsTypeDefs,
+  otaTypeDefs,
   queriesTypeDefs,
   mutationsTypeDefs,
   subscriptionsTypeDefs,

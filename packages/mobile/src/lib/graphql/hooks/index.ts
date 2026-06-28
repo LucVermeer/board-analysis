@@ -65,9 +65,11 @@ import {
   GET_CLIMB,
   GET_SESSION_SUMMARY,
   GET_SESSION_HEALTH_EXPORT,
+  GET_OTA_PREVIEW_CHANNELS,
   END_SESSION,
   TOGGLE_FAVORITE,
   type GetProfileQueryResponse,
+  type GetOtaPreviewChannelsQueryResponse,
   type UpdateProfileMutationResponse,
   type GetMyBoardsQueryResponse,
   type GetBoardQueryResponse,
@@ -101,6 +103,26 @@ export function useProfile(options?: { enabled?: boolean }) {
     queryKey: ['profile'],
     queryFn: () => getHttpClient().request<GetProfileQueryResponse>(GET_PROFILE),
     select: (data) => data.profile,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+// ============================================
+// OTA Preview Channels
+// ============================================
+
+/**
+ * Live per-PR OTA preview channels (`pr-<number>`) with their PR titles, for the
+ * in-app channel switcher. Public — no auth. The backend caches and fail-soft
+ * returns [] on any GitHub error, so this never throws on the data path; the
+ * screen renders an empty state instead.
+ */
+export function useOtaPreviewChannels(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['otaPreviewChannels'],
+    queryFn: () => getHttpClient().request<GetOtaPreviewChannelsQueryResponse>(GET_OTA_PREVIEW_CHANNELS),
+    select: (data) => data.otaPreviewChannels,
+    staleTime: 60_000,
     enabled: options?.enabled ?? true,
   });
 }

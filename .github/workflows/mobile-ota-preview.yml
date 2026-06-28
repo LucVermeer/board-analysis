@@ -1,8 +1,8 @@
 name: Mobile OTA Preview (Per-PR Channel)
 
-# Publishes a PR's JS bundle to its own self-hosted OTA channel `pr-<number>` so a
-# tester on the store / TestFlight binary can load it via the in-app OTA Channel
-# Switcher (More → Development → type `pr-<number>`) — no per-tester build. Companion
+# Publishes a PR's JS bundle to its own self-hosted OTA channel `pr-<number>` so
+# anyone on the store / TestFlight binary can load it via the in-app switcher
+# (What's New → Try a preview → pick the PR) — no per-tester build. Companion
 # to mobile-ota-production.yml, which owns the `production` channel. The published
 # runtimeVersion matches the shipped binary because EXPO_UPDATES_CHANNEL stays
 # `production` (it feeds the hashed config); the `pr-<number>` value is only the eoas
@@ -330,8 +330,8 @@ jobs:
             let deployDesc;
             if (anyPublished) {
               headline =
-                `This PR is live on the OTA channel **\`${channel}\`**. Testers with the \`tester\` role on a ` +
-                `TestFlight / App Store build can load it without a new build:`;
+                `This PR is live on the OTA channel **\`${channel}\`**. Anyone on a TestFlight / App Store ` +
+                `build can load it without a new build:`;
               deployState = 'success';
               deployDesc = `OTA channel ${channel} ready`;
             } else if (nativeOnly) {
@@ -346,8 +346,8 @@ jobs:
               deployDesc = `OTA preview ${channel} failed`;
             }
             const howto = anyPublished
-              ? ['', '**More → Development → OTA Channel Switcher → type `' + channel + '`** → it downloads and ' +
-                 'reloads. Reset on the same screen (back to `production`).', '']
+              ? ['', '**What\'s New → Try a preview → pick this PR** → it downloads and reloads. Reset on the ' +
+                 'same screen (back to `production`).', '']
               : [''];
 
             const body = [
