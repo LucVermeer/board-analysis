@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-28T00:00:37.290Z",
+  "generatedAt": "2026-06-28T00:06:13.645Z",
   "entries": [
+    {
+      "prNumber": 3239,
+      "category": "improved",
+      "title": "Draft pilot enabling React Compiler auto-memoization; not yet shipped — pending measurement.",
+      "mergedAt": "2026-06-28T00:01:11Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3239"
+    },
     {
       "prNumber": 3237,
       "category": "improved",
