@@ -304,24 +304,6 @@ export function ChannelSwitcherScreen() {
 
       {updatesUsable ? (
         <>
-          {/* Always offered (not gated on `override`) so a native override stranded
-              after an app-data clear — when the display mirror is gone — stays
-              clearable. Available to everyone so a user can always get back to the
-              shipped version. */}
-          <Pressable
-            onPress={() => void resetToBuildChannel()}
-            disabled={isSwitching}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.previewChannels.reset', { channel: buildChannel })}
-            accessibilityState={{ disabled: isSwitching }}
-            style={[styles.resetButton, { marginHorizontal: spacing[4], opacity: isSwitching ? 0.5 : 1 }]}
-          >
-            <Icon name="refresh" size={16} color={systemColors.label} />
-            <Text variant="footnote" color={systemColors.label}>
-              {t('mobile.previewChannels.reset', { channel: buildChannel })}
-            </Text>
-          </Pressable>
-
           {isTester ? (
             <>
               {/* i18n-ignore-next-line — tester-only dev tooling */}
@@ -349,21 +331,34 @@ export function ChannelSwitcherScreen() {
                   );
                 })}
               </View>
+            </>
+          ) : null}
 
-              {/* i18n-ignore-next-line — tester-only dev tooling */}
-              <SectionHeader title="Custom Channel (tester)" />
+          {/* Manual channel entry: always for testers, and as a fallback for
+              everyone when the preview list fails to load — so a user is never
+              stranded without a way to switch. */}
+          {isTester || previewQuery.isError ? (
+            <>
+              <SectionHeader title={t('mobile.previewChannels.manualSection')} />
+              {previewQuery.isError ? (
+                <Text
+                  variant="footnote"
+                  color={systemColors.secondaryLabel}
+                  style={[styles.intro, { marginHorizontal: spacing[4] }]}
+                >
+                  {t('mobile.previewChannels.manualHint')}
+                </Text>
+              ) : null}
               <View style={[styles.customRow, { marginHorizontal: spacing[4] }]}>
                 <TextInput
                   value={customChannel}
                   onChangeText={setCustomChannel}
-                  // i18n-ignore-next-line — tester-only screen
-                  placeholder="channel name"
+                  placeholder={t('mobile.previewChannels.manualPlaceholder')}
                   placeholderTextColor={systemColors.secondaryLabel}
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isSwitching}
-                  // i18n-ignore-next-line — tester-only screen
-                  accessibilityLabel="Custom OTA channel name"
+                  accessibilityLabel={t('mobile.previewChannels.manualInputA11y')}
                   style={[
                     styles.input,
                     {
@@ -380,8 +375,7 @@ export function ChannelSwitcherScreen() {
                   }}
                   disabled={isSwitching || customChannel.trim().length === 0}
                   accessibilityRole="button"
-                  // i18n-ignore-next-line — tester-only screen
-                  accessibilityLabel="Switch to the entered channel"
+                  accessibilityLabel={t('mobile.previewChannels.manualSwitchA11y')}
                   accessibilityState={{ disabled: isSwitching || customChannel.trim().length === 0 }}
                   style={[
                     styles.goButton,
@@ -394,13 +388,29 @@ export function ChannelSwitcherScreen() {
                 >
                   <Icon name="transfer" size={16} color={systemColors.label} />
                   <Text variant="footnote" color={systemColors.label}>
-                    {/* i18n-ignore-next-line — tester-only screen */}
-                    Switch
+                    {t('mobile.previewChannels.confirmSwitchConfirm')}
                   </Text>
                 </Pressable>
               </View>
             </>
           ) : null}
+
+          {/* Reset — available to everyone, kept last as the escape hatch back to
+              the shipped version. Not gated on `override` so a native override
+              stranded after an app-data clear stays clearable. */}
+          <Pressable
+            onPress={() => void resetToBuildChannel()}
+            disabled={isSwitching}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.previewChannels.reset', { channel: buildChannel })}
+            accessibilityState={{ disabled: isSwitching }}
+            style={[styles.resetButton, { marginHorizontal: spacing[4], opacity: isSwitching ? 0.5 : 1 }]}
+          >
+            <Icon name="refresh" size={16} color={systemColors.label} />
+            <Text variant="footnote" color={systemColors.label}>
+              {t('mobile.previewChannels.reset', { channel: buildChannel })}
+            </Text>
+          </Pressable>
         </>
       ) : null}
 

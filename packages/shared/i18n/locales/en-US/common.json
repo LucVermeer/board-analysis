@@ -269,7 +269,12 @@
       "restartResetMessage": "Cleared the preview. Restart the app to return to “{{channel}}”.",
       "resetFailedTitle": "Couldn't reset",
       "resetFailedReason": "Could not reset.",
-      "resetFailedMessage": "{{reason}} Stayed on “{{channel}}”."
+      "resetFailedMessage": "{{reason}} Stayed on “{{channel}}”.",
+      "manualSection": "Enter a channel manually",
+      "manualHint": "Couldn't load the preview list. Enter a channel name (like pr-1234) to switch manually.",
+      "manualPlaceholder": "channel name",
+      "manualInputA11y": "Channel name to switch to",
+      "manualSwitchA11y": "Switch to the entered channel"
     }
   },
   "lightControl": {
