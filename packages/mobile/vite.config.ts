@@ -158,6 +158,28 @@ export default defineConfig({
         find: /^(.*\/)?AngleSlider$/,
         replacement: fileURLToPath(new URL('./test/angle-slider-stub.tsx', import.meta.url)),
       },
+      // FeatureFlagsForm is platform-split (FeatureFlagsForm.ios.tsx renders a
+      // native @expo/ui SwiftUI `Form`; FeatureFlagsForm.android.tsx a native
+      // Compose `LazyColumn` of cards). Vitest doesn't resolve `.ios`/`.android`
+      // extensions and can't mount either native tree, so redirect the
+      // extensionless import to a faithful passthrough stub that keeps the public
+      // API + radio/radiogroup + button accessibility roles. Suites that assert
+      // FeatureFlagsForm internals register their own vi.mock (takes precedence).
+      {
+        find: /^(.*\/)?FeatureFlagsForm$/,
+        replacement: fileURLToPath(new URL('./test/feature-flags-form-stub.tsx', import.meta.url)),
+      },
+      // MoreForm is platform-split (MoreForm.ios.tsx renders a native @expo/ui
+      // SwiftUI `Form`; MoreForm.android.tsx a native Compose `LazyColumn`).
+      // Vitest doesn't resolve `.ios`/`.android` extensions and can't mount either
+      // native tree, so redirect the extensionless import to a faithful
+      // passthrough stub that keeps the public API + nav/button/switch/radio
+      // accessibility roles. Suites that assert MoreForm internals register their
+      // own vi.mock (takes precedence).
+      {
+        find: /^(.*\/)?MoreForm$/,
+        replacement: fileURLToPath(new URL('./test/more-form-stub.tsx', import.meta.url)),
+      },
     ],
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
