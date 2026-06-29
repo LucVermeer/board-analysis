@@ -12,6 +12,9 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Android: your climb filters now live in a tappable chip row right under the search bar — change grade, popularity, min rating, and what's shown in a single tap, no digging through a menu. ([#3310](https://github.com/boardsesh/boardsesh/pull/3310))
+  Long-press the Tall or Wide chip to pin it so it sticks through clears.
+- The workout generator's count steppers are easier to use — the number now sits between the − and + buttons, and you can press and hold to fly through the range. ([#3291](https://github.com/boardsesh/boardsesh/pull/3291))
 - Buttons across the app now use the real iOS and Android button — so a tap feels native: the system's own press animation, a crisp spinner while something's loading instead of three dots, and delete/disconnect actions that turn the proper system red. Your main violet action button stays bold and solid over busy board art and in dark mode, while quieter buttons pick up iOS 26's Liquid Glass on a calm background. ([#3309](https://github.com/boardsesh/boardsesh/pull/3309))
 - Sign-in and profile fields now use your phone's own keyboard, password autofill, and (on iPhone) Strong Password. ([#3284](https://github.com/boardsesh/boardsesh/pull/3284))
 - Mini MoonBoard is here — both the 2020 and 2025 Mini boards now show up with the right holds, so you can find problems, build a queue and log your sends on a Mini just like the full-size wall. ([#3287](https://github.com/boardsesh/boardsesh/pull/3287))

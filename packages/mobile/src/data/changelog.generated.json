@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-06-29T22:15:32.212Z",
+  "generatedAt": "2026-06-29T22:43:48.991Z",
   "entries": [
+    {
+      "prNumber": 3310,
+      "category": "new",
+      "title": "Android: your climb filters now live in a tappable chip row right under the search bar — change grade, popularity, min rating, and what's shown in a single tap, no digging through a menu.",
+      "mergedAt": "2026-06-29T22:42:00Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3310",
+      "body": "Long-press the Tall or Wide chip to pin it so it sticks through clears."
+    },
+    {
+      "prNumber": 3291,
+      "category": "new",
+      "title": "The workout generator's count steppers are easier to use — the number now sits between the − and + buttons, and you can press and hold to fly through the range.",
+      "mergedAt": "2026-06-29T22:16:06Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3291"
+    },
     {
       "prNumber": 3309,
       "category": "new",
