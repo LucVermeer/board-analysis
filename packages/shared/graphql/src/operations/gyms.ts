@@ -42,6 +42,7 @@ const GYM_FIELDS = `
   isFollowedByMe
   isMember
   myRole
+  canEdit
 `;
 
 export const GET_GYM = gql`

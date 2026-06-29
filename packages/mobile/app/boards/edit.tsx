@@ -72,9 +72,12 @@ function EditBoardForm({ board }: { board: UserBoard }) {
   const setActiveBoard = useSetActiveBoard();
   const updateBoard = useUpdateBoard();
 
-  // Config edits are server-rejected once a board has ticks; lock the chips and
-  // omit the config from the update so we don't trip that guard.
-  const lockedConfig = board.totalAscents > 0;
+  // Authorized editors (owner, or a community admin/leader for this board type —
+  // the server reports this as `canEdit`) may change the config even when the
+  // board has ticks: a config change reflects a real physical reconfiguration and
+  // the old ticks are preserved server-side. Anyone without edit access keeps the
+  // config chips locked.
+  const lockedConfig = !board.canEdit;
 
   const seed = useMemo<BoardBuilderSeed>(() => {
     const seedBoardName = toBoardName(board.boardType)!;

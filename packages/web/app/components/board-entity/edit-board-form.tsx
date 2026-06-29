@@ -17,12 +17,11 @@ import BoardForm from './board-form';
 
 type EditBoardFormProps = {
   board: UserBoard;
-  totalAscents?: number;
   onSuccess?: (board: UserBoard) => void;
   onCancel?: () => void;
 };
 
-export default function EditBoardForm({ board, totalAscents, onSuccess, onCancel }: EditBoardFormProps) {
+export default function EditBoardForm({ board, onSuccess, onCancel }: EditBoardFormProps) {
   const { t } = useTranslation('boards');
   const { showMessage } = useSnackbar();
 
@@ -34,13 +33,13 @@ export default function EditBoardForm({ board, totalAscents, onSuccess, onCancel
   });
 
   const configEditable = useMemo(() => {
-    if (totalAscents !== 0) return undefined;
+    if (!board.canEdit) return undefined;
     const options = getBoardSelectorOptions();
     const boardType = board.boardType as BoardName;
     const layouts = options.layouts[boardType] ?? [];
     if (layouts.length === 0) return undefined;
     return { boardType, layouts, sizes: options.sizes, sets: options.sets };
-  }, [totalAscents, board.boardType]);
+  }, [board.canEdit, board.boardType]);
 
   const handleSubmit = useCallback(
     async (values: {

@@ -26,6 +26,8 @@ export type Gym = {
   isFollowedByMe: boolean;
   isMember: boolean;
   myRole?: GymMemberRole | null;
+  /** Whether the current viewer may edit this gym (owner, gym admin, or community admin/leader for one of its board types). */
+  canEdit?: boolean;
 };
 
 export type GymConnection = {

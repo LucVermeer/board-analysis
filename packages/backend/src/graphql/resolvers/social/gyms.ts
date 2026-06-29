@@ -5,6 +5,7 @@ import { rowsFromResult } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
+import { getUserCommunityRoles, rolesGrantAdminOrLeader } from './roles';
 import {
   CreateGymInputSchema,
   UpdateGymInputSchema,
@@ -103,6 +104,7 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     commentCountResult,
     followCheckResult,
     memberCheckResult,
+    viewerRolesResult,
   ] = await Promise.all([
     // Get owner profile
     db
@@ -163,6 +165,10 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
           .where(and(eq(dbSchema.gymMembers.userId, authenticatedUserId), eq(dbSchema.gymMembers.gymId, gym.id)))
           .limit(1)
       : Promise.resolve([]),
+
+    // Viewer's community roles (for canEdit: a community admin/leader scoped to
+    // one of the gym's board types, or global, may edit the gym)
+    authenticatedUserId ? getUserCommunityRoles(authenticatedUserId) : Promise.resolve([]),
   ]);
 
   const ownerInfo = ownerResult[0];
@@ -178,6 +184,15 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
   const memberRow = (memberCheckResult as Array<{ role: string }>)[0];
   const isMember = isOwner || !!memberRow;
   const myRole = isOwner ? 'admin' : ((memberRow?.role as 'admin' | 'member' | undefined) ?? null);
+
+  // Editable by gym owner/admin, or a community admin/leader whose role is
+  // global or scoped to one of the gym's board types.
+  const viewerRoles = viewerRolesResult as Array<{ role: string; boardType: string | null }>;
+  const canEdit =
+    isOwner ||
+    memberRow?.role === 'admin' ||
+    rolesGrantAdminOrLeader(viewerRoles, null) ||
+    boardTypes.some((boardType) => rolesGrantAdminOrLeader(viewerRoles, boardType));
 
   return {
     uuid: gym.uuid,
@@ -203,6 +218,7 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     isFollowedByMe,
     isMember,
     myRole,
+    canEdit,
   };
 }
 
@@ -224,7 +240,7 @@ async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<
     return gym;
   }
 
-  // Check if user is admin
+  // Check if user is a gym admin member
   const [member] = await db
     .select({ role: dbSchema.gymMembers.role })
     .from(dbSchema.gymMembers)
@@ -237,11 +253,30 @@ async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<
     )
     .limit(1);
 
-  if (!member) {
-    throw new Error('Not authorized: must be gym owner or admin');
+  if (member) {
+    return gym;
   }
 
-  return gym;
+  // A community admin/leader may also edit. A gym spans multiple board types, so
+  // allow a global role (boardType null) or any role matching one of the gym's
+  // board types (same set enrichGym computes).
+  const [roles, gymBoardTypeRows] = await Promise.all([
+    getUserCommunityRoles(userId),
+    db
+      .selectDistinct({ boardType: dbSchema.userBoards.boardType })
+      .from(dbSchema.userBoards)
+      .where(and(eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt))),
+  ]);
+  const gymBoardTypes = gymBoardTypeRows.map((row) => row.boardType);
+  const hasCommunityAccess =
+    rolesGrantAdminOrLeader(roles, null) ||
+    gymBoardTypes.some((boardType) => rolesGrantAdminOrLeader(roles, boardType));
+
+  if (hasCommunityAccess) {
+    return gym;
+  }
+
+  throw new Error('Not authorized: must be gym owner or admin');
 }
 
 // ============================================

@@ -43,6 +43,7 @@ function makeBoard(overrides: Partial<UserBoard> = {}): UserBoard {
     followerCount: 0,
     commentCount: 0,
     isFollowedByMe: false,
+    canEdit: false,
     serialNumber: 'SN-1',
     ...overrides,
   };

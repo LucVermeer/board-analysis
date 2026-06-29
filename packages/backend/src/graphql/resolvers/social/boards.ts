@@ -21,6 +21,7 @@ import {
   UUIDSchema,
 } from '../../../validation/schemas';
 import { generateUniqueGymSlug } from './gyms';
+import { getUserCommunityRoles, hasAdminOrLeader, rolesGrantAdminOrLeader } from './roles';
 import { logger } from '../../../utils/logger';
 import { redisClientManager } from '../../../redis/client';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
@@ -113,6 +114,52 @@ export async function resolveBoardFromPath(
 }
 
 /**
+ * Whether a user owns or is an admin member of a gym. Used to authorize editing
+ * a board through its linked gym (gym owners/admins may fix the gym's boards).
+ */
+async function viewerCanAdminGym(gymId: number, userId: string): Promise<boolean> {
+  const [ownedGym] = await db
+    .select({ id: dbSchema.gyms.id })
+    .from(dbSchema.gyms)
+    .where(and(eq(dbSchema.gyms.id, gymId), eq(dbSchema.gyms.ownerId, userId), isNull(dbSchema.gyms.deletedAt)))
+    .limit(1);
+
+  if (ownedGym) return true;
+
+  const [adminMembership] = await db
+    .select({ role: dbSchema.gymMembers.role })
+    .from(dbSchema.gymMembers)
+    .where(
+      and(
+        eq(dbSchema.gymMembers.gymId, gymId),
+        eq(dbSchema.gymMembers.userId, userId),
+        eq(dbSchema.gymMembers.role, 'admin'),
+      ),
+    )
+    .limit(1);
+
+  return !!adminMembership;
+}
+
+/**
+ * Authorize editing a board: the caller must be the board owner, a community
+ * admin/leader for the board's type, or the owner/admin of the board's linked
+ * gym. Throws when none apply.
+ */
+async function requireBoardEditAccess(
+  ctx: ConnectionContext,
+  board: typeof dbSchema.userBoards.$inferSelect,
+): Promise<void> {
+  const userId = ctx.userId!;
+
+  if (board.ownerId === userId) return;
+  if (await hasAdminOrLeader(userId, board.boardType)) return;
+  if (board.gymId != null && (await viewerCanAdminGym(board.gymId, userId))) return;
+
+  throw new Error('Not authorized to update this board');
+}
+
+/**
  * Enrich a board row with computed fields (counts, names, follow status).
  */
 async function enrichBoard(
@@ -121,72 +168,85 @@ async function enrichBoard(
   distanceMeters?: number | null,
 ) {
   // Run all independent queries in parallel to avoid N+1 per board
-  const [ownerResult, tickStatsResult, followerStatsResult, commentStatsResult, followCheckResult, gymInfoResult] =
-    await Promise.all([
-      // Get owner profile
-      db
-        .select({
-          name: dbSchema.users.name,
-          image: dbSchema.users.image,
-          displayName: dbSchema.userProfiles.displayName,
-          avatarUrl: dbSchema.userProfiles.avatarUrl,
-        })
-        .from(dbSchema.users)
-        .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
-        .where(eq(dbSchema.users.id, board.ownerId))
-        .limit(1),
+  const [
+    ownerResult,
+    tickStatsResult,
+    followerStatsResult,
+    commentStatsResult,
+    followCheckResult,
+    gymInfoResult,
+    canEditByRole,
+    canEditByGym,
+  ] = await Promise.all([
+    // Get owner profile
+    db
+      .select({
+        name: dbSchema.users.name,
+        image: dbSchema.users.image,
+        displayName: dbSchema.userProfiles.displayName,
+        avatarUrl: dbSchema.userProfiles.avatarUrl,
+      })
+      .from(dbSchema.users)
+      .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
+      .where(eq(dbSchema.users.id, board.ownerId))
+      .limit(1),
 
-      // Count total ascents and unique climbers
-      db
-        .select({
-          totalAscents: count(),
-          uniqueClimbers: sql<number>`COUNT(DISTINCT ${dbSchema.boardseshTicks.userId})`,
-        })
-        .from(dbSchema.boardseshTicks)
-        .where(
-          and(
-            eq(dbSchema.boardseshTicks.boardId, board.id),
-            or(eq(dbSchema.boardseshTicks.status, 'flash'), eq(dbSchema.boardseshTicks.status, 'send')),
-          ),
+    // Count total ascents and unique climbers
+    db
+      .select({
+        totalAscents: count(),
+        uniqueClimbers: sql<number>`COUNT(DISTINCT ${dbSchema.boardseshTicks.userId})`,
+      })
+      .from(dbSchema.boardseshTicks)
+      .where(
+        and(
+          eq(dbSchema.boardseshTicks.boardId, board.id),
+          or(eq(dbSchema.boardseshTicks.status, 'flash'), eq(dbSchema.boardseshTicks.status, 'send')),
         ),
+      ),
 
-      // Count followers
-      db.select({ count: count() }).from(dbSchema.boardFollows).where(eq(dbSchema.boardFollows.boardUuid, board.uuid)),
+    // Count followers
+    db.select({ count: count() }).from(dbSchema.boardFollows).where(eq(dbSchema.boardFollows.boardUuid, board.uuid)),
 
-      // Count comments
-      db
-        .select({ count: count() })
-        .from(dbSchema.comments)
-        .where(
-          and(
-            eq(dbSchema.comments.entityType, 'board'),
-            eq(dbSchema.comments.entityId, board.uuid),
-            isNull(dbSchema.comments.deletedAt),
-          ),
+    // Count comments
+    db
+      .select({ count: count() })
+      .from(dbSchema.comments)
+      .where(
+        and(
+          eq(dbSchema.comments.entityType, 'board'),
+          eq(dbSchema.comments.entityId, board.uuid),
+          isNull(dbSchema.comments.deletedAt),
         ),
+      ),
 
-      // Check if authenticated user follows this board
-      authenticatedUserId
-        ? db
-            .select({ count: count() })
-            .from(dbSchema.boardFollows)
-            .where(
-              and(
-                eq(dbSchema.boardFollows.userId, authenticatedUserId),
-                eq(dbSchema.boardFollows.boardUuid, board.uuid),
-              ),
-            )
-        : Promise.resolve([]),
+    // Check if authenticated user follows this board
+    authenticatedUserId
+      ? db
+          .select({ count: count() })
+          .from(dbSchema.boardFollows)
+          .where(
+            and(eq(dbSchema.boardFollows.userId, authenticatedUserId), eq(dbSchema.boardFollows.boardUuid, board.uuid)),
+          )
+      : Promise.resolve([]),
 
-      // Get gym info if board is linked to a gym
-      board.gymId
-        ? db
-            .select({ uuid: dbSchema.gyms.uuid, name: dbSchema.gyms.name })
-            .from(dbSchema.gyms)
-            .where(and(eq(dbSchema.gyms.id, board.gymId), isNull(dbSchema.gyms.deletedAt)))
-            .limit(1)
-        : Promise.resolve([]),
-    ]);
+    // Get gym info if board is linked to a gym
+    board.gymId
+      ? db
+          .select({ uuid: dbSchema.gyms.uuid, name: dbSchema.gyms.name })
+          .from(dbSchema.gyms)
+          .where(and(eq(dbSchema.gyms.id, board.gymId), isNull(dbSchema.gyms.deletedAt)))
+          .limit(1)
+      : Promise.resolve([]),
+
+    // Whether the viewer is a community admin/leader for this board type
+    authenticatedUserId ? hasAdminOrLeader(authenticatedUserId, board.boardType) : Promise.resolve(false),
+
+    // Whether the viewer owns/admins the board's linked gym
+    authenticatedUserId && board.gymId != null
+      ? viewerCanAdminGym(board.gymId, authenticatedUserId)
+      : Promise.resolve(false),
+  ]);
 
   const ownerInfo = ownerResult[0];
   const tickStats = tickStatsResult[0];
@@ -194,6 +254,7 @@ async function enrichBoard(
   const commentStats = commentStatsResult[0];
   const isFollowedByMe = Number(followCheckResult[0]?.count || 0) > 0;
   const gymInfo = (gymInfoResult as Array<{ uuid: string; name: string }>)[0];
+  const canEdit = authenticatedUserId ? board.ownerId === authenticatedUserId || canEditByRole || canEditByGym : false;
 
   return {
     uuid: board.uuid,
@@ -232,6 +293,7 @@ async function enrichBoard(
     gymName: gymInfo?.name ?? null,
     distanceMeters: distanceMeters ?? null,
     serialNumber: board.serialNumber ?? null,
+    canEdit,
   };
 }
 
@@ -250,83 +312,115 @@ async function enrichBoards(
   const ownerIds = [...new Set(boards.map((b) => b.board.ownerId))];
   const gymIds = [...new Set(boards.map((b) => b.board.gymId).filter((id): id is number => id != null))];
 
-  const [ownerRows, tickRows, followerRows, commentRows, followRows, gymRows] = await Promise.all([
-    // Batch owner profiles
-    db
-      .select({
-        userId: dbSchema.users.id,
-        name: dbSchema.users.name,
-        image: dbSchema.users.image,
-        displayName: dbSchema.userProfiles.displayName,
-        avatarUrl: dbSchema.userProfiles.avatarUrl,
-      })
-      .from(dbSchema.users)
-      .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
-      .where(inArray(dbSchema.users.id, ownerIds)),
+  const [ownerRows, tickRows, followerRows, commentRows, followRows, gymRows, viewerRoles, ownedGymRows, adminGymRows] =
+    await Promise.all([
+      // Batch owner profiles
+      db
+        .select({
+          userId: dbSchema.users.id,
+          name: dbSchema.users.name,
+          image: dbSchema.users.image,
+          displayName: dbSchema.userProfiles.displayName,
+          avatarUrl: dbSchema.userProfiles.avatarUrl,
+        })
+        .from(dbSchema.users)
+        .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
+        .where(inArray(dbSchema.users.id, ownerIds)),
 
-    // Batch tick stats per board
-    db
-      .select({
-        boardId: dbSchema.boardseshTicks.boardId,
-        totalAscents: count(),
-        uniqueClimbers: sql<number>`COUNT(DISTINCT ${dbSchema.boardseshTicks.userId})`,
-      })
-      .from(dbSchema.boardseshTicks)
-      .where(
-        and(
-          inArray(dbSchema.boardseshTicks.boardId, boardIds),
-          or(eq(dbSchema.boardseshTicks.status, 'flash'), eq(dbSchema.boardseshTicks.status, 'send')),
-        ),
-      )
-      .groupBy(dbSchema.boardseshTicks.boardId),
+      // Batch tick stats per board
+      db
+        .select({
+          boardId: dbSchema.boardseshTicks.boardId,
+          totalAscents: count(),
+          uniqueClimbers: sql<number>`COUNT(DISTINCT ${dbSchema.boardseshTicks.userId})`,
+        })
+        .from(dbSchema.boardseshTicks)
+        .where(
+          and(
+            inArray(dbSchema.boardseshTicks.boardId, boardIds),
+            or(eq(dbSchema.boardseshTicks.status, 'flash'), eq(dbSchema.boardseshTicks.status, 'send')),
+          ),
+        )
+        .groupBy(dbSchema.boardseshTicks.boardId),
 
-    // Batch follower counts per board
-    db
-      .select({
-        boardUuid: dbSchema.boardFollows.boardUuid,
-        count: count(),
-      })
-      .from(dbSchema.boardFollows)
-      .where(inArray(dbSchema.boardFollows.boardUuid, boardUuids))
-      .groupBy(dbSchema.boardFollows.boardUuid),
+      // Batch follower counts per board
+      db
+        .select({
+          boardUuid: dbSchema.boardFollows.boardUuid,
+          count: count(),
+        })
+        .from(dbSchema.boardFollows)
+        .where(inArray(dbSchema.boardFollows.boardUuid, boardUuids))
+        .groupBy(dbSchema.boardFollows.boardUuid),
 
-    // Batch comment counts per board
-    db
-      .select({
-        entityId: dbSchema.comments.entityId,
-        count: count(),
-      })
-      .from(dbSchema.comments)
-      .where(
-        and(
-          eq(dbSchema.comments.entityType, 'board'),
-          inArray(dbSchema.comments.entityId, boardUuids),
-          isNull(dbSchema.comments.deletedAt),
-        ),
-      )
-      .groupBy(dbSchema.comments.entityId),
+      // Batch comment counts per board
+      db
+        .select({
+          entityId: dbSchema.comments.entityId,
+          count: count(),
+        })
+        .from(dbSchema.comments)
+        .where(
+          and(
+            eq(dbSchema.comments.entityType, 'board'),
+            inArray(dbSchema.comments.entityId, boardUuids),
+            isNull(dbSchema.comments.deletedAt),
+          ),
+        )
+        .groupBy(dbSchema.comments.entityId),
 
-    // Batch follow status for authenticated user
-    authenticatedUserId
-      ? db
-          .select({ boardUuid: dbSchema.boardFollows.boardUuid })
-          .from(dbSchema.boardFollows)
-          .where(
-            and(
-              eq(dbSchema.boardFollows.userId, authenticatedUserId),
-              inArray(dbSchema.boardFollows.boardUuid, boardUuids),
-            ),
-          )
-      : Promise.resolve([]),
+      // Batch follow status for authenticated user
+      authenticatedUserId
+        ? db
+            .select({ boardUuid: dbSchema.boardFollows.boardUuid })
+            .from(dbSchema.boardFollows)
+            .where(
+              and(
+                eq(dbSchema.boardFollows.userId, authenticatedUserId),
+                inArray(dbSchema.boardFollows.boardUuid, boardUuids),
+              ),
+            )
+        : Promise.resolve([]),
 
-    // Batch gym info
-    gymIds.length > 0
-      ? db
-          .select({ id: dbSchema.gyms.id, uuid: dbSchema.gyms.uuid, name: dbSchema.gyms.name })
-          .from(dbSchema.gyms)
-          .where(and(inArray(dbSchema.gyms.id, gymIds), isNull(dbSchema.gyms.deletedAt)))
-      : Promise.resolve([]),
-  ]);
+      // Batch gym info
+      gymIds.length > 0
+        ? db
+            .select({ id: dbSchema.gyms.id, uuid: dbSchema.gyms.uuid, name: dbSchema.gyms.name })
+            .from(dbSchema.gyms)
+            .where(and(inArray(dbSchema.gyms.id, gymIds), isNull(dbSchema.gyms.deletedAt)))
+        : Promise.resolve([]),
+
+      // Viewer's community roles — fetched once, applied per board by board type
+      authenticatedUserId ? getUserCommunityRoles(authenticatedUserId) : Promise.resolve([]),
+
+      // Gyms (among the referenced ones) the viewer owns — grants edit on their boards
+      authenticatedUserId && gymIds.length > 0
+        ? db
+            .select({ id: dbSchema.gyms.id })
+            .from(dbSchema.gyms)
+            .where(
+              and(
+                inArray(dbSchema.gyms.id, gymIds),
+                eq(dbSchema.gyms.ownerId, authenticatedUserId),
+                isNull(dbSchema.gyms.deletedAt),
+              ),
+            )
+        : Promise.resolve([]),
+
+      // Gyms (among the referenced ones) the viewer is an admin member of
+      authenticatedUserId && gymIds.length > 0
+        ? db
+            .select({ gymId: dbSchema.gymMembers.gymId })
+            .from(dbSchema.gymMembers)
+            .where(
+              and(
+                inArray(dbSchema.gymMembers.gymId, gymIds),
+                eq(dbSchema.gymMembers.userId, authenticatedUserId),
+                eq(dbSchema.gymMembers.role, 'admin'),
+              ),
+            )
+        : Promise.resolve([]),
+    ]);
 
   // Index results for O(1) lookups
   const ownerMap = new Map(ownerRows.map((r) => [r.userId, r]));
@@ -335,11 +429,21 @@ async function enrichBoards(
   const commentMap = new Map(commentRows.map((r) => [r.entityId, Number(r.count)]));
   const followedSet = new Set(followRows.map((r) => r.boardUuid));
   const gymMap = new Map(gymRows.map((r) => [r.id, r]));
+  // Gym ids the viewer can edit boards through (owns the gym OR is an admin member)
+  const editableGymIds = new Set<number>([
+    ...(ownedGymRows as Array<{ id: number }>).map((row) => row.id),
+    ...(adminGymRows as Array<{ gymId: number }>).map((row) => row.gymId),
+  ]);
 
   return boards.map(({ board, distanceMeters }) => {
     const owner = ownerMap.get(board.ownerId);
     const ticks = tickMap.get(board.id);
     const gym = board.gymId ? gymMap.get(board.gymId) : undefined;
+    const canEdit = authenticatedUserId
+      ? board.ownerId === authenticatedUserId ||
+        rolesGrantAdminOrLeader(viewerRoles, board.boardType) ||
+        (board.gymId != null && editableGymIds.has(board.gymId))
+      : false;
 
     return {
       uuid: board.uuid,
@@ -377,6 +481,7 @@ async function enrichBoards(
       gymName: gym?.name ?? null,
       distanceMeters: distanceMeters ?? null,
       serialNumber: board.serialNumber ?? null,
+      canEdit,
     };
   });
 }
@@ -722,6 +827,7 @@ export const socialBoardQueries = {
           gymName: null,
           distanceMeters: null,
           serialNumber: board.serialNumber ?? null,
+          canEdit: false,
         };
       });
     }
@@ -1536,7 +1642,6 @@ export const socialBoardMutations = {
     const validatedInput = validateInput(UpdateBoardInputSchema, input, 'input');
     const userId = ctx.userId!;
 
-    // Verify ownership
     const [board] = await db
       .select()
       .from(dbSchema.userBoards)
@@ -1547,9 +1652,9 @@ export const socialBoardMutations = {
       throw new Error('Board not found');
     }
 
-    if (board.ownerId !== userId) {
-      throw new Error('Not authorized to update this board');
-    }
+    // Owner, community admin/leader (for this board type), or the linked gym's
+    // owner/admin may edit. Community moderators can fix outdated catalog boards.
+    await requireBoardEditAccess(ctx, board);
 
     // Build update values (only provided fields)
     const updateValues: Record<string, unknown> = {
@@ -1570,25 +1675,20 @@ export const socialBoardMutations = {
       updateValues.isAngleAdjustable = validatedInput.isAngleAdjustable;
     if (validatedInput.serialNumber !== undefined) updateValues.serialNumber = validatedInput.serialNumber;
 
-    // Handle config field changes (layoutId, sizeId, setIds) — only allowed on boards with zero ticks
+    // Config field changes (layoutId, sizeId, setIds). Authorized editors may
+    // change these even when the board has logged climbs — a config change
+    // reflects a real physical reconfiguration. Old boardsesh_ticks rows are
+    // left untouched: they keep referencing the climbs/config they were logged
+    // against. We do not delete, move, or modify any tick rows here.
     const hasConfigChange =
       validatedInput.layoutId !== undefined ||
       validatedInput.sizeId !== undefined ||
       validatedInput.setIds !== undefined;
 
     if (hasConfigChange) {
-      const [tickCount] = await db
-        .select({ total: count() })
-        .from(dbSchema.boardseshTicks)
-        .where(eq(dbSchema.boardseshTicks.boardId, board.id));
-
-      if (Number(tickCount?.total || 0) > 0) {
-        throw new Error(
-          'Cannot change board configuration because this board has logged climbs. Delete the board and create a new one instead.',
-        );
-      }
-
-      // Check unique constraint: no other active board with same config for this user
+      // Check unique constraint: no other active board with the same config for
+      // the board's OWNER (not the caller — an admin may be editing a board
+      // owned by a system/import user).
       const newLayoutId = validatedInput.layoutId ?? board.layoutId;
       const newSizeId = validatedInput.sizeId ?? board.sizeId;
       const newSetIds = validatedInput.setIds ?? board.setIds;
@@ -1598,7 +1698,7 @@ export const socialBoardMutations = {
         .from(dbSchema.userBoards)
         .where(
           and(
-            eq(dbSchema.userBoards.ownerId, userId),
+            eq(dbSchema.userBoards.ownerId, board.ownerId),
             eq(dbSchema.userBoards.boardType, board.boardType),
             eq(dbSchema.userBoards.layoutId, newLayoutId),
             eq(dbSchema.userBoards.sizeId, newSizeId),

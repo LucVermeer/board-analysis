@@ -24,6 +24,7 @@ const activeBoard: UserBoard = {
   followerCount: 0,
   commentCount: 0,
   isFollowedByMe: false,
+  canEdit: false,
 };
 
 const currentClimbQueueItem: ClimbQueueItem = {

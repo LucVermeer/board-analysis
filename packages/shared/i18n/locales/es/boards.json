@@ -38,6 +38,29 @@
       "back": "Volver",
       "configLockedHint": "Este plafón tiene ascensos registrados, así que su layout, tamaño y sets están bloqueados."
     },
+    "gymEdit": {
+      "screenTitle": "Editar gimnasio",
+      "save": "Guardar cambios",
+      "updateError": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
+      "updateSuccess": "Gimnasio actualizado",
+      "notFound": "No encontramos ese gimnasio",
+      "back": "Volver",
+      "name": "Nombre",
+      "namePlaceholder": "Nombre del gimnasio",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Cuéntales a los escaladores qué hay en el muro",
+      "address": "Dirección",
+      "addressPlaceholder": "Calle, ciudad",
+      "contactEmail": "Correo de contacto",
+      "contactEmailPlaceholder": "hola@gimnasio.com",
+      "contactPhone": "Teléfono de contacto",
+      "contactPhonePlaceholder": "Número de teléfono",
+      "latitude": "Latitud",
+      "longitude": "Longitud",
+      "coordinatePlaceholder": "Grados decimales",
+      "public": "Gimnasio público",
+      "publicHint": "Muéstralo en el mapa para que los escaladores lo encuentren"
+    },
     "manage": {
       "ownedHeader": "Tus plafones",
       "followingHeader": "Siguiendo",
@@ -142,7 +165,9 @@
       "clearSearch": "Borrar búsqueda",
       "closeMap": "Cerrar",
       "otherBoardsTitle": "Plafones cercanos",
-      "multiBoardChip": "2+ tipos de plafón"
+      "multiBoardChip": "2+ tipos de plafón",
+      "editGym": "Editar gimnasio",
+      "editBoard": "Editar plafón"
     }
   },
   "boardEntity": {
@@ -223,7 +248,7 @@
       "hideLocation": "Oculto de las búsquedas de plafones cercanos a menos que sigas al buscador"
     },
     "alerts": {
-      "configEditable": "Puedes cambiar la disposición del plafón porque aún no se han registrado bloques."
+      "configEditable": "Puedes cambiar la disposición, el tamaño y los conjuntos de presas. Los bloques ya registrados se mantienen igual."
     }
   },
   "editBoard": {

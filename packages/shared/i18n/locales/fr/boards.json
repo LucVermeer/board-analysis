@@ -38,6 +38,29 @@
       "back": "Retour",
       "configLockedHint": "Ce board a des voies enregistrées : son layout, sa taille et ses sets sont verrouillés."
     },
+    "gymEdit": {
+      "screenTitle": "Modifier la salle",
+      "save": "Enregistrer",
+      "updateError": "Impossible d'enregistrer les modifications. Réessaie.",
+      "updateSuccess": "Salle mise à jour",
+      "notFound": "Salle introuvable",
+      "back": "Retour",
+      "name": "Nom",
+      "namePlaceholder": "Nom de la salle",
+      "description": "Description",
+      "descriptionPlaceholder": "Dis aux grimpeurs ce qu'il y a sur le mur",
+      "address": "Adresse",
+      "addressPlaceholder": "Rue, ville",
+      "contactEmail": "E-mail de contact",
+      "contactEmailPlaceholder": "bonjour@salle.com",
+      "contactPhone": "Téléphone de contact",
+      "contactPhonePlaceholder": "Numéro de téléphone",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "coordinatePlaceholder": "Degrés décimaux",
+      "public": "Salle publique",
+      "publicHint": "Affiche-la sur la carte pour que les grimpeurs la trouvent"
+    },
     "manage": {
       "ownedHeader": "Tes boards",
       "followingHeader": "Abonnements",
@@ -142,7 +165,9 @@
       "clearSearch": "Effacer la recherche",
       "closeMap": "Fermer",
       "otherBoardsTitle": "Murs à proximité",
-      "multiBoardChip": "2+ types de mur"
+      "multiBoardChip": "2+ types de mur",
+      "editGym": "Modifier la salle",
+      "editBoard": "Modifier le board"
     }
   },
   "boardEntity": {
@@ -223,7 +248,7 @@
       "hideLocation": "Masqué des recherches de boards à proximité, sauf pour les personnes que vous suivez"
     },
     "alerts": {
-      "configEditable": "Vous pouvez modifier le layout du board tant qu'aucun bloc n'a été enregistré."
+      "configEditable": "Vous pouvez modifier le layout, la taille et les jeux de prises. Les blocs déjà enregistrés restent intacts."
     }
   },
   "editBoard": {
