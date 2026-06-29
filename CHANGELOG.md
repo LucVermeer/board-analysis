@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Filter the gym map by how many boards a gym has, the board, the layout, and the exact size ([#3317](https://github.com/boardsesh/boardsesh/pull/3317))
+  Hunt down a specific wall — like a 16x10 Kilter — instead of scrolling every gym nearby
 - Cleaner single-choice filters in the climb-filter sheet — the status and accuracy pickers now use the native iOS/Android selection controls. ([#3280](https://github.com/boardsesh/boardsesh/pull/3280))
 - Android: your climb filters now live in a tappable chip row right under the search bar — change grade, popularity, min rating, and what's shown in a single tap, no digging through a menu. ([#3310](https://github.com/boardsesh/boardsesh/pull/3310))
   Long-press the Tall or Wide chip to pin it so it sticks through clears.

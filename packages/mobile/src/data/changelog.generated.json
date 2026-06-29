@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-29T22:52:33.679Z",
+  "generatedAt": "2026-06-29T23:17:47.055Z",
   "entries": [
+    {
+      "prNumber": 3317,
+      "category": "new",
+      "title": "Filter the gym map by how many boards a gym has, the board, the layout, and the exact size",
+      "mergedAt": "2026-06-29T23:16:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3317",
+      "body": "Hunt down a specific wall — like a 16x10 Kilter — instead of scrolling every gym nearby"
+    },
     {
       "prNumber": 3280,
       "category": "new",
