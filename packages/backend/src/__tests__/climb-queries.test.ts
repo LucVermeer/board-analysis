@@ -6,6 +6,7 @@ import {
   type ParsedBoardRouteParameters,
   type ClimbSearchParams,
 } from '../db/queries/climbs/index';
+import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 import { db } from '../db/client';
 import { sql } from 'drizzle-orm';
 
@@ -436,6 +437,51 @@ describe('Climb Query Functions', () => {
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mainline');
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'fullride');
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mixed');
+    });
+  });
+
+  describe('moonboard required_set_ids population', () => {
+    // Directly exercises populateMoonBoardRequiredSetIds (the regexp_matches +
+    // cell->set CTE that the prod backfill also runs), so a regex or SQL typo is
+    // caught here rather than only at backfill time.
+    const POP_PREFIX = 'mb-populate-test-';
+
+    beforeAll(async () => {
+      // layout 3 (MoonBoard 2024): cell 1->set 5 (base), cell 2->set 8 (wooden),
+      // cell 9->set 5 (base), cell 999 uncovered. required_set_ids starts NULL.
+      await db.execute(sql`
+        INSERT INTO board_climbs (uuid, board_type, layout_id, setter_username, name, frames, frames_count, is_draft, is_listed, edge_left, edge_right, edge_bottom, edge_top, created_at, required_set_ids)
+        VALUES
+          (${POP_PREFIX + 'base'}, 'moonboard', 3, 's', 'Base', 'p1r42p9r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL),
+          (${POP_PREFIX + 'wooden'}, 'moonboard', 3, 's', 'Wooden', 'p1r42p2r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL),
+          (${POP_PREFIX + 'uncovered'}, 'moonboard', 3, 's', 'Uncovered', 'p999r42', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL)
+        ON CONFLICT DO NOTHING
+      `);
+    });
+
+    afterAll(async () => {
+      await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${POP_PREFIX + '%'}`);
+    });
+
+    async function requiredSetIds(uuid: string): Promise<number[] | null> {
+      const rows = (await db.execute(
+        sql`SELECT required_set_ids FROM board_climbs WHERE uuid = ${uuid}`,
+      )) as unknown as { required_set_ids: number[] | null }[];
+      return rows[0].required_set_ids;
+    }
+
+    it('derives required_set_ids from the climb frames and cell->set map', async () => {
+      await populateDenormalizedColumns(db, 'moonboard', [
+        POP_PREFIX + 'base',
+        POP_PREFIX + 'wooden',
+        POP_PREFIX + 'uncovered',
+      ]);
+
+      expect(await requiredSetIds(POP_PREFIX + 'base')).toEqual([5]);
+      // Uses a wooden-holds cell, so the wooden set (8) is required.
+      expect(await requiredSetIds(POP_PREFIX + 'wooden')).toEqual([5, 8]);
+      // All holds on uncovered cells -> empty array (always shown), not NULL.
+      expect(await requiredSetIds(POP_PREFIX + 'uncovered')).toEqual([]);
     });
   });
 

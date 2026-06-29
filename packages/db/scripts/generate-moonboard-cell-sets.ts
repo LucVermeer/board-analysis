@@ -132,17 +132,21 @@ ${layoutBlocks.join('\n')}
 
 /** Format-independent comparison of two cell->set maps. */
 function mapsEqual(a: Record<number, Record<number, number>>, b: Record<number, Record<number, number>>): boolean {
-  const layoutsA = Object.keys(a).sort();
-  const layoutsB = Object.keys(b).sort();
+  const numericKeys = (obj: Record<number, unknown>) =>
+    Object.keys(obj)
+      .map(Number)
+      .sort((x, y) => x - y);
+  const layoutsA = numericKeys(a);
+  const layoutsB = numericKeys(b);
   if (layoutsA.length !== layoutsB.length || layoutsA.some((k, i) => k !== layoutsB[i])) return false;
   for (const layoutId of layoutsA) {
-    const cellsA = a[Number(layoutId)];
-    const cellsB = b[Number(layoutId)];
-    const holdsA = Object.keys(cellsA).sort();
-    const holdsB = Object.keys(cellsB).sort();
+    const cellsA = a[layoutId];
+    const cellsB = b[layoutId];
+    const holdsA = numericKeys(cellsA);
+    const holdsB = numericKeys(cellsB);
     if (holdsA.length !== holdsB.length || holdsA.some((k, i) => k !== holdsB[i])) return false;
     for (const holdId of holdsA) {
-      if (cellsA[Number(holdId)] !== cellsB[Number(holdId)]) return false;
+      if (cellsA[holdId] !== cellsB[holdId]) return false;
     }
   }
   return true;

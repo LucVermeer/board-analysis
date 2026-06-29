@@ -27,6 +27,20 @@ const EXPECTED_COVERED_CELLS: Record<number, number> = {
   7: 128,
 };
 
+// The whole feature hinges on telling optional add-on sets (wooden holds /
+// screw-on feet) apart from base holds. Pin the per-layout count of cells owned
+// by an optional set so a regression in the art or the sampler is caught.
+const OPTIONAL_SET_NAME = /wooden|screw/i;
+const optionalSetIdsByLayoutId = new Map<number, Set<number>>(
+  Object.entries(MOONBOARD_LAYOUTS).map(([key, layout]) => [
+    layout.id,
+    new Set(
+      MOONBOARD_SETS[key as MoonBoardLayoutKey].filter((set) => OPTIONAL_SET_NAME.test(set.name)).map((s) => s.id),
+    ),
+  ]),
+);
+const EXPECTED_OPTIONAL_CELLS: Record<number, number> = { 1: 0, 2: 0, 3: 78, 4: 32, 5: 80, 6: 80, 7: 48 };
+
 describe('MoonBoard cell -> set map', () => {
   it('covers every layout with the expected number of cells', () => {
     const layoutIds = Object.keys(MOONBOARD_CELL_SETS)
@@ -48,13 +62,13 @@ describe('MoonBoard cell -> set map', () => {
     }
   });
 
-  it('assigns each cell to exactly one set (no ambiguous overlap)', () => {
-    // The map is a holdId -> single setId record, so overlap is structurally
-    // impossible; this documents the invariant the generator enforces.
-    for (const cells of Object.values(MOONBOARD_CELL_SETS)) {
-      for (const setId of Object.values(cells)) {
-        expect(Number.isInteger(setId)).toBe(true);
-      }
+  it('keeps optional add-on sets (wooden / screw-on) on their own cells', () => {
+    for (const [layoutId, expected] of Object.entries(EXPECTED_OPTIONAL_CELLS)) {
+      const optionalIds = optionalSetIdsByLayoutId.get(Number(layoutId))!;
+      const count = Object.values(MOONBOARD_CELL_SETS[Number(layoutId)]).filter((setId) =>
+        optionalIds.has(setId),
+      ).length;
+      expect(count).toBe(expected);
     }
   });
 });
