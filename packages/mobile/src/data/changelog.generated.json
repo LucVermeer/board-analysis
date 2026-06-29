@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T10:08:26.207Z",
+  "generatedAt": "2026-06-29T22:15:32.212Z",
   "entries": [
+    {
+      "prNumber": 3309,
+      "category": "new",
+      "title": "Buttons across the app now use the real iOS and Android button — so a tap feels native: the system's own press animation, a crisp spinner while something's loading instead of three dots, and delete/disconnect actions that turn the proper system red. Your main violet action button stays bold and solid over busy board art and in dark mode, while quieter buttons pick up iOS 26's Liquid Glass on a calm background.",
+      "mergedAt": "2026-06-29T22:14:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3309"
+    },
     {
       "prNumber": 3255,
       "category": "fixed",
