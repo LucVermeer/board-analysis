@@ -66,13 +66,22 @@ vi.mock('react-i18next', () => ({
         'userDrawer.joinDiscord': 'Join Discord',
         'userDrawer.logout': 'Log out',
         'userDrawer.myPlaylists': 'My playlists',
+        'userDrawer.newBadge': 'New',
         'userDrawer.rateBoardsesh': 'Rate Boardsesh',
         'userDrawer.reportBug': 'Report a bug',
+        'userDrawer.whatsNew': "What's New",
       })[key] ?? key,
   }),
 }));
 
 vi.mock('../../../lib/error-reporting', () => ({ reportError: vi.fn() }));
+// Mock the changelog data + seen-state so importing the screen never reaches the
+// real secure-store adapter; "nothing unseen" keeps the What's New pill hidden.
+vi.mock('../../../lib/changelog', () => ({ latestEntryDate: '2026-01-01T00:00:00.000Z' }));
+vi.mock('../../../lib/changelog-seen', () => ({
+  getLastSeenChangelogDate: vi.fn().mockResolvedValue('2026-01-01T00:00:00.000Z'),
+  hasUnseenChangelog: () => false,
+}));
 vi.mock('../../../lib/graphql/hooks', () => ({
   useProfile: () => ({ data: { id: 'user-1', displayName: 'Alex', email: 'alex@example.com', avatarUrl: null } }),
 }));
@@ -218,6 +227,7 @@ describe('user-drawer route defers each action until the route unmounts', () => 
   it.each([
     ['Settings', '/(tabs)/profile/more'],
     ['My playlists', '/(tabs)/discover/all'],
+    ["What's New", '/changelog'],
     ['About', '/about'],
     ['My boards', '/boards/manage'],
   ])('%s closes the drawer, then pushes %s', (rowTitle, route) => {

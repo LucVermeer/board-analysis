@@ -24,6 +24,7 @@ type UserDrawerContextValue = {
   navigateToSettings: () => void;
   navigateToEditProfile: () => void;
   navigateToPlaylists: () => void;
+  navigateToChangelog: () => void;
   navigateToAbout: () => void;
   openDiscord: () => void;
   signOutAction: () => void;
@@ -94,6 +95,10 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     router.push('/(tabs)/discover/all');
   }, []);
 
+  const navigateToChangelog = useCallback(() => {
+    router.push('/changelog');
+  }, []);
+
   const navigateToAbout = useCallback(() => {
     router.push('/about');
   }, []);
@@ -119,6 +124,7 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
       navigateToSettings,
       navigateToEditProfile,
       navigateToPlaylists,
+      navigateToChangelog,
       navigateToAbout,
       openDiscord,
       signOutAction,
@@ -133,6 +139,7 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
       navigateToSettings,
       navigateToEditProfile,
       navigateToPlaylists,
+      navigateToChangelog,
       navigateToAbout,
       openDiscord,
       signOutAction,
