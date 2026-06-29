@@ -1,10 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// Import the key from source so a rename can't leave these tests checking a
+// stale slot. Safe alongside the per-test dynamic imports: it's a constant
+// literal, identical across the module instances vi.resetModules() creates.
+import { STORAGE_KEY } from '../section-expand-store';
 
 vi.mock('@react-native-async-storage/async-storage', () => {
   let storage: Record<string, string> = {};
+  let throwOnRead = false;
   return {
     default: {
-      getItem: vi.fn(async (key: string) => storage[key] ?? null),
+      getItem: vi.fn(async (key: string) => {
+        if (throwOnRead) throw new Error('AsyncStorage read failed');
+        return storage[key] ?? null;
+      }),
       setItem: vi.fn(async (key: string, value: string) => {
         storage[key] = value;
       }),
@@ -13,22 +21,25 @@ vi.mock('@react-native-async-storage/async-storage', () => {
       }),
       __reset: () => {
         storage = {};
+        throwOnRead = false;
       },
       __setRaw: (key: string, value: string) => {
         storage[key] = value;
       },
       __getRaw: (key: string) => storage[key] ?? null,
+      __setThrowOnRead: (value: boolean) => {
+        throwOnRead = value;
+      },
     },
   };
 });
-
-const STORAGE_KEY = 'climbCardSectionExpanded';
 
 async function getMockStorage() {
   return (await import('@react-native-async-storage/async-storage')).default as unknown as {
     __reset: () => void;
     __setRaw: (key: string, value: string) => void;
     __getRaw: (key: string) => string | null;
+    __setThrowOnRead: (value: boolean) => void;
   };
 }
 
@@ -52,6 +63,14 @@ describe('section-expand-store', () => {
     expect(getSectionExpandedSync('logbook')).toBe(true);
     expect(getSectionExpandedSync('community')).toBe(false);
     expect(getSectionExpandedSync('similarClimbs')).toBeUndefined();
+  });
+
+  it('resolves to an empty map (no throw) when the AsyncStorage read rejects', async () => {
+    (await getMockStorage()).__setThrowOnRead(true);
+    const { loadSectionExpandState, getSectionExpandedSync } = await import('../section-expand-store');
+    // Must not reject — a rejected load would permanently poison the singleton.
+    await expect(loadSectionExpandState()).resolves.toEqual({});
+    expect(getSectionExpandedSync('logbook')).toBeUndefined();
   });
 
   it('falls back to an empty map for a malformed stored payload', async () => {

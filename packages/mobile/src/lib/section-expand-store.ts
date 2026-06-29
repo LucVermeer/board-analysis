@@ -8,7 +8,10 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { getPreference, setPreference } from './preference-store';
 
-const STORAGE_KEY = 'climbCardSectionExpanded';
+// Exported so tests assert against the source of truth rather than duplicating
+// the literal (a rename would otherwise leave tests silently checking the wrong
+// slot).
+export const STORAGE_KEY = 'climbCardSectionExpanded';
 
 type ExpandedMap = Record<string, boolean>;
 type ExpandedSnapshot = { map: ExpandedMap; loaded: boolean };
@@ -38,7 +41,10 @@ function notify(): void {
 
 export async function loadSectionExpandState(): Promise<ExpandedMap> {
   if (hasLoaded) return current;
-  const stored = await getPreference<ExpandedMap>(STORAGE_KEY);
+  // Guard the read like the write in `setSectionExpanded`: a rejected
+  // AsyncStorage.getItem would otherwise leave `loadPromise` permanently
+  // rejected with no retry, silently pinning every section to its default.
+  const stored = await getPreference<ExpandedMap>(STORAGE_KEY).catch(() => null);
   // A `setSectionExpanded` may have raced in while we awaited storage; honour
   // the user's choice rather than clobbering it with the (now stale) value.
   if (hasLoaded) return current;

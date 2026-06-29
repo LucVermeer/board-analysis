@@ -21,7 +21,6 @@ import {
 import { ScrollView, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
-import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -36,6 +35,7 @@ import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
+import { copyClimbName } from './copy-climb-name';
 import { SwipeableHeader } from './SwipeableHeader';
 import { PlayDrawerPreviewBanner } from './PlayDrawerPreviewBanner';
 import { PlayDrawerOnWallBanner } from './PlayDrawerOnWallBanner';
@@ -428,15 +428,19 @@ export function PlayDrawer({
   }, [shareClimb, showToast, t]);
 
   // Long-press the climb name to copy it — handy for pasting into a chat when
-  // sharing beta. Fire a haptic for tactile confirmation of the long-press, then
-  // an info toast (matching the "Link copied" affordance in ClimbActionsSheet).
+  // sharing beta. Delegates to the unit-tested copyClimbName helper; haptic for
+  // tactile confirmation, info toast matching the "Link copied" affordance.
   const handleCopyName = useCallback(() => {
-    const climbName = displayedClimb?.name;
-    if (!climbName) return;
-    void Clipboard.setStringAsync(climbName);
-    hapticSuccess();
-    track(SHARED_EVENTS.ClimbShared, { method: 'copy_name', climbUuid: displayedClimb.uuid, boardName, layoutId });
-    showToast(tClimbs('mobile.climbActions.nameCopied'), 'info');
+    copyClimbName(
+      displayedClimb,
+      { boardName, layoutId },
+      {
+        haptic: hapticSuccess,
+        track,
+        showToast: (message) => showToast(message, 'info'),
+        toastMessage: tClimbs('mobile.climbActions.nameCopied'),
+      },
+    );
   }, [displayedClimb, boardName, layoutId, showToast, tClimbs]);
 
   const openDrawer = useCallback(

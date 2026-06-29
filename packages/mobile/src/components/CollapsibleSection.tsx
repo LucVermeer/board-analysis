@@ -120,13 +120,12 @@ function CollapsibleSectionInternal({
   // change to the same key) reconciles into local state.
   const { expanded: persistedExpanded } = useSectionExpanded(persistKey);
   useEffect(() => {
-    if (!persistKey || persistedExpanded === undefined) return;
-    setExpanded((prev) => {
-      if (prev === persistedExpanded) return prev;
-      chevronRotation.value = withTiming(persistedExpanded ? 1 : 0, { duration: timing.normal });
-      return persistedExpanded;
-    });
-  }, [persistKey, persistedExpanded, chevronRotation]);
+    // Keep the Reanimated side-effect out of the setState updater: StrictMode
+    // double-invokes updaters in dev, which would fire withTiming twice.
+    if (!persistKey || persistedExpanded === undefined || persistedExpanded === expanded) return;
+    chevronRotation.value = withTiming(persistedExpanded ? 1 : 0, { duration: timing.normal });
+    setExpanded(persistedExpanded);
+  }, [persistKey, persistedExpanded, expanded, chevronRotation]);
 
   const isFirstReset = useRef(true);
   useEffect(() => {
@@ -148,14 +147,15 @@ function CollapsibleSectionInternal({
   }, [expanded, onExpandedChange]);
 
   const toggleExpanded = useCallback(() => {
+    // Side-effects (haptic, animation, persist) stay outside setExpanded so a
+    // StrictMode double-invoke of the updater can't fire them twice. `expanded`
+    // is in deps, so this closure is never stale.
+    const next = !expanded;
     hapticSelection();
-    setExpanded((prev) => {
-      const next = !prev;
-      chevronRotation.value = withTiming(next ? 1 : 0, { duration: timing.normal });
-      if (persistKey) setSectionExpanded(persistKey, next);
-      return next;
-    });
-  }, [chevronRotation, persistKey]);
+    chevronRotation.value = withTiming(next ? 1 : 0, { duration: timing.normal });
+    if (persistKey) setSectionExpanded(persistKey, next);
+    setExpanded(next);
+  }, [expanded, chevronRotation, persistKey]);
 
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${chevronRotation.value * 180}deg` }],
