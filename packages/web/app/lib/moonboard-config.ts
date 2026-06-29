@@ -12,10 +12,21 @@ export {
   coordinateToHoldId,
   holdIdToCoordinate,
   getGridPosition,
+  getMoonBoardGeometry,
+  getMoonBoardGeometryByLayoutId,
+  getMoonBoardGeometryByFolder,
+  STANDARD_MOONBOARD_GEOMETRY,
+  MINI_MOONBOARD_GEOMETRY,
   getLayoutById,
   getHoldSetsForLayout,
   getHoldSetImages,
   getMoonBoardDetails,
   encodeMoonBoardHoldsToFrames,
 } from '@boardsesh/board-config';
-export type { MoonBoardLayoutKey, MoonBoardColumn, MoonBoardRow, MoonBoardCoordinate } from '@boardsesh/board-config';
+export type {
+  MoonBoardLayoutKey,
+  MoonBoardColumn,
+  MoonBoardRow,
+  MoonBoardCoordinate,
+  MoonBoardGridGeometry,
+} from '@boardsesh/board-config';

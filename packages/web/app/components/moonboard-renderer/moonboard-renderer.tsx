@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { MOONBOARD_GRID, MOONBOARD_SIZE, getGridPosition, MOONBOARD_HOLD_STATES } from '@/app/lib/moonboard-config';
+import { getGridPosition, getMoonBoardGeometryByFolder, MOONBOARD_HOLD_STATES } from '@/app/lib/moonboard-config';
 import type { MoonBoardRendererProps } from './types';
 
 const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
@@ -13,20 +13,29 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
   fillHeight = false,
   onHoldClick,
 }) => {
-  const { width, height } = MOONBOARD_SIZE;
+  // Geometry differs between the standard 11×18 board (650×1000) and the Mini
+  // boards (650×694, rows 1–12). Derived from the layout's board-art folder.
+  const geometry = useMemo(() => getMoonBoardGeometryByFolder(layoutFolder), [layoutFolder]);
+  const { width, height } = geometry;
 
   // Calculate hold circle radius based on grid cell size
-  const cellWidth = width / MOONBOARD_GRID.numColumns;
-  const cellHeight = height / MOONBOARD_GRID.numRows;
+  const cellWidth = width / geometry.numColumns;
+  const cellHeight = height / geometry.numRows;
   const holdRadius = Math.min(cellWidth, cellHeight) * 0.35;
 
-  // Generate all grid positions (198 holds: 11 cols x 18 rows)
+  // Background image for this layout (.webp; thumbs/ variant in thumbnail mode).
+  const backgroundHref = useMemo(() => {
+    const webp = geometry.backgroundImage.replace(/\.png$/, '.webp');
+    return thumbnail ? `/images/moonboard/thumbs/${webp}` : `/images/moonboard/${webp}`;
+  }, [geometry, thumbnail]);
+
+  // Generate all grid positions for the layout (198 standard, 132 Mini).
   const gridHolds = React.useMemo(() => {
     const holds = [];
-    for (let row = 1; row <= MOONBOARD_GRID.numRows; row++) {
-      for (let colIdx = 0; colIdx < MOONBOARD_GRID.numColumns; colIdx++) {
-        const holdId = (row - 1) * MOONBOARD_GRID.numColumns + colIdx + 1;
-        const pos = getGridPosition(holdId);
+    for (let row = 1; row <= geometry.rowTop; row++) {
+      for (let colIdx = 0; colIdx < geometry.numColumns; colIdx++) {
+        const holdId = (row - 1) * geometry.numColumns + colIdx + 1;
+        const pos = getGridPosition(holdId, geometry);
 
         holds.push({
           id: holdId,
@@ -36,7 +45,7 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
       }
     }
     return holds;
-  }, [width, height]);
+  }, [geometry, width, height]);
 
   const getHoldColor = (holdId: number): string => {
     const hold = litUpHoldsMap[holdId];
@@ -84,11 +93,7 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
       {/* Render MoonBoard background first. The Fetch Priority API does not
           apply to inline SVG images; LCP-critical cards should be preloaded
           via `<link rel="preload">` from the page-level server component. */}
-      <image
-        href={thumbnail ? '/images/moonboard/thumbs/moonboard-bg.webp' : '/images/moonboard/moonboard-bg.webp'}
-        width="100%"
-        height="100%"
-      />
+      <image href={backgroundHref} width="100%" height="100%" />
 
       {/* Render hold set images as overlay layers */}
       {holdSetImages.map((imageFile) => (

@@ -4,6 +4,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import sharp from 'sharp';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
+import { getMoonBoardGeometryByFolder } from '@/app/lib/moonboard-config';
 import { HOLD_STATE_MAP, THUMBNAIL_WIDTH } from '@/app/components/board-renderer/types';
 import type { BoardName } from '@/app/lib/types';
 import { createOgImageHeaders, OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH } from '@/app/lib/seo/og';
@@ -142,8 +143,10 @@ function getBackgroundRelPaths(boardDetails: BoardDetailsForBg, isThumbnail: boo
       paths.push(toWebpPath(`images/${boardDetails.board_name}`, key, isThumbnail));
     }
   } else if (boardDetails.layoutFolder && boardDetails.holdSetImages) {
-    // MoonBoard: board background + hold set layers
-    const bgFile = 'moonboard-bg.png';
+    // MoonBoard fallback (getMoonBoardDetails normally populates images_to_holds,
+    // so this runs only if a caller passes an empty map). Mini boards use their
+    // own background, so resolve it from the layout's geometry.
+    const bgFile = getMoonBoardGeometryByFolder(boardDetails.layoutFolder).backgroundImage;
     paths.push(toWebpPath('images/moonboard', bgFile, isThumbnail));
     for (const holdSetImage of boardDetails.holdSetImages) {
       paths.push(toWebpPath(`images/moonboard/${boardDetails.layoutFolder}`, holdSetImage, isThumbnail));
