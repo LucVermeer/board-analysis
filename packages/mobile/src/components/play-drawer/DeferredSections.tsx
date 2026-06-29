@@ -110,7 +110,7 @@ export const DeferredSections = memo(function DeferredSections({
 
       {readyToRender && (
         <>
-          <CollapsibleSection title={t('mobile.logbook.title')} summary={logbookSummary}>
+          <CollapsibleSection title={t('mobile.logbook.title')} summary={logbookSummary} persistKey="logbook">
             <LogbookSection
               climbUuid={climb.uuid}
               boardName={boardName}
@@ -119,7 +119,7 @@ export const DeferredSections = memo(function DeferredSections({
             />
           </CollapsibleSection>
 
-          <CollapsibleSection title={t('mobile.community.title')} defaultExpanded>
+          <CollapsibleSection title={t('mobile.community.title')} defaultExpanded persistKey="community">
             <CommunitySection
               climbUuid={climb.uuid}
               boardName={boardName}
@@ -128,7 +128,7 @@ export const DeferredSections = memo(function DeferredSections({
             />
           </CollapsibleSection>
 
-          <CollapsibleSection title={t('mobile.similarClimbs.title')}>
+          <CollapsibleSection title={t('mobile.similarClimbs.title')} persistKey="similarClimbs">
             <SimilarClimbsSection
               climbUuid={climb.uuid}
               boardName={boardName}

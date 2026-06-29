@@ -2,9 +2,11 @@ import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { LogbookEntry } from '@boardsesh/board-react';
+import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { normalizeAscentStatus, type AscentStatusValue } from '../../lib/ascent-status-utils';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -33,10 +35,19 @@ const STATUS_ICON: Record<AscentStatusValue, { name: 'flash' | 'tick' | 'close';
 
 export const LogbookEntryRow = memo(function LogbookEntryRow({ entry, showMirrorTag }: LogbookEntryRowProps) {
   const { t } = useTranslation('session');
+  const { formatGradeByDifficultyId } = useGradeFormat();
 
   const status = normalizeAscentStatus({ status: entry.status, isAscent: entry.is_ascent, tries: entry.tries });
   const statusIcon = STATUS_ICON[status];
   const isSuccess = status !== 'attempt';
+
+  // The grade the climber gave this ascent. Null when they logged no personal
+  // grade (typical for attempts), in which case the chip is hidden.
+  const gradeLabel = useMemo(
+    () => formatGradeByDifficultyId(entry.difficulty),
+    [formatGradeByDifficultyId, entry.difficulty],
+  );
+  const gradeColor = useMemo(() => getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR, [gradeLabel]);
 
   const stars = useMemo(() => {
     if (!isSuccess || entry.quality == null || entry.quality <= 0) return null;
@@ -62,6 +73,13 @@ export const LogbookEntryRow = memo(function LogbookEntryRow({ entry, showMirror
             {`${entry.angle}°`}
           </Text>
         </View>
+        {gradeLabel ? (
+          <View style={styles.gradeChip}>
+            <Text variant="caption2" color={gradeColor} style={styles.gradeText}>
+              {gradeLabel}
+            </Text>
+          </View>
+        ) : null}
         {showMirrorTag && entry.is_mirror ? (
           <View style={styles.mirrorChip}>
             <Text variant="caption2" color={iosSystemColors.systemGray}>
@@ -103,6 +121,16 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: borderRadius.full,
     backgroundColor: iosSystemColors.systemBlue,
+  },
+  gradeChip: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 1,
+    borderRadius: borderRadius.full,
+    backgroundColor: `${iosSystemColors.systemGray}1F`,
+  },
+  gradeText: {
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
   },
   mirrorChip: {
     paddingHorizontal: spacing[2],

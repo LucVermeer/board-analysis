@@ -715,6 +715,8 @@
       "preview": "Preview",
       "copyLink": "Copy link",
       "linkCopied": "Link copied",
+      "nameCopied": "Name copied",
+      "copyNameHint": "Press and hold to copy the name",
       "tick": "Log a tick",
       "addBetaVideo": "Add beta video",
       "openInApp": "Open in Aurora app",

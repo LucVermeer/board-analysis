@@ -21,6 +21,7 @@ import {
 import { ScrollView, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -169,6 +170,9 @@ export function PlayDrawer({
   openTarget,
 }: PlayDrawerProps) {
   const { t } = useTranslation('session');
+  // The copy/share affordance strings live in the `climbs` namespace alongside
+  // the climb-actions sheet's "Link copied" toast.
+  const { t: tClimbs } = useTranslation('climbs');
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // The route is mounted only while the player is open, so the player is "open"
@@ -422,6 +426,16 @@ export function PlayDrawer({
       showToast(t('playView.shareError'), 'error');
     });
   }, [shareClimb, showToast, t]);
+
+  // Long-press the climb name to copy it — handy for pasting into a chat when
+  // sharing beta. The success toast carries its own confirmation haptic.
+  const handleCopyName = useCallback(() => {
+    const climbName = displayedClimb?.name;
+    if (!climbName) return;
+    void Clipboard.setStringAsync(climbName);
+    track(SHARED_EVENTS.ClimbShared, { method: 'copy_name', climbUuid: displayedClimb.uuid, boardName, layoutId });
+    showToast(tClimbs('mobile.climbActions.nameCopied'), 'success');
+  }, [displayedClimb, boardName, layoutId, showToast, tClimbs]);
 
   const openDrawer = useCallback(
     (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
@@ -723,6 +737,7 @@ export function PlayDrawer({
                         // read-only "on the wall" status rides in the header's leading slot
                         // (left of the name, opposite the grade) rather than as a banner.
                         leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
+                        onLongPressName={handleCopyName}
                       />
                     }
                     peek={
