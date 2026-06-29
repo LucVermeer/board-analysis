@@ -162,6 +162,22 @@ vi.mock('../../Text', () => ({
     ),
 }));
 
+// MarqueeText (the scrolling climb-name label) has its own unit test; here it's
+// a coloured text node. Font weight rides `textStyle`, so read it from there.
+vi.mock('../../MarqueeText', () => ({
+  MarqueeText: (props: TextMockProps & { textStyle?: TextMockProps['style'] }) =>
+    createElement(
+      'span',
+      {
+        'data-text': 'true',
+        'data-color': readColor(props),
+        'data-font-weight': readTextStyleValue({ style: props.textStyle }, 'fontWeight'),
+        'data-variant': props.variant ?? '',
+      },
+      props.children,
+    ),
+}));
+
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { label: '#111111' },

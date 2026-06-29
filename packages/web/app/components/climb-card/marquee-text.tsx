@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { computeMarqueeDurationS } from '@boardsesh/play-view';
 import styles from './marquee-text.module.css';
 
 type MarqueeTextProps = {
@@ -9,10 +10,6 @@ type MarqueeTextProps = {
   className?: string;
   children: React.ReactNode;
 };
-
-const PIXELS_PER_SECOND = 30;
-const MIN_DURATION_S = 8;
-const MAX_DURATION_S = 24;
 
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -43,9 +40,7 @@ const MarqueeText: React.FC<MarqueeTextProps> = ({ active, className, children }
   }, [active, children]);
 
   const isScrolling = active && overflowPx > 0;
-  const durationS = isScrolling
-    ? Math.min(MAX_DURATION_S, Math.max(MIN_DURATION_S, overflowPx / PIXELS_PER_SECOND + 6))
-    : 0;
+  const durationS = isScrolling ? computeMarqueeDurationS(overflowPx) : 0;
 
   const innerStyle = isScrolling
     ? ({
