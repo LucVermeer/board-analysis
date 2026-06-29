@@ -61,6 +61,10 @@ describe('getBoardConfigForPlaylist', () => {
     expect(config?.layoutId).toBe(MOONBOARD_LAYOUTS['moonboard-2024'].id);
   });
 
+  it('returns null for an unknown moonboard layout id', () => {
+    expect(getBoardConfigForPlaylist('moonboard', 999999)).toBeNull();
+  });
+
   it('produces a moonboard config that feeds getBoardRenderData end-to-end', () => {
     const config = getBoardConfigForPlaylist('moonboard', MOONBOARD_LAYOUTS['moonboard-2016'].id);
     expect(config).not.toBeNull();
