@@ -99,17 +99,19 @@ function EditGymForm({ gym }: { gym: Gym }) {
   const handleSubmit = useCallback(
     async (values: GymFormSubmitValues) => {
       if (submitting) return;
-      // `UpdateGymInput`'s optional string/number fields can't be nulled, so a
-      // blanked field is sent as `undefined` (no change) — matching the web editor.
+      // Fields are sent as-is. The form yields `null` for a blanked field, which
+      // tells the server to clear it (coordinates also clear the PostGIS
+      // location); `undefined` would mean "leave unchanged". `name`/`isPublic`
+      // are never null.
       const input: UpdateGymInput = {
         gymUuid: gym.uuid,
         name: values.name,
-        description: values.description ?? undefined,
-        address: values.address ?? undefined,
-        contactEmail: values.contactEmail ?? undefined,
-        contactPhone: values.contactPhone ?? undefined,
-        latitude: values.latitude ?? undefined,
-        longitude: values.longitude ?? undefined,
+        description: values.description,
+        address: values.address,
+        contactEmail: values.contactEmail,
+        contactPhone: values.contactPhone,
+        latitude: values.latitude,
+        longitude: values.longitude,
         isPublic: values.isPublic,
       };
       setSubmitting(true);

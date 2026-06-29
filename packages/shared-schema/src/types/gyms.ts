@@ -67,12 +67,12 @@ export type UpdateGymInput = {
   gymUuid: string;
   name?: string;
   slug?: string;
-  description?: string;
-  address?: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  latitude?: number;
-  longitude?: number;
+  description?: string | null;
+  address?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   isPublic?: boolean;
   imageUrl?: string;
 };
