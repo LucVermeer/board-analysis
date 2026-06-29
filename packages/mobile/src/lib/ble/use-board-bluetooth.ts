@@ -10,6 +10,7 @@ import {
   type LedColorOverrides,
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket, isMoonboardDeviceName } from '@boardsesh/ble-protocol/moonboard';
+import { getMoonBoardGeometryByLayoutId } from '@boardsesh/board-config';
 import {
   classifyBleFailure,
   classifyBleFailureReason,
@@ -63,9 +64,13 @@ export async function dispatchMoonboardPacket(
   frames: string,
   write: BluetoothAdapter['write'],
   signal?: AbortSignal,
+  numRows?: number,
 ): Promise<boolean | undefined> {
   if (!frames) return undefined;
-  const { packet, skippedRoleCount, skippedPositionCount, totalPlacements } = getMoonboardBluetoothPacket(frames);
+  const { packet, skippedRoleCount, skippedPositionCount, totalPlacements } = getMoonboardBluetoothPacket(
+    frames,
+    numRows,
+  );
   const skippedCount = skippedRoleCount + skippedPositionCount;
   if (totalPlacements > 0 && skippedCount === totalPlacements) {
     return false;
@@ -403,6 +408,9 @@ export function useBoardBluetooth({
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal, sendContext?: BleSendContext) => {
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
+      // Resolved here (where layoutId is narrowed to a number) so the nested
+      // performSend closure can use it. Mini LED strips are 12 rows, standard 18.
+      const moonNumRows = getMoonBoardGeometryByLayoutId(layoutId).numRows;
       const boardAnalyticsProperties = {
         boardName,
         layoutId,
@@ -436,6 +444,7 @@ export function useBoardBluetooth({
               frames,
               adapterRef.current.write.bind(adapterRef.current),
               combinedSignal,
+              moonNumRows,
             );
             // false = every placement was skipped (unrecognised/corrupt hold
             // data). The packet builder would emit a "clear all" packet, darking

@@ -168,3 +168,40 @@ describe('MoonBoard frame chunking', () => {
     expect(new TextDecoder().decode(reassembled)).toBe(new TextDecoder().decode(packet));
   });
 });
+
+// =============================================================================
+// Mini MoonBoard — 12-row serpentine (vs the standard 18)
+// =============================================================================
+// The Mini LED strip is wired 11 columns × 12 rows. Positions verified against
+// the reverse-engineered MoonBoard app protocol (e-sr/moonboard), which sends an
+// `M` flag and addresses the Mini on a 12-row grid.
+
+describe('getMoonboardSerialPosition — Mini (numRows = 12)', () => {
+  it.each([
+    [1, 0], // A1: col 0 (even), row 0
+    [2, 23], // B1: col 1 (odd), row 0 → 12 + (12-1-0)
+    [11, 120], // K1: col 10 (even), row 0
+    [12, 1], // A2: col 0, row 1
+    [123, 12], // B12: col 1 (odd), row 11 → 12 + (12-1-11)
+    [132, 131], // K12: col 10 (even), row 11 — last LED on the 132-LED strip
+  ])('holdId %i → position %i', (holdId, position) => {
+    expect(getMoonboardSerialPosition(holdId, 12)).toBe(position);
+  });
+
+  it('rejects hold ids past the 11×12 Mini strip (max 132)', () => {
+    expect(getMoonboardSerialPosition(132, 12)).toBe(131);
+    expect(() => getMoonboardSerialPosition(133, 12)).toThrow('MoonBoard hold id out of range');
+  });
+
+  it('encodes a Mini packet with 12-row positions', () => {
+    // p1r42 → S0 (A1 start), p2r43 → P23 (B1 hand), p132r44 → E131 (K12 finish)
+    const result = getMoonboardBluetoothPacket('p1r42p2r43p132r44', 12);
+    expect(new TextDecoder().decode(result.packet)).toBe('l#S0,P23,E131#');
+  });
+
+  it('differs from the standard board for the same hold (B1)', () => {
+    // B1 is serial 35 on the 18-row board but 23 on the 12-row Mini.
+    expect(getMoonboardSerialPosition(2)).toBe(35);
+    expect(getMoonboardSerialPosition(2, 12)).toBe(23);
+  });
+});
