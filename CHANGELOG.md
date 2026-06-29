@@ -23,6 +23,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Long boulder names read in full again — the climb view and the play bar scroll a long name so nothing gets cut off. ([#3255](https://github.com/boardsesh/boardsesh/pull/3255))
 - The board, layout, and size buttons on board setup no longer cut off their labels — they wrap to fit and every option is visible. ([#3292](https://github.com/boardsesh/boardsesh/pull/3292))
 - MoonBoard sends now show the board preview in your crew's session feed, just like Kilter and Tension. ([#3286](https://github.com/boardsesh/boardsesh/pull/3286))
 
