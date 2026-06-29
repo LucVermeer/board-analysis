@@ -11,6 +11,28 @@ export type DiscoveredDevice = {
 
 export type BoardScanFamily = 'aurora' | 'moonboard';
 
+// Best-effort reason for an unsolicited BLE drop, surfaced to analytics so we
+// can tell a takeover (another phone grabbing the last-connection-wins board)
+// apart from a range/idle timeout or an app-driven write-stall recovery. Fields
+// are sparse — each adapter fills only what its platform exposes. `source` names
+// which adapter observed the drop so a missing code reads as "platform didn't
+// report one" rather than "we forgot to capture it".
+export type BleDisconnectInfo = {
+  source: 'native-ios' | 'ble-plx' | 'write-failure';
+  // CoreBluetooth CBError code (native-ios: NSError.code; ble-plx: iosErrorCode).
+  iosErrorCode?: number;
+  // Android GATT status (ble-plx androidErrorCode).
+  androidErrorCode?: number;
+  // react-native-ble-plx BleErrorCode enum value.
+  bleErrorCode?: number;
+  // NSError domain (native-ios) — distinguishes CBErrorDomain from CBATTErrorDomain.
+  errorDomain?: string;
+  // App-side classification for drops we caused (write-stall recovery paths).
+  context?: string;
+  // Human-readable description (localizedDescription / ble-plx reason or message).
+  description?: string;
+};
+
 // The picker subscribes for live device updates and, optionally, a one-shot
 // signal that the scan has stopped (timeout) so it can drop its "scanning"
 // spinner instead of implying a scan that's no longer running.
@@ -23,5 +45,5 @@ export type BluetoothAdapter = {
   requestAndConnect(targetSerial?: string): Promise<BleConnection>;
   disconnect(): Promise<void>;
   write(data: Uint8Array, signal?: AbortSignal): Promise<void>;
-  onDisconnect(callback: () => void): () => void;
+  onDisconnect(callback: (info?: BleDisconnectInfo) => void): () => void;
 };

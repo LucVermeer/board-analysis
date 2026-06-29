@@ -7,6 +7,7 @@ import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
+import type { BleDisconnectInfo } from '../../lib/ble/types';
 import { setHoldColorOverridesPreference } from '../../lib/hold-color-overrides';
 
 type TestResolvedBoard = { boardId: number };
@@ -56,6 +57,7 @@ const bluetooth = vi.hoisted(() => {
       pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
       connectInitialSendRef: { current: null as { frames: string; mirrored: boolean; colorSignature: string } | null },
+      lastDisconnectInfoRef: { current: null as BleDisconnectInfo | null },
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
       mock.options = options;

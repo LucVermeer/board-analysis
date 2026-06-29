@@ -950,6 +950,67 @@ describe('RNBleAdapter', () => {
 
       expect(typeof unsubscribe2).toBe('function');
     });
+
+    it('forwards a ble-plx disconnect error as BleDisconnectInfo', async () => {
+      const adapter = setupConnectableAdapter(
+        'aurora',
+        'dev-disc',
+        vi.fn().mockResolvedValue([
+          {
+            uuid: 'uart-write-uuid',
+            isWritableWithoutResponse: true,
+            writeWithoutResponse: vi.fn().mockResolvedValue(undefined),
+          },
+        ]),
+      );
+      await adapter.requestAndConnect();
+
+      const callback = vi.fn();
+      adapter.onDisconnect(callback);
+
+      // Fire the handler react-native-ble-plx was handed, shaped like an iOS
+      // peer-terminated drop (CBError code 7) — what a takeover looks like.
+      const handler = mockBleManager.onDeviceDisconnected.mock.calls.at(-1)?.[1] as
+        | ((error: unknown, device: unknown) => void)
+        | undefined;
+      handler?.(
+        { errorCode: 201, iosErrorCode: 7, androidErrorCode: null, reason: 'Peripheral disconnected', message: 'msg' },
+        null,
+      );
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'ble-plx',
+          bleErrorCode: 201,
+          iosErrorCode: 7,
+          description: 'Peripheral disconnected',
+        }),
+      );
+    });
+
+    it('forwards a clean (null-error) ble-plx drop as a source-only BleDisconnectInfo', async () => {
+      const adapter = setupConnectableAdapter(
+        'aurora',
+        'dev-disc-clean',
+        vi.fn().mockResolvedValue([
+          {
+            uuid: 'uart-write-uuid',
+            isWritableWithoutResponse: true,
+            writeWithoutResponse: vi.fn().mockResolvedValue(undefined),
+          },
+        ]),
+      );
+      await adapter.requestAndConnect();
+
+      const callback = vi.fn();
+      adapter.onDisconnect(callback);
+      const handler = mockBleManager.onDeviceDisconnected.mock.calls.at(-1)?.[1] as
+        | ((error: unknown, device: unknown) => void)
+        | undefined;
+      handler?.(null, null);
+
+      expect(callback).toHaveBeenCalledWith({ source: 'ble-plx' });
+    });
   });
 
   describe('requestAndConnect — original MoonBoard (RedBearLab) fallback', () => {

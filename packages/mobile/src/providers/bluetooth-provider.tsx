@@ -743,6 +743,7 @@ export function BluetoothProvider({
     pickerState,
     reconnectSerialForCurrentBoard,
     connectInitialSendRef,
+    lastDisconnectInfoRef,
   } = useBoardBluetooth({
     boardName,
     layoutId,
@@ -1147,14 +1148,26 @@ export function BluetoothProvider({
       // longer writing the wall). Compare-and-delete server-side, so if another
       // phone already took over this is a no-op.
       releaseBoardHolder();
+      // The hook stashed the drop's platform reason (CoreBluetooth / ble-plx
+      // code, or a write-stall context) on this ref before flipping isConnected.
+      // Flattened onto the event so analytics can tell a takeover apart from a
+      // range/idle timeout — the gap that left `disconnectReason` null before.
+      const disconnectInfo = lastDisconnectInfoRef.current;
       track(SHARED_EVENTS.BluetoothDisconnected, {
         boardName,
         reason: 'unexpected',
         inSession: sessionIdRef.current != null,
+        disconnectSource: disconnectInfo?.source,
+        disconnectReason: disconnectInfo?.description,
+        disconnectContext: disconnectInfo?.context,
+        disconnectIosCode: disconnectInfo?.iosErrorCode,
+        disconnectAndroidCode: disconnectInfo?.androidErrorCode,
+        disconnectBleCode: disconnectInfo?.bleErrorCode,
+        disconnectErrorDomain: disconnectInfo?.errorDomain,
       });
     }
     wasConnectedRef.current = isConnected;
-  }, [clearPendingWallReportAndUndoToastArm, releaseBoardHolder, isConnected, boardName]);
+  }, [clearPendingWallReportAndUndoToastArm, releaseBoardHolder, isConnected, boardName, lastDisconnectInfoRef]);
 
   const value = useMemo<BluetoothContextValue>(
     () => ({

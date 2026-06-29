@@ -17,6 +17,15 @@ export type NativeBleScanEvent = {
 
 export type NativeBleDisconnectEvent = {
   deviceId: string;
+  // CoreBluetooth disconnect reason, present when iOS supplied an NSError on
+  // didDisconnectPeripheral. Absent on a clean/expected drop, or when the drop
+  // came from an app-driven write-stall recovery (which sets `context` instead).
+  errorCode?: number;
+  errorDomain?: string;
+  errorDescription?: string;
+  // App-side classification for drops the native layer caused itself (write-stall
+  // budget exhausted, recovery reconnect failed/timed out).
+  context?: string;
 };
 
 export type NativeBleConnectedEvent = {

@@ -1,4 +1,4 @@
-import { type Device, type Characteristic } from 'react-native-ble-plx';
+import { type Device, type Characteristic, type BleError } from 'react-native-ble-plx';
 import {
   AURORA_ADVERTISED_SERVICE_UUID,
   UART_SERVICE_UUID,
@@ -13,7 +13,14 @@ import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
 import { upsertDiscoveredDevice } from './scan-device-cache';
-import type { BluetoothAdapter, BleConnection, BoardScanFamily, DevicePickerFn, DiscoveredDevice } from './types';
+import type {
+  BluetoothAdapter,
+  BleConnection,
+  BleDisconnectInfo,
+  BoardScanFamily,
+  DevicePickerFn,
+  DiscoveredDevice,
+} from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
 const CONNECTION_TIMEOUT_MS = 12_000;
@@ -43,7 +50,7 @@ async function findWriteCharacteristic(
 export class RNBleAdapter implements BluetoothAdapter {
   private connectedDevice: Device | null = null;
   private writeCharacteristic: Characteristic | null = null;
-  private disconnectCallback: (() => void) | null = null;
+  private disconnectCallback: ((info?: BleDisconnectInfo) => void) | null = null;
   private disconnectSubscription: { remove: () => void } | null = null;
 
   constructor(
@@ -234,12 +241,12 @@ export class RNBleAdapter implements BluetoothAdapter {
     this.connectedDevice = deviceWithServices;
     this.writeCharacteristic = writeCharacteristic;
 
-    this.disconnectSubscription = bleManager.onDeviceDisconnected(selectedDeviceId, (_error, _device) => {
+    this.disconnectSubscription = bleManager.onDeviceDisconnected(selectedDeviceId, (error, _device) => {
       this.connectedDevice = null;
       this.writeCharacteristic = null;
       this.disconnectSubscription?.remove();
       this.disconnectSubscription = null;
-      this.disconnectCallback?.();
+      this.disconnectCallback?.(bleErrorToDisconnectInfo(error));
     });
 
     return {
@@ -328,12 +335,27 @@ export class RNBleAdapter implements BluetoothAdapter {
     }
   }
 
-  onDisconnect(callback: () => void): () => void {
+  onDisconnect(callback: (info?: BleDisconnectInfo) => void): () => void {
     this.disconnectCallback = callback;
     return () => {
       this.disconnectCallback = null;
     };
   }
+}
+
+// Normalise a react-native-ble-plx disconnect error into the cross-adapter
+// shape. `onDeviceDisconnected` passes null on a clean drop; an unexpected drop
+// (RF loss, another central grabbing the board) carries a BleError whose
+// iosErrorCode/androidErrorCode is the platform's real reason code.
+function bleErrorToDisconnectInfo(error: BleError | null): BleDisconnectInfo {
+  if (!error) return { source: 'ble-plx' };
+  return {
+    source: 'ble-plx',
+    bleErrorCode: error.errorCode,
+    iosErrorCode: error.iosErrorCode ?? undefined,
+    androidErrorCode: error.androidErrorCode ?? undefined,
+    description: error.reason ?? error.message ?? undefined,
+  };
 }
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
