@@ -26,8 +26,17 @@ export function isMoonboardDeviceName(name?: string): boolean {
   return !!name && MOONBOARD_DEVICE_NAME_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
-export function getMoonboardSerialPosition(holdId: number): number {
-  const maxHoldId = MOONBOARD_GRID.numColumns * MOONBOARD_GRID.numRows;
+/**
+ * Convert a hold id to its position on the physical LED string.
+ *
+ * The LED strip is wired as a column-major serpentine, so the per-column LED
+ * count — the number of rows — sets the stride. The standard board has 18 rows;
+ * the Mini MoonBoard strip is 12 rows tall (confirmed against the official app's
+ * protocol, which sends an `M` flag and addresses the Mini on a 12-row grid).
+ * `numRows` defaults to the standard board so existing callers are unchanged.
+ */
+export function getMoonboardSerialPosition(holdId: number, numRows: number = MOONBOARD_GRID.numRows): number {
+  const maxHoldId = MOONBOARD_GRID.numColumns * numRows;
   if (!Number.isInteger(holdId) || holdId < 1 || holdId > maxHoldId) {
     throw new Error(`MoonBoard hold id out of range: ${holdId}`);
   }
@@ -37,13 +46,16 @@ export function getMoonboardSerialPosition(holdId: number): number {
   const rowIndex = Math.floor(zeroBasedHoldId / MOONBOARD_GRID.numColumns);
 
   if (colIndex % 2 === 0) {
-    return colIndex * MOONBOARD_GRID.numRows + rowIndex;
+    return colIndex * numRows + rowIndex;
   }
 
-  return colIndex * MOONBOARD_GRID.numRows + (MOONBOARD_GRID.numRows - 1 - rowIndex);
+  return colIndex * numRows + (numRows - 1 - rowIndex);
 }
 
-export function getMoonboardBluetoothPacket(frames: string): MoonboardPacketResult {
+export function getMoonboardBluetoothPacket(
+  frames: string,
+  numRows: number = MOONBOARD_GRID.numRows,
+): MoonboardPacketResult {
   const encodedHolds: string[] = [];
   let skippedRoleCount = 0;
   let skippedPositionCount = 0;
@@ -61,7 +73,7 @@ export function getMoonboardBluetoothPacket(frames: string): MoonboardPacketResu
     }
 
     try {
-      encodedHolds.push(`${holdType}${getMoonboardSerialPosition(holdId)}`);
+      encodedHolds.push(`${holdType}${getMoonboardSerialPosition(holdId, numRows)}`);
     } catch {
       skippedPositionCount++;
     }

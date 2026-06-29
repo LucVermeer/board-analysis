@@ -94,10 +94,16 @@ export const MOONBOARD_SETS: Record<MoonBoardLayoutKey, { id: number; name: stri
     { id: 26, name: 'Wooden Holds B', imageFile: 'woodenholdsb.png' },
     { id: 27, name: 'Wooden Holds C', imageFile: 'woodenholdsc.png' },
   ],
-  // Mini 2025 (holdsetup 22). Board-art images aren't in the repo yet (the Mini
-  // 2020 art is also still missing) — climbs import and holds render; the board
-  // photo overlay is a follow-up.
-  'mini-moonboard-2025': [{ id: 28, name: 'Wooden Holds', imageFile: 'woodenholds.png' }],
+  // Mini 2025 (holdsetup 22). Set list matches the board art shipped in the
+  // MoonBoard app (assets/boards/minimoonboard2025): Hold Set F + Original
+  // School Holds + Wooden Holds B/C. There is no plain "Wooden Holds" image for
+  // this layout.
+  'mini-moonboard-2025': [
+    { id: 28, name: 'Hold Set F', imageFile: 'holdsetf.png' },
+    { id: 29, name: 'Original School Holds', imageFile: 'originalschoolholds.png' },
+    { id: 30, name: 'Wooden Holds B', imageFile: 'woodenholdsb.png' },
+    { id: 31, name: 'Wooden Holds C', imageFile: 'woodenholdsc.png' },
+  ],
 };
 
 // MoonBoard grid configuration (same for all standard layouts)
@@ -172,40 +178,101 @@ export function holdIdToCoordinate(holdId: number): MoonBoardCoordinate {
   return `${col}${row}` as MoonBoardCoordinate;
 }
 
-// Grid calibration based on actual hold positions in MoonBoard images
-// These margins match the board region detection in the OCR library
-const GRID_CALIBRATION = {
-  // X margins: the grid doesn't fill the full image width
-  leftMargin: 0.1, // 10% left margin
-  rightMargin: 0.05, // 5% right margin
-  // Y margins: the grid doesn't fill the full image height
-  topMargin: 0.06, // 6% top margin
-  bottomMargin: 0.04, // 4% bottom margin
+// Visual grid geometry per layout. All MoonBoard layouts share the A–K column
+// naming and the 18-row hold-ID numbering used by coordinateToHoldId /
+// holdIdToCoordinate; this descriptor only governs how a hold's (column, row)
+// maps onto its board-art image, which differs for the Mini boards.
+//
+// The Mini boards reuse the standard 11-column horizontal grid but are shorter:
+// the art (650×694) draws the top row at row 12 and goes down to row 1 (2025) or
+// row 2 (2020). Calibration margins below are measured from the actual hold
+// positions in the MoonBoard app's board art.
+export type MoonBoardGridGeometry = {
+  // Columns drawn (A.. ); 11 for every current MoonBoard layout.
+  numColumns: number;
+  // Highest row number, drawn at the top slot of the image.
+  rowTop: number;
+  // Number of vertical slots, counting down from rowTop.
+  numRows: number;
+  // Board-art image dimensions (px).
+  width: number;
+  height: number;
+  // Background image filename under public/images/moonboard/.
+  backgroundImage: string;
+  // Margins (0-1) of the hold grid within the image.
+  calibration: { leftMargin: number; rightMargin: number; topMargin: number; bottomMargin: number };
 };
 
+export const STANDARD_MOONBOARD_GEOMETRY: MoonBoardGridGeometry = {
+  numColumns: MOONBOARD_GRID.numColumns,
+  rowTop: MOONBOARD_GRID.numRows,
+  numRows: MOONBOARD_GRID.numRows,
+  width: MOONBOARD_SIZE.width,
+  height: MOONBOARD_SIZE.height,
+  backgroundImage: 'moonboard-bg.png',
+  // X: 10% left / 5% right; Y: 6% top / 4% bottom.
+  calibration: { leftMargin: 0.1, rightMargin: 0.05, topMargin: 0.06, bottomMargin: 0.04 },
+};
+
+// Mini MoonBoard 2020 and 2025 share one geometry: 11 columns, rows 1–12 (top
+// row is row 12), on the 650×694 board art. 2020 simply leaves row 1 empty.
+export const MINI_MOONBOARD_GEOMETRY: MoonBoardGridGeometry = {
+  numColumns: 11,
+  rowTop: 12,
+  numRows: 12,
+  width: 650,
+  height: 694,
+  backgroundImage: 'minimoonboard-bg.png',
+  calibration: { leftMargin: 0.1047, rightMargin: 0.0508, topMargin: 0.0793, bottomMargin: 0.0571 },
+};
+
+const MINI_MOONBOARD_LAYOUT_KEYS = new Set<MoonBoardLayoutKey>(['mini-moonboard-2020', 'mini-moonboard-2025']);
+
+/** Geometry for a layout key (Mini boards differ from the standard 11×18). */
+export function getMoonBoardGeometry(layoutKey: MoonBoardLayoutKey): MoonBoardGridGeometry {
+  return MINI_MOONBOARD_LAYOUT_KEYS.has(layoutKey) ? MINI_MOONBOARD_GEOMETRY : STANDARD_MOONBOARD_GEOMETRY;
+}
+
+/** Geometry by numeric layout id; falls back to the standard board. */
+export function getMoonBoardGeometryByLayoutId(layoutId: number): MoonBoardGridGeometry {
+  const entry = getLayoutById(layoutId);
+  return entry ? getMoonBoardGeometry(entry[0] as MoonBoardLayoutKey) : STANDARD_MOONBOARD_GEOMETRY;
+}
+
+/** Geometry by board-art folder (e.g. 'minimoonboard2020'); falls back to standard. */
+export function getMoonBoardGeometryByFolder(folder: string): MoonBoardGridGeometry {
+  const entry = Object.entries(MOONBOARD_LAYOUTS).find(([, layout]) => layout.folder === folder);
+  return entry ? getMoonBoardGeometry(entry[0] as MoonBoardLayoutKey) : STANDARD_MOONBOARD_GEOMETRY;
+}
+
 /**
- * Get the relative position (0-1) for a hold ID on the board.
- * X: 0 = left edge, 1 = right edge
- * Y: 0 = top edge, 1 = bottom edge (SVG coordinate system)
+ * Get the relative position (0-1) for a hold ID on the board, for the given
+ * geometry (defaults to the standard 11×18 board).
+ * X: 0 = left edge, 1 = right edge. Y: 0 = top edge, 1 = bottom edge (SVG).
  *
- * Positions are calibrated to match actual hold positions in the MoonBoard images.
+ * The hold's (column, row) is decoded from the universal 11-column hold-ID
+ * scheme; `geometry.rowTop` places row numbers onto the image's vertical slots.
  */
-export function getGridPosition(holdId: number): { x: number; y: number } {
+export function getGridPosition(
+  holdId: number,
+  geometry: MoonBoardGridGeometry = STANDARD_MOONBOARD_GEOMETRY,
+): { x: number; y: number } {
   const id = holdId - 1;
   const colIndex = id % MOONBOARD_GRID.numColumns;
-  const rowIndex = Math.floor(id / MOONBOARD_GRID.numColumns);
+  const row = Math.floor(id / MOONBOARD_GRID.numColumns) + 1;
 
-  const { leftMargin, rightMargin, topMargin, bottomMargin } = GRID_CALIBRATION;
+  const { leftMargin, rightMargin, topMargin, bottomMargin } = geometry.calibration;
   const gridWidth = 1 - leftMargin - rightMargin;
   const gridHeight = 1 - topMargin - bottomMargin;
 
-  // X: cell center position within the grid region
-  const relativeX = (colIndex + 0.5) / MOONBOARD_GRID.numColumns;
+  // X: cell center within the grid region.
+  const relativeX = (colIndex + 0.5) / geometry.numColumns;
   const x = leftMargin + relativeX * gridWidth;
 
-  // Y: row 1 at bottom (rowIndex 0), row 18 at top (rowIndex 17)
-  // In SVG, Y increases downward, so we invert
-  const relativeY = 1 - (rowIndex + 0.5) / MOONBOARD_GRID.numRows;
+  // Y: the highest row number sits in the top slot; rows count down. In SVG, Y
+  // increases downward, so a higher row number maps to a smaller y.
+  const slotFromTop = geometry.rowTop - row;
+  const relativeY = (slotFromTop + 0.5) / geometry.numRows;
   const y = topMargin + relativeY * gridHeight;
 
   return { x, y };
@@ -244,22 +311,26 @@ export function getMoonBoardDetails({ layout_id, set_ids }: { layout_id: number;
   }
 
   const [layoutKey, layoutData] = layoutEntry;
+  const geometry = getMoonBoardGeometry(layoutKey as MoonBoardLayoutKey);
   const sets = MOONBOARD_SETS[layoutKey as MoonBoardLayoutKey] || [];
   const selectedSets = sets.filter((s) => set_ids.includes(s.id));
 
-  // Compute all 198 hold positions from grid for WASM/canvas rendering pipeline
-  const cellWidth = MOONBOARD_SIZE.width / MOONBOARD_GRID.numColumns;
-  const cellHeight = MOONBOARD_SIZE.height / MOONBOARD_GRID.numRows;
+  // Compute hold positions from the layout's grid for the WASM/canvas rendering
+  // pipeline. Rows 1..rowTop are emitted (132 holds for the Mini, 198 standard).
+  // Mini 2020 has no physical holds on row 1, but emitting those slots is
+  // harmless — no climb references them, so they never light up.
+  const cellWidth = geometry.width / geometry.numColumns;
+  const cellHeight = geometry.height / geometry.numRows;
   const holdRadius = Math.min(cellWidth, cellHeight) * 0.525;
 
-  const holdsData = Array.from({ length: MOONBOARD_GRID.numColumns * MOONBOARD_GRID.numRows }, (_, i) => {
+  const holdsData = Array.from({ length: geometry.numColumns * geometry.rowTop }, (_, i) => {
     const holdId = i + 1;
-    const pos = getGridPosition(holdId);
+    const pos = getGridPosition(holdId, geometry);
     return {
       id: holdId,
       mirroredHoldId: null,
-      cx: pos.x * MOONBOARD_SIZE.width,
-      cy: pos.y * MOONBOARD_SIZE.height,
+      cx: pos.x * geometry.width,
+      cy: pos.y * geometry.height,
       r: holdRadius,
     };
   });
@@ -267,7 +338,7 @@ export function getMoonBoardDetails({ layout_id, set_ids }: { layout_id: number;
   // Build images_to_holds with background + hold set images as keys.
   // Values are empty arrays — only keys are used for background URL construction
   // in the WASM worker and BoardImageLayers rendering paths.
-  const images_to_holds: Record<string, []> = { 'moonboard-bg.png': [] };
+  const images_to_holds: Record<string, []> = { [geometry.backgroundImage]: [] };
   for (const set of selectedSets) {
     images_to_holds[`${layoutData.folder}/${set.imageFile}`] = [];
   }
@@ -281,13 +352,13 @@ export function getMoonBoardDetails({ layout_id, set_ids }: { layout_id: number;
     size_name: MOONBOARD_SIZE.name,
     size_description: MOONBOARD_SIZE.description,
     set_names: selectedSets.map((s) => s.name),
-    boardWidth: MOONBOARD_SIZE.width,
-    boardHeight: MOONBOARD_SIZE.height,
+    boardWidth: geometry.width,
+    boardHeight: geometry.height,
     supportsMirroring: false,
     edge_left: 0,
-    edge_right: MOONBOARD_GRID.numColumns,
+    edge_right: geometry.numColumns,
     edge_bottom: 0,
-    edge_top: MOONBOARD_GRID.numRows,
+    edge_top: geometry.rowTop,
     images_to_holds,
     holdsData,
     // Moonboard-specific fields for grid-based rendering (used by MoonBoardRenderer SVG)

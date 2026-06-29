@@ -17,12 +17,6 @@ import {
   type MoonBoardLayoutKey,
 } from '@boardsesh/board-config';
 
-// Mini boards are hidden from the custom-board picker until their board art exists.
-const HIDDEN_CUSTOM_MOONBOARD_LAYOUT_IDS = new Set<number>([
-  MOONBOARD_LAYOUTS['mini-moonboard-2020'].id,
-  MOONBOARD_LAYOUTS['mini-moonboard-2025'].id,
-]);
-
 const MOONBOARD_PRODUCT_SIZE: ProductSizeData = {
   id: MOONBOARD_SIZE.id,
   name: MOONBOARD_SIZE.name,
@@ -40,13 +34,11 @@ function getMoonBoardLayoutKey(layoutId: number): MoonBoardLayoutKey | null {
 
 export function getBoardLayouts(boardName: BoardName): LayoutData[] {
   if (boardName === 'moonboard') {
-    return Object.values(MOONBOARD_LAYOUTS)
-      .filter((layout) => !HIDDEN_CUSTOM_MOONBOARD_LAYOUT_IDS.has(layout.id))
-      .map((layout) => ({
-        id: layout.id,
-        name: layout.name,
-        productId: MOONBOARD_PRODUCT_SIZE.productId,
-      }));
+    return Object.values(MOONBOARD_LAYOUTS).map((layout) => ({
+      id: layout.id,
+      name: layout.name,
+      productId: MOONBOARD_PRODUCT_SIZE.productId,
+    }));
   }
 
   return getAllLayouts(boardName);

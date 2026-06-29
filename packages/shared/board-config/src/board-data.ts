@@ -122,6 +122,16 @@ export const BOARD_IMAGE_DIMENSIONS: Record<BoardName, ImageDimensions> = {
     'moonboardmasters2019/woodenholds.png': { width: 650, height: 1000 },
     'moonboardmasters2019/woodenholdsb.png': { width: 650, height: 1000 },
     'moonboardmasters2019/woodenholdsc.png': { width: 650, height: 1000 },
+    // Mini MoonBoard 2020 — shorter board art (11 cols × rows 2–12).
+    'minimoonboard2020/originalschoolholds.png': { width: 650, height: 694 },
+    'minimoonboard2020/woodenholds.png': { width: 650, height: 694 },
+    'minimoonboard2020/woodenholdsb.png': { width: 650, height: 694 },
+    'minimoonboard2020/woodenholdsc.png': { width: 650, height: 694 },
+    // Mini MoonBoard 2025 — shorter board art (11 cols × rows 1–12).
+    'minimoonboard2025/holdsetf.png': { width: 650, height: 694 },
+    'minimoonboard2025/originalschoolholds.png': { width: 650, height: 694 },
+    'minimoonboard2025/woodenholdsb.png': { width: 650, height: 694 },
+    'minimoonboard2025/woodenholdsc.png': { width: 650, height: 694 },
   },
   decoy: {
     'product_sizes_layouts_sets/1.png': { width: 1080, height: 1144 },

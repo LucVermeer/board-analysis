@@ -18,6 +18,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { BoardDetails } from '@/app/lib/types';
 import { getAuroraBluetoothPacket, parseApiLevel, parseSerialNumber, type LedColorOverrides } from './bluetooth-aurora';
 import { getMoonboardBluetoothPacket } from './bluetooth-moonboard';
+import { getMoonBoardGeometryByLayoutId } from '@/app/lib/moonboard-config';
 import type { HoldRenderData } from '../board-renderer/types';
 import { useWakeLock } from './use-wake-lock';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from '@/app/lib/ble/types';
@@ -367,7 +368,9 @@ export function useBoardBluetooth({
           // empty frame string — skip the write rather than send a malformed
           // packet to the board.
           if (!frames) return;
-          const moonResult = getMoonboardBluetoothPacket(frames);
+          // Mini boards wire a 12-row LED strip; the standard board is 18 rows.
+          const moonNumRows = getMoonBoardGeometryByLayoutId(boardDetails.layout_id).numRows;
+          const moonResult = getMoonboardBluetoothPacket(frames, moonNumRows);
           const moonSkipped = moonResult.skippedRoleCount + moonResult.skippedPositionCount;
 
           if (moonSkipped > 0 && moonResult.totalPlacements === moonSkipped) {
