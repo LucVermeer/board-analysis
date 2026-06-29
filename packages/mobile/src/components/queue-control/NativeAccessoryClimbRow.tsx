@@ -8,6 +8,7 @@ import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
+import { MarqueeText } from '../MarqueeText';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useAccessoryClimbTap } from './use-accessory-climb-tap';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
@@ -42,16 +43,18 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
   return (
     <View style={styles.labelInner}>
       {showThumbnail ? <AccessoryClimbThumbnail climb={climb} boardConfig={boardConfig} /> : null}
-      <Text
+      {/* Scrolls a long name when it overflows (Reduce-Motion-gated); the grade
+          stays pinned. Falls back to tail-ellipsis when it fits or motion is off. */}
+      <MarqueeText
+        active
         variant="subheadline"
         color={labelColor}
-        numberOfLines={1}
-        ellipsizeMode="tail"
         maxFontSizeMultiplier={CHROME_LABEL_MAX_FONT_SCALE}
         style={styles.name}
+        textStyle={styles.nameText}
       >
         {climb.name}
-      </Text>
+      </MarqueeText>
       {formattedGrade ? (
         <Text
           variant="subheadline"
@@ -164,6 +167,8 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     minWidth: 0,
+  },
+  nameText: {
     fontWeight: '500',
   },
   gradeText: {

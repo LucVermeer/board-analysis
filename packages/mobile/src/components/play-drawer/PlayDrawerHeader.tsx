@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { Text } from '../Text';
+import { MarqueeText } from '../MarqueeText';
 import { DrawerHeader } from '../DrawerHeader';
 import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -60,6 +61,10 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
       center={
         <>
           <View style={styles.nameRow}>
+            {/* Long-press copies the name; the name itself is a single-line marquee
+                that scrolls when it overflows, so the header height — and the board
+                below it — stays constant per climb. Under Reduce Motion it falls
+                back to a 2-line wrap (full name). */}
             <Pressable
               onLongPress={onLongPressName}
               disabled={!onLongPressName}
@@ -68,9 +73,9 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
               accessibilityHint={onLongPressName ? t('mobile.climbActions.copyNameHint') : undefined}
               style={styles.namePressable}
             >
-              <Text variant="body" style={styles.nameText} numberOfLines={1}>
+              <MarqueeText active variant="body" style={styles.nameClip} textStyle={styles.nameText} fallbackLines={2}>
                 {name}
-              </Text>
+              </MarqueeText>
             </Pressable>
             <ClimbAttributeIcons benchmarkDifficulty={benchmarkDifficulty} characteristics={characteristics} />
           </View>
@@ -100,17 +105,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 0,
   },
-  // Shrinks with the name so a long title still truncates while the attribute
-  // glyphs stay visible; the long-press target is the name text itself.
+  // Shrinks with the name so a long title scrolls within the available width while
+  // the attribute glyphs stay visible; the long-press target is the name itself.
   namePressable: {
     flexShrink: 1,
+    minWidth: 0,
+  },
+  // The marquee clip fills the (shrinking) pressable so it's bounded enough to
+  // detect overflow and scroll; it hugs its content when the name fits.
+  nameClip: {
+    alignSelf: 'stretch',
     minWidth: 0,
   },
   nameText: {
     fontWeight: '700',
     textAlign: 'center',
-    // Shrink so a long name truncates while the attribute glyphs stay visible.
-    flexShrink: 1,
   },
   subtitleText: {
     color: iosSystemColors.systemGray,

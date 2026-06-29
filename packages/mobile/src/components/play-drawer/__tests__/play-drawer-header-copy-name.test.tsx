@@ -40,6 +40,11 @@ vi.mock('../../../lib/format-climb-stats', () => ({
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
+// MarqueeText (the scrolling climb-name label) has its own unit test; here it's a
+// plain text node so the long-press wrapper + name lookup work without Reanimated.
+vi.mock('../../MarqueeText', () => ({
+  MarqueeText: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
 vi.mock('../../DrawerHeader', () => ({
   // Render the center column so the name Pressable is in the tree.
   DrawerHeader: ({ center }: { center?: ReactNode }) => createElement('div', null, center),

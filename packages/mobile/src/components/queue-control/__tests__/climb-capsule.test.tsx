@@ -107,6 +107,13 @@ vi.mock('../../Text', () => ({
     createElement('span', { 'data-text': 'true', 'data-color': readColor(props) }, props.children),
 }));
 
+// MarqueeText (the scrolling climb-name label) has its own unit test; here it's
+// just a coloured text node so the capsule's layout/colour assertions hold.
+vi.mock('../../MarqueeText', () => ({
+  MarqueeText: (props: TextMockProps) =>
+    createElement('span', { 'data-text': 'true', 'data-color': readColor(props) }, props.children),
+}));
+
 vi.mock('../../GlassSurface', () => ({
   GlassSurface: ({ tintColor }: { tintColor?: string }) =>
     createElement('div', { 'data-glass': 'true', 'data-tint': tintColor ?? '' }),
