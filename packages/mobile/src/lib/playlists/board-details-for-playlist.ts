@@ -1,5 +1,6 @@
 import type { BoardName } from '@boardsesh/shared-schema';
 import { getSizesForLayoutId, getSetsForLayoutAndSize, getAllLayouts } from '@boardsesh/board-constants/product-sizes';
+import { MOONBOARD_LAYOUTS, MOONBOARD_SETS, MOONBOARD_SIZE, type MoonBoardLayoutKey } from '@boardsesh/board-config';
 
 export type PlaylistBoardConfig = {
   boardName: BoardName;
@@ -26,9 +27,10 @@ const boardConfigCache = new Map<string, PlaylistBoardConfig | null>();
  * Resolve a renderable board config (largest size + all its sets) for a
  * playlist that only carries `boardType` + `layoutId`. Mobile mirror of web's
  * `getBoardDetailsForPlaylist`, returning the minimal config the bundled
- * background cache needs. Returns null when the board/layout can't resolve
- * (e.g. moonboard, which the bundled-asset path doesn't cover) so the caller
- * falls back cleanly to the plain colour tile. Memoised by board key.
+ * background cache needs. Handles Aurora boards (kilter/tension) via the
+ * product-size tables and MoonBoard via its own layout/set config. Returns null
+ * when the board/layout can't resolve so the caller falls back cleanly to the
+ * plain colour tile. Memoised by board key.
  */
 export function getBoardConfigForPlaylist(
   boardType: string,
@@ -57,6 +59,13 @@ function computeBoardConfigForPlaylist(
   // return null (→ plain colour tile) rather than rendering a bad board, so the
   // cast is safe at runtime.
   const boardName = boardType as unknown as BoardName;
+
+  // MoonBoard isn't in the Aurora product-size tables — it has a single fixed
+  // size and its own layout/set config. Mirror web's `getMoonBoardDetailsForPlaylist`.
+  if (boardName === 'moonboard') {
+    return computeMoonBoardConfigForPlaylist(layoutId);
+  }
+
   const effectiveLayoutId = layoutId ?? getDefaultLayoutId(boardName);
   if (!effectiveLayoutId) return null;
 
@@ -77,6 +86,26 @@ function computeBoardConfigForPlaylist(
     boardName,
     layoutId: effectiveLayoutId,
     sizeId: largest.id,
+    setIds: sets.map((set) => set.id),
+  };
+}
+
+function computeMoonBoardConfigForPlaylist(layoutId: number | null | undefined): PlaylistBoardConfig | null {
+  // MoonBoard has one fixed size; default to the 2024 layout when the playlist
+  // carries no layout id (matches web's fallback).
+  const effectiveLayoutId = layoutId ?? MOONBOARD_LAYOUTS['moonboard-2024'].id;
+
+  const layoutEntry = Object.entries(MOONBOARD_LAYOUTS).find(([, layout]) => layout.id === effectiveLayoutId);
+  if (!layoutEntry) return null;
+
+  const [layoutKey] = layoutEntry;
+  const sets = MOONBOARD_SETS[layoutKey as MoonBoardLayoutKey] ?? [];
+  if (sets.length === 0) return null;
+
+  return {
+    boardName: 'moonboard',
+    layoutId: effectiveLayoutId,
+    sizeId: MOONBOARD_SIZE.id,
     setIds: sets.map((set) => set.id),
   };
 }
