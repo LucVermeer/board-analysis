@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T02:58:10.343Z",
+  "generatedAt": "2026-06-29T06:00:06.098Z",
   "entries": [
+    {
+      "prNumber": 3279,
+      "category": "new",
+      "title": "Android: the Home scope switcher now opens a smoother, native dropdown.",
+      "mergedAt": "2026-06-29T05:59:05Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3279"
+    },
     {
       "prNumber": 3265,
       "category": "new",
