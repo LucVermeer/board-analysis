@@ -15,7 +15,7 @@
 // from the `expo-ui-modifiers` bridge; M3 surface/label colours come from the
 // Compose Material theme.
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Host } from '@expo/ui';
 import {
   LazyColumn,
@@ -48,6 +48,17 @@ const ROW_PADDING = padding(spacing[4], spacing[3], spacing[4], spacing[3]);
 const CHEVRON = '›';
 const CHECK = '✓';
 
+// The manual channel / custom branch field is always a plain identifier input, so
+// its Compose keyboard options are fully static — hoisted so the native field
+// isn't handed a fresh object on every keystroke-driven re-render.
+const FIELD_KEYBOARD_OPTIONS = toAndroidKeyboardOptions({
+  keyboardType: undefined,
+  autoCapitalize: 'none',
+  autoCorrect: false,
+  returnKeyType: 'go',
+  secureTextEntry: false,
+});
+
 function TargetTrailing({ row }: { row: SwitcherTargetRow }) {
   if (row.state === 'switching') return <CircularProgressIndicator modifiers={[size(20, 20)]} strokeWidth={2} />;
   if (row.state === 'active') {
@@ -57,7 +68,9 @@ function TargetTrailing({ row }: { row: SwitcherTargetRow }) {
       </Text>
     );
   }
-  if (row.state === 'pressable' && row.showChevronWhenPressable) {
+  // A `disabled` row (another switch in flight) keeps the chevron — the whole Row
+  // is dimmed via alpha(0.5) — matching the original and the iOS side.
+  if ((row.state === 'pressable' || row.state === 'disabled') && row.showChevronWhenPressable) {
     return (
       <Text style={{ typography: 'titleMedium' }} modifiers={[alpha(0.4)]}>
         {CHEVRON}
@@ -96,6 +109,13 @@ function FieldRow({ row }: { row: SwitcherFieldRow }) {
   const { brandColors } = useTheme();
   const textState = useNativeState(row.value);
   const lastEmittedRef = useRef(row.value);
+  // `row.onSubmit` is rebuilt each render (the screen makes it inline), so keep the
+  // latest in a ref and hand the native field a STABLE keyboardActions object —
+  // mirroring AuthTextInput.android's memoized keyboardActions.
+  const submitRef = useRef(row.onSubmit);
+  useEffect(() => {
+    submitRef.current = row.onSubmit;
+  }, [row.onSubmit]);
 
   useEffect(() => {
     if (shouldPushValueToNative(row.value, lastEmittedRef.current)) {
@@ -104,27 +124,27 @@ function FieldRow({ row }: { row: SwitcherFieldRow }) {
     }
   }, [row.value, textState]);
 
-  const keyboardOptions = toAndroidKeyboardOptions({
-    keyboardType: undefined,
-    autoCapitalize: 'none',
-    autoCorrect: false,
-    returnKeyType: 'go',
-    secureTextEntry: false,
-  });
+  // `row.onChangeText` is the screen's stable setState setter, so this is stable.
+  const handleValueChange = useCallback(
+    (text: string) => {
+      lastEmittedRef.current = text;
+      row.onChangeText(text);
+    },
+    [row.onChangeText],
+  );
+  const keyboardActions = useMemo(() => ({ onGo: () => submitRef.current() }), []);
+  const colors = useMemo(() => textFieldBrandColors(brandColors), [brandColors]);
 
   return (
     <Column modifiers={[fillMaxWidth(), ROW_PADDING]}>
       <OutlinedTextField
         value={textState}
-        onValueChange={(text) => {
-          lastEmittedRef.current = text;
-          row.onChangeText(text);
-        }}
+        onValueChange={handleValueChange}
         readOnly={!row.editable}
         singleLine
-        keyboardOptions={keyboardOptions}
-        keyboardActions={{ onGo: () => row.onSubmit() }}
-        colors={textFieldBrandColors(brandColors)}
+        keyboardOptions={FIELD_KEYBOARD_OPTIONS}
+        keyboardActions={keyboardActions}
+        colors={colors}
         modifiers={[fillMaxWidth()]}
       >
         <OutlinedTextField.Label>

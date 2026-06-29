@@ -30,6 +30,7 @@ import {
 } from '@expo/ui/swift-ui';
 import {
   tint,
+  opacity,
   disabled as disabledModifier,
   accessibilityLabel as accessibilityLabelModifier,
   autocorrectionDisabled,
@@ -62,11 +63,13 @@ const ACTION_SF_SYMBOL = {
   flame: 'flame',
 } as const;
 
-// A single switch-target row's trailing accessory, by precomputed state.
+// A single switch-target row's trailing accessory, by precomputed state. A
+// `disabled` row (another switch in flight) keeps the chevron a pressable preview
+// row would show — the whole row is just dimmed — matching the original.
 function TargetTrailing({ row }: { row: SwitcherTargetRow }) {
   if (row.state === 'switching') return <ProgressView />;
   if (row.state === 'active') return <Image systemName="checkmark" modifiers={[SECONDARY_LABEL]} />;
-  if (row.state === 'pressable' && row.showChevronWhenPressable) {
+  if ((row.state === 'pressable' || row.state === 'disabled') && row.showChevronWhenPressable) {
     return <Image systemName="chevron.right" modifiers={[FOOTNOTE, TERTIARY_LABEL]} />;
   }
   return null;
@@ -74,7 +77,9 @@ function TargetTrailing({ row }: { row: SwitcherTargetRow }) {
 
 function TargetBody({ row }: { row: SwitcherTargetRow }) {
   return (
-    <HStack spacing={spacing[3]}>
+    // A `disabled` row dims to 0.5 (matching the Android `alpha(0.5)` and the
+    // original RN opacity), so the row that's actually switching stands out.
+    <HStack spacing={spacing[3]} modifiers={row.state === 'disabled' ? [opacity(0.5)] : undefined}>
       <VStack alignment="leading" spacing={spacing[1]}>
         <Text modifiers={[PRIMARY_LABEL]}>{row.title}</Text>
         {row.subtitle ? <Text modifiers={[FOOTNOTE, SECONDARY_LABEL]}>{row.subtitle}</Text> : null}
@@ -86,9 +91,9 @@ function TargetBody({ row }: { row: SwitcherTargetRow }) {
 }
 
 function TargetRow({ row }: { row: SwitcherTargetRow }) {
-  // A pressable row is a Button; every other state renders as an inert HStack so a
-  // dimmed/active/switching row can't be tapped (the in-flight ref guarded this
-  // before; the structure enforces it now). `disabled`/`inert` read secondary.
+  // A pressable row is a Button; every other state renders as an inert HStack so an
+  // active/switching/disabled row can't be tapped (the in-flight ref guarded this
+  // before; the structure enforces it now). A `disabled` row is dimmed in TargetBody.
   if (row.state === 'pressable' && row.onPress) {
     return <Button onPress={row.onPress}>{<TargetBody row={row} />}</Button>;
   }
@@ -131,7 +136,9 @@ function FieldRow({ row }: { row: SwitcherFieldRow }) {
   );
 }
 
-function ActionRow({ row, accent }: { row: SwitcherActionRow; accent: string }) {
+type ActionIconColors = { accent: string; warning: string; error: string };
+
+function ActionRow({ row, iconColors }: { row: SwitcherActionRow; iconColors: ActionIconColors }) {
   const modifiers = row.disabled ? [disabledModifier(true)] : [];
   // A bare destructive/standalone action is an idiomatic Form button (centred,
   // role-tinted); an action carrying a trailing icon (the Sentry rows) uses an
@@ -146,12 +153,16 @@ function ActionRow({ row, accent }: { row: SwitcherActionRow; accent: string }) 
       />
     );
   }
+  // Semantic tint for the Sentry glyphs, matching the original RN icon colours:
+  // warning amber, flame red, everything else the brand accent.
+  const iconColor =
+    row.icon === 'warning' ? iconColors.warning : row.icon === 'flame' ? iconColors.error : iconColors.accent;
   return (
     <Button role={row.destructive ? 'destructive' : undefined} onPress={row.onPress} modifiers={modifiers}>
       <HStack spacing={spacing[3]}>
         <Text modifiers={[PRIMARY_LABEL]}>{row.label}</Text>
         <Spacer />
-        <Image systemName={ACTION_SF_SYMBOL[row.icon]} modifiers={[tint(accent)]} />
+        <Image systemName={ACTION_SF_SYMBOL[row.icon]} modifiers={[tint(iconColor)]} />
       </HStack>
     </Button>
   );
@@ -160,6 +171,7 @@ function ActionRow({ row, accent }: { row: SwitcherActionRow; accent: string }) 
 export function SwitcherForm({ model }: SwitcherFormProps) {
   const { brandColors, colorScheme } = useTheme();
   const accent = brandAccentColor(brandColors);
+  const iconColors: ActionIconColors = { accent, warning: brandColors.warning, error: brandColors.error };
 
   return (
     <Host style={styles.host} useViewportSizeMeasurement colorScheme={colorScheme}>
@@ -193,7 +205,7 @@ export function SwitcherForm({ model }: SwitcherFormProps) {
                 case 'field':
                   return <FieldRow key={row.key} row={row} />;
                 case 'action':
-                  return <ActionRow key={row.key} row={row} accent={accent} />;
+                  return <ActionRow key={row.key} row={row} iconColors={iconColors} />;
                 default:
                   return assertNeverSwitcherRow(row);
               }
