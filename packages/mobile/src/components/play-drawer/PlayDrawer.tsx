@@ -35,6 +35,7 @@ import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
+import { copyClimbName } from './copy-climb-name';
 import { SwipeableHeader } from './SwipeableHeader';
 import { PlayDrawerPreviewBanner } from './PlayDrawerPreviewBanner';
 import { PlayDrawerOnWallBanner } from './PlayDrawerOnWallBanner';
@@ -169,6 +170,9 @@ export function PlayDrawer({
   openTarget,
 }: PlayDrawerProps) {
   const { t } = useTranslation('session');
+  // The copy/share affordance strings live in the `climbs` namespace alongside
+  // the climb-actions sheet's "Link copied" toast.
+  const { t: tClimbs } = useTranslation('climbs');
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // The route is mounted only while the player is open, so the player is "open"
@@ -422,6 +426,23 @@ export function PlayDrawer({
       showToast(t('playView.shareError'), 'error');
     });
   }, [shareClimb, showToast, t]);
+
+  // Long-press the climb name to copy it — handy for pasting into a chat when
+  // sharing beta. Delegates to the unit-tested copyClimbName helper; haptic for
+  // tactile confirmation, info toast matching the "Link copied" affordance.
+  const handleCopyName = useCallback(() => {
+    void copyClimbName(
+      displayedClimb,
+      { boardName, layoutId },
+      {
+        haptic: hapticSuccess,
+        track,
+        showToast: (message, variant) => showToast(message, variant ?? 'info'),
+        toastMessage: tClimbs('mobile.climbActions.nameCopied'),
+        errorToastMessage: tClimbs('mobile.climbActions.copyNameError'),
+      },
+    );
+  }, [displayedClimb, boardName, layoutId, showToast, tClimbs]);
 
   const openDrawer = useCallback(
     (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
@@ -723,6 +744,7 @@ export function PlayDrawer({
                         // read-only "on the wall" status rides in the header's leading slot
                         // (left of the name, opposite the grade) rather than as a banner.
                         leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
+                        onLongPressName={handleCopyName}
                       />
                     }
                     peek={

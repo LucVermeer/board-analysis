@@ -4,6 +4,7 @@ import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { hapticSelection } from '../lib/haptics';
+import { getSectionExpandedSync, setSectionExpanded, useSectionExpanded } from '../lib/section-expand-store';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
 import { timing } from '../theme/animations';
@@ -28,6 +29,11 @@ type CollapsibleSectionProps = {
   /** Fires when the section expands/collapses (and once on mount). Lets a caller
    *  gate expensive content (e.g. a query) on the section being open. */
   onExpandedChange?: (expanded: boolean) => void;
+  /** When set, the section's expand state persists under this key (across climbs
+   *  and app restarts) instead of resetting to `defaultExpanded` each mount.
+   *  `defaultExpanded` is then only the first-ever state before the user touches
+   *  the section. Omit to keep the section's state ephemeral. */
+  persistKey?: string;
   children: ReactNode;
 };
 
@@ -40,6 +46,7 @@ export function CollapsibleSection({
   headerAction,
   onHeaderLayout,
   onExpandedChange,
+  persistKey,
   children,
 }: CollapsibleSectionProps) {
   const handleHeaderLayout = useCallback(
@@ -72,6 +79,7 @@ export function CollapsibleSection({
       headerAction={headerAction}
       onHeaderLayoutEvent={onHeaderLayout ? handleHeaderLayout : undefined}
       onExpandedChange={onExpandedChange}
+      persistKey={persistKey}
     >
       {children}
     </CollapsibleSectionInternal>
@@ -86,6 +94,7 @@ function CollapsibleSectionInternal({
   headerAction,
   onHeaderLayoutEvent,
   onExpandedChange,
+  persistKey,
   children,
 }: {
   title: string;
@@ -98,10 +107,25 @@ function CollapsibleSectionInternal({
   // never get conflated in callers or refactors.
   onHeaderLayoutEvent?: (event: LayoutChangeEvent) => void;
   onExpandedChange?: (expanded: boolean) => void;
+  persistKey?: string;
   children: ReactNode;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const chevronRotation = useSharedValue(defaultExpanded ? 1 : 0);
+  // Seed from the persisted store synchronously when warm (no flash on the next
+  // climb); fall back to `defaultExpanded` for a cold store or no persistKey.
+  const initialExpanded = persistKey ? (getSectionExpandedSync(persistKey) ?? defaultExpanded) : defaultExpanded;
+  const [expanded, setExpanded] = useState(initialExpanded);
+  const chevronRotation = useSharedValue(initialExpanded ? 1 : 0);
+
+  // Subscribe to the persisted value so a cold-launch async load (or an external
+  // change to the same key) reconciles into local state.
+  const { expanded: persistedExpanded } = useSectionExpanded(persistKey);
+  useEffect(() => {
+    // Keep the Reanimated side-effect out of the setState updater: StrictMode
+    // double-invokes updaters in dev, which would fire withTiming twice.
+    if (!persistKey || persistedExpanded === undefined || persistedExpanded === expanded) return;
+    chevronRotation.value = withTiming(persistedExpanded ? 1 : 0, { duration: timing.normal });
+    setExpanded(persistedExpanded);
+  }, [persistKey, persistedExpanded, expanded, chevronRotation]);
 
   const isFirstReset = useRef(true);
   useEffect(() => {
@@ -109,6 +133,9 @@ function CollapsibleSectionInternal({
       isFirstReset.current = false;
       return;
     }
+    // A persisted section ignores resetKey — its remembered state outranks the
+    // per-mount default that resetKey would otherwise restore.
+    if (persistKey) return;
     setExpanded(defaultExpanded);
     chevronRotation.value = withTiming(defaultExpanded ? 1 : 0, { duration: timing.normal });
   }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -120,13 +147,15 @@ function CollapsibleSectionInternal({
   }, [expanded, onExpandedChange]);
 
   const toggleExpanded = useCallback(() => {
+    // Side-effects (haptic, animation, persist) stay outside setExpanded so a
+    // StrictMode double-invoke of the updater can't fire them twice. `expanded`
+    // is in deps, so this closure is never stale.
+    const next = !expanded;
     hapticSelection();
-    setExpanded((prev) => {
-      const next = !prev;
-      chevronRotation.value = withTiming(next ? 1 : 0, { duration: timing.normal });
-      return next;
-    });
-  }, [chevronRotation]);
+    chevronRotation.value = withTiming(next ? 1 : 0, { duration: timing.normal });
+    if (persistKey) setSectionExpanded(persistKey, next);
+    setExpanded(next);
+  }, [expanded, chevronRotation, persistKey]);
 
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${chevronRotation.value * 180}deg` }],

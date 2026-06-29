@@ -1,5 +1,5 @@
 import { memo, useMemo, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
@@ -25,6 +25,9 @@ type PlayDrawerHeaderProps = {
   /** Left-aligned element on the name's row (e.g. the on-wall status). The header
    *  balances both flanks so the name stays centered. */
   leading?: ReactNode;
+  /** Long-press handler on the name (copies it to the clipboard). When omitted the
+   *  name is a plain, non-interactive label — used for the swipe "peek" header. */
+  onLongPressName?: () => void;
 };
 
 export const PlayDrawerHeader = memo(function PlayDrawerHeader({
@@ -37,6 +40,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   benchmarkDifficulty,
   characteristics,
   leading,
+  onLongPressName,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
   const gradeColor = useMemo(
@@ -56,9 +60,18 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
       center={
         <>
           <View style={styles.nameRow}>
-            <Text variant="body" style={styles.nameText} numberOfLines={1}>
-              {name}
-            </Text>
+            <Pressable
+              onLongPress={onLongPressName}
+              disabled={!onLongPressName}
+              delayLongPress={350}
+              accessibilityRole={onLongPressName ? 'button' : undefined}
+              accessibilityHint={onLongPressName ? t('mobile.climbActions.copyNameHint') : undefined}
+              style={styles.namePressable}
+            >
+              <Text variant="body" style={styles.nameText} numberOfLines={1}>
+                {name}
+              </Text>
+            </Pressable>
             <ClimbAttributeIcons benchmarkDifficulty={benchmarkDifficulty} characteristics={characteristics} />
           </View>
           <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
@@ -85,6 +98,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 0,
+  },
+  // Shrinks with the name so a long title still truncates while the attribute
+  // glyphs stay visible; the long-press target is the name text itself.
+  namePressable: {
+    flexShrink: 1,
     minWidth: 0,
   },
   nameText: {
