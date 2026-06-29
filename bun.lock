@@ -135,6 +135,7 @@
       "name": "@boardsesh/db",
       "version": "1.0.0",
       "dependencies": {
+        "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/shared-schema": "*",
         "drizzle-orm": "^0.45.1",
@@ -145,6 +146,7 @@
         "@types/node": "^25",
         "dotenv": "^17.3.1",
         "drizzle-kit": "^0.31.10",
+        "sharp": "^0.34.5",
         "tsx": "^4.21.0",
         "typescript": "~6.0.3",
       },
@@ -198,7 +200,6 @@
     },
     "packages/mobile": {
       "name": "@boardsesh/mobile",
-      "version": "2.0.0",
       "dependencies": {
         "@boardsesh/analytics": "*",
         "@boardsesh/ble-protocol": "*",

@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { populateMoonBoardRequiredSetIds } from './moonboard-set-ids';
 
 /**
  * A minimal database interface that supports raw SQL execution.
@@ -23,7 +24,9 @@ type ExecutableDb = {
  * `compatible_size_ids` — derived by comparing the climb's edge bounding box
  * against all `board_product_sizes` for that board type.
  *
- * MoonBoard climbs are skipped (they have no set or size data).
+ * MoonBoard takes a separate path: it has no `board_placements`/size data, so we
+ * derive `required_set_ids` from the cell -> set map (see
+ * populateMoonBoardRequiredSetIds) and skip the edge/size steps.
  *
  * @param db A drizzle database or transaction instance
  * @param boardType The board type (e.g. 'kilter', 'tension')
@@ -34,7 +37,12 @@ export async function populateDenormalizedColumns(
   boardType: string,
   climbUuids: string[],
 ): Promise<void> {
-  if (climbUuids.length === 0 || boardType === 'moonboard') return;
+  if (climbUuids.length === 0) return;
+
+  if (boardType === 'moonboard') {
+    await populateMoonBoardRequiredSetIds(db, climbUuids);
+    return;
+  }
 
   // Drizzle's `sql` template expands a JS array into comma-separated parameters
   // wrapped in parentheses, producing a ROW literal like `($1, $2, $3)` which
