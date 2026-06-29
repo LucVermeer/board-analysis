@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { LogbookEntry } from '@boardsesh/board-react';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
+import { BOULDER_GRADES } from '@boardsesh/board-constants/boulder-grade-mapping';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { normalizeAscentStatus, type AscentStatusValue } from '../../lib/ascent-status-utils';
@@ -27,6 +28,12 @@ function formatClimbedAt(iso: string): string {
   }).format(date);
 }
 
+// Canonical difficulty_id → "6a/V3" name, which always carries both scales so
+// the grade color resolves regardless of the user's display-format preference.
+const GRADE_NAME_BY_DIFFICULTY_ID = new Map<number, string>(
+  BOULDER_GRADES.map((grade) => [grade.difficulty_id, grade.difficulty_name]),
+);
+
 const STATUS_ICON: Record<AscentStatusValue, { name: 'flash' | 'tick' | 'close'; color: string }> = {
   flash: { name: 'flash', color: iosSystemColors.systemYellow },
   send: { name: 'tick', color: iosSystemColors.systemGreen },
@@ -47,12 +54,14 @@ export const LogbookEntryRow = memo(function LogbookEntryRow({ entry, showMirror
     () => formatGradeByDifficultyId(entry.difficulty),
     [formatGradeByDifficultyId, entry.difficulty],
   );
-  // Only resolve a color when there's a chip to paint — skips the lookup on the
-  // common no-grade rows (most attempts).
-  const gradeColor = useMemo(
-    () => (gradeLabel ? (getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR),
-    [gradeLabel],
-  );
+  // Color keys off the raw difficulty id (via its canonical name), not the
+  // display-formatted label — so a "V6 / 7a" combined-format label still paints
+  // the right color. Falls back for no-grade rows / unknown ids.
+  const gradeColor = useMemo(() => {
+    if (entry.difficulty == null) return DEFAULT_GRADE_COLOR;
+    const difficultyName = GRADE_NAME_BY_DIFFICULTY_ID.get(entry.difficulty);
+    return (difficultyName ? getGradeColor(difficultyName) : undefined) ?? DEFAULT_GRADE_COLOR;
+  }, [entry.difficulty]);
 
   const stars = useMemo(() => {
     if (!isSuccess || entry.quality == null || entry.quality <= 0) return null;

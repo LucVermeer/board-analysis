@@ -437,8 +437,9 @@ export function PlayDrawer({
       {
         haptic: hapticSuccess,
         track,
-        showToast: (message) => showToast(message, 'info'),
+        showToast: (message, variant) => showToast(message, variant ?? 'info'),
         toastMessage: tClimbs('mobile.climbActions.nameCopied'),
+        errorToastMessage: tClimbs('mobile.climbActions.copyNameError'),
       },
     );
   }, [displayedClimb, boardName, layoutId, showToast, tClimbs]);

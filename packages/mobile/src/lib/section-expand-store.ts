@@ -80,6 +80,15 @@ export function setSectionExpanded(key: string, expanded: boolean): void {
   });
 }
 
+/** Test-only: clear the in-memory singleton so each test starts from a cold
+ *  store (mirrors the `resetDimensionLocksForTests` convention). */
+export function resetSectionExpandStoreForTests(): void {
+  current = {};
+  hasLoaded = false;
+  snapshot = { map: current, loaded: hasLoaded };
+  loadPromise = null;
+}
+
 /** Synchronous read of the cached map — `undefined` when this key has no stored
  *  preference yet (or storage hasn't loaded). Lets a section pick its initial
  *  state without a flash when the store is already warm from a prior climb. */

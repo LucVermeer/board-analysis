@@ -716,6 +716,7 @@
       "copyLink": "Copy link",
       "linkCopied": "Link copied",
       "nameCopied": "Name copied",
+      "copyNameError": "Couldn't copy name",
       "copyNameHint": "Press and hold to copy the name",
       "tick": "Log a tick",
       "addBetaVideo": "Add beta video",

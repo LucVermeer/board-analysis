@@ -12,6 +12,7 @@ function makeDeps() {
     track: vi.fn(),
     showToast: vi.fn(),
     toastMessage: 'Name copied',
+    errorToastMessage: "Couldn't copy name",
   };
 }
 
@@ -54,7 +55,7 @@ describe('copyClimbName', () => {
     expect(result).toBe(false);
     expect(deps.haptic).not.toHaveBeenCalled();
     expect(deps.track).not.toHaveBeenCalled();
-    expect(deps.showToast).not.toHaveBeenCalled();
+    expect(deps.showToast).toHaveBeenCalledWith("Couldn't copy name", 'error');
   });
 
   it('no-ops when there is no climb', async () => {

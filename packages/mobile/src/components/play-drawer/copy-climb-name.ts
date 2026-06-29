@@ -9,10 +9,12 @@ export type CopyClimbNameDeps = {
   /** Analytics sink (forwards a ClimbShared event with method=copy_name). Matches
    *  the `track` signature from @boardsesh/analytics. */
   track: (event: string, properties?: AnalyticsEventProperties) => void;
-  /** Shows the "Name copied" confirmation. */
-  showToast: (message: string) => void;
-  /** Already-localized toast string. */
+  /** Shows a toast (info on success, error on a failed write). */
+  showToast: (message: string, variant?: 'info' | 'error') => void;
+  /** Already-localized success string. */
   toastMessage: string;
+  /** Already-localized failure string, shown when the clipboard write rejects. */
+  errorToastMessage: string;
 };
 
 /**
@@ -35,7 +37,9 @@ export async function copyClimbName(
   try {
     await Clipboard.setStringAsync(name);
   } catch {
-    // Nothing reached the clipboard — don't claim success.
+    // Nothing reached the clipboard — surface a failure rather than a silent
+    // no-op, so the long-press doesn't just feel broken.
+    deps.showToast(deps.errorToastMessage, 'error');
     return false;
   }
   deps.haptic();
