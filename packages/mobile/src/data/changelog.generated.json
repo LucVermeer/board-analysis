@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T06:00:06.098Z",
+  "generatedAt": "2026-06-29T07:42:01.731Z",
   "entries": [
+    {
+      "prNumber": 3286,
+      "category": "fixed",
+      "title": "MoonBoard sends now show the board preview in your crew's session feed, just like Kilter and Tension.",
+      "mergedAt": "2026-06-29T07:40:59Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3286"
+    },
     {
       "prNumber": 3279,
       "category": "new",

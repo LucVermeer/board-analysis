@@ -19,6 +19,10 @@ A new version shipped to the App Store and Play Store.
   Long-press a climb's name to copy it
 - Find What's New in the user menu now — tap your avatar to see the latest updates, with a badge when there's something fresh. ([#3276](https://github.com/boardsesh/boardsesh/pull/3276))
 
+### Fixed
+
+- MoonBoard sends now show the board preview in your crew's session feed, just like Kilter and Tension. ([#3286](https://github.com/boardsesh/boardsesh/pull/3286))
+
 ## 2026-06-28
 
 ### App update
