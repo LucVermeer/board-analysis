@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- On Android, the tag showing whose climb is on the wall is now a clean "On the wall" status band that fits the app instead of an iOS-style pill. ([#3293](https://github.com/boardsesh/boardsesh/pull/3293))
 - Filter the gym map by how many boards a gym has, the board, the layout, and the exact size ([#3317](https://github.com/boardsesh/boardsesh/pull/3317))
   Hunt down a specific wall — like a 16x10 Kilter — instead of scrolling every gym nearby
 - Cleaner single-choice filters in the climb-filter sheet — the status and accuracy pickers now use the native iOS/Android selection controls. ([#3280](https://github.com/boardsesh/boardsesh/pull/3280))

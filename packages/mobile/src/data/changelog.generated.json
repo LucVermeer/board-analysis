@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T23:17:47.055Z",
+  "generatedAt": "2026-06-29T23:23:40.827Z",
   "entries": [
+    {
+      "prNumber": 3293,
+      "category": "new",
+      "title": "On Android, the tag showing whose climb is on the wall is now a clean \"On the wall\" status band that fits the app instead of an iOS-style pill.",
+      "mergedAt": "2026-06-29T23:17:37Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3293"
+    },
     {
       "prNumber": 3317,
       "category": "new",
