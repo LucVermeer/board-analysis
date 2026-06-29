@@ -223,9 +223,13 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
 }
 
 /**
- * Verify user is gym owner or admin, return the gym row.
+ * Load a gym and report whether the user is its owner or an admin member. Shared
+ * building block for the two gym gates below.
  */
-async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
+async function loadGymWithOwnerOrAdmin(
+  gymUuid: string,
+  userId: string,
+): Promise<{ gym: typeof dbSchema.gyms.$inferSelect; isOwnerOrGymAdmin: boolean }> {
   const [gym] = await db
     .select()
     .from(dbSchema.gyms)
@@ -237,7 +241,7 @@ async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<
   }
 
   if (gym.ownerId === userId) {
-    return gym;
+    return { gym, isOwnerOrGymAdmin: true };
   }
 
   // Check if user is a gym admin member
@@ -253,7 +257,32 @@ async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<
     )
     .limit(1);
 
-  if (member) {
+  return { gym, isOwnerOrGymAdmin: !!member };
+}
+
+/**
+ * Gate for gym MANAGEMENT (add/remove members, link boards): owner or gym admin
+ * member only. Community moderators are intentionally excluded here — otherwise
+ * a board-type-scoped role could self-promote to a persistent gym admin (a
+ * gym_members row that outlives the community role) or evict other admins.
+ */
+async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
+  const { gym, isOwnerOrGymAdmin } = await loadGymWithOwnerOrAdmin(gymUuid, userId);
+  if (!isOwnerOrGymAdmin) {
+    throw new Error('Not authorized: must be gym owner or admin');
+  }
+  return gym;
+}
+
+/**
+ * Gate for EDITING a gym's own details (updateGym): owner, gym admin member, or
+ * a community admin/leader whose role is global or scoped to one of the gym's
+ * board types. Mirrors the `canEdit` computation in enrichGym so the edit UI and
+ * the mutation agree. Editing details only — never membership (see above).
+ */
+async function requireGymEditAccess(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
+  const { gym, isOwnerOrGymAdmin } = await loadGymWithOwnerOrAdmin(gymUuid, userId);
+  if (isOwnerOrGymAdmin) {
     return gym;
   }
 
@@ -276,7 +305,7 @@ async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<
     return gym;
   }
 
-  throw new Error('Not authorized: must be gym owner or admin');
+  throw new Error('Not authorized to edit this gym');
 }
 
 // ============================================
@@ -613,7 +642,7 @@ export const socialGymMutations = {
     const validatedInput = validateInput(UpdateGymInputSchema, input, 'input');
     const userId = ctx.userId!;
 
-    const gym = await requireGymOwnerOrAdmin(validatedInput.gymUuid, userId);
+    const gym = await requireGymEditAccess(validatedInput.gymUuid, userId);
 
     const updateValues: Record<string, unknown> = {
       updatedAt: new Date(),

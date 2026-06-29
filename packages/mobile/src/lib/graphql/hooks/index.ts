@@ -382,11 +382,14 @@ export function useCreateBoard() {
 }
 
 /**
- * Edit a board the user owns (name, visibility, angle, location, serial — and
- * layout/size/sets only when the board has zero ticks; the server enforces the
- * latter). Invalidate-only: `myBoards` carries enriched fields (counts, sizeName)
- * that can't be rebuilt client-side. Re-syncing the active board's denormalised
- * AsyncStorage copy is the edit screen's job — see `useSetActiveBoard`.
+ * Edit a board the caller is authorised to edit (owner, or a community
+ * admin/leader for the board type — the server enforces access via `canEdit`).
+ * Config (layout/size/sets) can change too; existing ticks are preserved
+ * server-side. Invalidate-only: `myBoards` carries enriched fields (counts,
+ * sizeName) that can't be rebuilt client-side; also refresh the wall-finder
+ * lists/pins so a moderator's edit from gym discovery shows without a reload.
+ * Re-syncing the active board's denormalised AsyncStorage copy is the edit
+ * screen's job — see `useSetActiveBoard`.
  */
 export function useUpdateBoard() {
   const queryClient = useQueryClient();
@@ -398,6 +401,8 @@ export function useUpdateBoard() {
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
       void queryClient.invalidateQueries({ queryKey: ['board', updated.uuid] });
+      void queryClient.invalidateQueries({ queryKey: ['nearbyBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['searchBoards'] });
     },
   });
 }

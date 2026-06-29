@@ -349,13 +349,13 @@ describe('updateGym authorization for community moderators', () => {
         { input: { gymUuid: kilterGymUuid, name: 'should fail' } },
         authCtx(MOON_LEADER),
       ),
-    ).rejects.toThrow(/Not authorized: must be gym owner or admin/);
+    ).rejects.toThrow(/Not authorized to edit this gym/);
   });
 
   it('rejects a logged-in user with no role and no ownership', async () => {
     await expect(
       socialGymMutations.updateGym(null, { input: { gymUuid: kilterGymUuid, name: 'nope' } }, authCtx(PLAIN_USER)),
-    ).rejects.toThrow(/Not authorized: must be gym owner or admin/);
+    ).rejects.toThrow(/Not authorized to edit this gym/);
   });
 });
 
@@ -422,5 +422,86 @@ describe('enrichGym canEdit', () => {
 
   it('is false for an anonymous viewer', async () => {
     expect(await canEditGym(anonCtx())).toBe(false);
+  });
+});
+
+describe('updateGym for a gym admin member', () => {
+  it('lets a gym admin member (not owner, no community role) update the gym', async () => {
+    const result = await socialGymMutations.updateGym(
+      null,
+      { input: { gymUuid: kilterGymUuid, name: 'Gym-admin gym edit' } },
+      authCtx(GYM_ADMIN_MEMBER),
+    );
+
+    expect(result.name).toBe('Gym-admin gym edit');
+  });
+});
+
+describe('gym membership management excludes community moderators (escalation guard)', () => {
+  // editing a gym's details (updateGym) is open to community moderators, but
+  // membership management (addGymMember/removeGymMember/linkBoardToGym) must NOT
+  // be — otherwise a board-type-scoped role could self-promote to a persistent
+  // gym admin that outlives the community role, or evict real gym admins.
+  const gymMemberRole = async (userId: string): Promise<string | null> => {
+    const result = await db.execute(sql`
+      SELECT role FROM gym_members WHERE gym_id = ${kilterGymId} AND user_id = ${userId} LIMIT 1
+    `);
+    const row = Array.from(result as Iterable<{ role: string }>)[0];
+    return row ? row.role : null;
+  };
+
+  it('rejects a community admin/leader adding a gym member (no self-promotion to gym admin)', async () => {
+    await expect(
+      socialGymMutations.addGymMember(
+        null,
+        { input: { gymUuid: kilterGymUuid, userId: GLOBAL_ADMIN, role: 'admin' } },
+        authCtx(GLOBAL_ADMIN),
+      ),
+    ).rejects.toThrow(/Not authorized: must be gym owner or admin/);
+
+    await expect(
+      socialGymMutations.addGymMember(
+        null,
+        { input: { gymUuid: kilterGymUuid, userId: KILTER_LEADER, role: 'admin' } },
+        authCtx(KILTER_LEADER),
+      ),
+    ).rejects.toThrow(/Not authorized: must be gym owner or admin/);
+
+    // Neither moderator gained a persistent gym_members row.
+    expect(await gymMemberRole(GLOBAL_ADMIN)).toBeNull();
+    expect(await gymMemberRole(KILTER_LEADER)).toBeNull();
+  });
+
+  it('rejects a community moderator removing an existing gym admin', async () => {
+    await expect(
+      socialGymMutations.removeGymMember(
+        null,
+        { input: { gymUuid: kilterGymUuid, userId: GYM_ADMIN_MEMBER } },
+        authCtx(GLOBAL_ADMIN),
+      ),
+    ).rejects.toThrow(/Not authorized: must be gym owner or admin/);
+
+    // The gym admin member is still there.
+    expect(await gymMemberRole(GYM_ADMIN_MEMBER)).toBe('admin');
+  });
+
+  it('still lets the gym owner and a gym admin member manage membership', async () => {
+    await expect(
+      socialGymMutations.addGymMember(
+        null,
+        { input: { gymUuid: kilterGymUuid, userId: PLAIN_USER, role: 'member' } },
+        authCtx(SYS_OWNER),
+      ),
+    ).resolves.toBe(true);
+    expect(await gymMemberRole(PLAIN_USER)).toBe('member');
+
+    await expect(
+      socialGymMutations.removeGymMember(
+        null,
+        { input: { gymUuid: kilterGymUuid, userId: PLAIN_USER } },
+        authCtx(GYM_ADMIN_MEMBER),
+      ),
+    ).resolves.toBe(true);
+    expect(await gymMemberRole(PLAIN_USER)).toBeNull();
   });
 });

@@ -69,6 +69,7 @@ const BOARD_FIELDS = `
   gymName
   distanceMeters
   serialNumber
+  canEdit
 `;
 
 const CLIMB_SEARCH_FIELDS = `
