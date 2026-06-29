@@ -4,7 +4,13 @@ import { fireEvent, render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 
-const spies = vi.hoisted(() => ({ openWallPreview: vi.fn(), announce: vi.fn(), reduceMotion: false }));
+const spies = vi.hoisted(() => ({
+  openWallPreview: vi.fn(),
+  announce: vi.fn(),
+  reduceMotion: false,
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
+  colorScheme: 'dark' as 'dark' | 'light',
+}));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -65,8 +71,18 @@ vi.mock('../../board-presence/BoardDriverAvatar', () => ({
 }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: spies.variant,
+    colorScheme: spies.colorScheme,
     systemColors: { label: '#111', secondaryBackground: '#222' },
     brandColors: { warning: '#FBBF24' },
+    m3: {
+      tertiary: '#FF8A3D',
+      onTertiary: '#3A1D00',
+      onSurface: '#F5F2FB',
+      onSurfaceVariant: '#A9A2B6',
+      outlineVariant: '#4A4458',
+    },
+    m3SurfaceContainers: { high: '#2A2142', highest: '#322748' },
   }),
 }));
 vi.mock('../../../hooks/use-grade-format', () => ({
@@ -78,7 +94,37 @@ vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
-vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4, 2: 8, 3: 12 } }));
+vi.mock('../../PressableSurface', () => ({
+  PressableSurface: ({
+    children,
+    onPress,
+    accessibilityRole,
+    accessibilityLabel,
+    accessibilityHint,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityRole?: string;
+    accessibilityLabel?: string;
+    accessibilityHint?: string;
+  }) =>
+    createElement(
+      'button',
+      {
+        'data-pressable': 'true',
+        'data-pressable-surface': 'true',
+        'data-role': accessibilityRole,
+        'data-label': accessibilityLabel,
+        'data-hint': accessibilityHint,
+        onClick: onPress,
+      },
+      children,
+    ),
+}));
+vi.mock('../../../theme/tokens', () => ({
+  spacing: { 1: 4, 2: 8, 3: 12, 4: 16 },
+  borderRadius: { none: 0, sm: 4, md: 8, lg: 12, xl: 16, full: 9999 },
+}));
 vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string) => color }));
 vi.mock('../../../theme/typography', () => ({ CHROME_LABEL_MAX_FONT_SCALE: 1.2 }));
 
@@ -106,6 +152,8 @@ describe('WallStatusCapsule', () => {
     spies.openWallPreview.mockClear();
     spies.announce.mockClear();
     spies.reduceMotion = false;
+    spies.variant = 'liquidGlass';
+    spies.colorScheme = 'dark';
   });
 
   it('renders without the entering animation when Reduce Motion is on', () => {
@@ -186,5 +234,66 @@ describe('WallStatusCapsule', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('renders the Liquid Glass Pressable pill (not the Material band) on iOS', () => {
+    const { container, queryByText } = render(<WallStatusCapsule climb={makeClimb()} />);
+    expect(container.querySelector('[data-pressable]')).not.toBeNull();
+    expect(container.querySelector('[data-pressable-surface]')).toBeNull();
+    // The glass pill carries the "lit" cue as the amber tint — no visible overline.
+    expect(queryByText('mobile.boardPresence.stripOverline')).toBeNull();
+  });
+
+  describe('Material variant (Android)', () => {
+    beforeEach(() => {
+      spies.variant = 'material';
+    });
+
+    it('renders a Material status band via PressableSurface (native ripple), not the glass Pressable', () => {
+      const { container, getByText } = render(<WallStatusCapsule climb={makeClimb()} />);
+      expect(container.querySelector('[data-pressable-surface]')).not.toBeNull();
+      expect(getByText('Wax On')).not.toBeNull();
+      expect(getByText('V5 6C')).not.toBeNull();
+    });
+
+    it('names the sender in the "On the wall" overline (no lightbulb)', () => {
+      const { container, getByText } = render(<WallStatusCapsule climb={makeClimb()} />);
+      expect(container.querySelector('[data-driver-avatar]')).not.toBeNull();
+      // The overline carries "lit + who" in words; the bottom queue bar owns the bulb.
+      expect(getByText('mobile.boardPresence.stripOverlineWithSender:Casey')).not.toBeNull();
+      expect(container.querySelector('[data-icon="lightbulb.fill"]')).toBeNull();
+      // The person glyph belongs to the anonymous fallback, not a known sender.
+      expect(container.querySelector('[data-icon="profile.fill"]')).toBeNull();
+    });
+
+    it('falls back to the bare overline + a neutral person glyph for an anonymous sender', () => {
+      const climb = makeClimb({ sentByDisplayName: null, sentByAvatarUrl: null, sentByUserId: null });
+      const { container, getByText } = render(<WallStatusCapsule climb={climb} />);
+      // No sender to name — the overline drops the "· {sender}" suffix gracefully.
+      expect(getByText('mobile.boardPresence.stripOverline')).not.toBeNull();
+      expect(container.querySelector('[data-driver-avatar]')).toBeNull();
+      expect(container.querySelector('[data-icon="profile.fill"]')).not.toBeNull();
+      expect(container.querySelector('[data-icon="lightbulb.fill"]')).toBeNull();
+    });
+
+    it('opens the read-only wall preview on tap', () => {
+      const { container } = render(<WallStatusCapsule climb={makeClimb()} />);
+      fireEvent.click(container.querySelector('[data-pressable-surface]') as Element);
+      expect(spies.openWallPreview).toHaveBeenCalledWith({ uuid: 'wall-1', _converted: true });
+    });
+
+    it('keeps the grade legible in the light scheme (still renders the grade text)', () => {
+      spies.colorScheme = 'light';
+      const { getByText } = render(<WallStatusCapsule climb={makeClimb()} />);
+      expect(getByText('V5 6C')).not.toBeNull();
+    });
+
+    it('exposes the same button role + sender-naming label as the glass skin', () => {
+      const { container } = render(<WallStatusCapsule climb={makeClimb()} />);
+      const pressable = container.querySelector('[data-pressable-surface]');
+      expect(pressable?.getAttribute('data-role')).toBe('button');
+      expect(pressable?.getAttribute('data-label')).toContain('Wax On');
+      expect(pressable?.getAttribute('data-label')).toContain('Casey');
+    });
   });
 });

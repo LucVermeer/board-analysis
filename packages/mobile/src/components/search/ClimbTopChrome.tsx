@@ -378,11 +378,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   materialWallStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
+    // Full-bleed "On the wall" status band — it owns its own padding, accent rail
+    // and bottom divider, so the wrapper adds no inset.
+    width: '100%',
   },
   materialSearchStack: {
     paddingHorizontal: spacing[4],
