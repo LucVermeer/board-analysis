@@ -47,7 +47,12 @@ export const LogbookEntryRow = memo(function LogbookEntryRow({ entry, showMirror
     () => formatGradeByDifficultyId(entry.difficulty),
     [formatGradeByDifficultyId, entry.difficulty],
   );
-  const gradeColor = useMemo(() => getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR, [gradeLabel]);
+  // Only resolve a color when there's a chip to paint — skips the lookup on the
+  // common no-grade rows (most attempts).
+  const gradeColor = useMemo(
+    () => (gradeLabel ? (getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR),
+    [gradeLabel],
+  );
 
   const stars = useMemo(() => {
     if (!isSuccess || entry.quality == null || entry.quality <= 0) return null;

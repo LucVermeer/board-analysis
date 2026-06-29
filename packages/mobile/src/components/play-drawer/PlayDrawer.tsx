@@ -428,13 +428,15 @@ export function PlayDrawer({
   }, [shareClimb, showToast, t]);
 
   // Long-press the climb name to copy it — handy for pasting into a chat when
-  // sharing beta. The success toast carries its own confirmation haptic.
+  // sharing beta. Fire a haptic for tactile confirmation of the long-press, then
+  // an info toast (matching the "Link copied" affordance in ClimbActionsSheet).
   const handleCopyName = useCallback(() => {
     const climbName = displayedClimb?.name;
     if (!climbName) return;
     void Clipboard.setStringAsync(climbName);
+    hapticSuccess();
     track(SHARED_EVENTS.ClimbShared, { method: 'copy_name', climbUuid: displayedClimb.uuid, boardName, layoutId });
-    showToast(tClimbs('mobile.climbActions.nameCopied'), 'success');
+    showToast(tClimbs('mobile.climbActions.nameCopied'), 'info');
   }, [displayedClimb, boardName, layoutId, showToast, tClimbs]);
 
   const openDrawer = useCallback(
