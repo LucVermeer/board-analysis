@@ -135,18 +135,18 @@ export const AuthTextInput = forwardRef<AuthTextInputHandle, AuthTextInputProps>
   // Memoized so the native Host isn't handed a fresh object every render.
   const keyboardActions = useMemo(() => {
     if (!onSubmitEditing) return undefined;
-    const submit = () => onSubmitEditing();
+    // The native handlers pass the field value; onSubmitEditing ignores it.
     switch (keyboardOptions.imeAction) {
       case 'next':
-        return { onNext: submit };
+        return { onNext: onSubmitEditing };
       case 'done':
-        return { onDone: submit };
+        return { onDone: onSubmitEditing };
       case 'go':
-        return { onGo: submit };
+        return { onGo: onSubmitEditing };
       case 'search':
-        return { onSearch: submit };
+        return { onSearch: onSubmitEditing };
       case 'send':
-        return { onSend: submit };
+        return { onSend: onSubmitEditing };
       default:
         return undefined;
     }
