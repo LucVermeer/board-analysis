@@ -119,11 +119,7 @@
         "title": "Connected apps",
         "subtitle": "Board accounts, Apple Health",
         "subtitleWithStrava": "Board accounts, Apple Health, Strava"
-      },
-      "aboutSection": "About",
-      "changelogTitle": "What's New",
-      "changelogSubtitle": "Recent updates and fixes",
-      "newPill": "New"
+      }
     },
     "about": {
       "title": "About",
@@ -378,6 +374,8 @@
     "myPlaylists": "My playlists",
     "recentSessions": "Recent sessions",
     "about": "About",
+    "whatsNew": "What's New",
+    "newBadge": "New",
     "rateBoardsesh": "Rate Boardsesh",
     "reportBug": "Report a bug",
     "joinDiscord": "Join Discord",

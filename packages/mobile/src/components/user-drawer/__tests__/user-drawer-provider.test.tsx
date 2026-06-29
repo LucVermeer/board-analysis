@@ -66,13 +66,24 @@ vi.mock('react-i18next', () => ({
         'userDrawer.joinDiscord': 'Join Discord',
         'userDrawer.logout': 'Log out',
         'userDrawer.myPlaylists': 'My playlists',
+        'userDrawer.newBadge': 'New',
         'userDrawer.rateBoardsesh': 'Rate Boardsesh',
         'userDrawer.reportBug': 'Report a bug',
+        'userDrawer.whatsNew': "What's New",
       })[key] ?? key,
   }),
 }));
 
 vi.mock('../../../lib/error-reporting', () => ({ reportError: vi.fn() }));
+// Mock the changelog data + seen-state so importing the screen never reaches the
+// real secure-store adapter. hasUnseenChangelog is a vi.fn so a test can flip it
+// to exercise the visible "New" pill path (default: nothing unseen → no pill).
+const changelogSeen = vi.hoisted(() => ({
+  getLastSeenChangelogDate: vi.fn(),
+  hasUnseenChangelog: vi.fn(() => false),
+}));
+vi.mock('../../../lib/changelog', () => ({ latestEntryDate: '2026-01-01T00:00:00.000Z' }));
+vi.mock('../../../lib/changelog-seen', () => changelogSeen);
 vi.mock('../../../lib/graphql/hooks', () => ({
   useProfile: () => ({ data: { id: 'user-1', displayName: 'Alex', email: 'alex@example.com', avatarUrl: null } }),
 }));
@@ -106,8 +117,18 @@ vi.mock('../../Icon', () => ({
   Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }),
 }));
 vi.mock('../../ListRow', () => ({
-  ListRow: ({ leading, onPress, title }: { leading?: ReactNode; onPress?: () => void; title: string }) =>
-    createElement('button', { 'data-row-title': title, onClick: onPress, type: 'button' }, leading, title),
+  ListRow: ({
+    leading,
+    onPress,
+    title,
+    trailing,
+  }: {
+    leading?: ReactNode;
+    onPress?: () => void;
+    title: string;
+    trailing?: ReactNode;
+  }) =>
+    createElement('button', { 'data-row-title': title, onClick: onPress, type: 'button' }, leading, title, trailing),
 }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -152,6 +173,8 @@ beforeEach(() => {
   feedbackPresent.mockClear();
   reanimated.closeCallbacks.length = 0;
   segmentsMock.current = [];
+  changelogSeen.getLastSeenChangelogDate.mockResolvedValue('2026-01-01T00:00:00.000Z');
+  changelogSeen.hasUnseenChangelog.mockReturnValue(false);
   // The route defers its post-close action one frame past unmount (so the route
   // VC dismissal flushes before a sheet presents). Run rAF synchronously so the
   // deferral resolves within the unmounting rerender the tests drive.
@@ -218,6 +241,7 @@ describe('user-drawer route defers each action until the route unmounts', () => 
   it.each([
     ['Settings', '/(tabs)/profile/more'],
     ['My playlists', '/(tabs)/discover/all'],
+    ["What's New", '/changelog'],
     ['About', '/about'],
     ['My boards', '/boards/manage'],
   ])('%s closes the drawer, then pushes %s', (rowTitle, route) => {
@@ -232,6 +256,15 @@ describe('user-drawer route defers each action until the route unmounts', () => 
 
     rerender(<Harness showScreen={false} />);
     expect(routerMock.push).toHaveBeenCalledWith(route);
+  });
+
+  it('shows the "New" pill on the What\'s New row when there is an unseen changelog entry', async () => {
+    changelogSeen.hasUnseenChangelog.mockReturnValue(true);
+    render(<Harness showScreen />);
+
+    // The pill (userDrawer.newBadge) renders only once the mount read of
+    // getLastSeenChangelogDate resolves and flips changelogUnseen to true.
+    expect(await screen.findByText('New')).toBeTruthy();
   });
 
   it('Change board closes the drawer, then pushes the /boards modal route with the returnTo', () => {

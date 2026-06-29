@@ -1,5 +1,4 @@
-import { useCallback, useState } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
@@ -25,8 +24,6 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
-import { latestEntryDate } from '../../../src/lib/changelog';
-import { getLastSeenChangelogDate, hasUnseenChangelog } from '../../../src/lib/changelog-seen';
 
 // Translations live in the shared catalog at packages/shared/i18n/locales/<locale>/.
 // We deep-link to the active language's folder so a community member lands on the
@@ -69,24 +66,6 @@ export default function MoreScreen() {
   // (The OTA channel switcher moved to an everyone-facing "Try a preview" entry
   // on the changelog screen, so it's no longer listed here.)
   const showDevSection = (__DEV__ || Boolean(profile?.isTester)) && (showDevServerSwitcher || showFeatureFlags);
-
-  // Whether the bundled changelog has an entry the user hasn't opened yet — drives
-  // the "New" pill on the What's New row. Re-read every time this screen regains
-  // focus: opening the changelog clears the flag, but a native-stack push leaves
-  // More mounted underneath, so a mount-only read would never see the cleared
-  // state when the user pops back.
-  const [changelogUnseen, setChangelogUnseen] = useState(false);
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      void getLastSeenChangelogDate().then((lastSeen) => {
-        if (active) setChangelogUnseen(hasUnseenChangelog(latestEntryDate, lastSeen));
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
 
   // 'System' follows the device language; the rest are the supported locales,
   // labelled in their own script (English / Español / Français) from
@@ -352,23 +331,6 @@ export default function MoreScreen() {
         subtitle: t('mobile.onboarding.replaySubtitle'),
         icon: 'replay',
         onPress: navAction(handleReplayWalkthrough),
-      },
-    ],
-  });
-
-  // About / What's New — the "New" pill shows while there's an unseen entry.
-  sections.push({
-    key: 'about',
-    title: t('mobile.more.aboutSection'),
-    rows: [
-      {
-        kind: 'nav',
-        key: 'changelog',
-        label: t('mobile.more.changelogTitle'),
-        subtitle: t('mobile.more.changelogSubtitle'),
-        icon: 'changelog',
-        badge: changelogUnseen ? t('mobile.more.newPill') : undefined,
-        onPress: navAction(() => router.push('/changelog')),
       },
     ],
   });

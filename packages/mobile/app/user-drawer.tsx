@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
@@ -14,6 +14,8 @@ import { Text } from '../src/components/Text';
 import { Icon } from '../src/components/Icon';
 import { ListRow } from '../src/components/ListRow';
 import { useUserDrawer } from '../src/components/user-drawer/UserDrawerProvider';
+import { latestEntryDate } from '../src/lib/changelog';
+import { getLastSeenChangelogDate, hasUnseenChangelog } from '../src/lib/changelog-seen';
 
 const DRAWER_MAX_WIDTH = 320;
 const DRAWER_SCREEN_FRACTION = 0.86;
@@ -44,12 +46,28 @@ export default function UserDrawerScreen() {
   const windowDimensions = useWindowDimensions();
   const drawerWidth = Math.min(DRAWER_MAX_WIDTH, windowDimensions.width * DRAWER_SCREEN_FRACTION);
 
+  // Whether the bundled changelog has an entry the user hasn't opened yet — drives
+  // the "New" pill on the What's New row. The drawer is a fresh route push every
+  // time it opens, so a one-shot mount read is enough; opening the changelog clears
+  // the marker and the next drawer open re-reads it.
+  const [changelogUnseen, setChangelogUnseen] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void getLastSeenChangelogDate().then((lastSeen) => {
+      if (active) setChangelogUnseen(hasUnseenChangelog(latestEntryDate, lastSeen));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const {
     navigateToBoards,
     navigateToManageBoards,
     navigateToSettings,
     navigateToEditProfile,
     navigateToPlaylists,
+    navigateToChangelog,
     navigateToAbout,
     openDiscord,
     signOutAction,
@@ -217,6 +235,23 @@ export default function UserDrawerScreen() {
               title={t('userDrawer.myPlaylists')}
               onPress={() => close(() => navigateToPlaylists())}
             />
+            {/* No subtitle: drawer rows are single-line menu entries (Settings,
+                About, …); the "Recent updates and fixes" line lives on the
+                changelog screen itself. The "New" pill carries the unseen cue. */}
+            <DrawerRow
+              icon="changelog"
+              title={t('userDrawer.whatsNew')}
+              onPress={() => close(() => navigateToChangelog())}
+              trailing={
+                changelogUnseen ? (
+                  <View style={[styles.newPill, { backgroundColor: brandColors.primaryFill }]}>
+                    <Text variant="caption2" color={brandColors.onPrimary} style={styles.newPillLabel}>
+                      {t('userDrawer.newBadge')}
+                    </Text>
+                  </View>
+                ) : undefined
+              }
+            />
             <DrawerRow
               icon="info"
               title={t('userDrawer.about')}
@@ -285,15 +320,17 @@ type DrawerRowProps = {
   onPress: () => void;
   showSeparator?: boolean;
   tintColor?: string;
+  trailing?: ReactNode;
 };
 
-function DrawerRow({ icon, title, onPress, showSeparator = true, tintColor }: DrawerRowProps) {
+function DrawerRow({ icon, title, onPress, showSeparator = true, tintColor, trailing }: DrawerRowProps) {
   const { systemColors } = useTheme();
   const iconColor = tintColor ?? systemColors.label;
   return (
     <ListRow
       title={title}
       leading={<Icon name={icon} size={22} color={iconColor} />}
+      trailing={trailing}
       showChevron
       showSeparator={showSeparator}
       separatorInset={16}
@@ -343,5 +380,14 @@ const styles = StyleSheet.create({
   },
   drawerRow: {
     minHeight: 48,
+  },
+  newPill: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  newPillLabel: {
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
 });
