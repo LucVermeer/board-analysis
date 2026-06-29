@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T22:43:48.991Z",
+  "generatedAt": "2026-06-29T22:52:33.679Z",
   "entries": [
+    {
+      "prNumber": 3280,
+      "category": "new",
+      "title": "Cleaner single-choice filters in the climb-filter sheet — the status and accuracy pickers now use the native iOS/Android selection controls.",
+      "mergedAt": "2026-06-29T22:51:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3280"
+    },
     {
       "prNumber": 3310,
       "category": "new",
