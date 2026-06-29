@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, RefreshControl, Pressable, StyleSheet } from 'react-native';
+import { View, RefreshControl, Pressable, StyleSheet, Platform } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
-import { toAscentFeedInput, DEFAULT_LOGBOOK_FILTERS, DEFAULT_LOGBOOK_SORT } from '@boardsesh/logbook';
+import {
+  toAscentFeedInput,
+  DEFAULT_LOGBOOK_FILTERS,
+  DEFAULT_LOGBOOK_SORT,
+  type LogbookSortPreset,
+} from '@boardsesh/logbook';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { Text } from '../Text';
@@ -16,6 +21,7 @@ import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { LogbookFilterSheet } from './LogbookFilterSheet';
+import { LogbookSortChipRow } from './LogbookSortChipRow';
 import { useLogbookSearch, countActiveLogbookFilters } from './use-logbook-search';
 import { useUserAscentsFeed } from '../../lib/graphql/hooks';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
@@ -29,6 +35,7 @@ import { hapticSelection } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -50,9 +57,14 @@ type LogbookTabProps = {
 
 export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenTitle }: LogbookTabProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   // Temporary kill switch while the search + filter UI is unfinished.
   const logbookFiltersEnabled = useFeatureFlag('logbook-filters') === true;
+  // Latest/Hardest become top-level Liquid Glass chips (iOS 26 only) so sort is
+  // switchable without opening the sheet; the variant goes through selectByVariant
+  // per the mobile variant guard. When shown, the sheet's Sort block is suppressed.
+  const showSortChips =
+    logbookFiltersEnabled && Platform.OS === 'ios' && selectByVariant(variant, { liquidGlass: true, material: false });
   const router = useRouter();
   const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
@@ -64,7 +76,10 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
   // Logbook search/filter/sort state. The committed name lives here; the visible
   // input value is debounced before it commits to the query.
   const logbookSearch = useLogbookSearch();
-  const { filters, sort, name, setName, apply, hydrated } = logbookSearch;
+  const { filters, sort, name, setName, setPreset, apply, hydrated } = logbookSearch;
+  // Which preset the chips highlight; null (no chip lit) when a non-preset
+  // (custom) sort is in effect, rather than falsely lighting up Latest.
+  const sortPreset: LogbookSortPreset | null = sort.mode === 'preset' ? sort.preset : null;
   const activeFilterCount = useMemo(() => countActiveLogbookFilters(filters), [filters]);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -232,6 +247,10 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
             </Pressable>
           </View>
         ) : null}
+        {/* Top-level Liquid Glass sort chips (Latest/Hardest) — switch sort
+            without opening the sheet. iOS Liquid Glass only; the sheet's own Sort
+            block is hidden (showSort={false}) so it isn't shown twice. */}
+        {showSortChips ? <LogbookSortChipRow preset={sortPreset} onSelectPreset={setPreset} /> : null}
       </View>
 
       {feed.isPending ? (
@@ -305,6 +324,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
           currentSort={sort}
           onApply={apply}
           onClearSearch={clearSearch}
+          // When the top-level sort chips are shown, drop the sheet's Sort block
+          // so sort isn't worded twice.
+          showSort={!showSortChips}
         />
       ) : null}
     </View>
