@@ -235,8 +235,11 @@ export default function UserDrawerScreen() {
               title={t('userDrawer.myPlaylists')}
               onPress={() => close(() => navigateToPlaylists())}
             />
+            {/* No subtitle: drawer rows are single-line menu entries (Settings,
+                About, …); the "Recent updates and fixes" line lives on the
+                changelog screen itself. The "New" pill carries the unseen cue. */}
             <DrawerRow
-              icon="flash"
+              icon="changelog"
               title={t('userDrawer.whatsNew')}
               onPress={() => close(() => navigateToChangelog())}
               trailing={

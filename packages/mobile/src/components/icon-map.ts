@@ -56,6 +56,9 @@ export const iconMap = {
   tag: { ios: 'tag', android: 'tag-outline' },
   'check.small': { ios: 'checkmark', android: 'check' },
   flash: { ios: 'bolt.fill', android: 'flash' },
+  // What's New / changelog. Mirrors the More tab's native changelog glyph
+  // (sparkles on iOS) so the same feature reads consistently across surfaces.
+  changelog: { ios: 'sparkles', android: 'star-four-points' },
   'open.external': { ios: 'arrow.up.right.square', android: 'open-in-new' },
 
   // Climb/Board

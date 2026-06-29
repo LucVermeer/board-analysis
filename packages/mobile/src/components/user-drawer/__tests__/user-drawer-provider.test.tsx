@@ -127,7 +127,8 @@ vi.mock('../../ListRow', () => ({
     onPress?: () => void;
     title: string;
     trailing?: ReactNode;
-  }) => createElement('button', { 'data-row-title': title, onClick: onPress, type: 'button' }, leading, title, trailing),
+  }) =>
+    createElement('button', { 'data-row-title': title, onClick: onPress, type: 'button' }, leading, title, trailing),
 }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
