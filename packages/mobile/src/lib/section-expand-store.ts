@@ -59,6 +59,10 @@ export async function loadSectionExpandState(): Promise<ExpandedMap> {
 // effect).
 let loadPromise: Promise<ExpandedMap> | null = null;
 function ensureSectionExpandLoaded(): Promise<ExpandedMap> {
+  // Already established by an earlier read or a `setSectionExpanded` — skip the
+  // read entirely so the "load once" intent holds even when a write beats the
+  // first section's mount.
+  if (hasLoaded) return Promise.resolve(current);
   if (!loadPromise) loadPromise = loadSectionExpandState();
   return loadPromise;
 }

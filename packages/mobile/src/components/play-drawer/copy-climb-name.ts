@@ -21,16 +21,23 @@ export type CopyClimbNameDeps = {
  * the clipboard, which is mocked at the module boundary in tests) so the
  * behaviour is unit-testable without mounting the play drawer.
  *
- * Returns `false` (no-op) when there's no name to copy.
+ * Awaits the clipboard write so the "Name copied" confirmation never fires when
+ * nothing actually landed on the clipboard. Resolves `false` when there's no
+ * name to copy or the write fails.
  */
-export function copyClimbName(
+export async function copyClimbName(
   climb: CopyClimbNameTarget | null | undefined,
   context: { boardName: string; layoutId: number },
   deps: CopyClimbNameDeps,
-): boolean {
+): Promise<boolean> {
   const name = climb?.name;
   if (!name) return false;
-  void Clipboard.setStringAsync(name);
+  try {
+    await Clipboard.setStringAsync(name);
+  } catch {
+    // Nothing reached the clipboard — don't claim success.
+    return false;
+  }
   deps.haptic();
   deps.track(SHARED_EVENTS.ClimbShared, {
     method: 'copy_name',

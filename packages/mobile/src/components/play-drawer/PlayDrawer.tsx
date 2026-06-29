@@ -431,7 +431,7 @@ export function PlayDrawer({
   // sharing beta. Delegates to the unit-tested copyClimbName helper; haptic for
   // tactile confirmation, info toast matching the "Link copied" affordance.
   const handleCopyName = useCallback(() => {
-    copyClimbName(
+    void copyClimbName(
       displayedClimb,
       { boardName, layoutId },
       {

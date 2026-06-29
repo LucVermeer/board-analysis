@@ -20,9 +20,9 @@ describe('copyClimbName', () => {
     clipboard.setStringAsync.mockClear();
   });
 
-  it('copies the name and fires haptic, analytics, and toast', () => {
+  it('copies the name and fires haptic, analytics, and toast', async () => {
     const deps = makeDeps();
-    const result = copyClimbName(
+    const result = await copyClimbName(
       { name: 'Hueco Madness', uuid: 'climb-1' },
       { boardName: 'kilter', layoutId: 8 },
       deps,
@@ -41,9 +41,25 @@ describe('copyClimbName', () => {
     expect(deps.showToast).toHaveBeenCalledWith('Name copied');
   });
 
-  it('no-ops when there is no climb', () => {
+  it('does not claim success when the clipboard write fails', async () => {
     const deps = makeDeps();
-    const result = copyClimbName(null, { boardName: 'kilter', layoutId: 8 }, deps);
+    clipboard.setStringAsync.mockRejectedValueOnce(new Error('clipboard unavailable'));
+
+    const result = await copyClimbName(
+      { name: 'Hueco Madness', uuid: 'climb-1' },
+      { boardName: 'kilter', layoutId: 8 },
+      deps,
+    );
+
+    expect(result).toBe(false);
+    expect(deps.haptic).not.toHaveBeenCalled();
+    expect(deps.track).not.toHaveBeenCalled();
+    expect(deps.showToast).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when there is no climb', async () => {
+    const deps = makeDeps();
+    const result = await copyClimbName(null, { boardName: 'kilter', layoutId: 8 }, deps);
 
     expect(result).toBe(false);
     expect(clipboard.setStringAsync).not.toHaveBeenCalled();
@@ -52,9 +68,9 @@ describe('copyClimbName', () => {
     expect(deps.showToast).not.toHaveBeenCalled();
   });
 
-  it('no-ops on an empty name', () => {
+  it('no-ops on an empty name', async () => {
     const deps = makeDeps();
-    const result = copyClimbName({ name: '', uuid: 'climb-1' }, { boardName: 'tension', layoutId: 1 }, deps);
+    const result = await copyClimbName({ name: '', uuid: 'climb-1' }, { boardName: 'tension', layoutId: 1 }, deps);
 
     expect(result).toBe(false);
     expect(clipboard.setStringAsync).not.toHaveBeenCalled();
