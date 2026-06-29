@@ -689,6 +689,48 @@ describe('BluetoothProvider wall-confirm integration', () => {
       expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
     });
 
+    it('attaches the captured disconnect reason to the unexpected-drop analytics event', async () => {
+      // Start connected so the next transition reads as a real drop, not the
+      // initial mount.
+      bluetooth.state.isConnected = true;
+      bluetooth.state.lastDisconnectInfoRef.current = null;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      analytics.track.mockClear();
+
+      // The hook stashes a native-iOS peer-terminated drop (CBError 7 — what a
+      // takeover looks like) just before the link goes down.
+      bluetooth.state.lastDisconnectInfoRef.current = {
+        source: 'native-ios',
+        iosErrorCode: 7,
+        errorDomain: 'CBErrorDomain',
+        description: 'The specified device has disconnected from us.',
+      };
+      bluetooth.state.isConnected = false;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(analytics.track).toHaveBeenCalledWith(
+          'Bluetooth Disconnected',
+          expect.objectContaining({
+            reason: 'unexpected',
+            disconnectSource: 'native-ios',
+            disconnectIosCode: 7,
+            disconnectErrorDomain: 'CBErrorDomain',
+            disconnectReason: 'The specified device has disconnected from us.',
+          }),
+        );
+      });
+    });
+
     it('shows the Undo snackbar once after an armed control gain reports a wall change', async () => {
       presence.enabled = true;
       presence.boardId = 99;

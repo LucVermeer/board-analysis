@@ -1167,7 +1167,9 @@ export function BluetoothProvider({
       });
     }
     wasConnectedRef.current = isConnected;
-  }, [clearPendingWallReportAndUndoToastArm, releaseBoardHolder, isConnected, boardName, lastDisconnectInfoRef]);
+    // lastDisconnectInfoRef is a stable ref (read via .current), so it's
+    // intentionally not a dependency — the isConnected transition is the trigger.
+  }, [clearPendingWallReportAndUndoToastArm, releaseBoardHolder, isConnected, boardName]);
 
   const value = useMemo<BluetoothContextValue>(
     () => ({
