@@ -64,12 +64,24 @@ export const AuthTextInput = forwardRef<AuthTextInputHandle, AuthTextInputProps>
     autoComplete,
     returnKeyType,
     onSubmitEditing,
+    accessibilityLabel,
     testID,
     showLabel = 'Show password',
     hideLabel = 'Hide password',
   },
   ref,
 ) {
+  // accessibilityLabel is iOS-only: the Compose `semantics` modifier exposes
+  // `contentType` but not `contentDescription`, so Android derives the accessible
+  // name from the visible Material floating label. Warn if a caller passes a
+  // custom value that would silently be lost.
+  if (__DEV__ && accessibilityLabel && accessibilityLabel !== label) {
+    console.warn(
+      `[AuthTextInput] accessibilityLabel ("${accessibilityLabel}") is iOS-only; ` +
+        `Android derives the accessible name from the visible label ("${label}").`,
+    );
+  }
+
   const { brandColors } = useTheme();
   const textState = useNativeState(value);
   const lastEmittedRef = useRef(value);
@@ -114,12 +126,15 @@ export const AuthTextInput = forwardRef<AuthTextInputHandle, AuthTextInputProps>
     returnKeyType,
     secureTextEntry,
   });
-  // Only the action matching keyboardOptions.imeAction fires, so wiring both is safe.
+  // Wire only the handler matching the field's imeAction so a single key press
+  // can't double-fire onSubmitEditing if the Compose bridge ever delivers both.
   // Memoized so the native Host isn't handed a fresh object every render.
-  const keyboardActions = useMemo(
-    () => (onSubmitEditing ? { onNext: () => onSubmitEditing(), onDone: () => onSubmitEditing() } : undefined),
-    [onSubmitEditing],
-  );
+  const keyboardActions = useMemo(() => {
+    if (!onSubmitEditing) return undefined;
+    return keyboardOptions.imeAction === 'next'
+      ? { onNext: () => onSubmitEditing() }
+      : { onDone: () => onSubmitEditing() };
+  }, [onSubmitEditing, keyboardOptions.imeAction]);
   const contentType = toAndroidContentType(autoComplete);
   const supportingText = error ?? hint;
 
