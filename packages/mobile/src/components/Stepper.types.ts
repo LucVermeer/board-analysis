@@ -16,8 +16,15 @@ export type StepperProps = {
   max: number;
   /** Fired with the next (clamped) value when the stepper changes. */
   onChange: (nextValue: number) => void;
-  /** Accessibility label for the decrement control (used by the Android −/+ buttons). */
+  // decreaseLabel/increaseLabel are the per-button accessibility labels for the
+  // Android −/+ controls. They're intentionally REQUIRED (not optional) even though
+  // iOS ignores them — the native SwiftUI Stepper supplies its own adjustable trait
+  // and announcement, so it doesn't need them. Requiring them guards against a silent
+  // Android a11y regression: a call site can't ship an unlabelled stepper. The sole
+  // consumer (GeneratorPickerCard) always passes translated values, so requiring them
+  // costs nothing in practice.
+  /** Accessibility label for the decrement control (Android −/+ buttons; unused on iOS). */
   decreaseLabel: string;
-  /** Accessibility label for the increment control (used by the Android −/+ buttons). */
+  /** Accessibility label for the increment control (Android −/+ buttons; unused on iOS). */
   increaseLabel: string;
 };

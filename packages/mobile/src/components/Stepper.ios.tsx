@@ -21,7 +21,7 @@ import { StyleSheet } from 'react-native';
 import { useTheme } from '../providers/theme-provider';
 import { brandAccentColor } from '../theme/expo-ui-modifiers';
 import { spacing } from '../theme/tokens';
-import { clampStepperValue } from './Stepper.logic';
+import { clampStepperValue, composeStepperLabel } from './Stepper.logic';
 import type { StepperProps } from './Stepper.types';
 
 // Floor the host height in RN's layout. The native iOS Host (matchContents vertical)
@@ -43,8 +43,8 @@ export function Stepper({ label, value, min, max, onChange }: StepperProps) {
     >
       <SwiftUIStepper
         // The native Stepper has no separate value readout — fold the value into the
-        // label so the row still shows the current count.
-        label={`${label}   ${value}`}
+        // label so the row still shows the current count (see composeStepperLabel).
+        label={composeStepperLabel(label, value)}
         value={value}
         min={min}
         max={max}
