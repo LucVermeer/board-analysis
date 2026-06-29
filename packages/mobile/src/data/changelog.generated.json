@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-06-29T02:05:45.582Z",
+  "generatedAt": "2026-06-29T02:58:10.343Z",
   "entries": [
+    {
+      "prNumber": 3265,
+      "category": "new",
+      "title": "In the logbook, Latest and Hardest are now quick-tap chips at the top — switch how your ticks are sorted without opening the filter sheet. (iOS; the rest of the filters stay one tap away in the sheet.)",
+      "mergedAt": "2026-06-29T02:57:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3265"
+    },
+    {
+      "prNumber": 3274,
+      "category": "new",
+      "title": "See the grade you gave each climb right in its logbook",
+      "mergedAt": "2026-06-29T02:57:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3274",
+      "body": "Logbook, community, and similar-climbs sections now stay open if you leave them open\nLong-press a climb's name to copy it"
+    },
     {
       "prNumber": 3276,
       "category": "new",

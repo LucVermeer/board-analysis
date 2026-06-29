@@ -12,6 +12,10 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- In the logbook, Latest and Hardest are now quick-tap chips at the top — switch how your ticks are sorted without opening the filter sheet. (iOS; the rest of the filters stay one tap away in the sheet.) ([#3265](https://github.com/boardsesh/boardsesh/pull/3265))
+- See the grade you gave each climb right in its logbook ([#3274](https://github.com/boardsesh/boardsesh/pull/3274))
+  Logbook, community, and similar-climbs sections now stay open if you leave them open
+  Long-press a climb's name to copy it
 - Find What's New in the user menu now — tap your avatar to see the latest updates, with a badge when there's something fresh. ([#3276](https://github.com/boardsesh/boardsesh/pull/3276))
 
 ## 2026-06-28
