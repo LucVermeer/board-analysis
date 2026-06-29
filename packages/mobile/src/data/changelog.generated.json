@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T01:07:45.101Z",
+  "generatedAt": "2026-06-29T02:05:45.582Z",
   "entries": [
+    {
+      "prNumber": 3276,
+      "category": "new",
+      "title": "Find What's New in the user menu now — tap your avatar to see the latest updates, with a badge when there's something fresh.",
+      "mergedAt": "2026-06-29T02:04:36Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3276"
+    },
     {
       "prNumber": 3261,
       "category": "new",
