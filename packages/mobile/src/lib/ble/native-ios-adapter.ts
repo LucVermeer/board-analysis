@@ -7,9 +7,17 @@ import {
 import {
   boardBleNative,
   type NativeBleConfigureBoardOptions,
+  type NativeBleDisconnectEvent,
   type NativeBleScanEvent,
 } from '../../../modules/live-activity/src/index';
-import type { BluetoothAdapter, BleConnection, BoardScanFamily, DevicePickerFn, DiscoveredDevice } from './types';
+import type {
+  BluetoothAdapter,
+  BleConnection,
+  BleDisconnectInfo,
+  BoardScanFamily,
+  DevicePickerFn,
+  DiscoveredDevice,
+} from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 import { isLikelyBoardDevice } from './board-device-filter';
 import { upsertDiscoveredDevice } from './scan-device-cache';
@@ -33,6 +41,21 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
   return hex;
 }
 
+// Normalise the native `disconnected` event into the cross-adapter shape. The
+// Swift layer attaches the CoreBluetooth NSError (code/domain/description) for a
+// real link drop, or a `context` marker for a drop it caused itself during
+// write-stall recovery. Older binaries emit deviceId only, leaving every field
+// undefined — read as "platform didn't report a reason".
+function nativeDisconnectInfo(payload: NativeBleDisconnectEvent): BleDisconnectInfo {
+  return {
+    source: 'native-ios',
+    iosErrorCode: payload.errorCode,
+    errorDomain: payload.errorDomain,
+    description: payload.errorDescription,
+    context: payload.context,
+  };
+}
+
 // Adapter that drives the BoardBleManager Swift singleton via the
 // `@boardsesh/live-activity-module` Expo Module. iOS-only — guarded at the
 // factory level. Keeps the encoding-in-JS pattern the existing
@@ -42,7 +65,7 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
 // has the board metadata it needs to encode without going through JS.
 export class NativeIosBleAdapter implements BluetoothAdapter {
   private connectedDeviceId: string | null = null;
-  private disconnectCallback: (() => void) | null = null;
+  private disconnectCallback: ((info?: BleDisconnectInfo) => void) | null = null;
   private disconnectSubscription: { remove: () => void } | null = null;
 
   constructor(
@@ -228,7 +251,7 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       this.connectedDeviceId = null;
       this.disconnectSubscription?.remove();
       this.disconnectSubscription = null;
-      this.disconnectCallback?.();
+      this.disconnectCallback?.(nativeDisconnectInfo(payload));
     });
   }
 
@@ -283,7 +306,7 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     }
   }
 
-  onDisconnect(callback: () => void): () => void {
+  onDisconnect(callback: (info?: BleDisconnectInfo) => void): () => void {
     this.disconnectCallback = callback;
     return () => {
       this.disconnectCallback = null;

@@ -30,7 +30,7 @@ import {
   subscribeNativeBleConnected,
 } from './adapter-factory';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
-import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
+import type { BleDisconnectInfo, BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 import { reportHandledError } from '../error-reporting';
@@ -401,9 +401,20 @@ export function useBoardBluetooth({
     void adapter?.disconnect().catch(() => {});
   }, [onConnectionChange]);
 
-  const handleDisconnection = useCallback(() => {
-    clearConnectionAfterDrop();
-  }, [clearConnectionAfterDrop]);
+  // Stash the most recent drop's reason so the provider's isConnected-transition
+  // effect — which actually fires the `Bluetooth Disconnected` analytics event —
+  // can attach it. Set synchronously here, before clearConnectionAfterDrop flips
+  // isConnected, so it's current when that effect reads it. Reset on a fresh
+  // connect so a later clean transition can't inherit a stale reason.
+  const lastDisconnectInfoRef = useRef<BleDisconnectInfo | null>(null);
+
+  const handleDisconnection = useCallback(
+    (info?: BleDisconnectInfo) => {
+      lastDisconnectInfoRef.current = info ?? null;
+      clearConnectionAfterDrop();
+    },
+    [clearConnectionAfterDrop],
+  );
 
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal, sendContext?: BleSendContext) => {
@@ -576,7 +587,7 @@ export function useBoardBluetooth({
             // failed on a dead link. On a shared board this is usually another
             // device having grabbed it. Recorded so the two-climber case is visible.
             track(SHARED_EVENTS.BluetoothConnectionStolen, { boardName, layoutId, sizeId });
-            handleDisconnection();
+            handleDisconnection({ source: 'write-failure' });
           }
           return false;
         } finally {
@@ -741,6 +752,7 @@ export function useBoardBluetooth({
 
         connectedConfigKeyRef.current =
           layoutId !== undefined && sizeId !== undefined ? boardConfigKey(boardName, layoutId, sizeId) : null;
+        lastDisconnectInfoRef.current = null;
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
@@ -979,6 +991,7 @@ export function useBoardBluetooth({
         setLastConnectedBoard({ serial, configKey: currentConfigKey });
       }
       connectedConfigKeyRef.current = currentConfigKey;
+      lastDisconnectInfoRef.current = null;
       setIsConnected(true);
       onConnectionChange?.(true);
       onConnectSuccess?.(serial);
@@ -1087,5 +1100,6 @@ export function useBoardBluetooth({
     pickerState,
     reconnectSerialForCurrentBoard,
     connectInitialSendRef,
+    lastDisconnectInfoRef,
   };
 }

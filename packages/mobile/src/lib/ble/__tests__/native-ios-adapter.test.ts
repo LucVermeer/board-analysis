@@ -17,7 +17,13 @@ type ScanListener = (payload: {
   rssi: number;
   serviceUuids?: string[];
 }) => void;
-type DisconnectListener = (payload: { deviceId: string }) => void;
+type DisconnectListener = (payload: {
+  deviceId: string;
+  errorCode?: number;
+  errorDomain?: string;
+  errorDescription?: string;
+  context?: string;
+}) => void;
 const harness = vi.hoisted(() => {
   const scanListeners: ScanListener[] = [];
   const disconnectListeners: DisconnectListener[] = [];
@@ -366,6 +372,45 @@ describe('NativeIosBleAdapter connect flow', () => {
     adapter.onDisconnect(onDisconnect);
     disconnectListeners[0]?.({ deviceId: 'adopted-dev' });
     expect(onDisconnect).toHaveBeenCalled();
+  });
+
+  it('forwards the native disconnect reason fields as BleDisconnectInfo', () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    adapter.adoptConnection('adopted-dev');
+    const onDisconnect = vi.fn();
+    adapter.onDisconnect(onDisconnect);
+    // Shaped like an iOS peer-terminated drop (CBError code 7) — what a takeover
+    // of the last-connection-wins board looks like once the Swift layer attaches
+    // the NSError.
+    disconnectListeners[0]?.({
+      deviceId: 'adopted-dev',
+      errorCode: 7,
+      errorDomain: 'CBErrorDomain',
+      errorDescription: 'The specified device has disconnected from us.',
+    });
+
+    expect(onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'native-ios',
+        iosErrorCode: 7,
+        errorDomain: 'CBErrorDomain',
+        description: 'The specified device has disconnected from us.',
+      }),
+    );
+  });
+
+  it('forwards a write-stall context marker when the native layer caused the drop', () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    adapter.adoptConnection('adopted-dev');
+    const onDisconnect = vi.fn();
+    adapter.onDisconnect(onDisconnect);
+    disconnectListeners[0]?.({ deviceId: 'adopted-dev', context: 'write_stall_budget_exhausted' });
+
+    expect(onDisconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'native-ios', context: 'write_stall_budget_exhausted' }),
+    );
   });
 });
 

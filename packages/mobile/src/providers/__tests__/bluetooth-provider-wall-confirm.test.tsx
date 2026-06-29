@@ -7,6 +7,7 @@ import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
+import type { BleDisconnectInfo } from '../../lib/ble/types';
 import { setHoldColorOverridesPreference } from '../../lib/hold-color-overrides';
 
 type TestResolvedBoard = { boardId: number };
@@ -56,6 +57,7 @@ const bluetooth = vi.hoisted(() => {
       pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
       connectInitialSendRef: { current: null as { frames: string; mirrored: boolean; colorSignature: string } | null },
+      lastDisconnectInfoRef: { current: null as BleDisconnectInfo | null },
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
       mock.options = options;
@@ -685,6 +687,108 @@ describe('BluetoothProvider wall-confirm integration', () => {
       expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
 
       expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+    });
+
+    it('attaches the captured disconnect reason to the unexpected-drop analytics event', async () => {
+      // Start connected so the next transition reads as a real drop, not the
+      // initial mount.
+      bluetooth.state.isConnected = true;
+      bluetooth.state.lastDisconnectInfoRef.current = null;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      analytics.track.mockClear();
+
+      // The hook stashes a native-iOS peer-terminated drop (CBError 7 — what a
+      // takeover looks like) just before the link goes down.
+      bluetooth.state.lastDisconnectInfoRef.current = {
+        source: 'native-ios',
+        iosErrorCode: 7,
+        errorDomain: 'CBErrorDomain',
+        description: 'The specified device has disconnected from us.',
+      };
+      bluetooth.state.isConnected = false;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(analytics.track).toHaveBeenCalledWith(
+          'Bluetooth Disconnected',
+          expect.objectContaining({
+            reason: 'unexpected',
+            disconnectSource: 'native-ios',
+            disconnectIosCode: 7,
+            disconnectErrorDomain: 'CBErrorDomain',
+            disconnectReason: 'The specified device has disconnected from us.',
+          }),
+        );
+      });
+    });
+
+    it('tags a write-failure drop with disconnectSource write-failure', async () => {
+      bluetooth.state.isConnected = true;
+      bluetooth.state.lastDisconnectInfoRef.current = null;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      analytics.track.mockClear();
+
+      // The write-failure path (use-board-bluetooth) stashes this shape before
+      // flipping the link down — no platform codes, just the source.
+      bluetooth.state.lastDisconnectInfoRef.current = { source: 'write-failure' };
+      bluetooth.state.isConnected = false;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(analytics.track).toHaveBeenCalledWith(
+          'Bluetooth Disconnected',
+          expect.objectContaining({ reason: 'unexpected', disconnectSource: 'write-failure' }),
+        );
+      });
+    });
+
+    it('omits reason fields when no disconnect info was captured', async () => {
+      bluetooth.state.isConnected = true;
+      bluetooth.state.lastDisconnectInfoRef.current = null;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      analytics.track.mockClear();
+
+      // Ref stays null (a drop the adapters didn't classify) — the event still
+      // fires, just without any disconnect* reason fields.
+      bluetooth.state.isConnected = false;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(analytics.track).toHaveBeenCalledWith(
+          'Bluetooth Disconnected',
+          expect.objectContaining({ reason: 'unexpected' }),
+        );
+      });
+      const disconnectCall = analytics.track.mock.calls.find(([event]) => event === 'Bluetooth Disconnected');
+      expect(disconnectCall?.[1].disconnectSource).toBeUndefined();
+      expect(disconnectCall?.[1].disconnectIosCode).toBeUndefined();
     });
 
     it('shows the Undo snackbar once after an armed control gain reports a wall change', async () => {
