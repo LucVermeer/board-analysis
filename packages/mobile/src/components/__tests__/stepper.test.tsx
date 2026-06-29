@@ -3,8 +3,33 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
+type AccessibilityAction = (event: { nativeEvent: { actionName: string } }) => void;
+
 vi.mock('react-native', () => ({
-  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  // The outer (adjustable) View carries onAccessibilityAction — stash it on the DOM
+  // node so a test can invoke the VoiceOver/TalkBack swipe handler directly (jsdom
+  // has no native accessibility-action event).
+  View: ({
+    children,
+    accessibilityRole,
+    onAccessibilityAction,
+  }: {
+    children?: ReactNode;
+    accessibilityRole?: string;
+    onAccessibilityAction?: AccessibilityAction;
+  }) =>
+    createElement(
+      'div',
+      {
+        'data-testid': accessibilityRole === 'adjustable' ? 'stepper-adjustable' : undefined,
+        ref: onAccessibilityAction
+          ? (node: (HTMLDivElement & { onAccessibilityAction?: AccessibilityAction }) | null) => {
+              if (node) node.onAccessibilityAction = onAccessibilityAction;
+            }
+          : undefined,
+      },
+      children,
+    ),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
@@ -60,6 +85,10 @@ function makeProps(over: Partial<Parameters<typeof Stepper>[0]> = {}) {
 
 const decrement = (root: HTMLElement) => root.querySelector('[data-testid="stepper-decrement"]') as HTMLButtonElement;
 const increment = (root: HTMLElement) => root.querySelector('[data-testid="stepper-increment"]') as HTMLButtonElement;
+const adjustable = (root: HTMLElement) =>
+  root.querySelector('[data-testid="stepper-adjustable"]') as HTMLElement & {
+    onAccessibilityAction: AccessibilityAction;
+  };
 
 afterEach(() => {
   vi.useRealTimers();
@@ -120,6 +149,23 @@ describe('Stepper', () => {
     fireEvent.mouseUp(increment(container));
     vi.advanceTimersByTime(3000);
     expect(onChange).toHaveBeenCalledTimes(heldCalls);
+  });
+
+  it('steps via the accessibility increment / decrement actions', () => {
+    const onChange = vi.fn();
+    const { container } = render(<Stepper {...makeProps({ value: 5, onChange })} />);
+    adjustable(container).onAccessibilityAction({ nativeEvent: { actionName: 'increment' } });
+    expect(onChange).toHaveBeenLastCalledWith(6);
+    // optimistic ref: a following decrement steps from 6 → 5
+    adjustable(container).onAccessibilityAction({ nativeEvent: { actionName: 'decrement' } });
+    expect(onChange).toHaveBeenLastCalledWith(5);
+  });
+
+  it('ignores an unrecognized accessibility action', () => {
+    const onChange = vi.fn();
+    const { container } = render(<Stepper {...makeProps({ value: 5, onChange })} />);
+    adjustable(container).onAccessibilityAction({ nativeEvent: { actionName: 'magic-tap' } });
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('cancels a running hold when the opposite button is pressed (no orphaned timer)', () => {

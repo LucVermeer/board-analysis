@@ -99,8 +99,11 @@ export function Stepper({ label, value, min, max, onChange }: StepperProps) {
 
   const onAccessibilityAction = useCallback(
     (event: AccessibilityActionEvent) => {
-      const direction = event.nativeEvent.actionName === 'increment' ? 1 : -1;
-      if (applyStep(direction)) hapticSelection();
+      const { actionName } = event.nativeEvent;
+      // Only our two registered actions step; ignore anything else (e.g. a future
+      // action added to ADJUST_ACTIONS) rather than defaulting it to decrement.
+      if (actionName !== 'increment' && actionName !== 'decrement') return;
+      if (applyStep(actionName === 'increment' ? 1 : -1)) hapticSelection();
     },
     [applyStep],
   );
