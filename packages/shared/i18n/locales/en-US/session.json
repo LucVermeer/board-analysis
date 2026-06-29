@@ -461,8 +461,6 @@
       "preGeneratorTallClimbsDescription": "Use the taller 8x12 or 10x12 rows.",
       "preGeneratorWideClimbsLabel": "Wide climbs only",
       "preGeneratorWideClimbsDescription": "Use the 10x10 side expansion.",
-      "preGeneratorDecreaseOption": "Decrease {{label}}",
-      "preGeneratorIncreaseOption": "Increase {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
       "preGeneratorOptionChartValue": "{{value}}, {{summary}}",
       "preGeneratorChartPoint_one": "{{count}} climb at {{grade}}",

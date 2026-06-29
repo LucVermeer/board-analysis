@@ -437,17 +437,7 @@ export function GeneratorPickerCard({
     onValue: (next: number) => void,
   ): StepperRow => ({
     key: fieldKey,
-    node: (
-      <Stepper
-        label={label}
-        value={value}
-        min={min}
-        max={max}
-        onChange={onValue}
-        decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', { label })}
-        increaseLabel={t('mobile.session.preGeneratorIncreaseOption', { label })}
-      />
-    ),
+    node: <Stepper label={label} value={value} min={min} max={max} onChange={onValue} />,
   });
 
   // Primary count stepper(s) shown directly under the workout type. Volume:

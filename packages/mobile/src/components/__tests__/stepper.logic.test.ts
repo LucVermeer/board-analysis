@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clampStepperValue, composeStepperLabel } from '../Stepper.logic';
+import { clampStepperValue, nextHoldDelay, HOLD_INITIAL_DELAY_MS, HOLD_MIN_DELAY_MS } from '../Stepper.logic';
 
 describe('clampStepperValue', () => {
   it('returns the value unchanged when within range', () => {
@@ -28,15 +28,19 @@ describe('clampStepperValue', () => {
   });
 });
 
-describe('composeStepperLabel', () => {
-  it('folds the value onto the end of the label', () => {
-    expect(composeStepperLabel('Number of climbs', 5)).toBe('Number of climbs   5');
+describe('nextHoldDelay', () => {
+  it('shortens the interval on each repeat (acceleration)', () => {
+    const second = nextHoldDelay(HOLD_INITIAL_DELAY_MS);
+    expect(second).toBeLessThan(HOLD_INITIAL_DELAY_MS);
   });
 
-  it('keeps the value visually separated from the label text', () => {
-    // The value is a distinct trailing token, never glued to the label.
-    expect(composeStepperLabel('Steps', 12)).not.toBe('Steps12');
-    expect(composeStepperLabel('Steps', 12).endsWith('12')).toBe(true);
-    expect(composeStepperLabel('Steps', 12).startsWith('Steps')).toBe(true);
+  it('floors at HOLD_MIN_DELAY_MS no matter how long the hold runs', () => {
+    let delay = HOLD_INITIAL_DELAY_MS;
+    for (let i = 0; i < 50; i += 1) delay = nextHoldDelay(delay);
+    expect(delay).toBe(HOLD_MIN_DELAY_MS);
+  });
+
+  it('never returns below the floor', () => {
+    expect(nextHoldDelay(HOLD_MIN_DELAY_MS)).toBe(HOLD_MIN_DELAY_MS);
   });
 });
