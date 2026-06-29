@@ -317,6 +317,8 @@ export function getMoonBoardDetails({ layout_id, set_ids }: { layout_id: number;
 
   // Compute hold positions from the layout's grid for the WASM/canvas rendering
   // pipeline. Rows 1..rowTop are emitted (132 holds for the Mini, 198 standard).
+  // Mini 2020 has no physical holds on row 1, but emitting those slots is
+  // harmless — no climb references them, so they never light up.
   const cellWidth = geometry.width / geometry.numColumns;
   const cellHeight = geometry.height / geometry.numRows;
   const holdRadius = Math.min(cellWidth, cellHeight) * 0.525;

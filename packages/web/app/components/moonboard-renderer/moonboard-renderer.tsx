@@ -45,7 +45,7 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
       }
     }
     return holds;
-  }, [geometry, width, height]);
+  }, [geometry]);
 
   const getHoldColor = (holdId: number): string => {
     const hold = litUpHoldsMap[holdId];
