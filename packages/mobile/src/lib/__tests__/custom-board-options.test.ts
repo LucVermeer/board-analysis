@@ -21,8 +21,12 @@ describe('custom board options', () => {
       'MoonBoard 2024',
       'MoonBoard Masters 2017',
       'MoonBoard Masters 2019',
+      'Mini MoonBoard 2020',
+      'Mini MoonBoard 2025',
     ]);
-    expect(layouts.map((layout) => layout.id)).not.toContain(MOONBOARD_LAYOUTS['mini-moonboard-2020'].id);
+    // The Mini layouts now have board art, so they appear in the picker.
+    expect(layouts.map((layout) => layout.id)).toContain(MOONBOARD_LAYOUTS['mini-moonboard-2020'].id);
+    expect(layouts.map((layout) => layout.id)).toContain(MOONBOARD_LAYOUTS['mini-moonboard-2025'].id);
   });
 
   it('returns the MoonBoard standard size for known layouts', () => {
