@@ -9,6 +9,7 @@ import { Button } from '../Button';
 import { PressableSurface } from '../PressableSurface';
 import { SessionRecordingSwitchRow } from '../settings/SessionRecordingSwitchRow';
 import { SwitchRow } from '../SwitchRow';
+import { useAuth } from '../../providers/auth-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -37,10 +38,12 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
   const { t } = useTranslation('settings');
   const { systemColors, brandColors } = useTheme();
   const { showToast } = useToast();
+  const { isAuthenticated } = useAuth();
   const { mutateAsync, isPending, reset } = useSubmitMobileAppFeedback();
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [comment, setComment] = useState('');
   const [captureBleDiag, setCaptureBleDiag] = useState(false);
+  const [contactConsent, setContactConsent] = useState(false);
 
   const isBugReport = mode === 'bug';
   const trimmedComment = comment.trim();
@@ -54,6 +57,7 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
     setSelectedRating(null);
     setComment('');
     setCaptureBleDiag(false);
+    setContactConsent(false);
     reset();
   }, [mode, reset]);
 
@@ -82,11 +86,13 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
         source: isBugReport ? 'drawer-bug' : 'drawer-feedback',
         rating: isBugReport ? null : selectedRating,
         comment: trimmedComment.length > 0 ? trimmedComment : null,
+        contactConsent: isBugReport ? contactConsent : null,
       });
       sheetRef.current?.dismiss();
       showToast(isBugReport ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
       setSelectedRating(null);
       setComment('');
+      setContactConsent(false);
     } catch {
       showToast(t('feedbackDialog.errorRating'), 'error');
     }
@@ -167,6 +173,17 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
             description={t('feedbackForm.bluetoothBugDescription')}
             value={captureBleDiag}
             onValueChange={setCaptureBleDiag}
+          />
+        </View>
+      ) : null}
+
+      {isBugReport && isAuthenticated ? (
+        <View style={[styles.recordingCard, { backgroundColor: systemColors.secondaryBackground }]}>
+          <SwitchRow
+            label={t('feedbackForm.contactConsentLabel')}
+            description={t('feedbackForm.contactConsentDescription')}
+            value={contactConsent}
+            onValueChange={setContactConsent}
           />
         </View>
       ) : null}

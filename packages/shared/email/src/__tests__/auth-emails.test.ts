@@ -5,7 +5,7 @@ vi.mock('nodemailer', () => ({
   default: { createTransport: vi.fn(() => ({ sendMail })) },
 }));
 
-import { sendPasswordResetEmail } from '../email-service';
+import { sendPasswordResetEmail } from '../auth-emails';
 
 type SentMail = { to: string; from: string; subject: string; html: string; text: string };
 

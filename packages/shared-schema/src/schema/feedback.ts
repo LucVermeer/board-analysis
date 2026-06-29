@@ -60,5 +60,12 @@ export const feedbackTypeDefs = /* GraphQL */ `
     Optional debug context (current climb, party session, URL, user agent).
     """
     context: FeedbackContextInput
+
+    """
+    Whether the reporter opted in to follow-up contact about a bug report.
+    When true and the reporter is signed in, the backend emails them the
+    GitHub issue link. Only meaningful for bug-report sources.
+    """
+    contactConsent: Boolean
   }
 `;

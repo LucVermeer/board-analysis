@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '@/app/lib/db/db';
 import * as schema from '@/app/lib/db/schema';
-import { sendPasswordResetEmail } from '@/app/lib/email/email-service';
+import { sendPasswordResetEmail } from '@boardsesh/email';
 import { checkRateLimit, getClientIp } from '@/app/lib/auth/rate-limiter';
 import { getPasswordResetIdentifier, hashResetToken, consistentDelay } from '@/app/lib/auth/password-reset';
 

@@ -1,0 +1,1 @@
+ALTER TABLE "app_feedback" ADD COLUMN "contact_consent" boolean;

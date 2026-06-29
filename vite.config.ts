@@ -127,6 +127,7 @@ export default defineConfig({
       './packages/shared/i18n/vite.config.ts',
       './packages/shared/graphql/vite.config.ts',
       './packages/shared/graphql-client/vite.config.ts',
+      './packages/shared/email/vite.config.ts',
       './packages/shared-schema/vite.config.ts',
       './packages/mobile/vite.config.ts',
       './scripts/vite.config.ts',
@@ -484,6 +485,9 @@ export default defineConfig({
       'typecheck:i18n': {
         command: 'bun run --filter=@boardsesh/i18n typecheck',
       },
+      'typecheck:email': {
+        command: 'bun run --filter=@boardsesh/email typecheck',
+      },
       'typecheck:graphql': {
         command: 'bun run --filter=@boardsesh/graphql typecheck',
         dependsOn: ['codegen'],
@@ -545,6 +549,7 @@ export default defineConfig({
           'typecheck:climb-filters',
           'typecheck:kiosk',
           'typecheck:i18n',
+          'typecheck:email',
           'typecheck:graphql',
           'typecheck:graphql-client',
           'typecheck:mobile',

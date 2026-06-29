@@ -17,7 +17,7 @@ vi.mock('@/app/lib/auth/rate-limiter', () => ({
 }));
 
 const mockSendVerificationEmail = vi.fn();
-vi.mock('@/app/lib/email/email-service', () => ({
+vi.mock('@boardsesh/email', () => ({
   sendVerificationEmail: (...args: unknown[]) => mockSendVerificationEmail(...args),
 }));
 

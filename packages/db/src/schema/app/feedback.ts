@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, bigserial, index, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, bigserial, index, jsonb, boolean } from 'drizzle-orm/pg-core';
 import { users } from '../auth/users';
 
 export type FeedbackContext = {
@@ -26,6 +26,10 @@ export const appFeedback = pgTable(
     sizeId: integer('size_id'),
     setIds: jsonb('set_ids').$type<number[]>(),
     angle: integer('angle'),
+    // Whether the reporter opted in to follow-up contact. Only set for bug
+    // reports; null/false means "do not reach out". Resolve the reporter via
+    // this row's user_id when true.
+    contactConsent: boolean('contact_consent'),
     context: jsonb('context').$type<FeedbackContext>(),
     createdAt: timestamp('created_at', { mode: 'string' }).defaultNow().notNull(),
   },

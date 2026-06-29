@@ -28,6 +28,7 @@ export const SubmitAppFeedbackInputSchema = z
     setIds: z.array(z.number().int()).max(16).optional().nullable(),
     angle: z.number().int().min(0).max(180).optional().nullable(),
     context: FeedbackContextInputSchema.optional().nullable(),
+    contactConsent: z.boolean().optional().nullable(),
   })
   .refine((data) => !(RATING_SOURCES as readonly string[]).includes(data.source) || (data.rating ?? null) !== null, {
     message: 'rating is required for rating-source feedback',

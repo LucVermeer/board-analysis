@@ -6268,6 +6268,12 @@ export type SubmitAppFeedbackInput = {
    * present for rating sources when rating is below 3.
    */
   comment?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Whether the reporter opted in to follow-up contact about a bug report.
+   * When true and the reporter is signed in, the backend emails them the
+   * GitHub issue link. Only meaningful for bug-report sources.
+   */
+  contactConsent?: InputMaybe<Scalars['Boolean']['input']>;
   /** Optional debug context (current climb, party session, URL, user agent). */
   context?: InputMaybe<FeedbackContextInput>;
   layoutId?: InputMaybe<Scalars['Int']['input']>;

@@ -36,6 +36,7 @@ const nextConfig = {
     '@boardsesh/climb-filters',
     '@boardsesh/i18n',
     '@boardsesh/logbook',
+    '@boardsesh/email',
   ],
   // Empty turbopack config to silence warning about webpack config
   turbopack: {},

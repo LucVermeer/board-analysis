@@ -3,7 +3,7 @@ import { getDb } from '@/app/lib/db/db';
 import * as schema from '@/app/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { sendVerificationEmail } from '@/app/lib/email/email-service';
+import { sendVerificationEmail } from '@boardsesh/email';
 import { checkRateLimit, getClientIp } from '@/app/lib/auth/rate-limiter';
 
 // Zod schema for email validation

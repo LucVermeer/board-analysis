@@ -4,7 +4,7 @@ import * as schema from '@/app/lib/db/schema';
 import { hash } from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { sendVerificationEmail } from '@/app/lib/email/email-service';
+import { sendVerificationEmail } from '@boardsesh/email';
 import { checkRateLimit, getClientIp } from '@/app/lib/auth/rate-limiter';
 
 const emailVerificationEnabled = process.env.EMAIL_VERIFICATION_ENABLED === 'true';
