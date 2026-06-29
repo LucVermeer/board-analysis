@@ -1,0 +1,214 @@
+// SwitcherForm — iOS implementation, a real SwiftUI `Form` via @expo/ui/swift-ui.
+//
+// The whole OTA Channel / Branch switcher screen is ONE `Host` containing a single
+// SwiftUI `Form` (the grouped, inset-rounded iOS Settings look — section insets,
+// separators, and scrolling for free). Same consolidation as MoreForm /
+// FeatureFlagsForm: the entire form lives under one `Host`, not one per control.
+//
+// HOST SIZING: a `Form` is a scrolling container that fills its space, so the Host
+// uses `style={{ flex: 1 }}` + `useViewportSizeMeasurement` — NOT `matchContents`
+// (which would size to content and clip the scroll). `colorScheme` forces the
+// native appearance to follow the in-app Light/Dark toggle.
+//
+// The screen precomputes every string + handler + row state; this tree renders the
+// model. Each row kind maps to the idiomatic SwiftUI control.
+
+import { useEffect, useRef } from 'react';
+import { Host } from '@expo/ui';
+import {
+  Form,
+  Section,
+  Text,
+  Button,
+  Image,
+  HStack,
+  VStack,
+  Spacer,
+  ProgressView,
+  TextField,
+  useNativeState,
+} from '@expo/ui/swift-ui';
+import {
+  tint,
+  disabled as disabledModifier,
+  accessibilityLabel as accessibilityLabelModifier,
+  autocorrectionDisabled,
+  textInputAutocapitalization,
+  submitLabel as submitLabelModifier,
+  onSubmit as onSubmitModifier,
+  font,
+  foregroundStyle,
+} from '@expo/ui/swift-ui/modifiers';
+import { StyleSheet } from 'react-native';
+import { useTheme } from '../providers/theme-provider';
+import { brandAccentColor } from '../theme/expo-ui-modifiers';
+import { spacing } from '../theme/tokens';
+import { shouldPushValueToNative } from './AuthTextInput.logic';
+import { assertNeverSwitcherRow } from './SwitcherForm.logic';
+import type { SwitcherActionRow, SwitcherFieldRow, SwitcherFormProps, SwitcherTargetRow } from './SwitcherForm.types';
+
+const PRIMARY_LABEL = foregroundStyle({ type: 'hierarchical', style: 'primary' });
+const SECONDARY_LABEL = foregroundStyle({ type: 'hierarchical', style: 'secondary' });
+const TERTIARY_LABEL = foregroundStyle({ type: 'hierarchical', style: 'tertiary' });
+const FOOTNOTE = font({ textStyle: 'footnote' });
+
+// Semantic action icon → SF Symbol. Cast at the call site (the SFSymbol union
+// isn't resolvable from the shared types module), matching MoreForm.ios.
+const ACTION_SF_SYMBOL = {
+  switch: 'arrow.left.arrow.right',
+  reset: 'arrow.counterclockwise',
+  send: 'paperplane',
+  warning: 'exclamationmark.triangle',
+  flame: 'flame',
+} as const;
+
+// A single switch-target row's trailing accessory, by precomputed state.
+function TargetTrailing({ row }: { row: SwitcherTargetRow }) {
+  if (row.state === 'switching') return <ProgressView />;
+  if (row.state === 'active') return <Image systemName="checkmark" modifiers={[SECONDARY_LABEL]} />;
+  if (row.state === 'pressable' && row.showChevronWhenPressable) {
+    return <Image systemName="chevron.right" modifiers={[FOOTNOTE, TERTIARY_LABEL]} />;
+  }
+  return null;
+}
+
+function TargetBody({ row }: { row: SwitcherTargetRow }) {
+  return (
+    <HStack spacing={spacing[3]}>
+      <VStack alignment="leading" spacing={spacing[1]}>
+        <Text modifiers={[PRIMARY_LABEL]}>{row.title}</Text>
+        {row.subtitle ? <Text modifiers={[FOOTNOTE, SECONDARY_LABEL]}>{row.subtitle}</Text> : null}
+      </VStack>
+      <Spacer />
+      <TargetTrailing row={row} />
+    </HStack>
+  );
+}
+
+function TargetRow({ row }: { row: SwitcherTargetRow }) {
+  // A pressable row is a Button; every other state renders as an inert HStack so a
+  // dimmed/active/switching row can't be tapped (the in-flight ref guarded this
+  // before; the structure enforces it now). `disabled`/`inert` read secondary.
+  if (row.state === 'pressable' && row.onPress) {
+    return <Button onPress={row.onPress}>{<TargetBody row={row} />}</Button>;
+  }
+  return <TargetBody row={row} />;
+}
+
+// The manual channel / custom branch field. Bridges the controlled `value` into a
+// native observable (reusing AuthTextInput's pure push-guard) and applies the same
+// identifier-field modifiers: no autocaps, no autocorrect, a "go" submit key.
+function FieldRow({ row }: { row: SwitcherFieldRow }) {
+  const { brandColors } = useTheme();
+  const textState = useNativeState(row.value);
+  const lastEmittedRef = useRef(row.value);
+
+  useEffect(() => {
+    if (shouldPushValueToNative(row.value, lastEmittedRef.current)) {
+      lastEmittedRef.current = row.value;
+      textState.set(row.value);
+    }
+  }, [row.value, textState]);
+
+  return (
+    <TextField
+      text={textState}
+      placeholder={row.placeholder}
+      onTextChange={(text) => {
+        lastEmittedRef.current = text;
+        row.onChangeText(text);
+      }}
+      modifiers={[
+        tint(brandAccentColor(brandColors)),
+        accessibilityLabelModifier(row.label),
+        textInputAutocapitalization('never'),
+        autocorrectionDisabled(true),
+        submitLabelModifier('go'),
+        onSubmitModifier(() => row.onSubmit()),
+        ...(row.editable ? [] : [disabledModifier(true)]),
+      ]}
+    />
+  );
+}
+
+function ActionRow({ row, accent }: { row: SwitcherActionRow; accent: string }) {
+  const modifiers = row.disabled ? [disabledModifier(true)] : [];
+  // A bare destructive/standalone action is an idiomatic Form button (centred,
+  // role-tinted); an action carrying a trailing icon (the Sentry rows) uses an
+  // HStack so the glyph sits at the trailing edge like the RN ListRow did.
+  if (!row.icon || row.icon === 'switch' || row.icon === 'reset') {
+    return (
+      <Button
+        role={row.destructive ? 'destructive' : undefined}
+        label={row.label}
+        onPress={row.onPress}
+        modifiers={modifiers}
+      />
+    );
+  }
+  return (
+    <Button role={row.destructive ? 'destructive' : undefined} onPress={row.onPress} modifiers={modifiers}>
+      <HStack spacing={spacing[3]}>
+        <Text modifiers={[PRIMARY_LABEL]}>{row.label}</Text>
+        <Spacer />
+        <Image systemName={ACTION_SF_SYMBOL[row.icon]} modifiers={[tint(accent)]} />
+      </HStack>
+    </Button>
+  );
+}
+
+export function SwitcherForm({ model }: SwitcherFormProps) {
+  const { brandColors, colorScheme } = useTheme();
+  const accent = brandAccentColor(brandColors);
+
+  return (
+    <Host style={styles.host} useViewportSizeMeasurement colorScheme={colorScheme}>
+      <Form>
+        {model.sections.map((section) => (
+          <Section
+            key={section.key}
+            title={section.title}
+            footer={section.footer ? <Text>{section.footer}</Text> : undefined}
+          >
+            {section.intro ? <Text modifiers={[FOOTNOTE, SECONDARY_LABEL]}>{section.intro}</Text> : null}
+            {section.rows.map((row) => {
+              switch (row.kind) {
+                case 'info':
+                  return (
+                    <HStack key={row.key} spacing={spacing[3]}>
+                      <Text modifiers={[PRIMARY_LABEL]}>{row.label}</Text>
+                      <Spacer />
+                      <Text modifiers={[SECONDARY_LABEL]}>{row.value}</Text>
+                    </HStack>
+                  );
+                case 'status':
+                  return (
+                    <HStack key={row.key} spacing={spacing[2]}>
+                      {row.busy ? <ProgressView /> : null}
+                      <Text modifiers={[FOOTNOTE, SECONDARY_LABEL]}>{row.label}</Text>
+                    </HStack>
+                  );
+                case 'target':
+                  return <TargetRow key={row.key} row={row} />;
+                case 'field':
+                  return <FieldRow key={row.key} row={row} />;
+                case 'action':
+                  return <ActionRow key={row.key} row={row} accent={accent} />;
+                default:
+                  return assertNeverSwitcherRow(row);
+              }
+            })}
+          </Section>
+        ))}
+      </Form>
+    </Host>
+  );
+}
+
+const styles = StyleSheet.create({
+  // A Form fills the screen; flex + useViewportSizeMeasurement give SwiftUI the
+  // viewport as its proposed size so the Form scrolls within it.
+  host: {
+    flex: 1,
+  },
+});
