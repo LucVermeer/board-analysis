@@ -64,6 +64,7 @@ export const AuthTextInput = forwardRef<AuthTextInputHandle, AuthTextInputProps>
     autoComplete,
     returnKeyType,
     onSubmitEditing,
+    accessibilityLabel,
     testID,
     showLabel = 'Show password',
     hideLabel = 'Hide password',
@@ -76,6 +77,19 @@ export const AuthTextInput = forwardRef<AuthTextInputHandle, AuthTextInputProps>
   const fieldRef = useRef<{ focus: () => Promise<void> }>(null);
   const [revealed, setRevealed] = useState(false);
   const masked = computeMasked(secureTextEntry, revealed);
+
+  // accessibilityLabel is iOS-only: the Compose `semantics` modifier exposes
+  // `contentType` but not `contentDescription`, so Android derives the accessible
+  // name from the visible Material floating label. Warn (once per label change,
+  // not per render) if a caller passes a custom value that would silently be lost.
+  useEffect(() => {
+    if (__DEV__ && accessibilityLabel && accessibilityLabel !== label) {
+      console.warn(
+        `[AuthTextInput] accessibilityLabel ("${accessibilityLabel}") is iOS-only; ` +
+          `Android derives the accessible name from the visible label ("${label}").`,
+      );
+    }
+  }, [accessibilityLabel, label]);
 
   // Push external value changes (e.g. EditProfile seeding the email once the
   // profile resolves) into the native observable. Our own edits already echo
@@ -114,12 +128,29 @@ export const AuthTextInput = forwardRef<AuthTextInputHandle, AuthTextInputProps>
     returnKeyType,
     secureTextEntry,
   });
-  // Only the action matching keyboardOptions.imeAction fires, so wiring both is safe.
+  // Compose fires exactly the one keyboard action matching the field's imeAction,
+  // so wire only that handler — never several aliased to onSubmitEditing, which
+  // would double-fire if the bridge ever delivered more than one. imeActions with
+  // no submit semantics ('default'/'none'/'previous') wire nothing.
   // Memoized so the native Host isn't handed a fresh object every render.
-  const keyboardActions = useMemo(
-    () => (onSubmitEditing ? { onNext: () => onSubmitEditing(), onDone: () => onSubmitEditing() } : undefined),
-    [onSubmitEditing],
-  );
+  const keyboardActions = useMemo(() => {
+    if (!onSubmitEditing) return undefined;
+    // The native handlers pass the field value; onSubmitEditing ignores it.
+    switch (keyboardOptions.imeAction) {
+      case 'next':
+        return { onNext: onSubmitEditing };
+      case 'done':
+        return { onDone: onSubmitEditing };
+      case 'go':
+        return { onGo: onSubmitEditing };
+      case 'search':
+        return { onSearch: onSubmitEditing };
+      case 'send':
+        return { onSend: onSubmitEditing };
+      default:
+        return undefined;
+    }
+  }, [onSubmitEditing, keyboardOptions.imeAction]);
   const contentType = toAndroidContentType(autoComplete);
   const supportingText = error ?? hint;
 

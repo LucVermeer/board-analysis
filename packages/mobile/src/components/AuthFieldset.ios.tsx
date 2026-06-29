@@ -95,6 +95,11 @@ function AuthField({ spec, index, isLast, registerFocus, onAdvance }: AuthFieldP
   // Parity with the old per-field RN error (accessibilityLiveRegion="polite"):
   // the error renders as SwiftUI Text, which can't be a VoiceOver live region, so
   // announce a newly-shown/changed error explicitly.
+  //
+  // Seeding the ref with spec.error means an error already present on first render
+  // is intentionally NOT announced on mount. That's correct for auth flows, where
+  // errors only surface after the user interacts (submit/validation) — never
+  // pre-seeded — so this avoids announcing stale validation as the screen appears.
   const previousErrorRef = useRef(spec.error);
   useEffect(() => {
     if (spec.error && spec.error !== previousErrorRef.current) {
