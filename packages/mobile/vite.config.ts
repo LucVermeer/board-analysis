@@ -133,6 +133,17 @@ export default defineConfig({
         find: /^(.*\/)?SwitchRow$/,
         replacement: fileURLToPath(new URL('./test/switch-row-stub.tsx', import.meta.url)),
       },
+      // Stepper is platform-split (Stepper.ios.tsx renders a native @expo/ui SwiftUI
+      // Stepper; Stepper.android.tsx keeps the custom −/+ pill — Compose has no
+      // Stepper). Vitest doesn't resolve `.ios`/`.android` extensions and can't mount
+      // the iOS native tree, so redirect the extensionless import to a faithful
+      // passthrough stub that keeps the public API + the −/+ button accessibility
+      // labels. Suites that assert the real Android internals import the explicit
+      // `Stepper.android` impl (the `$`-anchored regex doesn't match `.android`).
+      {
+        find: /^(.*\/)?Stepper$/,
+        replacement: fileURLToPath(new URL('./test/stepper-stub.tsx', import.meta.url)),
+      },
       // SegmentedControl is platform-split (SegmentedControl.ios.tsx renders a
       // native @expo/ui SwiftUI segmented Picker; SegmentedControl.android.tsx a
       // native Compose SingleChoiceSegmentedButtonRow). Vitest doesn't resolve

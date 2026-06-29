@@ -1,3 +1,8 @@
+// Stepper — Android implementation. Jetpack Compose has no native Stepper, so this
+// keeps the custom −/+ pill (the same control both platforms shipped before the
+// split). iOS uses a real SwiftUI Stepper (Stepper.ios.tsx); Android stays RN — the
+// same asymmetric pattern FilterChipRow uses (rich iOS tree, RN-ish Android side).
+
 import { StyleSheet, View } from 'react-native';
 import { Text } from './Text';
 import { Icon } from './Icon';
@@ -5,25 +10,13 @@ import { PressableSurface } from './PressableSurface';
 import { useTheme } from '../providers/theme-provider';
 import { useVariantValue } from '../theme/variants';
 import { spacing, borderRadius } from '../theme/tokens';
-
-type StepperProps = {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (nextValue: number) => void;
-  decreaseLabel: string;
-  increaseLabel: string;
-};
-
-function clampStepperValue(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+import { clampStepperValue } from './Stepper.logic';
+import type { StepperProps } from './Stepper.types';
 
 /**
  * A grouped-list stepper row: label on the left, value + −/+ controls trailing.
- * Designed to sit inside an iOS grouped inset card (one per row, hairline
- * divided by the parent). Clamps to [min, max] before reporting changes.
+ * Designed to sit inside a grouped inset card (one per row, hairline divided by the
+ * parent). Clamps to [min, max] before reporting changes.
  */
 export function Stepper({ label, value, min, max, onChange, decreaseLabel, increaseLabel }: StepperProps) {
   const { systemColors, brandColors, opacity: themeOpacity, m3 } = useTheme();

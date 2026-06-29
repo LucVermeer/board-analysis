@@ -47,7 +47,12 @@ vi.mock('../PressableSurface', () => ({
     ),
 }));
 
-import { Stepper } from '../Stepper';
+// The behavioural ±/disabled/clamp assertions exercise the real Android impl
+// (Stepper.android.tsx — the custom −/+ pill). Import it by explicit path: the
+// extensionless `../Stepper` is aliased to the passthrough stub in vite.config.ts,
+// and the iOS impl is a native SwiftUI tree that can't mount under Vitest. The pure
+// clamp math is also covered directly in stepper.logic.test.ts.
+import { Stepper } from '../Stepper.android';
 
 function makeProps(over: Partial<Parameters<typeof Stepper>[0]> = {}) {
   return {
