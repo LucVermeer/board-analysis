@@ -461,8 +461,6 @@
       "preGeneratorTallClimbsDescription": "Usa las filas altas 8x12 o 10x12.",
       "preGeneratorWideClimbsLabel": "Solo bloques anchos",
       "preGeneratorWideClimbsDescription": "Usa la extensión lateral 10x10.",
-      "preGeneratorDecreaseOption": "Reducir {{label}}",
-      "preGeneratorIncreaseOption": "Aumentar {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
       "preGeneratorOptionChartValue": "{{value}}, {{summary}}",
       "preGeneratorChartPoint_one": "{{count}} bloque en {{grade}}",
