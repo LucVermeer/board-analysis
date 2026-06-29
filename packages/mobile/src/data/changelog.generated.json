@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-29T07:42:01.731Z",
+  "generatedAt": "2026-06-29T09:47:18.605Z",
   "entries": [
+    {
+      "prNumber": 3287,
+      "category": "new",
+      "title": "Mini MoonBoard is here — both the 2020 and 2025 Mini boards now show up with the right holds, so you can find problems, build a queue and log your sends on a Mini just like the full-size wall.",
+      "mergedAt": "2026-06-29T09:46:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3287"
+    },
     {
       "prNumber": 3286,
       "category": "fixed",
