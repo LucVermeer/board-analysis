@@ -346,7 +346,8 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(sendResult).toBe(true);
-    expect(mockGetMoonboardBluetoothPacket).toHaveBeenCalledWith('p1r42p2r43p198r44');
+    // Standard board (layout 2) → 18-row serpentine; Mini layouts pass 12.
+    expect(mockGetMoonboardBluetoothPacket).toHaveBeenCalledWith('p1r42p2r43p198r44', 18);
     expect(mockGetAuroraBluetoothPacket).not.toHaveBeenCalled();
     expect(mockGetLedPlacements).not.toHaveBeenCalled();
     expect(mockAdapter.write).toHaveBeenCalledWith(new Uint8Array([9, 8, 7]), undefined);
