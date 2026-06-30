@@ -21,6 +21,7 @@ const captured = vi.hoisted(() => ({
   chipFilters: undefined as LogbookFilterState | undefined,
   onToggleFacet: null as ((facet: 'grade' | 'angle' | 'show' | 'date') => void) | null,
   onUpdateFilters: null as ((partial: Partial<LogbookFilterState>) => void) | null,
+  onSearchChange: null as ((text: string) => void) | null,
   sheetMounted: false,
   sheetShowSort: undefined as boolean | undefined,
 }));
@@ -30,6 +31,10 @@ const themeState = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' |
 const flagState = vi.hoisted(() => ({ logbookFilters: true }));
 // The platform the gate reads; flipped per test (the chip row is iOS-only).
 const platformState = vi.hoisted(() => ({ os: 'ios' as 'ios' | 'android' }));
+
+// Capture the analytics mock so the sort/filter/search instrumentation can be
+// asserted (the wrapped handlers track then commit through the real reducer).
+const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 
 const feed = vi.hoisted(() => ({
   data: { pages: [{ userAscentsFeed: { items: [] } }] },
@@ -42,7 +47,7 @@ const feed = vi.hoisted(() => ({
   fetchNextPage: vi.fn(),
 }));
 
-vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
+vi.mock('../../../lib/analytics', () => ({ track: analytics.track }));
 
 vi.mock('react-native', () => ({
   // The gate reads Platform.OS; a getter lets a test flip it per render.
@@ -68,7 +73,12 @@ vi.mock('react-native', () => ({
 vi.mock('@shopify/flash-list', () => ({ FlashList: () => createElement('div', { 'data-testid': 'flash-list' }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock('../../SearchHeader', () => ({ SearchHeader: () => createElement('div', { 'data-testid': 'search-header' }) }));
+vi.mock('../../SearchHeader', () => ({
+  SearchHeader: ({ onChangeText }: { onChangeText?: (text: string) => void }) => {
+    captured.onSearchChange = onChangeText ?? null;
+    return createElement('div', { 'data-testid': 'search-header' });
+  },
+}));
 
 vi.mock('../LogbookChipRow', () => ({
   LogbookChipRow: ({
@@ -162,11 +172,13 @@ beforeEach(() => {
   captured.chipFilters = undefined;
   captured.onToggleFacet = null;
   captured.onUpdateFilters = null;
+  captured.onSearchChange = null;
   captured.sheetMounted = false;
   captured.sheetShowSort = undefined;
   themeState.variant = 'liquidGlass';
   flagState.logbookFilters = true;
   platformState.os = 'ios';
+  analytics.track.mockClear();
 });
 
 describe('LogbookTab chip row', () => {
@@ -219,13 +231,15 @@ describe('LogbookTab chip row', () => {
     expect(queryByLabelText('mobile.logbook.filter')).toBeNull();
   });
 
-  it('commits the selected preset live through setPreset', () => {
+  it('commits the selected preset live through setPreset and tracks the sort change', () => {
     render(createElement(LogbookTab, { userId: 'user-1' }));
     expect(captured.onSelectPreset).not.toBeNull();
 
     // Selecting Hardest commits via the real reducer; the chip re-renders with it.
     act(() => captured.onSelectPreset?.('hardest'));
     expect(captured.chipPreset).toBe('hardest');
+    // Privacy-safe: only the preset name is sent.
+    expect(analytics.track).toHaveBeenCalledWith('Logbook Sort Changed', { preset: 'hardest' });
   });
 
   it('toggles the inline facet rail open and closed via onToggleFacet', () => {
@@ -263,13 +277,46 @@ describe('LogbookTab chip row', () => {
     expect(queryByTestId('facet-rail')).toBeNull();
   });
 
-  it('live-commits a filter patch through onUpdateFilters (the Show menu / rails)', () => {
+  it('live-commits a filter patch through onUpdateFilters (the Show menu / rails) and tracks the changed fields', () => {
     render(createElement(LogbookTab, { userId: 'user-1' }));
     expect(captured.onUpdateFilters).not.toBeNull();
     expect(captured.chipFilters?.benchmarkOnly).toBe(false);
 
     act(() => captured.onUpdateFilters?.({ benchmarkOnly: true }));
     expect(captured.chipFilters?.benchmarkOnly).toBe(true);
+    // Privacy-safe: only the changed field NAMES are sent (sorted, comma-joined),
+    // never their values.
+    expect(analytics.track).toHaveBeenCalledWith('Logbook Filter Changed', { fields: 'benchmarkOnly' });
+  });
+
+  it('tracks a committed non-empty search by length only (never the query text)', () => {
+    vi.useFakeTimers();
+    try {
+      render(createElement(LogbookTab, { userId: 'user-1' }));
+      expect(captured.onSearchChange).not.toBeNull();
+
+      // Type a term; the commit (and the analytics) fire after the debounce.
+      act(() => captured.onSearchChange?.('crimps'));
+      expect(analytics.track).not.toHaveBeenCalledWith('Logbook Searched', expect.anything());
+      act(() => void vi.runAllTimers());
+      // Privacy: only the length is sent, never 'crimps'.
+      expect(analytics.track).toHaveBeenCalledWith('Logbook Searched', { length: 6 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not track a search when the committed term is empty', () => {
+    vi.useFakeTimers();
+    try {
+      render(createElement(LogbookTab, { userId: 'user-1' }));
+      // Whitespace normalises to '', which is a clear, not a search.
+      act(() => captured.onSearchChange?.('   '));
+      act(() => void vi.runAllTimers());
+      expect(analytics.track).not.toHaveBeenCalledWith('Logbook Searched', expect.anything());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lights no chip when a non-preset (custom) sort is active', async () => {

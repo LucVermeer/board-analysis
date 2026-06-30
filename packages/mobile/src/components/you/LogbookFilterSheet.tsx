@@ -253,8 +253,14 @@ export function LogbookFilterSheet({
         ) : null}
 
         <View style={styles.sectionsContainer}>
-          {/* REFINE — status / flash / grade / angle. */}
-          <CollapsibleSection title={t('mobile.logbook.refine')} summary={refineSummary} resetKey={sectionResetKey}>
+          {/* REFINE — status / flash / grade / angle. Open by default (the core
+              filters); Advanced (date / benchmarks) stays collapsed below. */}
+          <CollapsibleSection
+            title={t('mobile.logbook.refine')}
+            summary={refineSummary}
+            resetKey={sectionResetKey}
+            defaultExpanded
+          >
             <Text variant="footnote" style={styles.subsectionLabel}>
               {t('mobile.logbook.statusLabel')}
             </Text>

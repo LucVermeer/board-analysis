@@ -177,6 +177,11 @@ function LogbookChipRowComponent({
 const styles = StyleSheet.create({
   host: {
     width: '100%',
+    // The @expo/ui Host's hosting view otherwise paints a system background;
+    // the climbs chip row reads transparent because it sits on the chrome's
+    // blur, while this row sits on a plain toolbar — so the system fill shows
+    // through as an opaque band. Force transparent so the page shows behind it.
+    backgroundColor: 'transparent',
   },
 });
 

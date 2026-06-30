@@ -9,6 +9,7 @@ import {
   toAscentFeedInput,
   DEFAULT_LOGBOOK_FILTERS,
   DEFAULT_LOGBOOK_SORT,
+  type LogbookFilterState,
   type LogbookSortPreset,
 } from '@boardsesh/logbook';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -120,9 +121,38 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
     (text: string) => {
       const nextName = normalizeSearchName(text);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = setTimeout(() => setName(nextName), SEARCH_DEBOUNCE_MS);
+      debounceTimerRef.current = setTimeout(() => {
+        setName(nextName);
+        // Privacy: report only that a search was committed and its length, never
+        // the query text. A non-empty term marks intent; clearing back to '' is
+        // not a search.
+        if (nextName) track(SHARED_EVENTS.LogbookSearched, { length: nextName.length });
+      }, SEARCH_DEBOUNCE_MS);
     },
     [setName],
+  );
+
+  // Wrap the reducer's sort/filter setters so each change is instrumented before
+  // it commits — the chip row's React.memo holds because these are memoised. We
+  // send the preset and the changed field NAMES only (never grade/date values),
+  // so PostHog can show which facets get used without leaking what was searched.
+  const handleSelectPreset = useCallback(
+    (preset: LogbookSortPreset) => {
+      track(SHARED_EVENTS.LogbookSortChanged, { preset });
+      setPreset(preset);
+    },
+    [setPreset],
+  );
+  const handleUpdateFilters = useCallback(
+    (partial: Partial<LogbookFilterState>) => {
+      // Analytics property values are scalar (no arrays), so the changed field
+      // NAMES go as a sorted comma-joined string — PostHog can still break down
+      // which facets get used. Sorted so a `{minGrade,maxGrade}` patch groups
+      // the same regardless of key order. Never the grade/date values themselves.
+      track(SHARED_EVENTS.LogbookFilterChanged, { fields: Object.keys(partial).sort().join(',') });
+      setFilters(partial);
+    },
+    [setFilters],
   );
 
   // Clear the committed term AND the input field (silent: don't re-arm the
@@ -270,12 +300,12 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
                 isn't worded twice. */}
             <LogbookChipRow
               sortPreset={sortPreset}
-              onSelectPreset={setPreset}
+              onSelectPreset={handleSelectPreset}
               onOpenFilters={handleOpenFilters}
               filters={filters}
               grades={grades ?? EMPTY_GRADES}
               onToggleFacet={handleToggleFacet}
-              onUpdateFilters={setFilters}
+              onUpdateFilters={handleUpdateFilters}
             />
             {/* The open facet's inline rail, below the chip row. It grows the
                 toolbar View; the FlashList insets below the toolbar so results
@@ -284,7 +314,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
               openFacet={openFacet}
               filters={filters}
               grades={grades ?? EMPTY_GRADES}
-              onUpdateFilters={setFilters}
+              onUpdateFilters={handleUpdateFilters}
               today={today}
             />
           </>
