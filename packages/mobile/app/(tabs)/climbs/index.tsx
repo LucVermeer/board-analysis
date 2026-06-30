@@ -202,16 +202,15 @@ function ClimbListInner() {
     listBottomSpacerHeight.value = withTiming(listPaddingBottom, { duration: timing.normal });
   }, [listBottomSpacerHeight, listPaddingBottom]);
   const listBottomSpacerStyle = useAnimatedStyle(() => ({ height: listBottomSpacerHeight.value }));
-  // The persistent native filter-chip row is the filtering surface on every variant:
-  // Liquid Glass renders it under the title (its own chrome path); Material (Android)
-  // renders it in place of the top-chrome filter affordances (grade control + filter
-  // button + summary). We gate Material on the variant feature (not Platform.OS) and
-  // do NOT flip filtersInTopChrome, so Material's FAB-vs-toolbar coupling stays put.
+  // The persistent native filter-chip row is the filtering surface on every variant
+  // now, so it's always shown — hence `showFilterChips` is a constant. `filterInTopChrome`
+  // still distinguishes the two: on Material (Android) the chip row replaces the
+  // top-chrome filter affordances (grade control + filter button + summary); on Liquid
+  // Glass its own chrome path renders the chip row under the title. We gate Material on
+  // the variant feature (not Platform.OS) and do NOT flip filtersInTopChrome, so
+  // Material's FAB-vs-toolbar coupling stays put.
   const filterInTopChrome = features.filtersInTopChrome;
-  // Material swaps its top-chrome filters for the chip row; Liquid Glass already
-  // shows the chip row via its own chrome path.
-  const materialChips = filterInTopChrome;
-  const showFilterChips = !filterInTopChrome || materialChips;
+  const showFilterChips = true;
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -1282,14 +1281,14 @@ function ClimbListInner() {
         onOpenGrade={handleOpenGrade}
         onGradeChange={handleGradeChange}
         filterChrome={filterChrome}
-        showPersistentChips={materialChips}
+        showPersistentChips={filterInTopChrome}
       />
 
       {/* On Liquid Glass the Grade chip opens a top-anchored range rail +
-          dismiss layer, just below the measured chrome. (Material — incl. the
-          Material chip-row default — renders its own grade rail inside
-          ClimbTopChrome, so this glass-only overlay is gated on !materialChips.) */}
-      {showFilterChips && !materialChips && showGrade ? (
+          dismiss layer, just below the measured chrome. (Material renders its own
+          grade rail inside ClimbTopChrome, so this glass-only overlay is gated on
+          !filterInTopChrome.) */}
+      {showFilterChips && !filterInTopChrome && showGrade ? (
         <>
           <Pressable
             style={styles.chipGradeDismiss}
