@@ -5,3 +5,13 @@
 # Local-only board-data exports (gitignored, see .gitignore). If an operator drops an
 # export here to run an importer, don't let `vp check` try to reformat the raw data.
 packages/db/data/
+# CHANGELOG.md is generated + owned by the mobile OTA pipeline (built from PR Release
+# Notes); hand-formatting it drifts vs the generator and the `changelog-owned` gate
+# rejects edits. It's in vite.config.ts fmt.ignore too, but the full-repo `vp check`
+# only honours .prettierignore for by-name files.
+CHANGELOG.md
+# Embedded ESP32 firmware is a self-contained PlatformIO sub-project with its own
+# .clang-format; its JS build scripts and Markdown aren't held to the web/mobile Prettier
+# config (the CI PR-lint already skips `embedded/`).
+embedded/
+docs/embedded-architecture.md
