@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-06-29T23:23:40.827Z",
+  "generatedAt": "2026-06-30T00:02:30.944Z",
   "entries": [
+    {
+      "prNumber": 3319,
+      "category": "fixed",
+      "title": "The Tall and Wide filter chips now work — tap to filter to your homewall's shape, long-press to lock it on.",
+      "mergedAt": "2026-06-30T00:01:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3319",
+      "body": "Tap the Grade chip again (or swipe the grade picker away) to close it."
+    },
     {
       "prNumber": 3293,
       "category": "new",
