@@ -19,6 +19,9 @@ const captured = vi.hoisted(() => ({
   onSelectPreset: null as ((preset: LogbookSortPreset) => void) | null,
   onOpenFilters: null as (() => void) | null,
   chipFilters: undefined as LogbookFilterState | undefined,
+  chipOpenFacet: undefined as string | null | undefined,
+  onToggleFacet: null as ((facet: 'grade' | 'angle' | 'show' | 'date') => void) | null,
+  onUpdateFilters: null as ((partial: Partial<LogbookFilterState>) => void) | null,
   sheetMounted: false,
   sheetShowSort: undefined as boolean | undefined,
 }));
@@ -74,19 +77,33 @@ vi.mock('../LogbookChipRow', () => ({
     onSelectPreset,
     onOpenFilters,
     filters,
+    openFacet,
+    onToggleFacet,
+    onUpdateFilters,
   }: {
     sortPreset: LogbookSortPreset | null;
     onSelectPreset: (preset: LogbookSortPreset) => void;
     onOpenFilters: () => void;
     filters: LogbookFilterState;
+    openFacet: 'grade' | 'angle' | 'show' | 'date' | null;
+    onToggleFacet: (facet: 'grade' | 'angle' | 'show' | 'date') => void;
+    onUpdateFilters: (partial: Partial<LogbookFilterState>) => void;
   }) => {
     captured.chipMounted = true;
     captured.chipPreset = sortPreset;
     captured.onSelectPreset = onSelectPreset;
     captured.onOpenFilters = onOpenFilters;
     captured.chipFilters = filters;
+    captured.chipOpenFacet = openFacet;
+    captured.onToggleFacet = onToggleFacet;
+    captured.onUpdateFilters = onUpdateFilters;
     return createElement('div', { 'data-testid': 'chip-row' });
   },
+}));
+
+vi.mock('../LogbookFacetRail', () => ({
+  LogbookFacetRail: ({ openFacet }: { openFacet: string | null }) =>
+    openFacet ? createElement('div', { 'data-testid': 'facet-rail', 'data-facet': openFacet }) : null,
 }));
 
 vi.mock('../LogbookFilterSheet', () => ({
@@ -147,6 +164,9 @@ beforeEach(() => {
   captured.onSelectPreset = null;
   captured.onOpenFilters = null;
   captured.chipFilters = undefined;
+  captured.chipOpenFacet = undefined;
+  captured.onToggleFacet = null;
+  captured.onUpdateFilters = null;
   captured.sheetMounted = false;
   captured.sheetShowSort = undefined;
   themeState.variant = 'liquidGlass';
@@ -211,6 +231,43 @@ describe('LogbookTab chip row', () => {
     // Selecting Hardest commits via the real reducer; the chip re-renders with it.
     act(() => captured.onSelectPreset?.('hardest'));
     expect(captured.chipPreset).toBe('hardest');
+  });
+
+  it('toggles the inline facet rail open and closed via onToggleFacet', () => {
+    const { queryByTestId } = render(createElement(LogbookTab, { userId: 'user-1' }));
+    expect(captured.onToggleFacet).not.toBeNull();
+    // Nothing open initially.
+    expect(captured.chipOpenFacet).toBeNull();
+    expect(queryByTestId('facet-rail')).toBeNull();
+
+    // Tapping Grade opens its rail.
+    act(() => captured.onToggleFacet?.('grade'));
+    expect(captured.chipOpenFacet).toBe('grade');
+    expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('grade');
+
+    // Tapping Grade again closes it (toggle).
+    act(() => captured.onToggleFacet?.('grade'));
+    expect(captured.chipOpenFacet).toBeNull();
+    expect(queryByTestId('facet-rail')).toBeNull();
+  });
+
+  it('swaps to a different facet rail (one open at a time)', () => {
+    const { queryByTestId } = render(createElement(LogbookTab, { userId: 'user-1' }));
+    act(() => captured.onToggleFacet?.('grade'));
+    expect(captured.chipOpenFacet).toBe('grade');
+
+    act(() => captured.onToggleFacet?.('angle'));
+    expect(captured.chipOpenFacet).toBe('angle');
+    expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('angle');
+  });
+
+  it('live-commits a filter patch through onUpdateFilters (the Show menu / rails)', () => {
+    render(createElement(LogbookTab, { userId: 'user-1' }));
+    expect(captured.onUpdateFilters).not.toBeNull();
+    expect(captured.chipFilters?.benchmarkOnly).toBe(false);
+
+    act(() => captured.onUpdateFilters?.({ benchmarkOnly: true }));
+    expect(captured.chipFilters?.benchmarkOnly).toBe(true);
   });
 
   it('lights no chip when a non-preset (custom) sort is active', async () => {

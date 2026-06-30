@@ -223,6 +223,15 @@ export default defineConfig({
         find: /^(.*\/)?LogbookChipRow$/,
         replacement: fileURLToPath(new URL('./test/logbook-chip-row-stub.tsx', import.meta.url)),
       },
+      // LogbookFacetRail is the iOS-glass chip row's inline rail (rendered below
+      // the chips when a grade/angle/date facet is open). It pulls in Reanimated +
+      // the native date picker, which can't mount under Vitest's react-native mock,
+      // so redirect the extensionless import to a null stub. Suites that assert the
+      // rail (logbook-tab-chips) register their own vi.mock (takes precedence).
+      {
+        find: /^(.*\/)?LogbookFacetRail$/,
+        replacement: fileURLToPath(new URL('./test/logbook-facet-rail-stub.tsx', import.meta.url)),
+      },
       // AppMenu is platform-split (AppMenu.ios.tsx renders a native @expo/ui SwiftUI
       // `Menu`; AppMenu.android.tsx a native Compose `DropdownMenu`). Vitest doesn't
       // resolve `.ios`/`.android` extensions and can't mount either native tree, so

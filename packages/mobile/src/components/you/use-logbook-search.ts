@@ -43,6 +43,7 @@ const DEFAULT_STATE: LogbookSearchState = {
 type Action =
   | { type: 'setName'; name: string }
   | { type: 'setPreset'; preset: LogbookSortPreset }
+  | { type: 'setFilters'; filters: Partial<LogbookFilterState> }
   | { type: 'apply'; filters: LogbookFilterState; sort: LogbookSortState }
   | { type: 'hydrate'; filters: LogbookFilterState; sort: LogbookSortState }
   | { type: 'reset' };
@@ -59,6 +60,11 @@ function reducer(state: LogbookSearchState, action: Action): LogbookSearchState 
         sort: { ...DEFAULT_LOGBOOK_SORT, mode: 'preset', preset: action.preset },
         userModified: true,
       };
+    case 'setFilters':
+      // Live per-field merge from the toolbar's facet chips/rails — same commit +
+      // persistence path as `apply`, but it touches only the named fields and
+      // never the sort or the name.
+      return { ...state, filters: { ...state.filters, ...action.filters }, userModified: true };
     case 'apply':
       return { ...state, filters: action.filters, sort: action.sort, userModified: true };
     case 'hydrate':
@@ -77,6 +83,8 @@ function reducer(state: LogbookSearchState, action: Action): LogbookSearchState 
 export type UseLogbookSearch = LogbookSearchState & {
   setName: (name: string) => void;
   setPreset: (preset: LogbookSortPreset) => void;
+  /** Live-commit a partial filter patch (the toolbar's facet chips/rails). */
+  setFilters: (partial: Partial<LogbookFilterState>) => void;
   apply: (filters: LogbookFilterState, sort: LogbookSortState) => void;
   reset: () => void;
 };
@@ -119,6 +127,7 @@ export function useLogbookSearch(): UseLogbookSearch {
     () => ({
       setName: (name: string) => dispatch({ type: 'setName', name }),
       setPreset: (preset: LogbookSortPreset) => dispatch({ type: 'setPreset', preset }),
+      setFilters: (partial: Partial<LogbookFilterState>) => dispatch({ type: 'setFilters', filters: partial }),
       apply: (filters: LogbookFilterState, sort: LogbookSortState) => dispatch({ type: 'apply', filters, sort }),
       reset: () => dispatch({ type: 'reset' }),
     }),

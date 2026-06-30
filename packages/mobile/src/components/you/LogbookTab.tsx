@@ -22,8 +22,11 @@ import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { LogbookFilterSheet } from './LogbookFilterSheet';
 import { LogbookChipRow } from './LogbookChipRow';
+import { LogbookFacetRail } from './LogbookFacetRail';
+import type { LogbookFacetKey } from './LogbookChipRow.logic';
 import { useLogbookSearch, countActiveLogbookFilters } from './use-logbook-search';
 import { useUserAscentsFeed, useGrades } from '../../lib/graphql/hooks';
+import type { Grade } from '@boardsesh/shared-schema';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { tickToClimb } from '../../lib/tick-to-climb';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
@@ -44,6 +47,10 @@ const SEARCH_DEBOUNCE_MS = 300;
 // filter sheet's GradeRangeRail uses (LogbookFilterSheet's GRADE_SCALE_BOARD), so
 // the chip and the rail never word a grade differently.
 const GRADE_SCALE_BOARD = 'kilter';
+
+// Stable empty grade list so the chip row + facet rail (both memo'd) keep their
+// `grades` prop identity while the grade query is still loading (undefined).
+const EMPTY_GRADES: Grade[] = [];
 
 type LogbookTabProps = {
   userId: string | undefined;
@@ -85,12 +92,23 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
   // Logbook search/filter/sort state. The committed name lives here; the visible
   // input value is debounced before it commits to the query.
   const logbookSearch = useLogbookSearch();
-  const { filters, sort, name, setName, setPreset, apply, hydrated } = logbookSearch;
+  const { filters, sort, name, setName, setPreset, setFilters, apply, hydrated } = logbookSearch;
   // Which preset the chips highlight; null (no chip lit) when a non-preset
   // (custom) sort is in effect, rather than falsely lighting up Latest.
   const sortPreset: LogbookSortPreset | null = sort.mode === 'preset' ? sort.preset : null;
   const activeFilterCount = useMemo(() => countActiveLogbookFilters(filters), [filters]);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  // Which facet's inline rail is open below the chip row (Liquid Glass only); null
+  // when all closed. Tapping the open facet's chip closes it (toggle), tapping a
+  // different facet swaps to it — only one rail shows at a time.
+  const [openFacet, setOpenFacet] = useState<LogbookFacetKey | null>(null);
+  const handleToggleFacet = useCallback((facet: LogbookFacetKey) => {
+    hapticSelection();
+    setOpenFacet((current) => (current === facet ? null : facet));
+  }, []);
+  // One stable "today" ceiling so the To-date row's maximumDate keeps a constant
+  // identity across renders (mirrors the filter sheet's `today`).
+  const today = useMemo(() => new Date(), []);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
 
@@ -240,15 +258,30 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
                 height={40}
               />
             </View>
-            {/* Filter entry + Latest/Hardest + active-filter chips — switch sort
-                and surface active filters without opening the sheet. The sheet's
-                own Sort block is hidden (showSort={false}) so it isn't worded twice. */}
+            {/* Filter entry + Latest/Hardest + every facet chip (grade/angle/show/
+                date) — switch sort and adjust filters inline without opening the
+                sheet. Grade/angle/date toggle the rail below; Show is a native
+                menu. The sheet's Sort block is hidden (showSort={false}) so sort
+                isn't worded twice. */}
             <LogbookChipRow
               sortPreset={sortPreset}
               onSelectPreset={setPreset}
               onOpenFilters={handleOpenFilters}
               filters={filters}
-              grades={grades ?? []}
+              grades={grades ?? EMPTY_GRADES}
+              openFacet={openFacet}
+              onToggleFacet={handleToggleFacet}
+              onUpdateFilters={setFilters}
+            />
+            {/* The open facet's inline rail, below the chip row. It grows the
+                toolbar View; the FlashList insets below the toolbar so results
+                still scroll under it. Live-commits via setFilters. */}
+            <LogbookFacetRail
+              openFacet={openFacet}
+              filters={filters}
+              grades={grades ?? EMPTY_GRADES}
+              onUpdateFilters={setFilters}
+              today={today}
             />
           </>
         ) : (

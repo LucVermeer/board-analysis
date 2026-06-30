@@ -103,6 +103,35 @@ describe('useLogbookSearch', () => {
     );
   });
 
+  it('setFilters merges a partial patch and persists, leaving sort and name untouched', async () => {
+    const { result } = renderHook(() => useLogbookSearch());
+    await flushHydration();
+    // A name + a preset are in place before the partial filter patch.
+    await act(async () => {
+      result.current.setName('crimps');
+      result.current.setPreset('hardest');
+    });
+    vi.mocked(saveLogbookPrefs).mockClear();
+
+    await act(async () => {
+      result.current.setFilters({ minGrade: 12, maxGrade: 20 });
+    });
+
+    // Only the named fields changed; the rest of the filter set stays default.
+    expect(result.current.filters.minGrade).toBe(12);
+    expect(result.current.filters.maxGrade).toBe(20);
+    expect(result.current.filters.includeSends).toBe(true);
+    expect(result.current.filters.benchmarkOnly).toBe(false);
+    // Sort and name are not touched by setFilters.
+    expect(result.current.sort.mode).toBe('preset');
+    expect(result.current.sort.preset).toBe('hardest');
+    expect(result.current.name).toBe('crimps');
+    // The patch persisted (same path as apply).
+    expect(saveLogbookPrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ minGrade: 12, maxGrade: 20 }) }),
+    );
+  });
+
   it('keeps a change applied before hydration resolves (no clobber)', async () => {
     let resolveLoad: (value: StoredLogbookPrefs | null) => void = () => {};
     vi.mocked(loadLogbookPrefs).mockReturnValueOnce(

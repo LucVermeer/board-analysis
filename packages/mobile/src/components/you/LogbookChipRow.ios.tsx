@@ -1,28 +1,50 @@
-// The logbook toolbar's persistent chip row, mirroring the climb list's
+// The logbook toolbar's persistent facet-chip row, mirroring the climb list's
 // FilterChipRow.ios.tsx: a single <Host> wrapping a horizontal SwiftUI ScrollView
 // + HStack of native @expo/ui glass chips. iOS-26 Liquid Glass only (the caller
 // gates on the glass variant); Android keeps the sheet's filter/sort.
 //
-// Order: [Filter] [Latest] [Hardest] [...active-filter chips]. The Filter chip
-// opens the long-tail sheet; Latest/Hardest live-commit the sort preset; the
-// active-filter chips (grade/date/angle/etc.) read as amber-tinted prominent glass
-// and tap back into the sheet to adjust. Amber (not the climb search's purple)
-// marks this as the logbook, not a live search. The active-chip wording is sourced
-// once in LogbookChipRow.logic.ts so it never diverges from the badge / sheet.
+// Order: [Filter] [Latest] [Hardest] [Grade] [Angle] [Show] [Date].
+//   Filter   → opens the long-tail sheet (full set / less-common controls).
+//   Latest / Hardest → live-commit the sort preset.
+//   Grade / Angle / Date → toggle a lifted inline rail (LogbookTab renders the
+//                          RN rail below this Host; one open at a time).
+//   Show     → a native Menu of Toggles (sends / attempts / flash / benchmarks)
+//              that stays open (menuActionDismissBehavior) and live-commits.
+//
+// Every facet is ALWAYS shown — neutral glass with a resting placeholder until
+// set, then amber prominent glass with the value. Amber (brandColors.accent, not
+// the climb search's purple) marks this as the logbook, not a live search. The
+// wording is sourced once in LogbookChipRow.logic.ts so it never diverges from
+// the sheet / badge.
 
 import { memo, useCallback, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Host, HStack, ScrollView, Button } from '@expo/ui/swift-ui';
-import { buttonStyle, controlSize, tint, foregroundColor, padding } from '@expo/ui/swift-ui/modifiers';
+import { Host, HStack, ScrollView, Menu, Button, Toggle } from '@expo/ui/swift-ui';
+import {
+  buttonStyle,
+  controlSize,
+  tint,
+  foregroundColor,
+  padding,
+  menuActionDismissBehavior,
+} from '@expo/ui/swift-ui/modifiers';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { spacing } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { buildLogbookActiveChips } from './LogbookChipRow.logic';
+import { anyFilterActive, buildLogbookFacets } from './LogbookChipRow.logic';
 import type { LogbookChipRowProps } from './LogbookChipRow.types';
 
-function LogbookChipRowComponent({ sortPreset, onSelectPreset, onOpenFilters, filters, grades }: LogbookChipRowProps) {
+function LogbookChipRowComponent({
+  sortPreset,
+  onSelectPreset,
+  onOpenFilters,
+  filters,
+  grades,
+  onToggleFacet,
+  onUpdateFilters,
+}: LogbookChipRowProps) {
   const { t } = useTranslation('you');
   const { brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
@@ -45,12 +67,49 @@ function LogbookChipRowComponent({ sortPreset, onSelectPreset, onOpenFilters, fi
     [brandColors.accent],
   );
 
-  // Rebuilt only when the filters / grade scale / formatter change, so the chip
+  // Rebuilt only when the filters / grade scale / formatter change, so the facet
   // descriptors keep a stable identity between unrelated re-renders.
-  const activeChips = useMemo(
-    () => buildLogbookActiveChips(filters, grades, formatGrade, t),
-    [filters, grades, formatGrade, t],
+  const facets = useMemo(() => buildLogbookFacets(filters, grades, formatGrade, t), [filters, grades, formatGrade, t]);
+  const grade = facets[0];
+  const angle = facets[1];
+  const show = facets[2];
+  const date = facets[3];
+
+  // Live-commit handlers for the Show menu's toggles. Sends and Attempts can't
+  // both be off (mirrors the sheet's status logic) — turning one off while the
+  // other is already off keeps the other on. Flash is a send refinement, so
+  // dropping sends from the result set also clears flashOnly.
+  const handleToggleSends = useCallback(
+    (next: boolean) => {
+      if (!next && !filters.includeAttempts) return; // would leave both off — keep sends on.
+      onUpdateFilters({ includeSends: next, ...(next ? {} : { flashOnly: false }) });
+    },
+    [filters.includeAttempts, onUpdateFilters],
   );
+  const handleToggleAttempts = useCallback(
+    (next: boolean) => {
+      if (!next && !filters.includeSends) return; // would leave both off — keep attempts on.
+      onUpdateFilters({ includeAttempts: next });
+    },
+    [filters.includeSends, onUpdateFilters],
+  );
+  const handleToggleFlash = useCallback((next: boolean) => onUpdateFilters({ flashOnly: next }), [onUpdateFilters]);
+  const handleToggleBenchmarks = useCallback(
+    (next: boolean) => onUpdateFilters({ benchmarkOnly: next }),
+    [onUpdateFilters],
+  );
+
+  // Rail-facet taps route through the lifted toggle (close if already open).
+  const handleGradeChip = useCallback(() => onToggleFacet('grade'), [onToggleFacet]);
+  const handleAngleChip = useCallback(() => onToggleFacet('angle'), [onToggleFacet]);
+  const handleDateChip = useCallback(() => onToggleFacet('date'), [onToggleFacet]);
+
+  const handleSelectLatest = useCallback(() => onSelectPreset('recent'), [onSelectPreset]);
+  const handleSelectHardest = useCallback(() => onSelectPreset('hardest'), [onSelectPreset]);
+
+  // Flash is a send refinement: when sends leave the result set the toggle reads
+  // as off (and committing it is a no-op), matching the sheet.
+  const flashOn = filters.flashOnly && filters.includeSends;
 
   return (
     <Host matchContents={{ vertical: true }} style={styles.host}>
@@ -58,33 +117,57 @@ function LogbookChipRowComponent({ sortPreset, onSelectPreset, onOpenFilters, fi
         {/* Vertical padding gives a pressed chip's glass lens room to expand. */}
         <HStack spacing={spacing[2]} modifiers={[padding({ horizontal: spacing[4], vertical: spacing[2] })]}>
           {/* Filter → the long-tail sheet. An action button, not a menu. Neutral
-              glass until at least one filter is applied, then amber — matching the
+              glass until at least one facet is active, then amber — matching the
               climb search, where Filters only colours up once filters are set. The
               sort (Latest/Hardest) doesn't count, so it never tints the Filter chip. */}
           <Button
             label={t('mobile.logbook.filter')}
             systemImage="line.3.horizontal.decrease"
             onPress={onOpenFilters}
-            modifiers={chipModifiers(activeChips.length > 0)}
+            modifiers={chipModifiers(anyFilterActive(facets))}
           />
 
           {/* Latest / Hardest — live-commit the sort preset; null lights neither. */}
           <Button
             label={t('mobile.logbook.preset.latest')}
-            onPress={() => onSelectPreset('recent')}
+            onPress={handleSelectLatest}
             modifiers={chipModifiers(sortPreset === 'recent')}
           />
           <Button
             label={t('mobile.logbook.preset.hardest')}
-            onPress={() => onSelectPreset('hardest')}
+            onPress={handleSelectHardest}
             modifiers={chipModifiers(sortPreset === 'hardest')}
           />
 
-          {/* Active-filter chips — prominent glass so "active" reads visually; any
-              tap reopens the sheet to adjust that filter (no per-chip menu). */}
-          {activeChips.map((chip) => (
-            <Button key={chip.key} label={chip.label} onPress={onOpenFilters} modifiers={chipModifiers(true)} />
-          ))}
+          {/* Grade / Angle — open the matching inline rail (LogbookTab renders it
+              below the Host); amber once a bound is set. */}
+          <Button label={grade.label} onPress={handleGradeChip} modifiers={chipModifiers(grade.active)} />
+          <Button label={angle.label} onPress={handleAngleChip} modifiers={chipModifiers(angle.active)} />
+
+          {/* Show ▾ — sends / attempts / flash / benchmarks toggles;
+              menuActionDismissBehavior keeps it open so several can flip in one
+              pass. Sends/Attempts are guarded so they can't both turn off. */}
+          <Menu label={show.label} modifiers={[...chipModifiers(show.active), menuActionDismissBehavior('disabled')]}>
+            <Toggle
+              label={t('mobile.logbook.status.sends')}
+              isOn={filters.includeSends}
+              onIsOnChange={handleToggleSends}
+            />
+            <Toggle
+              label={t('mobile.logbook.status.attempts')}
+              isOn={filters.includeAttempts}
+              onIsOnChange={handleToggleAttempts}
+            />
+            <Toggle label={t('mobile.logbook.flashOnly')} isOn={flashOn} onIsOnChange={handleToggleFlash} />
+            <Toggle
+              label={t('mobile.logbook.benchmarksOnly')}
+              isOn={filters.benchmarkOnly}
+              onIsOnChange={handleToggleBenchmarks}
+            />
+          </Menu>
+
+          {/* Date → the inline From/To rail; amber once a bound is set. */}
+          <Button label={date.label} onPress={handleDateChip} modifiers={chipModifiers(date.active)} />
         </HStack>
       </ScrollView>
     </Host>
@@ -97,4 +180,8 @@ const styles = StyleSheet.create({
   },
 });
 
+// The chips don't need to read `openFacet` (it's the lifted rail's state, owned
+// by LogbookTab below this Host): each chip tap is a TOGGLE via onToggleFacet, so
+// the open/close decision is made by the parent. The prop stays on the type so
+// the parent's wiring is explicit.
 export const LogbookChipRow = memo(LogbookChipRowComponent);

@@ -4,16 +4,21 @@
 // LogbookChipRow vite alias swaps the COMPONENT for a null stub under Vitest, but
 // this `.logic` module is not aliased, so its functions run for real).
 //
-// An active-filter chip is included ONLY when its field is non-default, mirroring
-// countActiveLogbookFilters in use-logbook-search.ts so a chip never appears for a
-// filter the badge wouldn't count (and vice versa). Defaults in → returns [].
+// The row mirrors the climbs search: every facet (grade / angle / show / date)
+// is ALWAYS present — neutral with a resting placeholder until its field is set,
+// then amber with the value. A facet's `active` flag mirrors
+// countActiveLogbookFilters in use-logbook-search.ts so the chip's amber and the
+// badge never disagree about what counts as "set".
 
 import type { TFunction } from 'i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { DEFAULT_LOGBOOK_ANGLE_RANGE, type LogbookFilterState } from '@boardsesh/logbook';
 
-/** An active-filter chip: a stable key (for React) + the localised label. */
-export type LogbookActiveChip = { key: string; label: string };
+/** The facet chips the row controls inline (grade/angle/date open a rail; show is a menu). */
+export type LogbookFacetKey = 'grade' | 'angle' | 'show' | 'date';
+
+/** A facet chip: its key (for React + open-state routing), label, and active flag. */
+export type LogbookFacet = { key: LogbookFacetKey; label: string; active: boolean };
 
 /**
  * Resolve a difficulty id to its display label via the same grade list +
@@ -80,52 +85,66 @@ export function angleChipLabel(angleRange: [number, number]): string {
   return `${angleRange[0]}°–${angleRange[1]}°`;
 }
 
+/** Whether the grade facet is set (either bound). */
+function isGradeActive(filters: LogbookFilterState): boolean {
+  return filters.minGrade !== '' || filters.maxGrade !== '';
+}
+
+/** Whether the angle facet is narrowed off its [0, 70] default. */
+function isAngleActive(filters: LogbookFilterState): boolean {
+  return (
+    filters.angleRange[0] !== DEFAULT_LOGBOOK_ANGLE_RANGE[0] || filters.angleRange[1] !== DEFAULT_LOGBOOK_ANGLE_RANGE[1]
+  );
+}
+
+/** Whether the Show facet (status / flash / benchmarks) is off its default. */
+function isShowActive(filters: LogbookFilterState): boolean {
+  return !(filters.includeSends && filters.includeAttempts) || filters.flashOnly || filters.benchmarkOnly;
+}
+
+/** Whether the date facet has either bound set. */
+function isDateActive(filters: LogbookFilterState): boolean {
+  return Boolean(filters.fromDate || filters.toDate);
+}
+
 /**
- * The ordered active-filter chips for the chip row: one per non-default field,
- * in the same order the filter sheet groups them (status / flash / grade / angle
- * → date / benchmarks). Defaults in → [].
+ * The four facet chips for the row, ALWAYS in [grade, angle, show, date] order.
+ * Each carries its `active` flag (its non-default test, mirroring
+ * countActiveLogbookFilters) and its label: the formatted value when active, the
+ * resting placeholder when not. The Show facet has no single value to read back,
+ * so it shows "Show" in both states (active is conveyed by amber, like the climbs
+ * search's Show menu).
  */
-export function buildLogbookActiveChips(
+export function buildLogbookFacets(
   filters: LogbookFilterState,
   grades: readonly Grade[],
   formatGrade: (name: string) => string | null,
   t: TFunction<'you'>,
-): LogbookActiveChip[] {
-  const chips: LogbookActiveChip[] = [];
+): LogbookFacet[] {
+  const gradeActive = isGradeActive(filters);
+  const gradesById = gradeActive ? new Map(grades.map((grade) => [grade.difficultyId, grade.name])) : null;
+  const gradeLabel = gradesById
+    ? gradeChipLabel(filters.minGrade, filters.maxGrade, gradesById, formatGrade)
+    : t('mobile.logbook.grade');
 
-  // Status — a chip only when one of sends/attempts is excluded ("Both" = default).
-  if (!(filters.includeSends && filters.includeAttempts)) {
-    const statusLabel =
-      filters.includeSends && !filters.includeAttempts
-        ? t('mobile.logbook.status.sends')
-        : t('mobile.logbook.status.attempts');
-    chips.push({ key: 'status', label: statusLabel });
-  }
+  const angleActive = isAngleActive(filters);
+  const angleLabel = angleActive ? angleChipLabel(filters.angleRange) : t('mobile.logbook.angle');
 
-  if (filters.flashOnly) {
-    chips.push({ key: 'flash', label: t('mobile.logbook.flashOnly') });
-  }
+  const dateActive = isDateActive(filters);
+  // A half-formed range (neither bound parses) falls back to the placeholder so
+  // the chip never shows a stray dash.
+  const dateLabel =
+    (dateActive ? dateChipLabel(filters.fromDate, filters.toDate, t) : null) ?? t('mobile.logbook.dateRange');
 
-  if (filters.minGrade !== '' || filters.maxGrade !== '') {
-    const gradesById = new Map(grades.map((grade) => [grade.difficultyId, grade.name]));
-    chips.push({ key: 'grade', label: gradeChipLabel(filters.minGrade, filters.maxGrade, gradesById, formatGrade) });
-  }
+  return [
+    { key: 'grade', label: gradeLabel, active: gradeActive },
+    { key: 'angle', label: angleLabel, active: angleActive },
+    { key: 'show', label: t('mobile.logbook.show'), active: isShowActive(filters) },
+    { key: 'date', label: dateLabel, active: dateActive },
+  ];
+}
 
-  if (
-    filters.angleRange[0] !== DEFAULT_LOGBOOK_ANGLE_RANGE[0] ||
-    filters.angleRange[1] !== DEFAULT_LOGBOOK_ANGLE_RANGE[1]
-  ) {
-    chips.push({ key: 'angle', label: angleChipLabel(filters.angleRange) });
-  }
-
-  if (filters.fromDate || filters.toDate) {
-    const dateLabel = dateChipLabel(filters.fromDate, filters.toDate, t);
-    if (dateLabel != null) chips.push({ key: 'date', label: dateLabel });
-  }
-
-  if (filters.benchmarkOnly) {
-    chips.push({ key: 'benchmark', label: t('mobile.logbook.benchmarksOnly') });
-  }
-
-  return chips;
+/** True when any facet is active — drives the Filter chip's amber. */
+export function anyFilterActive(facets: readonly LogbookFacet[]): boolean {
+  return facets.some((facet) => facet.active);
 }

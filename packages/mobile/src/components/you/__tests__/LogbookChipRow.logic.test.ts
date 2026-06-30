@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { TFunction } from 'i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { DEFAULT_LOGBOOK_FILTERS, type LogbookFilterState } from '@boardsesh/logbook';
-import { angleChipLabel, buildLogbookActiveChips, dateChipLabel, gradeChipLabel } from '../LogbookChipRow.logic';
+import {
+  anyFilterActive,
+  angleChipLabel,
+  buildLogbookFacets,
+  dateChipLabel,
+  gradeChipLabel,
+  type LogbookFacet,
+  type LogbookFacetKey,
+} from '../LogbookChipRow.logic';
 
 // A grade scale (difficultyId → raw name) plus a formatter that renders the raw
 // name as its V-grade — mirroring how GradeRangeRail resolves a chip label.
@@ -24,62 +32,87 @@ function withFilters(patch: Partial<LogbookFilterState>): LogbookFilterState {
   return { ...DEFAULT_LOGBOOK_FILTERS, ...patch };
 }
 
-describe('buildLogbookActiveChips', () => {
-  it('returns [] for the default filters', () => {
-    expect(buildLogbookActiveChips(DEFAULT_LOGBOOK_FILTERS, GRADES, formatGrade, t)).toEqual([]);
+function facetByKey(facets: LogbookFacet[], key: LogbookFacetKey): LogbookFacet {
+  const found = facets.find((facet) => facet.key === key);
+  if (!found) throw new Error(`missing facet ${key}`);
+  return found;
+}
+
+describe('buildLogbookFacets', () => {
+  it('always returns all four facets in [grade, angle, show, date] order', () => {
+    const facets = buildLogbookFacets(DEFAULT_LOGBOOK_FILTERS, GRADES, formatGrade, t);
+    expect(facets.map((facet) => facet.key)).toEqual(['grade', 'angle', 'show', 'date']);
   });
 
-  it('emits a sends chip when attempts are excluded', () => {
-    const chips = buildLogbookActiveChips(withFilters({ includeAttempts: false }), GRADES, formatGrade, t);
-    expect(chips).toEqual([{ key: 'status', label: 'mobile.logbook.status.sends' }]);
+  it('marks every facet inactive with its placeholder for the default filters', () => {
+    const facets = buildLogbookFacets(DEFAULT_LOGBOOK_FILTERS, GRADES, formatGrade, t);
+    expect(facets.every((facet) => !facet.active)).toBe(true);
+    expect(facetByKey(facets, 'grade').label).toBe('mobile.logbook.grade');
+    expect(facetByKey(facets, 'angle').label).toBe('mobile.logbook.angle');
+    expect(facetByKey(facets, 'show').label).toBe('mobile.logbook.show');
+    expect(facetByKey(facets, 'date').label).toBe('mobile.logbook.dateRange');
   });
 
-  it('emits an attempts chip when sends are excluded', () => {
-    const chips = buildLogbookActiveChips(withFilters({ includeSends: false }), GRADES, formatGrade, t);
-    expect(chips).toEqual([{ key: 'status', label: 'mobile.logbook.status.attempts' }]);
+  it('activates the grade facet with the V-range label when a bound is set', () => {
+    const facets = buildLogbookFacets(withFilters({ minGrade: 10, maxGrade: 14 }), GRADES, formatGrade, t);
+    const grade = facetByKey(facets, 'grade');
+    expect(grade.active).toBe(true);
+    expect(grade.label).toBe('V3–V5');
   });
 
-  it('emits a flash chip when flashOnly is set', () => {
-    const chips = buildLogbookActiveChips(withFilters({ flashOnly: true }), GRADES, formatGrade, t);
-    expect(chips).toEqual([{ key: 'flash', label: 'mobile.logbook.flashOnly' }]);
+  it('activates the angle facet with the degree-range label when narrowed', () => {
+    const facets = buildLogbookFacets(withFilters({ angleRange: [20, 40] }), GRADES, formatGrade, t);
+    const angle = facetByKey(facets, 'angle');
+    expect(angle.active).toBe(true);
+    expect(angle.label).toBe('20°–40°');
   });
 
-  it('emits a benchmark chip when benchmarkOnly is set', () => {
-    const chips = buildLogbookActiveChips(withFilters({ benchmarkOnly: true }), GRADES, formatGrade, t);
-    expect(chips).toEqual([{ key: 'benchmark', label: 'mobile.logbook.benchmarksOnly' }]);
+  it('activates the show facet when sends/attempts is narrowed (label stays "Show")', () => {
+    const facets = buildLogbookFacets(withFilters({ includeAttempts: false }), GRADES, formatGrade, t);
+    const show = facetByKey(facets, 'show');
+    expect(show.active).toBe(true);
+    expect(show.label).toBe('mobile.logbook.show');
   });
 
-  it('emits a grade chip with the V-range label', () => {
-    const chips = buildLogbookActiveChips(withFilters({ minGrade: 10, maxGrade: 14 }), GRADES, formatGrade, t);
-    expect(chips).toEqual([{ key: 'grade', label: 'V3–V5' }]);
+  it('activates the show facet for flashOnly and for benchmarkOnly', () => {
+    expect(
+      facetByKey(buildLogbookFacets(withFilters({ flashOnly: true }), GRADES, formatGrade, t), 'show').active,
+    ).toBe(true);
+    expect(
+      facetByKey(buildLogbookFacets(withFilters({ benchmarkOnly: true }), GRADES, formatGrade, t), 'show').active,
+    ).toBe(true);
   });
 
-  it('emits an angle chip with the degree-range label', () => {
-    const chips = buildLogbookActiveChips(withFilters({ angleRange: [20, 40] }), GRADES, formatGrade, t);
-    expect(chips).toEqual([{ key: 'angle', label: '20°–40°' }]);
-  });
-
-  it('emits a date chip with the localized short range', () => {
-    const chips = buildLogbookActiveChips(
+  it('activates the date facet with the localized short range when a bound is set', () => {
+    const facets = buildLogbookFacets(
       withFilters({ fromDate: '2026-06-01', toDate: '2026-06-30' }),
       GRADES,
       formatGrade,
       t,
     );
-    expect(chips).toHaveLength(1);
-    expect(chips[0].key).toBe('date');
-    expect(chips[0].label).toContain('–');
+    const date = facetByKey(facets, 'date');
+    expect(date.active).toBe(true);
+    expect(date.label).toContain('–');
   });
 
-  it('combines multiple non-default fields in sheet order', () => {
-    const chips = buildLogbookActiveChips(
-      withFilters({ includeAttempts: false, flashOnly: true, minGrade: 12, maxGrade: 12, benchmarkOnly: true }),
-      GRADES,
-      formatGrade,
-      t,
+  it('falls back to the date placeholder when the bound does not parse', () => {
+    const facets = buildLogbookFacets(withFilters({ fromDate: 'not-a-date' }), GRADES, formatGrade, t);
+    const date = facetByKey(facets, 'date');
+    // The field is "set" (active), but the unparseable bound shows the placeholder.
+    expect(date.active).toBe(true);
+    expect(date.label).toBe('mobile.logbook.dateRange');
+  });
+});
+
+describe('anyFilterActive', () => {
+  it('is false when no facet is active', () => {
+    expect(anyFilterActive(buildLogbookFacets(DEFAULT_LOGBOOK_FILTERS, GRADES, formatGrade, t))).toBe(false);
+  });
+
+  it('is true when at least one facet is active', () => {
+    expect(anyFilterActive(buildLogbookFacets(withFilters({ benchmarkOnly: true }), GRADES, formatGrade, t))).toBe(
+      true,
     );
-    expect(chips.map((chip) => chip.key)).toEqual(['status', 'flash', 'grade', 'benchmark']);
-    expect(chips.find((chip) => chip.key === 'grade')?.label).toBe('V4');
   });
 });
 

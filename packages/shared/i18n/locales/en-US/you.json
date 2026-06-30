@@ -121,6 +121,8 @@
       },
       "flashOnly": "Flash only",
       "grade": "Grade",
+      "angle": "Angle",
+      "show": "Show",
       "angleMin": "Min angle",
       "angleMax": "Max angle",
       "dateRange": "Date range",
