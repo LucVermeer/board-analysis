@@ -96,7 +96,7 @@ export class SyncRunner {
 
   /**
    * Sync exactly one user — the daemon's per-cycle unit. Picks the oldest
-   * `last_sync_at` (NULLs first) credential that's neither disabled nor
+   * `last_sync_attempt_at` (NULLs first) credential that's neither disabled nor
    * permanently errored.
    */
   async syncNextUser(): Promise<SyncSummary> {
@@ -131,8 +131,31 @@ export class SyncRunner {
       const transient = isTransientKilterError(err);
 
       if (transient) {
-        // Don't touch syncStatus — retry next cycle. Surface the message
-        // so the daemon log shows what's been retrying.
+        // Leave syncStatus/syncError untouched (a genuine transient must
+        // not get flagged 'error' in the UI) and DO NOT touch last_sync_at
+        // (that timestamp is the user-facing "last successful sync" — a
+        // failed cycle must never advance it). Stamp last_sync_attempt_at
+        // instead: getNextCredentialToSync orders by it, and
+        // isTransientKilterError fails OPEN — a non-KilterApiError (a DB
+        // error, a programming bug) is classified transient. Without this
+        // stamp, a credential that fails deterministically keeps its
+        // old/NULL attempt time and is re-selected FIRST every cycle,
+        // monopolising the single-user-per-cycle queue and starving every
+        // other user. Stamping the attempt clock rotates it to the back;
+        // it still retries on its next turn.
+        //
+        // No data is lost: last_sync_attempt_at is ONLY a scheduling key
+        // (which credential to pick next), never a data cursor. Each cycle
+        // re-pulls the FULL PowerSync snapshot and the apply is idempotent
+        // (dedup + natural-key adoption + ON CONFLICT), so rows missed by a
+        // failed cycle are re-applied on the credential's next successful
+        // turn. If the pull ever becomes incremental, that watermark needs
+        // its own column — it must not piggyback on this attempt clock.
+        await db
+          .update(auroraCredentials)
+          .set({ lastSyncAttemptAt: new Date(), updatedAt: new Date() })
+          .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
+
         this.handleError(err, { userId: cred.userId, board: KILTER_BOARD_TYPE });
         summary.failed = 1;
         summary.errors.push({ userId: cred.userId, boardType: KILTER_BOARD_TYPE, error: err.message });
@@ -144,9 +167,15 @@ export class SyncRunner {
       // the UI knows to prompt re-auth instead of "something went wrong".
       const isExpired = err instanceof KilterApiError && err.code === 'invalid_grant';
       const status = isExpired ? 'expired' : 'error';
+      // Stamp last_sync_attempt_at on the permanent path too (NOT
+      // last_sync_at — a failed cycle is not a successful sync). 'expired'
+      // is excluded from selection so it can't be re-picked, but 'error'
+      // stays in the candidate set — without the attempt stamp an errored
+      // credential with a NULL attempt time would keep sorting first and
+      // monopolise the queue. (See the transient branch for the rationale.)
       await db
         .update(auroraCredentials)
-        .set({ syncStatus: status, syncError: err.message, updatedAt: new Date() })
+        .set({ syncStatus: status, syncError: err.message, lastSyncAttemptAt: new Date(), updatedAt: new Date() })
         .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
 
       this.handleError(err, { userId: cred.userId, board: KILTER_BOARD_TYPE });
@@ -190,13 +219,18 @@ export class SyncRunner {
     // enabler reads KILTER_SYNC_PUSH_ENABLED and invokes the call at this
     // point. See packages/kilter-sync/src/sync/push-back.ts.
 
+    // Success: advance BOTH clocks. last_sync_at is the user-facing "last
+    // successful sync"; last_sync_attempt_at is the scheduler's fairness
+    // clock (also advanced on failure). On a clean cycle they coincide.
+    const now = new Date();
     await db
       .update(auroraCredentials)
       .set({
-        lastSyncAt: new Date(),
+        lastSyncAt: now,
+        lastSyncAttemptAt: now,
         syncStatus: 'active',
         syncError: null,
-        updatedAt: new Date(),
+        updatedAt: now,
       })
       .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
 
@@ -377,7 +411,12 @@ export class SyncRunner {
           ),
         ),
       )
-      .orderBy(sql`${auroraCredentials.lastSyncAt} ASC NULLS FIRST`)
+      // Order by the ATTEMPT clock, not last_sync_at: a credential that
+      // fails (incl. the fail-open DB-error case) advances last_sync_attempt_at
+      // but not last_sync_at, so it rotates to the back instead of being
+      // re-picked first every cycle. NULLS FIRST keeps never-attempted
+      // credentials at the front. Served by syncAttemptPriorityIdx.
+      .orderBy(sql`${auroraCredentials.lastSyncAttemptAt} ASC NULLS FIRST`)
       .limit(1);
 
     return rows[0] ?? null;

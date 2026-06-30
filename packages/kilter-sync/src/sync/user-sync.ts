@@ -460,6 +460,14 @@ export async function applyLogs(
   const puts: PowerSyncOp[] = [];
   for (const op of ops) {
     if (op.op === 'REMOVE') {
+      // PowerSync REMOVE ops carry no `data`, only `object_id`. For the
+      // `logs` object_type that object_id IS the row's primary key,
+      // `log_uuid` — the same value PUT ops carry as `op.data.log_uuid` and
+      // that we write into `kilter_id`. So matching the soft-detach below on
+      // `kilter_id IN (object_ids)` is correct. This equivalence
+      // (object_id === data.log_uuid) is the one PowerSync-protocol
+      // assumption the dedup + insert paths also rely on; if it ever broke,
+      // REMOVE matching and the dedup key would silently drift.
       removeIds.push(op.object_id);
     } else if (op.op === 'PUT' && op.data) {
       puts.push(op);
@@ -500,23 +508,65 @@ export async function applyLogs(
 
   if (puts.length === 0) return;
 
+  // PowerSync's oplog can carry MORE THAN ONE op for the same row
+  // (object_id = log_uuid) within a single snapshot — an edited or
+  // re-logged climb surfaces as several PUTs with ascending op_id. The
+  // reference PowerSync client collapses these into a local table keyed by
+  // id; our hand-rolled stream (api/powersync-client.ts) forwards every op
+  // verbatim, so we dedupe here. Keyed by log_uuid, last-op-wins (later
+  // op_id = freshest state, and logs ride a single bucket so buffer order
+  // is op_id order), mirroring the conflict-key dedupe in
+  // applyClimbRatings. Without this, two PUTs for the same log_uuid both
+  // reach the INSERT below carrying the same kilter_id and violate the
+  // GLOBAL boardsesh_ticks_kilter_id_unique index, aborting the flush.
+  const dedupedPutsByLogUuid = new Map<string, PowerSyncOp>();
+  for (const op of puts) {
+    dedupedPutsByLogUuid.set((op.data as RawLog).log_uuid, op);
+  }
+  const dedupedPuts = Array.from(dedupedPutsByLogUuid.values());
+
   const now = new Date().toISOString();
   const normalised: NormalisedLog[] = [];
-  for (const op of puts) {
+  for (const op of dedupedPuts) {
     const raw = op.data as RawLog;
     const canonical = await resolveCanonicalClimbUuid(tx, KILTER_BOARD_TYPE, raw.climb_uuid, aliasCache);
     normalised.push({ raw, canonical, fields: buildLogTickFields(raw, canonical, now) });
   }
 
-  // (a) Single SELECT to find ticks already present by kilter_id.
+  // (a) One GLOBAL SELECT (deliberately NOT user-scoped) to find ticks
+  // already present by kilter_id. boardsesh_ticks_kilter_id_unique is a
+  // GLOBAL unique index, so a given kilter_id lives on at most one row
+  // table-wide. Efficiency depends on that index being on `kilter_id`
+  // ALONE (not a composite): the IN-list probe is index-served and returns
+  // ≤1 row per kilter_id, so dropping the user_id filter doesn't turn this
+  // into a scan. Partition the hits by owner:
+  //   - same user  → kilterIdMap, the idempotent re-sync UPDATE path.
+  //   - other user → foreignKilterIds. The same Kilter account is linked
+  //     to two Boardsesh accounts (duplicate-account / "linked but empty"
+  //     shape). Inserting those incoming logs would collide on the global
+  //     unique index and abort the whole flush; we must also NOT silently
+  //     drop or reassign them onto the other user. We skip-and-log in the
+  //     categorise step below so the situation is visible, not a crash.
   const incomingKilterIds = normalised.map((n) => n.raw.log_uuid);
+  // Explicit empty-guard: drizzle's inArray([]) emits invalid `IN ()` SQL
+  // that throws at the DB. incomingKilterIds is non-empty here (puts.length
+  // === 0 returned above, and normalised mirrors dedupedPuts 1:1), so this is
+  // belt-and-suspenders that keeps the invariant local and robust to a future
+  // refactor that could thin `normalised` between here and the early return.
+  if (incomingKilterIds.length === 0) return;
   const byKilterIdRows = await tx
-    .select({ uuid: boardseshTicks.uuid, kilterId: boardseshTicks.kilterId })
+    .select({ uuid: boardseshTicks.uuid, kilterId: boardseshTicks.kilterId, ownerUserId: boardseshTicks.userId })
     .from(boardseshTicks)
-    .where(and(eq(boardseshTicks.userId, userId), inArray(boardseshTicks.kilterId, incomingKilterIds)));
+    .where(inArray(boardseshTicks.kilterId, incomingKilterIds));
   const kilterIdMap = new Map<string, string>();
+  const foreignKilterIds = new Set<string>();
   for (const row of byKilterIdRows) {
-    if (row.kilterId) kilterIdMap.set(row.kilterId, row.uuid);
+    if (!row.kilterId) continue;
+    if (row.ownerUserId === userId) {
+      kilterIdMap.set(row.kilterId, row.uuid);
+    } else {
+      foreignKilterIds.add(row.kilterId);
+    }
   }
 
   // (b) For rows not found in (a), one SELECT against the natural-key
@@ -525,7 +575,13 @@ export async function applyLogs(
   // JS — Postgres can't easily express the multi-column tuple match
   // alongside the time-range predicate without disabling index use, and
   // the post-filter is cheap.
-  const naturalKeyCandidates = normalised.filter((n) => !kilterIdMap.has(n.raw.log_uuid));
+  // Exclude foreignKilterIds too: a log_uuid already owned by another user
+  // must not adopt one of THIS user's ticks either — the UPDATE would stamp
+  // a globally-taken kilter_id and collide. Those fall through to the
+  // skip-and-log branch in the categorise step.
+  const naturalKeyCandidates = normalised.filter(
+    (n) => !kilterIdMap.has(n.raw.log_uuid) && !foreignKilterIds.has(n.raw.log_uuid),
+  );
   const naturalKeyMatchesByKey = new Map<string, { uuid: string; kilterId: string | null }>();
   // Filter out candidates with an unparseable created_at BEFORE we
   // feed timestamps into Math.min/max. A single NaN would propagate
@@ -553,6 +609,7 @@ export async function applyLogs(
         climbUuid: boardseshTicks.climbUuid,
         angle: boardseshTicks.angle,
         climbedAt: boardseshTicks.climbedAt,
+        status: boardseshTicks.status,
       })
       .from(boardseshTicks)
       .where(
@@ -593,6 +650,14 @@ export async function applyLogs(
         if (claimed.has(r.uuid)) return false;
         if (r.climbUuid !== candidate.canonical) return false;
         if (r.angle !== candidate.raw.angle) return false;
+        // Status-aware adoption: the natural key (climb_uuid, angle, ±Δt)
+        // ignores status, so without this guard an incoming `attempt`
+        // logged within tolerance of an existing completion would adopt
+        // and DOWNGRADE it (send/flash → attempt) via the bulk UPDATE.
+        // Refuse that one direction: leave the completion unclaimed so the
+        // attempt inserts as its own tick. Upgrades (incoming send/flash
+        // onto an existing attempt) and same-status re-syncs still adopt.
+        if (candidate.fields.status === 'attempt' && (r.status === 'send' || r.status === 'flash')) return false;
         const dt = Math.abs(Date.parse(r.climbedAt) - target);
         return dt <= toleranceMs;
       });
@@ -612,7 +677,28 @@ export async function applyLogs(
   for (const n of normalised) {
     const existingUuid = kilterIdMap.get(n.raw.log_uuid);
     if (existingUuid) {
+      // Re-sync by kilter_id: this row IS the same Kilter log (matched on
+      // its surrogate key), so Kilter is authoritative and its edits flow
+      // through verbatim — INCLUDING a status change (e.g. the user un-topped
+      // a climb on Kilter, send → attempt). The status-downgrade guard at
+      // the natural-key match above is deliberately NOT applied here: that
+      // guard protects a *heuristic* (climb+angle+time) match from merging a
+      // distinct physical attempt onto a completion; it must not block a
+      // genuine edit to an already-linked row. Don't "fix" this by adding the
+      // guard here — see the re-sync test asserting an attempt updates a send.
       updatesByKilterId.push({ uuid: existingUuid, fields: n.fields });
+      continue;
+    }
+    if (foreignKilterIds.has(n.raw.log_uuid)) {
+      // This Kilter log already belongs to a DIFFERENT Boardsesh user —
+      // the same Kilter account is linked to two Boardsesh accounts.
+      // Inserting it would violate the global kilter_id unique index;
+      // adopting it would stamp a globally-taken kilter_id. Skip and log
+      // so the duplicate-account link is visible instead of crashing the
+      // flush or silently producing a "linked but empty" logbook.
+      log(
+        `[kilter-sync] kilter_id ${n.raw.log_uuid} already linked to a different Boardsesh user — skipping for user ${userId} (duplicate Kilter account link)`,
+      );
       continue;
     }
     const natural = naturalKeyMatchesByKey.get(n.raw.log_uuid);

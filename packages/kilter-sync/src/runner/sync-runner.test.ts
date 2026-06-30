@@ -135,11 +135,15 @@ describe('SyncRunner.syncNextUser', () => {
       accessToken: 'new-access-token',
     });
     // Exactly one UPDATE at the end of the cycle setting syncStatus active.
+    // Success advances BOTH clocks: last_sync_at (user-facing "last synced")
+    // and last_sync_attempt_at (scheduler fairness clock).
     const activeUpdate = updates.find((u) => u.set.syncStatus === 'active');
     expect(activeUpdate?.set).toMatchObject({
       syncStatus: 'active',
       syncError: null,
     });
+    expect(activeUpdate?.set.lastSyncAt).toBeInstanceOf(Date);
+    expect(activeUpdate?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
   });
 
   it('transient error leaves syncStatus untouched and reports failure', async () => {
@@ -168,7 +172,66 @@ describe('SyncRunner.syncNextUser', () => {
     });
     // No syncStatus write — transient errors leave the credential alone.
     expect(updates.find((u) => u.set.syncStatus !== undefined)).toBeUndefined();
+    // last_sync_attempt_at IS stamped (with a real Date — not null) so the
+    // credential rotates to the back of the `last_sync_attempt_at ASC NULLS
+    // FIRST` queue instead of monopolising it — but last_sync_at (the
+    // user-facing "last successful sync") must NOT advance on a failed cycle.
+    expect(updates.find((u) => u.set.lastSyncAttemptAt !== undefined)?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
+    expect(updates.find((u) => u.set.lastSyncAt !== undefined)).toBeUndefined();
     expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('fail-open DB error (non-KilterApiError) stamps last_sync_attempt_at, never last_sync_at (anti-starvation)', async () => {
+    // This is the poison-pill regression guard. A PostgresError thrown from
+    // syncKilterUserData is NOT a KilterApiError, so isTransientKilterError
+    // fails open to transient. Before the fix the credential kept its NULL
+    // attempt time and was re-selected FIRST every cycle, starving all
+    // others. It must stamp last_sync_attempt_at (to rotate) while leaving
+    // syncStatus AND last_sync_at untouched — a cycle that failed before
+    // applying data must not look like a fresh successful sync in the UI.
+    const runner = new SyncRunner();
+    const privates = runner as unknown as SyncRunnerPrivates;
+    const { db, updates } = createDbShim();
+    vi.spyOn(privates, 'getClient').mockReturnValue({ client: {}, db });
+    vi.spyOn(privates, 'getNextCredentialToSync').mockResolvedValue(credential());
+
+    mockRefreshAccessToken.mockResolvedValue({
+      access_token: 'new-access-token',
+      expires_in: 300,
+      token_type: 'Bearer',
+    });
+    mockSyncKilterUserData.mockRejectedValue(
+      new Error('duplicate key value violates unique constraint "boardsesh_ticks_kilter_id_unique"'),
+    );
+
+    const summary = await runner.syncNextUser();
+
+    expect(summary.failed).toBe(1);
+    expect(updates.find((u) => u.set.syncStatus !== undefined)).toBeUndefined();
+    expect(updates.find((u) => u.set.lastSyncAttemptAt !== undefined)?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
+    expect(updates.find((u) => u.set.lastSyncAt !== undefined)).toBeUndefined();
+  });
+
+  it('permanent error stamps syncStatus=error + last_sync_attempt_at, but NOT last_sync_at', async () => {
+    // A permanent, non-invalid_grant KilterApiError maps to syncStatus
+    // 'error' (which STAYS in the selection set), so it must also stamp
+    // last_sync_attempt_at to avoid monopolising the queue — but a failed
+    // cycle is not a successful sync, so last_sync_at must not advance.
+    const runner = new SyncRunner();
+    const privates = runner as unknown as SyncRunnerPrivates;
+    const { db, updates } = createDbShim();
+    vi.spyOn(privates, 'getClient').mockReturnValue({ client: {}, db });
+    vi.spyOn(privates, 'getNextCredentialToSync').mockResolvedValue(credential());
+
+    mockRefreshAccessToken.mockRejectedValue(new KilterApiError('unknown', 'something broke'));
+
+    const summary = await runner.syncNextUser();
+
+    expect(summary.failed).toBe(1);
+    const errorUpdate = updates.find((u) => u.set.syncStatus === 'error');
+    expect(errorUpdate?.set).toMatchObject({ syncStatus: 'error', syncError: 'something broke' });
+    expect(errorUpdate?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
+    expect(errorUpdate?.set.lastSyncAt).toBeUndefined();
   });
 
   it('transient KilterApiError (invalid_client) does NOT poison the credential — operator misconfig is retried', async () => {
