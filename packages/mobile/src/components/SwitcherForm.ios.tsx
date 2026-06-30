@@ -13,7 +13,7 @@
 // The screen precomputes every string + handler + row state; this tree renders the
 // model. Each row kind maps to the idiomatic SwiftUI control.
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Host } from '@expo/ui';
 import {
   Form,
@@ -107,6 +107,14 @@ function FieldRow({ row }: { row: SwitcherFieldRow }) {
   const { brandColors } = useTheme();
   const textState = useNativeState(row.value);
   const lastEmittedRef = useRef(row.value);
+  // `row.onSubmit` is rebuilt each render (the screen makes it inline), so keep the
+  // latest in a ref and feed the modifier a STABLE closure — same stabilization as
+  // the Android FieldRow (and AuthTextInput) so keystroke re-renders don't churn
+  // the native handler registration.
+  const submitRef = useRef(row.onSubmit);
+  useEffect(() => {
+    submitRef.current = row.onSubmit;
+  }, [row.onSubmit]);
 
   useEffect(() => {
     if (shouldPushValueToNative(row.value, lastEmittedRef.current)) {
@@ -115,24 +123,30 @@ function FieldRow({ row }: { row: SwitcherFieldRow }) {
     }
   }, [row.value, textState]);
 
+  // `row.onChangeText` is the screen's stable setState setter, so this is stable.
+  const handleTextChange = useCallback(
+    (text: string) => {
+      lastEmittedRef.current = text;
+      row.onChangeText(text);
+    },
+    [row.onChangeText],
+  );
+
+  const modifiers = useMemo(
+    () => [
+      tint(brandAccentColor(brandColors)),
+      accessibilityLabelModifier(row.label),
+      textInputAutocapitalization('never'),
+      autocorrectionDisabled(true),
+      submitLabelModifier('go'),
+      onSubmitModifier(() => submitRef.current()),
+      ...(row.editable ? [] : [disabledModifier(true)]),
+    ],
+    [brandColors, row.label, row.editable],
+  );
+
   return (
-    <TextField
-      text={textState}
-      placeholder={row.placeholder}
-      onTextChange={(text) => {
-        lastEmittedRef.current = text;
-        row.onChangeText(text);
-      }}
-      modifiers={[
-        tint(brandAccentColor(brandColors)),
-        accessibilityLabelModifier(row.label),
-        textInputAutocapitalization('never'),
-        autocorrectionDisabled(true),
-        submitLabelModifier('go'),
-        onSubmitModifier(() => row.onSubmit()),
-        ...(row.editable ? [] : [disabledModifier(true)]),
-      ]}
-    />
+    <TextField text={textState} placeholder={row.placeholder} onTextChange={handleTextChange} modifiers={modifiers} />
   );
 }
 

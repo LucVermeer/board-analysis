@@ -18,6 +18,12 @@ describe('deriveSwitchRowState', () => {
     expect(deriveSwitchRowState({ ...base, target: 'pr-100', switchingTarget: 'pr-3271' })).toBe('disabled');
   });
 
+  it('keeps the active row active while a different row is switching', () => {
+    // `active` is checked before the `switchingTarget !== null` disable, so the
+    // live target keeps its checkmark while another row is mid-switch.
+    expect(deriveSwitchRowState({ ...base, target: 'production', switchingTarget: 'pr-3271' })).toBe('active');
+  });
+
   it('is pressable when idle, usable, and not the active row', () => {
     expect(deriveSwitchRowState({ ...base, target: 'pr-3271' })).toBe('pressable');
   });

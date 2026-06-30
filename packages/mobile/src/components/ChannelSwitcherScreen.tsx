@@ -21,6 +21,12 @@ import { SwitcherForm } from './SwitcherForm';
 import { deriveSwitchRowState, isSwitchRowPressable } from './SwitcherForm.logic';
 import type { SwitcherFormModel, SwitcherRow, SwitcherSection } from './SwitcherForm.types';
 
+// Stable empty fallback so `previewQuery.data ?? […]` doesn't hand the model
+// `useMemo` a fresh array reference on every render while the query is loading
+// (which would rebuild the whole form model each render). React-query returns a
+// stable `data` ref once resolved.
+const EMPTY_PREVIEW_CHANNELS: NonNullable<ReturnType<typeof useOtaPreviewChannels>['data']> = [];
+
 // The OTA preview-channel switcher, rendered as a single native @expo/ui form
 // (SwiftUI `Form` on iOS, Jetpack Compose `LazyColumn` on Android) via the shared
 // <SwitcherForm />. This component owns every hook, route data, `t()` call,
@@ -35,7 +41,7 @@ export function ChannelSwitcherScreen() {
   // works for signed-out users too. Fail-soft: the backend returns [] on error,
   // so isError is rare; we still handle it for completeness.
   const previewQuery = useOtaPreviewChannels();
-  const previewChannels = previewQuery.data ?? [];
+  const previewChannels = previewQuery.data ?? EMPTY_PREVIEW_CHANNELS;
   // Channel switching (preview list, preset list, manual entry) is available to
   // everyone; only the Sentry crash-test tools stay tester-only.
   const isTester = Boolean(profile?.isTester);

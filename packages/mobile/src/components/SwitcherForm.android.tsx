@@ -158,6 +158,10 @@ function FieldRow({ row }: { row: SwitcherFieldRow }) {
   );
 }
 
+// Label-only by design: unlike iOS (SF Symbols are free), an Android trailing icon
+// needs a bundled XML vector drawable per glyph. The action rows are the tester-only
+// Sentry rows + the Switch/Reset actions whose labels already carry the meaning, so
+// we skip the per-glyph drawable plumbing rather than ship a partial icon set.
 function ActionRow({ row, errorColor }: { row: SwitcherActionRow; errorColor: string }) {
   const rowModifiers = [
     fillMaxWidth(),

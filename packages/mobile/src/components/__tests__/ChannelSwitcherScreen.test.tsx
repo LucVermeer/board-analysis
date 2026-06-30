@@ -134,6 +134,21 @@ describe('ChannelSwitcherScreen', () => {
     ]);
   });
 
+  it('surfaces the error status when the backend query fails', () => {
+    // The error branch is also the non-tester fallback that adds a `manual` section,
+    // but that section is `updatesUsable`-gated (false under test __DEV__), so only
+    // the preview error-status row is observable here.
+    hooksState.isError = true;
+    render(createElement(ChannelSwitcherScreen));
+
+    const preview = captured.model?.sections.find((section) => section.key === 'preview');
+    // The fixed Production row always leads; the error-status row follows.
+    expect(preview?.rows).toEqual([
+      expect.objectContaining({ kind: 'target', key: 'production' }),
+      expect.objectContaining({ kind: 'status', label: 'mobile.previewChannels.error' }),
+    ]);
+  });
+
   it('adds the Sentry section for a tester (gated on the profile, not OTA usability)', () => {
     hooksState.isTester = true;
     render(createElement(ChannelSwitcherScreen));
