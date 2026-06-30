@@ -137,8 +137,8 @@ test/switch-row-stub.tsx              # passthrough stub (RN Pressable + Switch)
 `FilterChipRow` is the second example — both sides are now built (SwiftUI menus on
 iOS, Jetpack Compose `FilterChip`s + `DropdownMenu`s on Android), showing the same
 split with a richer tree (menus, pickers / dropdowns) and the shared
-`FilterChipRow.logic` label helpers. On Android the chip row is the default climbs
-filtering surface (kill-switch flag `android-filter-chips`).
+`FilterChipRow.logic` label helpers. On Android the chip row is the climbs filtering
+surface (it replaces the Material top-chrome filter button + grade control + summary).
 
 `RadioGroup` (`src/components/RadioGroup.*`) is a third, two-platform example —
 single-choice selection. iOS is a SwiftUI `Picker` with `pickerStyle('inline')` (each

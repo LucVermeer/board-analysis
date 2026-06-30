@@ -1,9 +1,9 @@
 // FilterChipRow — Android implementation. Native Jetpack Compose Material 3
 // FilterChips + DropdownMenus via @expo/ui, mirroring the SwiftUI iOS reference
 // (FilterChipRow.ios.tsx) one-for-one: same chip set, order, labels, and
-// behaviour. The persistent, glanceable chip row is the Android (Material) default
-// filtering surface — the climbs screen suppresses the Material top-chrome filter
-// affordances while it's shown (gated by the `android-filter-chips` kill-switch).
+// behaviour. The persistent, glanceable chip row is the Android (Material) filtering
+// surface — the climbs screen suppresses the Material top-chrome filter affordances
+// (grade control + filter button + summary) in its favour.
 //
 // Compose specifics that differ from the SwiftUI tree:
 //   • DropdownMenu is CONTROLLED — each menu-bearing chip is its own small stateful
