@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-06-30T00:02:30.944Z",
+  "generatedAt": "2026-06-30T02:07:14.861Z",
   "entries": [
+    {
+      "prNumber": 3324,
+      "category": "new",
+      "title": "Switch between app versions yourself: open **What's New → Try a preview** to jump onto any preview build — or tap **Production** to get back to the stable app. No tester access needed.",
+      "mergedAt": "2026-06-30T02:06:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3324"
+    },
+    {
+      "prNumber": 3322,
+      "category": "fixed",
+      "title": "Lock the Tall or Wide filter from its chip menu so it sticks when you clear other filters.",
+      "mergedAt": "2026-06-30T02:06:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3322"
+    },
     {
       "prNumber": 3319,
       "category": "fixed",

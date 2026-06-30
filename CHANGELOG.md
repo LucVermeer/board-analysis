@@ -6,8 +6,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-06-30
 
+### New
+
+- Switch between app versions yourself: open **What's New → Try a preview** to jump onto any preview build — or tap **Production** to get back to the stable app. No tester access needed. ([#3324](https://github.com/boardsesh/boardsesh/pull/3324))
+
 ### Fixed
 
+- Lock the Tall or Wide filter from its chip menu so it sticks when you clear other filters. ([#3322](https://github.com/boardsesh/boardsesh/pull/3322))
 - The Tall and Wide filter chips now work — tap to filter to your homewall's shape, long-press to lock it on. ([#3319](https://github.com/boardsesh/boardsesh/pull/3319))
   Tap the Grade chip again (or swipe the grade picker away) to close it.
 
