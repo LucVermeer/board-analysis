@@ -12,14 +12,18 @@ vi.mock('@sentry/react-native', () => ({
   captureException: vi.fn(),
   flush: vi.fn(() => Promise.resolve(true)),
   wrap: vi.fn((component: unknown) => component),
+  setTag: vi.fn(),
 }));
 
 import * as Sentry from '@sentry/react-native';
 import {
   applyBleDiagnosticsToScope,
   applyErrorContextToScope,
+  applyOtaTagsToScope,
   captureToSentry,
   flushSentry,
+  setOtaChannelTag,
+  setOtaSentryTags,
   wrapWithSentry,
   isSentryEnabled,
   toSentryTag,
@@ -51,6 +55,18 @@ describe('flushSentry (disabled build)', () => {
   it('resolves true without flushing the SDK', async () => {
     await expect(flushSentry()).resolves.toBe(true);
     expect(Sentry.flush).not.toHaveBeenCalled();
+  });
+});
+
+describe('OTA tag setters (disabled build)', () => {
+  it('setOtaSentryTags is a no-op — never reaches Sentry.setTag', () => {
+    setOtaSentryTags({ channel: 'preview-2', updateId: 'abc', runtimeVersion: 'fp', isEmbeddedLaunch: false });
+    expect(Sentry.setTag).not.toHaveBeenCalled();
+  });
+
+  it('setOtaChannelTag is a no-op — never reaches Sentry.setTag', () => {
+    setOtaChannelTag('pr-123');
+    expect(Sentry.setTag).not.toHaveBeenCalled();
   });
 });
 
@@ -156,5 +172,53 @@ describe('applyBleDiagnosticsToScope', () => {
     ]) {
       expect(scope.setTag).toHaveBeenCalledWith(key, undefined);
     }
+  });
+});
+
+describe('applyOtaTagsToScope', () => {
+  function makeScope() {
+    return { setTag: vi.fn() };
+  }
+
+  it('sets each provided tag and stringifies the embedded boolean for filter-friendliness', () => {
+    const scope = makeScope();
+    applyOtaTagsToScope(scope, {
+      channel: 'preview-2',
+      updateId: 'abc-123',
+      runtimeVersion: 'fp-9f',
+      isEmbeddedLaunch: false,
+    });
+    expect(scope.setTag).toHaveBeenCalledWith('ota_channel', 'preview-2');
+    expect(scope.setTag).toHaveBeenCalledWith('ota_update_id', 'abc-123');
+    expect(scope.setTag).toHaveBeenCalledWith('ota_runtime_version', 'fp-9f');
+    expect(scope.setTag).toHaveBeenCalledWith('ota_is_embedded', 'false'); // string, not boolean
+  });
+
+  it('clears null / undefined fields (undefined) instead of writing the string "null"', () => {
+    const scope = makeScope();
+    applyOtaTagsToScope(scope, { channel: null, updateId: undefined, runtimeVersion: 'fp-9f' });
+    expect(scope.setTag).toHaveBeenCalledWith('ota_channel', undefined);
+    expect(scope.setTag).toHaveBeenCalledWith('ota_update_id', undefined);
+    expect(scope.setTag).toHaveBeenCalledWith('ota_runtime_version', 'fp-9f');
+    // isEmbeddedLaunch was omitted here too, so its tag clears alongside the others.
+    expect(scope.setTag).toHaveBeenCalledWith('ota_is_embedded', undefined);
+  });
+
+  it('treats an empty-string channel as absent (clears rather than writing a blank tag)', () => {
+    const scope = makeScope();
+    applyOtaTagsToScope(scope, { channel: '', updateId: '', runtimeVersion: 'fp-9f' });
+    expect(scope.setTag).toHaveBeenCalledWith('ota_channel', undefined);
+    expect(scope.setTag).toHaveBeenCalledWith('ota_update_id', undefined);
+    expect(scope.setTag).toHaveBeenCalledWith('ota_runtime_version', 'fp-9f');
+  });
+
+  it('distinguishes an omitted embedded flag (cleared) from an explicit false', () => {
+    const omitted = makeScope();
+    applyOtaTagsToScope(omitted, {});
+    expect(omitted.setTag).toHaveBeenCalledWith('ota_is_embedded', undefined);
+
+    const explicit = makeScope();
+    applyOtaTagsToScope(explicit, { isEmbeddedLaunch: false });
+    expect(explicit.setTag).toHaveBeenCalledWith('ota_is_embedded', 'false');
   });
 });

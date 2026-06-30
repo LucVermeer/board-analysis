@@ -129,8 +129,9 @@ export type BleConnectionDiagnostics = {
 
 // A scope whose tags accept `undefined` (the clear value) — wider than
 // SentryScopeLike, which only models the set path. Structural so the mapping is
-// unit-testable with a plain fake, like applyErrorContextToScope.
-type BleTagScope = { setTag: (key: string, value: string | number | boolean | undefined) => void };
+// unit-testable with a plain fake, like applyErrorContextToScope. Shared by the
+// BLE-diagnostics and OTA tag mappers below.
+type TagScope = { setTag: (key: string, value: string | number | boolean | undefined) => void };
 
 /**
  * Pure mapping of BLE diagnostics onto a scope's tags. `null` diagnostics =
@@ -139,7 +140,7 @@ type BleTagScope = { setTag: (key: string, value: string | number | boolean | un
  * the supported clear). Extracted (no enablement gate, no SDK) so the set/clear
  * + boolean-stringify behaviour is directly unit-testable.
  */
-export function applyBleDiagnosticsToScope(scope: BleTagScope, diagnostics: BleConnectionDiagnostics | null): void {
+export function applyBleDiagnosticsToScope(scope: TagScope, diagnostics: BleConnectionDiagnostics | null): void {
   if (!diagnostics) {
     for (const key of BLE_DIAGNOSTIC_TAG_KEYS) scope.setTag(key, undefined);
     return;
@@ -161,9 +162,10 @@ export function applyBleDiagnosticsToScope(scope: BleTagScope, diagnostics: BleC
   }
 }
 
-// Adapts the top-level functional API to a BleTagScope. `Sentry.setTag` accepts
-// `undefined` (Primitive), so it carries the clear path too.
-const bleTagScope: BleTagScope = { setTag: (key, value) => Sentry.setTag(key, value) };
+// Adapts the top-level functional API to a TagScope. `Sentry.setTag` accepts
+// `undefined` (Primitive), so it carries the clear path too. Shared by the BLE
+// and OTA global-tag setters.
+const tagScope: TagScope = { setTag: (key, value) => Sentry.setTag(key, value) };
 
 /**
  * BLE write diagnostics captured at connect, kept as GLOBAL scope tags (not the
@@ -177,7 +179,7 @@ const bleTagScope: BleTagScope = { setTag: (key, value) => Sentry.setTag(key, va
  */
 export function setBleDiagnosticsTags(diagnostics: BleConnectionDiagnostics | null | undefined): void {
   if (!isSentryEnabled) return;
-  applyBleDiagnosticsToScope(bleTagScope, diagnostics ?? null);
+  applyBleDiagnosticsToScope(tagScope, diagnostics ?? null);
 }
 
 /**
@@ -186,7 +188,56 @@ export function setBleDiagnosticsTags(diagnostics: BleConnectionDiagnostics | nu
  */
 export function clearBleDiagnosticsTags(): void {
   if (!isSentryEnabled) return;
-  applyBleDiagnosticsToScope(bleTagScope, null);
+  applyBleDiagnosticsToScope(tagScope, null);
+}
+
+export type OtaTagFields = {
+  // Updates.channel is string | null (null on embedded / dev-server launches).
+  channel?: string | null;
+  updateId?: string | null;
+  runtimeVersion?: string | null;
+  isEmbeddedLaunch?: boolean;
+};
+
+/**
+ * Pure mapping of OTA bundle fields onto a scope's tags. A null/undefined/empty
+ * field is cleared (setTag(key, undefined)) rather than written as the string
+ * "null" or a blank value, matching applyBleDiagnosticsToScope: only real values
+ * become filterable tags, so an embedded / dev-server launch (channel === null)
+ * leaves no noise. The string fields use `|| undefined` so an empty string is
+ * treated as absent too. The boolean is stringified so a Sentry filter reads
+ * `true`/`false`. Extracted (no enablement gate, no SDK) so the coercion is
+ * directly unit-testable.
+ */
+export function applyOtaTagsToScope(scope: TagScope, fields: OtaTagFields): void {
+  scope.setTag('ota_channel', fields.channel || undefined);
+  scope.setTag('ota_update_id', fields.updateId || undefined);
+  scope.setTag('ota_runtime_version', fields.runtimeVersion || undefined);
+  scope.setTag('ota_is_embedded', fields.isEmbeddedLaunch === undefined ? undefined : String(fields.isEmbeddedLaunch));
+}
+
+/**
+ * Stamp the running OTA bundle's channel + identifiers as GLOBAL scope tags so
+ * they ride every later event, including native crashes. Called once per launch
+ * from OtaUpdateTracker. No-op when Sentry is disabled. Takes the fields IN so
+ * this module never imports expo-updates (which is unstubbed under vitest and
+ * would break the sentry suite).
+ */
+export function setOtaSentryTags(fields: OtaTagFields): void {
+  if (!isSentryEnabled) return;
+  applyOtaTagsToScope(tagScope, fields);
+}
+
+/**
+ * Overwrite only the `ota_channel` tag with a tester's active channel override.
+ * A dedicated single-key setter (not setOtaSentryTags) because the override path
+ * only knows the channel — passing the other fields as undefined would clear the
+ * ota_update_id / ota_runtime_version / ota_is_embedded tags the launch stamp
+ * just set. No-op when Sentry is disabled.
+ */
+export function setOtaChannelTag(channel: string): void {
+  if (!isSentryEnabled) return;
+  Sentry.setTag('ota_channel', channel);
 }
 
 /** Best-effort flush so a report survives a later hard crash. */

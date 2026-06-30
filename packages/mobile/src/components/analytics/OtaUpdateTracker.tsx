@@ -6,6 +6,9 @@ import {
   OTA_UPDATE_STATUS_EVENT,
   buildOtaStatusProperties,
 } from '../../lib/ota-telemetry';
+import { setOtaChannelTag, setOtaSentryTags } from '../../lib/sentry';
+import { OTA_CHANNEL_OVERRIDE_KEY } from '../../lib/channel-switch';
+import { getPreference } from '../../lib/preference-store';
 
 // Emits OTA-adoption telemetry so a JS-only rollout is measurable (we previously
 // had no way to tell how many installs pulled an OTA — issue #3098). On mount it
@@ -26,6 +29,25 @@ let hasReportedStatus = false;
 export function resetOtaStatusReportedForTests(): void {
   hasReportedStatus = false;
 }
+
+// Stamp the OTA cohort onto Sentry as global tags. Exported so a test can assert
+// the Updates.* → tag-field wiring; CALLED at module-eval time below (not in an
+// effect) so it runs when the root layout imports this tracker — after
+// Sentry.init (imported first) but before the provider tree and the auth gate
+// render. A native crash / app hang / startup reportError during splash or auth
+// then still carries ota_channel + the bundle identifiers — the window an
+// effect-based stamp would miss. expo-updates' constants are available
+// synchronously at import; setOtaSentryTags no-ops when Sentry is disabled.
+export function stampOtaLaunchSentryTags(): void {
+  setOtaSentryTags({
+    channel: Updates.channel,
+    updateId: Updates.updateId,
+    runtimeVersion: Updates.runtimeVersion,
+    isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+  });
+}
+
+stampOtaLaunchSentryTags();
 
 export function OtaUpdateTracker(): null {
   const { isUpdatePending, downloadedUpdate } = Updates.useUpdates();
@@ -55,6 +77,25 @@ export function OtaUpdateTracker(): null {
       ota_is_embedded: properties.isEmbeddedLaunch,
       ota_runtime_version: properties.runtimeVersion,
     });
+  }, []);
+
+  // A tester who switched channels in-app runs a bundle whose channel differs
+  // from the build-time Updates.channel; the active override lives only in the
+  // AsyncStorage mirror (no native read-back API). Read it async and overwrite
+  // just the ota_channel tag so their reports show the channel they're actually
+  // on — matching ChannelSwitcherScreen's `override ?? buildChannel`.
+  useEffect(() => {
+    let active = true;
+    // Best-effort: a storage read failure just leaves the build channel tag from
+    // the launch stamp in place, so swallow rather than leak an unhandled rejection.
+    void getPreference<string>(OTA_CHANNEL_OVERRIDE_KEY)
+      .then((override) => {
+        if (active && override) setOtaChannelTag(override);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
 
   // A newer bundle finished downloading this session; it applies on the next
