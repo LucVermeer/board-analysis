@@ -107,7 +107,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
     setOpenFacet((current) => (current === facet ? null : facet));
   }, []);
   // One stable "today" ceiling so the To-date row's maximumDate keeps a constant
-  // identity across renders (mirrors the filter sheet's `today`).
+  // identity across renders (mirrors the filter sheet's `today`). Frozen at mount;
+  // if the app sits open past midnight it's a day stale, which is harmless here and
+  // matches the sheet.
   const today = useMemo(() => new Date(), []);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
