@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-30T02:07:14.861Z",
+  "generatedAt": "2026-06-30T02:30:20.994Z",
   "entries": [
+    {
+      "prNumber": 3327,
+      "category": "new",
+      "title": "Crash reports now know which preview channel you're running, so beta bugs get sorted out faster.",
+      "mergedAt": "2026-06-30T02:29:16Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3327"
+    },
     {
       "prNumber": 3324,
       "category": "new",

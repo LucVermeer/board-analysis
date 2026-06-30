@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Crash reports now know which preview channel you're running, so beta bugs get sorted out faster. ([#3327](https://github.com/boardsesh/boardsesh/pull/3327))
 - Switch between app versions yourself: open **What's New → Try a preview** to jump onto any preview build — or tap **Production** to get back to the stable app. No tester access needed. ([#3324](https://github.com/boardsesh/boardsesh/pull/3324))
 
 ### Fixed
