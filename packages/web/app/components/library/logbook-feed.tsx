@@ -299,7 +299,7 @@ export default function LogbookFeed({ layoutStats, loadingLayoutStats }: Logbook
   useEffect(() => {
     if (!preferencesLoaded) return;
     void setPreference('logbookPreferences', {
-      version: 1 as const,
+      version: 2 as const,
       boardFilter: 'all' as const,
       layoutSelections: {
         kilter: [],

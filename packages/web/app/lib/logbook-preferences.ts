@@ -31,7 +31,7 @@ export {
 export type BoardFilter = 'all' | 'moonboard' | AuroraBoardName;
 
 export type LogbookPreferences = {
-  version: 1;
+  version: 2;
   boardFilter: BoardFilter;
   layoutSelections: Record<Exclude<BoardFilter, 'all'>, number[]>;
   filters: LogbookFilterState;
@@ -49,7 +49,7 @@ export const ALL_LAYOUT_SELECTIONS: Record<Exclude<BoardFilter, 'all'>, number[]
 };
 
 export const DEFAULT_LOGBOOK_PREFERENCES: LogbookPreferences = {
-  version: 1,
+  version: 2,
   boardFilter: 'all',
   layoutSelections: ALL_LAYOUT_SELECTIONS,
   filters: DEFAULT_LOGBOOK_FILTERS,
@@ -88,18 +88,30 @@ export function sanitizeLogbookPreferences(value: unknown): LogbookPreferences {
   }
 
   const source = value as Partial<LogbookPreferences>;
+  const storedVersion = (value as { version?: number }).version;
 
   const boardFilter = VALID_BOARD_FILTERS.includes(source.boardFilter ?? 'all')
     ? (source.boardFilter as BoardFilter)
     : DEFAULT_LOGBOOK_PREFERENCES.boardFilter;
 
+  // Filter/sort sanitization is delegated to the shared package so web and
+  // mobile coerce persisted state identically.
+  const filters = sanitizeLogbookFilters(source.filters);
+
+  // One-time migration to the sends-only default (schema v2): legacy prefs (no v2
+  // stamp) that still carry the old "both" default get attempts dropped, so an
+  // untouched logbook stops showing a phantom filter badge. An explicit "both" is
+  // clobbered too (rare; re-add attempts from the filters). Stamping version 2
+  // below makes this run once — "both" is fully selectable afterward.
+  if (storedVersion !== 2 && filters.includeSends && filters.includeAttempts) {
+    filters.includeAttempts = false;
+  }
+
   return {
-    version: 1,
+    version: 2,
     boardFilter,
     layoutSelections: sanitizeLayoutSelections(source.layoutSelections),
-    // Filter/sort sanitization is delegated to the shared package so web and
-    // mobile coerce persisted state identically.
-    filters: sanitizeLogbookFilters(source.filters),
+    filters,
     sort: sanitizeLogbookSort(source.sort),
   };
 }
