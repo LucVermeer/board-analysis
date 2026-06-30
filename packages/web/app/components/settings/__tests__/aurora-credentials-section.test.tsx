@@ -69,7 +69,7 @@ describe('AuroraCredentialsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFeatureFlags = {};
-    mockGetAuroraCredentials.mockResolvedValue({ credentials: [], kilterSyncAllowed: true });
+    mockGetAuroraCredentials.mockResolvedValue({ credentials: [] });
     mockGetAuroraUnsyncedCounts.mockResolvedValue({});
     mockSaveKilterViaPassword.mockResolvedValue({ success: true });
     mockSaveAuroraCredential.mockResolvedValue({ success: true });
@@ -106,6 +106,40 @@ describe('AuroraCredentialsSection', () => {
           password: 'kilterpass',
         });
         expect(mockSaveAuroraCredential).not.toHaveBeenCalled();
+      });
+    });
+
+    it('hides the Kilter (new) sign-in card when the flag is off and nothing is linked', async () => {
+      render(<AuroraCredentialsSection />);
+
+      // Wait for the non-kilter board cards to render so the absence check runs
+      // after load, not before.
+      await waitFor(() => {
+        expect(screen.getAllByRole('button', { name: 'Link' }).length).toBeGreaterThan(0);
+      });
+
+      expect(screen.queryByText('Sign in to Kilter')).toBeNull();
+    });
+
+    it('keeps the Kilter (new) card when the flag is off but an account is already linked', async () => {
+      // The core UX promise: a linked Kilter account stays manageable even after
+      // the PostHog flag is switched off (showKilterNew = flag || hasKilterCredential).
+      mockGetAuroraCredentials.mockResolvedValue({
+        credentials: [
+          {
+            boardType: 'kilter',
+            auroraUsername: 'kilteruser',
+            syncStatus: 'synced',
+            lastSyncAt: null,
+            syncError: null,
+          },
+        ],
+      });
+
+      render(<AuroraCredentialsSection />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Kilter (new)')).toBeTruthy();
       });
     });
 
@@ -152,7 +186,6 @@ describe('AuroraCredentialsSection', () => {
             syncError: null,
           },
         ],
-        kilterSyncAllowed: false,
       });
 
       render(<AuroraCredentialsSection />);

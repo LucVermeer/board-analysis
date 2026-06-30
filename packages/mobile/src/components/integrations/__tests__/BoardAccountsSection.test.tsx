@@ -16,12 +16,11 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(() => Promise.resolve()),
   flags: {} as Record<string, boolean | undefined>,
   credentials: [] as AuroraCredentialStatus[],
-  kilterSyncAllowed: true,
 }));
 
 vi.mock('../../../lib/aurora-credentials', () => ({
   BoardAccountError: class BoardAccountError extends Error {},
-  getAuroraCredentials: () => Promise.resolve({ credentials: [], kilterSyncAllowed: true }),
+  getAuroraCredentials: () => Promise.resolve({ credentials: [] }),
   getAuroraUnsyncedCounts: () => Promise.resolve({}),
   saveAuroraCredential: mocks.saveAurora,
   saveKilterCredentialViaPassword: mocks.saveKilterViaPassword,
@@ -40,9 +39,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQuery: (opts: { queryKey: readonly unknown[] }) => {
     const isCredentials = opts.queryKey[0] === 'auroraCredentials' && opts.queryKey[1] !== 'unsynced';
     return {
-      data: isCredentials
-        ? ({ credentials: mocks.credentials, kilterSyncAllowed: mocks.kilterSyncAllowed } as AuroraCredentialsResponse)
-        : {},
+      data: isCredentials ? ({ credentials: mocks.credentials } as AuroraCredentialsResponse) : {},
       isPending: false,
       isError: false,
       isSuccess: true,
@@ -151,10 +148,9 @@ describe('BoardAccountsSection — Kilter password card', () => {
     mocks.invalidate.mockClear();
     mocks.flags = {};
     mocks.credentials = [];
-    mocks.kilterSyncAllowed = true;
   });
 
-  it('shows the Kilter (new) sign-in card when the flag and gate are on', () => {
+  it('shows the Kilter (new) sign-in card when the flag is on', () => {
     mocks.flags = { 'kilter-oauth-linking': true };
     const { container } = render(<BoardAccountsSection />);
     expect(button(container, 'aurora.card.kilterSignIn')).not.toBeNull();
@@ -166,6 +162,27 @@ describe('BoardAccountsSection — Kilter password card', () => {
     expect(button(container, 'aurora.card.kilterSignIn')).toBeNull();
     // The legacy Kilter (Aurora) import path is still offered.
     expect(button(container, 'aurora.card.requestData')).not.toBeNull();
+  });
+
+  it('keeps the Kilter (new) card when the flag is off but an account is already linked', () => {
+    // The core UX promise: a linked Kilter account stays manageable even after
+    // the flag is switched off (showKilterNew = flag || hasKilterCredential).
+    mocks.flags = { 'kilter-oauth-linking': false };
+    mocks.credentials = [
+      {
+        boardType: 'kilter',
+        auroraUsername: 'kilteruser',
+        auroraUserId: null,
+        lastSyncAt: null,
+        syncStatus: 'synced',
+        syncError: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    const { container } = render(<BoardAccountsSection />);
+    // The connected card (Unlink) shows; the sign-in button does not.
+    expect(button(container, 'aurora.card.unlink')).not.toBeNull();
+    expect(button(container, 'aurora.card.kilterSignIn')).toBeNull();
   });
 
   it('links Kilter via the password grant when the sign-in form is submitted', async () => {
