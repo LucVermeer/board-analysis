@@ -18,10 +18,10 @@ export type LogbookChipRowProps = {
   /** Grade scale (difficultyId → name) for the grade chip's V/font label. Same
    *  source the filter sheet's GradeRangeRail uses so the wording never diverges. */
   grades: readonly Grade[];
-  /** Which facet's inline rail is open (parent-lifted), or null when all closed.
-   *  Only the grade/angle/date facets open a rail; show is a native menu. */
-  openFacet: LogbookFacetKey | null;
-  /** Toggle a facet's rail open/close (one at a time) — the chip's tap handler. */
+  /** Toggle a facet's rail open/close (one at a time) — the chip's tap handler.
+   *  The open-state itself is owned by the parent (it renders the rail below the
+   *  Host), so it is NOT passed down — keeping it off the props lets the chip row
+   *  stay memoised across rail toggles. */
   onToggleFacet: (facet: LogbookFacetKey) => void;
   /** Live-commit a partial filter patch (the Show menu's toggles). */
   onUpdateFilters: (partial: Partial<LogbookFilterState>) => void;

@@ -170,6 +170,32 @@ describe('useLogbookSearch', () => {
     expect(result.current.filters.benchmarkOnly).toBe(false);
   });
 
+  it('keeps a setFilters change applied before hydration resolves (no clobber)', async () => {
+    let resolveLoad: (value: StoredLogbookPrefs | null) => void = () => {};
+    vi.mocked(loadLogbookPrefs).mockReturnValueOnce(
+      new Promise<StoredLogbookPrefs | null>((resolve) => {
+        resolveLoad = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useLogbookSearch());
+
+    // A facet chip live-commits via setFilters before persisted prefs finish loading.
+    await act(async () => {
+      result.current.setFilters({ benchmarkOnly: true });
+    });
+    expect(result.current.hydrated).toBe(false);
+
+    // The persisted prefs (a different set) now resolve — they must NOT overwrite.
+    await act(async () => {
+      resolveLoad({ filters: { ...DEFAULT_LOGBOOK_FILTERS, minGrade: 12 }, sort: DEFAULT_LOGBOOK_SORT });
+      await Promise.resolve();
+    });
+
+    expect(result.current.hydrated).toBe(true);
+    expect(result.current.filters.benchmarkOnly).toBe(true);
+    expect(result.current.filters.minGrade).toBe('');
+  });
+
   it('reset restores defaults and keeps the gate open', async () => {
     vi.mocked(loadLogbookPrefs).mockResolvedValueOnce({
       filters: { ...DEFAULT_LOGBOOK_FILTERS, benchmarkOnly: true },

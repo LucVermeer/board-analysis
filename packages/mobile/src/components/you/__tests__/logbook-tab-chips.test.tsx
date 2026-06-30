@@ -19,7 +19,6 @@ const captured = vi.hoisted(() => ({
   onSelectPreset: null as ((preset: LogbookSortPreset) => void) | null,
   onOpenFilters: null as (() => void) | null,
   chipFilters: undefined as LogbookFilterState | undefined,
-  chipOpenFacet: undefined as string | null | undefined,
   onToggleFacet: null as ((facet: 'grade' | 'angle' | 'show' | 'date') => void) | null,
   onUpdateFilters: null as ((partial: Partial<LogbookFilterState>) => void) | null,
   sheetMounted: false,
@@ -77,7 +76,6 @@ vi.mock('../LogbookChipRow', () => ({
     onSelectPreset,
     onOpenFilters,
     filters,
-    openFacet,
     onToggleFacet,
     onUpdateFilters,
   }: {
@@ -85,7 +83,6 @@ vi.mock('../LogbookChipRow', () => ({
     onSelectPreset: (preset: LogbookSortPreset) => void;
     onOpenFilters: () => void;
     filters: LogbookFilterState;
-    openFacet: 'grade' | 'angle' | 'show' | 'date' | null;
     onToggleFacet: (facet: 'grade' | 'angle' | 'show' | 'date') => void;
     onUpdateFilters: (partial: Partial<LogbookFilterState>) => void;
   }) => {
@@ -94,7 +91,6 @@ vi.mock('../LogbookChipRow', () => ({
     captured.onSelectPreset = onSelectPreset;
     captured.onOpenFilters = onOpenFilters;
     captured.chipFilters = filters;
-    captured.chipOpenFacet = openFacet;
     captured.onToggleFacet = onToggleFacet;
     captured.onUpdateFilters = onUpdateFilters;
     return createElement('div', { 'data-testid': 'chip-row' });
@@ -164,7 +160,6 @@ beforeEach(() => {
   captured.onSelectPreset = null;
   captured.onOpenFilters = null;
   captured.chipFilters = undefined;
-  captured.chipOpenFacet = undefined;
   captured.onToggleFacet = null;
   captured.onUpdateFilters = null;
   captured.sheetMounted = false;
@@ -237,27 +232,23 @@ describe('LogbookTab chip row', () => {
     const { queryByTestId } = render(createElement(LogbookTab, { userId: 'user-1' }));
     expect(captured.onToggleFacet).not.toBeNull();
     // Nothing open initially.
-    expect(captured.chipOpenFacet).toBeNull();
     expect(queryByTestId('facet-rail')).toBeNull();
 
     // Tapping Grade opens its rail.
     act(() => captured.onToggleFacet?.('grade'));
-    expect(captured.chipOpenFacet).toBe('grade');
     expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('grade');
 
     // Tapping Grade again closes it (toggle).
     act(() => captured.onToggleFacet?.('grade'));
-    expect(captured.chipOpenFacet).toBeNull();
     expect(queryByTestId('facet-rail')).toBeNull();
   });
 
   it('swaps to a different facet rail (one open at a time)', () => {
     const { queryByTestId } = render(createElement(LogbookTab, { userId: 'user-1' }));
     act(() => captured.onToggleFacet?.('grade'));
-    expect(captured.chipOpenFacet).toBe('grade');
+    expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('grade');
 
     act(() => captured.onToggleFacet?.('angle'));
-    expect(captured.chipOpenFacet).toBe('angle');
     expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('angle');
   });
 

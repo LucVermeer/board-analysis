@@ -274,7 +274,6 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
               onOpenFilters={handleOpenFilters}
               filters={filters}
               grades={grades ?? EMPTY_GRADES}
-              openFacet={openFacet}
               onToggleFacet={handleToggleFacet}
               onUpdateFilters={setFilters}
             />

@@ -180,8 +180,8 @@ const styles = StyleSheet.create({
   },
 });
 
-// The chips don't need to read `openFacet` (it's the lifted rail's state, owned
-// by LogbookTab below this Host): each chip tap is a TOGGLE via onToggleFacet, so
-// the open/close decision is made by the parent. The prop stays on the type so
-// the parent's wiring is explicit.
+// The chips don't take the rail's open-state: each chip tap is a TOGGLE via
+// onToggleFacet, and the parent (LogbookTab) owns which rail is open and renders
+// it below this Host. Keeping open-state off the props lets this row stay
+// memoised across rail toggles.
 export const LogbookChipRow = memo(LogbookChipRowComponent);
