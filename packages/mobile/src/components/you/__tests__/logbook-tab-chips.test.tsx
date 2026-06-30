@@ -252,6 +252,17 @@ describe('LogbookTab chip row', () => {
     expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('angle');
   });
 
+  it('closes the open facet rail when the filter sheet opens', () => {
+    const { queryByTestId } = render(createElement(LogbookTab, { userId: 'user-1' }));
+    act(() => captured.onToggleFacet?.('grade'));
+    expect(queryByTestId('facet-rail')?.getAttribute('data-facet')).toBe('grade');
+
+    // Opening the full sheet dismisses any open inline rail (no lingering rail
+    // under the sheet, no over-tall toolbar after it closes).
+    act(() => captured.onOpenFilters?.());
+    expect(queryByTestId('facet-rail')).toBeNull();
+  });
+
   it('live-commits a filter patch through onUpdateFilters (the Show menu / rails)', () => {
     render(createElement(LogbookTab, { userId: 'user-1' }));
     expect(captured.onUpdateFilters).not.toBeNull();

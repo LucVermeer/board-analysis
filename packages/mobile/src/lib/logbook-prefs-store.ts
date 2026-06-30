@@ -15,17 +15,29 @@ import {
 import { getPreference, setPreference } from './preference-store';
 
 const STORAGE_KEY = 'logbookSearchPrefs';
+// Persisted-schema version. v2 = the sends-only status default; a legacy payload
+// (v1 / unstamped) still on the old "both" default is migrated once on load.
+const LOGBOOK_PREFS_VERSION = 2;
 
 export type StoredLogbookPrefs = { filters: LogbookFilterState; sort: LogbookSortState };
 
 /** Load persisted logbook filter/sort prefs (sanitized); null when never set. */
 export async function loadLogbookPrefs(): Promise<StoredLogbookPrefs | null> {
   try {
-    const stored = await getPreference<{ filters?: unknown; sort?: unknown }>(STORAGE_KEY);
+    const stored = await getPreference<{ version?: number; filters?: unknown; sort?: unknown }>(STORAGE_KEY);
     if (!stored) return null;
     // Sanitize every field so a stale/partial payload (older app version, manual
     // edit) can never feed an invalid filter/sort into the query.
-    return { filters: sanitizeLogbookFilters(stored.filters), sort: sanitizeLogbookSort(stored.sort) };
+    const filters = sanitizeLogbookFilters(stored.filters);
+    const sort = sanitizeLogbookSort(stored.sort);
+    // One-time migration to the sends-only default (mirrors web's
+    // sanitizeLogbookPreferences v1→v2): a legacy payload still on the old "both"
+    // default drops attempts. saveLogbookPrefs stamps the version, so this runs
+    // once and "both" stays selectable afterward.
+    if (stored.version !== LOGBOOK_PREFS_VERSION && filters.includeSends && filters.includeAttempts) {
+      filters.includeAttempts = false;
+    }
+    return { filters, sort };
   } catch {
     // Storage unavailable/errored — treat as "no prefs" so the caller's
     // hydration still completes and the logbook never gets stuck loading.
@@ -36,7 +48,7 @@ export async function loadLogbookPrefs(): Promise<StoredLogbookPrefs | null> {
 /** Persist the logbook filter/sort prefs so they survive an app restart. */
 export async function saveLogbookPrefs(prefs: StoredLogbookPrefs): Promise<void> {
   try {
-    await setPreference(STORAGE_KEY, prefs);
+    await setPreference(STORAGE_KEY, { version: LOGBOOK_PREFS_VERSION, ...prefs });
   } catch {
     // Storage write failed (full disk, first-install permission race). Persisting
     // a UI preference is best-effort, so swallow rather than leak an unhandled
