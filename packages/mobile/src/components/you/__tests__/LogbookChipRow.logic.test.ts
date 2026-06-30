@@ -171,6 +171,14 @@ describe('dateChipLabel', () => {
   it('returns null when neither bound parses', () => {
     expect(dateChipLabel('not-a-date', '', t)).toBeNull();
   });
+
+  it('parses a bare ISO date as local midnight (no UTC day-shift)', () => {
+    // `new Date("2024-01-15")` is UTC midnight — a day earlier in negative-offset
+    // zones, which would disagree with the date picker's local-midnight parse. The
+    // label must read the ISO's own calendar day in any timezone.
+    const expected = new Date(2024, 0, 15).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    expect(dateChipLabel('2024-01-15', '', t)).toBe(`mobile.logbook.dateSince:${expected}`);
+  });
 });
 
 describe('angleChipLabel', () => {

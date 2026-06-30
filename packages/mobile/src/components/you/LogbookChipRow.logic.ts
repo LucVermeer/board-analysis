@@ -62,7 +62,10 @@ export function gradeChipLabel(
 /** Localise one ISO date short ("Jun 30"); null when the ISO can't be parsed. */
 function formatShortDate(iso: string): string | null {
   if (!iso) return null;
-  const parsed = new Date(iso);
+  // Parse as LOCAL midnight: `new Date("2024-01-15")` is UTC midnight, which
+  // renders a day early in negative-offset zones and would disagree with the date
+  // picker's local-midnight parse (parseIsoDate in logbook-facet-controls).
+  const parsed = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

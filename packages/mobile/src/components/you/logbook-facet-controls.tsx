@@ -23,7 +23,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
 import { springs } from '../../theme/animations';
 import { spacing } from '../../theme/tokens';
-import { iosSystemColors } from '../../theme/ios-colors';
+import { readableTextColor } from '../grade';
 
 // Angle filter granularity — mirrors the web slider (0–70°, step 5).
 const ANGLE_STEP = 5;
@@ -94,7 +94,11 @@ export const Chip = memo(function Chip({
       accessibilityLabel={label}
       style={[animatedStyle, chipStyle]}
     >
-      <Text variant="footnote" color={selected ? iosSystemColors.black : undefined} style={styles.chipText}>
+      <Text
+        variant="footnote"
+        color={selected ? readableTextColor(brandColors.accent) : undefined}
+        style={styles.chipText}
+      >
         {label}
       </Text>
     </AnimatedPressable>
