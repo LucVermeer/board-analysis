@@ -57,14 +57,15 @@ function LogbookChipRowComponent({ sortPreset, onSelectPreset, onOpenFilters, fi
       <ScrollView axes="horizontal" showsIndicators={false}>
         {/* Vertical padding gives a pressed chip's glass lens room to expand. */}
         <HStack spacing={spacing[2]} modifiers={[padding({ horizontal: spacing[4], vertical: spacing[2] })]}>
-          {/* Filter → the long-tail sheet. An action button, not a menu. Mirrors
-              FilterChipRow's icon-led "Filters" entry chip — prominent (amber) like
-              the climb search's filled Filter chip. */}
+          {/* Filter → the long-tail sheet. An action button, not a menu. Neutral
+              glass until at least one filter is applied, then amber — matching the
+              climb search, where Filters only colours up once filters are set. The
+              sort (Latest/Hardest) doesn't count, so it never tints the Filter chip. */}
           <Button
             label={t('mobile.logbook.filter')}
             systemImage="line.3.horizontal.decrease"
             onPress={onOpenFilters}
-            modifiers={chipModifiers(true)}
+            modifiers={chipModifiers(activeChips.length > 0)}
           />
 
           {/* Latest / Hardest — live-commit the sort preset; null lights neither. */}
