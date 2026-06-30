@@ -12,6 +12,7 @@
 // this alias.
 
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { assertNeverSwitcherRow } from '../src/components/SwitcherForm.logic';
 import type { SwitcherFormProps } from '../src/components/SwitcherForm.types';
 
 export function SwitcherForm({ model }: SwitcherFormProps) {
@@ -72,7 +73,10 @@ export function SwitcherForm({ model }: SwitcherFormProps) {
                   </Pressable>
                 );
               default:
-                return null;
+                // Mirror the real renderers: a new SwitcherRow kind must fail
+                // (compile-time via `never`, runtime if it slips through) rather
+                // than silently render nothing in tests.
+                return assertNeverSwitcherRow(row);
             }
           })}
           {section.footer ? <Text>{section.footer}</Text> : null}
