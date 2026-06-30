@@ -21,9 +21,9 @@ import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { LogbookFilterSheet } from './LogbookFilterSheet';
-import { LogbookSortChipRow } from './LogbookSortChipRow';
+import { LogbookChipRow } from './LogbookChipRow';
 import { useLogbookSearch, countActiveLogbookFilters } from './use-logbook-search';
-import { useUserAscentsFeed } from '../../lib/graphql/hooks';
+import { useUserAscentsFeed, useGrades } from '../../lib/graphql/hooks';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { tickToClimb } from '../../lib/tick-to-climb';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
@@ -38,6 +38,12 @@ import { useTheme } from '../../providers/theme-provider';
 import { selectByVariant } from '../../theme/variants';
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+// Kilter and Tension share an identical difficulty-id scale, so one board's grade
+// list is the canonical scale for the grade chip's label — the same source the
+// filter sheet's GradeRangeRail uses (LogbookFilterSheet's GRADE_SCALE_BOARD), so
+// the chip and the rail never word a grade differently.
+const GRADE_SCALE_BOARD = 'kilter';
 
 type LogbookTabProps = {
   userId: string | undefined;
@@ -65,6 +71,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
   // per the mobile variant guard. When shown, the sheet's Sort block is suppressed.
   const showSortChips =
     logbookFiltersEnabled && Platform.OS === 'ios' && selectByVariant(variant, { liquidGlass: true, material: false });
+  // Grade scale for the chip row's grade label — fetched only when the chip row is
+  // shown (the Android/Material toolbar has no grade chip). Same query as the sheet.
+  const { data: grades } = useGrades(GRADE_SCALE_BOARD, showSortChips);
   const router = useRouter();
   const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
@@ -216,41 +225,69 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
       {/* Fixed top toolbar — all logbook actions concentrated here, below the
           floating chrome. Sibling of the list, so list virtualization is intact. */}
       <View style={[styles.toolbar, { paddingTop: topInset }]}>
-        {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
-        {logbookFiltersEnabled ? (
-          <View style={styles.toolbarRow}>
-            <SearchHeader
-              ref={searchHeaderRef}
-              placeholder={t('mobile.logbook.searchPlaceholder')}
-              onChangeText={handleSearchChange}
-              initialValue={name}
-              height={40}
+        {showSortChips ? (
+          // iOS Liquid Glass: the title and search share one row to reclaim the
+          // line the search box used, and the chip row below carries the filter
+          // entry + sort + active-filter chips (so no separate filter button here).
+          <>
+            <View style={styles.titleSearchRow}>
+              {screenTitle ? <ScreenTitle style={styles.inlineScreenTitle}>{screenTitle}</ScreenTitle> : null}
+              <SearchHeader
+                ref={searchHeaderRef}
+                placeholder={t('mobile.logbook.searchPlaceholder')}
+                onChangeText={handleSearchChange}
+                initialValue={name}
+                height={40}
+              />
+            </View>
+            {/* Filter entry + Latest/Hardest + active-filter chips — switch sort
+                and surface active filters without opening the sheet. The sheet's
+                own Sort block is hidden (showSort={false}) so it isn't worded twice. */}
+            <LogbookChipRow
+              sortPreset={sortPreset}
+              onSelectPreset={setPreset}
+              onOpenFilters={handleOpenFilters}
+              filters={filters}
+              grades={grades ?? []}
             />
-            <Pressable
-              onPress={handleOpenFilters}
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.logbook.filter')}
-              style={({ pressed }) => [
-                styles.filterButton,
-                { backgroundColor: brandColors.accent },
-                pressed && styles.filterButtonPressed,
-              ]}
-            >
-              <Icon name="filter" size={18} color={iosSystemColors.black} />
-              {activeFilterCount > 0 ? (
-                <View style={[styles.filterBadge, { backgroundColor: iosSystemColors.black }]}>
-                  <Text variant="caption2" color={brandColors.accent} style={styles.filterBadgeText}>
-                    {activeFilterCount}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-          </View>
-        ) : null}
-        {/* Top-level Liquid Glass sort chips (Latest/Hardest) — switch sort
-            without opening the sheet. iOS Liquid Glass only; the sheet's own Sort
-            block is hidden (showSort={false}) so it isn't shown twice. */}
-        {showSortChips ? <LogbookSortChipRow preset={sortPreset} onSelectPreset={setPreset} /> : null}
+          </>
+        ) : (
+          // Android / Material: the current layout — title above, then search +
+          // the round filter button (no chip row).
+          <>
+            {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
+            {logbookFiltersEnabled ? (
+              <View style={styles.toolbarRow}>
+                <SearchHeader
+                  ref={searchHeaderRef}
+                  placeholder={t('mobile.logbook.searchPlaceholder')}
+                  onChangeText={handleSearchChange}
+                  initialValue={name}
+                  height={40}
+                />
+                <Pressable
+                  onPress={handleOpenFilters}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.logbook.filter')}
+                  style={({ pressed }) => [
+                    styles.filterButton,
+                    { backgroundColor: brandColors.accent },
+                    pressed && styles.filterButtonPressed,
+                  ]}
+                >
+                  <Icon name="filter" size={18} color={iosSystemColors.black} />
+                  {activeFilterCount > 0 ? (
+                    <View style={[styles.filterBadge, { backgroundColor: iosSystemColors.black }]}>
+                      <Text variant="caption2" color={brandColors.accent} style={styles.filterBadgeText}>
+                        {activeFilterCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </View>
+            ) : null}
+          </>
+        )}
       </View>
 
       {feed.isPending ? (
@@ -349,6 +386,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
+  },
+  // iOS glass: title + search on one row (title content-sized, search fills the rest).
+  titleSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  inlineScreenTitle: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   screenTitle: {
     paddingHorizontal: 0,

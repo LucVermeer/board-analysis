@@ -310,7 +310,10 @@ export function LogbookFilterSheet({
         ref={scrollRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing[4] }]}
+        // With a fixed 90% snap point + enableDynamicSizing off, the content must
+        // flex to fill the sheet and carry generous bottom padding so the last row
+        // (Benchmarks only) scrolls fully into view when both sections are expanded.
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing[8] }]}
       >
         {/* PRESET — the headline one-tap sort. Above Refine/Advanced. Suppressed
             when the toolbar's top-level sort chips own it (Liquid Glass), so sort
@@ -564,6 +567,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[3],
   },
   scrollContent: {
+    // Fill the sheet so the content is always scrollable to the last row (the
+    // inline override supplies the generous safe-area-aware bottom padding).
+    flexGrow: 1,
     paddingBottom: spacing[4],
   },
   primary: {

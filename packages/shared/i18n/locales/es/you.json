@@ -127,6 +127,8 @@
       "dateFrom": "Desde",
       "dateTo": "Hasta",
       "dateAny": "Cualquiera",
+      "dateSince": "Desde {{date}}",
+      "dateUntil": "Hasta {{date}}",
       "benchmarksOnly": "Solo referencias",
       "reset": "Restablecer",
       "editTitle": "Editar ascenso",

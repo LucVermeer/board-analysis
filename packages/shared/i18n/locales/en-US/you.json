@@ -127,6 +127,8 @@
       "dateFrom": "From",
       "dateTo": "To",
       "dateAny": "Any",
+      "dateSince": "Since {{date}}",
+      "dateUntil": "Until {{date}}",
       "benchmarksOnly": "Benchmarks only",
       "reset": "Reset",
       "editTitle": "Edit ascent",

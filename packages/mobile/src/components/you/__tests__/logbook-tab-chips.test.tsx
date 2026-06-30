@@ -2,16 +2,23 @@
 import { render, fireEvent, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_LOGBOOK_FILTERS, DEFAULT_LOGBOOK_SORT, type LogbookSortPreset } from '@boardsesh/logbook';
+import {
+  DEFAULT_LOGBOOK_FILTERS,
+  DEFAULT_LOGBOOK_SORT,
+  type LogbookFilterState,
+  type LogbookSortPreset,
+} from '@boardsesh/logbook';
 
-// Captures what LogbookTab hands the (mocked) sort chip row + filter sheet, so the
-// test can assert the Liquid-Glass gating and the showSort hand-off without native
-// components. The chip row exposes its onSelectPreset + the committed preset; the
-// sheet exposes its showSort prop.
+// Captures what LogbookTab hands the (mocked) chip row + filter sheet, so the test
+// can assert the Liquid-Glass gating, the inline-search layout, and the showSort
+// hand-off without native components. The chip row exposes its onSelectPreset +
+// onOpenFilters + the committed preset; the sheet exposes its showSort prop.
 const captured = vi.hoisted(() => ({
   chipMounted: false,
-  chipPreset: undefined as LogbookSortPreset | undefined,
+  chipPreset: undefined as LogbookSortPreset | null | undefined,
   onSelectPreset: null as ((preset: LogbookSortPreset) => void) | null,
+  onOpenFilters: null as (() => void) | null,
+  chipFilters: undefined as LogbookFilterState | undefined,
   sheetMounted: false,
   sheetShowSort: undefined as boolean | undefined,
 }));
@@ -61,18 +68,24 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => createElement('div', { 'data-testid': 'search-header' }) }));
 
-vi.mock('../LogbookSortChipRow', () => ({
-  LogbookSortChipRow: ({
-    preset,
+vi.mock('../LogbookChipRow', () => ({
+  LogbookChipRow: ({
+    sortPreset,
     onSelectPreset,
+    onOpenFilters,
+    filters,
   }: {
-    preset: LogbookSortPreset;
+    sortPreset: LogbookSortPreset | null;
     onSelectPreset: (preset: LogbookSortPreset) => void;
+    onOpenFilters: () => void;
+    filters: LogbookFilterState;
   }) => {
     captured.chipMounted = true;
-    captured.chipPreset = preset;
+    captured.chipPreset = sortPreset;
     captured.onSelectPreset = onSelectPreset;
-    return createElement('div', { 'data-testid': 'sort-chip-row' });
+    captured.onOpenFilters = onOpenFilters;
+    captured.chipFilters = filters;
+    return createElement('div', { 'data-testid': 'chip-row' });
   },
 }));
 
@@ -95,7 +108,10 @@ vi.mock('../../ScreenTitle', () => ({
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
 
-vi.mock('../../../lib/graphql/hooks', () => ({ useUserAscentsFeed: () => feed }));
+vi.mock('../../../lib/graphql/hooks', () => ({
+  useUserAscentsFeed: () => feed,
+  useGrades: () => ({ data: [] }),
+}));
 vi.mock('../../../lib/logbook-prefs-store', () => ({
   loadLogbookPrefs: vi.fn(() => Promise.resolve(null)),
   saveLogbookPrefs: vi.fn(() => Promise.resolve()),
@@ -129,6 +145,8 @@ beforeEach(() => {
   captured.chipMounted = false;
   captured.chipPreset = undefined;
   captured.onSelectPreset = null;
+  captured.onOpenFilters = null;
+  captured.chipFilters = undefined;
   captured.sheetMounted = false;
   captured.sheetShowSort = undefined;
   themeState.variant = 'liquidGlass';
@@ -136,34 +154,43 @@ beforeEach(() => {
   platformState.os = 'ios';
 });
 
-describe('LogbookTab sort chips', () => {
-  it('renders the sort chips and hides the sheet sort on iOS Liquid Glass', () => {
-    const { getByTestId, getByLabelText } = render(createElement(LogbookTab, { userId: 'user-1' }));
+describe('LogbookTab chip row', () => {
+  it('renders the chip row with inline search and no separate filter button on iOS Liquid Glass', () => {
+    const { getByTestId, queryByLabelText } = render(createElement(LogbookTab, { userId: 'user-1' }));
 
-    expect(getByTestId('sort-chip-row')).toBeTruthy();
+    expect(getByTestId('chip-row')).toBeTruthy();
+    expect(getByTestId('search-header')).toBeTruthy();
     expect(captured.chipPreset).toBe('recent');
+    expect(captured.chipFilters).toEqual(DEFAULT_LOGBOOK_FILTERS);
+    // The filter entry moved into the chip row, so no round filter button here.
+    expect(queryByLabelText('mobile.logbook.filter')).toBeNull();
+  });
 
-    // Opening the sheet hands it showSort={false} so sort isn't worded twice.
-    fireEvent.click(getByLabelText('mobile.logbook.filter'));
+  it("opens the sheet via the chip row's onOpenFilters and hands it showSort={false}", () => {
+    render(createElement(LogbookTab, { userId: 'user-1' }));
+    expect(captured.onOpenFilters).not.toBeNull();
+
+    act(() => captured.onOpenFilters?.());
     expect(captured.sheetMounted).toBe(true);
+    // Sort lives in the chips, so the sheet drops its Sort block.
     expect(captured.sheetShowSort).toBe(false);
   });
 
-  it('does not render the sort chips on Material and keeps the sheet sort', () => {
+  it('does not render the chip row on Material, keeps the filter button + sheet sort', () => {
     themeState.variant = 'material';
     const { queryByTestId, getByLabelText } = render(createElement(LogbookTab, { userId: 'user-1' }));
 
-    expect(queryByTestId('sort-chip-row')).toBeNull();
+    expect(queryByTestId('chip-row')).toBeNull();
 
     fireEvent.click(getByLabelText('mobile.logbook.filter'));
     expect(captured.sheetShowSort).toBe(true);
   });
 
-  it('does not render the sort chips on Android and keeps the sheet sort', () => {
+  it('does not render the chip row on Android, keeps the filter button + sheet sort', () => {
     platformState.os = 'android';
     const { queryByTestId, getByLabelText } = render(createElement(LogbookTab, { userId: 'user-1' }));
 
-    expect(queryByTestId('sort-chip-row')).toBeNull();
+    expect(queryByTestId('chip-row')).toBeNull();
 
     fireEvent.click(getByLabelText('mobile.logbook.filter'));
     expect(captured.sheetShowSort).toBe(true);
@@ -173,7 +200,7 @@ describe('LogbookTab sort chips', () => {
     flagState.logbookFilters = false;
     const { queryByTestId, queryByLabelText } = render(createElement(LogbookTab, { userId: 'user-1' }));
 
-    expect(queryByTestId('sort-chip-row')).toBeNull();
+    expect(queryByTestId('chip-row')).toBeNull();
     expect(queryByLabelText('mobile.logbook.filter')).toBeNull();
   });
 

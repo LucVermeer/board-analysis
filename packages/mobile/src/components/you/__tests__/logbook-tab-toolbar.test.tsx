@@ -34,7 +34,7 @@ vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 
 vi.mock('react-native', () => ({
   // The sort-chip gate reads Platform.OS; these toolbar tests don't assert chip
-  // behaviour (LogbookSortChipRow is stubbed via the vite alias), so a fixed OS
+  // behaviour (LogbookChipRow is stubbed via the vite alias), so a fixed OS
   // is enough — the theme mock reports no `variant`, so the gate stays off.
   Platform: { OS: 'ios' },
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -96,6 +96,7 @@ vi.mock('../../../lib/graphql/hooks', () => ({
     captured.feedEnabled = options?.enabled;
     return feed;
   },
+  useGrades: () => ({ data: [] }),
 }));
 
 // Deterministic hydration: no persisted prefs, resolves on a microtask.

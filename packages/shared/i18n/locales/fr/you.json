@@ -127,6 +127,8 @@
       "dateFrom": "Du",
       "dateTo": "Au",
       "dateAny": "Toutes",
+      "dateSince": "Depuis le {{date}}",
+      "dateUntil": "Jusqu'au {{date}}",
       "benchmarksOnly": "Références seulement",
       "reset": "Réinitialiser",
       "editTitle": "Modifier la croix",
