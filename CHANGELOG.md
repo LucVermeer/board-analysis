@@ -8,11 +8,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- MoonBoard climbers can now request their data and kick off getting it into Boardsesh ([#3333](https://github.com/boardsesh/boardsesh/pull/3333))
 - Crash reports now know which preview channel you're running, so beta bugs get sorted out faster. ([#3327](https://github.com/boardsesh/boardsesh/pull/3327))
 - Switch between app versions yourself: open **What's New → Try a preview** to jump onto any preview build — or tap **Production** to get back to the stable app. No tester access needed. ([#3324](https://github.com/boardsesh/boardsesh/pull/3324))
 
 ### Fixed
 
+- Kilter logbook sync is more reliable — your Kilter sends and attempts keep importing even when a climb was logged more than once. ([#3329](https://github.com/boardsesh/boardsesh/pull/3329))
 - Lock the Tall or Wide filter from its chip menu so it sticks when you clear other filters. ([#3322](https://github.com/boardsesh/boardsesh/pull/3322))
 - The Tall and Wide filter chips now work — tap to filter to your homewall's shape, long-press to lock it on. ([#3319](https://github.com/boardsesh/boardsesh/pull/3319))
   Tap the Grade chip again (or swipe the grade picker away) to close it.

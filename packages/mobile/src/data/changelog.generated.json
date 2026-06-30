@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-06-30T02:30:20.994Z",
+  "generatedAt": "2026-06-30T22:37:59.854Z",
   "entries": [
+    {
+      "prNumber": 3333,
+      "category": "new",
+      "title": "MoonBoard climbers can now request their data and kick off getting it into Boardsesh",
+      "mergedAt": "2026-06-30T22:37:02Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3333"
+    },
+    {
+      "prNumber": 3329,
+      "category": "fixed",
+      "title": "Kilter logbook sync is more reliable — your Kilter sends and attempts keep importing even when a climb was logged more than once.",
+      "mergedAt": "2026-06-30T06:07:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3329"
+    },
     {
       "prNumber": 3327,
       "category": "new",
