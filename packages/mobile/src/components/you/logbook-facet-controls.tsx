@@ -27,7 +27,7 @@ import { readableTextColor } from '../grade';
 
 // Angle filter granularity — mirrors the web slider (0–70°, step 5).
 const ANGLE_STEP = 5;
-export const ANGLE_VALUES: number[] = (() => {
+const ANGLE_VALUES: number[] = (() => {
   const [min, max] = DEFAULT_LOGBOOK_ANGLE_RANGE;
   const values: number[] = [];
   for (let angle = min; angle <= max; angle += ANGLE_STEP) values.push(angle);
@@ -55,7 +55,7 @@ export function formatIsoDate(date: Date): string {
 // memo'd + value-based onPress so the ~30 angle chips (each carrying a Reanimated
 // shared value + worklet) don't all re-render when an unrelated filter changes.
 // The rails pass a stable handler, not a per-chip arrow.
-export const Chip = memo(function Chip({
+const Chip = memo(function Chip({
   label,
   selected,
   value,
