@@ -23,9 +23,10 @@ export async function populateMoonBoardRequiredSetIds(
 ): Promise<void> {
   if (climbUuids && climbUuids.length === 0) return;
 
-  // The cell->set map is our own generated integer data, so inline it as raw
-  // SQL rather than thousands of bind params. layout_id, hold_id and set_id are
-  // all integers.
+  // Inline the cell->set map as raw SQL rather than thousands of bind params.
+  // This is injection-safe ONLY because every value is coerced with Number()
+  // below and the source (MOONBOARD_CELL_SETS) is a generated constant, never
+  // user input — keep both invariants if this is ever changed.
   const valueRows: string[] = [];
   for (const [layoutId, cells] of Object.entries(MOONBOARD_CELL_SETS)) {
     for (const [holdId, setId] of Object.entries(cells)) {

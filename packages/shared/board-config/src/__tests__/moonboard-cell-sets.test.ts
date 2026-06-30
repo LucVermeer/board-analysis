@@ -98,6 +98,12 @@ describe('requiredSetIdsForMoonBoard', () => {
     expect(requiredSetIdsForMoonBoard(3, 'p2r42p2r43')).toEqual([8]);
   });
 
+  it('ignores uncovered holds while keeping the covered ones', () => {
+    // cell 1 -> set 5 (covered), cell 999 -> uncovered (contributes nothing).
+    expect(moonBoardCellSet(3, 999)).toBeUndefined();
+    expect(requiredSetIdsForMoonBoard(3, 'p1r42p999r43')).toEqual([5]);
+  });
+
   it('returns an empty array for an unknown layout', () => {
     expect(requiredSetIdsForMoonBoard(999, 'p1r42')).toEqual([]);
   });
