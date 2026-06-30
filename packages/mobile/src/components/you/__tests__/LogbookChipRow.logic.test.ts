@@ -67,11 +67,23 @@ describe('buildLogbookFacets', () => {
     expect(angle.label).toBe('20°–40°');
   });
 
-  it('activates the show facet when sends/attempts is narrowed (label stays "Show")', () => {
-    const facets = buildLogbookFacets(withFilters({ includeAttempts: false }), GRADES, formatGrade, t);
-    const show = facetByKey(facets, 'show');
-    expect(show.active).toBe(true);
-    expect(show.label).toBe('mobile.logbook.show');
+  it('keeps the show facet inactive for the sends-only default', () => {
+    // The default rests on sends-only, so the Show facet is not amber.
+    const show = facetByKey(buildLogbookFacets(DEFAULT_LOGBOOK_FILTERS, GRADES, formatGrade, t), 'show');
+    expect(show.active).toBe(false);
+  });
+
+  it('activates the show facet for a non-default status — both or attempts-only (label stays "Show")', () => {
+    // "both" (sends + attempts) is off the sends-only default.
+    const both = facetByKey(buildLogbookFacets(withFilters({ includeAttempts: true }), GRADES, formatGrade, t), 'show');
+    expect(both.active).toBe(true);
+    expect(both.label).toBe('mobile.logbook.show');
+    // attempts-only.
+    const attempts = facetByKey(
+      buildLogbookFacets(withFilters({ includeSends: false, includeAttempts: true }), GRADES, formatGrade, t),
+      'show',
+    );
+    expect(attempts.active).toBe(true);
   });
 
   it('activates the show facet for flashOnly and for benchmarkOnly', () => {

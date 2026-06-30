@@ -217,7 +217,7 @@ export function LogbookFilterSheet({
       <View style={styles.header}>
         <Text variant="title3">{t('mobile.logbook.filter')}</Text>
         <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
-          <Text variant="subheadline" color={theme.brandColors.primary}>
+          <Text variant="subheadline" color={theme.brandColors.accent}>
             {t('mobile.logbook.reset')}
           </Text>
         </Pressable>
@@ -246,6 +246,7 @@ export function LogbookFilterSheet({
               onSelect={(key) => handlePreset(key)}
               textVariant="footnote"
               trackColor={trackColor}
+              tint={theme.brandColors.accent}
               accessibilityLabel={t('mobile.logbook.sort')}
             />
           </View>
@@ -263,6 +264,7 @@ export function LogbookFilterSheet({
               onSelect={handleStatusChange}
               textVariant="footnote"
               trackColor={trackColor}
+              tint={theme.brandColors.accent}
               accessibilityLabel={t('mobile.logbook.statusLabel')}
             />
 
@@ -272,6 +274,7 @@ export function LogbookFilterSheet({
                 label={t('mobile.logbook.flashOnly')}
                 value={draftFilters.flashOnly && !flashDisabled}
                 disabled={flashDisabled}
+                tint={theme.brandColors.accent}
                 onValueChange={(value) => updateFilters({ flashOnly: value })}
               />
             </View>
@@ -284,6 +287,7 @@ export function LogbookFilterSheet({
               dismissible={false}
               showTitle
               centerOnEmpty={false}
+              accentColor={theme.brandColors.accent}
               style={styles.inlineGradeRail}
             />
 
@@ -316,6 +320,7 @@ export function LogbookFilterSheet({
               <SwitchRow
                 label={t('mobile.logbook.benchmarksOnly')}
                 value={draftFilters.benchmarkOnly}
+                tint={theme.brandColors.accent}
                 onValueChange={(value) => updateFilters({ benchmarkOnly: value })}
               />
             </View>

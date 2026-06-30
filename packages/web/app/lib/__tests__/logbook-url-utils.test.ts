@@ -239,10 +239,19 @@ describe('filtersToQueryParams', () => {
     expect(result.attempts).toBeUndefined();
   });
 
-  it('serialises disabled attempts', () => {
-    const filters = { ...DEFAULT_FILTERS, includeAttempts: false };
+  it('serialises enabled attempts (off the sends-only default)', () => {
+    // The status resting state is sends-only, so turning attempts ON is the
+    // non-default change and is serialised as the real value.
+    const filters = { ...DEFAULT_FILTERS, includeAttempts: true };
     const result = filtersToQueryParams('', filters, DEFAULT_SORT, []);
-    expect(result.attempts).toBe('0');
+    expect(result.attempts).toBe('1');
+  });
+
+  it('serialises attempts-only (sends off, attempts on)', () => {
+    const filters = { ...DEFAULT_FILTERS, includeSends: false, includeAttempts: true };
+    const result = filtersToQueryParams('', filters, DEFAULT_SORT, []);
+    expect(result.sends).toBe('0');
+    expect(result.attempts).toBe('1');
   });
 
   it('includes date range', () => {
@@ -320,10 +329,13 @@ describe('filtersToQueryParams', () => {
   });
 
   it('round-trips through readFiltersFromQuery', () => {
+    // Both status booleans off the sends-only default (attempts-only) so each is
+    // serialised and round-trips; flashOnly rides along (it's a send refinement,
+    // and the URL layer preserves what it's given — sanitize heals edge cases).
     const filters = {
       ...DEFAULT_FILTERS,
       includeSends: false,
-      includeAttempts: false,
+      includeAttempts: true,
       flashOnly: true,
       benchmarkOnly: true,
       minGrade: 12 as number | '',
@@ -336,7 +348,7 @@ describe('filtersToQueryParams', () => {
     const parsed = readFiltersFromQuery(new URLSearchParams(params));
 
     expect(parsed.includeSends).toBe(false);
-    expect(parsed.includeAttempts).toBe(false);
+    expect(parsed.includeAttempts).toBe(true);
     expect(parsed.flashOnly).toBe(true);
     expect(parsed.benchmarkOnly).toBe(true);
     expect(parsed.minGrade).toBe(12);

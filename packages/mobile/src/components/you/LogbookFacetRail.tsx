@@ -14,6 +14,7 @@ import type { Grade } from '@boardsesh/shared-schema';
 import { GradeRangeRail } from '../grade';
 import { LogbookAngleRail, DateRangeRow } from './logbook-facet-controls';
 import type { LogbookFacetKey } from './LogbookChipRow.logic';
+import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 
 type LogbookFacetRailProps = {
@@ -30,6 +31,7 @@ type LogbookFacetRailProps = {
 
 function LogbookFacetRailComponent({ openFacet, filters, grades, onUpdateFilters, today }: LogbookFacetRailProps) {
   const { t } = useTranslation('you');
+  const { brandColors } = useTheme();
 
   const gradeBound = useMemo<GradeBound>(
     () => ({
@@ -61,6 +63,7 @@ function LogbookFacetRailComponent({ openFacet, filters, grades, onUpdateFilters
           onChange={handleGradeChange}
           dismissible={false}
           centerOnEmpty={false}
+          accentColor={brandColors.accent}
         />
       ) : null}
 

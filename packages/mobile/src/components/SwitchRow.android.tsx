@@ -21,9 +21,11 @@ import { spacing } from '../theme/tokens';
 import { makeToggleHandler } from './SwitchRow.logic';
 import type { SwitchRowProps } from './SwitchRow.types';
 
-export function SwitchRow({ label, description, value, onValueChange, disabled = false }: SwitchRowProps) {
+export function SwitchRow({ label, description, value, onValueChange, disabled = false, tint }: SwitchRowProps) {
   const { brandColors } = useTheme();
   const handleToggle = makeToggleHandler(onValueChange, disabled);
+  // On-track colour: brand accent (purple) by default; the logbook passes amber.
+  const switchColors = tint ? { checkedTrackColor: tint } : switchBrandColors(brandColors);
 
   const rowModifiers = [
     fillMaxWidth(),
@@ -58,7 +60,7 @@ export function SwitchRow({ label, description, value, onValueChange, disabled =
           // The row's `toggleable` owns the tap — leave the Switch passive so a
           // tap on it doesn't double-fire the toggle.
           onCheckedChange={undefined}
-          colors={switchBrandColors(brandColors)}
+          colors={switchColors}
         />
       </Row>
     </Host>

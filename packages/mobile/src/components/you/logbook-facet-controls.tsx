@@ -23,6 +23,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
 import { springs } from '../../theme/animations';
 import { spacing } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
 
 // Angle filter granularity — mirrors the web slider (0–70°, step 5).
 const ANGLE_STEP = 5;
@@ -48,8 +49,9 @@ export function formatIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Same filled-pill chip language as ClimbFilterSheet, reused for the angle min/max
-// selectors (a horizontal chip rail).
+// Filled-pill chip for the logbook angle min/max selectors (a horizontal chip
+// rail). Logbook-scoped, so its selected fill is amber (brandColors.accent) to
+// match the logbook chip row — not the climbs purple.
 // memo'd + value-based onPress so the ~30 angle chips (each carrying a Reanimated
 // shared value + worklet) don't all re-render when an unrelated filter changes.
 // The rails pass a stable handler, not a per-chip arrow.
@@ -67,11 +69,13 @@ export const Chip = memo(function Chip({
   const { systemColors, brandColors } = useTheme();
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  // Logbook-only control: selected fill is amber (brandColors.accent) to match the
+  // chip row, and amber is fill-only so the label sits in dark text.
   const chipStyle: ViewStyle = {
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: 20,
-    backgroundColor: selected ? brandColors.primaryFill : systemColors.fill,
+    backgroundColor: selected ? brandColors.accent : systemColors.fill,
   };
   return (
     <AnimatedPressable
@@ -90,7 +94,7 @@ export const Chip = memo(function Chip({
       accessibilityLabel={label}
       style={[animatedStyle, chipStyle]}
     >
-      <Text variant="footnote" color={selected ? brandColors.onPrimary : undefined} style={styles.chipText}>
+      <Text variant="footnote" color={selected ? iosSystemColors.black : undefined} style={styles.chipText}>
         {label}
       </Text>
     </AnimatedPressable>
@@ -170,7 +174,7 @@ export type DateRangeRowProps = {
  * pattern. A Clear affordance resets the bound to "any" (empty ISO).
  */
 export function DateRangeRow({ label, value, onChange, clearLabel, maximumDate }: DateRangeRowProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const selectedDate = parseIsoDate(value);
   // iOS: tapping the empty field reveals the inline picker WITHOUT committing a
   // date, so opening "From" doesn't silently filter to today and empty the list.
@@ -216,6 +220,9 @@ export function DateRangeRow({ label, value, onChange, clearLabel, maximumDate }
               mode="date"
               display="compact"
               maximumDate={maximumDate}
+              // Logbook-only: tint the selected day + nav chevrons amber to match the
+              // chip row (the native compact picker otherwise uses the iOS system blue).
+              accentColor={brandColors.accent}
               accessibilityLabel={label}
               onChange={handleChange}
             />

@@ -133,6 +133,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
 
   const handleOpenFilters = useCallback(() => {
     hapticSelection();
+    // Close any open inline rail so it doesn't linger under the sheet (and leave
+    // the toolbar over-tall after the sheet dismisses).
+    setOpenFacet(null);
     setFilterSheetOpen(true);
   }, []);
 

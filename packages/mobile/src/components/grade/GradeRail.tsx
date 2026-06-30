@@ -89,6 +89,13 @@ type GradeRangeRailProps = {
    * false so an unset rail opens at the easiest grade instead of mid-scrolled.
    */
   centerOnEmpty?: boolean;
+  /**
+   * Accent for the "any grade" clear chip's selected fill. Defaults to the brand
+   * primary (purple) so climbs stays purple; the logbook passes `brandColors.accent`
+   * (amber) so its rail matches the amber chip row. Per-grade chips keep their own
+   * grade colour; this only tints the neutral clear chip's selected state.
+   */
+  accentColor?: string;
   // `meta` carries the rule-3 tap context (extendedRangeWithinWindow) so the
   // call site can feed it into the `Grade Filter Changed` analytics event.
   onChange: (next: GradeBound, meta?: GradeTapMeta) => void;
@@ -119,10 +126,14 @@ export function GradeRangeRail({
   onRequestClose,
   dismissible = true,
   showTitle = false,
+  accentColor,
   style,
 }: GradeRangeRailProps) {
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors } = useTheme();
+  // The clear chip's selected accent: brand primary (purple) by default so climbs
+  // stays purple; the logbook passes amber.
+  const clearAccent = accentColor ?? brandColors.primary;
   const { formatGrade } = useGradeFormat();
   const scrollRef = useRef<ElementRef<typeof ScrollView>>(null);
   const chipLayoutsRef = useRef<Record<number, ChipLayout>>({});
@@ -331,7 +342,7 @@ export function GradeRangeRail({
         <GradeChip
           label={t('mobile.search.gradeClear')}
           tone={anySelected ? 'selected' : 'neutral'}
-          gradeColor={brandColors.primary}
+          gradeColor={clearAccent}
           onPress={handleClear}
           accessibilityLabel={anySelected ? t('mobile.gradeRail.anyGradeAria') : t('mobile.gradeRail.clearFilterAria')}
           accessibilityState={{ selected: anySelected }}

@@ -1,6 +1,7 @@
 import { parseQueryParamBoolean, parseQueryParamInt } from '@/app/lib/url-utils';
 import {
   DEFAULT_ANGLE_RANGE,
+  DEFAULT_FILTERS,
   DEFAULT_SORT,
   type LogbookFilterState,
   type LogbookSortState,
@@ -101,9 +102,13 @@ export function filtersToQueryParams(
   if (filters.minGrade !== '' && filters.minGrade !== undefined) params.minGrade = String(filters.minGrade);
   if (filters.maxGrade !== '' && filters.maxGrade !== undefined) params.maxGrade = String(filters.maxGrade);
 
-  // Only write non-default filter values
-  if (!filters.includeSends) params.sends = '0';
-  if (!filters.includeAttempts) params.attempts = '0';
+  // Only write non-default filter values. The status resting state is sends-only
+  // (DEFAULT_FILTERS), so a status param is emitted only when it differs from that
+  // default — the real boolean value, so the URL round-trips. A clean default
+  // logbook view therefore yields no status params (matters for the canonical URL).
+  if (filters.includeSends !== DEFAULT_FILTERS.includeSends) params.sends = filters.includeSends ? '1' : '0';
+  if (filters.includeAttempts !== DEFAULT_FILTERS.includeAttempts)
+    params.attempts = filters.includeAttempts ? '1' : '0';
   if (filters.flashOnly) params.flash = '1';
   if (filters.benchmarkOnly) params.benchmark = '1';
   if (filters.fromDate) params.from = filters.fromDate;

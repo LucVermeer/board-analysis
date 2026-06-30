@@ -23,15 +23,24 @@ describe('countActiveLogbookFilters', () => {
     expect(countActiveLogbookFilters(DEFAULT_LOGBOOK_FILTERS)).toBe(0);
   });
 
-  it('counts a narrowed status (sends-only or attempts-only) as one', () => {
-    expect(countActiveLogbookFilters(withFilters({ includeAttempts: false }))).toBe(1);
-    expect(countActiveLogbookFilters(withFilters({ includeSends: false }))).toBe(1);
+  it('does not count the sends-only default status', () => {
+    // Sends-only is the resting state, so it adds nothing.
+    expect(countActiveLogbookFilters(DEFAULT_LOGBOOK_FILTERS)).toBe(0);
+  });
+
+  it('counts a non-default status (both or attempts-only) as one', () => {
+    // "both" (sends + attempts) is off the sends-only default.
+    expect(countActiveLogbookFilters(withFilters({ includeAttempts: true }))).toBe(1);
+    // attempts-only.
+    expect(countActiveLogbookFilters(withFilters({ includeSends: false, includeAttempts: true }))).toBe(1);
   });
 
   it('counts flash-only as one (the flash+no-sends edge still counts via status)', () => {
     expect(countActiveLogbookFilters(withFilters({ flashOnly: true }))).toBe(1);
-    // Sends excluded + flashOnly: status narrowed (1) + flash (1).
-    expect(countActiveLogbookFilters(withFilters({ includeSends: false, flashOnly: true }))).toBe(2);
+    // Sends excluded + flashOnly: status off the default (1) + flash (1).
+    expect(
+      countActiveLogbookFilters(withFilters({ includeSends: false, includeAttempts: true, flashOnly: true })),
+    ).toBe(2);
   });
 
   it('counts a grade bound (min and/or max) as one', () => {
@@ -53,10 +62,10 @@ describe('countActiveLogbookFilters', () => {
   });
 
   it('sums independent active filters', () => {
-    // status (attempts-only) + flash + grade + angle = 4
+    // status (both) + flash + grade + angle = 4
     expect(
       countActiveLogbookFilters(
-        withFilters({ includeAttempts: false, flashOnly: true, minGrade: 12, angleRange: [20, 50] }),
+        withFilters({ includeAttempts: true, flashOnly: true, minGrade: 12, angleRange: [20, 50] }),
       ),
     ).toBe(4);
   });

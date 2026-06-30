@@ -5,7 +5,7 @@ export const DEFAULT_LOGBOOK_ANGLE_RANGE: [number, number] = [0, 70];
 
 export const DEFAULT_LOGBOOK_FILTERS: LogbookFilterState = {
   includeSends: true,
-  includeAttempts: true,
+  includeAttempts: false,
   flashOnly: false,
   minGrade: '',
   maxGrade: '',

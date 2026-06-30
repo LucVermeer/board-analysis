@@ -53,8 +53,10 @@ export function gradeChipLabel(
     return minGrade === maxGrade ? minLabel : `${minLabel}–${maxLabel}`;
   }
   if (minLabel != null) return `≥${minLabel}`;
-  // maxLabel is non-null here (caller guarantees one bound set).
-  return `≤${maxLabel}`;
+  if (maxLabel != null) return `≤${maxLabel}`;
+  // Both bounds empty — callers guard against this; defensive fallback so the
+  // function never returns a stray "≤null".
+  return '';
 }
 
 /** Localise one ISO date short ("Jun 30"); null when the ISO can't be parsed. */
@@ -99,7 +101,9 @@ function isAngleActive(filters: LogbookFilterState): boolean {
 
 /** Whether the Show facet (status / flash / benchmarks) is off its default. */
 function isShowActive(filters: LogbookFilterState): boolean {
-  return !(filters.includeSends && filters.includeAttempts) || filters.flashOnly || filters.benchmarkOnly;
+  // The default rests on sends-only; "both" and "attempts only" are the active
+  // (amber) states, so active = NOT the sends-only default.
+  return !(filters.includeSends && !filters.includeAttempts) || filters.flashOnly || filters.benchmarkOnly;
 }
 
 /** Whether the date facet has either bound set. */
