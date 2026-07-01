@@ -23,3 +23,21 @@ export type {
   RuntimeSessionState,
   RuntimeSessionUser,
 } from './session-events';
+
+export {
+  createQueueSyncGate,
+  hasContiguousReplayCoverage,
+  RESYNC_LOOP_THRESHOLD,
+  CORRUPTION_RESYNC_COOLDOWN_MS,
+} from './sync-gate';
+export type {
+  QueueSyncGate,
+  QueueSyncGateOptions,
+  QueueSyncGateEvent,
+  IncomingEventDecision,
+  HashVerifyVerdict,
+  HashVerifyResult,
+  CorruptionVerdict,
+  ReconnectStrategy,
+  ReconnectStrategyInput,
+} from './sync-gate';
