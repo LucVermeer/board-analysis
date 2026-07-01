@@ -30,7 +30,9 @@ The iOS lane uploads PNGs in
 `vp run mobile:screenshots -- --devices common --locales all`) as
 **screenshots only** — no binary, no text metadata, no review submission.
 deliver routes each image to its display slot by pixel dimensions; the `NN-`
-filename prefixes set the display order inside each slot.
+filename prefixes set the display order inside each slot. The common iOS matrix
+includes the three iPhone portrait slots plus 13-inch and 11-inch iPad landscape
+slots.
 
 The upload expects the generated Apple locale folders `en-US`, `es-ES`, `es-MX`,
 and `fr-FR`. The app has one Spanish locale (`es`), so the capture pipeline

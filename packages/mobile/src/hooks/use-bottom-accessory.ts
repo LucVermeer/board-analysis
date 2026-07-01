@@ -3,6 +3,7 @@ import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTheme } from '../providers/theme-provider';
 import { useGlassCapability } from './use-glass-capability';
+import { useDeviceLayout } from './use-device-layout';
 
 /**
  * Whether the device *can* host `NativeTabs.BottomAccessory` — the pure
@@ -24,6 +25,19 @@ export function isBottomAccessoryAvailable(): boolean {
 export function useNativeTabBar(): boolean {
   const { variant } = useTheme();
   const glassCapable = useGlassCapability();
+  const { isPad } = useDeviceLayout();
+  // The iPad adaptive shell renders JS `Tabs` at EVERY iPad width — a glass rail at
+  // regular width, the Material bar in a narrow split (Slide Over / Split View) — and
+  // never `NativeTabs`, so a resize across the breakpoint keeps one navigator mounted
+  // (see `_layout`). So the native tab bar — and the bottom accessory + tab-bar search
+  // role it hosts — is never on screen on iPad. Everything that branches on this
+  // predicate (the climb-list search mode, the accessory mount, bottom-chrome
+  // geometry) must treat iPad as "no native tab bar", or it reaches for a native
+  // accessory / search bar that has no bar to live in — and on an iPad in a narrow
+  // split that would skip the native accessory AND suppress the JS PersistentQueueBar,
+  // dropping the now-playing bar entirely. (`isPad` subsumes the old regular-width
+  // check, since a `regular` width only ever resolves on an iPad.)
+  if (isPad) return false;
   return variant === 'liquidGlass' && glassCapable;
 }
 

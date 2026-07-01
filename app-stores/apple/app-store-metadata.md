@@ -43,7 +43,10 @@ Canonical: [`fastlane/metadata/en-US/release_notes.txt`](../../fastlane/metadata
 
 ## Screenshots
 
-iPhone 6.9" (1320×2868), captured + uploaded by `vp run mobile:screenshots` (Maestro → fastlane; see `packages/mobile/.maestro/README.md`). Ten slots, in store display order (the filename prefix sets the order):
+Generated iPhone portrait and iPad landscape screenshots, captured + uploaded by
+`vp run mobile:screenshots` (Maestro -> fastlane; see
+`packages/mobile/.maestro/README.md`). Ten slots, in store display order (the
+filename prefix sets the order):
 
 1. `00-home` — the global "Everyone" activity feed
 2. `01-climbs` — browse the board's climbs
@@ -56,7 +59,7 @@ iPhone 6.9" (1320×2868), captured + uploaded by `vp run mobile:screenshots` (Ma
 9. `08-logbook` — your logged sends and progression
 10. `09-profile` — your stats and progression
 
-Apple allows up to 10 and this set fills all 10; the board-switcher sheet shot was retired to make room. Google Play caps phones at 8, so its set drops party, playlist detail, and logbook (see the Play metadata).
+Apple allows up to 10; the current generated set uploads 10 screenshots. Google Play caps phones at 8, so its set drops playlist detail and logbook (see the Play metadata).
 
 ## Review Notes
 

@@ -26,6 +26,7 @@
   "boardPresence": {
     "title": "Now on the wall",
     "open": "On the wall",
+    "railDark": "Nothing lit right now",
     "openAria": "See what's on the wall",
     "openAriaWithClimb": "See what's on the wall: {{name}}",
     "nowOnWallAnnouncement": "Now on the wall: {{name}}",
@@ -526,6 +527,10 @@
   "playView": {
     "previewBadge": "Preview",
     "setActive": "Set active",
+    "paneEmpty": {
+      "title": "Pick a climb",
+      "subtitle": "Tap a climb to see it here."
+    },
     "previousFrame": "Previous frame",
     "nextFrame": "Next frame",
     "play": "Play",

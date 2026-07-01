@@ -16,13 +16,22 @@
  * pair, so `jsQueueToolbarVisible` is false here and this returns null.
  */
 
+import { useWindowDimensions } from 'react-native';
 import { useSegments } from 'expo-router';
-import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT, TOOLBAR_RESERVE, TAB_BAR_HEIGHT, glassSize } from '../../theme/layout';
+import {
+  MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+  SIDEBAR_WIDTH,
+  TOOLBAR_RESERVE,
+  TAB_BAR_HEIGHT,
+  glassSize,
+} from '../../theme/layout';
+import { resolveDetailPaneSurface } from '../../theme/size-class';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { selectByVariant } from '../../theme/variants';
 import { isTopLevelTabRoute } from '../../lib/route-segments';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { useDeviceLayout } from '../../hooks/use-device-layout';
 import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
 import { LogAscentFab } from './LogAscentFab';
@@ -37,10 +46,16 @@ export function PersistentQueueBar() {
   const { variant } = useTheme();
   const segments = useSegments();
   const bottomChrome = useBottomChromeMetrics();
+  const { widthClass } = useDeviceLayout();
+  const { width } = useWindowDimensions();
 
   // Queue head only — the wall's lit climb lives in the top "On the wall" strip.
   const currentClimb = state.currentClimbQueueItem?.climb ?? null;
+  const detailPaneOwnsQueue = resolveDetailPaneSurface({ width, widthClass, sidebarWidth: SIDEBAR_WIDTH }) === 'pane';
 
+  // The iPad shell shows the current climb in the persistent right-column pane
+  // (IpadPlayPane), so the floating bar must not also render there.
+  if (detailPaneOwnsQueue) return null;
   if (!currentClimb) return null;
   // Show the climb bar only on a top-level tab page (a tab's own index), never on a
   // pushed sub-route or any root push/modal. This single gate subsumes the old

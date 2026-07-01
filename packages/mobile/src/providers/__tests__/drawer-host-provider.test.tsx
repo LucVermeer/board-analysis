@@ -9,6 +9,7 @@ import type { Climb, UserBoard } from '@boardsesh/shared-schema';
 const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
   participantId: 'participant-self' as string | null,
+  activeClimbUuid: null as string | null,
   setCurrentClimb: vi.fn(),
   addToQueue: vi.fn(),
   setSessionBoardPath: vi.fn(async () => {}),
@@ -105,6 +106,17 @@ vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
     createElement('button', { onClick: onPress }, children),
+  // The host width-budgets pane vs. sheet (resolveDetailPaneSurface). 1024 clears
+  // the budget, so the regular-width describe takes the pane path; compact stays sheet.
+  useWindowDimensions: () => ({ width: 1024, height: 1366 }),
+}));
+
+// The host reads the device layout to decide sheet (compact) vs pane (regular).
+// Defaults to compact (the bottom-sheet path most tests exercise); the
+// regular-width pane describe flips it.
+const layoutCfg = vi.hoisted(() => ({ widthClass: 'compact' as 'compact' | 'regular' }));
+vi.mock('../../hooks/use-device-layout', () => ({
+  useDeviceLayout: () => ({ widthClass: layoutCfg.widthClass, expanded: false }),
 }));
 
 vi.mock('expo-crypto', () => ({
@@ -217,6 +229,7 @@ vi.mock('../bluetooth-provider', () => ({
 }));
 
 vi.mock('../queue-provider', () => ({
+  useActiveClimbUuid: () => queue.activeClimbUuid,
   useQueueActions: () => ({
     addToQueue: queue.addToQueue,
     setSessionBoardPath: queue.setSessionBoardPath,
@@ -322,6 +335,9 @@ beforeEach(() => {
   presence.resolveAndBindBoardByConfig.mockClear();
   presence.resolveAndBindBoardByUuid.mockClear();
   presence.resetPresence.mockClear();
+  queue.setCurrentClimb.mockClear();
+  queue.activeClimbUuid = null;
+  layoutCfg.widthClass = 'compact';
 });
 
 describe('DrawerHostProvider board presence binding', () => {
@@ -979,5 +995,212 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
     expect(routerDismiss).toHaveBeenCalledTimes(1);
     expect(routerPush).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/boards' }));
     expect(activeBoard.setActiveBoard).not.toHaveBeenCalled();
+  });
+});
+
+describe('DrawerHostProvider iPad pane open (regular width)', () => {
+  beforeEach(() => {
+    // Regular width (1024 window, 96 sidebar) resolves to the detail pane, so
+    // openPlayDrawer drives the right-column PlayDrawer via `openTarget` instead
+    // of navigating to the `/play` route. Committing to the queue is now the
+    // drawer's job (via openTarget.options), so the host never calls
+    // setCurrentClimb on a pane open.
+    layoutCfg.widthClass = 'regular';
+  });
+
+  it('drives the pane open target without navigating to /play', async () => {
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'pane-open-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb);
+    });
+
+    // The pane's selected climb is set on playDrawerPaneProps.openTarget.
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.climb.uuid).toBe('pane-open-1');
+    });
+    // No override, no caller options → the open target carries an empty options bag.
+    expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.options).toEqual({});
+    // The pane hosts the drawer in place — no full-screen /play navigation.
+    expect(routerNavigate).not.toHaveBeenCalled();
+  });
+
+  it('passes a view-only open through openTarget.options, stripping the analytics source', async () => {
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'pane-view-1').climb as unknown as Climb;
+    const previewItem = makeQueueItem('queue-preview-1', 'pane-view-1');
+    act(() => {
+      // Feed / beta / climb-view preview: show it in the pane; PlayDrawer decides
+      // whether to commit from openTarget.options (the host doesn't).
+      hosts.at(-1)?.openPlayDrawer(climb, { previewQueueItem: previewItem, source: 'climb_view' });
+    });
+
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.climb.uuid).toBe('pane-view-1');
+    });
+    const openTarget = hosts.at(-1)?.playDrawerPaneProps?.openTarget;
+    expect(openTarget?.options?.previewQueueItem).toBe(previewItem);
+    // `source` is analytics-only and is stripped before it reaches the open target
+    // (toEqual asserts nothing else — no `source`, no `boardConfig` — leaks through).
+    expect(openTarget?.options).toEqual({ previewQueueItem: previewItem });
+    expect(routerNavigate).not.toHaveBeenCalled();
+  });
+
+  it('forwards the playlist suggestion source through openTarget.options', async () => {
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const sourceItem = makeQueueItem('queue-source', 'pane-source-climb');
+    const previewItem = makeQueueItem('queue-preview-2', 'pane-preview-2');
+    const playlistSuggestionSource: PlaylistSuggestionSource = {
+      playlistUuid: 'playlist-pane',
+      activatedClimbUuid: sourceItem.climb.uuid,
+      boardKey: 'kilter:1:10:1,2',
+      climbs: [sourceItem.climb, previewItem.climb],
+    };
+
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(previewItem.climb as unknown as Climb, {
+        previewQueueItem: previewItem,
+        playlistSuggestionSource,
+        source: 'climb_view',
+      });
+    });
+
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.climb.uuid).toBe('pane-preview-2');
+    });
+    const openTarget = hosts.at(-1)?.playDrawerPaneProps?.openTarget;
+    expect(openTarget?.options?.playlistSuggestionSource).toBe(playlistSuggestionSource);
+    // `source` stripped; previewQueueItem + playlistSuggestionSource pass through.
+    expect(openTarget?.options).toEqual({ previewQueueItem: previewItem, playlistSuggestionSource });
+    expect(routerNavigate).not.toHaveBeenCalled();
+  });
+
+  it('applies a cross-board override to the pane board while the wall column stays on the stored board', async () => {
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const override: BoardConfig = {
+      boardName: 'tension',
+      layoutId: 8,
+      sizeId: 7,
+      setIds: '5,6',
+      angle: 55,
+    };
+    const climb = makeQueueItem('queue-x', 'pane-override-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
+    });
+
+    await waitFor(() => {
+      // The override differs from the stored kilter board → the pane's drawer
+      // board becomes the override, and it carries the opened climb.
+      expect(hosts.at(-1)?.playDrawerPaneProps?.boardConfig).toMatchObject(override);
+      expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.climb.uuid).toBe('pane-override-1');
+    });
+    // The persistent "Now on the wall" column stays bound to the stored board.
+    expect(hosts.at(-1)?.boardPanelProps?.boardConfig).toMatchObject({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 40,
+    });
+    // The board is applied via the override state, not the open target — boardConfig
+    // is stripped from options like the /play route path.
+    expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.options).toEqual({});
+    expect(routerNavigate).not.toHaveBeenCalled();
+  });
+
+  it('applies onAngleChange to the pane override board, leaving the wall column board unchanged', async () => {
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const override: BoardConfig = {
+      boardName: 'tension',
+      layoutId: 8,
+      sizeId: 7,
+      setIds: '5,6',
+      angle: 55,
+    };
+    const climb = makeQueueItem('queue-x', 'pane-angle-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
+    });
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.boardConfig).toMatchObject(override);
+    });
+
+    act(() => {
+      hosts.at(-1)?.playDrawerPaneProps?.onAngleChange(30);
+    });
+
+    // The angle write targets the override board the pane is showing…
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.boardConfig).toMatchObject({ ...override, angle: 30 });
+    });
+    // …not the stored active board the wall column renders against.
+    expect(hosts.at(-1)?.boardPanelProps?.boardConfig).toMatchObject({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 40,
+    });
+  });
+
+  it('bumps openTarget.nonce when the same climb is re-opened so the pane re-applies', async () => {
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'pane-renonce-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb);
+    });
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.climb.uuid).toBe('pane-renonce-1');
+    });
+    const firstNonce = hosts.at(-1)?.playDrawerPaneProps?.openTarget?.nonce;
+    expect(firstNonce).toBeDefined();
+
+    // Re-tap the same climb: a new open target (bumped nonce) so the pane re-applies
+    // even though the shown climb is unchanged.
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb);
+    });
+    await waitFor(() => {
+      expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.nonce).not.toBe(firstNonce);
+    });
+    expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget?.climb.uuid).toBe('pane-renonce-1');
+    expect(routerNavigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates to /play and leaves the pane open target null on compact width', async () => {
+    // Compact width has no persistent pane — the open falls back to the /play route.
+    layoutCfg.widthClass = 'compact';
+    const hosts: Array<HostValue> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'pane-compact-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb);
+    });
+
+    expect(routerNavigate).toHaveBeenCalledWith('/play');
+    // The pane props still resolve (a board is loaded) but the pane never receives
+    // an open target on compact — that path drives the route's playTarget instead.
+    expect(hosts.at(-1)?.playDrawerPaneProps?.openTarget).toBeNull();
   });
 });

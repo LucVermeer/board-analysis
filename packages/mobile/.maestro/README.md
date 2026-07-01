@@ -28,11 +28,14 @@ orchestrator builds with the prod `EXPO_PUBLIC_BACKEND_URL` and resets the
 simulator keychain first so login authenticates cleanly against prod.
 `--backend local` (the default) points at the seeded dev DB instead.
 
-By default the orchestrator captures one device size (`--devices common`: the
-6.9" iPhone 16 Pro Max — App Store Connect scales it down to every smaller iPhone,
-so extra sizes add no value) across every app locale (`--locales all`: en-US, es,
-fr). Spanish is written to both App Store Connect Spanish folders (`es-ES` and
-`es-MX`).
+By default the orchestrator captures the store device set (`--devices common`: the
+6.9" iPhone 16 Pro Max, the iPad Pro 13-inch (M5), and the iPad Pro 11-inch (M5))
+across every app locale (`--locales all`: en-US, es, fr). App Store Connect scales
+the largest iPhone screenshot down to every smaller iPhone, so one 6.9" set covers
+the whole iPhone range; iPad is a separate slot that doesn't auto-scale from iPhone,
+so both iPad Pro sizes are captured in landscape. Use `--devices phones` or
+`--devices ipads` for narrowed local runs. Spanish is written to both App Store
+Connect Spanish folders (`es-ES` and `es-MX`).
 
 ## Flows
 
@@ -106,10 +109,15 @@ on boot. They live only in screenshot-only builds; the separate prod-stripping o
   tree only exposes native text inputs and system dialogs — plain Views, Text,
   reanimated pressables and gesture rows don't surface, so app buttons can't be
   matched by id/text. The iOS flow now has **no** `point:` taps (every screen is a
-  deep link, the board is active from boot). Android keeps just the board-switcher
-  tap (`78%,10%`) for its board-sheet shot; re-check it if the emulator layout
-  differs. There's no login step at all — the app auto-signs-in on boot and never
-  shows a login screen.
+  deep link, the board is active from boot). The orchestrator renders the iOS
+  flow's orientation placeholder per device before Maestro runs: phones capture in
+  `PORTRAIT`, iPads in `LANDSCAPE_LEFT` so the store shots show the adaptive
+  sidebar/pane layout. On iPad, Maestro can save the raw portrait framebuffer even
+  after the app rotates, so the orchestrator rotates those PNGs into upright
+  landscape before copying them to the store folders. Android keeps just the
+  board-switcher tap (`78%,10%`) for its board-sheet shot;
+  re-check it if the emulator layout differs. There's no login step at all —
+  the app auto-signs-in on boot and never shows a login screen.
 - Screenshot mode (the build-time `EXPO_PUBLIC_SCREENSHOT_MODE=1` flag) auto-signs-in
   on boot with the baked `SCREENSHOT_USER_*` credentials, locks the theme to dark, the
   locale to `EXPO_PUBLIC_SCREENSHOT_LOCALE`, and the platform variant, pre-selects the

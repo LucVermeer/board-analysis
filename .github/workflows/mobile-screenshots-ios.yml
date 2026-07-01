@@ -15,10 +15,14 @@ name: Mobile Screenshots (iOS)
 # This is a 3-stage fan-out so every locale captures in parallel and a single
 # overloaded runner never thrashes:
 #   ios-build    — build/restore the cached .app ONCE (no per-shard cold build).
-#   ios-capture  — matrix of locale (en-US, es, fr) on one device size (the 6.9"
-#                  iPhone 16 Pro Max; Apple scales it down to all other iPhones) =
-#                  3 shards, each its own runner: one Metro, one simulator, one
-#                  capture.
+#   ios-capture  — matrix of locale (en-US, es, fr) × device (the 6.9" iPhone 16
+#                  Pro Max — Apple scales it down to all other iPhones — plus the
+#                  iPad Pro 13-inch and 11-inch, a separate slot that doesn't
+#                  auto-scale) = 9 shards, each its own runner: one Metro, one
+#                  simulator, one capture. --shutdown is kept as belt-and-suspenders
+#                  (a shard only ever boots one sim, so there's nothing to accumulate
+#                  — several booted at once on one runner is what made the old job
+#                  thrash and time out at "iOS driver not ready in time").
 #   ios-finalize — merge the per-shard artifacts into one tree, run the dimension
 #                  gate (it needs all four App Store locales at once), and upload.
 #
@@ -135,7 +139,7 @@ jobs:
       # ios-capture shard restores the exact same bucket.
       - name: Compute app cache key
         id: appkey
-        run: echo "key=${{ runner.os }}-${{ runner.arch }}-screenshot-sim-app-v1-${{ hashFiles('packages/mobile/app.config.ts', 'packages/mobile/plugins/**', 'packages/mobile/modules/**', 'packages/mobile/package.json', 'patches/**', 'package.json') }}" >> "$GITHUB_OUTPUT"
+        run: echo "key=${{ runner.os }}-${{ runner.arch }}-screenshot-sim-app-v1-${{ hashFiles('packages/mobile/app.config.ts', 'packages/mobile/plugins/**', 'packages/mobile/modules/**', 'packages/mobile/package.json', 'patches/**', 'package.json', 'scripts/mobile-build-sim-app.ts', 'scripts/screenshot-sim.entitlements') }}" >> "$GITHUB_OUTPUT"
 
       # lookup-only: this job only needs to KNOW whether the .app is cached (the
       # shards do the actual restore), so on a hit we skip downloading a .app this
@@ -176,16 +180,19 @@ jobs:
       # One shard failing shouldn't abandon the rest — let them all finish so
       # ios-finalize can report exactly which (locale, device) is short.
       fail-fast: false
-      # One device size only: the 6.9" iPhone 16 Pro Max. App Store Connect auto-scales
-      # it down to every smaller iPhone, so extra sizes add no value, only macOS-runner
-      # time. Locale is the axis that matters, so it stays a full sweep. Matrix = 3
-      # shards (one per locale), still one simulator per shard.
+      # Devices: the 6.9" iPhone 16 Pro Max (App Store Connect auto-scales it down to
+      # every smaller iPhone, so no smaller iPhone is worth a shard) plus the iPad Pro
+      # 13-inch and 11-inch, a separate App Store slot that doesn't auto-scale from
+      # iPhone. Locale is the other axis, a full sweep. Matrix = 3 locales × 3 devices
+      # = 9 shards, one simulator per shard.
       matrix:
         # Locales come from the setup job: the full en-US,es,fr set by default, or
         # the narrowed `locales` input when one is given.
         locale: ${{ fromJSON(needs.setup.outputs.ios_locales) }}
         device:
           - { name: iPhone 16 Pro Max, slug: iphone-16-pro-max }
+          - { name: iPad Pro 13-inch (M5), slug: ipad-pro-13-inch-m5 }
+          - { name: iPad Pro 11-inch (M5), slug: ipad-pro-11-inch-m5 }
 
     env:
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
@@ -252,9 +259,9 @@ jobs:
         # path. Always against prod (signed in as the test user); no
         # EXPO_PUBLIC_BACKEND_URL override, so the bundle uses the app's production
         # backend defaults. --locales is a single value: `es` expands to both es-ES
-        # and es-MX, so the 3 shards together produce all four App Store locales on
-        # the one device size. --shutdown is belt-and-suspenders (a shard only boots
-        # this one sim, so there's nothing to accumulate).
+        # and es-MX for this device, so the 9 shards together produce all four App
+        # Store locales × 3 devices. --shutdown is belt-and-suspenders (a shard only
+        # boots this one sim, so there's nothing to accumulate).
         run: |
           set -euo pipefail
           vp run mobile:screenshots -- \
@@ -315,7 +322,7 @@ jobs:
     env:
       # Marks an upload dispatch — gates the App Store Connect upload steps so the
       # nightly cron and capture-only runs never touch ASC.
-      UPLOAD_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.upload }}
+      UPLOAD_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.upload && inputs.flow == 'app-store' }}
 
     steps:
       - name: Checkout repository

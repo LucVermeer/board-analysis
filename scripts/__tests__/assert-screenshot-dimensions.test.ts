@@ -67,6 +67,32 @@ describe('findOffenders', () => {
     ).toMatch(/no accepted-size list/);
   });
 
+  it('accepts the iPad landscape App Store sizes', () => {
+    expect(
+      findOffenders('ipad-pro-13-inch-m5', [
+        { name: 'ipad-pro-13-inch-m5/00-home.png', buffer: pngHeader({ width: 2752, height: 2064 }) },
+      ]),
+    ).toEqual([]);
+    expect(
+      findOffenders('ipad-pro-13-inch-m5', [
+        { name: 'ipad-pro-13-inch-m5/00-home.png', buffer: pngHeader({ width: 2732, height: 2048 }) },
+      ]),
+    ).toEqual([]);
+    expect(
+      findOffenders('ipad-pro-11-inch-m5', [
+        { name: 'ipad-pro-11-inch-m5/00-home.png', buffer: pngHeader({ width: 2420, height: 1668 }) },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('rejects portrait iPad screenshots for the landscape store slots', () => {
+    const offenders = findOffenders('ipad-pro-13-inch-m5', [
+      { name: 'ipad-pro-13-inch-m5/00-home.png', buffer: pngHeader({ width: 2064, height: 2752 }) },
+    ]);
+    expect(offenders).toHaveLength(1);
+    expect(offenders[0].reason).toMatch(/2064x2752/);
+  });
+
   it('flags a wrong size, reporting both file and dimensions', () => {
     const offenders = findOffenders(slug, [
       { name: `${slug}/bad.png`, buffer: pngHeader({ width: 1284, height: 2778 }) },
@@ -101,6 +127,18 @@ describe('findScreenshotTreeOffenders', () => {
             buffer: pngHeader({ width: 1320, height: 2868 }),
           },
         ],
+        'ipad-pro-13-inch-m5': [
+          {
+            name: `${locale}/ipad-pro-13-inch-m5/00-home.png`,
+            buffer: pngHeader({ width: 2752, height: 2064 }),
+          },
+        ],
+        'ipad-pro-11-inch-m5': [
+          {
+            name: `${locale}/ipad-pro-11-inch-m5/00-home.png`,
+            buffer: pngHeader({ width: 2420, height: 1668 }),
+          },
+        ],
       };
     }
     for (const [locale, devices] of Object.entries(overrides)) {
@@ -113,6 +151,20 @@ describe('findScreenshotTreeOffenders', () => {
 
   it('accepts a complete localized common-device tree', () => {
     expect(findScreenshotTreeOffenders(screenshotTree())).toEqual([]);
+  });
+
+  it('flags a missing expected iPad device folder even when every locale is consistent', () => {
+    const tree = screenshotTree();
+    for (const devices of Object.values(tree)) {
+      delete devices['ipad-pro-11-inch-m5'];
+    }
+    const offenders = findScreenshotTreeOffenders(tree);
+    expect(
+      offenders.some(
+        (offender) =>
+          offender.file === 'en-US/ipad-pro-11-inch-m5' && /missing device screenshot folder/.test(offender.reason),
+      ),
+    ).toBe(true);
   });
 
   it('flags missing App Store locales', () => {
@@ -129,6 +181,18 @@ describe('findScreenshotTreeOffenders', () => {
           {
             name: 'de-DE/iphone-16-pro-max/00-home.png',
             buffer: pngHeader({ width: 1320, height: 2868 }),
+          },
+        ],
+        'ipad-pro-13-inch-m5': [
+          {
+            name: 'de-DE/ipad-pro-13-inch-m5/00-home.png',
+            buffer: pngHeader({ width: 2752, height: 2064 }),
+          },
+        ],
+        'ipad-pro-11-inch-m5': [
+          {
+            name: 'de-DE/ipad-pro-11-inch-m5/00-home.png',
+            buffer: pngHeader({ width: 2420, height: 1668 }),
           },
         ],
       },

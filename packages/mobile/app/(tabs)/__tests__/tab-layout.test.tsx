@@ -18,6 +18,21 @@ const cfg = vi.hoisted(() => ({
   // (Material, plus Liquid Glass on iOS < 26 / Android) takes the JS tab bar.
   glassCapable: true,
   platformOS: 'ios' as 'ios' | 'android',
+  // 'regular' takes the iPad sidebar shell; 'compact' keeps the phone tab bars.
+  widthClass: 'compact' as 'compact' | 'regular',
+  // iPad in a narrow split: compact width but still an iPad, which the shell keeps on
+  // JS Tabs (never NativeTabs). Independent of widthClass; 'regular' always implies iPad.
+  isPad: false,
+  // Window width drives the wall surface in the regular shell: a dedicated column
+  // (landscape) vs a strip atop the pane (portrait) — see resolveWallSurface.
+  windowWidth: 1024,
+  // Board presence gates the wall column: no bound board → no column (the wall
+  // stays the sidebar cell instead).
+  boardPresenceEnabled: false,
+  boardPresenceBoardId: null as number | null,
+  // The column also needs a resolved active board (the panel renders its config);
+  // boardId can be set from BLE without one, so the layout gates on this too.
+  activeBoard: null as { uuid: string } | null,
   materialScreens: [] as Array<{ name: string; options?: { lazy?: boolean } }>,
 }));
 
@@ -27,6 +42,14 @@ vi.mock('react-native', () => ({
       return cfg.platformOS;
     },
   },
+  // _layout.tsx wraps the iPad shell in Views + calls StyleSheet.create at module
+  // eval, so the strict RN mock must supply both.
+  View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+    createElement('div', { 'data-style': style == null ? '' : JSON.stringify(style) }, children),
+  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+  // The regular-width shell sizes the play pane + decides the wall surface off the
+  // window width.
+  useWindowDimensions: () => ({ width: cfg.windowWidth, height: 1366 }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -54,6 +77,37 @@ vi.mock('../../../src/hooks/use-sticky-accessory-presence', () => ({
 // in the real hook; the route-segment split is unit-tested in route-segments.test.
 vi.mock('../../../src/hooks/use-on-accessory-surface', () => ({
   useOnAccessorySurface: () => cfg.onAccessorySurface,
+}));
+
+vi.mock('../../../src/hooks/use-device-layout', () => ({
+  // `regular` is only ever reached on an iPad (an iPhone is always compact), so it
+  // always implies isPad; cfg.isPad additionally models an iPad in a narrow split.
+  useDeviceLayout: () => ({
+    widthClass: cfg.widthClass,
+    expanded: false,
+    isPad: cfg.widthClass === 'regular' || cfg.isPad,
+  }),
+}));
+
+vi.mock('../../../src/components/navigation/IpadSidebar', () => ({
+  IpadSidebar: ({ showWallCell = true }: { showWallCell?: boolean }) =>
+    createElement('aside', { 'data-ipad-sidebar': 'true', 'data-show-wall-cell': String(showWallCell) }),
+}));
+
+vi.mock('../../../src/components/play-drawer/IpadPlayPane', () => ({
+  IpadPlayPane: () => createElement('aside', { 'data-ipad-play-pane': 'true' }),
+}));
+
+vi.mock('../../../src/components/board-presence/IpadWallColumn', () => ({
+  IpadWallColumn: () => createElement('aside', { 'data-ipad-wall-column': 'true' }),
+}));
+
+vi.mock('../../../src/providers/board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({ enabled: cfg.boardPresenceEnabled, boardId: cfg.boardPresenceBoardId }),
+}));
+
+vi.mock('../../../src/lib/graphql/use-active-board', () => ({
+  useActiveBoard: () => ({ data: cfg.activeBoard }),
 }));
 
 vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({
@@ -153,6 +207,12 @@ vi.mock('expo-router/unstable-native-tabs', () => {
 
 import TabLayout, { unstable_settings } from '../_layout';
 
+function renderedViewStyles(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('[data-style]')).map(
+    (element) => element.getAttribute('data-style') ?? '',
+  );
+}
+
 describe('TabLayout', () => {
   beforeEach(() => {
     cfg.bluetoothConnected = false;
@@ -163,6 +223,12 @@ describe('TabLayout', () => {
     cfg.variant = 'liquidGlass';
     cfg.glassCapable = true;
     cfg.platformOS = 'ios';
+    cfg.widthClass = 'compact';
+    cfg.isPad = false;
+    cfg.windowWidth = 1024;
+    cfg.boardPresenceEnabled = false;
+    cfg.boardPresenceBoardId = null;
+    cfg.activeBoard = null;
     cfg.materialScreens = [];
   });
 
@@ -210,6 +276,168 @@ describe('TabLayout', () => {
       'discover',
       'profile',
     ]);
+  });
+
+  it('keeps an iPad in a narrow split on the JS Material tab bar (never NativeTabs)', () => {
+    // Slide Over / Split View: compact width but still an iPad. The single-navigator
+    // shell routes it through JS Tabs + the Material bar so a resize across the 700pt
+    // boundary doesn't swap navigator types — NativeTabs never renders on iPad, and
+    // there's no rail at compact width.
+    cfg.isPad = true;
+    cfg.widthClass = 'compact';
+    cfg.variant = 'liquidGlass';
+    cfg.glassCapable = true;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tabs-material="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')).toBeNull();
+    expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
+      'home',
+      'climbs',
+      'record',
+      'discover',
+      'profile',
+    ]);
+  });
+
+  it('renders the iPad sidebar shell at regular width and registers all five tabs', () => {
+    // Regular-width iPad takes the sidebar branch before the native/Material tab
+    // bars: the glass sidebar carries navigation and the native iOS 26 tab bar is
+    // gone, but the Tabs navigator still registers every tab screen.
+    cfg.widthClass = 'regular';
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-sidebar="true"]')).not.toBeNull();
+    // The right column hosts the PlayDrawer pane (replaces the floating accessory bar).
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+    // At narrow-regular width (1024) the wall has no room for a column, so it stays
+    // the sidebar cell — no dedicated column, rail cell shown.
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
+    expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
+      'home',
+      'climbs',
+      'record',
+      'discover',
+      'profile',
+    ]);
+  });
+
+  it('suppresses the detail pane on the tightest regular portraits, keeping the list full width', () => {
+    // iPad mini portrait (744): sidebar (96) + the pane's 320pt floor would leave the
+    // browse list ~328pt — below the 400pt readable floor — so resolveDetailPaneSurface
+    // drops the pane and the compact bottom-sheet PlayDrawer hosts the drawer instead.
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 744;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
+    // No room for a wall column at this width either — the wall stays the sidebar cell.
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+  });
+
+  it('shows the dedicated wall column in landscape with a bound board, hiding the rail cell', () => {
+    // Wide enough for sidebar + browse list + detail pane + wall column (1366), and
+    // a board is bound — so the wall graduates to its own column and the ambient
+    // sidebar cell steps aside (one wall surface per layout).
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1366;
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = { uuid: 'board-1' };
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(renderedViewStyles(container).some((style) => style.includes('"width":485'))).toBe(true);
+    expect(renderedViewStyles(container).some((style) => style.includes('"width":300'))).toBe(true);
+  });
+
+  it('hides the sidebar wall cell when the portrait play-pane strip owns the wall surface', () => {
+    // 13" portrait has room for the play pane but not the dedicated wall column.
+    // The wall therefore renders as the strip inside IpadPlayPane, so the sidebar
+    // cell steps aside just like it does for the landscape wall column.
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1032;
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = { uuid: 'board-1' };
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+  });
+
+  it('keeps the sidebar wall cell when tight regular width suppresses the play pane', () => {
+    // iPad mini portrait has no play pane, so there is no strip host either. The
+    // sidebar cell remains the only wall affordance in that regular-width shell.
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 744;
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = { uuid: 'board-1' };
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+  });
+
+  it('keeps the sidebar wall cell in portrait while the active board config is unresolved', () => {
+    // Presence can be bound from BLE before the active board query resolves. The
+    // strip cannot render a useful wall surface yet, so the sidebar cell remains.
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1032;
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = null;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+  });
+
+  it('keeps the wall as the sidebar cell (no column) when no board is bound', () => {
+    // Landscape width, but presence has no bound board — an empty column would be
+    // dead space, so the wall stays the ambient sidebar cell.
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1366;
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = null;
+    cfg.activeBoard = { uuid: 'board-1' };
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+  });
+
+  it('does not reserve a wall column when a board is BLE-bound but no active board is resolved', () => {
+    // boardId can be set from the BLE serial before/without an active board; the
+    // column renders its content from the active board config, so without one the
+    // layout must NOT reserve the 300pt column (it would be dead space).
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1366;
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = null;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
+    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('does not render the Record badge when no status is active', () => {

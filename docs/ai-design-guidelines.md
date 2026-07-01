@@ -310,6 +310,73 @@ borderless)` builds a Pressable `android_ripple` config at that state-layer opac
 
 ---
 
+## iPad adaptive layout
+
+iPad (only — no Android tablets) gets a multi-column shell; every iPhone, and an iPad in a narrow
+split, falls through to the phone UI **verbatim**. The size class is pure and unit-tested in
+`theme/size-class.ts` (`resolveDeviceLayout`), fed window width by `hooks/use-device-layout.ts`:
+
+- **`compact`** — every iPhone, plus an iPad window narrower than `REGULAR_WIDTH_BREAKPOINT` (700pt:
+  Slide Over / a narrow Split View). Renders today's phone UI; no phase may regress it.
+- **`regular`** — an iPad window wide enough for the glass sidebar (`IpadSidebar`, replacing the bottom
+  tab bar) + a content column + a detail pane. `expanded` (≥1024pt) is a flag on top.
+
+**The right column is master-detail, not status.** At `regular` width the shell is
+`sidebar · active-tab content · detail pane` (`(tabs)/_layout.tsx`). The detail pane (`IpadPlayPane` →
+`PlayDrawer presentation="pane"`) follows the user's **selection** — tapping a list row updates it —
+mirroring Mail/Notes/Files. It is the SELECTION surface; do not repoint it at shared/live status (that
+was the original bug). A `setAsCurrent:false` open (feed / beta / climb view) previews in the pane
+without committing to the queue (`drawer-host-provider`'s `panePreviewItem`), so every climb-open entry
+point populates the pane.
+
+**The live wall is STATUS, with its own width-adaptive home** (`resolveWallSurface({ width, widthClass,
+sidebarWidth })` → `'none' | 'strip' | 'column'`):
+
+- Ambient `SidebarWallCell` in the rail footer (always, `regular`) — the glanceable cross-tab anchor.
+- A dedicated **`column`** on the trailing edge in landscape, when sidebar + browse list (≥
+  `WALL_COLUMN_CONTENT_FLOOR` 400pt) + detail pane (`DETAIL_PANE_WIDTH_WITH_WALL` 320pt) +
+  `WALL_COLUMN_WIDTH` (300pt) all fit (≈≥1116pt → both 11" and 13" landscape).
+- A compact **`strip`** docked atop the detail pane in portrait, where a 4th column would crush the
+  list (11" 834pt / 13" 1032pt).
+
+All three reuse `NowOnTheWallPanel` (extracted from `BoardSheet`, `variant: 'sheet' | 'column'`) and tap
+through to the full `BoardSheet`. Rules when adding layout-sensitive iPad components:
+
+- Decide column-vs-strip from the **computed width budget**, never a raw breakpoint — it stays correct
+  across rotation / Split View / Stage Manager.
+- Exactly **one wall surface per layout**: the shell passes `showWallCell={!showWallColumn}` to the
+  sidebar so the rail cell and the column never both show.
+- Inline columns/strips **own their safe-area insets** (`insets.top` for a top-of-shell column header,
+  `insets.bottom` for a full-height column footer); a gorhom sheet handles its own. When a strip is
+  docked above the pane, the shell sets `PlayDrawer paneTopInset={false}` so the inset isn't doubled.
+- Status may **annotate** selection (the pane shows an "On the wall" chip when the selected climb is the
+  lit one) — but never replace it.
+
+**The detail pane is width-budgeted, like the wall column** — not gated on a raw breakpoint. The
+persistent detail (play) pane mounts only when, after the sidebar and a minimum pane width, the browse
+list still clears the readable content floor (`WALL_COLUMN_CONTENT_FLOOR` 400pt) — via
+`resolveDetailPaneSurface` in `theme/size-class.ts`, mirroring `resolveWallSurface`. On the narrowest
+regular widths (iPad mini and 9.7–10.2" portrait, ~744–810pt) the pane would squeeze the list below the
+floor, so there it falls back to the compact bottom-sheet `PlayDrawer` and the list keeps the full
+content column. This applies the "compute from the width budget, never a raw breakpoint" rule above to
+the detail pane, closing the one place it wasn't followed.
+
+**The active sidebar row uses neutral system glyphs**, matching the bottom tab bars. The sidebar is the
+tab-bar analogue, so its active row follows the same chrome-glyph rule as `NativeTabs` and
+`MaterialTabBar`: `systemColors.label` selected / `secondaryLabel` inactive, with the `systemColors.fill`
+pill as the active affordance — not a brand-violet tint. Brand colour stays for genuine accents, per the
+chrome-glyph rule documented under Iconography.
+
+**The shell is width-adaptive, not idiom-adaptive.** Size class is driven by `Platform.isPad` (fixed at
+process launch) plus the live window width; only width is live. The guarantee is "the right layout for
+the current window width on iPad," not a layout that re-derives the device idiom across Stage Manager or
+an external display. Note also the deliberate choice of a bespoke 96pt icon-over-label rail instead of a
+`UISplitViewController` sidebar: a Phase-1 call that keeps the rail simple but means it won't inherit
+system sidebar behaviours (collapse control, pointer magnetism). Revisit in Phase 2+ whether to adopt a
+true wide text sidebar or the iPadOS 18 floating-tab-bar-to-sidebar pattern.
+
+---
+
 ## Motion & haptics
 
 **Springs** (`theme/animations.ts`, for reanimated `withSpring`):

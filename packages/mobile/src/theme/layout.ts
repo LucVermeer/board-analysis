@@ -90,3 +90,24 @@ export const MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT = glassSize.standard;
  *  rounding — not absorb a constant-vs-reality mismatch — so it stays a fixed hairline
  *  instead of a hand-tuned per-device offset. */
 export const TABBAR_SEAM_OVERLAP = 1;
+
+/** Width of the iPad adaptive-shell sidebar rail (the glass left rail that
+ *  replaces the bottom tab bar at `regular` width — see `size-class.ts`). An
+ *  icon-over-label rail: wide enough for a 44pt touch target plus a caption,
+ *  narrow enough to leave the content panes the bulk of the canvas. */
+export const SIDEBAR_WIDTH = 96;
+
+/**
+ * iPad sidebar nav-row chrome dimensions, kept here on the token ladder rather
+ * than as raw numbers in `IpadSidebar` so the active-destination affordance is
+ * tunable and reads as one system with the M3 nav indicator. The active pill
+ * height snaps to the 8pt grid (the M3 nav indicator is 32 tall); the width
+ * seats the {@link SIDEBAR_NAV_ICON_SIZE} glyph with breathing room.
+ */
+export const SIDEBAR_NAV_PILL_HEIGHT = 32;
+export const SIDEBAR_NAV_PILL_WIDTH = 48;
+export const SIDEBAR_NAV_ICON_SIZE = 26;
+
+/** Diameter of the "live"/now-on-the-wall status dot in the rail cell and wall
+ *  strip — one value so every board-presence surface uses the same dot. */
+export const WALL_LIVE_DOT_SIZE = 10;

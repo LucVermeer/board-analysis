@@ -31,30 +31,33 @@ Automated native capture (the real RN app, dark theme) via Maestro:
 vp run mobile:screenshots -- --platform ios --backend prod --theme dark --devices common --locales all
 ```
 
-This drives the common iPhone simulator set against prod (signed in as the test
+This drives the common Apple simulator set against prod (signed in as the test
 user) and saves PNGs to `app-stores/apple/screenshots/<app-store-locale>/<device>/`
-— e.g. `app-stores/apple/screenshots/en-US/iphone-16-pro-max/`. See
+— e.g. `app-stores/apple/screenshots/en-US/iphone-16-pro-max/` and
+`app-stores/apple/screenshots/en-US/ipad-pro-13-inch-m5/`. See
 `packages/mobile/.maestro/README.md` for prerequisites (Maestro, the
 `SCREENSHOT_USER_PASSWORD` env, etc.).
 
 ### Required screenshot sizes
 
-| Device                          | Resolution | Required?                             |
-| ------------------------------- | ---------- | ------------------------------------- |
-| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Yes — the only size the flow captures |
-| 13" iPad (iPad Pro)             | 2064x2752  | Not required while tablet is disabled |
+| Device                          | Resolution       | Required?                                    |
+| ------------------------------- | ---------------- | -------------------------------------------- |
+| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868        | Yes — the only iPhone size the flow captures |
+| 13" iPad (iPad Pro)             | 2752x2064        | Yes — captured in landscape for tablet app   |
+| 11" iPad (iPad Pro)             | 2420x1668 family | Yes — captured in landscape for tablet app   |
 
-We capture a single device size, the 6.9" iPhone 16 Pro Max. App Store Connect
-**auto-scales the largest screenshot down** to every smaller iPhone, so one 6.9"
-set covers the whole device range — extra device sizes are invisible to users and
-add no ranking value, only CI time. The axis that helps the listing is locale, so
-that stays a full sweep. (See
+For iPhone we capture a single size, the 6.9" iPhone 16 Pro Max. App Store Connect
+**auto-scales the largest iPhone screenshot down** to every smaller iPhone, so one
+6.9" set covers the whole iPhone range — extra iPhone sizes are invisible to users
+and add no ranking value, only CI time. iPad is a separate App Store slot that does
+**not** auto-scale from iPhone, so the 13" and 11" iPad Pro captures are their own
+set. The other axis that helps the listing is locale, so that stays a full sweep.
+(See
 <https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots/>.)
 
-The app currently has `supportsTablet: false`, so iPad screenshots are not part
-of the automated set. `--locales all` captures `en-US`, `es`, and `fr`; the
-single Spanish app locale is uploaded to both App Store Connect Spanish locales:
-`es-ES` and `es-MX`.
+The app has `supportsTablet: true`, so the automated set includes iPad screenshots.
+`--locales all` captures `en-US`, `es`, and `fr`; the single Spanish app locale
+is uploaded to both App Store Connect Spanish locales: `es-ES` and `es-MX`.
 
 Dark is the canonical appearance; pass `--theme light` for a light set.
 
@@ -63,7 +66,7 @@ Dark is the canonical appearance; pass `--theme light` for a light set.
 If you need a specific screen the flow doesn't cover:
 
 1. Open Xcode > Window > Devices and Simulators
-2. Create or select an iPhone 16 Pro Max simulator
+2. Create or select an iPhone 16 Pro Max, iPad Pro 13-inch, or iPad Pro 11-inch simulator
 3. Run the app in the simulator
 4. Navigate to each key screen:
    - Board selection / home feed
@@ -97,17 +100,17 @@ Store Connect.
 
 What it does:
 
-1. Captures common iPhone screenshots on simulators, against **prod** (signed in
-   as the test user) for every supported app locale — the canonical store
-   recipe, with no local backend needed.
+1. Captures common iPhone portrait screenshots and iPad landscape screenshots on
+   simulators, against **prod** (signed in as the test user) for every supported
+   app locale — the canonical store recipe, with no local backend needed.
 2. Runs `vp run check:screenshot-dimensions`, which fails the run if any PNG
    isn't an Apple-accepted size for its slot (so Apple can't reject the upload
    for a bad resolution).
 3. Runs `fastlane ios screenshots` (`fastlane/Fastfile`), which uploads the PNGs
    with `skip_binary_upload`, `skip_metadata`, and `submit_for_review: false`.
    deliver routes each image to its display slot by pixel dimensions
-   (1320×2868 → the 6.9" iPhone slot); the `00-`/`01-` filename prefixes set the
-   display order inside each device slot.
+   (1320x2868 -> the 6.9" iPhone slot, 2752x2064 -> the 13" iPad slot); the
+   `00-`/`01-` filename prefixes set the display order inside each device slot.
 
 **Authentication** uses the App Store Connect API key already configured for the
 TestFlight workflows — no new secrets:
@@ -164,16 +167,10 @@ If a build fails:
 
 ## 4. Upload to App Store Connect
 
-1. In the Xcode Organizer (**Window > Organizer**), select the archive you just created.
-2. Click **Distribute App**.
-3. Select **App Store Connect** as the distribution method.
-4. Select **Upload** (not Export).
-5. Leave the default options (bitcode, symbols, etc.) and click **Next**.
-6. Select the signing profile **Boardsesh App Store Distribution** (should be auto-detected).
-7. Click **Upload**.
-8. Wait for the upload to complete. You will see a success message.
-
-The build will appear in App Store Connect within 5-30 minutes after upload. Apple runs automated processing (including a basic compliance check) before it becomes available.
+The React Native workflow uploads the archive during export, so there is no
+manual Xcode Organizer upload step in the normal release path. Use Organizer only
+for an emergency local archive after recreating the same `packages/mobile/ios`
+prebuild inputs.
 
 ---
 

@@ -13,6 +13,13 @@ const cfg = vi.hoisted(() => ({
   nativeTabs: {} as unknown,
   bottomAccessory: {} as unknown,
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
+  // 'regular' models the iPad sidebar shell (no native tab bar); 'compact' is
+  // every phone and the default for these variant/capability tests.
+  widthClass: 'compact' as 'compact' | 'regular',
+  // iPad in a narrow split: compact width but still an iPad, which the shell keeps
+  // on JS Tabs (never NativeTabs). Independent of widthClass so this case is
+  // expressible; a 'regular' width always implies an iPad too.
+  isPad: false,
 }));
 
 vi.mock('react-native', () => ({
@@ -47,6 +54,16 @@ vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({ variant: cfg.variant }),
 }));
 
+vi.mock('../use-device-layout', () => ({
+  // A 'regular' width only ever resolves on an iPad, so isPad is true there; the
+  // explicit cfg.isPad covers the iPad-in-a-narrow-split (compact) case.
+  useDeviceLayout: () => ({
+    widthClass: cfg.widthClass,
+    expanded: false,
+    isPad: cfg.widthClass === 'regular' || cfg.isPad,
+  }),
+}));
+
 import { isBottomAccessoryAvailable, useNativeAccessoryActive, useNativeTabBar } from '../use-bottom-accessory';
 
 describe('use-bottom-accessory', () => {
@@ -58,6 +75,8 @@ describe('use-bottom-accessory', () => {
     cfg.nativeTabs = {};
     cfg.bottomAccessory = {};
     cfg.variant = 'liquidGlass';
+    cfg.widthClass = 'compact';
+    cfg.isPad = false;
   });
 
   it('uses the native BottomAccessory export as the capability check', () => {
@@ -125,6 +144,16 @@ describe('use-bottom-accessory', () => {
     expect(result.current).toBe(false);
   });
 
+  it('does not report the native accessory active on the iPad sidebar shell', () => {
+    // The regular-width iPad shell has no native tab bar, so the accessory that
+    // lives inside it must be inactive even on a glass-capable device.
+    cfg.widthClass = 'regular';
+
+    const { result } = renderHook(() => useNativeAccessoryActive());
+
+    expect(result.current).toBe(false);
+  });
+
   describe('useNativeTabBar', () => {
     it('is true only for the Liquid Glass variant on a glass-capable device', () => {
       const { result, rerender } = renderHook(() => useNativeTabBar());
@@ -148,6 +177,30 @@ describe('use-bottom-accessory', () => {
 
     it('is false off iOS even on the Liquid Glass variant', () => {
       cfg.platformOS = 'android';
+
+      const { result } = renderHook(() => useNativeTabBar());
+
+      expect(result.current).toBe(false);
+    });
+
+    it('is false on the iPad sidebar shell (regular width), even when glass-capable', () => {
+      // The regular-width iPad renders JS Tabs + a glass sidebar, so the native
+      // tab bar is not on screen there — and everything that branches on this
+      // predicate (search mode, accessory, bottom-chrome geometry) must agree.
+      cfg.widthClass = 'regular';
+
+      const { result } = renderHook(() => useNativeTabBar());
+
+      expect(result.current).toBe(false);
+    });
+
+    it('is false on an iPad in a narrow split (compact width), even when glass-capable', () => {
+      // The single-navigator shell keeps an iPad on JS Tabs + the Material bar at
+      // compact width too (never NativeTabs), so the native bar is not on screen.
+      // If this returned true, the bottom-chrome metrics would suppress the JS queue
+      // bar for a native accessory that never mounts — dropping the now-playing bar.
+      cfg.isPad = true;
+      cfg.widthClass = 'compact';
 
       const { result } = renderHook(() => useNativeTabBar());
 
