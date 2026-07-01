@@ -237,17 +237,18 @@ describe('ProfileTopChrome', () => {
       ctrl.variant = 'material';
     });
 
-    it('renders a Paper app bar with the dashboard title and the MaterialTabs row', () => {
+    it('renders a Paper app bar with no visible title and the MaterialTabs row', () => {
       const { container } = render(<ProfileTopChrome {...makeProps()} />);
       expect(container.querySelector('[data-appbar="true"]')).not.toBeNull();
-      expect(container.querySelector('[data-appbar-title="metadata.dashboard.title"]')).not.toBeNull();
+      // The "You" title is dropped — the sub-tab group already names the surface.
+      expect(container.querySelector('[data-appbar-title="metadata.dashboard.title"]')).toBeNull();
       expect(container.querySelector('[data-material-tabs="true"]')).not.toBeNull();
       // No glass segmented control / track on the material branch.
       expect(container.querySelector('[data-segmented="true"]')).toBeNull();
       expect(container.querySelector('[data-glass="true"]')).toBeNull();
     });
 
-    it('renders the avatar menu before the dashboard title', () => {
+    it('renders the material avatar menu', () => {
       const { container } = render(<ProfileTopChrome {...makeProps()} />);
       expect(userMenuAction(container)?.getAttribute('data-avatar-variant')).toBe('material');
     });
