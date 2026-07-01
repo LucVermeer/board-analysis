@@ -129,7 +129,12 @@ export function buildLogbookFacets(
   t: TFunction<'you'>,
 ): LogbookFacet[] {
   const gradeActive = isGradeActive(filters);
-  const gradesById = gradeActive ? new Map(grades.map((grade) => [grade.difficultyId, grade.name])) : null;
+  // Show the placeholder (not the raw difficulty id) while the grade facet is set
+  // but the grade scale hasn't loaded yet — the chip stays amber (active) and
+  // swaps to the formatted "V4–V6" once `grades` arrives. Building the id→name map
+  // only when both are ready keeps the resting/loading cases on the placeholder.
+  const gradesById =
+    gradeActive && grades.length > 0 ? new Map(grades.map((grade) => [grade.difficultyId, grade.name])) : null;
   const gradeLabel = gradesById
     ? gradeChipLabel(filters.minGrade, filters.maxGrade, gradesById, formatGrade)
     : t('mobile.logbook.grade');

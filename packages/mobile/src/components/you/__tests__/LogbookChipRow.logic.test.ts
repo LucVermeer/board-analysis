@@ -60,6 +60,16 @@ describe('buildLogbookFacets', () => {
     expect(grade.label).toBe('V3–V5');
   });
 
+  it('shows the grade placeholder (not the raw id) while the grade facet is set but grades have not loaded', () => {
+    // The scale is still loading (empty grade list), so the chip stays amber but
+    // reads "Grade" instead of the raw "≥12" id — the formatted value appears once
+    // the scale arrives.
+    const facets = buildLogbookFacets(withFilters({ minGrade: 12 }), [], formatGrade, t);
+    const grade = facetByKey(facets, 'grade');
+    expect(grade.active).toBe(true);
+    expect(grade.label).toBe('mobile.logbook.grade');
+  });
+
   it('activates the angle facet with the degree-range label when narrowed', () => {
     const facets = buildLogbookFacets(withFilters({ angleRange: [20, 40] }), GRADES, formatGrade, t);
     const angle = facetByKey(facets, 'angle');

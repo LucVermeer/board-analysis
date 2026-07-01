@@ -33,7 +33,6 @@ import {
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
-import { ScreenTitle } from '../ScreenTitle';
 
 type SocialMode = 'followers' | 'following' | 'search';
 
@@ -42,14 +41,11 @@ type SocialTabProps = {
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   topInset?: number;
   registerScrollToTop?: (scrollToTop: (() => void) | null) => void;
-  /** In-body identity title (the own "You" tab passes "You"). Omitted when the
-   *  surrounding screen supplies its own identity. */
-  screenTitle?: string;
 };
 
 const EMPTY_PEOPLE: SocialPerson[] = [];
 
-export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop, screenTitle }: SocialTabProps) {
+export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SocialTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
@@ -143,8 +139,6 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop,
   const header = useMemo(
     () => (
       <View>
-        {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
-
         <View style={styles.summaryRow}>
           <SocialStatCard
             label={t('mobile.social.followers')}
@@ -179,7 +173,7 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop,
         ) : null}
       </View>
     ),
-    [followerCount, followingCount, mode, searchQuery, segmentOptions, systemColors.fill, t, screenTitle],
+    [followerCount, followingCount, mode, searchQuery, segmentOptions, systemColors.fill, t],
   );
 
   if (!userId) {
@@ -293,11 +287,6 @@ function SocialEmptyState({ mode }: { mode: Exclude<SocialMode, 'search'> }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  screenTitle: {
-    paddingHorizontal: spacing[4],
-    paddingTop: 0,
-    paddingBottom: spacing[2],
-  },
   summaryRow: {
     flexDirection: 'row',
     gap: spacing[3],

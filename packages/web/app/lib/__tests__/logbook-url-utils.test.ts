@@ -61,6 +61,23 @@ describe('readFiltersFromQuery', () => {
     expect(result).toEqual({});
   });
 
+  it('yields the sends-only default when no sends/attempts params are present', () => {
+    // A URL with no status params must resolve to the sends-only default (not
+    // "both"). readFiltersFromQuery omits unset status, so merging its partial over
+    // DEFAULT_FILTERS is the real resolution the feed sees. Guard the default too so
+    // this test tracks any future flip of the resting status.
+    expect(DEFAULT_FILTERS.includeSends).toBe(true);
+    expect(DEFAULT_FILTERS.includeAttempts).toBe(false);
+
+    const partial = readFiltersFromQuery(new URLSearchParams('minGrade=10'));
+    expect(partial.includeSends).toBeUndefined();
+    expect(partial.includeAttempts).toBeUndefined();
+
+    const resolved = { ...DEFAULT_FILTERS, ...partial };
+    expect(resolved.includeSends).toBe(true);
+    expect(resolved.includeAttempts).toBe(false);
+  });
+
   it('parses boolean filter params', () => {
     const params = new URLSearchParams('sends=0&attempts=1&flash=1&benchmark=0');
     const result = readFiltersFromQuery(params);

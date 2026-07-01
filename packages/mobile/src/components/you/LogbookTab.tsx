@@ -15,7 +15,6 @@ import {
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { Text } from '../Text';
-import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
@@ -64,12 +63,9 @@ type LogbookTabProps = {
    * read-only in the play drawer instead of the editable LogbookEditSheet.
    */
   viewerIsOwner?: boolean;
-  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
-   *  climber's profile, where the name lives in the public-profile header. */
-  screenTitle?: string;
 };
 
-export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenTitle }: LogbookTabProps) {
+export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
   // Temporary kill switch while the search + filter UI is unfinished.
@@ -279,20 +275,17 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
           floating chrome. Sibling of the list, so list virtualization is intact. */}
       <View style={[styles.toolbar, { paddingTop: topInset }]}>
         {showSortChips ? (
-          // iOS Liquid Glass: the title and search share one row to reclaim the
-          // line the search box used, and the chip row below carries the filter
-          // entry + sort + active-filter chips (so no separate filter button here).
+          // iOS Liquid Glass: search sits on its own row, and the chip row below
+          // carries the filter entry + sort + active-filter chips (so no separate
+          // filter button here).
           <>
-            <View style={styles.titleSearchRow}>
-              {screenTitle ? <ScreenTitle style={styles.inlineScreenTitle}>{screenTitle}</ScreenTitle> : null}
-              <SearchHeader
-                ref={searchHeaderRef}
-                placeholder={t('mobile.logbook.searchPlaceholder')}
-                onChangeText={handleSearchChange}
-                initialValue={name}
-                height={40}
-              />
-            </View>
+            <SearchHeader
+              ref={searchHeaderRef}
+              placeholder={t('mobile.logbook.searchPlaceholder')}
+              onChangeText={handleSearchChange}
+              initialValue={name}
+              height={40}
+            />
             {/* Filter entry + Latest/Hardest + every facet chip (grade/angle/show/
                 date) — switch sort and adjust filters inline without opening the
                 sheet. Grade/angle/date toggle the rail below; Show is a native
@@ -319,10 +312,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
             />
           </>
         ) : (
-          // Android / Material: the current layout — title above, then search +
-          // the round filter button (no chip row).
+          // Android / Material: the current layout — search + the round filter
+          // button (no chip row).
           <>
-            {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
             {logbookFiltersEnabled ? (
               <View style={styles.toolbarRow}>
                 <SearchHeader
@@ -453,22 +445,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
-  },
-  // iOS glass: title + search on one row (title content-sized, search fills the rest).
-  titleSearchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  inlineScreenTitle: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
-  },
-  screenTitle: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: spacing[2],
   },
   filterButton: {
     width: 40,

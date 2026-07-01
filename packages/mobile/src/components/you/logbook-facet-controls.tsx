@@ -176,8 +176,17 @@ export type DateRangeRowProps = {
  * One date bound (from / to). iOS shows the native compact picker inline; Android
  * opens the imperative dialog from a tappable row — mirroring LogbookEditSheet's
  * pattern. A Clear affordance resets the bound to "any" (empty ISO).
+ * memo'd (like LogbookAngleRail / Chip): both callers pass a stable onChange
+ * (useCallback), string labels, and a stable maximumDate, so an unrelated filter
+ * change on the sheet / rail doesn't re-render either date row.
  */
-export function DateRangeRow({ label, value, onChange, clearLabel, maximumDate }: DateRangeRowProps) {
+export const DateRangeRow = memo(function DateRangeRow({
+  label,
+  value,
+  onChange,
+  clearLabel,
+  maximumDate,
+}: DateRangeRowProps) {
   const { systemColors, brandColors } = useTheme();
   const selectedDate = parseIsoDate(value);
   // iOS: tapping the empty field reveals the inline picker WITHOUT committing a
@@ -275,7 +284,7 @@ export function DateRangeRow({ label, value, onChange, clearLabel, maximumDate }
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   subsectionLabel: {
