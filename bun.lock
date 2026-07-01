@@ -519,6 +519,8 @@
       "version": "1.0.0",
       "dependencies": {
         "@boardsesh/graphql": "*",
+        "@boardsesh/profile-stats": "*",
+        "dayjs": "^1.11.19",
       },
       "devDependencies": {
         "typescript": "~6.0.3",

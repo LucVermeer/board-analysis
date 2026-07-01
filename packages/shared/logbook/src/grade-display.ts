@@ -19,3 +19,19 @@ export function deriveLogbookGradeDisplay(
     gradeIsConsensus: !hasLogged && consensusDifficulty != null,
   };
 }
+
+/**
+ * Direction of the climber's grade relative to the consensus, for the arrow on
+ * the row's consensus sub-line: 'up' = you graded it harder than the crowd,
+ * 'down' = softer. Only meaningful when `showConsensusSecondary` is true —
+ * returns null when either grade is missing or they agree. Difficulty ids are
+ * ordinal (higher id = harder), the same assumption the grade range filters make.
+ */
+export function consensusDeltaDirection(
+  loggedDifficulty: number | null | undefined,
+  consensusDifficulty: number | null | undefined,
+): 'up' | 'down' | null {
+  if (loggedDifficulty == null || consensusDifficulty == null) return null;
+  if (loggedDifficulty === consensusDifficulty) return null;
+  return loggedDifficulty > consensusDifficulty ? 'up' : 'down';
+}
