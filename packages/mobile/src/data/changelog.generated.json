@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-06-30T22:37:59.854Z",
+  "generatedAt": "2026-07-01T22:05:24.641Z",
   "entries": [
+    {
+      "prNumber": 3334,
+      "category": "new",
+      "title": "Your logbook now opens to your sends. Bring attempts back from the filters whenever you want. Old bookmarked logbook links open to sends by default too; flip attempts back on if you want both.",
+      "mergedAt": "2026-07-01T22:04:21Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3334"
+    },
     {
       "prNumber": 3333,
       "category": "new",

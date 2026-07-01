@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-01
+
+### New
+
+- Your logbook now opens to your sends. Bring attempts back from the filters whenever you want. Old bookmarked logbook links open to sends by default too; flip attempts back on if you want both. ([#3334](https://github.com/boardsesh/boardsesh/pull/3334))
+
 ## 2026-06-30
 
 ### New
