@@ -118,8 +118,9 @@ describe('Queue client ↔ real backend (4-participant party session)', () => {
       for (let cycle = 0; cycle < 4; cycle++) {
         await dre.disconnect();
         await dre.reconnect();
+        // Pre-fix this settle would time out — the roster climbed past 4 as
+        // ghosts stacked and never came back down to the real party size.
         await waitFor(() => alice.users.length === 4, { label: `roster settles at 4 (cycle ${cycle})` });
-        expect(alice.users.length).toBeLessThanOrEqual(4);
       }
 
       // Still exactly four people, with a single live "Dre" — no ghost pile-up.

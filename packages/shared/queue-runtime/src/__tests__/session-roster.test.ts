@@ -34,11 +34,12 @@ describe('session-roster dedupe', () => {
   });
 
   it('preserves order and returns the first entry seen for each identity', () => {
+    // First-in-array wins, regardless of what the connection ids imply.
     const roster: Roster[] = [
-      { id: 'conn-late', userId: 'user-A' },
-      { id: 'conn-early', userId: 'user-A' },
+      { id: 'conn-1', userId: 'user-A' },
+      { id: 'conn-2', userId: 'user-A' },
     ];
-    expect(dedupeSessionUsers(roster)).toEqual([{ id: 'conn-late', userId: 'user-A' }]);
+    expect(dedupeSessionUsers(roster)).toEqual([{ id: 'conn-1', userId: 'user-A' }]);
   });
 
   it('handles the empty roster', () => {

@@ -18,7 +18,8 @@ type RosterIdentity = Pick<RuntimeSessionUser, 'id' | 'userId'>;
  * NOT for id-based lookups: keep the raw roster when you need to `find` a
  * participant by connection/participant `id`, since dedupe drops later entries.
  */
-export function dedupeSessionUsers<TUser extends RosterIdentity>(users: readonly TUser[]): TUser[] {
+export function dedupeSessionUsers<TUser extends RosterIdentity>(users: readonly TUser[] | null | undefined): TUser[] {
+  if (!users) return [];
   const seen = new Set<string>();
   const deduped: TUser[] = [];
   for (const user of users) {
@@ -31,7 +32,8 @@ export function dedupeSessionUsers<TUser extends RosterIdentity>(users: readonly
 }
 
 /** Count distinct humans in a session roster (see {@link dedupeSessionUsers}). */
-export function countDistinctSessionUsers(users: readonly RosterIdentity[]): number {
+export function countDistinctSessionUsers(users: readonly RosterIdentity[] | null | undefined): number {
+  if (!users) return 0;
   const seen = new Set<string>();
   for (const user of users) {
     seen.add(user.userId ?? user.id);
