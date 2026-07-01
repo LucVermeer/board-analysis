@@ -56,10 +56,7 @@ describe('buildLogbookListRows', () => {
 
   it('withholds stats from the oldest loaded day while more pages remain', () => {
     const rows = buildLogbookListRows(
-      [
-        tick({ uuid: 'a', climbedAt: `2026-06-30${NOON}` }),
-        tick({ uuid: 'b', climbedAt: `2026-06-29${NOON}` }),
-      ],
+      [tick({ uuid: 'a', climbedAt: `2026-06-30${NOON}` }), tick({ uuid: 'b', climbedAt: `2026-06-29${NOON}` })],
       { hasMore: true },
     );
     const dividers = rows.filter((row) => row.type === 'divider');

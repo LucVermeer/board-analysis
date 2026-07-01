@@ -4,17 +4,30 @@ import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
 
-// Capture what ClimbListItemContent receives so we can assert the dual-grade
-// pass-through (consensusGrade / gradeIsConsensus) the logbook row derives.
-// deriveLogbookGradeDisplay (@boardsesh/logbook) is intentionally NOT mocked so
-// the real decision + the row's label formatting are exercised end-to-end.
-const mockClimbListItemContent = vi.hoisted(() => vi.fn());
+// The swipeable's props and the row's accessibility surface are captured via
+// hoisted vars so tests can drive onSwipeableWillOpen / onAccessibilityAction
+// without a native tree. deriveLogbookGradeDisplay and the other row-meta rules
+// (@boardsesh/logbook) are intentionally NOT mocked so the real display
+// decisions + the row's label formatting are exercised end-to-end.
+const swipeable = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+const a11y = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
 
 vi.mock('react-native', () => ({
-  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  View: (props: { children?: ReactNode } & Record<string, unknown>) => {
+    // The row's accessible View is the only one carrying accessibilityActions.
+    if (props.accessibilityActions) a11y.props = props;
+    return createElement('div', null, props.children);
+  },
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+  useWindowDimensions: () => ({ fontScale: 1, width: 375, height: 800 }),
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    // Interpolate counts so `mobile.logbook.tries:1` / `…row.stars:3` are assertable.
+    t: (key: string, opts?: { count?: number }) => (opts?.count != null ? `${key}:${opts.count}` : key),
+    i18n: { language: 'en-US' },
+  }),
+}));
 vi.mock('react-native-reanimated', () => ({
   default: {
     View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -52,36 +65,37 @@ vi.mock('react-native-gesture-handler', () => {
     GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   };
 });
+// Capture the swipeable's props so tests can fire onSwipeableWillOpen directly.
 vi.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
-  default: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  default: (props: { children?: ReactNode } & Record<string, unknown>) => {
+    swipeable.props = props;
+    return createElement('div', null, props.children);
+  },
 }));
 vi.mock('@boardsesh/profile-stats', () => ({
   getLayoutDisplayName: () => 'Kilter Original',
-  formatTickRelativeTime: () => '2d ago',
+  // dayjs-like: the row only calls .toDate() for toLocaleTimeString.
+  parseTickTime: () => ({ toDate: () => new Date('2026-06-15T10:00:00Z') }),
 }));
-vi.mock('@boardsesh/play-view', () => ({ getGradeTextColor: () => '#fff' }));
+vi.mock('@boardsesh/board-constants/grade-colors', () => ({
+  getGradeColor: () => '#7A3FE4',
+  DEFAULT_GRADE_COLOR: '#8A8A8E',
+}));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../../Icon', () => ({ Icon: () => createElement('i', null) }));
-vi.mock('../../ClimbListItemContent', () => ({
-  ClimbListItemContent: (props: Record<string, unknown>) => {
-    mockClimbListItemContent(props);
-    return createElement('div', { 'data-testid': 'climb-content' });
-  },
+// Icons render as <i data-icon="…"> so tests can assert which glyphs mounted.
+vi.mock('../../Icon', () => ({
+  Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }),
 }));
-// ClimbListItemContent transitively imports ClimbListThumbnail → expo native
-// packages; mock it so the module worker doesn't traverse into them.
-vi.mock('../../ClimbListThumbnail', () => ({
-  ClimbListThumbnail: () => null,
-  THUMBNAIL_WIDTH: 76,
-  THUMBNAIL_HEIGHT: 96,
-}));
+vi.mock('../../ClimbAttributeIcons', () => ({ ClimbAttributeIcons: () => null }));
 vi.mock('../../use-swipe-arm', () => ({
   useSwipeArm: () => ({ armedRef: { current: false }, arm: () => {}, disarm: () => {} }),
 }));
-vi.mock('./profile-chart-colors', () => ({ gradeBadgeColor: () => '#000' }));
-vi.mock('../../../theme/colors', () => ({ brandColors: { primary: '#6D28D9' }, withAlpha: (c: string) => c }));
+vi.mock('../../../theme/colors', () => ({
+  brandColors: { primary: '#6D28D9', error: '#C81E1E' },
+  withAlpha: (color: string) => color,
+}));
 vi.mock('../../../theme/ios-colors', () => ({
   iosSystemColors: { white: '#fff', systemGray: '#888', separator: '#ccc' },
 }));
@@ -95,6 +109,7 @@ vi.mock('../../../providers/theme-provider', () => ({
       secondaryLabel: '#666',
       tertiaryLabel: '#999',
     },
+    brandColors: { warning: '#B45309', success: '#047857' },
   }),
 }));
 vi.mock('../../../hooks/use-grade-format', () => ({
@@ -144,32 +159,134 @@ function ascent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
   } as AscentFeedItem;
 }
 
-function renderRow(item: AscentFeedItem) {
-  render(createElement(LogbookRow, { ascent: item, onActivate: () => {} }));
-  return mockClimbListItemContent.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+type RowHandlers = {
+  onActivate?: (item: AscentFeedItem, index?: number) => void;
+  onOpenActions?: (item: AscentFeedItem) => void;
+  onEdit?: (item: AscentFeedItem) => void;
+  onDeleteRequest?: (item: AscentFeedItem, method: 'swipe' | 'a11y') => void;
+};
+
+function renderRow(item: AscentFeedItem, handlers: RowHandlers = {}) {
+  return render(createElement(LogbookRow, { ascent: item, onActivate: () => {}, ...handlers }));
+}
+
+function iconNames(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('[data-icon]')).map((iconEl) => iconEl.getAttribute('data-icon') ?? '');
 }
 
 beforeEach(() => {
-  mockClimbListItemContent.mockClear();
+  swipeable.props = null;
+  a11y.props = null;
 });
 
-describe('LogbookRow — dual-grade pass-through', () => {
-  it('marks the grade consensus-sourced and shows no secondary for an ungraded tick', () => {
-    const props = renderRow(ascent({ difficulty: null, consensusDifficulty: 9, consensusDifficultyName: 'V9' }));
-    expect(props).toMatchObject({ gradeIsConsensus: true, consensusGrade: null });
+describe('LogbookRow — grade column', () => {
+  it('shows the consensus as the big grade with the people marker (no sub-line) for an ungraded tick', () => {
+    const { container, getByText } = renderRow(ascent({ consensusDifficulty: 9, consensusDifficultyName: 'V9' }));
+
+    getByText('V9');
+    const icons = iconNames(container);
+    // One people glyph: the consensus-sourced marker beside the big grade.
+    expect(icons.filter((name) => name === 'people')).toHaveLength(1);
+    // The crowd can't disagree with a grade that was never logged.
+    expect(icons).not.toContain('chevron.up');
+    expect(icons).not.toContain('chevron.down');
   });
 
-  it('passes the consensus grade as a secondary when it disagrees with the logged grade', () => {
-    const props = renderRow(
+  it('renders the consensus sub-line with a down arrow when you graded softer than the crowd', () => {
+    const { container, getByText } = renderRow(
       ascent({ difficulty: 8, difficultyName: 'V8', consensusDifficulty: 9, consensusDifficultyName: 'V9' }),
     );
-    expect(props).toMatchObject({ gradeIsConsensus: false, consensusGrade: 'V9' });
+
+    // Your grade big, the crowd's as the secondary.
+    getByText('V8');
+    getByText('V9');
+    const icons = iconNames(container);
+    expect(icons.filter((name) => name === 'people')).toHaveLength(1);
+    // logged 8 < consensus 9 → you found it softer → arrow points down.
+    expect(icons).toContain('chevron.down');
+    expect(icons).not.toContain('chevron.up');
   });
 
-  it('shows neither when the logged grade matches the consensus', () => {
-    const props = renderRow(
+  it('shows no sub-line and no people marker when the logged grade matches the consensus', () => {
+    const { container, getByText } = renderRow(
       ascent({ difficulty: 9, difficultyName: 'V9', consensusDifficulty: 9, consensusDifficultyName: 'V9' }),
     );
-    expect(props).toMatchObject({ gradeIsConsensus: false, consensusGrade: null });
+
+    getByText('V9');
+    const icons = iconNames(container);
+    expect(icons).not.toContain('people');
+    expect(icons).not.toContain('chevron.up');
+    expect(icons).not.toContain('chevron.down');
+  });
+});
+
+describe('LogbookRow — meta line', () => {
+  it('renders no stars part when quality is null or the "cleared" 0', () => {
+    const { container: unratedContainer } = renderRow(ascent({ quality: null }));
+    expect(unratedContainer.textContent).not.toContain('mobile.logbook.row.stars');
+
+    const { container: clearedContainer } = renderRow(ascent({ quality: 0 }));
+    expect(clearedContainer.textContent).not.toContain('mobile.logbook.row.stars');
+  });
+
+  it('renders the stars label for a rated tick', () => {
+    const { container } = renderRow(ascent({ quality: 3 }));
+    expect(container.textContent).toContain('mobile.logbook.row.stars:3');
+  });
+
+  it('shows no note glyph for a whitespace-only comment', () => {
+    const { container } = renderRow(ascent({ comment: '   ' }));
+    expect(iconNames(container)).not.toContain('edit');
+  });
+
+  it('shows the note glyph for a real comment', () => {
+    const { container } = renderRow(ascent({ comment: 'beta' }));
+    expect(iconNames(container)).toContain('edit');
+  });
+
+  it('clamps an imported 0-attempt send to 1 try', () => {
+    const { container } = renderRow(ascent({ status: 'send', attemptCount: 0 }));
+    expect(container.textContent).toContain('mobile.logbook.tries:1');
+  });
+});
+
+describe('LogbookRow — swipe wiring', () => {
+  it('maps the swipe directions onto delete (right-to-left) and edit (left-to-right)', () => {
+    const item = ascent();
+    const onEdit = vi.fn();
+    const onDeleteRequest = vi.fn();
+    renderRow(item, { onEdit, onDeleteRequest });
+    expect(swipeable.props).not.toBeNull();
+
+    const willOpen = swipeable.props?.onSwipeableWillOpen as (direction: 'left' | 'right') => void;
+    // ReanimatedSwipeable reports the SWIPE direction: 'left' = the RIGHT
+    // actions (Delete) opened; 'right' = the LEFT actions (Edit).
+    willOpen('left');
+    expect(onDeleteRequest).toHaveBeenCalledWith(item, 'swipe');
+    expect(onEdit).not.toHaveBeenCalled();
+
+    willOpen('right');
+    expect(onEdit).toHaveBeenCalledWith(item);
+    expect(onDeleteRequest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LogbookRow — accessibility actions', () => {
+  it('exposes edit/delete/more and routes the delete action with the a11y method', () => {
+    const item = ascent();
+    const onEdit = vi.fn();
+    const onDeleteRequest = vi.fn();
+    const onOpenActions = vi.fn();
+    renderRow(item, { onEdit, onDeleteRequest, onOpenActions });
+    expect(a11y.props).not.toBeNull();
+
+    const actions = a11y.props?.accessibilityActions as { name: string }[];
+    expect(actions.map((action) => action.name)).toEqual(['edit', 'delete', 'more']);
+
+    const onAction = a11y.props?.onAccessibilityAction as (event: { nativeEvent: { actionName: string } }) => void;
+    onAction({ nativeEvent: { actionName: 'delete' } });
+    expect(onDeleteRequest).toHaveBeenCalledWith(item, 'a11y');
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(onOpenActions).not.toHaveBeenCalled();
   });
 });

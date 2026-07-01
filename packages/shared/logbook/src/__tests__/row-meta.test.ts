@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  displayedAttemptCount,
-  logbookAttemptsKind,
-  logbookNoteIsVisible,
-  normalizeLogbookQuality,
-} from '../row-meta';
+import { displayedAttemptCount, logbookAttemptsKind, logbookNoteIsVisible, normalizeLogbookQuality } from '../row-meta';
 import { consensusDeltaDirection } from '../grade-display';
 
 describe('logbookAttemptsKind', () => {
@@ -24,7 +19,7 @@ describe('displayedAttemptCount', () => {
 });
 
 describe('normalizeLogbookQuality', () => {
-  it('treats null and the edit sheet\'s cleared 0 as unset', () => {
+  it("treats null and the edit sheet's cleared 0 as unset", () => {
     expect(normalizeLogbookQuality(null)).toBeNull();
     expect(normalizeLogbookQuality(undefined)).toBeNull();
     expect(normalizeLogbookQuality(0)).toBeNull();
