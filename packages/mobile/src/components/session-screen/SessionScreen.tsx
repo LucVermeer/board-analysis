@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PanGesture } from 'react-native-gesture-handler';
 import type { SharedValue } from 'react-native-reanimated';
+import { countDistinctSessionUsers } from '@boardsesh/queue-runtime';
 import { useQueueSessionId, useQueueLiveStats } from '../../providers/queue-provider';
 import { SessionScreenHeader } from './SessionScreenHeader';
 import { PreSessionView } from './pre-session/PreSessionView';
@@ -41,7 +42,7 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
   const sessionActive = sessionId !== null;
   // Teach the share affordance while solo; once a friend joins, the label drops
   // and the share glyph stands on its own.
-  const soloInvite = sessionActive && sessionUsers.length <= 1;
+  const soloInvite = sessionActive && countDistinctSessionUsers(sessionUsers) <= 1;
   const handleShare = useCallback(() => setShowInvite(true), []);
   const onShare = sessionActive ? handleShare : undefined;
 

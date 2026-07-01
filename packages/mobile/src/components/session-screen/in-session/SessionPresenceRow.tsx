@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { dedupeSessionUsers } from '@boardsesh/queue-runtime';
 import type { SessionUser } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { AvatarGroup } from '../../you/AvatarGroup';
@@ -18,14 +19,20 @@ type SessionPresenceRowProps = {
 export function SessionPresenceRow({ users }: SessionPresenceRowProps) {
   const { t } = useTranslation('session');
 
+  // Dedupe by stable identity first: the roster can briefly hold two entries for
+  // one person (a reconnect landing before the old connection's UserLeft), which
+  // would otherwise double their avatar and inflate the "N here" count into a
+  // false crowd.
+  const dedupedUsers = useMemo(() => dedupeSessionUsers(users), [users]);
+
   // Connected climbers first so the visible (non-overflow) avatars favour the
   // people actually present. The AvatarGroup participant shape carries no
   // connection state, so dimming is expressed at the cluster level.
   const ordered = useMemo(() => {
-    const connected = users.filter((user) => user.connectionState === 'CONNECTED');
-    const reconnecting = users.filter((user) => user.connectionState !== 'CONNECTED');
+    const connected = dedupedUsers.filter((user) => user.connectionState === 'CONNECTED');
+    const reconnecting = dedupedUsers.filter((user) => user.connectionState !== 'CONNECTED');
     return [...connected, ...reconnecting];
-  }, [users]);
+  }, [dedupedUsers]);
 
   const participants = useMemo(
     () =>
@@ -40,9 +47,9 @@ export function SessionPresenceRow({ users }: SessionPresenceRowProps) {
     [ordered],
   );
 
-  if (users.length === 0) return null;
+  if (dedupedUsers.length === 0) return null;
 
-  const allReconnecting = users.every((user) => user.connectionState !== 'CONNECTED');
+  const allReconnecting = dedupedUsers.every((user) => user.connectionState !== 'CONNECTED');
 
   return (
     <View style={styles.container}>
@@ -51,7 +58,7 @@ export function SessionPresenceRow({ users }: SessionPresenceRowProps) {
       </View>
       <View style={styles.text}>
         <Text variant="subheadline" style={styles.count}>
-          {t('mobile.session.inPresenceCount', { count: users.length })}
+          {t('mobile.session.inPresenceCount', { count: dedupedUsers.length })}
         </Text>
       </View>
     </View>

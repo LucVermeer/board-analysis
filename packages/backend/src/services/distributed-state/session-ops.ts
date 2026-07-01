@@ -590,6 +590,20 @@ export async function getSessionMemberCount(redis: Redis, sessionId: string): Pr
 }
 
 /**
+ * Count the distinct live participants in a session (deduped by participant
+ * identity, so one authenticated user with several tabs/reconnects counts once).
+ *
+ * Use this for anything user-facing (discovery lists, "N climbers here"). It is
+ * NOT interchangeable with `getSessionMemberCount`, which counts live
+ * *connections* — that connection count backs liveness checks whose `0 ⟺ no
+ * live connections` contract must hold during the RECONNECTING grace window.
+ */
+export async function getSessionParticipantCount(redis: Redis, sessionId: string): Promise<number> {
+  validateSessionId(sessionId);
+  return (await getSessionMembers(redis, sessionId)).length;
+}
+
+/**
  * Check if a connection exists and belongs to a specific session.
  */
 export async function isConnectionInSession(redis: Redis, connectionId: string, sessionId: string): Promise<boolean> {

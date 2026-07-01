@@ -223,7 +223,11 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       const original = await registerAndJoinSession('anon-conn-1', sessionId, boardPath, 'Anon');
       expect(original.participantId).toBe('anon-conn-1');
 
-      await roomManager.disconnectClient('anon-conn-1');
+      // Anonymous disconnect is a full leave (not a RECONNECTING park): the
+      // per-connection identity can never be resumed, so peers get UserLeft.
+      const disconnectResult = await roomManager.disconnectClient('anon-conn-1');
+      expect(disconnectResult?.participantFullyLeft).toBe(true);
+      expect(disconnectResult?.presenceUser).toBeUndefined();
 
       // Reconnect from a NEW anonymous connection. Even if the client tries
       // to replay the previous participantId, the server must reject it.
@@ -244,6 +248,52 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       expect(rejoined.participantId).not.toBe(original.participantId);
       expect(rejoined.participantWasReconnecting).toBe(false);
       expect(rejoined.participantWasKnown).toBe(false);
+
+      // The stale first identity must be gone — the roster holds only the one
+      // live reconnected participant, not a ghost + the reconnect.
+      const roster = await roomManager.getSessionUsers(sessionId);
+      expect(roster).toHaveLength(1);
+      expect(roster[0].id).toBe('anon-conn-2');
+    });
+
+    it('removes an anonymous participant immediately on disconnect (no RECONNECTING ghost)', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      await registerAndJoinSession('anon-solo', sessionId, boardPath, 'Anon');
+
+      const disconnectResult = await roomManager.disconnectClient('anon-solo');
+      // Contrast the authenticated case below, which parks as RECONNECTING.
+      expect(disconnectResult?.participantFullyLeft).toBe(true);
+      expect(disconnectResult?.presenceUser).toBeUndefined();
+
+      const roster = await roomManager.getSessionUsers(sessionId);
+      expect(roster).toHaveLength(0);
+    });
+
+    it('does not grow the roster under anonymous reconnect churn (peerCount inflation regression)', async () => {
+      // Reproduces the production bug: a single WS-anonymous user (a logged-in
+      // user whose session socket connected without a token counts here too)
+      // reconnecting many times must not stack ghosts. Pre-fix, each disconnect
+      // parked a RECONNECTING ghost that lingered for the 60s grace, so the
+      // roster (and peerCount / partyMode) climbed toward N (the 5/6/7/8/10/13
+      // telemetry). Post-fix it stays pinned to the live connection count.
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      for (let cycle = 0; cycle < 8; cycle++) {
+        const connectionId = `anon-churn-${cycle}`;
+        await registerAndJoinSession(connectionId, sessionId, boardPath, 'Anon');
+        const roster = await roomManager.getSessionUsers(sessionId);
+        expect(roster).toHaveLength(1);
+        await roomManager.disconnectClient(connectionId);
+      }
+
+      // One final connection stays put.
+      await registerAndJoinSession('anon-churn-final', sessionId, boardPath, 'Anon');
+      const finalRoster = await roomManager.getSessionUsers(sessionId);
+      expect(finalRoster).toHaveLength(1);
+      expect(finalRoster[0].id).toBe('anon-churn-final');
     });
 
     it('marks a passively disconnected participant as reconnecting and restores them on reconnect', async () => {
@@ -291,8 +341,23 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       const sessionId = uuidv4();
       const boardPath = '/kilter/1/2/3/40';
 
-      const leader = await registerAndJoinSession('leader-client', sessionId, boardPath, 'Leader');
-      const member = await registerAndJoinSession('member-client', sessionId, boardPath, 'Member');
+      // Authenticated leader/member: the RECONNECTING grace only applies to
+      // users with a stable participantId (= userId). Anonymous leaders are
+      // removed outright on disconnect — see the dedicated test below.
+      const leader = await registerAndJoinSession(
+        'leader-client',
+        sessionId,
+        boardPath,
+        'Leader',
+        'leader-participant-id',
+      );
+      const member = await registerAndJoinSession(
+        'member-client',
+        sessionId,
+        boardPath,
+        'Member',
+        'member-participant-id',
+      );
 
       expect(leader.isLeader).toBe(true);
       expect(member.isLeader).toBe(false);
@@ -322,6 +387,34 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
           id: leader.participantId,
           isLeader: false,
           connectionState: 'RECONNECTING',
+        }),
+      );
+    });
+
+    it('removes an anonymous leader outright on passive disconnect and re-elects', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      // Anonymous leader (no userId → participantId = connectionId). On a
+      // passive disconnect they must be fully removed (not parked RECONNECTING),
+      // and leadership must still hand off to the remaining member.
+      const leader = await registerAndJoinSession('anon-leader', sessionId, boardPath, 'Leader');
+      const member = await registerAndJoinSession('anon-member', sessionId, boardPath, 'Member');
+      expect(leader.isLeader).toBe(true);
+
+      const disconnectResult = await roomManager.disconnectClient('anon-leader');
+      expect(disconnectResult?.participantFullyLeft).toBe(true);
+      expect(disconnectResult?.presenceUser).toBeUndefined();
+      expect(disconnectResult?.newLeaderId).toBe('anon-member');
+      expect(disconnectResult?.newLeaderParticipantId).toBe(member.participantId);
+
+      const users = await roomManager.getSessionUsers(sessionId);
+      expect(users).toHaveLength(1);
+      expect(users).toContainEqual(
+        expect.objectContaining({
+          id: member.participantId,
+          isLeader: true,
+          connectionState: 'CONNECTED',
         }),
       );
     });

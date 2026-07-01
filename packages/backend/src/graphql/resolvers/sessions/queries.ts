@@ -122,8 +122,8 @@ export const sessionQueries = {
     return Promise.all(
       sessions.map(async (s) => {
         const participantCount = distributedState
-          ? await distributedState.getSessionMemberCount(s.id)
-          : roomManager.getSessionClients(s.id).length;
+          ? await distributedState.getSessionParticipantCount(s.id)
+          : roomManager.getSessionUsersLocal(s.id).length;
         const isActive = await roomManager.isSessionActive(s.id);
 
         return {

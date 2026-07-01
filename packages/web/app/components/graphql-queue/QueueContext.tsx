@@ -32,6 +32,7 @@ import { useMutationGuard } from './hooks/use-mutation-guard';
 import { useOfflineQueueBuffer } from './hooks/use-offline-queue-buffer';
 import { useOfflineReconciliation } from './hooks/use-offline-reconciliation';
 import { emitWallConfirm } from '@boardsesh/play-view';
+import { countDistinctSessionUsers } from '@boardsesh/queue-runtime';
 import { useQueueAddValidator } from '../board-lock/use-queue-add-validator';
 import { track } from '@/app/lib/analytics';
 import {
@@ -249,6 +250,13 @@ export const GraphQLQueueProvider = ({
     () => (isPersistentSessionActive ? persistentSession.users : []),
     [isPersistentSessionActive, persistentSession.users],
   );
+  // Distinct humans in the crew. The roster can briefly hold more than one entry
+  // per person (a reconnect landing before the old connection's UserLeft, or a
+  // logged-in user whose socket authenticated anonymously), so peerCount and
+  // partyMode must dedupe rather than trust the raw length — otherwise a lone
+  // climber reads as a party. Matches the crew avatars' dedupe in
+  // queue-control-bar.
+  const distinctUserCount = useMemo(() => countDistinctSessionUsers(users), [users]);
   const connectionError = isPersistentSessionActive ? persistentSession.error : null;
   const isSessionActive = !!sessionId && hasConnected;
   const isSessionReady = isSessionActive && connectionState === 'connected';
@@ -343,8 +351,8 @@ export const GraphQLQueueProvider = ({
   // use-session-id-management's endSession(). ---
   useEffect(() => {
     if (!sessionId) return;
-    updateSessionPeerCount(sessionId, users.length);
-  }, [sessionId, users.length]);
+    updateSessionPeerCount(sessionId, distinctUserCount);
+  }, [sessionId, distinctUserCount]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -661,7 +669,8 @@ export const GraphQLQueueProvider = ({
         },
         onQueueItemAdded: ({ source, queueLengthAfter }) => {
           const latest = latestRef.current;
-          const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+          const partyMode =
+            latest.isPersistentSessionActive && countDistinctSessionUsers(latest.persistentSession.users) > 1;
           // `queueLengthAfter` reflects the most recent committed render, so
           // two adds dispatched back-to-back in the same tick will both
           // report the same length. Acceptable for the queue-churn dashboard
@@ -675,7 +684,8 @@ export const GraphQLQueueProvider = ({
         },
         onQueueItemRemoved: () => {
           const latest = latestRef.current;
-          const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+          const partyMode =
+            latest.isPersistentSessionActive && countDistinctSessionUsers(latest.persistentSession.users) > 1;
           track('Climb Removed from Queue', {
             boardLayout: latest.boardDetails?.layout_name ?? null,
             partyMode,

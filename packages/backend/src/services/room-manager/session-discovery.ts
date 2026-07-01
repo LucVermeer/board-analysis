@@ -174,7 +174,7 @@ export async function findNearbySessions(
   for (const { session, distance } of sessionsWithDistance) {
     let participantCount: number;
     if (distributedState) {
-      participantCount = await distributedState.getSessionMemberCount(session.id);
+      participantCount = await distributedState.getSessionParticipantCount(session.id);
     } else {
       participantCount = sessionsMap.get(session.id)?.size || 0;
     }

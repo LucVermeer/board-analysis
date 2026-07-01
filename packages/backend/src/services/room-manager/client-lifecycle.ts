@@ -495,6 +495,34 @@ export async function disconnectClient(
     return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
   }
 
+  // WS-anonymous participants are keyed by connectionId (joinSession sets
+  // `resolvedParticipantId = client.userId || connectionId`), so a reconnect
+  // always arrives as a brand-new participantId that can never resume this one.
+  // The RECONNECTING grace below only pays off when the *same* participant comes
+  // back; for an anonymous connection it just parks a ghost that lingers for the
+  // full grace window while every reconnect stacks another — inflating the
+  // roster (and `peerCount`/`partyMode`). Remove them now and tell peers with a
+  // UserLeft instead. Authenticated users (stable `participantId = userId`) keep
+  // the grace path unchanged.
+  if (!client.userId) {
+    if (participant.reconnectTimer) {
+      clearTimeout(participant.reconnectTimer);
+    }
+    participants.delete(participantId);
+    if (participants.size === 0) {
+      sessionParticipants.delete(sessionId);
+    }
+    if (distributedState) {
+      await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
+        logger.error(
+          `[RoomManager] Failed to remove anonymous participant ${participantId.slice(0, 8)} on disconnect:`,
+          err,
+        );
+      });
+    }
+    return { sessionId, participantId, participantFullyLeft: true, newLeaderId, newLeaderParticipantId };
+  }
+
   // ORIGINAL SOURCE (post-B4 numbering): lines 615-697. See
   // `beginParticipantGraceWindow` (presence marking + timer arm) and
   // `evictParticipantIfGhost` (the timer body) for the full ordering

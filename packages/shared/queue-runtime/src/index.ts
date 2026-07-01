@@ -31,6 +31,8 @@ export type {
   SessionConnectionTimerHandle,
 } from './session-connection';
 
+export { dedupeSessionUsers, countDistinctSessionUsers } from './session-roster';
+
 export { applySessionRuntimeEvent, upsertRuntimeSessionUser } from './session-events';
 export type {
   ApplySessionRuntimeEventOptions,

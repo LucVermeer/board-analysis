@@ -94,6 +94,13 @@ export type SessionDisconnectResult = {
   presenceUser?: SessionUser;
   newLeaderId?: string;
   newLeaderParticipantId?: string;
+  /**
+   * True when the disconnect fully removed the participant (WS-anonymous
+   * connections, which can't be resumed on reconnect) — peers should see a
+   * `UserLeft`. When absent/false the participant was parked as `RECONNECTING`
+   * and `presenceUser` carries the `UserPresenceChanged` payload instead.
+   */
+  participantFullyLeft?: boolean;
 };
 
 /**

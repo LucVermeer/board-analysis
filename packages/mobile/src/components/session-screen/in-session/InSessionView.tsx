@@ -12,6 +12,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
+import { countDistinctSessionUsers } from '@boardsesh/queue-runtime';
 import { Card } from '../../Card';
 import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { EndSessionSheet } from '../../EndSessionSheet';
@@ -411,7 +412,7 @@ export function InSessionView({
   const [chromeHeight, setChromeHeight] = useState(() => insets.top + 56);
   // Teach the share affordance while solo — an in-body row, since the chrome's
   // bare glass glyph can't carry a label. Drops once a friend joins.
-  const soloInvite = sessionUsers.length <= 1;
+  const soloInvite = countDistinctSessionUsers(sessionUsers) <= 1;
   const dismissGesture = useMemo(() => {
     if (translateY === undefined || screenHeight === undefined) return null;
     return Gesture.Pan()

@@ -19,6 +19,7 @@ import {
   pushRecentClimb,
   isRecentClimb,
   getSessionMemberCount,
+  getSessionParticipantCount,
   isConnectionInSession,
   refreshConnection,
   refreshSessionMembership,
@@ -204,9 +205,14 @@ export class DistributedStateManager {
     return isRecentClimb(this.redis, sessionId, climbUuid);
   }
 
-  /** Get count of live members in a session. */
+  /** Get count of live *connections* in a session (liveness checks only). */
   async getSessionMemberCount(sessionId: string): Promise<number> {
     return getSessionMemberCount(this.redis, sessionId);
+  }
+
+  /** Get count of distinct live *participants* (deduped) for display surfaces. */
+  async getSessionParticipantCount(sessionId: string): Promise<number> {
+    return getSessionParticipantCount(this.redis, sessionId);
   }
 
   /** Update connection username. */
