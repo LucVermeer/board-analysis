@@ -9,8 +9,8 @@ import { userBoards } from './boards';
  * Distinct from `boardsesh_ticks` (a climber's deliberate logbook entry, with
  * flash/send/attempt status): this records every climb that was actually pushed
  * to a board's LEDs, regardless of whether anyone logged it. It survives past
- * the 24h Redis presence window and is the substrate for "what was on last" and
- * future board leaderboards/competitions.
+ * the 1-week Redis presence window (BOARD_HISTORY_TTL) and is the substrate
+ * for "what was on last" and future board leaderboards/competitions.
  *
  * Writes are dwell-gated: a member's sends are only persisted once they've had
  * sustained presence on the board for ~60s, so app-swiping noise doesn't land

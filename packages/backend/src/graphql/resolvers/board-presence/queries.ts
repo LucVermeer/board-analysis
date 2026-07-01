@@ -11,7 +11,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
 import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
 import { requireActiveBoardById, requireAnonReadableBoard, resolveBoardHolder } from './shared';
-import { computeBoardPresenceStats } from './stats';
+import { computeBoardPresenceStats, getCachedBoardPresenceStats, setCachedBoardPresenceStats } from './stats';
 
 export const boardPresenceQueries = {
   /**
@@ -128,6 +128,13 @@ export const boardPresenceQueries = {
    *
    * Includes the representative hardest send so the board sheet can show the
    * climber + climb that established the wall's hardest logged grade.
+   *
+   * Cached for 60s (`boardsesh:board-stats:v1:{boardId}`, best-effort — a
+   * Redis miss or outage just falls through to a fresh compute) since the
+   * underlying aggregate scans every tick on the board. Every write path that
+   * changes these stats (`saveTick` / `updateTick` / `deleteTick` via
+   * `queueBoardStatsPublish`) refreshes the cache within its own debounce
+   * window, so a cache hit is never more than ~60s + the debounce stale.
    */
   boardPresenceStats: async (
     _: unknown,
@@ -137,7 +144,13 @@ export const boardPresenceQueries = {
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'boardPresenceStats');
     const board = await requireActiveBoardById(boardId);
-    return computeBoardPresenceStats(boardId, board.boardType);
+
+    const cached = await getCachedBoardPresenceStats(boardId);
+    if (cached) return cached;
+
+    const stats = await computeBoardPresenceStats(boardId, board.boardType);
+    setCachedBoardPresenceStats(boardId, stats);
+    return stats;
   },
 
   /**

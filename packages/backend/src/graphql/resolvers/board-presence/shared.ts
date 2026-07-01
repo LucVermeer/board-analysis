@@ -442,6 +442,23 @@ async function ensureSystemBoardOwner(): Promise<void> {
     .onConflictDoNothing();
 }
 
+/**
+ * Durable seq floor for a board: the highest `seq` ever persisted to
+ * `board_climb_events`. Backs the Redis `board:{id}:seq` counter's dormancy
+ * reseed (see `PubSub.nextBoardSeq` / A3) — after the 1-week Redis TTL
+ * expires, INCR would otherwise restart at 1 and collide with / precede rows
+ * that still exist in Postgres. Injected via `pubsub.setBoardSeqFloorProvider`
+ * at backend bootstrap so the pubsub module itself stays DB-free (and easy to
+ * unit test without Postgres).
+ */
+export async function getBoardSeqFloor(boardId: number): Promise<number> {
+  const [row] = await db
+    .select({ maxSeq: sql<number | null>`max(${dbSchema.boardClimbEvents.seq})` })
+    .from(dbSchema.boardClimbEvents)
+    .where(eq(dbSchema.boardClimbEvents.boardId, boardId));
+  return Number(row?.maxSeq ?? 0);
+}
+
 export async function resolveSharedBoardForConfig(
   boardType: string,
   layoutId: number,

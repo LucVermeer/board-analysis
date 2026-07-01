@@ -27,9 +27,10 @@ export const boardPresenceSubscriptions = {
 
       const boardKey = String(boardId);
 
-      const asyncIterator = await createEagerAsyncIterator<BoardPresenceEvent>((push) => {
-        return pubsub.subscribeBoardPresence(boardKey, push);
-      });
+      const asyncIterator = await createEagerAsyncIterator<BoardPresenceEvent>(
+        (push) => pubsub.subscribeBoardPresence(boardKey, push),
+        `boardNowPlaying:${boardId}`,
+      );
 
       for await (const event of asyncIterator) {
         yield { boardNowPlaying: event };

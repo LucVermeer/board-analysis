@@ -52,7 +52,7 @@ import {
 import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat';
 import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
 import { buildContentStateFromQueueState } from './services/apns/content-state';
-import { resolveBoardHolder } from './graphql/resolvers/board-presence/shared';
+import { getBoardSeqFloor, resolveBoardHolder } from './graphql/resolvers/board-presence/shared';
 import { logger, setInstanceIdProvider } from './utils/logger';
 import { isClientAbortError } from './utils/http-errors';
 import type { QueueEvent } from '@boardsesh/shared-schema';
@@ -88,6 +88,11 @@ export async function startServer(): Promise<ServerResources> {
   // Initialize PubSub (connects to Redis if configured)
   // This must happen before we start accepting connections
   await pubsub.initialize();
+
+  // Wire the durable seq-floor lookup for board-presence's dormancy reseed
+  // (A3) — pubsub stays DB-free at import time, but the running server needs
+  // Postgres to answer "what's the highest seq we've durably persisted".
+  pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
 
   // Wire the logger to the pubsub instance id. The format step in the
   // logger reads this provider at log time, so we get the `[i:abcd1234]`

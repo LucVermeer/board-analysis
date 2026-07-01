@@ -349,6 +349,7 @@ export const tickMutations = {
         boardType: dbSchema.boardseshTicks.boardType,
         climbUuid: dbSchema.boardseshTicks.climbUuid,
         angle: dbSchema.boardseshTicks.angle,
+        boardId: dbSchema.boardseshTicks.boardId,
       })
       .from(dbSchema.boardseshTicks)
       .where(eq(dbSchema.boardseshTicks.uuid, uuid))
@@ -405,6 +406,14 @@ export const tickMutations = {
     // Recompute the stats row so a deleted ascent doesn't leave the count
     // inflated or the FA pinned to a now-vanished tick.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
+
+    // Board presence: a deleted tick on a connected wall changes that wall's
+    // durable stats (sends / climbers / hardest / top grade) — refresh the
+    // live tiles + cache the same way saveTick does. See the longer comment
+    // on the saveTick call site below.
+    if (tick.boardId != null) {
+      queueBoardStatsPublish(tick.boardId, tick.boardType);
+    }
 
     logger.info(`[deleteTick] deleted tick=${uuid} user=${userId}`);
 
@@ -822,6 +831,13 @@ export const tickMutations = {
     // toward ascensionist_count, and a quality/difficulty/comment edit can
     // also change downstream derived stats once we aggregate those. Recompute.
     queueClimbStatsRecompute(updated.boardType, updated.climbUuid, updated.angle);
+
+    // Board presence: an edited tick on a connected wall can change that
+    // wall's durable stats (e.g. attempt -> send). See the longer comment on
+    // the saveTick call site above.
+    if (updated.boardId != null) {
+      queueBoardStatsPublish(updated.boardId, updated.boardType);
+    }
 
     logger.info(
       `[updateTick] updated tick=${updated.uuid} user=${userId} ` +
