@@ -32,10 +32,18 @@ export async function loadLogbookPrefs(): Promise<StoredLogbookPrefs | null> {
     const sort = sanitizeLogbookSort(stored.sort);
     // One-time migration to the sends-only default (mirrors web's
     // sanitizeLogbookPreferences v1→v2): a legacy payload still on the old "both"
-    // default drops attempts. saveLogbookPrefs stamps the version, so this runs
-    // once and "both" stays selectable afterward.
-    if (stored.version !== LOGBOOK_PREFS_VERSION && filters.includeSends && filters.includeAttempts) {
+    // default drops attempts. Stamping the version back means this runs once and
+    // "both" stays selectable afterward.
+    const needsMigration = stored.version !== LOGBOOK_PREFS_VERSION;
+    if (needsMigration && filters.includeSends && filters.includeAttempts) {
       filters.includeAttempts = false;
+    }
+    // Persist the v2 stamp now rather than waiting for the next filter change, so
+    // the migration check doesn't re-run on every cold launch for users who never
+    // touch a filter. Fire-and-forget: a failed write just re-runs the (identical)
+    // migration next launch, which is harmless.
+    if (needsMigration) {
+      void saveLogbookPrefs({ filters, sort });
     }
     return { filters, sort };
   } catch {

@@ -70,13 +70,9 @@ const Chip = memo(function Chip({
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   // Logbook-only control: selected fill is amber (brandColors.accent) to match the
-  // chip row, and amber is fill-only so the label sits in dark text.
-  const chipStyle: ViewStyle = {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: 20,
-    backgroundColor: selected ? brandColors.accent : systemColors.fill,
-  };
+  // chip row, and amber is fill-only so the label sits in dark text. Only the fill
+  // is dynamic; the static padding/radius live in styles.chip.
+  const chipFill: ViewStyle = { backgroundColor: selected ? brandColors.accent : systemColors.fill };
   return (
     <AnimatedPressable
       onPress={() => {
@@ -92,7 +88,7 @@ const Chip = memo(function Chip({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
-      style={[animatedStyle, chipStyle]}
+      style={[animatedStyle, styles.chip, chipFill]}
     >
       <Text
         variant="footnote"
@@ -299,6 +295,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[2],
+  },
+  // Static chip geometry; the amber/fill backgroundColor is applied inline per
+  // selected state (see the Chip component).
+  chip: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: 20,
   },
   chipText: {
     fontWeight: '500',
