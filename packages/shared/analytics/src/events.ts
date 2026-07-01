@@ -63,6 +63,11 @@ export const SHARED_EVENTS = {
   LogbookSearched: 'Logbook Searched',
   LogbookFilterChanged: 'Logbook Filter Changed',
   LogbookSortChanged: 'Logbook Sort Changed',
+  // Logbook entry mutations — the redesign's edit/delete UX previously had zero
+  // baseline telemetry. Props: { method: 'swipe' | 'sheet' | 'a11y' } for how
+  // the mutation was initiated; never the entry's content.
+  LogbookEntryEdited: 'Logbook Entry Edited',
+  LogbookEntryDeleted: 'Logbook Entry Deleted',
   // Ticks / logbook
   TickButtonClicked: 'Tick Button Clicked',
   QuickTickSaved: 'Quick Tick Saved',
