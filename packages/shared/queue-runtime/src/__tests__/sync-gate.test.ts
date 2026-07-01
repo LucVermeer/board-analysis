@@ -20,10 +20,35 @@ function playbackStateChanged(sequence: number): QueueSyncGateEvent {
 }
 
 describe('createQueueSyncGate', () => {
+  it('pins the ported web constants so silent threshold drift fails a test', () => {
+    // These mirror web's RESYNC_LOOP_THRESHOLD (use-session-subscriptions.ts)
+    // and CORRUPTION_RESYNC_COOLDOWN_MS (persistent-session/types.ts). The
+    // behavioral tests below derive from the exported constants, so without
+    // this pin a 3→5 or 30s→10s change would still pass everything.
+    expect(RESYNC_LOOP_THRESHOLD).toBe(3);
+    expect(CORRUPTION_RESYNC_COOLDOWN_MS).toBe(30_000);
+  });
+
   describe('evaluateIncoming / noteApplied', () => {
     it('applies the first event unconditionally (lastSequence starts null)', () => {
       const gate = createQueueSyncGate();
       expect(gate.evaluateIncoming(delta('QueueItemAdded', 1, 'hash-1'))).toBe('apply');
+    });
+
+    it('bypasses the gate for a delta with no sequence number (never ignore-stale)', () => {
+      const gate = createQueueSyncGate();
+      const first = delta('QueueItemAdded', 5, 'hash-5');
+      gate.evaluateIncoming(first);
+      gate.noteApplied(first);
+
+      // A caller whose subscription doesn't select `sequence` must not have
+      // its events coerced to 0 and dropped as stale after the first one.
+      const unsequenced: QueueSyncGateEvent = { __typename: 'QueueItemAdded' };
+      expect(gate.evaluateIncoming(unsequenced)).toBe('apply');
+      expect(gate.evaluateIncoming(unsequenced)).toBe('apply');
+      // Tracking is untouched — noteApplied has nothing to advance with.
+      gate.noteApplied(unsequenced);
+      expect(gate.getLastSequence()).toBe(5);
     });
 
     it('applies in-order events and advances tracking via noteApplied', () => {
@@ -114,7 +139,7 @@ describe('createQueueSyncGate', () => {
   describe('verifyLocalHash', () => {
     it('returns ok with no server hash tracked yet', () => {
       const gate = createQueueSyncGate();
-      expect(gate.verifyLocalHash('anything')).toEqual({ verdict: 'ok', consecutiveResyncs: 0 });
+      expect(gate.verifyLocalHash('anything')).toEqual({ verdict: 'ok', consecutiveResyncs: 0, serverHash: null });
     });
 
     it('returns ok when the local hash matches the tracked server hash', () => {
@@ -122,7 +147,7 @@ describe('createQueueSyncGate', () => {
       const event = fullSync(1, 'hash-a');
       gate.evaluateIncoming(event);
 
-      expect(gate.verifyLocalHash('hash-a')).toEqual({ verdict: 'ok', consecutiveResyncs: 0 });
+      expect(gate.verifyLocalHash('hash-a')).toEqual({ verdict: 'ok', consecutiveResyncs: 0, serverHash: 'hash-a' });
     });
 
     it('escalates through resync-drift for the first RESYNC_LOOP_THRESHOLD mismatches, then backs off', () => {
@@ -132,17 +157,23 @@ describe('createQueueSyncGate', () => {
       const results = Array.from({ length: RESYNC_LOOP_THRESHOLD + 2 }, () => gate.verifyLocalHash('local-hash'));
 
       for (let strike = 0; strike < RESYNC_LOOP_THRESHOLD; strike++) {
-        expect(results[strike]).toEqual({ verdict: 'resync-drift', consecutiveResyncs: strike + 1 });
+        expect(results[strike]).toEqual({
+          verdict: 'resync-drift',
+          consecutiveResyncs: strike + 1,
+          serverHash: 'server-hash',
+        });
       }
       // Past the threshold: back off, but keep counting so the caller can see
       // the loop is still ongoing.
       expect(results[RESYNC_LOOP_THRESHOLD]).toEqual({
         verdict: 'backoff',
         consecutiveResyncs: RESYNC_LOOP_THRESHOLD + 1,
+        serverHash: 'server-hash',
       });
       expect(results[RESYNC_LOOP_THRESHOLD + 1]).toEqual({
         verdict: 'backoff',
         consecutiveResyncs: RESYNC_LOOP_THRESHOLD + 2,
+        serverHash: 'server-hash',
       });
     });
 
@@ -152,11 +183,19 @@ describe('createQueueSyncGate', () => {
 
       gate.verifyLocalHash('local-hash');
       gate.verifyLocalHash('local-hash');
-      expect(gate.verifyLocalHash('server-hash')).toEqual({ verdict: 'ok', consecutiveResyncs: 0 });
+      expect(gate.verifyLocalHash('server-hash')).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: 'server-hash',
+      });
 
       // A subsequent mismatch against the *same* server hash starts a fresh
       // streak at strike 1, not 3.
-      expect(gate.verifyLocalHash('local-hash')).toEqual({ verdict: 'resync-drift', consecutiveResyncs: 1 });
+      expect(gate.verifyLocalHash('local-hash')).toEqual({
+        verdict: 'resync-drift',
+        consecutiveResyncs: 1,
+        serverHash: 'server-hash',
+      });
     });
 
     it('restarts the strike counter when the server hash itself changes mid-streak', () => {
@@ -165,15 +204,25 @@ describe('createQueueSyncGate', () => {
 
       gate.verifyLocalHash('local-hash');
       gate.verifyLocalHash('local-hash');
-      expect(gate.verifyLocalHash('local-hash')).toEqual({ verdict: 'resync-drift', consecutiveResyncs: 3 });
+      expect(gate.verifyLocalHash('local-hash')).toEqual({
+        verdict: 'resync-drift',
+        consecutiveResyncs: 3,
+        serverHash: 'server-hash-a',
+      });
 
       // Server hash changes (e.g. a delta landed) — new drift streak, even
-      // though the local hash is still mismatched.
+      // though the local hash is still mismatched. The reported serverHash
+      // follows the gate's tracking so a wired Sentry report never needs a
+      // parallel copy of it.
       const next = delta('QueueItemAdded', 2, 'server-hash-b');
       gate.evaluateIncoming(next);
       gate.noteApplied(next);
 
-      expect(gate.verifyLocalHash('local-hash')).toEqual({ verdict: 'resync-drift', consecutiveResyncs: 1 });
+      expect(gate.verifyLocalHash('local-hash')).toEqual({
+        verdict: 'resync-drift',
+        consecutiveResyncs: 1,
+        serverHash: 'server-hash-b',
+      });
     });
   });
 
@@ -333,7 +382,11 @@ describe('createQueueSyncGate', () => {
       // from 2.
       const event2 = fullSync(1, 'server-hash-2');
       gate.evaluateIncoming(event2);
-      expect(gate.verifyLocalHash('local-hash')).toEqual({ verdict: 'resync-drift', consecutiveResyncs: 1 });
+      expect(gate.verifyLocalHash('local-hash')).toEqual({
+        verdict: 'resync-drift',
+        consecutiveResyncs: 1,
+        serverHash: 'server-hash-2',
+      });
 
       // Corruption cooldown cleared too — an immediate check resyncs again
       // rather than reporting cooldown.

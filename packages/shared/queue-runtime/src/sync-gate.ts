@@ -65,6 +65,12 @@ export type HashVerifyResult = {
    *  streak by checking `consecutiveResyncs === RESYNC_LOOP_THRESHOLD`
    *  (the same one-shot point `use-session-subscriptions.ts` reports at). */
   consecutiveResyncs: number;
+  /** The server hash the local hash was compared against (the gate's tracked
+   *  `lastServerStateHash`), or `null` when nothing was tracked yet. Web's
+   *  Sentry drift report includes it (`use-session-subscriptions.ts:150-160`)
+   *  — returning it here keeps callers from mirroring the exact value the
+   *  gate exists to own. */
+  serverHash: string | null;
 };
 
 export type CorruptionVerdict = 'resync' | 'cooldown';
@@ -156,6 +162,9 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
     if (event.sequence != null) {
       lastSequence = event.sequence;
     }
+    // Skipping a null stateHash diverges (unreachably, with current web
+    // types — every gated delta carries a non-null stateHash) from web's
+    // unconditional `setLastReceivedStateHash(event.stateHash)` assignment.
     if (event.stateHash != null) {
       lastServerStateHash = event.stateHash;
     }
@@ -173,7 +182,16 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
         return 'apply';
       }
 
-      const sequenceDecision = evaluateQueueEventSequence(lastSequence, event.sequence ?? 0);
+      // A delta with no sequence number can't be sequence-gated: coercing
+      // null to 0 would classify every such event after the first as
+      // 'ignore-stale' and silently drop it (e.g. a mobile caller whose
+      // subscription doesn't select `sequence`). Bypass the gate instead —
+      // an ungated apply matches the pre-gate behaviour for such callers.
+      if (event.sequence == null) {
+        return 'apply';
+      }
+
+      const sequenceDecision = evaluateQueueEventSequence(lastSequence, event.sequence);
       if (sequenceDecision === 'ignore-stale') {
         return 'ignore-stale';
       }
@@ -196,7 +214,7 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
         // counter so future drift starts fresh.
         resyncLoopHash = null;
         consecutiveResyncCount = 0;
-        return { verdict: 'ok', consecutiveResyncs: 0 };
+        return { verdict: 'ok', consecutiveResyncs: 0, serverHash: lastServerStateHash };
       }
 
       if (resyncLoopHash === lastServerStateHash) {
@@ -207,7 +225,7 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
       }
 
       const verdict: HashVerifyVerdict = consecutiveResyncCount <= RESYNC_LOOP_THRESHOLD ? 'resync-drift' : 'backoff';
-      return { verdict, consecutiveResyncs: consecutiveResyncCount };
+      return { verdict, consecutiveResyncs: consecutiveResyncCount, serverHash: lastServerStateHash };
     },
 
     evaluateCorruption() {
@@ -227,6 +245,9 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
 
       const gap = serverSequence - lastSeq;
 
+      // NOTE: web's original delta-replay branch also required a truthy
+      // sessionId (falsy → no resync at all); the wiring workstream must
+      // handle missing-sessionId itself before acting on 'delta-replay'.
       if (gap > 0 && gap <= 100) {
         return 'delta-replay';
       }
@@ -253,6 +274,9 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
       lastServerStateHash = null;
       resyncLoopHash = null;
       consecutiveResyncCount = 0;
+      // Deliberate per-session scoping: web's `lastCorruptionResyncRef`
+      // survived session changes (it lived in the provider, not the
+      // lifecycle effect), but a fresh session deserves a fresh cooldown.
       lastCorruptionResyncAt = Number.NEGATIVE_INFINITY;
     },
 
