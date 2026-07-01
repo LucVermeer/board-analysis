@@ -38,13 +38,23 @@ function historyHasEntry(history: BoardPresenceClimb[], climb: BoardPresenceClim
  *
  * Identity-preserving: seeded from `existing` FIRST, so an incoming entry that
  * duplicates an already-present key is skipped rather than replacing it — the
- * existing object identity wins. That's correct because `(climbUuid, seq)` is
- * immutable server-side (a re-delivery of the same key is always the same
- * data), and it's what lets `React.memo`'d history rows bail on a backfill
- * that repeats everything the client already has (every app resume, foreground
- * catch-up, and pull-to-refresh when nothing new happened). When the merged
- * result is element-wise identical to `existing`, we return `existing` itself
- * so callers can cheaply detect "nothing changed" by reference.
+ * existing object identity wins. This is what lets `React.memo`'d history rows
+ * bail on a backfill that repeats everything the client already has (every app
+ * resume, foreground catch-up, and pull-to-refresh when nothing new happened).
+ * When the merged result is element-wise identical to `existing`, we return
+ * `existing` itself so callers can cheaply detect "nothing changed" by
+ * reference.
+ *
+ * On "the same key is the same data": that holds within one source (the live
+ * feed and `boardRecentClimbs` share the Redis-backed payload verbatim), but
+ * the durable `boardHistory` query is a known asymmetry — it re-resolves the
+ * sender identity via a live users/profiles join and nulls `queueItemUuid` /
+ * `gradeColor` (backend board-presence queries.ts), so the same
+ * `(climbUuid, seq)` CAN differ in those fields across sources. Existing-wins
+ * is still the right policy (the live-feed shape is the richer one), but a
+ * future caller routing `fetchHistory` results through BACKFILL_HISTORY should
+ * know the merge keeps the already-present variant rather than "refreshing"
+ * those fields.
  */
 function mergeHistory(existing: BoardPresenceClimb[], incoming: BoardPresenceClimb[]): BoardPresenceClimb[] {
   const byKey = new Map<string, BoardPresenceClimb>();

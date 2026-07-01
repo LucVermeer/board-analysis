@@ -116,6 +116,19 @@ export type FullBoardPresenceClient = Required<BoardPresenceClient> & {
  * see the header comment for why this factory exists.
  */
 export function createBoardPresenceClient(transport: BoardPresenceTransport): FullBoardPresenceClient {
+  // Whether ANY `onReconnect` registration made through this factory instance
+  // has observed a `connected` event. Factory-level, NOT per-registration, on
+  // purpose: graphql-ws does not replay `connected` to a listener added on an
+  // already-open socket, so after a mid-session re-registration (e.g. the
+  // shared hook's effect re-running on a board switch) the new registration's
+  // FIRST observed `connected` is a genuine reconnect — a per-registration
+  // skip-first would swallow exactly the catch-up that registration exists
+  // for. With this shared flag, only the first `connected` ever observed
+  // through this factory instance (the initial connect, whose backfill already
+  // covers it) is skipped; everything after fires, including a fresh
+  // registration's first observed event. Erring toward an occasional extra
+  // catch-up is safe — the hook's runCatchUp coalesces in-flight requests.
+  let everConnected = false;
   return {
     subscribeNowPlaying(boardId, onEvent, onError, onComplete) {
       return transport.subscribe<BoardNowPlayingData>(
@@ -138,18 +151,15 @@ export function createBoardPresenceClient(transport: BoardPresenceTransport): Fu
 
     onReconnect(callback) {
       // The transport fires `onConnected` on the first connect AND on every
-      // reconnect. Skip the first (the initial backfill already covers it) and
-      // fire on each reconnect so the hook can re-read the durable history for
-      // anything the Redis pub/sub feed dropped during the gap. `connectedOnce`
-      // is scoped to THIS registration call, so two independent `onReconnect`
-      // registrations (e.g. two hook instances sharing a transport) each track
-      // their own skip-first state.
-      let connectedOnce = false;
+      // reconnect. Skip the first ever observed through this factory (see
+      // `everConnected` above for why the flag is factory-level) and fire on
+      // each one after, so the hook can re-read the durable history for
+      // anything the Redis pub/sub feed dropped during the gap.
       return transport.onConnected(() => {
-        if (connectedOnce) {
+        if (everConnected) {
           callback();
         }
-        connectedOnce = true;
+        everConnected = true;
       });
     },
 

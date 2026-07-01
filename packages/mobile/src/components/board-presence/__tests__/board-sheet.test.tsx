@@ -27,7 +27,20 @@ const toast = vi.hoisted(() => ({
   showToast: vi.fn(),
 }));
 
-const sheetModal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
+const sheetModal = vi.hoisted(() => ({
+  present: vi.fn(),
+  dismiss: vi.fn(),
+  // The BottomSheetModal's `onChange` prop, captured so tests can fire native
+  // index changes (index >= 0 = the sheet actually came up).
+  onChange: null as ((index: number) => void) | null,
+}));
+const managedSheet = vi.hoisted(() => ({
+  // When true, `handle.dismiss` does NOT fire onFullyDismissed synchronously —
+  // simulating the coordinator's dismiss settle window (up to 550ms). The test
+  // then fires `lastOnFullyDismissed` itself to settle the dismiss late.
+  deferSettle: false,
+  lastOnFullyDismissed: null as (() => void) | null,
+}));
 const climbRows = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
 const thumbnails = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
 
@@ -69,10 +82,13 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('@expo/ui/community/bottom-sheet', () => ({
-  BottomSheetModal: forwardRef(({ children }: { children?: ReactNode }, ref: Ref<unknown>) => {
-    useImperativeHandle(ref, () => ({ present: sheetModal.present, dismiss: sheetModal.dismiss }));
-    return createElement('div', { 'data-sheet': 'true' }, children);
-  }),
+  BottomSheetModal: forwardRef(
+    ({ children, onChange }: { children?: ReactNode; onChange?: (index: number) => void }, ref: Ref<unknown>) => {
+      sheetModal.onChange = onChange ?? null;
+      useImperativeHandle(ref, () => ({ present: sheetModal.present, dismiss: sheetModal.dismiss }));
+      return createElement('div', { 'data-sheet': 'true' }, children);
+    },
+  ),
   // Render the list inline so header + items + empty state appear in the DOM.
   BottomSheetFlatList: ({
     data,
@@ -102,22 +118,29 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
 
 // Isolate from the real coordinator (covered by sheet-presentation-provider.test):
 // route the handle straight to the mocked native ref and simulate an immediate
-// settle on dismiss so onFullyDismissed-driven behaviour still fires.
+// settle on dismiss so onFullyDismissed-driven behaviour still fires. With
+// `managedSheet.deferSettle` the settle is withheld (the coordinator's dismiss
+// settle window) and the test fires `lastOnFullyDismissed` itself.
 vi.mock('../../../providers/sheet-presentation-provider', () => ({
   useManagedSheet: (opts: {
     sheetRef: { current: { present?: () => void; dismiss?: () => void } | null };
     onFullyDismissed?: () => void;
-  }) => ({
-    onChange: () => {},
-    onFullyDismissed: () => opts.onFullyDismissed?.(),
-    handle: {
-      present: () => opts.sheetRef.current?.present?.(),
-      dismiss: () => {
-        opts.sheetRef.current?.dismiss?.();
-        opts.onFullyDismissed?.();
+  }) => {
+    managedSheet.lastOnFullyDismissed = () => opts.onFullyDismissed?.();
+    return {
+      onChange: () => {},
+      onFullyDismissed: () => opts.onFullyDismissed?.(),
+      handle: {
+        present: () => opts.sheetRef.current?.present?.(),
+        dismiss: () => {
+          opts.sheetRef.current?.dismiss?.();
+          if (!managedSheet.deferSettle) {
+            opts.onFullyDismissed?.();
+          }
+        },
       },
-    },
-  }),
+    };
+  },
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
@@ -310,6 +333,9 @@ describe('BoardSheet', () => {
     toast.showToast.mockClear();
     sheetModal.present.mockClear();
     sheetModal.dismiss.mockClear();
+    sheetModal.onChange = null;
+    managedSheet.deferSettle = false;
+    managedSheet.lastOnFullyDismissed = null;
     climbRows.props = [];
     thumbnails.props = [];
   });
@@ -385,6 +411,47 @@ describe('BoardSheet', () => {
     expect(sheetModal.present).toHaveBeenCalled();
   });
 
+  it('re-mounts content when the native sheet comes up after a dismiss settles mid-re-present (settle-window race)', () => {
+    presence.history = [makeClimb('c1', 3)];
+    // Withhold the dismiss settle, simulating the coordinator's settle window
+    // (up to 550ms on iOS) between a dismiss and its onFullyDismissed.
+    managedSheet.deferSettle = true;
+    const ref = createRef<BoardSheetHandle>();
+    const { container } = render(
+      createElement(BoardSheet, {
+        ref,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    // Open: content mounts.
+    act(() => ref.current?.present());
+    expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+
+    // User dismisses; the settle window opens. Content stays mounted
+    // mid-animation (we never tear down before the settle).
+    act(() => ref.current?.dismiss());
+    expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+
+    // User re-taps the entry point BEFORE the dismiss settles: the coordinator
+    // queues the present (its pump early-returns while the dismiss is in
+    // flight), so nothing native happens yet.
+    act(() => ref.current?.present());
+
+    // The dismiss now settles — AFTER the re-present request — unmounting the
+    // content. Without the onChange backstop this is where it would stay stuck.
+    act(() => managedSheet.lastOnFullyDismissed?.());
+    expect(container.querySelector('[data-list="true"]')).toBeNull();
+
+    // The coordinator pumps and presents the native sheet: index >= 0 through
+    // the native onChange re-mounts the content.
+    act(() => sheetModal.onChange?.(0));
+    expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+  });
+
   it('triggers a manual catch-up when the history list is pulled to refresh', () => {
     presence.history = [makeClimb('c1', 3)];
     const ref = createRef<BoardSheetHandle>();
@@ -440,6 +507,37 @@ describe('BoardSheet', () => {
 
     act(() => ref.current?.present());
 
+    expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
+  });
+
+  it('fires BoardHistoryViewed when history first arrives after presenting (late backfill), once per presentation', () => {
+    // Presented before the initial backfill resolves: empty at mount.
+    presence.history = [];
+    const ref = createRef<BoardSheetHandle>();
+    const sheetProps = {
+      ref,
+      boardLabel: 'Garage Wall',
+      onClose: noop,
+      boardConfig,
+      onSwitchBoard: noop,
+    };
+    const view = render(createElement(BoardSheet, sheetProps));
+    act(() => ref.current?.present());
+    expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
+
+    // The backfill lands while the sheet is up.
+    presence.history = [makeClimb('c1', 3), makeClimb('c0', 2)];
+    view.rerender(createElement(BoardSheet, sheetProps));
+
+    expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: 123,
+      itemCount: 2,
+    });
+
+    // More history arriving in the SAME presentation does not re-fire.
+    analytics.track.mockClear();
+    presence.history = [makeClimb('c2', 4), makeClimb('c1', 3), makeClimb('c0', 2)];
+    view.rerender(createElement(BoardSheet, sheetProps));
     expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
   });
 

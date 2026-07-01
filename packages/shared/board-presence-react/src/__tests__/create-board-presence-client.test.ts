@@ -35,9 +35,15 @@ function makeTransport() {
 
   const connectedListeners: Array<() => void> = [];
   const onConnectedUnsubscribe = vi.fn();
+  // Unsubscribe really removes the listener (like graphql-ws's `on`), so tests
+  // can assert an unsubscribed registration stops receiving events.
   const onConnected = vi.fn((callback: () => void) => {
     connectedListeners.push(callback);
-    return onConnectedUnsubscribe;
+    return () => {
+      onConnectedUnsubscribe();
+      const listenerIndex = connectedListeners.indexOf(callback);
+      if (listenerIndex !== -1) connectedListeners.splice(listenerIndex, 1);
+    };
   });
 
   // `vi.fn()` produces a concretely-typed mock (always `Promise<unknown>`),
@@ -323,27 +329,57 @@ describe('createBoardPresenceClient — onReconnect', () => {
     expect(harness.onConnectedUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it('tracks connectedOnce independently across two separate registrations', () => {
+  it('fires a re-registration on its first observed connected once the initial connect has been seen (board switch)', () => {
+    // graphql-ws does not replay `connected` to a listener added on an
+    // already-open socket, so after a mid-session re-registration (the hook
+    // effect re-running on a board switch) the new registration's first
+    // observed `connected` is a GENUINE reconnect. The skip-first flag is
+    // therefore factory-level (`everConnected`), not per-registration.
+    const client = createBoardPresenceClient(harness.transport);
+    const firstRegistration = vi.fn();
+
+    const unsubscribeFirst = client.onReconnect(firstRegistration);
+    harness.fireConnected(); // initial connect — skipped
+    expect(firstRegistration).not.toHaveBeenCalled();
+
+    // Board switch: the old registration tears down, a new one registers on
+    // the (still-open) socket, then the socket drops and reconnects.
+    unsubscribeFirst();
+    const secondRegistration = vi.fn();
+    client.onReconnect(secondRegistration);
+
+    harness.fireConnected(); // reconnect — the new registration's FIRST observed event
+    expect(secondRegistration).toHaveBeenCalledTimes(1);
+    // The unsubscribed registration stays silent.
+    expect(firstRegistration).not.toHaveBeenCalled();
+  });
+
+  it('two live registrations both fire on a reconnect (shared everConnected)', () => {
     const client = createBoardPresenceClient(harness.transport);
     const firstCallback = vi.fn();
     const secondCallback = vi.fn();
 
     client.onReconnect(firstCallback);
-    // A second registration made AFTER the transport has already connected
-    // once (from the first registration's perspective) still treats its own
-    // next event as "first connect" — connectedOnce is scoped per call.
-    harness.fireConnected();
+    harness.fireConnected(); // initial connect — skipped for everyone
     expect(firstCallback).not.toHaveBeenCalled();
 
     client.onReconnect(secondCallback);
-    harness.fireConnected();
-    // First registration: this is its second connected event → fires.
+    harness.fireConnected(); // reconnect — both fire (an extra catch-up coalesces safely)
     expect(firstCallback).toHaveBeenCalledTimes(1);
-    // Second registration: this is its first connected event → still skipped.
-    expect(secondCallback).not.toHaveBeenCalled();
-
-    harness.fireConnected();
-    expect(firstCallback).toHaveBeenCalledTimes(2);
     expect(secondCallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('an unsubscribed registration stops receiving reconnects', () => {
+    const client = createBoardPresenceClient(harness.transport);
+    const callback = vi.fn();
+
+    const unsubscribe = client.onReconnect(callback);
+    harness.fireConnected(); // initial — skipped
+    harness.fireConnected(); // reconnect — fires
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    harness.fireConnected();
+    expect(callback).toHaveBeenCalledTimes(1);
   });
 });

@@ -440,6 +440,27 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     [managed.handle, invalidatePendingActions],
   );
 
+  // Index-based re-mount backstop for a re-present that lands inside a dismiss
+  // settle window. Sequence without this: dismiss starts → user re-taps →
+  // `present()` sets isPresented(true) (no-op, still true) and the coordinator
+  // QUEUES the present (its pump early-returns while the dismiss is in flight)
+  // → the dismiss settles → `handleFullyDismissed` sets isPresented(false) →
+  // only THEN does the coordinator present the native sheet — leaving it fully
+  // up with the content unmounted until a close+reopen. The native `onChange`
+  // fires with index >= 0 whenever the sheet is actually up, so re-mounting
+  // here closes that gap. The synchronous set in `present()` stays as the fast
+  // path for the common (no-race) open.
+  const managedOnChange = managed.onChange;
+  const handleSheetChange = useCallback(
+    (index: number) => {
+      if (index >= 0) {
+        setIsPresented(true);
+      }
+      managedOnChange(index);
+    },
+    [managedOnChange],
+  );
+
   return (
     <BottomSheetModal
       ref={sheetRef}
@@ -450,7 +471,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       // bounded content height to measure).
       enableDynamicSizing={false}
       enablePanDownToClose
-      onChange={managed.onChange}
+      onChange={handleSheetChange}
       handleIndicatorStyle={sheet.handleStyle}
       style={styles.sheet}
     >
@@ -588,19 +609,20 @@ function BoardSheetContent({
     [currentClimb, history],
   );
 
-  // Fires once per presentation: this component mounts fresh every time the
-  // sheet opens (`BoardSheet`'s `isPresented` gate), so a mount-only effect IS
-  // "once per presentation" — no `historyCountRef`/imperative-present coupling
-  // needed anymore.
+  // Fires once per presentation, when history is FIRST non-empty — not only at
+  // mount, because presenting before the initial backfill resolves would find
+  // an empty list and never fire for that presentation. This component mounts
+  // fresh every time the sheet opens (`BoardSheet`'s `isPresented` gate), so
+  // the ref naturally resets per presentation. Mirrors web's `BoardSheetBody`.
+  const historyViewedForPresentationRef = useRef(false);
   useEffect(() => {
-    if (visibleHistory.length > 0) {
-      track(SHARED_EVENTS.BoardHistoryViewed, {
-        boardId: boardPresenceBoardId ?? undefined,
-        itemCount: visibleHistory.length,
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: fire once per presentation, not on every history change while open.
-  }, []);
+    if (historyViewedForPresentationRef.current || visibleHistory.length === 0) return;
+    historyViewedForPresentationRef.current = true;
+    track(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: boardPresenceBoardId ?? undefined,
+      itemCount: visibleHistory.length,
+    });
+  }, [visibleHistory.length, boardPresenceBoardId]);
 
   const renderHistoryItem = useCallback(
     ({ item }: { item: BoardPresenceClimb }) => {
