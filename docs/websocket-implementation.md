@@ -811,6 +811,8 @@ On reconnect, the web client calls `eventsReplay(sessionId, sinceSequence)` when
 
 The `EVENTS_REPLAY` query uses the same GraphQL aliases as `queueUpdates` (`addedItem: item`, `currentItem: item`) so the event processor can apply live and replayed events through the same code path.
 
+`PlaybackStateChanged` events are excluded from the buffer. They broadcast at up to 3600/min during variable-speed playback and reuse the room's current sequence number instead of incrementing it, so buffering them would evict real queue events within seconds and hand replaying clients duplicate/non-monotonic sequences that fail the contiguity check above. `publishQueueEvent` skips buffering them and `getEventsSince` filters any out on read (defence for mixed-version rollouts); the live `queueUpdates` subscription still forwards them normally.
+
 ---
 
 ## Failure States and Recovery

@@ -55,7 +55,7 @@ function queueItemAddedEvent(sequence: number, uuid: string): QueueEvent {
   };
 }
 
-function playbackStateChangedEvent(sequence: number, overrides: Partial<QueueEvent> = {}): QueueEvent {
+function playbackStateChangedEvent(sequence: number): QueueEvent {
   return {
     __typename: 'PlaybackStateChanged',
     sequence,
@@ -66,8 +66,7 @@ function playbackStateChangedEvent(sequence: number, overrides: Partial<QueueEve
     paceMs: 250,
     anchorTimestamp: String(Date.now()),
     clientId: 'conn-playback',
-    ...overrides,
-  } as QueueEvent;
+  };
 }
 
 describe('event replay buffer excludes PlaybackStateChanged', () => {
@@ -106,11 +105,16 @@ describe('event replay buffer excludes PlaybackStateChanged', () => {
       pubsub.publishQueueEvent(sessionId, playbackStateChangedEvent(1));
     }
 
-    // publishQueueEvent buffers fire-and-forget; give the async writes a
-    // moment to land before reading back.
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const events = await pubsub.getEventsSince(sessionId, 0);
+    // publishQueueEvent buffers fire-and-forget, so poll until the
+    // QueueItemAdded write has landed rather than sleeping a fixed interval
+    // (a hardcoded sleep flakes under I/O contention).
+    let events: QueueEvent[] = [];
+    const deadline = Date.now() + 5000;
+    do {
+      events = await pubsub.getEventsSince(sessionId, 0);
+      if (events.some((event) => event.__typename === 'QueueItemAdded')) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    } while (Date.now() < deadline);
 
     const playbackEvents = events.filter((event) => event.__typename === 'PlaybackStateChanged');
     const queueItemAddedEvents = events.filter((event) => event.__typename === 'QueueItemAdded');
