@@ -28,11 +28,20 @@ function isIsoDate(value: string | null): value is string {
 export function readFiltersFromQuery(params: URLSearchParams): Partial<LogbookFilterState> {
   const partial: Partial<LogbookFilterState> = {};
 
+  // A status param is written only when it differs from the current default, so a
+  // URL naming just one side omits the other. Historically the omitted side was
+  // the old "both on" default (true) — e.g. `?sends=0` meant attempts-only. Fill
+  // the missing side with that old default when exactly one side is present, so
+  // pre-migration bookmarks keep their meaning (a lone `sends=0` stays
+  // attempts-only instead of collapsing to sends-only / an empty logbook). This
+  // also reads the current serializer's "both" form (`?attempts=1`, sends omitted)
+  // correctly. No status params at all → the new sends-only default via the merge.
   const sends = parseQueryParamBoolean(params, 'sends');
-  if (sends !== undefined) partial.includeSends = sends;
-
   const attempts = parseQueryParamBoolean(params, 'attempts');
+  if (sends !== undefined) partial.includeSends = sends;
   if (attempts !== undefined) partial.includeAttempts = attempts;
+  if (sends !== undefined && attempts === undefined) partial.includeAttempts = true;
+  if (attempts !== undefined && sends === undefined) partial.includeSends = true;
 
   const flash = parseQueryParamBoolean(params, 'flash');
   if (flash !== undefined) partial.flashOnly = flash;

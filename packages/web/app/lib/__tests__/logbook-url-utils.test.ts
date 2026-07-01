@@ -87,6 +87,28 @@ describe('readFiltersFromQuery', () => {
     expect(result.benchmarkOnly).toBe(false);
   });
 
+  // Back-compat: a URL naming only one status side omits the other, which used to
+  // default to "on". Fill the missing side with true so pre-migration bookmarks
+  // keep their meaning (and the current "both" serialization `?attempts=1` reads
+  // as both, not sends-only / empty).
+  it('treats a lone sends=0 as attempts-only (old bookmark)', () => {
+    const result = readFiltersFromQuery(new URLSearchParams('sends=0'));
+    expect(result.includeSends).toBe(false);
+    expect(result.includeAttempts).toBe(true);
+  });
+
+  it('treats a lone attempts=0 as sends-only', () => {
+    const result = readFiltersFromQuery(new URLSearchParams('attempts=0'));
+    expect(result.includeSends).toBe(true);
+    expect(result.includeAttempts).toBe(false);
+  });
+
+  it('treats a lone attempts=1 as both (current "both" serialization)', () => {
+    const result = readFiltersFromQuery(new URLSearchParams('attempts=1'));
+    expect(result.includeSends).toBe(true);
+    expect(result.includeAttempts).toBe(true);
+  });
+
   it('parses grade params', () => {
     const params = new URLSearchParams('minGrade=10&maxGrade=20');
     const result = readFiltersFromQuery(params);
