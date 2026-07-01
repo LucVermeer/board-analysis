@@ -34,10 +34,7 @@ describe('initialState', () => {
     expect(state.climbSearchParams).toEqual({});
     expect(state.playlistSuggestionSource).toBeNull();
     expect(state.hasDoneFirstFetch).toBe(false);
-    expect(state.initialQueueDataReceivedFromPeers).toBe(false);
     expect(state.pendingCurrentClimbUpdates).toEqual([]);
-    expect(state.lastReceivedSequence).toBeNull();
-    expect(state.lastReceivedStateHash).toBeNull();
     expect(state.needsResync).toBe(false);
   });
 

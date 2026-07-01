@@ -101,10 +101,7 @@ export type QueueState<TSearchParams extends QueueSearchParams = QueueSearchPara
   climbSearchParams: TSearchParams;
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   hasDoneFirstFetch: boolean;
-  initialQueueDataReceivedFromPeers: boolean;
   pendingCurrentClimbUpdates: string[];
-  lastReceivedSequence: number | null;
-  lastReceivedStateHash: string | null;
   needsResync: boolean;
 };
 

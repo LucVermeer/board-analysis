@@ -115,17 +115,6 @@ describe('INITIAL_QUEUE_DATA', () => {
     expect(result.currentClimbQueueItem?.uuid).toBe('a');
   });
 
-  it('marks initialQueueDataReceivedFromPeers as true', () => {
-    const state = makeState({ initialQueueDataReceivedFromPeers: false });
-
-    const result = queueReducer(state, {
-      type: 'INITIAL_QUEUE_DATA',
-      payload: { queue: [], currentClimbQueueItem: null },
-    });
-
-    expect(result.initialQueueDataReceivedFromPeers).toBe(true);
-  });
-
   it('clears pending updates on full sync', () => {
     const state = makeState({ pendingCurrentClimbUpdates: ['corr-1', 'corr-2'] });
 

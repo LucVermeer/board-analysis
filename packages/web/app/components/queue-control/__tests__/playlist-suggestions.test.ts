@@ -95,10 +95,7 @@ function makeQueueState(playlistSuggestionSource: QueueState['playlistSuggestion
     climbSearchParams: mockSearchParams,
     playlistSuggestionSource,
     hasDoneFirstFetch: false,
-    initialQueueDataReceivedFromPeers: false,
     pendingCurrentClimbUpdates: [],
-    lastReceivedSequence: null,
-    lastReceivedStateHash: null,
     needsResync: false,
   };
 }
