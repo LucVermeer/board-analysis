@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { render, act, waitFor } from '@testing-library/react';
 import React, { createElement, useEffect, type ReactNode } from 'react';
 import type { ResolvedBoard } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 
 const transport = vi.hoisted(() => ({
   resolveBoardForSerial: vi.fn(async () => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard),
@@ -12,8 +13,13 @@ const sharedProvider = vi.hoisted(() => ({
   lastBoardId: undefined as number | null | undefined,
   lastClient: null as unknown,
   clientHistory: [] as unknown[],
+  lastOnCatchUp: undefined as ((info: { reason: string; recoveredThroughSeqDelta: number }) => void) | undefined,
 }));
 const wsClient = vi.hoisted(() => ({ created: 0, disposed: 0, lastId: 0 }));
+// The refresh action exposed by the (mocked) shared actions context — asserts
+// the foreground-sync wiring the same way the mobile provider test does.
+const refreshMock = vi.hoisted(() => vi.fn());
+const trackMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: () => ({ token: auth.token, isAuthenticated: auth.isAuthenticated, isLoading: false, error: null }),
@@ -43,7 +49,7 @@ vi.mock('../board-presence-client', () => ({
   }),
 }));
 
-vi.mock('@/app/lib/analytics', () => ({ track: () => {} }));
+vi.mock('@/app/lib/analytics', () => ({ track: trackMock }));
 
 // Capture the boardId handed to the shared provider so we can assert it updates
 // after resolve.
@@ -60,17 +66,22 @@ vi.mock('@boardsesh/board-presence-react', async () => {
     BoardPresenceProvider: ({
       boardId,
       client,
+      onCatchUp,
       children,
     }: {
       boardId: number | null;
       client: unknown;
+      onCatchUp?: (info: { reason: string; recoveredThroughSeqDelta: number }) => void;
       children: ReactNode;
     }) => {
       sharedProvider.lastBoardId = boardId;
       sharedProvider.lastClient = client;
       sharedProvider.clientHistory.push(client);
+      sharedProvider.lastOnCatchUp = onCatchUp;
       return createElement('div', { 'data-board-id': String(boardId) }, children);
     },
+    // WebBoardPresenceForegroundSync (rendered inside the provider) reads this.
+    useBoardPresenceActions: () => ({ refresh: refreshMock }),
   };
 });
 
@@ -98,10 +109,13 @@ describe('WebBoardPresenceProvider', () => {
     sharedProvider.lastBoardId = undefined;
     sharedProvider.lastClient = null;
     sharedProvider.clientHistory = [];
+    sharedProvider.lastOnCatchUp = undefined;
     capturedControls = null;
     wsClient.created = 0;
     wsClient.disposed = 0;
     wsClient.lastId = 0;
+    refreshMock.mockClear();
+    trackMock.mockClear();
   });
 
   it('is always-on: builds a WS client, null boardId until a board is bound', async () => {
@@ -269,6 +283,53 @@ describe('WebBoardPresenceProvider', () => {
       expect(wsClient.created).toBe(2);
       expect(wsClient.disposed).toBe(1);
       expect(sharedProvider.lastClient).not.toBe(initialPresenceClient);
+    });
+  });
+
+  it('refetches the wall feed when the tab returns to the foreground', () => {
+    renderProvider();
+    refreshMock.mockClear();
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(refreshMock).toHaveBeenCalledWith('foreground');
+  });
+
+  it('does not refetch when the tab goes to the background', () => {
+    renderProvider();
+    refreshMock.mockClear();
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it('tracks a catch-up telemetry event with the active boardId, reason, and recovered delta', async () => {
+    renderProvider();
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+    });
+    await waitFor(() => expect(sharedProvider.lastBoardId).toBe(42));
+
+    trackMock.mockClear();
+    act(() => sharedProvider.lastOnCatchUp?.({ reason: 'reconnect', recoveredThroughSeqDelta: 2 }));
+
+    expect(trackMock).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryCatchUp, {
+      boardId: 42,
+      reason: 'reconnect',
+      recoveredThroughSeqDelta: 2,
     });
   });
 });

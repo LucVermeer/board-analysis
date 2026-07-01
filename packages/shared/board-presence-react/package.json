@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@boardsesh/board-presence": "*",
+    "@boardsesh/graphql": "*",
     "@boardsesh/shared-schema": "*"
   },
   "devDependencies": {

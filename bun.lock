@@ -198,7 +198,6 @@
     },
     "packages/mobile": {
       "name": "@boardsesh/mobile",
-      "version": "2.0.0",
       "dependencies": {
         "@boardsesh/analytics": "*",
         "@boardsesh/ble-protocol": "*",
@@ -399,6 +398,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@boardsesh/board-presence": "*",
+        "@boardsesh/graphql": "*",
         "@boardsesh/shared-schema": "*",
       },
       "devDependencies": {

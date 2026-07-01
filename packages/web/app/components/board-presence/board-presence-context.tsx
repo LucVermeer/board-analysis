@@ -39,6 +39,8 @@ import {
   BoardPresenceActionsContext,
   BoardPresenceCurrentContext,
   BoardPresenceProvider,
+  useBoardPresenceActions,
+  type BoardPresenceCatchUpInfo,
   type UseBoardPresenceResult,
 } from '@boardsesh/board-presence-react';
 import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
@@ -194,14 +196,54 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
     [boardId, resolveAndBindBoard, reportDisconnect],
   );
 
+  // Telemetry for every catch-up. `recoveredThroughSeqDelta > 0` means the live
+  // feed silently dropped pushes (Redis pub/sub has no replay) and we just
+  // recovered them — the measurable "history was slow to update" signal.
+  // Mirrors the mobile provider's `handleCatchUp`. Stable identity (reads
+  // boardIdRef) so it never re-binds the presence subscription.
+  const handleCatchUp = useCallback((info: BoardPresenceCatchUpInfo) => {
+    track(SHARED_EVENTS.BoardHistoryCatchUp, {
+      boardId: boardIdRef.current ?? undefined,
+      reason: info.reason,
+      recoveredThroughSeqDelta: info.recoveredThroughSeqDelta,
+    });
+  }, []);
+
   return (
     <BoardPresenceControlsContext.Provider value={controls}>
-      <BoardPresenceProvider boardId={boardId} client={presenceClient}>
+      <BoardPresenceProvider boardId={boardId} client={presenceClient} onCatchUp={handleCatchUp}>
         <BoardNowPlayingInstrument boardId={boardId} />
+        <WebBoardPresenceForegroundSync />
         {children}
       </BoardPresenceProvider>
     </BoardPresenceControlsContext.Provider>
   );
+}
+
+/**
+ * Refetch the wall feed when the tab returns to the foreground. The browser
+ * can suspend/throttle a background tab's WebSocket without a clean
+ * reconnect, so climbs pushed in the meantime are dropped (Redis pub/sub has
+ * no replay) and the seq-gap detector only recovers them if a *later* event
+ * happens to arrive. A foreground catch-up pulls them from the durable
+ * history right away — mirrors the mobile provider's `BoardPresenceForegroundSync`
+ * (AppState there, `visibilitychange` here). Rendered inside
+ * `BoardPresenceProvider` so it can read the `refresh` action; the catch-up
+ * coalescer dedups it against any reconnect/gap catch-up, and `refresh`
+ * no-ops while inert (no board bound).
+ */
+function WebBoardPresenceForegroundSync(): null {
+  const { refresh } = useBoardPresenceActions();
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refresh('foreground');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refresh]);
+  return null;
 }
 
 /**

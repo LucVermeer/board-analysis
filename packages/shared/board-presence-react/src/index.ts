@@ -24,12 +24,23 @@ export {
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
   useBoardPresenceHasClimb,
+  useBoardPresenceWallClimb,
   BoardPresenceActionsContext,
   BoardPresenceContext,
   BoardPresenceCurrentContext,
   BoardPresenceFeedContext,
   BoardPresenceHasClimbContext,
+  BoardPresenceWallClimbContext,
 } from './board-presence-provider';
 
 export { boardHistoryCursor } from './types';
 export type { BoardHistoryCursor, BoardPresenceClient } from './types';
+
+export { createBoardPresenceClient } from './create-board-presence-client';
+export type {
+  BoardPresenceOperation,
+  BoardPresenceSink,
+  BoardPresenceTransport,
+  FullBoardPresenceClient,
+  SerialResolveArgs,
+} from './create-board-presence-client';

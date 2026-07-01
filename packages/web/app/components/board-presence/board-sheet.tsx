@@ -7,11 +7,18 @@
 // "Switch board" footer row that opens the existing board switcher (via a
 // window event the bottom tab bar listens for).
 //
-// State comes from `@boardsesh/board-presence-react`'s split current/feed
-// contexts, which are inert until a board is bound — so this sheet is only ever
-// opened from the entry pill once a BLE serial has resolved to a board.
+// PERF: `BoardSheet` itself (the header/footer chrome + the boardId lookup)
+// never reads the volatile current/feed contexts — those live in
+// `BoardSheetBody`, rendered as an actual JSX CHILD of `<Drawer>`. A MUI
+// temporary Drawer without `keepMounted` unmounts its children once fully
+// closed, so `BoardSheetBody` (and thus its presence subscriptions) mounts and
+// unmounts with the sheet — a closed sheet subscribes to nothing. Calling
+// `useBoardPresenceCurrent`/`useBoardPresenceFeed` directly in `BoardSheet`
+// would defeat this: that top-level hook call runs on every render of
+// `BoardSheet` regardless of Drawer's own mount state, since `BoardSheet` is
+// rendered unconditionally by the always-mounted entry pill.
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Drawer from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
@@ -28,9 +35,12 @@ import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
+import { track } from '@/app/lib/analytics';
 import { DEFAULT_GRADE_COLOR, getGradeTextColor } from '@/app/lib/grade-colors';
+import { useBoardPresenceControls } from './board-presence-context';
 
 type BoardSheetProps = {
   open: boolean;
@@ -43,27 +53,10 @@ type BoardSheetProps = {
 
 export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSheetProps) {
   const { t } = useTranslation('session');
-  const { formatGrade, getGradeColor } = useGradeFormat();
-  const { currentClimb } = useBoardPresenceCurrent();
-  const { history, stats } = useBoardPresenceFeed();
-
-  const statTiles = useMemo(() => {
-    if (!stats) return [];
-    return [
-      { key: 'sent', value: String(stats.climbsSentCount), label: t('boardPresence.statSent') },
-      { key: 'climbers', value: String(stats.distinctClimbersCount), label: t('boardPresence.statClimbers') },
-      {
-        key: 'hardest',
-        value: stats.hardestGrade ? (formatGrade(stats.hardestGrade) ?? '–') : '–',
-        label: t('boardPresence.statHardest'),
-      },
-      {
-        key: 'top',
-        value: stats.topGrade ? (formatGrade(stats.topGrade) ?? '–') : '–',
-        label: t('boardPresence.statTopGrade'),
-      },
-    ];
-  }, [stats, formatGrade, t]);
+  // `boardId` comes from the stable controls context (changes only when the
+  // bound board itself changes, not on every wall event), so reading it here
+  // in the always-mounted wrapper is cheap — unlike current/feed below.
+  const { boardId } = useBoardPresenceControls();
 
   return (
     <Drawer
@@ -108,72 +101,7 @@ export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSh
       </Box>
       <Divider />
 
-      <Box sx={{ overflowY: 'auto', flex: 1 }}>
-        {currentClimb ? (
-          <NowOnTheWallHero
-            climb={currentClimb}
-            formattedGrade={currentClimb.grade ? formatGrade(currentClimb.grade) : null}
-            gradeColor={getGradeColor(currentClimb.grade) ?? DEFAULT_GRADE_COLOR}
-            setByLine={(setter) => t('boardPresence.setByLine', { setter })}
-            litByLine={(name) => t('boardPresence.litByLine', { name })}
-          />
-        ) : (
-          <Box sx={{ textAlign: 'center', px: 4, py: 6 }}>
-            <LightbulbOutlined sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              {t('boardPresence.emptyTitle')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {t('boardPresence.emptyBody')}
-            </Typography>
-          </Box>
-        )}
-
-        {statTiles.length > 0 ? (
-          <Box sx={{ px: 2, pb: 1 }}>
-            <SectionHeader>{t('boardPresence.statsHeader')}</SectionHeader>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {statTiles.map((tile) => (
-                <Box
-                  key={tile.key}
-                  sx={{
-                    flexGrow: 1,
-                    flexBasis: '47%',
-                    bgcolor: 'action.hover',
-                    borderRadius: `${themeTokens.borderRadius.md}px`,
-                    px: 1.5,
-                    py: 1.25,
-                  }}
-                >
-                  <Typography variant="h6" sx={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }} noWrap>
-                    {tile.value}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {tile.label}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        ) : null}
-
-        {history.length > 0 ? (
-          <Box sx={{ px: 2, pb: 1 }}>
-            <SectionHeader>{t('boardPresence.historyHeader')}</SectionHeader>
-            <List disablePadding>
-              {history.map((climb) => (
-                <HistoryRow
-                  key={`${climb.climbUuid}-${climb.seq}`}
-                  climb={climb}
-                  formattedGrade={climb.grade ? formatGrade(climb.grade) : null}
-                  gradeColor={getGradeColor(climb.grade) ?? DEFAULT_GRADE_COLOR}
-                  litByLine={(name) => t('boardPresence.litByLine', { name })}
-                />
-              ))}
-            </List>
-          </Box>
-        ) : null}
-      </Box>
+      <BoardSheetBody open={open} boardId={boardId} />
 
       <Divider />
       <ButtonBase
@@ -204,6 +132,130 @@ export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSh
   );
 }
 
+/**
+ * Everything that reads the wall's live state: the hero, stat tiles, and the
+ * history list. Rendered as a real JSX child of `<Drawer>` (not conditionally
+ * gated by a prop check) so it mounts/unmounts with the Drawer itself — a
+ * closed sheet subscribes to none of the presence contexts.
+ */
+function BoardSheetBody({ open, boardId }: { open: boolean; boardId: number | null }) {
+  const { t } = useTranslation('session');
+  const { formatGrade, getGradeColor } = useGradeFormat();
+  const { currentClimb } = useBoardPresenceCurrent();
+  const { history, stats } = useBoardPresenceFeed();
+
+  // Fires once per open (not on every history change while open) — reset when
+  // the sheet closes so the next open re-evaluates. Keyed on `open` rather
+  // than relying solely on Drawer's own unmount timing, so this stays correct
+  // even if a future change adds `keepMounted`.
+  const historyViewedForOpenRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      historyViewedForOpenRef.current = false;
+      return;
+    }
+    if (historyViewedForOpenRef.current || history.length === 0) return;
+    historyViewedForOpenRef.current = true;
+    track(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: boardId ?? undefined,
+      itemCount: history.length,
+    });
+  }, [open, history.length, boardId]);
+
+  const statTiles = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { key: 'sent', value: String(stats.climbsSentCount), label: t('boardPresence.statSent') },
+      { key: 'climbers', value: String(stats.distinctClimbersCount), label: t('boardPresence.statClimbers') },
+      {
+        key: 'hardest',
+        value: stats.hardestGrade ? (formatGrade(stats.hardestGrade) ?? '–') : '–',
+        label: t('boardPresence.statHardest'),
+      },
+      {
+        key: 'top',
+        value: stats.topGrade ? (formatGrade(stats.topGrade) ?? '–') : '–',
+        label: t('boardPresence.statTopGrade'),
+      },
+    ];
+  }, [stats, formatGrade, t]);
+
+  // Stabilized so `NowOnTheWallHero`/`HistoryRow` (both `React.memo`'d) can
+  // actually bail on an unrelated re-render (e.g. a stats-only push) instead
+  // of recreating these as fresh inline arrows every render.
+  const setByLine = useCallback((setter: string) => t('boardPresence.setByLine', { setter }), [t]);
+  const litByLine = useCallback((name: string) => t('boardPresence.litByLine', { name }), [t]);
+
+  return (
+    <Box sx={{ overflowY: 'auto', flex: 1 }}>
+      {currentClimb ? (
+        <NowOnTheWallHero
+          climb={currentClimb}
+          formattedGrade={currentClimb.grade ? formatGrade(currentClimb.grade) : null}
+          gradeColor={getGradeColor(currentClimb.grade) ?? DEFAULT_GRADE_COLOR}
+          setByLine={setByLine}
+          litByLine={litByLine}
+        />
+      ) : (
+        <Box sx={{ textAlign: 'center', px: 4, py: 6 }}>
+          <LightbulbOutlined sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            {t('boardPresence.emptyTitle')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {t('boardPresence.emptyBody')}
+          </Typography>
+        </Box>
+      )}
+
+      {statTiles.length > 0 ? (
+        <Box sx={{ px: 2, pb: 1 }}>
+          <SectionHeader>{t('boardPresence.statsHeader')}</SectionHeader>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {statTiles.map((tile) => (
+              <Box
+                key={tile.key}
+                sx={{
+                  flexGrow: 1,
+                  flexBasis: '47%',
+                  bgcolor: 'action.hover',
+                  borderRadius: `${themeTokens.borderRadius.md}px`,
+                  px: 1.5,
+                  py: 1.25,
+                }}
+              >
+                <Typography variant="h6" sx={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }} noWrap>
+                  {tile.value}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {tile.label}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      ) : null}
+
+      {history.length > 0 ? (
+        <Box sx={{ px: 2, pb: 1 }}>
+          <SectionHeader>{t('boardPresence.historyHeader')}</SectionHeader>
+          <List disablePadding>
+            {history.map((climb) => (
+              <HistoryRow
+                key={`${climb.climbUuid}-${climb.seq}`}
+                climb={climb}
+                formattedGrade={climb.grade ? formatGrade(climb.grade) : null}
+                gradeColor={getGradeColor(climb.grade) ?? DEFAULT_GRADE_COLOR}
+                litByLine={litByLine}
+              />
+            ))}
+          </List>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
     <Typography variant="overline" color="text.secondary" sx={{ display: 'block', pt: 1.5, pb: 1, letterSpacing: 0.5 }}>
@@ -220,7 +272,17 @@ type HeroProps = {
   litByLine: (name: string) => string;
 };
 
-function NowOnTheWallHero({ climb, formattedGrade, gradeColor, setByLine, litByLine }: HeroProps) {
+// React.memo — the reducer preserves per-entry object identity across a
+// backfill/catch-up that doesn't actually change this climb (see
+// `mergeHistory` in `@boardsesh/board-presence`), so with `setByLine`/
+// `litByLine` stabilized above, this bails on an unrelated stats-only update.
+const NowOnTheWallHero = React.memo(function NowOnTheWallHeroInner({
+  climb,
+  formattedGrade,
+  gradeColor,
+  setByLine,
+  litByLine,
+}: HeroProps) {
   const setter = climb.setter?.trim();
   const litBy = climb.sentByDisplayName?.trim();
   return (
@@ -261,7 +323,7 @@ function NowOnTheWallHero({ climb, formattedGrade, gradeColor, setByLine, litByL
       ) : null}
     </Box>
   );
-}
+});
 
 type HistoryRowProps = {
   climb: BoardPresenceClimb;
@@ -270,7 +332,15 @@ type HistoryRowProps = {
   litByLine: (name: string) => string;
 };
 
-function HistoryRow({ climb, formattedGrade, gradeColor, litByLine }: HistoryRowProps) {
+// React.memo for the same reason as `NowOnTheWallHero` — pairs with the
+// reducer's identity-preserving backfill merge so an unrelated stats/current
+// update doesn't re-render every row in the list.
+const HistoryRow = React.memo(function HistoryRowInner({
+  climb,
+  formattedGrade,
+  gradeColor,
+  litByLine,
+}: HistoryRowProps) {
   const litBy = climb.sentByDisplayName?.trim();
   return (
     <ListItem
@@ -297,4 +367,4 @@ function HistoryRow({ climb, formattedGrade, gradeColor, litByLine }: HistoryRow
       />
     </ListItem>
   );
-}
+});

@@ -12,6 +12,7 @@ import {
   type UseBoardPresenceResult,
 } from './use-board-presence';
 import type { BoardPresenceClient } from './types';
+import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 
 const BoardPresenceContext = createContext<UseBoardPresenceResult | undefined>(undefined);
 const BoardPresenceActionsContext = createContext<BoardPresenceActions | undefined>(undefined);
@@ -24,6 +25,13 @@ const BoardPresenceFeedContext = createContext<BoardPresenceFeedState | undefine
 // `useActiveClimbUuid` — lets chrome (tab tree, bottom-chrome metrics) gate on
 // presence without re-rendering on every board-level climb change.
 const BoardPresenceHasClimbContext = createContext<boolean | undefined>(undefined);
+// Narrow selector: the wall's lit climb when live, else `null`. `undefined`
+// means "outside the provider" (mirrors every other context here); `null` is a
+// real value (no board bound, or the feed isn't live). Consumers that only
+// need "what's lit right now" (e.g. mobile's `useWallClimbIfDistinct`) read
+// this instead of `BoardPresenceCurrentContext`, so they don't re-render on
+// holder/stats/undo-target churn that context also carries.
+const BoardPresenceWallClimbContext = createContext<BoardPresenceClimb | null | undefined>(undefined);
 
 export function BoardPresenceProvider({
   boardId,
@@ -74,13 +82,19 @@ export function BoardPresenceProvider({
   // the context only re-renders consumers when it actually flips (not on every
   // currentClimb identity change). Wrapping it in useMemo would add nothing.
   const hasClimb = value.isLive && value.currentClimb !== null;
+  // No useMemo here either — this value IS `value.currentClimb`'s own identity
+  // when live (or the stable `null` literal otherwise), so there is nothing to
+  // memoize: the reference only changes when `currentClimb` itself does.
+  const wallClimb = value.isLive ? value.currentClimb : null;
 
   return (
     <BoardPresenceContext.Provider value={value}>
       <BoardPresenceActionsContext.Provider value={actions}>
         <BoardPresenceCurrentContext.Provider value={current}>
           <BoardPresenceHasClimbContext.Provider value={hasClimb}>
-            <BoardPresenceFeedContext.Provider value={feed}>{children}</BoardPresenceFeedContext.Provider>
+            <BoardPresenceWallClimbContext.Provider value={wallClimb}>
+              <BoardPresenceFeedContext.Provider value={feed}>{children}</BoardPresenceFeedContext.Provider>
+            </BoardPresenceWallClimbContext.Provider>
           </BoardPresenceHasClimbContext.Provider>
         </BoardPresenceCurrentContext.Provider>
       </BoardPresenceActionsContext.Provider>
@@ -128,10 +142,26 @@ export function useBoardPresenceHasClimb(): boolean {
   return context;
 }
 
+/**
+ * The wall's lit climb when the feed is live, else `null`. Narrower than
+ * `useBoardPresenceCurrent()`: this context only changes when the lit climb
+ * itself changes, not on holder/undo-target/isLive-independent churn, so
+ * consumers that just need "what's on the wall right now" (e.g. mobile's
+ * `useWallClimbIfDistinct`) avoid re-rendering on every presence event.
+ */
+export function useBoardPresenceWallClimb(): BoardPresenceClimb | null {
+  const context = useContext(BoardPresenceWallClimbContext);
+  if (context === undefined) {
+    throw new Error('useBoardPresenceWallClimb must be used within a BoardPresenceProvider');
+  }
+  return context;
+}
+
 export {
   BoardPresenceContext,
   BoardPresenceActionsContext,
   BoardPresenceCurrentContext,
   BoardPresenceFeedContext,
   BoardPresenceHasClimbContext,
+  BoardPresenceWallClimbContext,
 };

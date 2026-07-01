@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { Client } from '@boardsesh/graphql-client';
+import { boardHistoryCursor } from '@boardsesh/board-presence-react';
 import type { BoardPresenceEvent, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 
 // Stub the shared transport helpers (re-exported by the web graphql-queue
@@ -24,8 +25,18 @@ vi.mock('../../graphql-queue/graphql-client', () => ({
 
 import { createWebBoardPresenceClient } from '../board-presence-client';
 
-const fakeClient = { id: 'ws-client' } as unknown as Client;
+// A `.on('connected', ...)` recorder — web's `ExtendedClient` supports `.on`
+// the same way mobile's graphql-ws `Client` does, so `onReconnect` (derived
+// from it) is exercisable here without a real websocket.
+const connectedListeners: Array<() => void> = [];
+const onUnsubscribe = vi.fn();
+const onMock = vi.fn((_event: string, listener: () => void) => {
+  connectedListeners.push(listener);
+  return onUnsubscribe;
+});
+const fakeClient = { id: 'ws-client', on: onMock } as unknown as Client;
 const getClient = () => fakeClient;
+const fireConnected = () => connectedListeners.forEach((listener) => listener());
 
 function makeClimb(climbUuid: string) {
   return { climbUuid, seq: 1, sentAt: '2026-06-09T00:00:00.000Z', name: `Climb ${climbUuid}`, angle: 40 };
@@ -36,6 +47,9 @@ describe('createWebBoardPresenceClient', () => {
     transport.execute.mockReset();
     transport.subscribe.mockReset();
     transport.subscribe.mockReturnValue(vi.fn());
+    connectedListeners.length = 0;
+    onUnsubscribe.mockClear();
+    onMock.mockClear();
   });
 
   it('subscribes to BOARD_NOW_PLAYING and forwards set events to the callback', () => {
@@ -190,5 +204,68 @@ describe('createWebBoardPresenceClient', () => {
       setIds: '1',
     });
     expect(operation.query).toContain('resolveBoardForConfig');
+  });
+
+  it('fetches durable history, forwarding limit + before and unwrapping boardHistory', async () => {
+    const history = [makeClimb('h1'), makeClimb('h2')];
+    transport.execute.mockResolvedValue({ boardHistory: history });
+
+    const climbs = await createWebBoardPresenceClient(getClient).fetchHistory(7, {
+      limit: 25,
+      before: boardHistoryCursor(900),
+    });
+
+    expect(climbs).toEqual(history);
+    const [passedClient, operation] = transport.execute.mock.calls[0];
+    expect(passedClient).toBe(fakeClient);
+    expect(operation.variables).toEqual({ boardId: 7, limit: 25, before: '900' });
+    expect(operation.query).toContain('boardHistory');
+  });
+
+  it('defaults history limit + before to null when no paging opts are given', async () => {
+    transport.execute.mockResolvedValue({ boardHistory: [] });
+    await createWebBoardPresenceClient(getClient).fetchHistory(7);
+    expect(transport.execute.mock.calls[0][1].variables).toEqual({ boardId: 7, limit: null, before: null });
+  });
+
+  it('fetches the current connection holder, unwrapping boardConnection and falling back to null', async () => {
+    const holder = { userId: 'u1', displayName: 'Climber', avatarUrl: null, lastSentAt: null };
+    transport.execute.mockResolvedValue({ boardConnection: holder });
+
+    const result = await createWebBoardPresenceClient(getClient).fetchConnection(9);
+
+    expect(result).toEqual(holder);
+    expect(transport.execute.mock.calls[0][1].variables).toEqual({ boardId: 9 });
+    expect(transport.execute.mock.calls[0][1].query).toContain('boardConnection');
+
+    transport.execute.mockResolvedValue({});
+    expect(await createWebBoardPresenceClient(getClient).fetchConnection(9)).toBeNull();
+  });
+
+  it('reports a disconnect, treating a non-true response as not accepted', async () => {
+    transport.execute.mockResolvedValue({ reportBoardDisconnect: true });
+
+    const accepted = await createWebBoardPresenceClient(getClient).reportDisconnect(5);
+
+    expect(accepted).toBe(true);
+    const [, operation] = transport.execute.mock.calls[0];
+    expect(operation.variables).toEqual({ boardId: 5 });
+    expect(operation.query).toContain('reportBoardDisconnect');
+  });
+
+  it('registers onReconnect against the client’s "connected" event, skipping the first connect', () => {
+    const callback = vi.fn();
+    const unsubscribe = createWebBoardPresenceClient(getClient).onReconnect(callback);
+
+    expect(onMock).toHaveBeenCalledWith('connected', expect.any(Function));
+
+    fireConnected(); // first connect — skipped (initial backfill already covers it)
+    expect(callback).not.toHaveBeenCalled();
+
+    fireConnected(); // reconnect — fires
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(onUnsubscribe).toHaveBeenCalledTimes(1);
   });
 });

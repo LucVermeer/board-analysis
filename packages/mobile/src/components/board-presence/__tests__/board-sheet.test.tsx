@@ -334,10 +334,18 @@ describe('BoardSheet', () => {
     expect(sheetModal.dismiss).toHaveBeenCalled();
   });
 
-  it('tracks distinct now-on-the-wall climbs from the presence feed', () => {
+  it('renders no presence content while dismissed — zero list/hero work', () => {
     presence.currentClimb = makeClimb('c1', 3);
+    presence.history = [makeClimb('c1', 3)];
+    presence.stats = {
+      climbsSentCount: 14,
+      distinctClimbersCount: 5,
+      hardestGrade: 'V9',
+      topGrade: 'V5',
+      lastSentAt: null,
+    };
 
-    render(
+    const { container, queryByLabelText, getAllByText } = render(
       createElement(BoardSheet, {
         boardLabel: 'Garage Wall',
         onClose: noop,
@@ -346,29 +354,56 @@ describe('BoardSheet', () => {
       }),
     );
 
-    expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardNowPlayingReceived, {
-      boardId: 123,
-      climbUuid: 'c1',
-      seq: 3,
-    });
+    // The header/footer chrome (cheap, presence-free) still renders — both the
+    // header title and the footer subtitle show the board label.
+    expect(getAllByText('Garage Wall')).toHaveLength(2);
+    // ...but nothing that reads the wall's presence state does.
+    expect(container.querySelector('[data-list="true"]')).toBeNull();
+    expect(queryByLabelText('refresh')).toBeNull();
+    expect(container.textContent).not.toContain('Climb c1');
+    expect(container.textContent).not.toContain('mobile.boardPresence.emptyTitle');
+    expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
+  });
+
+  it('mounts the presence content (history list) once presented', () => {
+    presence.history = [makeClimb('c1', 3)];
+    const ref = createRef<BoardSheetHandle>();
+    const { container } = render(
+      createElement(BoardSheet, {
+        ref,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+    expect(container.querySelector('[data-list="true"]')).toBeNull();
+
+    act(() => ref.current?.present());
+
+    expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+    expect(sheetModal.present).toHaveBeenCalled();
   });
 
   it('triggers a manual catch-up when the history list is pulled to refresh', () => {
     presence.history = [makeClimb('c1', 3)];
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         boardConfig,
         onSwitchBoard: noop,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('refresh'));
     expect(presence.refresh).toHaveBeenCalledWith('manual');
   });
 
-  it('tracks history views from the imperative present call', () => {
+  it('tracks history views once per presentation, from the content mount effect', () => {
     presence.history = [makeClimb('c1', 3), makeClimb('c0', 2)];
     const ref = createRef<BoardSheetHandle>();
     render(
@@ -381,7 +416,7 @@ describe('BoardSheet', () => {
       }),
     );
 
-    ref.current?.present();
+    act(() => ref.current?.present());
 
     expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, {
       boardId: 123,
@@ -390,9 +425,29 @@ describe('BoardSheet', () => {
     expect(sheetModal.present).toHaveBeenCalled();
   });
 
+  it('does not track history views on present when there is no history', () => {
+    presence.history = [];
+    const ref = createRef<BoardSheetHandle>();
+    render(
+      createElement(BoardSheet, {
+        ref,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    act(() => ref.current?.present());
+
+    expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
+  });
+
   it('renders the empty state when no climb is on the wall', () => {
+    const ref = createRef<BoardSheetHandle>();
     const { container } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -400,6 +455,7 @@ describe('BoardSheet', () => {
         onSwitchBoard: noop,
       }),
     );
+    act(() => ref.current?.present());
     expect(container.textContent).toContain('mobile.boardPresence.emptyTitle');
   });
 
@@ -423,8 +479,10 @@ describe('BoardSheet', () => {
       lastSentAt: null,
     };
 
+    const ref = createRef<BoardSheetHandle>();
     const { container } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -432,6 +490,7 @@ describe('BoardSheet', () => {
         onSwitchBoard: noop,
       }),
     );
+    act(() => ref.current?.present());
 
     // The current climb renders as the hero only; it is filtered out of history.
     expect(container.textContent?.match(/Climb c1/g) ?? []).toHaveLength(1);
@@ -452,8 +511,10 @@ describe('BoardSheet', () => {
     presence.currentClimb = makeClimb('c1', 3);
     presence.history = [makeClimb('c1', 3)];
 
+    const ref = createRef<BoardSheetHandle>();
     const { container } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -461,6 +522,7 @@ describe('BoardSheet', () => {
         onSwitchBoard: noop,
       }),
     );
+    act(() => ref.current?.present());
 
     expect(container.textContent?.match(/Climb c1/g) ?? []).toHaveLength(1);
     expect(container.textContent).not.toContain('mobile.boardPresence.historyHeader');
@@ -501,8 +563,10 @@ describe('BoardSheet', () => {
     });
     graphql.request.mockResolvedValueOnce({ climb: heroDetail }).mockResolvedValueOnce({ climb: oldDetail });
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose,
         onDismissed: noop,
@@ -514,6 +578,7 @@ describe('BoardSheet', () => {
         onOpenActions,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('press hero-climb'));
     await waitFor(() =>
@@ -612,8 +677,10 @@ describe('BoardSheet', () => {
     });
     graphql.request.mockResolvedValueOnce({ climb: oldDetail });
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -622,6 +689,7 @@ describe('BoardSheet', () => {
         onOpenPlaylist,
       }),
     );
+    act(() => ref.current?.present());
 
     expect(climbRows.props[0]?.onPress).toBeUndefined();
     fireEvent.click(getByLabelText('playlist old-climb'));
@@ -662,8 +730,10 @@ describe('BoardSheet', () => {
     });
     graphql.request.mockResolvedValueOnce({ climb: oldDetail });
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -672,6 +742,7 @@ describe('BoardSheet', () => {
         onOpenActions,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('actions old-climb'));
 
@@ -706,8 +777,10 @@ describe('BoardSheet', () => {
     const climbRequest = createDeferred<{ climb: Climb | null }>();
     graphql.request.mockReturnValueOnce(climbRequest.promise);
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText, queryByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose,
         onDismissed: noop,
@@ -716,6 +789,7 @@ describe('BoardSheet', () => {
         onClimbPress,
       }),
     );
+    act(() => ref.current?.present());
 
     expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull();
 
@@ -754,8 +828,10 @@ describe('BoardSheet', () => {
     const climbRequest = createDeferred<{ climb: Climb | null }>();
     graphql.request.mockReturnValueOnce(climbRequest.promise);
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText, queryByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose,
         onDismissed: noop,
@@ -764,6 +840,7 @@ describe('BoardSheet', () => {
         onClimbPress,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('press hero-climb'));
     await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
@@ -792,8 +869,10 @@ describe('BoardSheet', () => {
     const heroDetail = makeFullClimb('hero-climb', { name: 'Hydrated Hero' });
     graphql.request.mockResolvedValueOnce({ climb: heroDetail });
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose,
         onDismissed: noop,
@@ -802,6 +881,7 @@ describe('BoardSheet', () => {
         onClimbPress,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('press hero-climb'));
 
@@ -821,8 +901,10 @@ describe('BoardSheet', () => {
     const climbRequest = createDeferred<{ climb: Climb | null }>();
     graphql.request.mockReturnValueOnce(climbRequest.promise).mockResolvedValueOnce({ climb: retryDetail });
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText, queryByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -831,6 +913,7 @@ describe('BoardSheet', () => {
         onClimbPress,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('press hero-climb'));
     await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
@@ -866,8 +949,10 @@ describe('BoardSheet', () => {
     const retryDetail = makeFullClimb('hero-climb', { name: 'Retry Hero' });
     graphql.request.mockResolvedValueOnce({ climb: null }).mockResolvedValueOnce({ climb: retryDetail });
 
+    const ref = createRef<BoardSheetHandle>();
     const { getByLabelText, queryByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -876,6 +961,7 @@ describe('BoardSheet', () => {
         onClimbPress,
       }),
     );
+    act(() => ref.current?.present());
 
     fireEvent.click(getByLabelText('press hero-climb'));
 
@@ -902,8 +988,10 @@ describe('BoardSheet', () => {
     presence.currentClimb = makeClimb('hero-climb', 3);
     const onClimbPress = vi.fn();
 
+    const ref = createRef<BoardSheetHandle>();
     const { rerender } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -912,10 +1000,12 @@ describe('BoardSheet', () => {
         onClimbPress,
       }),
     );
+    act(() => ref.current?.present());
     const stalePress = climbRows.props[0]?.onPress;
 
     rerender(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
