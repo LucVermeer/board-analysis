@@ -26,7 +26,10 @@ type SessionQueueState = {
  */
 export type SessionPayloadInputs = {
   users?: SessionUser[];
-  queueState?: SessionQueueState;
+  // `null` is a real override — used by the `session` query's non-member
+  // preview path to redact the queue without a Redis lookup. `undefined`
+  // (key absent) still triggers the fetch, per the module convention above.
+  queueState?: SessionQueueState | null;
   sessionData?: SessionDbRow | null;
   lastConnectedBoardSerial?: string | null;
   leaderConnectionId?: string | null;
@@ -87,12 +90,14 @@ export async function buildSessionPayload(
     name: inputs.name !== undefined ? inputs.name : sessionData?.name || null,
     boardPath: inputs.boardPath !== undefined ? inputs.boardPath : sessionData?.boardPath || '',
     users,
-    queueState: {
-      sequence: queueState.sequence,
-      stateHash: queueState.stateHash,
-      queue: queueState.queue,
-      currentClimbQueueItem: queueState.currentClimbQueueItem,
-    },
+    queueState: queueState
+      ? {
+          sequence: queueState.sequence,
+          stateHash: queueState.stateHash,
+          queue: queueState.queue,
+          currentClimbQueueItem: queueState.currentClimbQueueItem,
+        }
+      : null,
     isLeader: inputs.isLeader !== undefined ? inputs.isLeader : leaderConnectionId === ctx.connectionId,
     lastConnectedBoardSerial,
     clientId: inputs.clientId !== undefined ? inputs.clientId : ctx.connectionId,

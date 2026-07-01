@@ -177,6 +177,13 @@ describe('buildSessionPayload — override short-circuits', () => {
     expect(payload.lastConnectedBoardSerial).toBeNull();
   });
 
+  it('skips getQueueState when inputs.queueState is explicitly null (B3 non-member preview redaction)', async () => {
+    const payload = await buildSessionPayload('session-1', makeCtx(), { queueState: null });
+
+    expect(getQueueStateMock).not.toHaveBeenCalled();
+    expect(payload.queueState).toBeNull();
+  });
+
   it('skips getSessionLeaderConnectionId when inputs.isLeader is supplied', async () => {
     // `leaderConnectionId` only feeds `isLeader` — fetching it just to
     // discard the value is wasted traffic. This was flagged in PR review.

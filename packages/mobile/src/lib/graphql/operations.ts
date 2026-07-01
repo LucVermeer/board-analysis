@@ -719,10 +719,14 @@ export type GetSessionQueueStateQueryVariables = {
 
 export type GetSessionQueueStateQueryResponse = {
   session: {
+    // Null when the caller isn't a session member (e.g. this resync races a
+    // leaveSession, or the backend can't verify HTTP membership) — the
+    // resolver returns a redacted preview rather than an error. Callers
+    // already null-guard this (see resyncQueueFromServer in queue-provider.tsx).
     queueState: {
       queue: SubscriptionQueueItem[];
       currentClimbQueueItem: SubscriptionQueueItem | null;
-    };
+    } | null;
   } | null;
 };
 

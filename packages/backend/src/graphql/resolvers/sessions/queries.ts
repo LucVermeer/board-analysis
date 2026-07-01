@@ -7,7 +7,7 @@ import type {
 import { eq } from 'drizzle-orm';
 import { roomManager, type DiscoverableSession } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
-import { validateInput, requireSessionMember, requireAuthenticated } from '../shared/helpers';
+import { validateInput, requireSessionMember, requireAuthenticated, isSessionMember } from '../shared/helpers';
 import { SessionIdSchema, LatitudeSchema, LongitudeSchema, RadiusMetersSchema } from '../../../validation/schemas';
 import { generateSessionHealthExport, generateSessionSummary } from './session-summary';
 import { getDistributedState } from '../../../services/distributed-state';
@@ -24,20 +24,36 @@ export const sessionQueries = {
     // Validate session ID
     validateInput(SessionIdSchema, sessionId, 'sessionId');
 
-    // The membership check guards the rest of the payload — no session means
-    // no payload. Fetch users explicitly so we can early-return null without
-    // paying for the remaining lookups, then hand the pre-resolved list to
-    // the helper.
+    // Dormant-session short circuit runs first, before any membership check:
+    // an empty live roster means null regardless of who's asking. Mobile
+    // relies on this null to tell a dormant-but-restorable session apart from
+    // one that's actually ended — `sessionStatus` exists precisely for that
+    // disambiguation via the durable row, since this query can't do it.
+    // Fetch users explicitly so we can early-return without paying for the
+    // remaining lookups, then hand the pre-resolved list to the helper.
     const users = await roomManager.getSessionUsers(sessionId);
     if (users.length === 0) return null;
 
-    // Query result: no WebSocket context, so `isLeader` is always false and
-    // `clientId` is empty. Participant ID falls back through the helper's
-    // default (ctx.participantId ?? ctx.connectionId ?? '').
+    // Real gate: members get the current full payload (queue, leader flag,
+    // board serial). Everyone else — including a stranger who only has the
+    // session UUID — gets a redacted invite-preview: metadata plus the full
+    // roster (mobile's join-confirmation screen shows who's climbing before
+    // the user commits — see GET_SESSION), but no queue contents, leader
+    // status, or board serial. `isSessionMember` is the single-shot,
+    // non-throwing counterpart of `requireSessionMember` (no retry/backoff —
+    // this is a read, not a race against `joinSession` context propagation).
+    const isMember = await isSessionMember(ctx, sessionId);
+
+    // `isLeader` is always false and `clientId` is empty for both branches:
+    // this query never represents "the current WS connection controlling the
+    // session" the way a mutation/subscription payload does. Participant ID
+    // falls back through the helper's default
+    // (ctx.participantId ?? ctx.connectionId ?? '').
     return buildSessionPayload(sessionId, ctx, {
       users,
       isLeader: false,
       clientId: '',
+      ...(isMember ? {} : { queueState: null, lastConnectedBoardSerial: null }),
     });
   },
 
