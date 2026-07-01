@@ -422,10 +422,13 @@ export const queueMutations = {
    * trips. The server stamps `anchorTimestamp` so peers can extrapolate
    * elapsed frames. Echo-suppressed by `clientId` on receipt.
    *
-   * Playback events are intentionally not buffered for delta replay — they're
-   * superseded by the next broadcast and have no value when a peer reconnects
-   * mid-playback. Sequence numbers are taken from the room manager's monotonic
-   * counter for ordering consistency with other queue events.
+   * Playback events are intentionally not buffered for delta replay (skipped
+   * in `publishQueueEvent`, `pubsub/index.ts`) — they're superseded by the
+   * next broadcast and have no value when a peer reconnects mid-playback.
+   * Sequence numbers are taken from the room manager's monotonic counter for
+   * ordering consistency with other queue events, but are reused rather than
+   * incremented, so they are non-monotonic/duplicate across playback events —
+   * another reason they must never enter the replay buffer.
    */
   publishPlaybackState: async (
     _: unknown,
