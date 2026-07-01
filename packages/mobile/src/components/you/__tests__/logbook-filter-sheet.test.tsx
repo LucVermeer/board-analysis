@@ -151,7 +151,7 @@ vi.mock('../../CollapsibleSection', () => ({
 }));
 
 vi.mock('../../SwitchRow', () => ({ SwitchRow: () => null }));
-vi.mock('../../grade', () => ({ GradeRangeRail: () => null }));
+vi.mock('../../grade', () => ({ GradeRangeRail: () => null, readableTextColor: () => '#000000' }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),

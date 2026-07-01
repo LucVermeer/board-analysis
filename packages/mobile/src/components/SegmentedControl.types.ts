@@ -34,4 +34,11 @@ export type SegmentedControlProps<K extends string = string> = {
   disabledKeys?: ReadonlySet<K>;
   /** Accessibility label naming the group (e.g. "Appearance"), so the platform announces what the segments control. */
   accessibilityLabel?: string;
+  /**
+   * Selected-segment fill colour. Defaults to the brand accent (purple) so every
+   * existing call site is unchanged; the logbook passes `brandColors.accent` (amber)
+   * so its controls match the amber chip row. The selected-label colour is derived
+   * to stay readable on the given fill (dark text on amber).
+   */
+  tint?: string;
 };

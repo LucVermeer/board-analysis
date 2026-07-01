@@ -61,6 +61,23 @@ describe('readFiltersFromQuery', () => {
     expect(result).toEqual({});
   });
 
+  it('yields the sends-only default when no sends/attempts params are present', () => {
+    // A URL with no status params must resolve to the sends-only default (not
+    // "both"). readFiltersFromQuery omits unset status, so merging its partial over
+    // DEFAULT_FILTERS is the real resolution the feed sees. Guard the default too so
+    // this test tracks any future flip of the resting status.
+    expect(DEFAULT_FILTERS.includeSends).toBe(true);
+    expect(DEFAULT_FILTERS.includeAttempts).toBe(false);
+
+    const partial = readFiltersFromQuery(new URLSearchParams('minGrade=10'));
+    expect(partial.includeSends).toBeUndefined();
+    expect(partial.includeAttempts).toBeUndefined();
+
+    const resolved = { ...DEFAULT_FILTERS, ...partial };
+    expect(resolved.includeSends).toBe(true);
+    expect(resolved.includeAttempts).toBe(false);
+  });
+
   it('parses boolean filter params', () => {
     const params = new URLSearchParams('sends=0&attempts=1&flash=1&benchmark=0');
     const result = readFiltersFromQuery(params);
@@ -68,6 +85,28 @@ describe('readFiltersFromQuery', () => {
     expect(result.includeAttempts).toBe(true);
     expect(result.flashOnly).toBe(true);
     expect(result.benchmarkOnly).toBe(false);
+  });
+
+  // Back-compat: a URL naming only one status side omits the other, which used to
+  // default to "on". Fill the missing side with true so pre-migration bookmarks
+  // keep their meaning (and the current "both" serialization `?attempts=1` reads
+  // as both, not sends-only / empty).
+  it('treats a lone sends=0 as attempts-only (old bookmark)', () => {
+    const result = readFiltersFromQuery(new URLSearchParams('sends=0'));
+    expect(result.includeSends).toBe(false);
+    expect(result.includeAttempts).toBe(true);
+  });
+
+  it('treats a lone attempts=0 as sends-only', () => {
+    const result = readFiltersFromQuery(new URLSearchParams('attempts=0'));
+    expect(result.includeSends).toBe(true);
+    expect(result.includeAttempts).toBe(false);
+  });
+
+  it('treats a lone attempts=1 as both (current "both" serialization)', () => {
+    const result = readFiltersFromQuery(new URLSearchParams('attempts=1'));
+    expect(result.includeSends).toBe(true);
+    expect(result.includeAttempts).toBe(true);
   });
 
   it('parses grade params', () => {
@@ -239,10 +278,19 @@ describe('filtersToQueryParams', () => {
     expect(result.attempts).toBeUndefined();
   });
 
-  it('serialises disabled attempts', () => {
-    const filters = { ...DEFAULT_FILTERS, includeAttempts: false };
+  it('serialises enabled attempts (off the sends-only default)', () => {
+    // The status resting state is sends-only, so turning attempts ON is the
+    // non-default change and is serialised as the real value.
+    const filters = { ...DEFAULT_FILTERS, includeAttempts: true };
     const result = filtersToQueryParams('', filters, DEFAULT_SORT, []);
-    expect(result.attempts).toBe('0');
+    expect(result.attempts).toBe('1');
+  });
+
+  it('serialises attempts-only (sends off, attempts on)', () => {
+    const filters = { ...DEFAULT_FILTERS, includeSends: false, includeAttempts: true };
+    const result = filtersToQueryParams('', filters, DEFAULT_SORT, []);
+    expect(result.sends).toBe('0');
+    expect(result.attempts).toBe('1');
   });
 
   it('includes date range', () => {
@@ -320,10 +368,13 @@ describe('filtersToQueryParams', () => {
   });
 
   it('round-trips through readFiltersFromQuery', () => {
+    // Both status booleans off the sends-only default (attempts-only) so each is
+    // serialised and round-trips; flashOnly rides along (it's a send refinement,
+    // and the URL layer preserves what it's given — sanitize heals edge cases).
     const filters = {
       ...DEFAULT_FILTERS,
       includeSends: false,
-      includeAttempts: false,
+      includeAttempts: true,
       flashOnly: true,
       benchmarkOnly: true,
       minGrade: 12 as number | '',
@@ -336,7 +387,7 @@ describe('filtersToQueryParams', () => {
     const parsed = readFiltersFromQuery(new URLSearchParams(params));
 
     expect(parsed.includeSends).toBe(false);
-    expect(parsed.includeAttempts).toBe(false);
+    expect(parsed.includeAttempts).toBe(true);
     expect(parsed.flashOnly).toBe(true);
     expect(parsed.benchmarkOnly).toBe(true);
     expect(parsed.minGrade).toBe(12);

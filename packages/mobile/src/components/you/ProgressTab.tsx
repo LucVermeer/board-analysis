@@ -3,7 +3,6 @@ import { View, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { useYouProfileData } from '../../lib/graphql/hooks';
 import { Text } from '../Text';
-import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
@@ -28,15 +27,12 @@ type ProgressTabProps = {
   /** Measured chrome height — the scroll content insets its top by this so the
    *  first card rests below the floating chrome and the rest scroll under it. */
   topInset: number;
-  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
-   *  climber's profile, where the name lives in the public-profile header. */
-  screenTitle?: string;
   /** Climber whose beta-video shelf to show above the stats. Omit to hide it
    *  (e.g. before the viewer's own id resolves). */
   userId?: string;
 };
 
-export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTitle, userId }: ProgressTabProps) {
+export const ProgressTab = memo(function ProgressTab({ data, topInset, userId }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
   const { t: tCommon } = useTranslation('common');
@@ -103,12 +99,6 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTit
         <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />
       }
     >
-      {/* The screen's identity (when supplied), in-body under the floating chrome —
-          collapses into the header capsule as it scrolls up behind the glass.
-          ScreenTitle hides itself on Material (the M3 app bar owns the title).
-          Omitted on another climber's profile, where the name lives in the header. */}
-      {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
-
       {recordTipVisible ? (
         <View style={styles.tipInset}>
           <OnboardingTipBanner
@@ -221,11 +211,6 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTit
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  screenTitle: {
-    paddingHorizontal: spacing[4],
-    paddingTop: 0,
-    paddingBottom: spacing[2],
-  },
   chartCard: { marginHorizontal: spacing[4] },
   tipInset: { marginHorizontal: spacing[4], marginBottom: spacing[3] },
   vpTotal: { marginBottom: spacing[2] },

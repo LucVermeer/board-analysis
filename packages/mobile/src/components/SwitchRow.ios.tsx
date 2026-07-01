@@ -29,9 +29,18 @@ import type { SwitchRowProps } from './SwitchRow.types';
 const ROW_MIN_HEIGHT = 48;
 const ROW_MIN_HEIGHT_WITH_SUBTITLE = 64;
 
-export function SwitchRow({ label, description, value, onValueChange, disabled = false }: SwitchRowProps) {
+export function SwitchRow({
+  label,
+  description,
+  value,
+  onValueChange,
+  disabled = false,
+  tint: tintColor,
+}: SwitchRowProps) {
   const { brandColors } = useTheme();
   const handleToggle = makeToggleHandler(onValueChange, disabled);
+  // On-track colour: brand accent (purple) by default; the logbook passes amber.
+  const onTrack = tintColor ?? brandAccentColor(brandColors);
 
   return (
     <Host
@@ -46,8 +55,8 @@ export function SwitchRow({ label, description, value, onValueChange, disabled =
           // the container's right edge — matches the old row's paddingHorizontal
           // and the Android impl's padding.
           padding({ horizontal: spacing[4], vertical: spacing[2] }),
-          // Brand on-track colour, sourced once via the theming bridge.
-          tint(brandAccentColor(brandColors)),
+          // On-track colour (brand accent by default; amber for the logbook).
+          tint(onTrack),
           // SwiftUI greys the control and blocks interaction natively.
           disabledModifier(disabled),
           // No explicit accessibilityLabel: SwiftUI derives the label from BOTH

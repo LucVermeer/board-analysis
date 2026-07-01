@@ -65,13 +65,12 @@ vi.mock('../LogbookRow', () => ({
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
-vi.mock('../../ScreenTitle', () => ({ ScreenTitle: () => null }));
 vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { black: '#000' } }));
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
-vi.mock('../../../lib/graphql/hooks', () => ({ useUserAscentsFeed: () => feed }));
+vi.mock('../../../lib/graphql/hooks', () => ({ useUserAscentsFeed: () => feed, useGrades: () => ({ data: [] }) }));
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));

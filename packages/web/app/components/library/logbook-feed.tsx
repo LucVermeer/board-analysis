@@ -14,6 +14,7 @@ import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
   DEFAULT_ANGLE_RANGE,
+  DEFAULT_LOGBOOK_PREFERENCES,
   sanitizeLogbookPreferences,
   type LogbookFilterState as FilterState,
   type LogbookSortState as SortState,
@@ -299,7 +300,7 @@ export default function LogbookFeed({ layoutStats, loadingLayoutStats }: Logbook
   useEffect(() => {
     if (!preferencesLoaded) return;
     void setPreference('logbookPreferences', {
-      version: 1 as const,
+      version: DEFAULT_LOGBOOK_PREFERENCES.version,
       boardFilter: 'all' as const,
       layoutSelections: {
         kilter: [],

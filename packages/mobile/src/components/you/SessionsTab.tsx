@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
 import type { SessionFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
-import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
 import { Card } from '../Card';
@@ -35,9 +34,6 @@ type SessionsTabProps = {
   /** Measured chrome height — the list insets its top by this so the first row
    *  rests below the floating chrome and the rest scroll under it. */
   topInset?: number;
-  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
-   *  climber's profile, where the name lives in the public-profile header. */
-  screenTitle?: string;
 };
 
 // String-literal `t(...)` per call so the catalog keys stay statically greppable.
@@ -90,7 +86,7 @@ function SessionCardSkeleton() {
   );
 }
 
-export function SessionsTab({ userId, topInset = 0, screenTitle }: SessionsTabProps) {
+export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const router = useRouter();
@@ -207,20 +203,12 @@ export function SessionsTab({ userId, topInset = 0, screenTitle }: SessionsTabPr
     [handleOpenComments, handleOpenSession, summaryMap, t, openPlayDrawer, router],
   );
 
-  // The screen's identity, in-body under the floating chrome, plus the feed
-  // rollup when there are sessions. Memoized so FlashList doesn't re-measure /
-  // re-render the header on every SessionsTab render — only when the rollup data
-  // (sessions/now) changes. The title renders above the empty state too when
-  // supplied; it's omitted on another climber's profile.
+  // The feed rollup, shown when there are sessions. Memoized so FlashList doesn't
+  // re-measure / re-render the header on every SessionsTab render — only when the
+  // rollup data (sessions/now) changes.
   const listHeader = useMemo(
-    () => (
-      <>
-        {/* ScreenTitle hides itself on Material; omitted on another climber's profile. */}
-        {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
-        {sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null}
-      </>
-    ),
-    [screenTitle, sessions, now],
+    () => (sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null),
+    [sessions, now],
   );
 
   if (!userId) {
@@ -376,11 +364,6 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: borderRadius.full,
     opacity: 0.32,
-  },
-  screenTitle: {
-    paddingHorizontal: spacing[4],
-    paddingTop: 0,
-    paddingBottom: spacing[2],
   },
   empty: {
     alignItems: 'center',

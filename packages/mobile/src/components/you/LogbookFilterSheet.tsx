@@ -1,11 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { GradeBound } from '@boardsesh/climb-filters';
@@ -19,16 +14,15 @@ import {
 } from '@boardsesh/logbook';
 import { androidSafeSnapPoints } from '../sheet-snap-points';
 import { Text } from '../Text';
-import { Icon } from '../Icon';
 import { CollapsibleSection } from '../CollapsibleSection';
 import { SegmentedControl } from '../SegmentedControl';
 import { SwitchRow } from '../SwitchRow';
 import { GradeRangeRail } from '../grade';
+import { LogbookAngleRail, DateRangeRow } from './logbook-facet-controls';
 import { useTheme } from '../../providers/theme-provider';
 import { useManagedSheet } from '../../providers/sheet-presentation-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import { hapticSelection } from '../../lib/haptics';
-import { springs } from '../../theme/animations';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -37,15 +31,6 @@ import { spacing, borderRadius } from '../../theme/tokens';
 // the canonical scale for the range rail. minDifficulty/maxDifficulty go to the
 // backend as difficulty ids, board-agnostic.
 const GRADE_SCALE_BOARD = 'kilter';
-
-// Angle filter granularity — mirrors the web slider (0–70°, step 5).
-const ANGLE_STEP = 5;
-const ANGLE_VALUES: number[] = (() => {
-  const [min, max] = DEFAULT_LOGBOOK_ANGLE_RANGE;
-  const values: number[] = [];
-  for (let angle = min; angle <= max; angle += ANGLE_STEP) values.push(angle);
-  return values;
-})();
 
 type LogbookFilterSheetProps = {
   onDismiss: () => void;
@@ -62,57 +47,6 @@ type LogbookFilterSheetProps = {
 
 type StatusKey = 'sends' | 'attempts' | 'both';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// Same filled-pill chip language as ClimbFilterSheet, reused locally for the
-// angle min/max selectors (a horizontal chip rail).
-// memo'd + value-based onPress so the ~30 angle chips (each carrying a Reanimated
-// shared value + worklet) don't all re-render when an unrelated filter changes.
-// The rails pass a stable handler, not a per-chip arrow.
-const Chip = memo(function Chip({
-  label,
-  selected,
-  value,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  value: number;
-  onPress: (value: number) => void;
-}) {
-  const { systemColors, brandColors } = useTheme();
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const chipStyle: ViewStyle = {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: 20,
-    backgroundColor: selected ? brandColors.primaryFill : systemColors.fill,
-  };
-  return (
-    <AnimatedPressable
-      onPress={() => {
-        hapticSelection();
-        onPress(value);
-      }}
-      onPressIn={() => {
-        scale.value = withSpring(0.95, springs.snappy);
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, springs.snappy);
-      }}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={label}
-      style={[animatedStyle, chipStyle]}
-    >
-      <Text variant="footnote" color={selected ? brandColors.onPrimary : undefined} style={styles.chipText}>
-        {label}
-      </Text>
-    </AnimatedPressable>
-  );
-});
-
 function statusKeyFor(filters: LogbookFilterState): StatusKey {
   if (filters.includeSends && !filters.includeAttempts) return 'sends';
   if (!filters.includeSends && filters.includeAttempts) return 'attempts';
@@ -123,19 +57,6 @@ function statusPatchFor(key: StatusKey): Pick<LogbookFilterState, 'includeSends'
   if (key === 'sends') return { includeSends: true, includeAttempts: false };
   if (key === 'attempts') return { includeSends: false, includeAttempts: true };
   return { includeSends: true, includeAttempts: true };
-}
-
-function parseIsoDate(iso: string): Date | null {
-  if (!iso) return null;
-  const parsed = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function formatIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 export function LogbookFilterSheet({
@@ -251,13 +172,9 @@ export function LogbookFilterSheet({
   );
 
   const [draftMinAngle, draftMaxAngle] = draftFilters.angleRange;
-  const handleMinAngle = useCallback(
-    (angle: number) => updateFilters({ angleRange: [angle, Math.max(angle, draftMaxAngle)] }),
-    [updateFilters, draftMaxAngle],
-  );
-  const handleMaxAngle = useCallback(
-    (angle: number) => updateFilters({ angleRange: [Math.min(draftMinAngle, angle), angle] }),
-    [updateFilters, draftMinAngle],
+  const handleAngleRange = useCallback(
+    (angleRange: [number, number]) => updateFilters({ angleRange }),
+    [updateFilters],
   );
 
   const handleFromDate = useCallback((iso: string) => updateFilters({ fromDate: iso }), [updateFilters]);
@@ -300,7 +217,7 @@ export function LogbookFilterSheet({
       <View style={styles.header}>
         <Text variant="title3">{t('mobile.logbook.filter')}</Text>
         <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
-          <Text variant="subheadline" color={theme.brandColors.primary}>
+          <Text variant="subheadline" color={theme.brandColors.accent}>
             {t('mobile.logbook.reset')}
           </Text>
         </Pressable>
@@ -310,7 +227,10 @@ export function LogbookFilterSheet({
         ref={scrollRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing[4] }]}
+        // With a fixed 90% snap point + enableDynamicSizing off, the content must
+        // flex to fill the sheet and carry generous bottom padding so the last row
+        // (Benchmarks only) scrolls fully into view when both sections are expanded.
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing[8] }]}
       >
         {/* PRESET — the headline one-tap sort. Above Refine/Advanced. Suppressed
             when the toolbar's top-level sort chips own it (Liquid Glass), so sort
@@ -326,14 +246,21 @@ export function LogbookFilterSheet({
               onSelect={(key) => handlePreset(key)}
               textVariant="footnote"
               trackColor={trackColor}
+              tint={theme.brandColors.accent}
               accessibilityLabel={t('mobile.logbook.sort')}
             />
           </View>
         ) : null}
 
         <View style={styles.sectionsContainer}>
-          {/* REFINE — status / flash / grade / angle. */}
-          <CollapsibleSection title={t('mobile.logbook.refine')} summary={refineSummary} resetKey={sectionResetKey}>
+          {/* REFINE — status / flash / grade / angle. Open by default (the core
+              filters); Advanced (date / benchmarks) stays collapsed below. */}
+          <CollapsibleSection
+            title={t('mobile.logbook.refine')}
+            summary={refineSummary}
+            resetKey={sectionResetKey}
+            defaultExpanded
+          >
             <Text variant="footnote" style={styles.subsectionLabel}>
               {t('mobile.logbook.statusLabel')}
             </Text>
@@ -343,6 +270,7 @@ export function LogbookFilterSheet({
               onSelect={handleStatusChange}
               textVariant="footnote"
               trackColor={trackColor}
+              tint={theme.brandColors.accent}
               accessibilityLabel={t('mobile.logbook.statusLabel')}
             />
 
@@ -352,6 +280,7 @@ export function LogbookFilterSheet({
                 label={t('mobile.logbook.flashOnly')}
                 value={draftFilters.flashOnly && !flashDisabled}
                 disabled={flashDisabled}
+                tint={theme.brandColors.accent}
                 onValueChange={(value) => updateFilters({ flashOnly: value })}
               />
             </View>
@@ -364,40 +293,12 @@ export function LogbookFilterSheet({
               dismissible={false}
               showTitle
               centerOnEmpty={false}
+              accentColor={theme.brandColors.accent}
               style={styles.inlineGradeRail}
             />
 
             <View style={styles.subsectionGap} />
-            <Text variant="footnote" style={styles.subsectionLabel}>
-              {t('mobile.logbook.angleMin')}
-            </Text>
-            <View style={styles.chipRow}>
-              {ANGLE_VALUES.map((angle) => (
-                <Chip
-                  key={`min-${angle}`}
-                  label={`${angle}°`}
-                  value={angle}
-                  selected={draftMinAngle === angle}
-                  onPress={handleMinAngle}
-                />
-              ))}
-            </View>
-
-            <View style={styles.subsectionGap} />
-            <Text variant="footnote" style={styles.subsectionLabel}>
-              {t('mobile.logbook.angleMax')}
-            </Text>
-            <View style={styles.chipRow}>
-              {ANGLE_VALUES.map((angle) => (
-                <Chip
-                  key={`max-${angle}`}
-                  label={`${angle}°`}
-                  value={angle}
-                  selected={draftMaxAngle === angle}
-                  onPress={handleMaxAngle}
-                />
-              ))}
-            </View>
+            <LogbookAngleRail angleRange={draftFilters.angleRange} onChange={handleAngleRange} />
           </CollapsibleSection>
 
           {/* ADVANCED — date range / benchmarks. */}
@@ -425,6 +326,7 @@ export function LogbookFilterSheet({
               <SwitchRow
                 label={t('mobile.logbook.benchmarksOnly')}
                 value={draftFilters.benchmarkOnly}
+                tint={theme.brandColors.accent}
                 onValueChange={(value) => updateFilters({ benchmarkOnly: value })}
               />
             </View>
@@ -432,117 +334,6 @@ export function LogbookFilterSheet({
         </View>
       </BottomSheetScrollView>
     </BottomSheetModal>
-  );
-}
-
-type DateRangeRowProps = {
-  label: string;
-  /** ISO date (YYYY-MM-DD) or '' when unset. */
-  value: string;
-  onChange: (iso: string) => void;
-  clearLabel: string;
-  maximumDate?: Date;
-};
-
-/**
- * One date bound (from / to). iOS shows the native compact picker inline; Android
- * opens the imperative dialog from a tappable row — mirroring LogbookEditSheet's
- * pattern. A Clear affordance resets the bound to "any" (empty ISO).
- */
-function DateRangeRow({ label, value, onChange, clearLabel, maximumDate }: DateRangeRowProps) {
-  const { systemColors } = useTheme();
-  const selectedDate = parseIsoDate(value);
-  // iOS: tapping the empty field reveals the inline picker WITHOUT committing a
-  // date, so opening "From" doesn't silently filter to today and empty the list.
-  const [revealed, setRevealed] = useState(false);
-
-  const handleChange = useCallback(
-    (_event: DateTimePickerEvent, picked?: Date) => {
-      if (!picked) return;
-      onChange(formatIsoDate(picked));
-    },
-    [onChange],
-  );
-
-  const openAndroid = useCallback(() => {
-    DateTimePickerAndroid.open({
-      value: selectedDate ?? new Date(),
-      mode: 'date',
-      display: 'default',
-      maximumDate,
-      onChange: (event, picked) => {
-        if (event.type !== 'set' || !picked) return;
-        onChange(formatIsoDate(picked));
-      },
-    });
-  }, [selectedDate, maximumDate, onChange]);
-
-  const handleClear = useCallback(() => {
-    hapticSelection();
-    setRevealed(false);
-    onChange('');
-  }, [onChange]);
-
-  return (
-    <View style={styles.dateRow}>
-      <Text variant="body" style={styles.dateRowLabel}>
-        {label}
-      </Text>
-      <View style={styles.dateRowTrailing}>
-        {Platform.OS === 'ios' ? (
-          selectedDate || revealed ? (
-            <DateTimePicker
-              value={selectedDate ?? maximumDate ?? new Date()}
-              mode="date"
-              display="compact"
-              maximumDate={maximumDate}
-              accessibilityLabel={label}
-              onChange={handleChange}
-            />
-          ) : (
-            <Pressable
-              onPress={() => {
-                hapticSelection();
-                setRevealed(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              style={({ pressed }) => [
-                styles.dateButton,
-                { backgroundColor: systemColors.fill },
-                pressed && styles.dateButtonPressed,
-              ]}
-            >
-              <Text variant="footnote" color={systemColors.secondaryLabel}>
-                {clearLabel}
-              </Text>
-              <Icon name="calendar" size={16} color={systemColors.secondaryLabel} />
-            </Pressable>
-          )
-        ) : (
-          <Pressable
-            onPress={openAndroid}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            style={({ pressed }) => [
-              styles.dateButton,
-              { backgroundColor: systemColors.fill },
-              pressed && styles.dateButtonPressed,
-            ]}
-          >
-            <Text variant="footnote" color={value ? systemColors.label : systemColors.secondaryLabel}>
-              {value || clearLabel}
-            </Text>
-            <Icon name="calendar" size={16} color={systemColors.secondaryLabel} />
-          </Pressable>
-        )}
-        {value || revealed ? (
-          <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button" accessibilityLabel={clearLabel}>
-            <Icon name="close" size={14} color={systemColors.secondaryLabel} />
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
   );
 }
 
@@ -564,6 +355,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[3],
   },
   scrollContent: {
+    // Fill the sheet so the content is always scrollable to the last row (the
+    // inline override supplies the generous safe-area-aware bottom padding).
+    flexGrow: 1,
     paddingBottom: spacing[4],
   },
   primary: {
@@ -584,14 +378,6 @@ const styles = StyleSheet.create({
   subsectionGap: {
     height: spacing[4],
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
-  },
-  chipText: {
-    fontWeight: '500',
-  },
   groupedCard: {
     borderRadius: borderRadius.lg,
     backgroundColor: `${iosSystemColors.systemGray}14`,
@@ -600,33 +386,7 @@ const styles = StyleSheet.create({
   inlineGradeRail: {
     marginTop: spacing[1],
   },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 44,
-  },
   dateRowGap: {
     height: spacing[2],
-  },
-  dateRowLabel: {
-    flex: 1,
-  },
-  dateRowTrailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: 8,
-    minHeight: 34,
-  },
-  dateButtonPressed: {
-    opacity: 0.6,
   },
 });

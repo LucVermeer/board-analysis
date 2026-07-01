@@ -48,6 +48,12 @@ export const SHARED_EVENTS = {
   SessionJoined: 'Session Joined',
   // Logbook
   LogbookRowClicked: 'Logbook Row Clicked',
+  // Logbook search / filter usage — privacy-safe (counts, field names, and the
+  // sort preset only; never the raw query text or grade/date values). Drives the
+  // "promote the most-used facets to the top level" call.
+  LogbookSearched: 'Logbook Searched',
+  LogbookFilterChanged: 'Logbook Filter Changed',
+  LogbookSortChanged: 'Logbook Sort Changed',
   // Ticks / logbook
   TickButtonClicked: 'Tick Button Clicked',
   QuickTickSaved: 'Quick Tick Saved',

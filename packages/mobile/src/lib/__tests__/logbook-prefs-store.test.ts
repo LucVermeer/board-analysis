@@ -44,4 +44,31 @@ describe('logbook-prefs-store', () => {
     store.get.mockRejectedValue(new Error('storage unavailable'));
     await expect(loadLogbookPrefs()).resolves.toBeNull();
   });
+
+  it('migrates a legacy "both" payload to sends-only on load (v1 -> v2)', async () => {
+    store.get.mockResolvedValue({
+      version: 1,
+      filters: { ...DEFAULT_LOGBOOK_FILTERS, includeSends: true, includeAttempts: true },
+      sort: DEFAULT_LOGBOOK_SORT,
+    });
+    const prefs = await loadLogbookPrefs();
+    expect(prefs?.filters.includeSends).toBe(true);
+    expect(prefs?.filters.includeAttempts).toBe(false);
+  });
+
+  it('keeps an explicit "both" once the payload is stamped v2 (one-time migration)', async () => {
+    store.get.mockResolvedValue({
+      version: 2,
+      filters: { ...DEFAULT_LOGBOOK_FILTERS, includeSends: true, includeAttempts: true },
+      sort: DEFAULT_LOGBOOK_SORT,
+    });
+    const prefs = await loadLogbookPrefs();
+    expect(prefs?.filters.includeAttempts).toBe(true);
+  });
+
+  it('stamps the schema version when saving', async () => {
+    store.set.mockResolvedValue(undefined);
+    await saveLogbookPrefs({ filters: DEFAULT_LOGBOOK_FILTERS, sort: DEFAULT_LOGBOOK_SORT });
+    expect(store.set).toHaveBeenCalledWith('logbookSearchPrefs', expect.objectContaining({ version: 2 }));
+  });
 });

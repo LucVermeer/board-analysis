@@ -23,15 +23,24 @@ describe('countActiveLogbookFilters', () => {
     expect(countActiveLogbookFilters(DEFAULT_LOGBOOK_FILTERS)).toBe(0);
   });
 
-  it('counts a narrowed status (sends-only or attempts-only) as one', () => {
-    expect(countActiveLogbookFilters(withFilters({ includeAttempts: false }))).toBe(1);
-    expect(countActiveLogbookFilters(withFilters({ includeSends: false }))).toBe(1);
+  it('does not count the sends-only default status', () => {
+    // Sends-only is the resting state, so it adds nothing.
+    expect(countActiveLogbookFilters(DEFAULT_LOGBOOK_FILTERS)).toBe(0);
+  });
+
+  it('counts a non-default status (both or attempts-only) as one', () => {
+    // "both" (sends + attempts) is off the sends-only default.
+    expect(countActiveLogbookFilters(withFilters({ includeAttempts: true }))).toBe(1);
+    // attempts-only.
+    expect(countActiveLogbookFilters(withFilters({ includeSends: false, includeAttempts: true }))).toBe(1);
   });
 
   it('counts flash-only as one (the flash+no-sends edge still counts via status)', () => {
     expect(countActiveLogbookFilters(withFilters({ flashOnly: true }))).toBe(1);
-    // Sends excluded + flashOnly: status narrowed (1) + flash (1).
-    expect(countActiveLogbookFilters(withFilters({ includeSends: false, flashOnly: true }))).toBe(2);
+    // Sends excluded + flashOnly: status off the default (1) + flash (1).
+    expect(
+      countActiveLogbookFilters(withFilters({ includeSends: false, includeAttempts: true, flashOnly: true })),
+    ).toBe(2);
   });
 
   it('counts a grade bound (min and/or max) as one', () => {
@@ -53,10 +62,10 @@ describe('countActiveLogbookFilters', () => {
   });
 
   it('sums independent active filters', () => {
-    // status (attempts-only) + flash + grade + angle = 4
+    // status (both) + flash + grade + angle = 4
     expect(
       countActiveLogbookFilters(
-        withFilters({ includeAttempts: false, flashOnly: true, minGrade: 12, angleRange: [20, 50] }),
+        withFilters({ includeAttempts: true, flashOnly: true, minGrade: 12, angleRange: [20, 50] }),
       ),
     ).toBe(4);
   });
@@ -103,6 +112,35 @@ describe('useLogbookSearch', () => {
     );
   });
 
+  it('setFilters merges a partial patch and persists, leaving sort and name untouched', async () => {
+    const { result } = renderHook(() => useLogbookSearch());
+    await flushHydration();
+    // A name + a preset are in place before the partial filter patch.
+    await act(async () => {
+      result.current.setName('crimps');
+      result.current.setPreset('hardest');
+    });
+    vi.mocked(saveLogbookPrefs).mockClear();
+
+    await act(async () => {
+      result.current.setFilters({ minGrade: 12, maxGrade: 20 });
+    });
+
+    // Only the named fields changed; the rest of the filter set stays default.
+    expect(result.current.filters.minGrade).toBe(12);
+    expect(result.current.filters.maxGrade).toBe(20);
+    expect(result.current.filters.includeSends).toBe(true);
+    expect(result.current.filters.benchmarkOnly).toBe(false);
+    // Sort and name are not touched by setFilters.
+    expect(result.current.sort.mode).toBe('preset');
+    expect(result.current.sort.preset).toBe('hardest');
+    expect(result.current.name).toBe('crimps');
+    // The patch persisted (same path as apply).
+    expect(saveLogbookPrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ minGrade: 12, maxGrade: 20 }) }),
+    );
+  });
+
   it('keeps a change applied before hydration resolves (no clobber)', async () => {
     let resolveLoad: (value: StoredLogbookPrefs | null) => void = () => {};
     vi.mocked(loadLogbookPrefs).mockReturnValueOnce(
@@ -130,6 +168,32 @@ describe('useLogbookSearch', () => {
     expect(result.current.hydrated).toBe(true);
     expect(result.current.filters.includeSends).toBe(false);
     expect(result.current.filters.benchmarkOnly).toBe(false);
+  });
+
+  it('keeps a setFilters change applied before hydration resolves (no clobber)', async () => {
+    let resolveLoad: (value: StoredLogbookPrefs | null) => void = () => {};
+    vi.mocked(loadLogbookPrefs).mockReturnValueOnce(
+      new Promise<StoredLogbookPrefs | null>((resolve) => {
+        resolveLoad = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useLogbookSearch());
+
+    // A facet chip live-commits via setFilters before persisted prefs finish loading.
+    await act(async () => {
+      result.current.setFilters({ benchmarkOnly: true });
+    });
+    expect(result.current.hydrated).toBe(false);
+
+    // The persisted prefs (a different set) now resolve — they must NOT overwrite.
+    await act(async () => {
+      resolveLoad({ filters: { ...DEFAULT_LOGBOOK_FILTERS, minGrade: 12 }, sort: DEFAULT_LOGBOOK_SORT });
+      await Promise.resolve();
+    });
+
+    expect(result.current.hydrated).toBe(true);
+    expect(result.current.filters.benchmarkOnly).toBe(true);
+    expect(result.current.filters.minGrade).toBe('');
   });
 
   it('reset restores defaults and keeps the gate open', async () => {

@@ -28,6 +28,7 @@ import { SingleChoiceSegmentedButtonRow, SegmentedButton, Text } from '@expo/ui/
 import { StyleSheet } from 'react-native';
 import { useTheme } from '../providers/theme-provider';
 import { segmentedBrandColors } from '../theme/expo-ui-modifiers';
+import { readableTextColor } from './grade/grade-chip-colors';
 import { makeSelectHandler } from './SegmentedControl.logic';
 import type { SegmentedControlProps } from './SegmentedControl.types';
 
@@ -36,10 +37,16 @@ export function SegmentedControl<K extends string = string>({
   selectedKey,
   onSelect,
   disabledKeys,
+  tint,
 }: SegmentedControlProps<K>) {
   const { brandColors } = useTheme();
   const handleSelect = makeSelectHandler(onSelect, disabledKeys);
-  const colors = segmentedBrandColors(brandColors);
+  // Default to the brand selected-fill (purple, with white on-fill text). When a
+  // custom tint is passed (the logbook's amber), the active label must derive its
+  // contrast from that fill — white-on-amber fails AA, so use a readable colour.
+  const colors = tint
+    ? { activeContainerColor: tint, activeContentColor: readableTextColor(tint) }
+    : segmentedBrandColors(brandColors);
 
   return (
     // `matchContents={{ vertical: true }}` (NOT the boolean `matchContents`, which

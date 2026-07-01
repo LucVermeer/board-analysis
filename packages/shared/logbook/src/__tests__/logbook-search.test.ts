@@ -9,7 +9,8 @@ describe('toAscentFeedInput', () => {
     const input = toAscentFeedInput({ filters: DEFAULT_LOGBOOK_FILTERS, sort: DEFAULT_LOGBOOK_SORT });
     expect(input.sortBy).toBe('recent');
     expect(input.sortOrder).toBe('desc');
-    expect(input.statusMode).toBe('both');
+    // The logbook rests on sends-only, so the default status maps to 'send'.
+    expect(input.statusMode).toBe('send');
     expect(input.flashOnly).toBe(false);
     expect(input.minDifficulty).toBeUndefined();
     expect(input.maxDifficulty).toBeUndefined();
@@ -17,6 +18,14 @@ describe('toAscentFeedInput', () => {
     expect(input.maxAngle).toBeUndefined();
     expect(input.climbName).toBeUndefined();
     expect(input.benchmarkOnly).toBeUndefined();
+  });
+
+  it('maps the "both" status (sends + attempts) to statusMode both', () => {
+    const input = toAscentFeedInput({
+      filters: { ...DEFAULT_LOGBOOK_FILTERS, includeAttempts: true },
+      sort: DEFAULT_LOGBOOK_SORT,
+    });
+    expect(input.statusMode).toBe('both');
   });
 
   it('Hardest preset -> sortBy hardest (resolver expands to effective grade -> date)', () => {

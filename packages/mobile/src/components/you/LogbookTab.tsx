@@ -9,21 +9,24 @@ import {
   toAscentFeedInput,
   DEFAULT_LOGBOOK_FILTERS,
   DEFAULT_LOGBOOK_SORT,
+  type LogbookFilterState,
   type LogbookSortPreset,
 } from '@boardsesh/logbook';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { Text } from '../Text';
-import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { LogbookFilterSheet } from './LogbookFilterSheet';
-import { LogbookSortChipRow } from './LogbookSortChipRow';
+import { LogbookChipRow } from './LogbookChipRow';
+import { LogbookFacetRail } from './LogbookFacetRail';
+import type { LogbookFacetKey } from './LogbookChipRow.logic';
 import { useLogbookSearch, countActiveLogbookFilters } from './use-logbook-search';
-import { useUserAscentsFeed } from '../../lib/graphql/hooks';
+import { useUserAscentsFeed, useGrades } from '../../lib/graphql/hooks';
+import type { Grade } from '@boardsesh/shared-schema';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { tickToClimb } from '../../lib/tick-to-climb';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
@@ -39,6 +42,16 @@ import { selectByVariant } from '../../theme/variants';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+// Kilter and Tension share an identical difficulty-id scale, so one board's grade
+// list is the canonical scale for the grade chip's label — the same source the
+// filter sheet's GradeRangeRail uses (LogbookFilterSheet's GRADE_SCALE_BOARD), so
+// the chip and the rail never word a grade differently.
+const GRADE_SCALE_BOARD = 'kilter';
+
+// Stable empty grade list so the chip row + facet rail (both memo'd) keep their
+// `grades` prop identity while the grade query is still loading (undefined).
+const EMPTY_GRADES: Grade[] = [];
+
 type LogbookTabProps = {
   userId: string | undefined;
   /** Measured chrome height — the fixed toolbar insets its top by this so it
@@ -50,12 +63,9 @@ type LogbookTabProps = {
    * read-only in the play drawer instead of the editable LogbookEditSheet.
    */
   viewerIsOwner?: boolean;
-  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
-   *  climber's profile, where the name lives in the public-profile header. */
-  screenTitle?: string;
 };
 
-export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenTitle }: LogbookTabProps) {
+export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
   // Temporary kill switch while the search + filter UI is unfinished.
@@ -65,6 +75,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
   // per the mobile variant guard. When shown, the sheet's Sort block is suppressed.
   const showSortChips =
     logbookFiltersEnabled && Platform.OS === 'ios' && selectByVariant(variant, { liquidGlass: true, material: false });
+  // Grade scale for the chip row's grade label — fetched only when the chip row is
+  // shown (the Android/Material toolbar has no grade chip). Same query as the sheet.
+  const { data: grades } = useGrades(GRADE_SCALE_BOARD, showSortChips);
   const router = useRouter();
   const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
@@ -76,12 +89,25 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
   // Logbook search/filter/sort state. The committed name lives here; the visible
   // input value is debounced before it commits to the query.
   const logbookSearch = useLogbookSearch();
-  const { filters, sort, name, setName, setPreset, apply, hydrated } = logbookSearch;
+  const { filters, sort, name, setName, setPreset, setFilters, apply, hydrated } = logbookSearch;
   // Which preset the chips highlight; null (no chip lit) when a non-preset
   // (custom) sort is in effect, rather than falsely lighting up Latest.
   const sortPreset: LogbookSortPreset | null = sort.mode === 'preset' ? sort.preset : null;
   const activeFilterCount = useMemo(() => countActiveLogbookFilters(filters), [filters]);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  // Which facet's inline rail is open below the chip row (Liquid Glass only); null
+  // when all closed. Tapping the open facet's chip closes it (toggle), tapping a
+  // different facet swaps to it — only one rail shows at a time.
+  const [openFacet, setOpenFacet] = useState<LogbookFacetKey | null>(null);
+  const handleToggleFacet = useCallback((facet: LogbookFacetKey) => {
+    hapticSelection();
+    setOpenFacet((current) => (current === facet ? null : facet));
+  }, []);
+  // One stable "today" ceiling so the To-date row's maximumDate keeps a constant
+  // identity across renders (mirrors the filter sheet's `today`). Frozen at mount;
+  // if the app sits open past midnight it's a day stale, which is harmless here and
+  // matches the sheet.
+  const today = useMemo(() => new Date(), []);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
 
@@ -91,9 +117,38 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
     (text: string) => {
       const nextName = normalizeSearchName(text);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = setTimeout(() => setName(nextName), SEARCH_DEBOUNCE_MS);
+      debounceTimerRef.current = setTimeout(() => {
+        setName(nextName);
+        // Privacy: report only that a search was committed and its length, never
+        // the query text. A non-empty term marks intent; clearing back to '' is
+        // not a search.
+        if (nextName) track(SHARED_EVENTS.LogbookSearched, { length: nextName.length });
+      }, SEARCH_DEBOUNCE_MS);
     },
     [setName],
+  );
+
+  // Wrap the reducer's sort/filter setters so each change is instrumented before
+  // it commits — the chip row's React.memo holds because these are memoised. We
+  // send the preset and the changed field NAMES only (never grade/date values),
+  // so PostHog can show which facets get used without leaking what was searched.
+  const handleSelectPreset = useCallback(
+    (preset: LogbookSortPreset) => {
+      track(SHARED_EVENTS.LogbookSortChanged, { preset });
+      setPreset(preset);
+    },
+    [setPreset],
+  );
+  const handleUpdateFilters = useCallback(
+    (partial: Partial<LogbookFilterState>) => {
+      // Analytics property values are scalar (no arrays), so the changed field
+      // NAMES go as a sorted comma-joined string — PostHog can still break down
+      // which facets get used. Sorted so a `{minGrade,maxGrade}` patch groups
+      // the same regardless of key order. Never the grade/date values themselves.
+      track(SHARED_EVENTS.LogbookFilterChanged, { fields: Object.keys(partial).sort().join(',') });
+      setFilters(partial);
+    },
+    [setFilters],
   );
 
   // Clear the committed term AND the input field (silent: don't re-arm the
@@ -106,6 +161,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
 
   const handleOpenFilters = useCallback(() => {
     hapticSelection();
+    // Close any open inline rail so it doesn't linger under the sheet (and leave
+    // the toolbar over-tall after the sheet dismisses).
+    setOpenFacet(null);
     setFilterSheetOpen(true);
   }, []);
 
@@ -216,9 +274,11 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
       {/* Fixed top toolbar — all logbook actions concentrated here, below the
           floating chrome. Sibling of the list, so list virtualization is intact. */}
       <View style={[styles.toolbar, { paddingTop: topInset }]}>
-        {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
-        {logbookFiltersEnabled ? (
-          <View style={styles.toolbarRow}>
+        {showSortChips ? (
+          // iOS Liquid Glass: search sits on its own row, and the chip row below
+          // carries the filter entry + sort + active-filter chips (so no separate
+          // filter button here).
+          <>
             <SearchHeader
               ref={searchHeaderRef}
               placeholder={t('mobile.logbook.searchPlaceholder')}
@@ -226,31 +286,67 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
               initialValue={name}
               height={40}
             />
-            <Pressable
-              onPress={handleOpenFilters}
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.logbook.filter')}
-              style={({ pressed }) => [
-                styles.filterButton,
-                { backgroundColor: brandColors.accent },
-                pressed && styles.filterButtonPressed,
-              ]}
-            >
-              <Icon name="filter" size={18} color={iosSystemColors.black} />
-              {activeFilterCount > 0 ? (
-                <View style={[styles.filterBadge, { backgroundColor: iosSystemColors.black }]}>
-                  <Text variant="caption2" color={brandColors.accent} style={styles.filterBadgeText}>
-                    {activeFilterCount}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-          </View>
-        ) : null}
-        {/* Top-level Liquid Glass sort chips (Latest/Hardest) — switch sort
-            without opening the sheet. iOS Liquid Glass only; the sheet's own Sort
-            block is hidden (showSort={false}) so it isn't shown twice. */}
-        {showSortChips ? <LogbookSortChipRow preset={sortPreset} onSelectPreset={setPreset} /> : null}
+            {/* Filter entry + Latest/Hardest + every facet chip (grade/angle/show/
+                date) — switch sort and adjust filters inline without opening the
+                sheet. Grade/angle/date toggle the rail below; Show is a native
+                menu. The sheet's Sort block is hidden (showSort={false}) so sort
+                isn't worded twice. */}
+            <LogbookChipRow
+              sortPreset={sortPreset}
+              onSelectPreset={handleSelectPreset}
+              onOpenFilters={handleOpenFilters}
+              filters={filters}
+              grades={grades ?? EMPTY_GRADES}
+              onToggleFacet={handleToggleFacet}
+              onUpdateFilters={handleUpdateFilters}
+            />
+            {/* The open facet's inline rail, below the chip row. It grows the
+                toolbar View; the FlashList insets below the toolbar so results
+                still scroll under it. Live-commits via setFilters. */}
+            <LogbookFacetRail
+              openFacet={openFacet}
+              filters={filters}
+              grades={grades ?? EMPTY_GRADES}
+              onUpdateFilters={handleUpdateFilters}
+              today={today}
+            />
+          </>
+        ) : (
+          // Android / Material: the current layout — search + the round filter
+          // button (no chip row).
+          <>
+            {logbookFiltersEnabled ? (
+              <View style={styles.toolbarRow}>
+                <SearchHeader
+                  ref={searchHeaderRef}
+                  placeholder={t('mobile.logbook.searchPlaceholder')}
+                  onChangeText={handleSearchChange}
+                  initialValue={name}
+                  height={40}
+                />
+                <Pressable
+                  onPress={handleOpenFilters}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.logbook.filter')}
+                  style={({ pressed }) => [
+                    styles.filterButton,
+                    { backgroundColor: brandColors.accent },
+                    pressed && styles.filterButtonPressed,
+                  ]}
+                >
+                  <Icon name="filter" size={18} color={iosSystemColors.black} />
+                  {activeFilterCount > 0 ? (
+                    <View style={[styles.filterBadge, { backgroundColor: iosSystemColors.black }]}>
+                      <Text variant="caption2" color={brandColors.accent} style={styles.filterBadgeText}>
+                        {activeFilterCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </View>
+            ) : null}
+          </>
+        )}
       </View>
 
       {feed.isPending ? (
@@ -349,11 +445,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
-  },
-  screenTitle: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: spacing[2],
   },
   filterButton: {
     width: 40,

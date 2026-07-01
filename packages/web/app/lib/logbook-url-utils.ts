@@ -1,6 +1,7 @@
 import { parseQueryParamBoolean, parseQueryParamInt } from '@/app/lib/url-utils';
 import {
   DEFAULT_ANGLE_RANGE,
+  DEFAULT_FILTERS,
   DEFAULT_SORT,
   type LogbookFilterState,
   type LogbookSortState,
@@ -27,11 +28,20 @@ function isIsoDate(value: string | null): value is string {
 export function readFiltersFromQuery(params: URLSearchParams): Partial<LogbookFilterState> {
   const partial: Partial<LogbookFilterState> = {};
 
+  // A status param is written only when it differs from the current default, so a
+  // URL naming just one side omits the other. Historically the omitted side was
+  // the old "both on" default (true) — e.g. `?sends=0` meant attempts-only. Fill
+  // the missing side with that old default when exactly one side is present, so
+  // pre-migration bookmarks keep their meaning (a lone `sends=0` stays
+  // attempts-only instead of collapsing to sends-only / an empty logbook). This
+  // also reads the current serializer's "both" form (`?attempts=1`, sends omitted)
+  // correctly. No status params at all → the new sends-only default via the merge.
   const sends = parseQueryParamBoolean(params, 'sends');
-  if (sends !== undefined) partial.includeSends = sends;
-
   const attempts = parseQueryParamBoolean(params, 'attempts');
+  if (sends !== undefined) partial.includeSends = sends;
   if (attempts !== undefined) partial.includeAttempts = attempts;
+  if (sends !== undefined && attempts === undefined) partial.includeAttempts = true;
+  if (attempts !== undefined && sends === undefined) partial.includeSends = true;
 
   const flash = parseQueryParamBoolean(params, 'flash');
   if (flash !== undefined) partial.flashOnly = flash;
@@ -101,9 +111,13 @@ export function filtersToQueryParams(
   if (filters.minGrade !== '' && filters.minGrade !== undefined) params.minGrade = String(filters.minGrade);
   if (filters.maxGrade !== '' && filters.maxGrade !== undefined) params.maxGrade = String(filters.maxGrade);
 
-  // Only write non-default filter values
-  if (!filters.includeSends) params.sends = '0';
-  if (!filters.includeAttempts) params.attempts = '0';
+  // Only write non-default filter values. The status resting state is sends-only
+  // (DEFAULT_FILTERS), so a status param is emitted only when it differs from that
+  // default — the real boolean value, so the URL round-trips. A clean default
+  // logbook view therefore yields no status params (matters for the canonical URL).
+  if (filters.includeSends !== DEFAULT_FILTERS.includeSends) params.sends = filters.includeSends ? '1' : '0';
+  if (filters.includeAttempts !== DEFAULT_FILTERS.includeAttempts)
+    params.attempts = filters.includeAttempts ? '1' : '0';
   if (filters.flashOnly) params.flash = '1';
   if (filters.benchmarkOnly) params.benchmark = '1';
   if (filters.fromDate) params.from = filters.fromDate;

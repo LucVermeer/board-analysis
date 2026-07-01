@@ -101,7 +101,11 @@ function ProfileTopChromeMaterial({
         style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
       >
         <UserAvatarToolbarAction variant="material" />
-        <Appbar.Content title={dashboardTitle} color={systemColors.label as string} />
+        {/* No visible title — the sub-tab group below already names the surface
+            (matches Liquid Glass, which never rendered one). The empty Content is
+            the flex spacer that keeps the avatar left and the filter action right;
+            dashboardTitle still labels the tabs for screen readers. */}
+        <Appbar.Content title="" />
         {activeTab === 'progress' ? (
           <Appbar.Action
             icon={iconMap.filter.android}

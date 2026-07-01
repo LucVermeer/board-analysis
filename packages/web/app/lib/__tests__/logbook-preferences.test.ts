@@ -48,4 +48,26 @@ describe('sanitizeLogbookPreferences', () => {
     expect(result.filters.includeAttempts).toBe(false);
     expect(result.filters.flashOnly).toBe(true);
   });
+
+  it('migrates the legacy both default to sends-only once (v1 to v2)', () => {
+    const legacyBoth = sanitizeLogbookPreferences({
+      version: 1,
+      boardFilter: 'all',
+      layoutSelections: ALL_LAYOUT_SELECTIONS,
+      filters: { ...DEFAULT_LOGBOOK_PREFERENCES.filters, includeSends: true, includeAttempts: true },
+      sort: DEFAULT_LOGBOOK_PREFERENCES.sort,
+    });
+    expect(legacyBoth.version).toBe(2);
+    expect(legacyBoth.filters.includeSends).toBe(true);
+    expect(legacyBoth.filters.includeAttempts).toBe(false);
+
+    // Re-sanitising the migrated (v2) prefs keeps an explicit "both" — the strip is
+    // one-time, so "both" stays selectable afterward.
+    const reBoth = sanitizeLogbookPreferences({
+      ...legacyBoth,
+      filters: { ...legacyBoth.filters, includeAttempts: true },
+    });
+    expect(reBoth.version).toBe(2);
+    expect(reBoth.filters.includeAttempts).toBe(true);
+  });
 });

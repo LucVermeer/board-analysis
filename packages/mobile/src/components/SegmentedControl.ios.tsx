@@ -30,9 +30,14 @@ export function SegmentedControl<K extends string = string>({
   onSelect,
   disabledKeys,
   accessibilityLabel,
+  tint: tintColor,
 }: SegmentedControlProps<K>) {
   const { brandColors } = useTheme();
   const handleSelect = makeSelectHandler(onSelect, disabledKeys);
+  // The selected-pill fill: brand accent (purple) by default; the logbook passes
+  // amber. SwiftUI's segmented Picker derives the selected label's contrast colour
+  // from the tint, so no separate on-fill text colour is needed here.
+  const selectedFill = tintColor ?? brandAccentColor(brandColors);
 
   return (
     // Explicit height, NOT matchContents: the native iOS Host under-reported the
@@ -53,8 +58,8 @@ export function SegmentedControl<K extends string = string>({
         }}
         modifiers={[
           pickerStyle('segmented'),
-          // Brand selected-fill tint, sourced once via the theming bridge.
-          tint(brandAccentColor(brandColors)),
+          // Selected-fill tint (brand accent by default; amber for the logbook).
+          tint(selectedFill),
           // Name the group for VoiceOver (the per-segment Text children stay the
           // individual labels). Skipped when no label is provided.
           ...(accessibilityLabel ? [accessibilityLabelModifier(accessibilityLabel)] : []),
