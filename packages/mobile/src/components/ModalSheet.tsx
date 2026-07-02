@@ -90,6 +90,12 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       if (index >= 0) {
         hapticMedium();
         setActiveIndex(index);
+      } else {
+        // Reset on close so a re-open of an always-mounted sheet starts at the
+        // first detent's (shortest) column height until the native onChange
+        // confirms the detent — erring short beats a stale taller column pushing
+        // the pinned footer off-screen for a frame.
+        setActiveIndex(0);
       }
       managed.onChange(index);
       onChangeRef.current?.(index);
