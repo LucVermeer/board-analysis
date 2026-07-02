@@ -46,8 +46,8 @@ describe('PubSubChannel', () => {
       const unsubscribe2 = await channel.subscribe('key-a', () => {});
       expect(redisSubscribe).toHaveBeenCalledTimes(1);
 
-      await unsubscribe1();
-      await unsubscribe2();
+      unsubscribe1();
+      unsubscribe2();
     });
 
     it('calls redisSubscribe again for a different key (independent per-key state)', async () => {
@@ -88,6 +88,34 @@ describe('PubSubChannel', () => {
       await Promise.resolve();
       expect(redisUnsubscribe).toHaveBeenCalledTimes(1);
       expect(redisUnsubscribe).toHaveBeenCalledWith('key-a');
+    });
+
+    it('a double unsubscribe is a no-op and cannot strand the remaining subscriber', async () => {
+      // Pins Set-based (idempotent) removal: a future counter-based refactor
+      // that decremented twice on a repeated unsubscribe would tear down the
+      // Redis subscription while subscriber B is still listening.
+      const redisUnsubscribe = vi.fn().mockResolvedValue(undefined);
+      const channel = new PubSubChannel<TestEvent>({
+        label: 'test',
+        redisSubscribe: () => Promise.resolve(),
+        redisUnsubscribe,
+        isRedisRequired: () => false,
+        logger: asChannelLogger(makeLogger()),
+      });
+
+      const unsubscribeA = await channel.subscribe('key-a', () => {});
+      const unsubscribeB = await channel.subscribe('key-a', () => {});
+
+      unsubscribeA();
+      unsubscribeA();
+      await Promise.resolve();
+      expect(redisUnsubscribe).not.toHaveBeenCalled();
+      expect(channel.count('key-a')).toBe(1);
+
+      unsubscribeB();
+      await Promise.resolve();
+      expect(redisUnsubscribe).toHaveBeenCalledTimes(1);
+      expect(channel.count('key-a')).toBe(0);
     });
 
     it('re-triggers redisSubscribe if all subscribers left and a new one joins', async () => {
@@ -198,7 +226,7 @@ describe('PubSubChannel', () => {
   });
 
   describe('publish() / dispatchLocal() — per-callback error isolation', () => {
-    it('isolates a throwing subscriber so other subscribers still receive the event', () => {
+    it('isolates a throwing subscriber so other subscribers still receive the event', async () => {
       const logger = makeLogger();
       const channel = new PubSubChannel<TestEvent>({
         label: 'test',
@@ -207,10 +235,10 @@ describe('PubSubChannel', () => {
       });
 
       const received: TestEvent[] = [];
-      channel.subscribe('key-a', () => {
+      await channel.subscribe('key-a', () => {
         throw new Error('boom');
       });
-      channel.subscribe('key-a', (event) => received.push(event));
+      await channel.subscribe('key-a', (event) => received.push(event));
 
       expect(() => channel.publish('key-a', { kind: 'ping', value: 1 })).not.toThrow();
       expect(received).toEqual([{ kind: 'ping', value: 1 }]);

@@ -61,11 +61,13 @@ const EVENT_BUFFER_TTL = 300; // 5 minutes
  * top in this class, documented at their call sites below.
  */
 class PubSub {
+  // No `redisPublish` here: queue publishes don't go through `channel.publish()`.
+  // `publishQueueEvent` issues the Redis publish explicitly so the replay-buffer
+  // LPUSH can be ordered before the fan-out PUBLISH on the wire (see its docstring).
   private readonly queueChannel = new PubSubChannel<QueueEvent>({
     label: 'queue',
     redisSubscribe: (sessionId) => this.redisAdapter?.subscribeQueueChannel(sessionId) ?? Promise.resolve(),
     redisUnsubscribe: (sessionId) => this.redisAdapter?.unsubscribeQueueChannel(sessionId) ?? Promise.resolve(),
-    redisPublish: (sessionId, event) => this.redisAdapter?.publishQueueEvent(sessionId, event) ?? Promise.resolve(),
     isRedisRequired: () => this.redisRequired,
     logger,
   });
@@ -327,10 +329,10 @@ class PubSub {
 
   /**
    * Publish a queue event to all subscribers of a session.
-   * Dispatches locally first, then publishes to Redis for other instances
-   * (both via `queueChannel.publish`). Also stores the event in the delta-sync
-   * buffer and fires the APNs hook — these two are queue-only quirks layered
-   * on top of the generic channel, not part of `PubSubChannel` itself.
+   * Dispatches locally first, then stores the event in the delta-sync buffer,
+   * then publishes to Redis for other instances, then fires the APNs hook —
+   * the buffer and hook are queue-only quirks layered on top of the generic
+   * channel, not part of `PubSubChannel` itself.
    *
    * `PlaybackStateChanged` events are excluded from buffering: they reuse the
    * room's current sequence number (rather than incrementing it) and can fire
@@ -338,17 +340,38 @@ class PubSub {
    * the 100-entry buffer within seconds and hand replaying clients
    * non-monotonic/duplicate sequences. See `publishPlaybackState` in
    * `graphql/resolvers/queue/mutations.ts`.
+   *
+   * Note: Redis publish errors are logged but not thrown to avoid blocking
+   * the local dispatch. In Redis mode, events may not reach other instances
+   * if Redis publish fails.
    */
   publishQueueEvent(sessionId: string, event: QueueEvent): void {
-    // Local dispatch (low latency) + Redis publish for other instances.
-    this.queueChannel.publish(sessionId, event);
+    // Always dispatch to local subscribers first (low latency). Deliberately
+    // NOT `queueChannel.publish()`: the queue domain must interleave the
+    // replay-buffer write between local dispatch and the Redis publish (see
+    // ordering contract below), so the Redis publish is issued explicitly.
+    this.queueChannel.dispatchLocal(sessionId, event);
 
     // Store event in buffer for delta sync (Phase 2), except playback events
     // (see docstring above). Fire and forget - don't block on buffer storage.
+    // Ordering contract: the buffer LPUSH must be written (hit the wire)
+    // before the fan-out PUBLISH below, so a remote instance can never
+    // dispatch an event that a reconnecting client's `getEventsSince` replay
+    // can't yet see. Both commands go through the same Redis connection, so
+    // call order here fixes wire order.
     if (event.__typename !== 'PlaybackStateChanged') {
       this.storeEventInBuffer(sessionId, event).catch((error) => {
         logger.error(`[PubSub] Failed to buffer event for session ${sessionId}:`, error);
         // Non-fatal: clients will fall back to full sync if delta sync fails
+      });
+    }
+
+    // Also publish to Redis if available
+    if (this.redisAdapter) {
+      this.redisAdapter.publishQueueEvent(sessionId, event).catch((error) => {
+        logger.error('[PubSub] Redis queue publish failed:', error);
+        // Log but don't throw - local dispatch already succeeded
+        // Health check will report Redis as unhealthy if connection is lost
       });
     }
 
