@@ -1,7 +1,12 @@
-import type { ClimbQueueItem } from '@boardsesh/shared-schema';
+import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
+import type { Session } from '../../db/schema';
 import type { RedisSessionStore } from '../redis-session-store';
 import type { DistributedStateManager } from '../distributed-state';
 import type { WriteScheduler } from './write-scheduler';
+// Type-only import — safe despite client-lifecycle.ts importing RoomManagerDeps
+// back from this module; `import type` is erased at compile time, so there's
+// no runtime circular dependency, only a type-level one.
+import type { SessionLeaveResult } from './client-lifecycle';
 
 // Custom error for version conflicts
 export class VersionConflictError extends Error {
@@ -70,6 +75,43 @@ export type RoomManagerDeps = {
   sessionGraceTimers: Map<string, NodeJS.Timeout>;
   pendingJoinPersists: Map<string, Promise<void>>;
   sessionGracePeriodMs: number;
+};
+
+/**
+ * Injected functions `joinSession` needs but doesn't own — mostly
+ * RoomManager methods that themselves delegate elsewhere (e.g.
+ * `getQueueState`/`updateQueueStateImmediate` route through Redis vs.
+ * Postgres, `leaveSession` is the sibling free function in client-lifecycle.ts).
+ * Passed separately from `RoomManagerDeps` since these are behaviour, not
+ * plumbing state.
+ */
+export type JoinSessionCallbacks = {
+  getQueueState: (sessionId: string) => Promise<{
+    queue: ClimbQueueItem[];
+    currentClimbQueueItem: ClimbQueueItem | null;
+    version: number;
+    sequence: number;
+    stateHash: string;
+  }>;
+  getSessionUsers: (sessionId: string) => Promise<SessionUser[]>;
+  getSessionUsersLocal: (sessionId: string) => SessionUser[];
+  getSessionById: (sessionId: string) => Promise<Session | null>;
+  updateQueueStateImmediate: (
+    sessionId: string,
+    queue: ClimbQueueItem[],
+    currentClimbQueueItem: ClimbQueueItem | null,
+    expectedVersion?: number,
+  ) => Promise<number>;
+  leaveSession: (connectionId: string) => Promise<SessionLeaveResult | null>;
+};
+
+export type JoinSessionOptions = {
+  username?: string;
+  avatarUrl?: string;
+  initialQueue?: ClimbQueueItem[];
+  initialCurrentClimb?: ClimbQueueItem | null;
+  sessionName?: string;
+  participantId?: string | null;
 };
 
 export type DiscoverableSession = {

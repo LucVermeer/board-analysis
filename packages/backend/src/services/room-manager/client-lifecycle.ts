@@ -1,9 +1,15 @@
 import { GraphQLError } from 'graphql';
 import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
 import { db } from '../../db/client';
-import { sessions, boardSessionParticipants, type Session } from '../../db/schema';
+import { sessions, boardSessionParticipants } from '../../db/schema';
 import type { DistributedStateManager } from '../distributed-state';
-import type { ConnectedClient, LocalSessionParticipant, RoomManagerDeps } from './types';
+import type {
+  ConnectedClient,
+  LocalSessionParticipant,
+  RoomManagerDeps,
+  JoinSessionCallbacks,
+  JoinSessionOptions,
+} from './types';
 import { restoreSessionWithLock } from './session-restoration';
 import { logger } from '../../utils/logger';
 import { markErrorReported } from '../../utils/sentry-dedupe';
@@ -44,43 +50,6 @@ export async function registerClient(
 
   return connectionId;
 }
-
-/**
- * Injected functions `joinSession` needs but doesn't own — mostly
- * RoomManager methods that themselves delegate elsewhere (e.g.
- * `getQueueState`/`updateQueueStateImmediate` route through Redis vs.
- * Postgres, `leaveSession` is the sibling free function in this module).
- * Passed separately from `RoomManagerDeps` since these are behaviour, not
- * plumbing state.
- */
-export type JoinSessionCallbacks = {
-  getQueueState: (sessionId: string) => Promise<{
-    queue: ClimbQueueItem[];
-    currentClimbQueueItem: ClimbQueueItem | null;
-    version: number;
-    sequence: number;
-    stateHash: string;
-  }>;
-  getSessionUsers: (sessionId: string) => Promise<SessionUser[]>;
-  getSessionUsersLocal: (sessionId: string) => SessionUser[];
-  getSessionById: (sessionId: string) => Promise<Session | null>;
-  updateQueueStateImmediate: (
-    sessionId: string,
-    queue: ClimbQueueItem[],
-    currentClimbQueueItem: ClimbQueueItem | null,
-    expectedVersion?: number,
-  ) => Promise<number>;
-  leaveSession: (connectionId: string) => Promise<SessionLeaveResult | null>;
-};
-
-export type JoinSessionOptions = {
-  username?: string;
-  avatarUrl?: string;
-  initialQueue?: ClimbQueueItem[];
-  initialCurrentClimb?: ClimbQueueItem | null;
-  sessionName?: string;
-  participantId?: string | null;
-};
 
 /**
  * Join a session - handles restoration, leader election, and initial state setup.
