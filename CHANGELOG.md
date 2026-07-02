@@ -16,6 +16,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Your session's queue is now visible only to people who've actually joined — invite links still show who's climbing before you join. ([#3341](https://github.com/boardsesh/boardsesh/pull/3341))
 - The shared queue catches up reliably after a dropped connection, even when someone in the party is running a variable-speed playback. ([#3340](https://github.com/boardsesh/boardsesh/pull/3340))
 - Board history keeps itself in sync — the wall feed catches up automatically after connection blips and when you come back to the app ([#3343](https://github.com/boardsesh/boardsesh/pull/3343))
   Smoother board history: no more full-list redraws when you reopen the app

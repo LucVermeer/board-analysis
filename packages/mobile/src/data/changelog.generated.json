@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-02T06:05:47.125Z",
+  "generatedAt": "2026-07-02T07:06:54.421Z",
   "entries": [
+    {
+      "prNumber": 3341,
+      "category": "fixed",
+      "title": "Your session's queue is now visible only to people who've actually joined — invite links still show who's climbing before you join.",
+      "mergedAt": "2026-07-02T07:06:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3341"
+    },
     {
       "prNumber": 3354,
       "category": "new",
