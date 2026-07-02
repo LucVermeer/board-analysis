@@ -30,9 +30,10 @@ export type QueueStateEvent = Exclude<SubscriptionQueueEvent, { __typename: 'Pla
  * would silently drop the event.
  *
  * Lives here (not in `graphql-queue/`) because the root persistent-session
- * event processor is now the primary consumer; the board-route subscription
- * hook (`use-queue-event-subscription.ts`) re-exports it for its existing
- * importers until a later workstream deletes that hook.
+ * event processor is the ONLY queue-event consumer now (W6): board routes
+ * read root state directly instead of mirroring events through their own
+ * subscription, so the board-route hook that used to re-export this
+ * (`use-queue-event-subscription.ts`) is deleted.
  */
 export function toWireEnvelope(event: QueueStateEvent): SubscriptionWireEnvelope<ClimbQueueItem> {
   switch (event.__typename) {

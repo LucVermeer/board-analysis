@@ -475,6 +475,26 @@ describe('setCurrentClimb', () => {
     expect(harness.mutations.setCurrentClimb).toHaveBeenCalledWith(expect.any(Object), false, expect.any(String));
   });
 
+  it('fires analytics, then applies the optimistic local dispatch, before the party mutation initiates', async () => {
+    // Locks the ordering contract this PR relies on when flipping bridge-party
+    // `applyLocal` from a no-op to a real dispatch (W6). `setCurrentClimb`
+    // fires 'Set Active Climb' analytics first (it doesn't depend on queue
+    // state), then applies the optimistic local dispatch, and only then
+    // initiates the party mutation — so a consumer reading state from the
+    // moment the mutation promise starts always sees the optimistic update
+    // already applied, and analytics never observes a torn intermediate state.
+    const harness = createHarness({ gateOnConnection: true });
+    harness.setPartyActive(true);
+    await harness.actions.setCurrentClimb(makeClimb(), { playlistSuggestionSource: null });
+
+    const analyticsOrder = harness.onSetActiveClimb.mock.invocationCallOrder[0];
+    const applyLocalOrder = harness.applyLocal.mock.invocationCallOrder[0];
+    const mutationOrder = harness.mutations.addQueueItem.mock.invocationCallOrder[0];
+
+    expect(analyticsOrder).toBeLessThan(applyLocalOrder);
+    expect(applyLocalOrder).toBeLessThan(mutationOrder);
+  });
+
   it('reuses an existing queue entry matched by climb.uuid instead of adding a duplicate (bridge invariant)', async () => {
     const climb = makeClimb({ uuid: 'shared-climb' });
     const existing = makeQueueItem({ climb, uuid: 'existing-item' });

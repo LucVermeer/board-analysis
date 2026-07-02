@@ -9,10 +9,14 @@
  *
  * Every dependency here exists because the two call sites genuinely differ,
  * not for abstraction's own sake:
- *   - `applyLocal` differs in mechanism (dispatch a reducer action / reduce
- *     against a useState-backed local store / no-op while a party mutation is
- *     in flight — party mode intentionally waits for the server echo instead
- *     of applying an optimistic update; see docs/websocket-implementation.md).
+ *   - `applyLocal` differs in mechanism, not in whether it applies: both
+ *     surfaces dispatch straight to the single root queue reducer now (W6);
+ *     QueueContext dispatches unconditionally, the bridge additionally
+ *     layers two solo-only UX quirks on top (see the doc on `applyLocal` in
+ *     `queue-bridge-context.tsx`). Party mode used to no-op `applyLocal`
+ *     entirely and wait for the server echo instead of an optimistic
+ *     update — that's gone; off-board party mutations are optimistic now
+ *     too, matching board-route behavior (see docs/websocket-implementation.md).
  *   - `party.attemptMutation` differs in *when* a party mutation fires:
  *     QueueContext gates on `hasConnected && !isDisconnected` (buffering adds
  *     while offline); the bridge has no such gate and always attempts the

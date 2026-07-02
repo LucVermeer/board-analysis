@@ -16,10 +16,14 @@ vi.mock('react-i18next', () => ({
 
 const mockSetInitialQueueForSession = vi.fn();
 const mockActivateSession = vi.fn();
-let mockLocalQueue: unknown[] = [];
-let mockLocalCurrentClimbQueueItem: unknown = null;
-let mockLocalBoardPath: string | null = null;
-let mockLocalBoardDetails: {
+// Single root-owned queue state (party or solo, whichever is active). These
+// back both `queue`/`currentClimbQueueItem` and are read as passive fixtures
+// by handleSubmit's carry-over logic — no reducer/dispatch in this suite.
+let mockQueue: unknown[] = [];
+let mockCurrentClimbQueueItem: unknown = null;
+// Solo-only board-context bookkeeping (null while a party session is active).
+let mockSoloBoardPath: string | null = null;
+let mockSoloBoardDetails: {
   board_name: string;
   layout_id: number;
   size_id: number;
@@ -31,15 +35,15 @@ vi.mock('@/app/components/persistent-session/persistent-session-context', () => 
   usePersistentSession: () => ({
     activateSession: mockActivateSession,
     setInitialQueueForSession: mockSetInitialQueueForSession,
-    localQueue: mockLocalQueue,
-    localCurrentClimbQueueItem: mockLocalCurrentClimbQueueItem,
-    localBoardPath: mockLocalBoardPath,
-    localBoardDetails: mockLocalBoardDetails,
+    queue: mockQueue,
+    currentClimbQueueItem: mockCurrentClimbQueueItem,
+    soloBoardPath: mockSoloBoardPath,
+    soloBoardDetails: mockSoloBoardDetails,
   }),
   usePersistentSessionState: () => ({
-    localQueue: mockLocalQueue,
-    localCurrentClimbQueueItem: mockLocalCurrentClimbQueueItem,
-    localBoardPath: mockLocalBoardPath,
+    queue: mockQueue,
+    currentClimbQueueItem: mockCurrentClimbQueueItem,
+    soloBoardPath: mockSoloBoardPath,
   }),
   usePersistentSessionActions: () => ({
     activateSession: mockActivateSession,
@@ -212,8 +216,6 @@ let mockBridgeBoardDetails: {
   angle?: number;
 } | null = null;
 let mockBridgeAngle = 0;
-let mockBridgeQueue: unknown[] = [];
-let mockBridgeCurrentClimbQueueItem: unknown = null;
 
 vi.mock('@/app/components/queue-control/queue-bridge-context', () => ({
   useQueueBridgeBoardInfo: () => ({
@@ -221,17 +223,6 @@ vi.mock('@/app/components/queue-control/queue-bridge-context', () => ({
     angle: mockBridgeAngle,
     hasActiveQueue: false,
     isHydrated: false,
-  }),
-}));
-
-vi.mock('@/app/components/graphql-queue', () => ({
-  useQueueList: () => ({
-    queue: mockBridgeQueue,
-    suggestedClimbs: [],
-  }),
-  useCurrentClimb: () => ({
-    currentClimbQueueItem: mockBridgeCurrentClimbQueueItem,
-    currentClimb: null,
   }),
 }));
 
@@ -251,14 +242,12 @@ function makeQueueItem(uuid: string, climbName: string) {
 describe('StartSeshDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLocalQueue = [];
-    mockLocalCurrentClimbQueueItem = null;
-    mockLocalBoardPath = null;
-    mockLocalBoardDetails = null;
+    mockQueue = [];
+    mockCurrentClimbQueueItem = null;
+    mockSoloBoardPath = null;
+    mockSoloBoardDetails = null;
     mockBridgeBoardDetails = null;
     mockBridgeAngle = 0;
-    mockBridgeQueue = [];
-    mockBridgeCurrentClimbQueueItem = null;
     mockPathname = null;
     mockCreateSession.mockResolvedValue('new-session-id');
     lastGeneratorProps = null;
@@ -287,11 +276,11 @@ describe('StartSeshDrawer', () => {
     await submitSesh();
   }
 
-  it('auto-selects board from localBoardPath and starts session without manual selection', async () => {
+  it('auto-selects board from soloBoardPath and starts session without manual selection', async () => {
     const item1 = makeQueueItem('q1', 'Boulder 1');
-    mockLocalQueue = [item1];
-    mockLocalCurrentClimbQueueItem = item1;
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
+    mockQueue = [item1];
+    mockCurrentClimbQueueItem = item1;
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -307,8 +296,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('auto-selects a custom config on generic routes (from persistent session)', async () => {
-    mockLocalBoardPath = '/kilter/original/12x12/screw_bolt/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/kilter/original/12x12/screw_bolt/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -322,14 +311,14 @@ describe('StartSeshDrawer', () => {
     expect(mockRouterPush).toHaveBeenCalled();
   });
 
-  it('prefers bridgeBoardDetails over localBoardDetails on the current generic route', async () => {
+  it('prefers bridgeBoardDetails over soloBoardDetails on the current generic route', async () => {
     // User is currently on a kilter route (bridge populated). The persistent
     // session still holds a stale tension route — bridge should win.
     mockPathname = '/kilter/original/12x12/screw_bolt/40/list';
     mockBridgeBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
     mockBridgeAngle = 40;
-    mockLocalBoardPath = '/tension/some-layout/8x10/main/30/list';
-    mockLocalBoardDetails = { board_name: 'tension', layout_id: 99, size_id: 99, set_ids: [99, 99] };
+    mockSoloBoardPath = '/tension/some-layout/8x10/main/30/list';
+    mockSoloBoardDetails = { board_name: 'tension', layout_id: 99, size_id: 99, set_ids: [99, 99] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
     await submitSesh();
@@ -338,12 +327,12 @@ describe('StartSeshDrawer', () => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
     // boardPath should reflect the CURRENT (bridge) route, not the stale
-    // localBoardPath — i.e. auto-select picked the bridge-side custom config.
+    // soloBoardPath — i.e. auto-select picked the bridge-side custom config.
     expect(mockCreateSession).toHaveBeenCalledWith(expect.anything(), '/kilter/original/12x12/screw_bolt/40/list');
   });
 
   it('shows collapsed card when board is auto-selected', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -355,7 +344,7 @@ describe('StartSeshDrawer', () => {
   });
 
   it('expands board selector when selected card is clicked', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -366,12 +355,12 @@ describe('StartSeshDrawer', () => {
     expect(screen.getByTestId('board-discovery-scroll')).toBeTruthy();
   });
 
-  it('transfers local queue when board matches', async () => {
+  it('transfers the queue when board matches', async () => {
     const item1 = makeQueueItem('q1', 'Boulder 1');
     const item2 = makeQueueItem('q2', 'Boulder 2');
-    mockLocalQueue = [item1, item2];
-    mockLocalCurrentClimbQueueItem = item1;
-    mockLocalBoardPath = '/b/kilter-original-12x12';
+    mockQueue = [item1, item2];
+    mockCurrentClimbQueueItem = item1;
+    mockSoloBoardPath = '/b/kilter-original-12x12';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -387,9 +376,9 @@ describe('StartSeshDrawer', () => {
 
   it('does not transfer queue when board does not match', async () => {
     const item1 = makeQueueItem('q1', 'Boulder 1');
-    mockLocalQueue = [item1];
-    mockLocalCurrentClimbQueueItem = item1;
-    mockLocalBoardPath = '/b/tension-board-8x10';
+    mockQueue = [item1];
+    mockCurrentClimbQueueItem = item1;
+    mockSoloBoardPath = '/b/tension-board-8x10';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -404,10 +393,10 @@ describe('StartSeshDrawer', () => {
     expect(mockRouterPush).toHaveBeenCalled();
   });
 
-  it('does not transfer queue when local queue is empty', async () => {
-    mockLocalQueue = [];
-    mockLocalCurrentClimbQueueItem = null;
-    mockLocalBoardPath = '/b/kilter-original-12x12';
+  it('does not transfer queue when the queue is empty', async () => {
+    mockQueue = [];
+    mockCurrentClimbQueueItem = null;
+    mockSoloBoardPath = '/b/kilter-original-12x12';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -420,15 +409,15 @@ describe('StartSeshDrawer', () => {
     expect(mockSetInitialQueueForSession).not.toHaveBeenCalled();
   });
 
-  it('does not transfer queue when localBoardPath is null', async () => {
+  it('does not transfer queue when soloBoardPath is null', async () => {
     const item1 = makeQueueItem('q1', 'Boulder 1');
-    mockLocalQueue = [item1];
-    mockLocalCurrentClimbQueueItem = item1;
-    mockLocalBoardPath = null;
+    mockQueue = [item1];
+    mockCurrentClimbQueueItem = item1;
+    mockSoloBoardPath = null;
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
-    // No auto-selection, manually select a board
+    // No solo board context, manually select a board
     await selectBoardAndSubmit('Kilter');
 
     await waitFor(() => {
@@ -440,9 +429,9 @@ describe('StartSeshDrawer', () => {
 
   it('transfers queue when only currentClimbQueueItem exists (no queue items)', async () => {
     const item1 = makeQueueItem('q1', 'Boulder 1');
-    mockLocalQueue = [];
-    mockLocalCurrentClimbQueueItem = item1;
-    mockLocalBoardPath = '/b/kilter-original-12x12';
+    mockQueue = [];
+    mockCurrentClimbQueueItem = item1;
+    mockSoloBoardPath = '/b/kilter-original-12x12';
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -455,8 +444,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('shows full board scroll when no board context is available', async () => {
-    mockLocalBoardPath = null;
-    mockLocalBoardDetails = null;
+    mockSoloBoardPath = null;
+    mockSoloBoardDetails = null;
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -466,12 +455,12 @@ describe('StartSeshDrawer', () => {
   });
 
   it('does not attribute a generic route to a same-config named UserBoard', async () => {
-    // localBoardDetails has the exact numeric identity of the "Kilter" mock
+    // soloBoardDetails has the exact numeric identity of the "Kilter" mock
     // UserBoard (layoutId 1, sizeId 10, setIds "1,2"). Pre-fix logic would
     // match by IDs and auto-select Kilter — that's the attribution bug.
     // Post-fix: generic route stays on a custom config, NOT /b/kilter-...
-    mockLocalBoardPath = '/kilter/original/12x12/screw_bolt/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/kilter/original/12x12/screw_bolt/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
     await submitSesh();
@@ -483,9 +472,9 @@ describe('StartSeshDrawer', () => {
   });
 
   it('prioritizes slug match over board details match', async () => {
-    // localBoardPath matches Kilter by slug, but localBoardDetails matches Tension by IDs
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'tension', layout_id: 2, size_id: 20, set_ids: [3, 4] };
+    // soloBoardPath matches Kilter by slug, but soloBoardDetails matches Tension by IDs
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'tension', layout_id: 2, size_id: 20, set_ids: [3, 4] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -500,8 +489,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('calls activateSession directly when already on the same board route', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -513,7 +502,7 @@ describe('StartSeshDrawer', () => {
         sessionId: 'new-session-id',
         sessionName: undefined,
         boardPath: '/b/kilter-original-12x12',
-        boardDetails: mockLocalBoardDetails,
+        boardDetails: mockSoloBoardDetails,
         parsedParams: {
           board_name: 'kilter',
           layout_id: 1,
@@ -528,8 +517,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('does not call activateSession when navigating to a different board', async () => {
-    mockLocalBoardPath = '/b/tension-board-8x10/30/list';
-    mockLocalBoardDetails = { board_name: 'tension', layout_id: 2, size_id: 20, set_ids: [3, 4] };
+    mockSoloBoardPath = '/b/tension-board-8x10/30/list';
+    mockSoloBoardDetails = { board_name: 'tension', layout_id: 2, size_id: 20, set_ids: [3, 4] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -543,9 +532,9 @@ describe('StartSeshDrawer', () => {
     expect(mockActivateSession).not.toHaveBeenCalled();
   });
 
-  it('does not call activateSession when local and bridge state are both null', async () => {
-    mockLocalBoardPath = null;
-    mockLocalBoardDetails = null;
+  it('does not call activateSession when solo and bridge state are both null', async () => {
+    mockSoloBoardPath = null;
+    mockSoloBoardDetails = null;
     mockBridgeBoardDetails = null;
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
@@ -559,19 +548,21 @@ describe('StartSeshDrawer', () => {
     expect(mockActivateSession).not.toHaveBeenCalled();
   });
 
-  it('activates session via bridge fallback when local state is null (board route injector active)', async () => {
-    // This is the core bug scenario: user is on a board route, the bridge injector
-    // is active so localBoardPath/localBoardDetails are null, but the bridge context
-    // has valid board details and queue data.
-    mockLocalBoardPath = null;
-    mockLocalBoardDetails = null;
+  it('activates session via bridge board details when solo board state is null (board route injector active)', async () => {
+    // Board route injector scenario: the user is on a board route, so the
+    // bridge injector owns board context and soloBoardPath/soloBoardDetails are
+    // null. The queue is root-owned now (single source), so the session's
+    // initial queue comes from the root queue/currentClimbQueueItem, while
+    // board attribution still falls back to the bridge board details.
+    mockSoloBoardPath = null;
+    mockSoloBoardDetails = null;
     mockPathname = '/b/kilter-original-12x12/40/list';
     mockBridgeBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
     mockBridgeAngle = 40;
 
-    const bridgeItem = makeQueueItem('bq1', 'Bridge Climb');
-    mockBridgeQueue = [bridgeItem];
-    mockBridgeCurrentClimbQueueItem = bridgeItem;
+    const rootItem = makeQueueItem('rq1', 'Root Climb');
+    mockQueue = [rootItem];
+    mockCurrentClimbQueueItem = rootItem;
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -582,8 +573,8 @@ describe('StartSeshDrawer', () => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
 
-    // Queue should be transferred from bridge state
-    expect(mockSetInitialQueueForSession).toHaveBeenCalledWith('new-session-id', [bridgeItem], bridgeItem, undefined);
+    // Root queue transfers — board matches via the bridge/pathname fallback.
+    expect(mockSetInitialQueueForSession).toHaveBeenCalledWith('new-session-id', [rootItem], rootItem, undefined);
 
     // activateSession should fire using bridge board details
     expect(mockActivateSession).toHaveBeenCalledWith({
@@ -684,8 +675,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('enables the generate button when a board has been auto-selected', () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -694,8 +685,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('appends generated climbs to initialQueue and uses the first as initialCurrent when no carried queue', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -720,8 +711,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('stamps the user-chosen target angle onto each generated queue item', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
     fireEvent.click(getGenerateButton()!);
@@ -750,10 +741,10 @@ describe('StartSeshDrawer', () => {
 
   it('appends generated climbs after a carried same-board queue and keeps the carried current', async () => {
     const carried = makeQueueItem('q1', 'Carried');
-    mockLocalQueue = [carried];
-    mockLocalCurrentClimbQueueItem = carried;
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockQueue = [carried];
+    mockCurrentClimbQueueItem = carried;
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -773,8 +764,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('preserves the existing generated queue when Regenerate is dismissed before completing', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
@@ -804,8 +795,8 @@ describe('StartSeshDrawer', () => {
   });
 
   it('clears the generated queue when the board selection changes', async () => {
-    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockSoloBoardPath = '/b/kilter-original-12x12/40/list';
+    mockSoloBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 

@@ -1,0 +1,187 @@
+import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
+import { renderHook } from '@testing-library/react';
+import type { SubscriptionQueueEvent } from '@boardsesh/shared-schema';
+
+const { mockTrack } = vi.hoisted(() => ({ mockTrack: vi.fn() }));
+vi.mock('@/app/lib/analytics', () => ({ track: mockTrack }));
+
+import { usePeerBroadcastAnalytics } from '../hooks/use-peer-broadcast-analytics';
+
+function createSubscribeToQueueEvents() {
+  const subscribers = new Set<(event: SubscriptionQueueEvent) => void>();
+  const subscribeToQueueEvents = vi.fn((callback: (event: SubscriptionQueueEvent) => void) => {
+    subscribers.add(callback);
+    return () => subscribers.delete(callback);
+  });
+  const emit = (event: SubscriptionQueueEvent) => {
+    subscribers.forEach((callback) => callback(event));
+  };
+  return { subscribeToQueueEvents, emit };
+}
+
+const addedEvent: SubscriptionQueueEvent = {
+  __typename: 'QueueItemAdded',
+  sequence: 1,
+  stateHash: 'hash-1',
+  addedItem: { uuid: 'item-1' } as never,
+  position: null,
+};
+
+const removedEvent: SubscriptionQueueEvent = {
+  __typename: 'QueueItemRemoved',
+  sequence: 2,
+  stateHash: 'hash-2',
+  uuid: 'item-1',
+};
+
+describe('usePeerBroadcastAnalytics', () => {
+  beforeEach(() => {
+    mockTrack.mockReset();
+  });
+
+  it('fires "Climb Added to Queue" for a peer QueueItemAdded event while on a board route', () => {
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    renderHook(() =>
+      usePeerBroadcastAnalytics({
+        subscribeToQueueEvents,
+        isOnBoardRoute: true,
+        boardLayoutName: 'Original',
+        queueRef: { current: new Array(2) },
+      }),
+    );
+
+    emit(addedEvent);
+
+    expect(mockTrack).toHaveBeenCalledTimes(1);
+    expect(mockTrack).toHaveBeenCalledWith('Climb Added to Queue', {
+      boardLayout: 'Original',
+      addedFromTab: 'peer_broadcast',
+      currentQueueLength: 3,
+      partyMode: true,
+    });
+  });
+
+  it('fires "Climb Removed from Queue" for a peer QueueItemRemoved event while on a board route', () => {
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    renderHook(() =>
+      usePeerBroadcastAnalytics({
+        subscribeToQueueEvents,
+        isOnBoardRoute: true,
+        boardLayoutName: 'Original',
+        queueRef: { current: new Array(2) },
+      }),
+    );
+
+    emit(removedEvent);
+
+    expect(mockTrack).toHaveBeenCalledTimes(1);
+    expect(mockTrack).toHaveBeenCalledWith('Climb Removed from Queue', {
+      boardLayout: 'Original',
+      partyMode: true,
+      removedBy: 'peer',
+    });
+  });
+
+  // Strict parity with the deleted board-route hook this replaces: that hook
+  // only ever ran inside GraphQLQueueProvider (board-route-scoped), so
+  // off-board surfaces never fired this analytics. Since this now runs at the
+  // always-mounted root, the gate is what restores that parity.
+  it('does not fire analytics for the same events off a board route', () => {
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    renderHook(() =>
+      usePeerBroadcastAnalytics({
+        subscribeToQueueEvents,
+        isOnBoardRoute: false,
+        boardLayoutName: null,
+        queueRef: { current: new Array(0) },
+      }),
+    );
+
+    emit(addedEvent);
+    emit(removedEvent);
+
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('lands exactly once per event — no double-fire on a single peer add', () => {
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    renderHook(() =>
+      usePeerBroadcastAnalytics({
+        subscribeToQueueEvents,
+        isOnBoardRoute: true,
+        boardLayoutName: 'Original',
+        queueRef: { current: new Array(0) },
+      }),
+    );
+
+    emit(addedEvent);
+
+    expect(mockTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a malformed QueueItemAdded (no item payload) — same gate as the reducer dispatch', () => {
+    // The old board-route hook only fired analytics when the wire mapper
+    // returned a dispatch; a QueueItemAdded with no item maps to 'ignore'
+    // (no state change), so it never counted. Pin that parity here.
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    renderHook(() =>
+      usePeerBroadcastAnalytics({
+        subscribeToQueueEvents,
+        isOnBoardRoute: true,
+        boardLayoutName: 'Original',
+        queueRef: { current: new Array(0) },
+      }),
+    );
+
+    emit({ ...addedEvent, addedItem: undefined as never });
+
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('re-subscribes only when subscribeToQueueEvents identity changes, not on every isOnBoardRoute/boardLayoutName flip', () => {
+    const { subscribeToQueueEvents } = createSubscribeToQueueEvents();
+    // Stable ref identity across renders, matching production (`queueRef` is
+    // a genuine `useRef` on the caller side, never a fresh object per render).
+    const queueRef = { current: [] as unknown[] };
+    const { rerender } = renderHook(
+      (props: { isOnBoardRoute: boolean; boardLayoutName: string | null }) =>
+        usePeerBroadcastAnalytics({
+          subscribeToQueueEvents,
+          isOnBoardRoute: props.isOnBoardRoute,
+          boardLayoutName: props.boardLayoutName,
+          queueRef,
+        }),
+      { initialProps: { isOnBoardRoute: true, boardLayoutName: 'Original' } },
+    );
+
+    expect(subscribeToQueueEvents).toHaveBeenCalledTimes(1);
+
+    rerender({ isOnBoardRoute: false, boardLayoutName: 'Angled' });
+    rerender({ isOnBoardRoute: true, boardLayoutName: 'Original' });
+
+    // Still just the one subscription — route/board changes are read through
+    // refs, not re-subscribed.
+    expect(subscribeToQueueEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('picks up a mid-flight isOnBoardRoute flip via the ref without re-subscribing', () => {
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    const { rerender } = renderHook(
+      (props: { isOnBoardRoute: boolean }) =>
+        usePeerBroadcastAnalytics({
+          subscribeToQueueEvents,
+          isOnBoardRoute: props.isOnBoardRoute,
+          boardLayoutName: 'Original',
+          queueRef: { current: new Array(0) },
+        }),
+      { initialProps: { isOnBoardRoute: false } },
+    );
+
+    emit(addedEvent);
+    expect(mockTrack).not.toHaveBeenCalled();
+
+    rerender({ isOnBoardRoute: true });
+    emit(addedEvent);
+    expect(mockTrack).toHaveBeenCalledTimes(1);
+  });
+});

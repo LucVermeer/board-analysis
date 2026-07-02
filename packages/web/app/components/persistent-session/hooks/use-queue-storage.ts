@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { SessionSummary } from '@boardsesh/shared-schema';
-import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
+import type { QueueAction, QueueSearchParams } from '@boardsesh/queue';
 import type { BoardDetails } from '@/app/lib/types';
 import { getPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
@@ -15,24 +15,22 @@ type UseQueueStorageArgs = {
   onSessionAutoFinished?: (summary: SessionSummary, boardType: string | null) => void;
   wsAuthToken?: string | null;
   isAuthLoading?: boolean;
+  /**
+   * The root reducer's dispatch. `setBoardContext` fires `CLEAR_QUEUE` here
+   * when the incoming board differs from the board the current (root-owned)
+   * queue belongs to — see `setBoardContext` doc below.
+   */
+  dispatch: (action: QueueAction<QueueSearchParams>) => void;
 };
 
 export type QueueStorageState = {
-  localQueue: LocalClimbQueueItem[];
-  localCurrentClimbQueueItem: LocalClimbQueueItem | null;
-  localBoardPath: string | null;
-  localBoardDetails: BoardDetails | null;
-  isLocalQueueLoaded: boolean;
+  soloBoardPath: string | null;
+  soloBoardDetails: BoardDetails | null;
+  isBoardContextLoaded: boolean;
 };
 
 export type QueueStorageActions = {
-  setLocalQueueState: (
-    queue: LocalClimbQueueItem[],
-    currentItem: LocalClimbQueueItem | null,
-    boardPath: string,
-    boardDetails: BoardDetails,
-  ) => void;
-  clearLocalQueue: () => void;
+  setBoardContext: (boardPath: string, boardDetails: BoardDetails) => void;
 };
 
 export function useQueueStorage({
@@ -41,12 +39,11 @@ export function useQueueStorage({
   onSessionAutoFinished = () => {},
   wsAuthToken = null,
   isAuthLoading = false,
+  dispatch,
 }: UseQueueStorageArgs): QueueStorageState & QueueStorageActions {
-  const [localQueue, setLocalQueue] = useState<LocalClimbQueueItem[]>([]);
-  const [localCurrentClimbQueueItem, setLocalCurrentClimbQueueItem] = useState<LocalClimbQueueItem | null>(null);
-  const [localBoardPath, setLocalBoardPath] = useState<string | null>(null);
-  const [localBoardDetails, setLocalBoardDetails] = useState<BoardDetails | null>(null);
-  const [isLocalQueueLoaded, setIsLocalQueueLoaded] = useState(false);
+  const [soloBoardPath, setSoloBoardPath] = useState<string | null>(null);
+  const [soloBoardDetails, setSoloBoardDetails] = useState<BoardDetails | null>(null);
+  const [isBoardContextLoaded, setIsBoardContextLoaded] = useState(false);
   // Flips true only after we ran the auto-finished pre-flight with a real
   // token (or determined there was no persisted session at all). The no-token
   // branch deliberately leaves this false so a later non-null `wsAuthToken`
@@ -60,6 +57,11 @@ export function useQueueStorage({
   // Ref for activeSession so callbacks have stable identity
   const activeSessionRef = useRef(activeSession);
   activeSessionRef.current = activeSession;
+
+  // Ref for the board-context fields + dispatch so `setBoardContext` stays a
+  // stable `[]`-deps callback while reading fresh values.
+  const boardContextRef = useRef({ soloBoardPath, dispatch });
+  boardContextRef.current = { soloBoardPath, dispatch };
 
   // One-time cleanup: delete the old IndexedDB queue database if it exists
   useEffect(() => {
@@ -100,7 +102,7 @@ export function useQueueStorage({
                 persistedSessionId: persisted.sessionId,
               });
             hasRunPreflightRef.current = true;
-            setIsLocalQueueLoaded(true);
+            setIsBoardContextLoaded(true);
             return;
           }
 
@@ -114,7 +116,7 @@ export function useQueueStorage({
               hasActivatedRef.current = true;
               setActiveSession(persisted);
             }
-            setIsLocalQueueLoaded(true);
+            setIsBoardContextLoaded(true);
             return;
           }
 
@@ -124,7 +126,7 @@ export function useQueueStorage({
             if (DEBUG) console.info('[PersistentSession] Session was auto-finished, showing summary');
             await removePreference(ACTIVE_SESSION_KEY);
             onSessionAutoFinished(autoFinished.summary, autoFinished.boardType);
-            setIsLocalQueueLoaded(true);
+            setIsBoardContextLoaded(true);
             return;
           }
 
@@ -132,7 +134,7 @@ export function useQueueStorage({
             hasActivatedRef.current = true;
             setActiveSession(persisted);
           }
-          setIsLocalQueueLoaded(true);
+          setIsBoardContextLoaded(true);
           return;
         }
       } catch (error) {
@@ -141,47 +143,48 @@ export function useQueueStorage({
 
       // No persisted session, or read failed — nothing the token would change.
       hasRunPreflightRef.current = true;
-      setIsLocalQueueLoaded(true);
+      setIsBoardContextLoaded(true);
     }
 
     void restoreState();
   }, [isAuthLoading, wsAuthToken, onSessionAutoFinished, setActiveSession]);
 
-  // Local queue management (in-memory only)
-  const setLocalQueueState = useCallback(
-    (
-      newQueue: LocalClimbQueueItem[],
-      newCurrentItem: LocalClimbQueueItem | null,
-      boardPath: string,
-      boardDetails: BoardDetails,
-    ) => {
-      // Don't store local queue if party mode is active
-      if (activeSessionRef.current) return;
+  // Board-context bookkeeping (in-memory only). Replaces the old
+  // `setLocalQueueState`/`clearLocalQueue` pair now that the queue itself
+  // lives in the root reducer instead of a separate local-state copy.
+  //
+  // Absorbs the board-config-change clear effect that used to live in the
+  // board route's `use-queue-restoration.ts`: that hook reactively compared
+  // its route's `baseBoardPath` against `ps.localBoardPath` and cleared the
+  // stale local queue on a mismatch. Since the queue is now single-owned at
+  // the root, the same decision has to happen HERE, before overwriting the
+  // board-context fields — otherwise a solo queue built on board A would
+  // silently keep showing (and accepting adds into) board B's queue after
+  // navigating directly from A's route to B's.
+  const setBoardContext = useCallback((boardPath: string, boardDetails: BoardDetails) => {
+    // Don't touch board context if party mode is active — mirrors the old
+    // `setLocalQueueState` guard (party queue state is server-owned).
+    if (activeSessionRef.current) return;
 
-      setLocalQueue(newQueue);
-      setLocalCurrentClimbQueueItem(newCurrentItem);
-      setLocalBoardPath(boardPath);
-      setLocalBoardDetails(boardDetails);
-    },
-    [],
-  );
+    const { soloBoardPath: previousBoardPath, dispatch: dispatchToRoot } = boardContextRef.current;
+    if (previousBoardPath && previousBoardPath !== boardPath) {
+      if (DEBUG)
+        console.info('[PersistentSession] Board context changed, clearing solo queue', {
+          from: previousBoardPath,
+          to: boardPath,
+        });
+      dispatchToRoot({ type: 'CLEAR_QUEUE' });
+    }
 
-  const clearLocalQueue = useCallback(() => {
-    if (DEBUG) console.info('[PersistentSession] Clearing local queue');
-    setLocalQueue([]);
-    setLocalCurrentClimbQueueItem(null);
-    setLocalBoardPath(null);
-    setLocalBoardDetails(null);
+    setSoloBoardPath(boardPath);
+    setSoloBoardDetails(boardDetails);
   }, []);
 
   return {
-    localQueue,
-    localCurrentClimbQueueItem,
-    localBoardPath,
-    localBoardDetails,
-    isLocalQueueLoaded,
-    setLocalQueueState,
-    clearLocalQueue,
+    soloBoardPath,
+    soloBoardDetails,
+    isBoardContextLoaded,
+    setBoardContext,
   };
 }
 

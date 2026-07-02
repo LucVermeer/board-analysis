@@ -202,15 +202,15 @@ describe('Active session persistence', () => {
 // ---------------------------------------------------------------------------
 
 describe('PersistentSessionProvider auto-restore on mount', () => {
-  it('sets isLocalQueueLoaded=true when no stored data exists', async () => {
+  it('sets isBoardContextLoaded=true when no stored data exists', async () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isLocalQueueLoaded).toBe(true);
+      expect(result.current.isBoardContextLoaded).toBe(true);
     });
 
-    expect(result.current.localQueue).toEqual([]);
-    expect(result.current.localBoardDetails).toBeNull();
+    expect(result.current.queue).toEqual([]);
+    expect(result.current.soloBoardDetails).toBeNull();
     expect(result.current.activeSession).toBeNull();
   });
 
@@ -234,20 +234,20 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isLocalQueueLoaded).toBe(true);
+      expect(result.current.isBoardContextLoaded).toBe(true);
     });
 
     // Party session should be active
     expectSession(result.current.activeSession, sessionInfo);
-    // Local queue should be empty (no IndexedDB persistence)
-    expect(result.current.localQueue).toEqual([]);
+    // Queue should be empty (no IndexedDB persistence — root-owned, in-memory)
+    expect(result.current.queue).toEqual([]);
   });
 
   it('activateSession persists to IndexedDB', async () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isLocalQueueLoaded).toBe(true);
+      expect(result.current.isBoardContextLoaded).toBe(true);
     });
 
     const sessionInfo = {
@@ -545,7 +545,7 @@ describe('Stale IndexedDB vs fresh /join cookie', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isLocalQueueLoaded).toBe(true);
+      expect(result.current.isBoardContextLoaded).toBe(true);
     });
 
     expect(result.current.activeSession).toBeNull();

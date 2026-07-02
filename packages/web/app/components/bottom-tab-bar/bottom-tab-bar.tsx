@@ -118,16 +118,12 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   const isAuthenticated = sessionStatus === 'authenticated';
 
   // Use the active queue's board details as a fallback when no boardDetails prop
-  const { activeSession, localBoardDetails, localCurrentClimbQueueItem } = usePersistentSessionState();
+  const { activeSession, soloBoardDetails, currentClimbQueueItem } = usePersistentSessionState();
 
-  // Resolve effective board details: prop > active session > local queue
-  const effectiveBoardDetails =
-    boardDetails ?? (activeSession ? activeSession.boardDetails : null) ?? localBoardDetails;
+  // Resolve effective board details: prop > active session > solo board context
+  const effectiveBoardDetails = boardDetails ?? (activeSession ? activeSession.boardDetails : null) ?? soloBoardDetails;
   const effectiveAngle =
-    angle ??
-    (activeSession ? activeSession.parsedParams.angle : undefined) ??
-    localCurrentClimbQueueItem?.climb?.angle ??
-    0;
+    angle ?? (activeSession ? activeSession.parsedParams.angle : undefined) ?? currentClimbQueueItem?.climb?.angle ?? 0;
 
   // Determine active tab from pathname
   const activeTab = getActiveTab(pathname);

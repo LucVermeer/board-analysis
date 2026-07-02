@@ -430,3 +430,69 @@ describe('useEventProcessor - sync gate at the root', () => {
     expect(refs.lastReceivedSequenceRef.current).toBe(7);
   });
 });
+
+describe('useEventProcessor - root dispatch (W6: the single queue-state owner)', () => {
+  // Exercises the exposed `dispatch` the same way board routes and the
+  // off-board bridge use it now (queue-actions-core's `applyLocal`): a local,
+  // optimistic action applied directly against the root reducer, ahead of any
+  // server confirmation.
+  it('exposes a dispatch that applies local/optimistic actions immediately', () => {
+    const { refs, syncGate } = createHarness([]);
+    const { result } = renderHook(() => useEventProcessor({ syncGate, refs }), { wrapper: createWrapper() });
+    const item = createItem('optimistic-1');
+
+    act(() => {
+      result.current.dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: { item, shouldAddToQueue: true, correlationId: 'client-1-1' },
+      });
+    });
+
+    expect(result.current.currentClimbQueueItem).toEqual(item);
+    expect(result.current.queue).toEqual([item]);
+    expect(result.current.pendingCurrentClimbUpdates).toEqual(['client-1-1']);
+  });
+
+  // Correlation-id echo suppression: a local dispatch (from queue-actions-core,
+  // solo or party alike now that the bridge's party `applyLocal` is optimistic
+  // too — see queue-bridge-context.tsx) registers a pending correlation id.
+  // When the matching server echo arrives — the same mutation broadcast back
+  // to the sender — the reducer recognizes it via `serverCorrelationId` and
+  // clears the pending entry WITHOUT re-applying/duplicating the state change.
+  // This is what keeps an off-board party activation from visibly flickering
+  // once the real server confirmation lands on top of the optimistic dispatch.
+  it('suppresses the server echo of a locally-dispatched current-climb update via correlation id', () => {
+    const { refs, syncGate } = createHarness([]);
+    const { result } = renderHook(() => useEventProcessor({ syncGate, refs }), { wrapper: createWrapper() });
+    const item = createItem('activated-1');
+    const correlationId = 'client-1-1';
+
+    act(() => {
+      result.current.dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: { item, shouldAddToQueue: true, correlationId },
+      });
+    });
+
+    expect(result.current.pendingCurrentClimbUpdates).toEqual([correlationId]);
+
+    act(() => {
+      // The server's broadcast of the SAME mutation, echoed back to us.
+      result.current.handleQueueEvent({
+        __typename: 'CurrentClimbChanged',
+        sequence: 1,
+        stateHash: 'hash-echo',
+        currentItem: item,
+        clientId: 'client-1',
+        correlationId,
+      } as unknown as SubscriptionQueueEvent);
+    });
+
+    // Echo recognized and cleaned up — no lingering pending entry.
+    expect(result.current.pendingCurrentClimbUpdates).toEqual([]);
+    // State is unchanged by the echo (no duplicate application, no flicker) —
+    // still exactly the item the optimistic dispatch already set.
+    expect(result.current.currentClimbQueueItem).toEqual(item);
+    expect(result.current.queue).toEqual([item]);
+  });
+});
