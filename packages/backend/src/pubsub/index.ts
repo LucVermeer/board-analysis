@@ -10,7 +10,18 @@ import type {
 import { redisClientManager } from '../redis/client';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from './redis-adapter';
 import { PubSubChannel, type ChannelSubscriber } from './channel';
+import {
+  BoardPresenceStore,
+  type BoardReportGate,
+  type CommitBoardClimbInput,
+  type CommitBoardClimbResult,
+} from './board-presence-store';
 import { logger } from '../utils/logger';
+
+// Board-presence gate/commit types live with their implementation in
+// board-presence-store.ts; re-exported here so consumers keep importing them
+// from the pubsub entry point.
+export type { BoardReportGate, CommitBoardClimbInput, CommitBoardClimbResult } from './board-presence-store';
 
 type QueueSubscriber = ChannelSubscriber<QueueEvent>;
 type SessionSubscriber = ChannelSubscriber<SessionEvent>;
@@ -18,90 +29,6 @@ type NotificationSubscriber = ChannelSubscriber<NotificationEvent>;
 type CommentSubscriber = ChannelSubscriber<CommentEvent>;
 type NewClimbSubscriber = ChannelSubscriber<NewClimbCreatedEvent>;
 type BoardPresenceSubscriber = ChannelSubscriber<BoardPresenceEvent>;
-
-/** Result of the Stage-A report gate read (one pipeline, see `getBoardReportGate`). */
-export type BoardReportGate = {
-  /** Whether `emitterId` currently has a live proof-of-presence stamp on the board. */
-  isMember: boolean;
-  /** First-seen epoch-ms for the durable-history dwell gate, or null when unknown/implausible. */
-  firstSeenMs: number | null;
-  /** Value of `board:{id}:lastReport` ("emitterId|climbUuid|angle"), or null when never set / expired. */
-  lastReport: string | null;
-  /**
-   * The board's current connection holder (`board:{id}:writer`), or null when
-   * free / unknown. The dedup short-circuit must only fire while the retrying
-   * emitter still holds the wall — a WS-close backstop clear between the
-   * original send and the retry deletes the writer key but leaves lastReport,
-   * and short-circuiting then would strand the wall looking free while the
-   * emitter holds it (no re-take, no re-broadcast).
-   */
-  currentWriter: string | null;
-};
-
-export type CommitBoardClimbInput = {
-  boardId: string;
-  emitterId: string;
-  climb: BoardPresenceClimb;
-  climbUuid: string;
-  effectiveAngle: number;
-  /** The reporting connection's party-session id, when it's in one. */
-  sessionId: string | null;
-};
-
-export type CommitBoardClimbResult = {
-  /** The writer key's previous value (from the atomic SET..GET), or null when
-   * the board was free / the commit failed. */
-  previousWriter: string | null;
-  /**
-   * True only when the writer SET..GET slot actually executed without error —
-   * i.e. `previousWriter` is a real observation, not a failure collapsed to
-   * null. The caller must gate the hand-off broadcast on this: a failing
-   * pipeline otherwise looks like "board was free" (`null !== emitterId`) and
-   * would spuriously broadcast a hand-off + kick a Live Activity push on
-   * every send while Redis is unhealthy.
-   */
-  writerSlotOk: boolean;
-};
-
-// Board-presence durable history (Redis FIFO) configuration. The live
-// "now on the wall" feed is ephemeral; this buffer backfills late joiners
-// before the `boardNowPlaying` subscription takes over.
-const BOARD_HISTORY_SIZE = 50; // Keep the last 50 climbs per board
-const BOARD_HISTORY_TTL = 604_800; // 1 week
-// The per-board seq counter's TTL matches BOARD_HISTORY_TTL so the common
-// case (an active board) never sees the counter expire while the Redis
-// history buffer is still populated. But `board_climb_events` rows are
-// durable forever, so a board dormant for *longer* than a week still has a
-// live durable floor after this key expires — INCR would otherwise restart
-// at 1 and collide with / precede rows that still exist in Postgres. That
-// residual gap is closed by the dormancy reseed in `nextBoardSeq` (see
-// `boardSeqFloorProvider` / `allocateBoardSeqAtLeast` below), not by this TTL
-// alone.
-const BOARD_SEQ_TTL = 604_800; // 1 week
-// Once INCR returns a value at or below this, nextBoardSeq consults the
-// durable floor provider — a small INCR result is the signature of a
-// freshly-(re)created Redis key, which happens both for a genuinely new board
-// and for a dormant board whose key just expired.
-const BOARD_SEQ_RESEED_THRESHOLD = 50;
-// Proof-of-presence window: how long after connecting (resolveBoardForSerial /
-// resolveBoardForConfig) a user may report climbs to that board's feed. Long
-// enough for a climbing session; a reconnect re-stamps it.
-const BOARD_MEMBERSHIP_TTL = 43_200; // 12 hours
-// Write-side idempotency window for reportBoardClimb: a retry of the exact
-// same (emitter, climb, angle) within this window is treated as a no-op
-// duplicate rather than a new send (see `getBoardReportGate` / A2 dedup).
-const REPORT_DEDUP_WINDOW_MS = 10_000;
-// Epoch-ms floor a first-seen stamp must clear to be trusted. Guards against
-// legacy sentinel values (e.g. an old '1') that would otherwise trivially
-// satisfy the durable-history dwell gate.
-const PLAUSIBLE_EPOCH_MS_FLOOR = 1_600_000_000_000;
-
-function parsePlausibleFirstSeenMs(raw: string | null): number | null {
-  if (raw === null) return null;
-  const firstSeen = Number(raw);
-  if (!Number.isFinite(firstSeen) || firstSeen < PLAUSIBLE_EPOCH_MS_FLOOR) return null;
-  return firstSeen;
-}
 
 /** External hook called after every queue event publish. Fire-and-forget. */
 type QueueEventHook = (sessionId: string, event: QueueEvent) => void;
@@ -183,41 +110,18 @@ class PubSub {
     isRedisRequired: () => this.redisRequired,
     logger,
   });
-  // Local-only fallback for the per-board monotonic seq counter. In Redis
-  // mode the authoritative counter is `board:${boardId}:seq` (INCR); this map
-  // only ever serves single-instance deployments that have no Redis.
-  private localBoardSeq = new Map<string, number>();
-  // Per-board watermark for the seq dormancy reseed (see
-  // `ensureBoardSeqClearOfDurableFloor`): the highest seq this instance has
-  // verified clear of the durable floor or allocated through the reseed
-  // check. Lets a brand-new board skip the repeated MAX(seq) Postgres lookup
-  // on each of its first ~BOARD_SEQ_RESEED_THRESHOLD sends. One number per
-  // board that allocates during the process lifetime (bounded like
-  // `localBoardSeq`); never TTL'd — see the safety analysis on the method.
-  private boardSeqVerifiedThrough = new Map<string, number>();
-  // Sticky "the floor consultation FAILED and hasn't succeeded since" marker.
-  // While a board is in here, every nextBoardSeq call retries the floor
-  // consultation — regardless of the INCR value and bypassing the watermark
-  // skip — so a transient Postgres/Lua failure during the reseed window can't
-  // let the counter grow past BOARD_SEQ_RESEED_THRESHOLD while still below
-  // the durable floor (which would permanently freeze clients holding
-  // pre-reset high seqs). Cleared only by a successful verification/reseed.
-  // Same lifecycle/bounds as the watermark map.
-  private boardSeqReseedPending = new Set<string>();
-  // Local-only proof-of-presence: `${boardId}:${userId}` → expiry epoch ms.
-  private localBoardMembership = new Map<string, number>();
-  private localBoardMembershipCleanupTimer: ReturnType<typeof setTimeout> | null = null;
-  private localBoardMembershipCleanupExpiry: number | null = null;
+  // Board-presence Redis KV helpers (seq counter, durable history, proof-of-
+  // presence, writer holder, session→board) live outside the generic channel
+  // — see board-presence-store.ts for why.
+  private readonly boardPresenceStore = new BoardPresenceStore({
+    isRedisAvailable: () => this.isRedisConnected(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
   private redisAdapter: RedisPubSubAdapter | null = null;
   private initialized = false;
   private redisRequired = false;
   private queueEventHook: QueueEventHook | null = null;
-  // Durable seq floor lookup for the `nextBoardSeq` dormancy reseed (A3).
-  // Injected via `setBoardSeqFloorProvider` at bootstrap so pubsub itself
-  // stays DB-free (and trivially unit-testable without Postgres). Defaults to
-  // "no durable floor" — a board with no floor provider wired never reseeds,
-  // matching pre-A3 behavior.
-  private boardSeqFloorProvider: (boardId: number) => Promise<number> = async () => 0;
 
   /**
    * Initialize the PubSub system.
@@ -295,16 +199,6 @@ class PubSub {
    */
   setQueueEventHook(hook: QueueEventHook): void {
     this.queueEventHook = hook;
-  }
-
-  /**
-   * Inject the durable seq-floor lookup used by `nextBoardSeq`'s dormancy
-   * reseed (A3). Wired once at backend bootstrap (`server.ts`) to a Drizzle
-   * query over `board_climb_events`; defaults to `async () => 0` so pubsub
-   * unit tests never need a database.
-   */
-  setBoardSeqFloorProvider(provider: (boardId: number) => Promise<number>): void {
-    this.boardSeqFloorProvider = provider;
   }
 
   private setupRedisMessageHandlers(): void {
@@ -554,519 +448,84 @@ class PubSub {
     this.boardPresenceChannel.publish(boardId, event);
   }
 
+  // The methods below delegate to `boardPresenceStore` (board-presence-store.ts)
+  // — Redis KV bookkeeping for the board-presence domain (seq counter, durable
+  // history, proof-of-presence, writer holder, session→board) that sits
+  // alongside but outside the generic pub/sub channel above. See that file
+  // for the full rationale on each method; signatures and behavior here are
+  // unchanged from before the extraction.
+
   /**
-   * Atomically allocate the next monotonic sequence number for a board.
-   * Redis `INCR` + `EXPIRE` (pipelined — 1 RTT), cluster-safe across
-   * instances; falls back to an in-memory counter in local-only mode.
-   *
-   * The key expires after a week of inactivity. For a genuinely fresh board
-   * that's harmless (INCR restarts at 1 and the empty history buffer expired
-   * along with it). For a board dormant *longer* than the TTL whose durable
-   * `board_climb_events` rows outlive the key, restarting at 1 would collide
-   * with / precede still-existing rows — so whenever INCR comes back small
-   * (<= BOARD_SEQ_RESEED_THRESHOLD, the signature of a fresh key either way),
-   * `ensureBoardSeqClearOfDurableFloor` checks the durable floor and, if the
-   * floor is at or above the INCR result, reseeds atomically past it. The
-   * check memoizes per board so a brand-new board's early sends don't repeat
-   * the Postgres lookup ~50 times (see that method's safety analysis). A
-   * FAILED consultation marks the board reseed-pending, which keeps the
-   * consultation retrying on every subsequent allocation even after the
-   * counter crosses the threshold — otherwise a transient Postgres blip in
-   * the reseed window would leave the counter permanently below the durable
-   * floor.
+   * Inject the durable seq-floor lookup used by `nextBoardSeq`'s dormancy
+   * reseed (A3). Wired once at backend bootstrap (`server.ts`).
    */
+  setBoardSeqFloorProvider(provider: (boardId: number) => Promise<number>): void {
+    this.boardPresenceStore.setBoardSeqFloorProvider(provider);
+  }
+
+  /** Atomically allocate the next monotonic sequence number for a board (with dormancy reseed). */
   async nextBoardSeq(boardId: string): Promise<number> {
-    if (this.redisAdapter && this.isRedisConnected()) {
-      try {
-        const { publisher } = redisClientManager.getClients();
-        const key = `board:${boardId}:seq`;
-        const results = await publisher.pipeline().incr(key).expire(key, BOARD_SEQ_TTL).exec();
-        if (!results) {
-          throw new Error('nextBoardSeq pipeline returned null');
-        }
-        const [incrError, incrResult] = results[0];
-        if (incrError) throw incrError;
-        const next = incrResult as number;
-
-        if (next <= BOARD_SEQ_RESEED_THRESHOLD || this.boardSeqReseedPending.has(boardId)) {
-          return await this.ensureBoardSeqClearOfDurableFloor(boardId, next);
-        }
-
-        return next;
-      } catch (error) {
-        if (this.redisRequired) {
-          logger.error('[PubSub] Failed to allocate board seq from required Redis:', error);
-          throw error;
-        }
-        logger.error('[PubSub] Failed to allocate board seq from Redis, falling back to local:', error);
-      }
-    }
-
-    const next = (this.localBoardSeq.get(boardId) ?? 0) + 1;
-    this.localBoardSeq.set(boardId, next);
-    return next;
+    return this.boardPresenceStore.nextBoardSeq(boardId);
   }
 
-  /**
-   * Ensures a small (or reseed-pending) INCR result is clear of the durable
-   * `board_climb_events` floor, reseeding atomically via
-   * `allocateBoardSeqAtLeast` when it isn't. Returns the seq to use. Never
-   * throws: a floor-lookup or reseed failure falls back to the INCR result —
-   * but marks the board reseed-pending, so every subsequent allocation
-   * retries the consultation (bypassing the watermark skip) until one
-   * succeeds. Without the sticky flag, a transient Postgres blip covering
-   * the whole <= BOARD_SEQ_RESEED_THRESHOLD window would let the counter
-   * cross the threshold still below the durable floor and never consult
-   * Postgres again — clients holding pre-reset high seqs would then treat
-   * every subsequent event as stale and the live wall would freeze until the
-   * next counter loss.
-   *
-   * Memoization: without it, every send of a brand-new board's first
-   * ~BOARD_SEQ_RESEED_THRESHOLD would run the MAX(seq) Postgres lookup. The
-   * memo is a per-board watermark = the highest seq this instance has either
-   * verified clear of the floor or allocated through this check; the lookup
-   * is skipped only when the fresh INCR result is strictly ahead of it
-   * (normal early-life counter growth, provably not a reset this instance
-   * could collide on). Deliberately NOT the raw floor value: a floor-only
-   * memo (e.g. 0 for a new board) would keep skipping after a mid-process
-   * counter loss (FLUSHALL / failover to an empty replica) once durable rows
-   * exist — INCR restarts at 1, `1 > 0` skips, collision. With the
-   * watermark, any allocation pushes it to >= 1, so the first post-reset
-   * INCR (= 1) can never be ahead of it and always re-consults the floor.
-   *
-   * Accepted residual (documented, not defended): in multi-instance, an
-   * instance holding a small stale watermark can race another instance's
-   * first post-reset reseed and skip the check for a seq the durable floor
-   * already covers. The colliding durable insert lands on the (boardId, seq)
-   * unique index's `onConflictDoNothing` — one dropped duplicate row, no
-   * corruption, and exactly the failure mode every post-dormancy send had
-   * before the reseed existed. That needs a mid-process Redis counter loss
-   * (not mere dormancy — any send or stats publish re-arms the TTL) plus
-   * concurrent sends in the reseed window, so we take the simple memo.
-   */
-  private async ensureBoardSeqClearOfDurableFloor(boardId: string, incrResult: number): Promise<number> {
-    const reseedPending = this.boardSeqReseedPending.has(boardId);
-    const verifiedThrough = this.boardSeqVerifiedThrough.get(boardId);
-    // The watermark skip is only trustworthy when no consultation has failed
-    // since the last success — while reseed-pending, the floor may be far
-    // above anything this instance ever verified, so always re-consult.
-    if (!reseedPending && verifiedThrough !== undefined && incrResult > verifiedThrough) {
-      this.boardSeqVerifiedThrough.set(boardId, incrResult);
-      return incrResult;
-    }
-
-    let floor: number;
-    try {
-      floor = await this.boardSeqFloorProvider(Number(boardId));
-    } catch (error) {
-      this.boardSeqReseedPending.add(boardId);
-      logger.error('[PubSub] board seq floor provider failed, using INCR result (reseed pending):', error);
-      return incrResult;
-    }
-
-    if (floor < incrResult) {
-      this.boardSeqReseedPending.delete(boardId);
-      this.boardSeqVerifiedThrough.set(boardId, Math.max(incrResult, verifiedThrough ?? 0));
-      return incrResult;
-    }
-
-    try {
-      const reseeded = await this.allocateBoardSeqAtLeast(boardId, floor);
-      if (reseeded === null) {
-        // Redis went away between the INCR and the reseed — keep retrying.
-        this.boardSeqReseedPending.add(boardId);
-        return incrResult;
-      }
-      this.boardSeqReseedPending.delete(boardId);
-      this.boardSeqVerifiedThrough.set(boardId, Math.max(reseeded, verifiedThrough ?? 0));
-      return reseeded;
-    } catch (error) {
-      this.boardSeqReseedPending.add(boardId);
-      logger.error('[PubSub] board seq Lua reseed failed, using INCR result (reseed pending):', error);
-      return incrResult;
-    }
-  }
-
-  /**
-   * Atomically allocate a board seq value guaranteed to exceed both the
-   * current Redis counter and `floor` (`max(currentValue, floor) + 1`),
-   * re-arming the TTL. A single Lua script keeps the read-compare-write
-   * atomic under concurrent callers — two racing reseeds still get distinct,
-   * monotonic results because Redis serializes the script execution.
-   * Redis-only: returns null when Redis is unavailable (callers fall back to
-   * the plain INCR result and mark the reseed pending). May still reject on
-   * a command failure against a connected Redis — the internal reseed path
-   * catches that. Public for direct unit testing.
-   */
+  /** Atomically allocate a board seq guaranteed past `floor`; null without Redis. Public for unit tests. */
   async allocateBoardSeqAtLeast(boardId: string, floor: number): Promise<number | null> {
-    if (!this.redisAdapter || !this.isRedisConnected()) return null;
-    const { publisher } = redisClientManager.getClients();
-    const key = `board:${boardId}:seq`;
-    const result = await publisher.eval(
-      "local cur = tonumber(redis.call('get', KEYS[1]) or '0'); " +
-        'local nxt = math.max(cur, tonumber(ARGV[1])) + 1; ' +
-        "redis.call('set', KEYS[1], nxt); " +
-        "redis.call('expire', KEYS[1], ARGV[2]); " +
-        'return nxt',
-      1,
-      key,
-      floor,
-      BOARD_SEQ_TTL,
-    );
-    return Number(result);
+    return this.boardPresenceStore.allocateBoardSeqAtLeast(boardId, floor);
   }
 
-  /**
-   * Read a board's recent climbs, newest-first by seq (cap 50). Empty without
-   * Redis.
-   */
+  /** Read a board's recent climbs, newest-first by seq (cap 50). Empty without Redis. */
   async getRecentBoardClimbs(boardId: string): Promise<BoardPresenceClimb[]> {
-    if (!this.redisAdapter || !this.isRedisConnected()) {
-      return [];
-    }
-
-    try {
-      const { publisher } = redisClientManager.getClients();
-      const key = `board:${boardId}:history`;
-      const entries = await publisher.lrange(key, 0, -1);
-
-      const climbs: BoardPresenceClimb[] = [];
-      for (const json of entries) {
-        try {
-          climbs.push(JSON.parse(json) as BoardPresenceClimb);
-        } catch (parseError) {
-          logger.error('[PubSub] Failed to parse board history entry:', parseError);
-        }
-      }
-
-      // The list is already newest-first (lpush), but sort by seq DESC so a
-      // late, out-of-order write can't surface above a newer climb.
-      climbs.sort((a, b) => b.seq - a.seq);
-      return climbs.slice(0, BOARD_HISTORY_SIZE);
-    } catch (error) {
-      logger.error('[PubSub] Failed to read board history:', error);
-      return [];
-    }
+    return this.boardPresenceStore.getRecentBoardClimbs(boardId);
   }
 
-  /**
-   * Record that a user is connected to a board (proof-of-presence), stamped on
-   * resolveBoardForSerial / resolveBoardForConfig. `reportBoardClimb` requires
-   * this so a logged-in user can't inject onto a board they never connected to.
-   * TTL'd; a reconnect re-stamps. Best-effort without Redis (local map).
-   */
+  /** Record that a user is connected to a board (proof-of-presence). TTL'd; a reconnect re-stamps. */
   async stampBoardMembership(boardId: string, userId: string): Promise<void> {
-    const key = `presence:board:${boardId}:user:${userId}`;
-    if (this.redisAdapter && this.isRedisConnected()) {
-      try {
-        const { publisher } = redisClientManager.getClients();
-        // Store the first-seen epoch-ms (NX preserves it across reconnects) so
-        // the durable-history dwell gate can tell how long this member has been
-        // on the board. A separate EXPIRE keeps the key alive while they're
-        // active without resetting first-seen. EXISTS still answers presence.
-        await publisher.set(key, String(Date.now()), 'EX', BOARD_MEMBERSHIP_TTL, 'NX');
-        await publisher.expire(key, BOARD_MEMBERSHIP_TTL);
-        return;
-      } catch (error) {
-        if (this.redisRequired) {
-          logger.error('[PubSub] Failed to stamp board membership in required Redis:', error);
-          throw error;
-        }
-        logger.error('[PubSub] Failed to stamp board membership, falling back to local:', error);
-      }
-    }
-    this.setLocalBoardMembership(`${boardId}:${userId}`, Date.now() + BOARD_MEMBERSHIP_TTL * 1000);
+    return this.boardPresenceStore.stampBoardMembership(boardId, userId);
   }
 
   /** True if the user has a live proof-of-presence stamp for the board. */
   async hasBoardMembership(boardId: string, userId: string): Promise<boolean> {
-    const key = `presence:board:${boardId}:user:${userId}`;
-    if (this.redisAdapter && this.isRedisConnected()) {
-      try {
-        const { publisher } = redisClientManager.getClients();
-        return (await publisher.exists(key)) === 1;
-      } catch (error) {
-        if (this.redisRequired) {
-          logger.error('[PubSub] Failed to check board membership in required Redis:', error);
-          throw error;
-        }
-        logger.error('[PubSub] Failed to check board membership, falling back to local:', error);
-      }
-    }
-    return this.checkLocalBoardMembership(boardId, userId);
+    return this.boardPresenceStore.hasBoardMembership(boardId, userId);
   }
 
-  private checkLocalBoardMembership(boardId: string, userId: string): boolean {
-    const localKey = `${boardId}:${userId}`;
-    const expiry = this.localBoardMembership.get(localKey);
-    if (expiry === undefined) return false;
-    if (expiry <= Date.now()) {
-      this.localBoardMembership.delete(localKey);
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * One Redis pipeline (1 RTT) that answers everything `reportBoardClimb`'s
-   * Stage A needs before validating the incoming climb: proof-of-presence
-   * (+ first-seen, for the durable-history dwell gate), the last-report dedup
-   * marker (for write-side idempotency, A2), and the current writer (so the
-   * dedup short-circuit can require the retrying emitter to still hold the
-   * wall — see `BoardReportGate.currentWriter`). Replaces what used to be
-   * separate `hasBoardMembership` + first-seen + `lastReport` reads — 3 RTTs
-   * collapsed into 1, with the writer read riding the same pipeline for free.
-   *
-   * Preserves `hasBoardMembership`'s fail-closed `redisRequired` semantics
-   * (throws when Redis is required but the pipeline fails) and the
-   * plausible-epoch guard on `firstSeenMs` (a legacy/implausible stamp still
-   * counts as a member but never satisfies the dwell gate). Local-only
-   * fallback mirrors today: membership from the in-memory map,
-   * `firstSeenMs`/`lastReport`/`currentWriter` unknown (null) — durable
-   * history and write-side dedup both degrade to off without Redis, same as
-   * before.
-   */
+  /** One-pipeline Stage-A read for reportBoardClimb: membership, first-seen, lastReport, writer. */
   async getBoardReportGate(boardId: string, emitterId: string): Promise<BoardReportGate> {
-    const membershipKey = `presence:board:${boardId}:user:${emitterId}`;
-    const lastReportKey = `board:${boardId}:lastReport`;
-    const writerKey = `board:${boardId}:writer`;
-
-    if (this.redisAdapter && this.isRedisConnected()) {
-      try {
-        const { publisher } = redisClientManager.getClients();
-        const results = await publisher.pipeline().get(membershipKey).get(lastReportKey).get(writerKey).exec();
-        if (!results) {
-          throw new Error('getBoardReportGate pipeline returned null');
-        }
-        const [[membershipError, membershipRaw], [lastReportError, lastReportRaw], [writerError, writerRaw]] = results;
-        if (membershipError) throw membershipError;
-        if (lastReportError) throw lastReportError;
-        if (writerError) throw writerError;
-        const raw = membershipRaw as string | null;
-        return {
-          isMember: raw !== null,
-          firstSeenMs: parsePlausibleFirstSeenMs(raw),
-          lastReport: (lastReportRaw as string | null) ?? null,
-          currentWriter: (writerRaw as string | null) ?? null,
-        };
-      } catch (error) {
-        if (this.redisRequired) {
-          logger.error('[PubSub] Failed to read board report gate from required Redis:', error);
-          throw error;
-        }
-        logger.error('[PubSub] Failed to read board report gate, falling back to local:', error);
-      }
-    }
-
-    return {
-      isMember: this.checkLocalBoardMembership(boardId, emitterId),
-      firstSeenMs: null,
-      lastReport: null,
-      currentWriter: null,
-    };
+    return this.boardPresenceStore.getBoardReportGate(boardId, emitterId);
   }
 
-  /**
-   * One Redis pipeline (1 RTT) that commits an accepted `reportBoardClimb`
-   * send: appends to the durable FIFO history (LPUSH/LTRIM/EXPIRE), takes the
-   * connection-holder slot (atomic `SET writer EX GET` — a single command, so
-   * two concurrent reports still can't both observe the same previous
-   * holder), stamps the write-side dedup marker (A2's `lastReport`), and —
-   * when this connection is in a party session — remembers the session→board
-   * mapping (`session:{id}:board`). Replaces what used to be 3 separate
-   * round trips.
-   *
-   * Non-fatal: the whole pipeline (or an individual command within it) can
-   * fail without failing the accepted report — failures are logged and
-   * swallowed. But a swallowed failure means `previousWriter: null` is a
-   * fabrication, not an observation, so the result also carries
-   * `writerSlotOk`: false whenever the writer slot didn't verifiably execute
-   * (Redis off, pipeline threw, or the SET..GET slot itself errored). The
-   * resolver gates the hand-off broadcast on it — without that gate, a
-   * failing pipeline would look like "board was free" on every send and
-   * spuriously re-broadcast the hand-off each time (the pre-pipeline code
-   * never had this failure mode: a writer-update failure was either swallowed
-   * with no broadcast, or thrown in redisRequired mode).
-   */
+  /** One-pipeline commit of an accepted reportBoardClimb send (history, writer take, dedup, session→board). */
   async commitBoardClimb(input: CommitBoardClimbInput): Promise<CommitBoardClimbResult> {
-    if (!this.redisAdapter || !this.isRedisConnected()) {
-      return { previousWriter: null, writerSlotOk: false };
-    }
-
-    try {
-      const { publisher } = redisClientManager.getClients();
-      const historyKey = `board:${input.boardId}:history`;
-      const writerKey = `board:${input.boardId}:writer`;
-      const lastReportKey = `board:${input.boardId}:lastReport`;
-      const lastReportValue = `${input.emitterId}|${input.climbUuid}|${input.effectiveAngle}`;
-
-      const pipeline = publisher.pipeline();
-      const commandLabels: string[] = [];
-      pipeline.lpush(historyKey, JSON.stringify(input.climb));
-      commandLabels.push('history-lpush');
-      pipeline.ltrim(historyKey, 0, BOARD_HISTORY_SIZE - 1);
-      commandLabels.push('history-ltrim');
-      pipeline.expire(historyKey, BOARD_HISTORY_TTL);
-      commandLabels.push('history-expire');
-      const writerCommandIndex = commandLabels.length;
-      pipeline.set(writerKey, input.emitterId, 'EX', BOARD_MEMBERSHIP_TTL, 'GET');
-      commandLabels.push('writer-set');
-      pipeline.set(lastReportKey, lastReportValue, 'PX', REPORT_DEDUP_WINDOW_MS);
-      commandLabels.push('last-report-set');
-      if (input.sessionId) {
-        pipeline.set(`session:${input.sessionId}:board`, input.boardId, 'EX', BOARD_MEMBERSHIP_TTL);
-        commandLabels.push('session-board-set');
-      }
-
-      const results = await pipeline.exec();
-      if (!results) {
-        throw new Error('commitBoardClimb pipeline returned null');
-      }
-
-      results.forEach(([error], index) => {
-        if (error) {
-          logger.warn(`[PubSub] commitBoardClimb ${commandLabels[index]} command failed: ${String(error)}`);
-        }
-      });
-
-      const [writerError, writerValue] = results[writerCommandIndex];
-      if (writerError) return { previousWriter: null, writerSlotOk: false };
-      return { previousWriter: (writerValue as string | null) ?? null, writerSlotOk: true };
-    } catch (error) {
-      logger.error('[PubSub] commitBoardClimb pipeline failed:', error);
-      return { previousWriter: null, writerSlotOk: false };
-    }
+    return this.boardPresenceStore.commitBoardClimb(input);
   }
 
-  /**
-   * Clear the board's holder only if `emitterId` still holds it (atomic
-   * compare-and-delete), so a holder who was already booted can't wipe the new
-   * one. Returns whether it was actually cleared.
-   */
+  /** Clear the board's holder only if `emitterId` still holds it (atomic compare-and-delete). */
   async clearBoardWriterIf(boardId: string, emitterId: string): Promise<boolean> {
-    if (!this.redisAdapter || !this.isRedisConnected()) return false;
-    try {
-      const { publisher } = redisClientManager.getClients();
-      const cleared = await publisher.eval(
-        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-        1,
-        `board:${boardId}:writer`,
-        emitterId,
-      );
-      return cleared === 1;
-    } catch (error) {
-      if (this.redisRequired) throw error;
-      logger.error('[PubSub] Failed to clear board writer:', error);
-      return false;
-    }
+    return this.boardPresenceStore.clearBoardWriterIf(boardId, emitterId);
   }
 
   /** The board's current connection holder emitter id, or null when free. */
   async getBoardWriter(boardId: string): Promise<string | null> {
-    if (!this.redisAdapter || !this.isRedisConnected()) return null;
-    try {
-      const { publisher } = redisClientManager.getClients();
-      return await publisher.get(`board:${boardId}:writer`);
-    } catch (error) {
-      if (this.redisRequired) throw error;
-      logger.error('[PubSub] Failed to get board writer:', error);
-      return null;
-    }
+    return this.boardPresenceStore.getBoardWriter(boardId);
   }
 
-  /**
-   * The shared board_id this party session is on, or null when unknown.
-   *
-   * The mapping (`session:{id}:board`) is written by `commitBoardClimb` as a
-   * side-effect of `reportBoardClimb` — the only moment a session is provably
-   * tied to a board. The APNs Live Activity path reads it to resolve the
-   * board's current holder for a given session (`QueueState` and the
-   * push-token rows carry sessionId but not boardId). Redis-only and TTL'd to
-   * the same window as proof-of-presence so an idle session's mapping doesn't
-   * leak; a fresh send re-stamps it. Without Redis the holder lookup degrades
-   * to "unknown" and the APNs path omits boardConnection (device falls back
-   * to its own App-Group state).
-   */
+  /** The shared board_id this session is on, or null when unknown (written by commitBoardClimb). */
   async getSessionBoard(sessionId: string): Promise<string | null> {
-    if (!this.redisAdapter || !this.isRedisConnected()) return null;
-    try {
-      const { publisher } = redisClientManager.getClients();
-      return await publisher.get(`session:${sessionId}:board`);
-    } catch (error) {
-      if (this.redisRequired) throw error;
-      logger.error('[PubSub] Failed to get session board:', error);
-      return null;
-    }
-  }
-
-  private setLocalBoardMembership(localKey: string, expiry: number): void {
-    this.localBoardMembership.set(localKey, expiry);
-    if (this.localBoardMembershipCleanupExpiry !== null && expiry >= this.localBoardMembershipCleanupExpiry) {
-      return;
-    }
-    this.scheduleLocalBoardMembershipCleanup();
+    return this.boardPresenceStore.getSessionBoard(sessionId);
   }
 
   /** @internal Test hook for local-only proof-of-presence cleanup coverage. */
   resetLocalBoardMembershipForTest(): void {
-    this.clearLocalBoardMembershipCleanupTimer();
-    this.localBoardMembership.clear();
+    this.boardPresenceStore.resetLocalBoardMembershipForTest();
   }
 
   /** @internal Test hook for local-only proof-of-presence cleanup coverage. */
   setLocalBoardMembershipForTest(localKey: string, expiry: number): void {
-    this.setLocalBoardMembership(localKey, expiry);
+    this.boardPresenceStore.setLocalBoardMembershipForTest(localKey, expiry);
   }
 
   /** @internal Test hook for local-only proof-of-presence cleanup coverage. */
   hasLocalBoardMembershipForTest(localKey: string): boolean {
-    return this.localBoardMembership.has(localKey);
-  }
-
-  private scheduleLocalBoardMembershipCleanup(): void {
-    this.clearLocalBoardMembershipCleanupTimer();
-
-    if (this.localBoardMembership.size === 0) {
-      return;
-    }
-
-    // Local-only mode is single-process and expected to stay small; keep the
-    // scheduler simple unless proof-of-presence cardinality becomes material.
-    let nextExpiry: number | null = null;
-    for (const expiry of this.localBoardMembership.values()) {
-      nextExpiry = nextExpiry === null ? expiry : Math.min(nextExpiry, expiry);
-    }
-    if (nextExpiry === null) return;
-
-    this.localBoardMembershipCleanupExpiry = nextExpiry;
-    const cleanupDelay = Math.max(0, nextExpiry - Date.now());
-    const cleanupTimer = setTimeout(() => {
-      this.localBoardMembershipCleanupTimer = null;
-      this.localBoardMembershipCleanupExpiry = null;
-      this.evictExpiredLocalBoardMemberships();
-      this.scheduleLocalBoardMembershipCleanup();
-    }, cleanupDelay);
-    this.localBoardMembershipCleanupTimer = cleanupTimer;
-    if (typeof cleanupTimer === 'object') {
-      cleanupTimer.unref?.();
-    }
-  }
-
-  private clearLocalBoardMembershipCleanupTimer(): void {
-    if (this.localBoardMembershipCleanupTimer === null) {
-      return;
-    }
-    clearTimeout(this.localBoardMembershipCleanupTimer);
-    this.localBoardMembershipCleanupTimer = null;
-    this.localBoardMembershipCleanupExpiry = null;
-  }
-
-  private evictExpiredLocalBoardMemberships(now = Date.now()): void {
-    for (const [localKey, expiry] of this.localBoardMembership) {
-      if (expiry <= now) {
-        this.localBoardMembership.delete(localKey);
-      }
-    }
+    return this.boardPresenceStore.hasLocalBoardMembershipForTest(localKey);
   }
 
   /**
