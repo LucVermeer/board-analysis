@@ -7,6 +7,9 @@ import type { HoldsFilter, ZoneBoxInput } from '@boardsesh/shared-schema';
 const track = vi.hoisted(() => vi.fn());
 const haptics = vi.hoisted(() => ({ selection: vi.fn() }));
 const emitZoneFilterSelection = vi.hoisted(() => vi.fn());
+// Captures navigation.setOptions calls so tests can assert the headerRight
+// "Clear all" shows only while a zone exists.
+const navMock = vi.hoisted(() => ({ setOptions: vi.fn() }));
 // Mutable across tests so each can seed its own route params.
 const routeParams = vi.hoisted(() => ({ current: {} as Record<string, string> }));
 
@@ -38,7 +41,7 @@ vi.mock('react-native', () => ({
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => routeParams.current,
   // The screen drives the native header (title + headerRight) through setOptions.
-  useNavigation: () => ({ setOptions: vi.fn() }),
+  useNavigation: () => navMock,
   // Route the focus effect through a real useEffect so its cleanup (the handoff
   // emit) fires on unmount — matching useFocusEffect's blur/unmount behaviour.
   useFocusEffect: (effect: () => void | (() => void)) => {
@@ -140,7 +143,25 @@ describe('ZoneFilterScreen', () => {
     track.mockClear();
     haptics.selection.mockClear();
     emitZoneFilterSelection.mockClear();
+    navMock.setOptions.mockClear();
     routeParams.current = baseParams();
+  });
+
+  // The headerRight the screen last handed the native header via setOptions.
+  function lastHeaderRight(): unknown {
+    const lastOptions = navMock.setOptions.mock.calls.at(-1)?.[0] as { headerRight?: unknown } | undefined;
+    return lastOptions?.headerRight;
+  }
+
+  it('shows the headerRight Clear all only while a zone exists', () => {
+    const { container } = render(<ZoneFilterScreen />);
+
+    // No zone yet → no headerRight.
+    expect(lastHeaderRight()).toBeUndefined();
+
+    // Enable a zone → the Clear all headerRight appears.
+    fireEvent.click(container.querySelector('[data-button="mobile.zoneFilter.enable"]') as HTMLButtonElement);
+    expect(lastHeaderRight()).toBeTypeOf('function');
   });
 
   it('shows the Add-a-region affordance when no zone is set yet', () => {

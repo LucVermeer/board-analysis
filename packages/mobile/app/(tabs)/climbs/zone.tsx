@@ -298,8 +298,6 @@ export default function ZoneFilterScreen() {
     );
   }
 
-  const zoneEnabled = zoneBox != null;
-
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <View style={styles.boardSection}>
@@ -317,7 +315,7 @@ export default function ZoneFilterScreen() {
         />
       </View>
 
-      {zoneEnabled ? (
+      {zoneActive ? (
         <GlassSurface
           glassEffectStyle="regular"
           fallbackColor={systemColors.elevatedSurface}
@@ -347,7 +345,7 @@ export default function ZoneFilterScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
         <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerText}>
-          {zoneEnabled ? t('mobile.zoneFilter.activeHint') : t('mobile.zoneFilter.hint')}
+          {zoneActive ? t('mobile.zoneFilter.activeHint') : t('mobile.zoneFilter.hint')}
         </Text>
       </View>
     </View>

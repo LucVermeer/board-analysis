@@ -75,11 +75,10 @@ vi.mock('../../lib/graphql/extract-error-message', () => ({ extractGraphqlMessag
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
-    brandColors: { primary: '#000', primaryFill: '#000', onPrimary: '#fff' },
+    brandColors: { primary: '#000', primaryFill: '#000', onPrimary: '#fff', error: '#C81E1E' },
     systemColors: { separator: '#ccc', secondaryLabel: '#666', tertiaryLabel: '#999', label: '#000' },
   }),
 }));
-vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: {} }));
 vi.mock('../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
 
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';

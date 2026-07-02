@@ -20,6 +20,9 @@ const params = vi.hoisted(() => ({
   },
 }));
 const emitMock = vi.hoisted(() => vi.fn());
+// Captures navigation.setOptions calls so tests can assert the headerRight
+// "Clear all" shows only while setters are selected.
+const navMock = vi.hoisted(() => ({ setOptions: vi.fn() }));
 const setterStats = vi.hoisted(() => ({
   data: [
     { setterUsername: 'alice', climbCount: 5 },
@@ -32,7 +35,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => params.value,
   // The screen drives the native header (title + headerRight) through setOptions.
-  useNavigation: () => ({ setOptions: vi.fn() }),
+  useNavigation: () => navMock,
   // Run the effect immediately and stash its cleanup so the test can fire it.
   useFocusEffect: (effect: () => void | (() => void)) => {
     const cleanup = effect();
@@ -141,11 +144,29 @@ import SettersFilterScreen from '../setters';
 
 beforeEach(() => {
   emitMock.mockClear();
+  navMock.setOptions.mockClear();
   focus.cleanup = null;
   params.value.setters = undefined;
 });
 
+// The headerRight the screen last handed the native header via setOptions.
+function lastHeaderRight(): unknown {
+  const lastOptions = navMock.setOptions.mock.calls.at(-1)?.[0] as { headerRight?: unknown } | undefined;
+  return lastOptions?.headerRight;
+}
+
 describe('SettersFilterScreen', () => {
+  it('shows the headerRight Clear all only while setters are selected', () => {
+    const { getByLabelText } = render(<SettersFilterScreen />);
+
+    // Nothing selected yet → no headerRight.
+    expect(lastHeaderRight()).toBeUndefined();
+
+    // Select a setter → the Clear all headerRight appears.
+    fireEvent.click(getByLabelText('alice'));
+    expect(lastHeaderRight()).toBeTypeOf('function');
+  });
+
   it('hands the selected setters back when the screen loses focus', () => {
     const { getByLabelText } = render(<SettersFilterScreen />);
 

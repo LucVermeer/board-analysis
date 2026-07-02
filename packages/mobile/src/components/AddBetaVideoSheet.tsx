@@ -26,7 +26,6 @@ import { useAttachBetaLink } from '../lib/graphql/hooks';
 import { extractGraphqlMessage } from '../lib/graphql/extract-error-message';
 import { useToast } from '../providers/toast-provider';
 import { useTheme } from '../providers/theme-provider';
-import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
 import { textStyles } from '../theme/typography';
 
@@ -147,7 +146,7 @@ export function AddBetaVideoSheet({
         value={url}
         onChangeText={setUrl}
         placeholder={t('mobile.betaVideos.urlPlaceholder')}
-        placeholderTextColor={iosSystemColors.systemGray}
+        placeholderTextColor={systemColors.secondaryLabel}
         keyboardType="url"
         autoCapitalize="none"
         autoCorrect={false}
@@ -156,7 +155,7 @@ export function AddBetaVideoSheet({
         style={[styles.input, { color: systemColors.label, borderColor: systemColors.separator }]}
       />
       {showError && (
-        <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
+        <Text variant="footnote" color={brandColors.error} style={styles.errorText}>
           {t('mobile.betaVideos.urlInvalid')}
         </Text>
       )}
