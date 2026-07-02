@@ -263,9 +263,17 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const confirmDialog = useConfirm();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  // Depend on the STABLE pieces of the mutation, not the result object — that
+  // object gets a fresh identity every render, which would recreate this
+  // callback → recreate renderItem → re-render every visible row on each tab
+  // render (each search keystroke). `mutate` is identity-stable; the pending
+  // guard reads a ref for the same reason.
+  const { mutate: deleteTickMutate } = deleteTick;
+  const deleteTickPendingRef = useRef(deleteTick.isPending);
+  deleteTickPendingRef.current = deleteTick.isPending;
   const handleDeleteRequest = useCallback(
     (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => {
-      if (deleteTick.isPending) return;
+      if (deleteTickPendingRef.current) return;
       const targetUuid = ascent.uuid;
       void (async () => {
         const confirmed = await confirmDialog({
@@ -276,7 +284,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
           destructive: true,
         });
         if (!confirmed) return;
-        deleteTick.mutate(targetUuid, {
+        deleteTickMutate(targetUuid, {
           onSuccess: () => {
             track(SHARED_EVENTS.LogbookEntryDeleted, { method });
             hapticSuccess();
@@ -304,7 +312,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
         });
       })();
     },
-    [deleteTick, confirmDialog, queryClient, userId, showToast, t],
+    [deleteTickMutate, confirmDialog, queryClient, userId, showToast, t],
   );
 
   // Long press → open the climb actions sheet. For the owner it carries an
