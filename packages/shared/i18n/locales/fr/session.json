@@ -422,7 +422,8 @@
       "undoAria": "Annuler le changement du mur",
       "actionLoading": "Chargement du bloc",
       "actionFailed": "Impossible de charger ce bloc. Réessayez.",
-      "loadingMore": "Chargement de l'historique"
+      "loadingMore": "Chargement de l'historique",
+      "loadMore": "Charger plus"
     },
     "toast": {
       "sessionEnded": "Session terminée"

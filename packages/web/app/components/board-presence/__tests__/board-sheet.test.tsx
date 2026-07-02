@@ -16,6 +16,9 @@ const historyPagination = vi.hoisted(() => ({
   isLoadingOlder: false,
   hasMore: true,
   loadOlder: vi.fn(),
+  // The onPageLoaded callback BoardSheetBody passes to the (mocked) hook,
+  // captured so tests can fire it and assert the analytics wiring.
+  capturedOnPageLoaded: null as ((info: { pageSize: number; returnedCount: number }) => void) | null,
 }));
 
 const presenceControls = vi.hoisted(() => ({
@@ -42,7 +45,19 @@ vi.mock('@boardsesh/board-presence-react', () => ({
     isLive: true,
   }),
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
-  useBoardHistoryPagination: () => historyPagination,
+  useBoardHistoryPagination: (
+    _pageSize?: number,
+    onPageLoaded?: (info: { pageSize: number; returnedCount: number }) => void,
+  ) => {
+    historyPagination.capturedOnPageLoaded = onPageLoaded ?? null;
+    return {
+      olderHistory: historyPagination.olderHistory,
+      isLoadingOlder: historyPagination.isLoadingOlder,
+      hasMore: historyPagination.hasMore,
+      loadOlder: historyPagination.loadOlder,
+    };
+  },
+  boardHistoryEntryKey: (climb: BoardPresenceClimb) => `${climb.climbUuid}:${climb.seq}`,
 }));
 
 vi.mock('@/app/hooks/use-grade-format', () => ({
@@ -92,6 +107,7 @@ describe('BoardSheet', () => {
     historyPagination.isLoadingOlder = false;
     historyPagination.hasMore = true;
     historyPagination.loadOlder.mockClear();
+    historyPagination.capturedOnPageLoaded = null;
     analytics.track.mockClear();
   });
 
@@ -278,8 +294,29 @@ describe('BoardSheet', () => {
       expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
     });
 
-    it('does not render the Load more button when there is no history yet', () => {
+    it('still offers Load more when the live window is empty — durable rows may exist beyond it', () => {
+      // A wall quiet longer than the Redis window's TTL: empty live window,
+      // but weeks of durable boardHistory. The button (rendered with the
+      // empty state) is the only way to reach them.
       presence.history = [];
+
+      const { getByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(getByText(EMPTY_TITLE)).not.toBeNull();
+      fireEvent.click(getByText(LOAD_MORE));
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides the Load more button once hasMore is false (a short page ended pagination)', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.hasMore = false;
 
       const { queryByText } = render(
         createElement(BoardSheet, {
@@ -293,8 +330,8 @@ describe('BoardSheet', () => {
       expect(queryByText(LOAD_MORE)).toBeNull();
     });
 
-    it('hides the Load more button once hasMore is false (a short page ended pagination)', () => {
-      presence.history = [makeClimb('c1', 3)];
+    it('hides the Load more button on an empty window once hasMore is false', () => {
+      presence.history = [];
       historyPagination.hasMore = false;
 
       const { queryByText } = render(
@@ -364,6 +401,31 @@ describe('BoardSheet', () => {
       expect(queryByText(LOAD_MORE)).toBeNull();
       const button = getByText(LOADING_MORE).closest('button');
       expect(button?.disabled).toBe(true);
+    });
+
+    it('tracks BoardHistoryPageLoaded with the boardId when a page resolves', () => {
+      presence.history = [makeClimb('c1', 3)];
+
+      render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      // The sheet hands its onPageLoaded callback to the pagination hook;
+      // firing it (as the real hook does when a page resolves) must emit the
+      // analytics event with the bound boardId attached.
+      expect(historyPagination.capturedOnPageLoaded).not.toBeNull();
+      historyPagination.capturedOnPageLoaded?.({ pageSize: 50, returnedCount: 37 });
+
+      expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: 123,
+        pageSize: 50,
+        returnedCount: 37,
+      });
     });
   });
 });

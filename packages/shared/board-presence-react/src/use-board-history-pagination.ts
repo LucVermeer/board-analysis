@@ -73,7 +73,13 @@ export type BoardHistoryPagination = {
   loadOlder: () => void;
 };
 
-function historyEntryKey(climb: BoardPresenceClimb): string {
+/**
+ * Canonical identity key for a wall-history entry — the immutable
+ * `(climbUuid, seq)` pair. One function so every layer agrees on what "the
+ * same entry" means: this hook's page dedup, both sheets' render-path dedup
+ * against the live window, and the list/React keys on both platforms.
+ */
+export function boardHistoryEntryKey(climb: BoardPresenceClimb): string {
   return `${climb.climbUuid}:${climb.seq}`;
 }
 
@@ -165,14 +171,14 @@ export function useBoardHistoryPagination(
         if (!isActiveRef.current || generationRef.current !== requestGeneration) {
           return;
         }
-        const knownKeys = new Set([...liveHistoryRef.current, ...olderHistoryRef.current].map(historyEntryKey));
+        const knownKeys = new Set([...liveHistoryRef.current, ...olderHistoryRef.current].map(boardHistoryEntryKey));
         // Duplicates always defer to the already-known entry: the durable
         // `boardHistory` query re-resolves sender identity via a live DB join
         // and nulls `queueItemUuid`/`gradeColor`, so the same (climbUuid, seq)
         // can differ in shape from the live-feed/prior-page variant — the
         // live-feed shape is the richer one (mirrors the reducer's
         // `mergeHistory` policy).
-        const deduped = page.filter((climb) => !knownKeys.has(historyEntryKey(climb)));
+        const deduped = page.filter((climb) => !knownKeys.has(boardHistoryEntryKey(climb)));
         const nextOlderHistory = [...olderHistoryRef.current, ...deduped];
         olderHistoryRef.current = nextOlderHistory;
         setOlderHistory(nextOlderHistory);
@@ -185,9 +191,14 @@ export function useBoardHistoryPagination(
         if (!isActiveRef.current || generationRef.current !== requestGeneration) {
           return;
         }
-        // `boardHistory` is auth-required server-side — an anonymous client
-        // (or any other failure) should degrade to "no more history" rather
-        // than retry forever.
+        // Deliberately terminal for ALL errors — auth failures AND transient
+        // network ones. `boardHistory` is auth-required server-side, so for an
+        // anonymous client every call is a guaranteed reject and quietly
+        // stopping IS the graceful degrade (no error/retry UI by design). A
+        // transient failure lands in the same "no more history" state on
+        // purpose: pagination state is scoped to the consumer's mount, so
+        // closing and reopening the sheet resets `hasMore` and retries
+        // naturally.
         hasMoreRef.current = false;
         setHasMore(false);
       })

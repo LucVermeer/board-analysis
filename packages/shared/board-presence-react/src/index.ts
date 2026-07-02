@@ -48,5 +48,5 @@ export type {
   SerialResolveArgs,
 } from './create-board-presence-client';
 
-export { useBoardHistoryPagination } from './use-board-history-pagination';
+export { boardHistoryEntryKey, useBoardHistoryPagination } from './use-board-history-pagination';
 export type { BoardHistoryPageLoadedInfo, BoardHistoryPagination } from './use-board-history-pagination';

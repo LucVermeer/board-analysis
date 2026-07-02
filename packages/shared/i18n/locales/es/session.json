@@ -422,7 +422,8 @@
       "undoAria": "Deshacer el cambio del muro",
       "actionLoading": "Cargando el bloque",
       "actionFailed": "No se pudo cargar ese bloque. Inténtalo de nuevo.",
-      "loadingMore": "Cargando más historial"
+      "loadingMore": "Cargando más historial",
+      "loadMore": "Cargar más"
     },
     "toast": {
       "sessionEnded": "Sesión terminada"

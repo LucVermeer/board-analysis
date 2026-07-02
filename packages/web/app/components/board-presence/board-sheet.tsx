@@ -36,6 +36,7 @@ import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import {
+  boardHistoryEntryKey,
   useBoardHistoryPagination,
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
@@ -46,11 +47,6 @@ import { useGradeFormat } from '@/app/hooks/use-grade-format';
 import { track } from '@/app/lib/analytics';
 import { DEFAULT_GRADE_COLOR, getGradeTextColor } from '@/app/lib/grade-colors';
 import { useBoardPresenceControls } from './board-presence-context';
-
-/** History rows are keyed (and deduped) by the immutable `(climbUuid, seq)` pair. */
-function historyRowKey(climb: BoardPresenceClimb): string {
-  return `${climb.climbUuid}-${climb.seq}`;
-}
 
 type BoardSheetProps = {
   open: boolean;
@@ -176,8 +172,8 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
   // twice with duplicate React keys.
   const combinedHistory = useMemo(() => {
     if (olderHistory.length === 0) return history;
-    const liveKeys = new Set(history.map(historyRowKey));
-    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(historyRowKey(climb)));
+    const liveKeys = new Set(history.map(boardHistoryEntryKey));
+    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(boardHistoryEntryKey(climb)));
     return dedupedOlder.length === 0 ? history : [...history, ...dedupedOlder];
   }, [history, olderHistory]);
 
@@ -274,7 +270,7 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
           <List disablePadding>
             {combinedHistory.map((climb) => (
               <HistoryRow
-                key={historyRowKey(climb)}
+                key={boardHistoryEntryKey(climb)}
                 climb={climb}
                 formattedGrade={climb.grade ? formatGrade(climb.grade) : null}
                 gradeColor={getGradeColor(climb.grade) ?? DEFAULT_GRADE_COLOR}
@@ -282,13 +278,20 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
               />
             ))}
           </List>
-          {hasMore && history.length > 0 ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
-              <Button onClick={loadOlder} disabled={isLoadingOlder} size="small">
-                {isLoadingOlder ? t('boardPresence.loadingMore') : t('boardPresence.loadMore')}
-              </Button>
-            </Box>
-          ) : null}
+        </Box>
+      ) : null}
+
+      {/* Gated on `hasMore` alone — NOT the list being non-empty. A wall
+          that's been quiet longer than the Redis window's TTL has an EMPTY
+          live window but durable boardHistory rows; this button (the hook
+          supports a cursor-less first page) is then the only way to reach
+          them. It sits under the list when there is one, under the empty
+          state when there isn't. */}
+      {hasMore ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, pb: 1 }}>
+          <Button onClick={loadOlder} disabled={isLoadingOlder} size="small">
+            {isLoadingOlder ? t('boardPresence.loadingMore') : t('boardPresence.loadMore')}
+          </Button>
         </Box>
       ) : null}
     </Box>

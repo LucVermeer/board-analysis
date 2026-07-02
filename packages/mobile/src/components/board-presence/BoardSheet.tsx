@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import {
+  boardHistoryEntryKey,
   useBoardHistoryPagination,
   useBoardPresenceActions,
   useBoardPresenceCurrent,
@@ -52,9 +53,6 @@ import { withAlpha } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 const ACTION_CLIMB_CACHE_LIMIT = 50;
-function boardPresenceHistoryKeyExtractor(item: BoardPresenceClimb): string {
-  return `${item.climbUuid}-${item.seq}`;
-}
 
 type BoardSheetRowBoard = {
   boardName: BoardName;
@@ -620,8 +618,8 @@ function BoardSheetContent({
   // must still suppress a durable copy of it leaking in from a page.
   const combinedHistory = useMemo(() => {
     if (olderHistory.length === 0) return visibleHistory;
-    const liveKeys = new Set(history.map(boardPresenceHistoryKeyExtractor));
-    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(boardPresenceHistoryKeyExtractor(climb)));
+    const liveKeys = new Set(history.map(boardHistoryEntryKey));
+    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(boardHistoryEntryKey(climb)));
     return dedupedOlder.length === 0 ? visibleHistory : [...visibleHistory, ...dedupedOlder];
   }, [visibleHistory, history, olderHistory]);
 
@@ -831,19 +829,40 @@ function BoardSheetContent({
   );
 
   const listEmpty = useMemo(
-    () =>
-      currentClimb ? null : (
-        <View style={styles.empty}>
-          <Icon name="lightbulb" size={36} color={systemColors.tertiaryLabel} />
-          <Text variant="headline" color={systemColors.label} style={styles.emptyTitle}>
-            {t('mobile.boardPresence.emptyTitle')}
-          </Text>
-          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyBody}>
-            {t('mobile.boardPresence.emptyBody')}
-          </Text>
-        </View>
-      ),
-    [currentClimb, systemColors, t],
+    () => (
+      <View>
+        {currentClimb ? null : (
+          <View style={styles.empty}>
+            <Icon name="lightbulb" size={36} color={systemColors.tertiaryLabel} />
+            <Text variant="headline" color={systemColors.label} style={styles.emptyTitle}>
+              {t('mobile.boardPresence.emptyTitle')}
+            </Text>
+            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyBody}>
+              {t('mobile.boardPresence.emptyBody')}
+            </Text>
+          </View>
+        )}
+        {/* A wall that's been quiet longer than the Redis window's TTL has an
+            EMPTY live window but durable boardHistory rows. An empty list
+            can't scroll, so the scroll-gated onEndReached above can never
+            fire — this button is then the only path into the durable log
+            (the hook supports a cursor-less first page). */}
+        {hasMore ? (
+          <Pressable
+            onPress={loadOlder}
+            disabled={isLoadingOlder}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.boardPresence.loadMore')}
+            style={styles.emptyLoadMore}
+          >
+            <Text variant="subheadline" color={brandColors.primary}>
+              {isLoadingOlder ? t('mobile.boardPresence.loadingMore') : t('mobile.boardPresence.loadMore')}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ),
+    [currentClimb, systemColors, t, hasMore, isLoadingOlder, loadOlder, brandColors.primary],
   );
 
   const listFooter = useMemo(
@@ -859,7 +878,7 @@ function BoardSheetContent({
   return (
     <BottomSheetFlatList
       data={combinedHistory}
-      keyExtractor={boardPresenceHistoryKeyExtractor}
+      keyExtractor={boardHistoryEntryKey}
       renderItem={renderHistoryItem}
       ListHeaderComponent={listHeader}
       ListEmptyComponent={listEmpty}
@@ -1529,6 +1548,10 @@ const styles = StyleSheet.create({
   historyFooter: {
     paddingVertical: spacing[5],
     alignItems: 'center',
+  },
+  emptyLoadMore: {
+    alignItems: 'center',
+    paddingVertical: spacing[3],
   },
   footer: {
     flexDirection: 'row',

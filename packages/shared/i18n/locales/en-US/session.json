@@ -422,7 +422,8 @@
       "undoAria": "Undo the wall change",
       "actionLoading": "Loading climb",
       "actionFailed": "Couldn't load that climb. Try again.",
-      "loadingMore": "Loading more history"
+      "loadingMore": "Loading more history",
+      "loadMore": "Load more"
     },
     "toast": {
       "sessionEnded": "Session ended"

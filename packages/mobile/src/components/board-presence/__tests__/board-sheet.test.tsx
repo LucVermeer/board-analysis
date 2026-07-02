@@ -16,6 +16,9 @@ const historyPagination = vi.hoisted(() => ({
   isLoadingOlder: false,
   hasMore: true,
   loadOlder: vi.fn(),
+  // The onPageLoaded callback BoardSheetContent passes to the (mocked) hook,
+  // captured so tests can fire it and assert the analytics wiring.
+  capturedOnPageLoaded: null as ((info: { pageSize: number; returnedCount: number }) => void) | null,
 }));
 
 const presenceControls = vi.hoisted(() => ({
@@ -186,7 +189,19 @@ vi.mock('@boardsesh/board-presence-react', () => ({
   }),
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
   useBoardPresenceActions: () => ({ refresh: presence.refresh }),
-  useBoardHistoryPagination: () => historyPagination,
+  useBoardHistoryPagination: (
+    _pageSize?: number,
+    onPageLoaded?: (info: { pageSize: number; returnedCount: number }) => void,
+  ) => {
+    historyPagination.capturedOnPageLoaded = onPageLoaded ?? null;
+    return {
+      olderHistory: historyPagination.olderHistory,
+      isLoadingOlder: historyPagination.isLoadingOlder,
+      hasMore: historyPagination.hasMore,
+      loadOlder: historyPagination.loadOlder,
+    };
+  },
+  boardHistoryEntryKey: (climb: BoardPresenceClimb) => `${climb.climbUuid}:${climb.seq}`,
 }));
 
 vi.mock('../../../providers/board-presence-provider', () => ({
@@ -352,6 +367,7 @@ describe('BoardSheet', () => {
     historyPagination.isLoadingOlder = false;
     historyPagination.hasMore = true;
     historyPagination.loadOlder.mockClear();
+    historyPagination.capturedOnPageLoaded = null;
     analytics.track.mockClear();
     graphql.request.mockReset();
     toast.showToast.mockClear();
@@ -1325,6 +1341,71 @@ describe('BoardSheet', () => {
       );
 
       expect(queryByLabelText('mobile.boardPresence.loadingMore')).toBeNull();
+    });
+
+    it('offers Load more from the empty state — an empty list cannot scroll to trigger onEndReached', () => {
+      // A wall quiet longer than the Redis window's TTL: empty live window,
+      // but durable rows may exist. The empty-state button is the only path.
+      presence.history = [];
+      const ref = createRef<BoardSheetHandle>();
+      const { getByLabelText } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      fireEvent.click(getByLabelText('mobile.boardPresence.loadMore'));
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides the empty-state Load more once hasMore is false', () => {
+      presence.history = [];
+      historyPagination.hasMore = false;
+      const ref = createRef<BoardSheetHandle>();
+      const { queryByLabelText } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      expect(queryByLabelText('mobile.boardPresence.loadMore')).toBeNull();
+    });
+
+    it('tracks BoardHistoryPageLoaded with the boardId when a page resolves', () => {
+      presence.history = [makeClimb('c1', 3)];
+      const ref = createRef<BoardSheetHandle>();
+      render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      // The sheet hands its onPageLoaded callback to the pagination hook;
+      // firing it (as the real hook does when a page resolves) must emit the
+      // analytics event with the bound boardId attached.
+      expect(historyPagination.capturedOnPageLoaded).not.toBeNull();
+      act(() => historyPagination.capturedOnPageLoaded?.({ pageSize: 50, returnedCount: 37 }));
+
+      expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: 123,
+        pageSize: 50,
+        returnedCount: 37,
+      });
     });
   });
 });
