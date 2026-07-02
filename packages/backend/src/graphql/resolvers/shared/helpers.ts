@@ -4,7 +4,7 @@ import { checkRateLimit, RateLimitError } from '../../../utils/rate-limiter';
 import { checkRateLimitRedis } from '../../../utils/redis-rate-limiter';
 import { getContext } from '../../context';
 import { getDistributedState } from '../../../services/distributed-state';
-import { db, dbRead } from '../../../db/client';
+import { db } from '../../../db/client';
 import { esp32Controllers, boardSessionParticipants } from '@boardsesh/db/schema/app';
 import { and, eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
@@ -203,7 +203,11 @@ export async function isSessionMember(ctx: ConnectionContext, sessionId: string)
   }
 
   if (ctx.userId) {
-    const rows = await dbRead
+    // Primary client (`db`, not `dbRead`), matching verifyWidgetSession: the
+    // participant row is written on join, and reading it from a lagging
+    // replica could demote a freshly-joined authenticated HTTP caller to the
+    // preview payload. A single PK-indexed row read is cheap on the primary.
+    const rows = await db
       .select({ sessionId: boardSessionParticipants.sessionId })
       .from(boardSessionParticipants)
       .where(and(eq(boardSessionParticipants.userId, ctx.userId), eq(boardSessionParticipants.sessionId, sessionId)))

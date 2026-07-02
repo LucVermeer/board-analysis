@@ -19,7 +19,14 @@ export type Session = {
   name: string | null;
   boardPath: string;
   users: SessionUser[];
-  queueState: QueueState;
+  /**
+   * Nullable to match the schema: the server returns null on the `session`
+   * query's non-member preview and on `createSession`'s HTTP path. Web only
+   * ever fills this type from `joinSession` (a WS member payload, always a
+   * full snapshot), so a null here means a malformed response — read sites
+   * guard rather than assume.
+   */
+  queueState: QueueState | null;
   isLeader: boolean;
   /**
    * Most recently observed BLE board serial for this session, or null when no
