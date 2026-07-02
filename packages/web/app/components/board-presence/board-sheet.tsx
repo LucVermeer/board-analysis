@@ -30,11 +30,17 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import ButtonBase from '@mui/material/ButtonBase';
+import Button from '@mui/material/Button';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
+import {
+  boardHistoryEntryKey,
+  useBoardHistoryPagination,
+  useBoardPresenceCurrent,
+  useBoardPresenceFeed,
+} from '@boardsesh/board-presence-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -144,6 +150,33 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
   const { currentClimb } = useBoardPresenceCurrent();
   const { history, stats } = useBoardPresenceFeed();
 
+  // "Load older" — pages further back through the durable history log, past
+  // the live feed's in-memory HISTORY_CAP window.
+  const handleHistoryPageLoaded = useCallback(
+    (info: { pageSize: number; returnedCount: number }) => {
+      track(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: boardId ?? undefined,
+        pageSize: info.pageSize,
+        returnedCount: info.returnedCount,
+      });
+    },
+    [boardId],
+  );
+  const { olderHistory, isLoadingOlder, hasMore, loadOlder } = useBoardHistoryPagination(
+    undefined,
+    handleHistoryPageLoaded,
+  );
+  // The hook dedupes each page only at resolve time; the live window can gain
+  // lower seqs AFTERWARDS (backfill / foreground catch-up merge — seam 2 in
+  // the hook's header), so re-filter here or overlapping entries would render
+  // twice with duplicate React keys.
+  const combinedHistory = useMemo(() => {
+    if (olderHistory.length === 0) return history;
+    const liveKeys = new Set(history.map(boardHistoryEntryKey));
+    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(boardHistoryEntryKey(climb)));
+    return dedupedOlder.length === 0 ? history : [...history, ...dedupedOlder];
+  }, [history, olderHistory]);
+
   // Fires once per open, when history is first non-empty. This body mounts
   // fresh each time the Drawer opens (unmounted while closed), so the ref
   // naturally resets per open — mirrors the mobile `BoardSheetContent`.
@@ -231,13 +264,13 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
         </Box>
       ) : null}
 
-      {history.length > 0 ? (
+      {combinedHistory.length > 0 ? (
         <Box sx={{ px: 2, pb: 1 }}>
           <SectionHeader>{t('boardPresence.historyHeader')}</SectionHeader>
           <List disablePadding>
-            {history.map((climb) => (
+            {combinedHistory.map((climb) => (
               <HistoryRow
-                key={`${climb.climbUuid}-${climb.seq}`}
+                key={boardHistoryEntryKey(climb)}
                 climb={climb}
                 formattedGrade={climb.grade ? formatGrade(climb.grade) : null}
                 gradeColor={getGradeColor(climb.grade) ?? DEFAULT_GRADE_COLOR}
@@ -245,6 +278,20 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
               />
             ))}
           </List>
+        </Box>
+      ) : null}
+
+      {/* Gated on `hasMore` alone — NOT the list being non-empty. A wall
+          that's been quiet longer than the Redis window's TTL has an EMPTY
+          live window but durable boardHistory rows; this button (the hook
+          supports a cursor-less first page) is then the only way to reach
+          them. It sits under the list when there is one, under the empty
+          state when there isn't. */}
+      {hasMore ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, pb: 1 }}>
+          <Button onClick={loadOlder} disabled={isLoadingOlder} size="small">
+            {isLoadingOlder ? t('boardPresence.loadingMore') : t('boardPresence.loadMore')}
+          </Button>
         </Box>
       ) : null}
     </Box>

@@ -11,6 +11,16 @@ const presence = vi.hoisted(() => ({
   stats: null as BoardPresenceStats | null,
 }));
 
+const historyPagination = vi.hoisted(() => ({
+  olderHistory: [] as BoardPresenceClimb[],
+  isLoadingOlder: false,
+  hasMore: true,
+  loadOlder: vi.fn(),
+  // The onPageLoaded callback BoardSheetBody passes to the (mocked) hook,
+  // captured so tests can fire it and assert the analytics wiring.
+  capturedOnPageLoaded: null as ((info: { pageSize: number; returnedCount: number }) => void) | null,
+}));
+
 const presenceControls = vi.hoisted(() => ({
   boardId: 123 as number | null,
 }));
@@ -35,6 +45,19 @@ vi.mock('@boardsesh/board-presence-react', () => ({
     isLive: true,
   }),
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
+  useBoardHistoryPagination: (
+    _pageSize?: number,
+    onPageLoaded?: (info: { pageSize: number; returnedCount: number }) => void,
+  ) => {
+    historyPagination.capturedOnPageLoaded = onPageLoaded ?? null;
+    return {
+      olderHistory: historyPagination.olderHistory,
+      isLoadingOlder: historyPagination.isLoadingOlder,
+      hasMore: historyPagination.hasMore,
+      loadOlder: historyPagination.loadOlder,
+    };
+  },
+  boardHistoryEntryKey: (climb: BoardPresenceClimb) => `${climb.climbUuid}:${climb.seq}`,
 }));
 
 vi.mock('@/app/hooks/use-grade-format', () => ({
@@ -71,6 +94,8 @@ const SWITCH_BOARD_ARIA = tFromCatalog('session', 'boardPresence.switchBoardAria
 const CLOSE_ARIA = tFromCatalog('session', 'boardPresence.close');
 const EMPTY_TITLE = tFromCatalog('session', 'boardPresence.emptyTitle');
 const HISTORY_HEADER = tFromCatalog('session', 'boardPresence.historyHeader');
+const LOAD_MORE = tFromCatalog('session', 'boardPresence.loadMore');
+const LOADING_MORE = tFromCatalog('session', 'boardPresence.loadingMore');
 
 describe('BoardSheet', () => {
   beforeEach(() => {
@@ -78,6 +103,11 @@ describe('BoardSheet', () => {
     presence.history = [];
     presence.stats = null;
     presenceControls.boardId = 123;
+    historyPagination.olderHistory = [];
+    historyPagination.isLoadingOlder = false;
+    historyPagination.hasMore = true;
+    historyPagination.loadOlder.mockClear();
+    historyPagination.capturedOnPageLoaded = null;
     analytics.track.mockClear();
   });
 
@@ -244,5 +274,158 @@ describe('BoardSheet', () => {
     );
 
     expect(analytics.track).toHaveBeenCalledTimes(2);
+  });
+
+  describe('load older history', () => {
+    it('renders a Load more button and calls loadOlder on click', () => {
+      presence.history = [makeClimb('c1', 3)];
+
+      const { getByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      const button = getByText(LOAD_MORE);
+      fireEvent.click(button);
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('still offers Load more when the live window is empty — durable rows may exist beyond it', () => {
+      // A wall quiet longer than the Redis window's TTL: empty live window,
+      // but weeks of durable boardHistory. The button (rendered with the
+      // empty state) is the only way to reach them.
+      presence.history = [];
+
+      const { getByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(getByText(EMPTY_TITLE)).not.toBeNull();
+      fireEvent.click(getByText(LOAD_MORE));
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides the Load more button once hasMore is false (a short page ended pagination)', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.hasMore = false;
+
+      const { queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByText(LOAD_MORE)).toBeNull();
+    });
+
+    it('hides the Load more button on an empty window once hasMore is false', () => {
+      presence.history = [];
+      historyPagination.hasMore = false;
+
+      const { queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByText(LOAD_MORE)).toBeNull();
+    });
+
+    it('renders loaded older rows appended after the live history', () => {
+      presence.history = [makeClimb('c2', 4)];
+      historyPagination.olderHistory = [makeClimb('c1', 3), makeClimb('c0', 2, { name: 'Oldest Climb' })];
+
+      const { getByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(getByText('Climb c2')).not.toBeNull();
+      expect(getByText('Climb c1')).not.toBeNull();
+      expect(getByText('Oldest Climb')).not.toBeNull();
+    });
+
+    it('renders an overlapping older row only once — the live window wins (backfill overlap)', () => {
+      // The live window gained c1/3 AFTER the page containing it resolved
+      // (backfill / foreground catch-up merge); the render-path dedup must
+      // drop the durable copy or the list would have duplicate React keys.
+      presence.history = [makeClimb('c2', 4), makeClimb('c1', 3)];
+      historyPagination.olderHistory = [makeClimb('c1', 3, { name: 'Durable Variant' }), makeClimb('c0', 2)];
+
+      const { getAllByText, getByText, queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(getAllByText('Climb c1')).toHaveLength(1);
+      expect(queryByText('Durable Variant')).toBeNull();
+      expect(getByText('Climb c0')).not.toBeNull();
+    });
+
+    it('disables the button and swaps its label while loading', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.isLoadingOlder = true;
+
+      const { getByText, queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByText(LOAD_MORE)).toBeNull();
+      const button = getByText(LOADING_MORE).closest('button');
+      expect(button?.disabled).toBe(true);
+    });
+
+    it('tracks BoardHistoryPageLoaded with the boardId when a page resolves', () => {
+      presence.history = [makeClimb('c1', 3)];
+
+      render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      // The sheet hands its onPageLoaded callback to the pagination hook;
+      // firing it (as the real hook does when a page resolves) must emit the
+      // analytics event with the bound boardId attached.
+      expect(historyPagination.capturedOnPageLoaded).not.toBeNull();
+      historyPagination.capturedOnPageLoaded?.({ pageSize: 50, returnedCount: 37 });
+
+      expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: 123,
+        pageSize: 50,
+        returnedCount: 37,
+      });
+    });
   });
 });

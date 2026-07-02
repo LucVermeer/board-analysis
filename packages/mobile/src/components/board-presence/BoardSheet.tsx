@@ -25,6 +25,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import {
+  boardHistoryEntryKey,
+  useBoardHistoryPagination,
   useBoardPresenceActions,
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
@@ -51,9 +53,6 @@ import { withAlpha } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 const ACTION_CLIMB_CACHE_LIMIT = 50;
-function boardPresenceHistoryKeyExtractor(item: BoardPresenceClimb): string {
-  return `${item.climbUuid}-${item.seq}`;
-}
 
 type BoardSheetRowBoard = {
   boardName: BoardName;
@@ -595,6 +594,50 @@ function BoardSheetContent({
     [currentClimb, history],
   );
 
+  // "Load older" — pages further back through the durable history log, past
+  // the live feed's in-memory HISTORY_CAP window.
+  const handleHistoryPageLoaded = useCallback(
+    (info: { pageSize: number; returnedCount: number }) => {
+      track(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: boardPresenceBoardId ?? undefined,
+        pageSize: info.pageSize,
+        returnedCount: info.returnedCount,
+      });
+    },
+    [boardPresenceBoardId],
+  );
+  const { olderHistory, isLoadingOlder, hasMore, loadOlder } = useBoardHistoryPagination(
+    undefined,
+    handleHistoryPageLoaded,
+  );
+  // The hook dedupes each page only at resolve time; the live window can gain
+  // lower seqs AFTERWARDS (backfill / pull-to-refresh merge — seam 2 in the
+  // hook's header), so re-filter here or overlapping entries would render
+  // twice with duplicate list keys. Filter against the FULL feed history, not
+  // `visibleHistory`: the current climb is excluded from the list but its key
+  // must still suppress a durable copy of it leaking in from a page.
+  const combinedHistory = useMemo(() => {
+    if (olderHistory.length === 0) return visibleHistory;
+    const liveKeys = new Set(history.map(boardHistoryEntryKey));
+    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(boardHistoryEntryKey(climb)));
+    return dedupedOlder.length === 0 ? visibleHistory : [...visibleHistory, ...dedupedOlder];
+  }, [visibleHistory, history, olderHistory]);
+
+  // FlatList fires onEndReached immediately when the content is shorter than
+  // the viewport, so without this gate every presentation of a quiet wall
+  // would auto-fire a durable history fetch (guaranteed-rejected for
+  // logged-out users). Require a real user scroll first. The ref lives in
+  // this component, which mounts fresh per presentation, so the gate re-arms
+  // on every open.
+  const hasUserScrolledRef = useRef(false);
+  const handleScrollBeginDrag = useCallback(() => {
+    hasUserScrolledRef.current = true;
+  }, []);
+  const handleEndReached = useCallback(() => {
+    if (!hasUserScrolledRef.current) return;
+    loadOlder();
+  }, [loadOlder]);
+
   // Fires once per presentation, when history is FIRST non-empty — not only at
   // mount, because presenting before the initial backfill resolves would find
   // an empty list and never fire for that presentation. This component mounts
@@ -786,28 +829,68 @@ function BoardSheetContent({
   );
 
   const listEmpty = useMemo(
+    () => (
+      <View>
+        {currentClimb ? null : (
+          <View style={styles.empty}>
+            <Icon name="lightbulb" size={36} color={systemColors.tertiaryLabel} />
+            <Text variant="headline" color={systemColors.label} style={styles.emptyTitle}>
+              {t('mobile.boardPresence.emptyTitle')}
+            </Text>
+            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyBody}>
+              {t('mobile.boardPresence.emptyBody')}
+            </Text>
+          </View>
+        )}
+        {/* A wall that's been quiet longer than the Redis window's TTL has an
+            EMPTY live window but durable boardHistory rows. An empty list
+            can't scroll, so the scroll-gated onEndReached above can never
+            fire — this button is then the only path into the durable log
+            (the hook supports a cursor-less first page). */}
+        {hasMore ? (
+          <Pressable
+            onPress={loadOlder}
+            disabled={isLoadingOlder}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.boardPresence.loadMore')}
+            style={styles.emptyLoadMore}
+          >
+            <Text variant="subheadline" color={brandColors.primary}>
+              {isLoadingOlder ? t('mobile.boardPresence.loadingMore') : t('mobile.boardPresence.loadMore')}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ),
+    [currentClimb, systemColors, t, hasMore, isLoadingOlder, loadOlder, brandColors.primary],
+  );
+
+  const listFooter = useMemo(
     () =>
-      currentClimb ? null : (
-        <View style={styles.empty}>
-          <Icon name="lightbulb" size={36} color={systemColors.tertiaryLabel} />
-          <Text variant="headline" color={systemColors.label} style={styles.emptyTitle}>
-            {t('mobile.boardPresence.emptyTitle')}
-          </Text>
-          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyBody}>
-            {t('mobile.boardPresence.emptyBody')}
-          </Text>
+      isLoadingOlder ? (
+        <View style={styles.historyFooter}>
+          <ActivityIndicator size="small" accessibilityLabel={t('mobile.boardPresence.loadingMore')} />
         </View>
-      ),
-    [currentClimb, systemColors, t],
+      ) : null,
+    [isLoadingOlder, t],
   );
 
   return (
     <BottomSheetFlatList
-      data={visibleHistory}
-      keyExtractor={boardPresenceHistoryKeyExtractor}
+      data={combinedHistory}
+      keyExtractor={boardHistoryEntryKey}
       renderItem={renderHistoryItem}
       ListHeaderComponent={listHeader}
       ListEmptyComponent={listEmpty}
+      ListFooterComponent={listFooter}
+      // `loadOlder` already no-ops once `hasMore` is false, but skipping the
+      // prop entirely once there's nothing left avoids FlatList re-evaluating
+      // the end-reached threshold on every scroll frame for no reason. The
+      // handler itself is additionally gated on a real user scroll — see
+      // `hasUserScrolledRef` above.
+      onEndReached={hasMore ? handleEndReached : undefined}
+      onEndReachedThreshold={0.6}
+      onScrollBeginDrag={handleScrollBeginDrag}
       contentContainerStyle={{ paddingBottom: spacing[4] }}
       refreshControl={
         <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />
@@ -1461,6 +1544,14 @@ const styles = StyleSheet.create({
   },
   emptyBody: {
     textAlign: 'center',
+  },
+  historyFooter: {
+    paddingVertical: spacing[5],
+    alignItems: 'center',
+  },
+  emptyLoadMore: {
+    alignItems: 'center',
+    paddingVertical: spacing[3],
   },
   footer: {
     flexDirection: 'row',

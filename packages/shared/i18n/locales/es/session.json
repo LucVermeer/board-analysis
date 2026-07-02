@@ -43,7 +43,9 @@
     "statHardest": "más difícil",
     "statTopGrade": "más repetido",
     "wallChanged": "Has cambiado el muro",
-    "undo": "Deshacer"
+    "undo": "Deshacer",
+    "loadMore": "Cargar más",
+    "loadingMore": "Cargando…"
   },
   "detail": {
     "subtitleSends_one": "{{count}} encadene",
@@ -419,7 +421,9 @@
       "undo": "Deshacer",
       "undoAria": "Deshacer el cambio del muro",
       "actionLoading": "Cargando el bloque",
-      "actionFailed": "No se pudo cargar ese bloque. Inténtalo de nuevo."
+      "actionFailed": "No se pudo cargar ese bloque. Inténtalo de nuevo.",
+      "loadingMore": "Cargando más historial",
+      "loadMore": "Cargar más"
     },
     "toast": {
       "sessionEnded": "Sesión terminada"

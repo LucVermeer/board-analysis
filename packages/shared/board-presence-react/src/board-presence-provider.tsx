@@ -33,6 +33,19 @@ const BoardPresenceHasClimbContext = createContext<boolean | undefined>(undefine
 // holder/stats/undo-target churn that context also carries.
 const BoardPresenceWallClimbContext = createContext<BoardPresenceClimb | null | undefined>(undefined);
 
+/** The board + client pair a consumer needs to drive its own platform I/O
+ * against — currently just `use-board-history-pagination`'s `fetchHistory`
+ * paging, which lives outside the reducer/feed context on purpose (see that
+ * hook's docstring). Memoized on `[boardId, client]` only, so it changes
+ * exactly when the bound board or transport itself changes, never on a wall
+ * event. */
+export type BoardPresenceClientValue = {
+  boardId: number | null;
+  client: BoardPresenceClient | null;
+};
+
+const BoardPresenceClientContext = createContext<BoardPresenceClientValue | undefined>(undefined);
+
 export function BoardPresenceProvider({
   boardId,
   client,
@@ -86,6 +99,10 @@ export function BoardPresenceProvider({
   // when live (or the stable `null` literal otherwise), so there is nothing to
   // memoize: the reference only changes when `currentClimb` itself does.
   const wallClimb = value.isLive ? value.currentClimb : null;
+  // Changes only on a board switch or client rebuild (props identity), never
+  // on a wall event — safe for a hook like `use-board-history-pagination` to
+  // key an effect on without re-running per climb.
+  const clientValue = useMemo<BoardPresenceClientValue>(() => ({ boardId, client }), [boardId, client]);
 
   return (
     <BoardPresenceContext.Provider value={value}>
@@ -93,7 +110,11 @@ export function BoardPresenceProvider({
         <BoardPresenceCurrentContext.Provider value={current}>
           <BoardPresenceHasClimbContext.Provider value={hasClimb}>
             <BoardPresenceWallClimbContext.Provider value={wallClimb}>
-              <BoardPresenceFeedContext.Provider value={feed}>{children}</BoardPresenceFeedContext.Provider>
+              <BoardPresenceFeedContext.Provider value={feed}>
+                <BoardPresenceClientContext.Provider value={clientValue}>
+                  {children}
+                </BoardPresenceClientContext.Provider>
+              </BoardPresenceFeedContext.Provider>
             </BoardPresenceWallClimbContext.Provider>
           </BoardPresenceHasClimbContext.Provider>
         </BoardPresenceCurrentContext.Provider>
@@ -157,6 +178,22 @@ export function useBoardPresenceWallClimb(): BoardPresenceClimb | null {
   return context;
 }
 
+/**
+ * The bound `boardId` + injected `client`, for consumers that need to drive
+ * their own platform I/O against the same board/transport `useBoardPresence`
+ * is attached to — e.g. `use-board-history-pagination`'s `fetchHistory`
+ * paging. Prefer the narrower current/feed/actions hooks above for anything
+ * that only reads wall state; this one exists for callers that need the raw
+ * client.
+ */
+export function useBoardPresenceClient(): BoardPresenceClientValue {
+  const context = useContext(BoardPresenceClientContext);
+  if (context === undefined) {
+    throw new Error('useBoardPresenceClient must be used within a BoardPresenceProvider');
+  }
+  return context;
+}
+
 export {
   BoardPresenceContext,
   BoardPresenceActionsContext,
@@ -164,4 +201,5 @@ export {
   BoardPresenceFeedContext,
   BoardPresenceHasClimbContext,
   BoardPresenceWallClimbContext,
+  BoardPresenceClientContext,
 };
