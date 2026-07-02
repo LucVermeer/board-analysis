@@ -148,6 +148,22 @@ describe('buildLogbookListRows', () => {
     expect(new Set(dividerKeys).size).toBe(dividerKeys.length);
   });
 
+  it('groups ascending (date-asc custom sort) input the same way — direction-agnostic', () => {
+    const rows = buildLogbookListRows(
+      [
+        tick({ uuid: 'a', climbedAt: `2026-06-29${NOON}` }),
+        tick({ uuid: 'b', climbedAt: `2026-06-30${NOON}` }),
+        tick({ uuid: 'c', climbedAt: `2026-06-30${NOON}` }),
+      ],
+      { hasMore: true },
+    );
+    expect(rows.map((row) => row.type)).toEqual(['divider', 'entry', 'divider', 'entry', 'entry']);
+    const dividers = rows.filter((row) => row.type === 'divider');
+    // The LAST loaded run may straddle the next page regardless of direction.
+    expect(dividers[0].stats).not.toBeNull();
+    expect(dividers[1].stats).toBeNull();
+  });
+
   it('returns no rows for an empty list', () => {
     expect(buildLogbookListRows([], { hasMore: false })).toEqual([]);
   });

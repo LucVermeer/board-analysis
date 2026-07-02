@@ -63,6 +63,9 @@ function stripTickFromAscentFeeds(queryClient: QueryClient, uuid: string) {
       // stale-high until the background refetch reconciles. One tick = one off
       // the total, even if offset-pagination overlap duplicated its row across
       // cached pages (the duplicates are cache artifacts, not extra ticks).
+      // Decrementing EVERY page (not just pages holding the row) is deliberate:
+      // the copies must stay in lockstep, and the refetch re-syncs any page
+      // whose copy had already drifted.
       const anyRemoved = cached.pages.some((page) => page.userAscentsFeed.items.some((item) => item.uuid === uuid));
       if (!anyRemoved) return cached;
       return {
