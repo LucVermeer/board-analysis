@@ -1268,12 +1268,14 @@ omit the `boardsesh:` namespace prefix.
 ```
 board:{boardId}:history             # List - latest BoardPresenceClimb payloads, newest first
 board:{boardId}:seq                 # String/integer - per-board monotonic event sequence
+board:{boardId}:writer              # String - current connection-holder emitter id
+board:{boardId}:lastReport          # String - "emitter|climb|angle" write-dedup marker (10s)
 presence:board:{boardId}:user:{id}  # String - proof-of-presence stamp for report authorization
 ```
 
-Board presence is a separate pub/sub domain from party sessions. `resolveBoardForSerial` maps a BLE serial to one active `user_boards.id`; `resolveBoardForConfig` maps serial-less hardware to one hidden system-owned board per normalized `(boardType, layoutId, sizeId, setIds)` config. `reportBoardClimb` requires a live proof-of-presence stamp for that board before it publishes a `BoardClimbSet` event.
+Board presence is a separate pub/sub domain from party sessions. `resolveBoardForSerial` maps a BLE serial to one active `user_boards.id`; `resolveBoardForConfig` maps serial-less hardware to one hidden system-owned board per normalized `(boardType, layoutId, sizeId, setIds)` config. `reportBoardClimb` requires a live proof-of-presence stamp for that board before it publishes a `BoardClimbSet` event. The report path is pipelined: `pubsub.getBoardReportGate` reads membership + first-seen + the dedup marker + the current writer in one round trip, and `pubsub.commitBoardClimb` writes the history append, the writer hand-off (atomic `SET ... GET`), the dedup marker, and the session→board mapping in another. An identical retry (same emitter, climb, and angle) within the 10 s dedup window is accepted as a no-op while that emitter still holds the wall.
 
-Redis-backed deployments keep the last 50 climbs for 24 hours so late subscribers can backfill before listening to `boardsesh:board:{boardId}`. Local-only deployments dispatch live board-presence events in process and keep proof-of-presence in memory with scheduled TTL cleanup; they do not provide board history backfill across process restarts.
+Redis-backed deployments keep the last 50 climbs for 1 week (`BOARD_HISTORY_TTL`) so late subscribers can backfill before listening to `boardsesh:board:{boardId}`; the seq counter shares that TTL and reseeds itself past the durable `board_climb_events` floor when it comes back small after expiry. Local-only deployments dispatch live board-presence events in process and keep proof-of-presence in memory with scheduled TTL cleanup; they do not provide board history backfill across process restarts.
 
 ### Graceful Shutdown
 
@@ -1564,27 +1566,28 @@ Requires user authentication and controller ownership.
 
 ### Timeouts and Limits
 
-| Setting                 | Value    | Purpose                                   |
-| ----------------------- | -------- | ----------------------------------------- |
-| Retry attempts          | 10       | WebSocket reconnection                    |
-| Max retry delay         | 30s      | Exponential backoff cap                   |
-| Keep-alive interval     | 10s      | Connection health check                   |
-| Mutation timeout        | 30s      | Prevent hanging mutations                 |
-| Redis TTL               | 4 hours  | Session cache expiry                      |
-| Postgres debounce       | 30s      | Batch writes                              |
-| Event buffer size       | 100      | Delta sync limit                          |
-| Event buffer TTL        | 5 min    | Old events cleanup                        |
-| Board history size      | 50       | Board-presence backfill limit             |
-| Board history TTL       | 24 hours | Board-presence history expiry             |
-| Board membership TTL    | 12 hours | Proof-of-presence report window           |
-| Hash verification       | 60s      | State drift detection                     |
-| Subscription queue      | 1000     | Max pending events                        |
-| Connection TTL          | 1 hour   | Distributed connection expiry             |
-| WebSocket ping interval | 30s      | Dead connection detection                 |
-| Instance heartbeat      | 30s      | Heartbeat update interval                 |
-| Instance heartbeat TTL  | 60s      | Dead instance detection                   |
-| Session members TTL     | 4 hours  | Matches session TTL                       |
-| Session grace period    | 60s      | In-memory retention after last disconnect |
+| Setting                 | Value                        | Purpose                                   |
+| ----------------------- | ---------------------------- | ----------------------------------------- |
+| Retry attempts          | 10                           | WebSocket reconnection                    |
+| Max retry delay         | 30s                          | Exponential backoff cap                   |
+| Keep-alive interval     | 10s                          | Connection health check                   |
+| Mutation timeout        | 30s                          | Prevent hanging mutations                 |
+| Redis TTL               | 4 hours                      | Session cache expiry                      |
+| Postgres debounce       | 30s                          | Batch writes                              |
+| Event buffer size       | 100                          | Delta sync limit                          |
+| Event buffer TTL        | 5 min                        | Old events cleanup                        |
+| Board history size      | 50                           | Board-presence backfill limit             |
+| Board history TTL       | 1 week (`BOARD_HISTORY_TTL`) | Board-presence history expiry             |
+| Board report dedup      | 10s                          | Write-side retry idempotency window       |
+| Board membership TTL    | 12 hours                     | Proof-of-presence report window           |
+| Hash verification       | 60s                          | State drift detection                     |
+| Subscription queue      | 1000                         | Max pending events                        |
+| Connection TTL          | 1 hour                       | Distributed connection expiry             |
+| WebSocket ping interval | 30s                          | Dead connection detection                 |
+| Instance heartbeat      | 30s                          | Heartbeat update interval                 |
+| Instance heartbeat TTL  | 60s                          | Dead instance detection                   |
+| Session members TTL     | 4 hours                      | Matches session TTL                       |
+| Session grace period    | 60s                          | In-memory retention after last disconnect |
 
 ---
 

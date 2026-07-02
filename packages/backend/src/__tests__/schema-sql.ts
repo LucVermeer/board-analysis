@@ -469,6 +469,7 @@ export const schemaSQL = `
 
   -- Durable per-board send log (dwell-gated). Distinct from boardsesh_ticks: the
   -- raw wall-push stream, no flash/send/attempt status.
+  DROP TABLE IF EXISTS "board_climb_events" CASCADE;
   CREATE TABLE IF NOT EXISTS "board_climb_events" (
     "id" bigserial PRIMARY KEY NOT NULL,
     "board_id" bigint NOT NULL REFERENCES "user_boards"("id") ON DELETE CASCADE,
@@ -554,6 +555,54 @@ export const schemaSQL = `
     "deleted_at" timestamp
   );
   CREATE INDEX IF NOT EXISTS "comments_entity_created_at_idx" ON "comments" ("entity_type", "entity_id", "created_at");
+
+  -- Votes on a comment/tick/climb/etc. entity_type is text here (see the
+  -- comments-table note above — the real schema uses an enum).
+  DROP TABLE IF EXISTS "votes" CASCADE;
+  CREATE TABLE IF NOT EXISTS "votes" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "entity_type" text NOT NULL,
+    "entity_id" text NOT NULL,
+    "value" integer NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "votes_unique_user_entity" ON "votes" ("user_id", "entity_type", "entity_id");
+  CREATE INDEX IF NOT EXISTS "votes_entity_idx" ON "votes" ("entity_type", "entity_id");
+
+  -- Per-user activity feed rows (ascent/new_climb/comment/etc.), fanned out on
+  -- write. entity_type/type are text here (see the comments-table note above).
+  DROP TABLE IF EXISTS "feed_items" CASCADE;
+  CREATE TABLE IF NOT EXISTS "feed_items" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "recipient_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "actor_id" text REFERENCES "users"("id") ON DELETE SET NULL,
+    "type" text NOT NULL,
+    "entity_type" text NOT NULL,
+    "entity_id" text NOT NULL,
+    "board_uuid" text,
+    "metadata" jsonb,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "feed_items_recipient_created_at_idx" ON "feed_items" ("recipient_id", "created_at" DESC, "id" DESC);
+  CREATE INDEX IF NOT EXISTS "feed_items_entity_type_entity_id_idx" ON "feed_items" ("entity_type", "entity_id");
+
+  -- User notifications (comment replies, votes, follows, etc.). type/entity_type
+  -- are text here (see the comments-table note above).
+  DROP TABLE IF EXISTS "notifications" CASCADE;
+  CREATE TABLE IF NOT EXISTS "notifications" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "uuid" text NOT NULL UNIQUE,
+    "recipient_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "actor_id" text REFERENCES "users"("id") ON DELETE SET NULL,
+    "type" text NOT NULL,
+    "entity_type" text,
+    "entity_id" text,
+    "comment_id" bigint REFERENCES "comments"("id") ON DELETE SET NULL,
+    "read_at" timestamp,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "notifications_recipient_created_at_idx" ON "notifications" ("recipient_id", "created_at");
 
   -- Beta links the session feed INNER-joins for featured-beta enrichment. Empty
   -- in tests (no featured beta), but the relation must exist so the query plans.

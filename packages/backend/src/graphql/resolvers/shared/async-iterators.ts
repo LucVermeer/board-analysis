@@ -3,6 +3,18 @@ import { logger } from '../../../utils/logger';
 const MAX_SUBSCRIPTION_QUEUE_SIZE = 1000;
 
 /**
+ * Logs the first overflow drop for an iterator, then every 100th thereafter.
+ * A single persistently-slow-or-absent consumer would otherwise flood the log
+ * with one warn per dropped event; this still surfaces that it's happening
+ * (and how much) without the spam.
+ */
+function logOverflowDrop(label: string, droppedCount: number): void {
+  if (droppedCount === 1 || droppedCount % 100 === 0) {
+    logger.warn(`[Subscription] Queue full for "${label}", dropping oldest event (${droppedCount} dropped so far)`);
+  }
+}
+
+/**
  * Helper to create an async iterator from an async callback-based subscription.
  * Used for GraphQL subscriptions.
  * Includes bounded queue to prevent memory issues with slow clients.
@@ -10,13 +22,19 @@ const MAX_SUBSCRIPTION_QUEUE_SIZE = 1000;
  * NOTE: This function is async because the subscribe function may need to
  * establish Redis connections before returning. We must await subscription
  * setup to ensure multi-instance pub/sub is ready before yielding events.
+ *
+ * @param label identifies this iterator in overflow logs (e.g.
+ *   `boardNowPlaying:42`). Defaults to 'unknown' for call sites that haven't
+ *   been updated to pass one.
  */
 export async function createAsyncIterator<T>(
   subscribe: (push: (value: T) => void) => Promise<() => void>,
+  label = 'unknown',
 ): Promise<AsyncIterable<T>> {
   const queue: T[] = [];
   const pending: Array<(value: IteratorResult<T>) => void> = [];
   let done = false;
+  let droppedCount = 0;
 
   // Subscribe and await Redis channel setup before returning iterator
   const unsubscribe = await subscribe((value: T) => {
@@ -26,7 +44,8 @@ export async function createAsyncIterator<T>(
       // Bounded queue: drop oldest events if queue is full
       if (queue.length >= MAX_SUBSCRIPTION_QUEUE_SIZE) {
         queue.shift(); // Drop oldest
-        logger.warn('[Subscription] Queue full, dropping oldest event');
+        droppedCount += 1;
+        logOverflowDrop(label, droppedCount);
       }
       queue.push(value);
     }
@@ -64,13 +83,19 @@ export async function createAsyncIterator<T>(
  * NOTE: This function is async because the subscribe function may need to
  * establish Redis connections before returning. We must await subscription
  * setup to ensure multi-instance pub/sub is ready before yielding events.
+ *
+ * @param label identifies this iterator in overflow logs (e.g.
+ *   `boardNowPlaying:42`). Defaults to 'unknown' for call sites that haven't
+ *   been updated to pass one.
  */
 export async function createEagerAsyncIterator<T>(
   subscribe: (push: (value: T) => void) => Promise<() => void>,
+  label = 'unknown',
 ): Promise<AsyncIterable<T>> {
   const queue: T[] = [];
   const pending: Array<(value: IteratorResult<T>) => void> = [];
   let done = false;
+  let droppedCount = 0;
 
   // Subscribe IMMEDIATELY and await Redis channel setup
   const unsubscribe = await subscribe((value: T) => {
@@ -80,7 +105,8 @@ export async function createEagerAsyncIterator<T>(
       // Bounded queue: drop oldest events if queue is full
       if (queue.length >= MAX_SUBSCRIPTION_QUEUE_SIZE) {
         queue.shift(); // Drop oldest
-        logger.warn('[Subscription] Queue full, dropping oldest event');
+        droppedCount += 1;
+        logOverflowDrop(label, droppedCount);
       }
       queue.push(value);
     }

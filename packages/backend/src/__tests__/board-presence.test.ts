@@ -10,6 +10,7 @@ import type {
   BoardConnectionChanged,
   BoardStatsUpdated,
   BoardPresenceClimb,
+  BoardPresenceStats,
   ClimbQueueItemInput,
 } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
@@ -20,6 +21,8 @@ import { roomManager } from '../services/room-manager';
 import { boardPresenceMutations } from '../graphql/resolvers/board-presence/mutations';
 import { boardPresenceQueries } from '../graphql/resolvers/board-presence/queries';
 import { boardPresenceSubscriptions } from '../graphql/resolvers/board-presence/subscription';
+import { getBoardSeqFloor } from '../graphql/resolvers/board-presence/shared';
+import { setCachedBoardPresenceStats } from '../graphql/resolvers/board-presence/stats';
 import { tickMutations } from '../graphql/resolvers/ticks/mutations';
 
 // Board presence is always-on (the BOARD_PRESENCE_ENABLED env gate and the
@@ -1318,7 +1321,12 @@ describe('board-presence durable history (board_climb_events)', () => {
   it('does not persist a send before the 60s dwell gate, but still accepts the live report', async () => {
     const boardId = await resolveBoardId(`DWELL-A-${Date.now()}`);
     // First-seen = now → < 60s dwell → no durable persist.
-    vi.spyOn(pubsub, 'getBoardMembershipFirstSeen').mockResolvedValue(Date.now());
+    vi.spyOn(pubsub, 'getBoardReportGate').mockResolvedValue({
+      isMember: true,
+      firstSeenMs: Date.now(),
+      lastReport: null,
+      currentWriter: null,
+    });
     const accepted = await boardPresenceMutations.reportBoardClimb(
       undefined,
       { boardId, climb: makeQueueItemInput(), angle: 40 },
@@ -1330,7 +1338,12 @@ describe('board-presence durable history (board_climb_events)', () => {
 
   it('drops a send when first-seen is unknown (fail-closed)', async () => {
     const boardId = await resolveBoardId(`DWELL-C-${Date.now()}`);
-    vi.spyOn(pubsub, 'getBoardMembershipFirstSeen').mockResolvedValue(null);
+    vi.spyOn(pubsub, 'getBoardReportGate').mockResolvedValue({
+      isMember: true,
+      firstSeenMs: null,
+      lastReport: null,
+      currentWriter: null,
+    });
     await boardPresenceMutations.reportBoardClimb(
       undefined,
       { boardId, climb: makeQueueItemInput(), angle: 40 },
@@ -1342,7 +1355,12 @@ describe('board-presence durable history (board_climb_events)', () => {
   it('persists once the member has >= 60s of presence, and boardHistory returns it', async () => {
     const boardId = await resolveBoardId(`DWELL-B-${Date.now()}`);
     // Simulate sustained presence: first-seen 2 minutes ago → dwell met.
-    vi.spyOn(pubsub, 'getBoardMembershipFirstSeen').mockResolvedValue(Date.now() - 120_000);
+    vi.spyOn(pubsub, 'getBoardReportGate').mockResolvedValue({
+      isMember: true,
+      firstSeenMs: Date.now() - 120_000,
+      lastReport: null,
+      currentWriter: null,
+    });
 
     const accepted = await boardPresenceMutations.reportBoardClimb(
       undefined,
@@ -1536,9 +1554,10 @@ describe('board-presence connection holder', () => {
     });
   });
 
-  // The holder lives in Redis (setBoardWriter / clearBoardWriterIf are Redis-only).
-  // pubsub connects only when REDIS_URL is configured (CI sets it); skip cleanly
-  // otherwise, mirroring the FIFO-history test above.
+  // The holder lives in Redis (the commitBoardClimb writer take and
+  // clearBoardWriterIf are Redis-only). pubsub connects only when REDIS_URL is
+  // configured (CI sets it); skip cleanly otherwise, mirroring the
+  // FIFO-history test above.
   describe('holder state + hand-off (Redis)', () => {
     let redisOn = false;
     beforeAll(async () => {
@@ -1677,5 +1696,817 @@ describe('board-presence connection holder', () => {
         await roomManager.removeClient(otherConnectionId);
       }
     });
+  });
+});
+
+// ============================================================
+// PR A perf work: pipelined commit (A1), write-side idempotency (A2), seq
+// continuity across dormancy (A3), stats cache (A4). Appended at the END —
+// never disturb the timing-racy concurrent-config-create test earlier in the
+// file (the only permitted mid-file edit was retargeting the three dwell-gate
+// spies above from getBoardMembershipFirstSeen to getBoardReportGate).
+//
+// These describes reconnect `redisClientManager` directly rather than via
+// `pubsub.initialize()`: that call is a one-time no-op once the "holder state
+// + hand-off" describe above already initialized pubsub, and that describe's
+// own afterAll disconnects redisClientManager — so exercising the real Redis
+// paths again here needs an explicit reconnect.
+// ============================================================
+
+async function ensureRedisConnectedForTest(): Promise<boolean> {
+  if (redisClientManager.isRedisConnected()) return true;
+  try {
+    return await redisClientManager.connect();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Overwrites the NX-guarded first-seen stamp that resolveBoardForSerial /
+ * stampBoardMembership already wrote, so the *real* getBoardReportGate
+ * pipeline reads a "dwell met" value below — exercising the production read
+ * path end-to-end instead of mocking around it.
+ */
+async function stampSustainedFirstSeen(redis: Redis, boardId: number, userId: string, msAgo = 120_000): Promise<void> {
+  await redis.set(`presence:board:${boardId}:user:${userId}`, String(Date.now() - msAgo), 'EX', 43_200);
+}
+
+describe('board-presence pipelined commit (Redis)', () => {
+  let redisOn = false;
+  let testRedis: Redis | null = null;
+  const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380';
+
+  beforeAll(async () => {
+    redisOn = await ensureRedisConnectedForTest();
+    if (!redisOn) {
+      console.warn('[board-presence] Redis unavailable — skipping pipelined-commit tests');
+      return;
+    }
+    testRedis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    await testRedis.connect();
+  });
+
+  afterAll(async () => {
+    if (testRedis) await testRedis.quit().catch(() => {});
+  });
+
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  let pipelineSerialCounter = 0;
+  async function makePipelineBoard(ctx: ConnectionContext = authCtx()): Promise<number> {
+    const serial = `PIPE-${Date.now().toString(36)}-${pipelineSerialCounter++}`;
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      ctx,
+    );
+    return resolved.boardId;
+  }
+
+  it('one report populates the history list and the writer key, both with a live TTL', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makePipelineBoard();
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+
+    const historyKey = `board:${boardId}:history`;
+    const writerKey = `board:${boardId}:writer`;
+    const [historyEntries, writerValue, historyTtl, writerTtl] = await Promise.all([
+      testRedis.lrange(historyKey, 0, -1),
+      testRedis.get(writerKey),
+      testRedis.pttl(historyKey),
+      testRedis.pttl(writerKey),
+    ]);
+
+    expect(historyEntries).toHaveLength(1);
+    expect((JSON.parse(historyEntries[0]) as BoardPresenceClimb).climbUuid).toBe(TEST_CLIMB_UUID);
+    expect(writerValue).toBe(TEST_USER_ID);
+    expect(historyTtl).toBeGreaterThan(0);
+    expect(writerTtl).toBeGreaterThan(0);
+  });
+});
+
+describe('board-presence write-side idempotency (Redis)', () => {
+  let redisOn = false;
+  let testRedis: Redis | null = null;
+  const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380';
+
+  beforeAll(async () => {
+    redisOn = await ensureRedisConnectedForTest();
+    if (!redisOn) {
+      console.warn('[board-presence] Redis unavailable — skipping write-side idempotency tests');
+      return;
+    }
+    testRedis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    await testRedis.connect();
+  });
+
+  afterAll(async () => {
+    if (testRedis) await testRedis.quit().catch(() => {});
+  });
+
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  let idemSerialCounter = 0;
+  async function makeIdemBoard(ctx: ConnectionContext = authCtx()): Promise<number> {
+    const serial = `IDEM-${Date.now().toString(36)}-${idemSerialCounter++}`;
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      ctx,
+    );
+    return resolved.boardId;
+  }
+
+  async function countEvents(boardId: number): Promise<number> {
+    const [row] = await db.execute(
+      sql`SELECT count(*)::int AS count FROM board_climb_events WHERE board_id = ${boardId}`,
+    );
+    return Number((row as { count: number }).count);
+  }
+
+  // These tests verify through directly-observable state (the Redis FIFO
+  // history list, the writer key, and durable Postgres rows) rather than by
+  // subscribing to pubsub.subscribeBoardPresence: this file's earlier "holder
+  // state + hand-off (Redis)" describe already disconnected redisClientManager
+  // in its own afterAll (a describe we may not touch), which leaves pubsub's
+  // internal Redis *subscriber* connection permanently closed for the rest of
+  // this file — a test-harness artifact of reconnecting the publisher-side
+  // client directly, not a production concern (ioredis reconnects live
+  // clients automatically; only the test teardown calls `.quit()`). Every
+  // write path exercised below (INCR/SET/EVAL/pipelines) goes through the
+  // publisher client, which IS healthy after `ensureRedisConnectedForTest`.
+
+  it('collapses an exact retry (same user/climb/angle) into a no-op: one history entry, one durable row, seq consumed once', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeIdemBoard();
+    await stampSustainedFirstSeen(testRedis, boardId, TEST_USER_ID);
+
+    const firstAccepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    const seqAfterFirst = await testRedis.get(`board:${boardId}:seq`);
+
+    const secondAccepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    const seqAfterSecond = await testRedis.get(`board:${boardId}:seq`);
+
+    expect(firstAccepted).toBe(true);
+    expect(secondAccepted).toBe(true);
+    const history = await testRedis.lrange(`board:${boardId}:history`, 0, -1);
+    expect(history).toHaveLength(1);
+    expect(await countEvents(boardId)).toBe(1);
+    // The dedup path returns before allocating a seq, so the counter is unchanged.
+    expect(seqAfterSecond).toBe(seqAfterFirst);
+  });
+
+  it('does not suppress a different climb, angle, or user (and a user change still hands off the writer)', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeIdemBoard();
+    await pubsub.stampBoardMembership(String(boardId), SECOND_USER_ID);
+    const writerKey = `board:${boardId}:writer`;
+
+    expect(await testRedis.get(writerKey)).toBeNull();
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(await testRedis.get(writerKey)).toBe(TEST_USER_ID);
+
+    // Different climb, same user/angle.
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput({ uuid: OTHER_TEST_CLIMB_UUID }), angle: 40 },
+      authCtx(),
+    );
+    // Different angle, back to the first climb.
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 45 },
+      authCtx(),
+    );
+    // Different user, same climb/angle as the previous send — a hand-off.
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 45 },
+      authCtx({ userId: SECOND_USER_ID }),
+    );
+
+    // None of the four sends were deduped — one FIFO entry each.
+    const history = await testRedis.lrange(`board:${boardId}:history`, 0, -1);
+    expect(history).toHaveLength(4);
+    expect(await testRedis.get(writerKey)).toBe(SECOND_USER_ID);
+  });
+
+  it('re-accepts a retry once the dedup window has expired', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeIdemBoard();
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    // Force the dedup marker to expire immediately instead of waiting out the real 10s window.
+    await testRedis.pexpire(`board:${boardId}:lastReport`, 1);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const secondAccepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+
+    expect(secondAccepted).toBe(true);
+    const history = await testRedis.lrange(`board:${boardId}:history`, 0, -1);
+    expect(history).toHaveLength(2);
+  });
+
+  it('falls through (re-takes the writer) when the wall was freed between the send and its retry', async () => {
+    if (!redisOn || !testRedis) return;
+    // The canonical A2 retry cause is a socket drop right after the send — and
+    // that same drop fires the WS-close backstop, which DELETEs the writer key
+    // and broadcasts holder:null while the 10s lastReport marker survives. The
+    // retry must NOT short-circuit then: it has to re-take the writer (and so
+    // re-broadcast the hand-off), or every watcher shows the wall free while
+    // this emitter holds it. The accepted cost is a duplicate history/durable
+    // row with a fresh seq — holder correctness over row dedup.
+    const boardId = await makeIdemBoard();
+    await stampSustainedFirstSeen(testRedis, boardId, TEST_USER_ID);
+    const writerKey = `board:${boardId}:writer`;
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(await testRedis.get(writerKey)).toBe(TEST_USER_ID);
+    expect(await countEvents(boardId)).toBe(1);
+
+    // Simulate the WS-close backstop: the writer key is cleared, lastReport isn't.
+    await testRedis.del(writerKey);
+    expect(await testRedis.get(`board:${boardId}:lastReport`)).not.toBeNull();
+
+    // Identical retry, well inside the dedup window.
+    const retryAccepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(retryAccepted).toBe(true);
+
+    // The retry fell through the dedup: writer re-taken, and a second
+    // history entry + durable row with a fresh, higher seq landed.
+    expect(await testRedis.get(writerKey)).toBe(TEST_USER_ID);
+    const history = await testRedis.lrange(`board:${boardId}:history`, 0, -1);
+    expect(history).toHaveLength(2);
+    expect(await countEvents(boardId)).toBe(2);
+    const [durableRow] = await db.execute(
+      sql`SELECT count(DISTINCT seq)::int AS distinct_seqs FROM board_climb_events WHERE board_id = ${boardId}`,
+    );
+    expect(Number((durableRow as { distinct_seqs: number }).distinct_seqs)).toBe(2);
+  });
+});
+
+describe('board-presence seq continuity across dormancy (Redis)', () => {
+  let redisOn = false;
+  let testRedis: Redis | null = null;
+  const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380';
+
+  beforeAll(async () => {
+    redisOn = await ensureRedisConnectedForTest();
+    if (!redisOn) {
+      console.warn('[board-presence] Redis unavailable — skipping seq continuity tests');
+      return;
+    }
+    testRedis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    await testRedis.connect();
+    pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
+  });
+
+  afterAll(async () => {
+    // Restore the no-op default so later test files in the same worker never
+    // inherit a floor provider that hits Postgres.
+    pubsub.setBoardSeqFloorProvider(async () => 0);
+    if (testRedis) await testRedis.quit().catch(() => {});
+  });
+
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  let seqSerialCounter = 0;
+  async function makeSeqBoard(ctx: ConnectionContext = authCtx()): Promise<number> {
+    const serial = `SEQCONT-${Date.now().toString(36)}-${seqSerialCounter++}`;
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      ctx,
+    );
+    return resolved.boardId;
+  }
+
+  async function durableSeqs(boardId: number): Promise<number[]> {
+    const rows = await db.execute(sql`SELECT seq FROM board_climb_events WHERE board_id = ${boardId} ORDER BY seq ASC`);
+    return rows.map((row) => Number((row as { seq: number }).seq));
+  }
+
+  it('reseeds past the durable floor after the Redis seq counter is lost, keeping boardHistory newest-first intact', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeSeqBoard();
+    await stampSustainedFirstSeen(testRedis, boardId, TEST_USER_ID);
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    const [firstSeq] = await durableSeqs(boardId);
+    expect(firstSeq).toBeGreaterThan(0);
+
+    // Simulate dormancy: the Redis seq key expired/was evicted, but the
+    // durable Postgres row from the first send is still there.
+    await testRedis.del(`board:${boardId}:seq`);
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput({ uuid: OTHER_TEST_CLIMB_UUID }), angle: 40 },
+      authCtx(),
+    );
+
+    const seqs = await durableSeqs(boardId);
+    expect(seqs).toHaveLength(2);
+    expect(seqs[1]).toBeGreaterThan(firstSeq);
+
+    const history = await boardPresenceQueries.boardHistory(undefined, { boardId }, authCtx());
+    expect(history.map((row) => row.seq)).toEqual([seqs[1], seqs[0]]);
+  });
+
+  it('starts a brand-new board at seq 1 even right after a DEL with no durable rows', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeSeqBoard();
+    await testRedis.del(`board:${boardId}:seq`); // no-op: the board never sent, so this key never existed
+    expect(await pubsub.nextBoardSeq(String(boardId))).toBe(1);
+  });
+
+  it('allocates distinct seqs above the durable floor under concurrent reports issued right after a reset', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeSeqBoard();
+    await stampSustainedFirstSeen(testRedis, boardId, TEST_USER_ID);
+    await pubsub.stampBoardMembership(String(boardId), SECOND_USER_ID);
+    // Both concurrent senders below need the durable dwell gate satisfied, or
+    // the under-dwell one's send is correctly accepted live but skipped
+    // durably — which would make the "3 durable rows" assertion below fail
+    // for a reason unrelated to seq continuity.
+    await stampSustainedFirstSeen(testRedis, boardId, SECOND_USER_ID);
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    const [priorSeq] = await durableSeqs(boardId);
+
+    await testRedis.del(`board:${boardId}:seq`);
+
+    const [firstAccepted, secondAccepted] = await Promise.all([
+      boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput({ uuid: OTHER_TEST_CLIMB_UUID }), angle: 40 },
+        authCtx(),
+      ),
+      boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 45 },
+        authCtx({ userId: SECOND_USER_ID }),
+      ),
+    ]);
+    expect(firstAccepted).toBe(true);
+    expect(secondAccepted).toBe(true);
+
+    const seqs = await durableSeqs(boardId);
+    expect(seqs).toHaveLength(3);
+    const [, second, third] = seqs;
+    expect(second).toBeGreaterThan(priorSeq);
+    expect(third).toBeGreaterThan(priorSeq);
+    expect(second).not.toBe(third);
+  });
+
+  it('the Lua allocator (allocateBoardSeqAtLeast) advances monotonically above a given floor', async () => {
+    if (!redisOn) return;
+    const boardId = `lua-floor-test-${Date.now()}`;
+    const first = await pubsub.allocateBoardSeqAtLeast(boardId, 500);
+    const second = await pubsub.allocateBoardSeqAtLeast(boardId, 500);
+    expect(first).toBe(501);
+    expect(second).toBe(502);
+  });
+
+  it('memoizes the floor check: one provider call while the counter grows, re-consulted after a counter loss', async () => {
+    if (!redisOn || !testRedis) return;
+    let providerCalls = 0;
+    pubsub.setBoardSeqFloorProvider(async () => {
+      providerCalls += 1;
+      return 0;
+    });
+    try {
+      const syntheticBoardId = `memo-${Date.now().toString(36)}`;
+      expect(await pubsub.nextBoardSeq(syntheticBoardId)).toBe(1);
+      expect(providerCalls).toBe(1);
+
+      // Early-life growth: each fresh INCR is strictly ahead of the
+      // watermark, so the Postgres floor lookup is not repeated.
+      await pubsub.nextBoardSeq(syntheticBoardId);
+      await pubsub.nextBoardSeq(syntheticBoardId);
+      expect(providerCalls).toBe(1);
+
+      // Counter loss while the process is up: INCR restarts at 1, which is
+      // NOT ahead of the watermark — the floor must be re-consulted (this is
+      // the hole a naive floor-value memo would leave open).
+      await testRedis.del(`board:${syntheticBoardId}:seq`);
+      await pubsub.nextBoardSeq(syntheticBoardId);
+      expect(providerCalls).toBe(2);
+    } finally {
+      // Restore this describe's real provider for any later Redis-gated test.
+      pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
+    }
+  });
+
+  it('keeps retrying a failed floor consultation past the reseed threshold, then jumps the floor once it recovers', async () => {
+    if (!redisOn || !testRedis) return;
+    // The hazard: a fresh counter (post-dormancy) on a board whose durable
+    // floor is high, while the floor lookup fails transiently for the whole
+    // <= threshold window. Without a sticky retry, the counter would cross
+    // the threshold still below the floor and never consult Postgres again —
+    // clients holding pre-reset high seqs would treat every later event as
+    // stale and the live wall would freeze forever.
+    let providerHealthy = false;
+    let providerCalls = 0;
+    pubsub.setBoardSeqFloorProvider(async () => {
+      providerCalls += 1;
+      if (!providerHealthy) throw new Error('simulated transient Postgres blip');
+      return 500;
+    });
+    try {
+      // Fresh synthetic board = the post-counter-loss state (INCR from 1).
+      const syntheticBoardId = `sticky-${Date.now().toString(36)}`;
+      const allocatedDuringOutage: number[] = [];
+      for (let sendIndex = 0; sendIndex < 55; sendIndex++) {
+        allocatedDuringOutage.push(await pubsub.nextBoardSeq(syntheticBoardId));
+      }
+      // Every allocation degraded to the raw INCR (still below the floor)...
+      expect(allocatedDuringOutage[54]).toBe(55);
+      // ...and calls 51..55 prove the retry is sticky: without the pending
+      // flag the consultation would have stopped at the 50 threshold.
+      expect(providerCalls).toBe(55);
+
+      // Postgres recovers: the very next allocation consults the floor and
+      // jumps past it.
+      providerHealthy = true;
+      expect(await pubsub.nextBoardSeq(syntheticBoardId)).toBe(501);
+
+      // The pending flag is cleared by the success: subsequent allocations
+      // (now far past the threshold) skip the consultation again.
+      const callsAfterRecovery = providerCalls;
+      expect(await pubsub.nextBoardSeq(syntheticBoardId)).toBe(502);
+      expect(providerCalls).toBe(callsAfterRecovery);
+    } finally {
+      pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
+    }
+  });
+});
+
+describe('board-presence stats cache (Redis)', () => {
+  let redisOn = false;
+  let testRedis: Redis | null = null;
+  const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380';
+
+  beforeAll(async () => {
+    redisOn = await ensureRedisConnectedForTest();
+    if (!redisOn) {
+      console.warn('[board-presence] Redis unavailable — skipping stats cache tests');
+      return;
+    }
+    testRedis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    await testRedis.connect();
+  });
+
+  afterAll(async () => {
+    if (testRedis) await testRedis.quit().catch(() => {});
+  });
+
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  function statsCacheKey(boardId: number): string {
+    return `boardsesh:board-stats:v1:${boardId}`;
+  }
+
+  let statsSerialCounter = 0;
+  async function makeStatsBoard(): Promise<number> {
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      {
+        serial: `STATSCACHE-${Date.now().toString(36)}-${statsSerialCounter++}`,
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      },
+      authCtx(),
+    );
+    return resolved.boardId;
+  }
+
+  async function insertSendTick(boardId: number, climbUuid: string, difficulty: number): Promise<void> {
+    await db.execute(sql`
+      INSERT INTO boardsesh_ticks
+        (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, difficulty, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
+      VALUES
+        (${uuidv4()}, ${TEST_USER_ID}, 'kilter', ${climbUuid}, 40, false, 'send', 1, ${difficulty}, false, '', ${new Date().toISOString()}, now(), now(), ${boardId})
+    `);
+  }
+
+  // saveTick's explicit-boardId fast path only attaches boardId when the
+  // FULL config matches the board (see saveTick's configMatches check in
+  // ticks/mutations.ts) — layoutId/sizeId/setIds must mirror makeStatsBoard's
+  // config below, or saveTick silently drops boardId (warns "config
+  // mismatch") and queueBoardStatsPublish never fires.
+  function baseSaveTickInput(boardId: number) {
+    return {
+      boardType: 'kilter',
+      climbUuid: TEST_CLIMB_UUID,
+      angle: 40,
+      isMirror: false,
+      status: 'send',
+      attemptCount: 1,
+      quality: null,
+      difficulty: 17,
+      isBenchmark: false,
+      comment: '',
+      climbedAt: new Date().toISOString(),
+      boardId,
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+    };
+  }
+
+  it('populates the cache on a miss and serves the same snapshot on a subsequent read', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+    await insertSendTick(boardId, TEST_CLIMB_UUID, 17);
+
+    expect(await testRedis.get(statsCacheKey(boardId))).toBeNull();
+
+    const first = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
+    expect(first.climbsSentCount).toBe(1);
+
+    // The SET is fire-and-forget — give it a tick to land.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const cachedRaw = await testRedis.get(statsCacheKey(boardId));
+    expect(cachedRaw).not.toBeNull();
+    expect(JSON.parse(cachedRaw!)).toEqual(first);
+  });
+
+  it('serves the cached snapshot even after a fresh tick lands directly in Postgres', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+    await insertSendTick(boardId, TEST_CLIMB_UUID, 17);
+
+    const first = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
+    expect(first.climbsSentCount).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // A second send lands straight in Postgres, bypassing saveTick (and so
+    // never calling queueBoardStatsPublish) — the query must still serve the
+    // cached snapshot rather than recomputing.
+    await insertSendTick(boardId, OTHER_TEST_CLIMB_UUID, 18);
+    const second = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
+    expect(second).toEqual(first);
+    expect(second.climbsSentCount).toBe(1);
+  });
+
+  // Polls the Redis cache key directly (never the rate-limited GraphQL
+  // query) so a several-second debounce wait can't trip applyRateLimit.
+  async function pollCacheUntil(
+    testRedisClient: Redis,
+    boardId: number,
+    predicate: (stats: BoardPresenceStats) => boolean,
+    timeoutMs = 6000,
+  ): Promise<BoardPresenceStats | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const cachedRaw = await testRedisClient.get(statsCacheKey(boardId));
+      if (cachedRaw) {
+        const stats = JSON.parse(cachedRaw) as BoardPresenceStats;
+        if (predicate(stats)) return stats;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return null;
+  }
+
+  it('saveTick refreshes the cache after the debounce window, matching a cold query', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+
+    await tickMutations.saveTick(undefined, { input: baseSaveTickInput(boardId) }, authCtx());
+
+    // publishBoardStats sets the cache to the exact snapshot it also pushes
+    // as BoardStatsUpdated (see stats.ts), so a matching cache entry proves
+    // the debounced publish landed.
+    const cached = await pollCacheUntil(testRedis, boardId, (stats) => stats.climbsSentCount === 1);
+    expect(cached).not.toBeNull();
+
+    const queried = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
+    expect(queried).toEqual(cached);
+  });
+
+  it('deleteTick refreshes the cache after the debounce window', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+
+    const saved = (await tickMutations.saveTick(undefined, { input: baseSaveTickInput(boardId) }, authCtx())) as {
+      uuid: string;
+    };
+
+    const afterSave = await pollCacheUntil(testRedis, boardId, (stats) => stats.climbsSentCount === 1);
+    expect(afterSave).not.toBeNull();
+
+    await tickMutations.deleteTick(undefined, { uuid: saved.uuid }, authCtx());
+
+    const afterDelete = await pollCacheUntil(testRedis, boardId, (stats) => stats.climbsSentCount === 0);
+    expect(afterDelete).not.toBeNull();
+  });
+
+  it('updateTick refreshes the cache after the debounce window (attempt -> send)', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+
+    // Log an ATTEMPT: counts toward distinct climbers but not sends.
+    const saved = (await tickMutations.saveTick(
+      undefined,
+      { input: { ...baseSaveTickInput(boardId), status: 'attempt', attemptCount: 2 } },
+      authCtx(),
+    )) as { uuid: string };
+
+    const afterSave = await pollCacheUntil(
+      testRedis,
+      boardId,
+      (stats) => stats.distinctClimbersCount === 1 && stats.climbsSentCount === 0,
+    );
+    expect(afterSave).not.toBeNull();
+
+    // The motivating edit: flipping attempt -> send must refresh the wall's
+    // live tiles + cache (pre-existing staleness this PR fixes).
+    await tickMutations.updateTick(undefined, { uuid: saved.uuid, input: { status: 'send' } }, authCtx());
+
+    const afterUpdate = await pollCacheUntil(testRedis, boardId, (stats) => stats.climbsSentCount === 1);
+    expect(afterUpdate).not.toBeNull();
+  });
+
+  it('a late query-miss cache write (SET NX) never rolls back a fresher publish-path snapshot', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+    const emptyStats: BoardPresenceStats = {
+      climbsSentCount: 0,
+      distinctClimbersCount: 0,
+      hardestGrade: null,
+      hardestSend: null,
+      topGrade: null,
+      lastSentAt: null,
+    };
+    const staleSnapshot: BoardPresenceStats = { ...emptyStats, climbsSentCount: 4 };
+    const freshSnapshot: BoardPresenceStats = { ...emptyStats, climbsSentCount: 5 };
+    const readCache = async () => JSON.parse((await testRedis!.get(statsCacheKey(boardId)))!) as BoardPresenceStats;
+    const flushFireAndForget = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    // True miss: the query-path NX write populates the key.
+    setCachedBoardPresenceStats(boardId, staleSnapshot, { onlyIfAbsent: true });
+    await flushFireAndForget();
+    expect(await readCache()).toEqual(staleSnapshot);
+
+    // The authoritative publish-path write (plain SET) overwrites it...
+    setCachedBoardPresenceStats(boardId, freshSnapshot);
+    await flushFireAndForget();
+    expect(await readCache()).toEqual(freshSnapshot);
+
+    // ...and a late query-miss write that lost the race (computed before the
+    // publish, landing after it) is a no-op instead of a rollback.
+    setCachedBoardPresenceStats(boardId, staleSnapshot, { onlyIfAbsent: true });
+    await flushFireAndForget();
+    expect(await readCache()).toEqual(freshSnapshot);
+  });
+
+  it('still computes stats correctly when Redis is unavailable (cache is best-effort)', async () => {
+    const boardId = await makeStatsBoard();
+    await insertSendTick(boardId, TEST_CLIMB_UUID, 17);
+
+    vi.spyOn(redisClientManager, 'isRedisConnected').mockReturnValue(false);
+    const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
+    expect(stats.climbsSentCount).toBe(1);
+  });
+});
+
+// ============================================================
+// commitBoardClimb degraded path: a failed / unavailable writer slot must
+// never fabricate a hand-off broadcast (the writerSlotOk gate). Appended at
+// the END of the file (see the ordering note above).
+// ============================================================
+describe('board-presence commit degradation', () => {
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('commitBoardClimb reports writerSlotOk=false (previousWriter is a fabrication) when Redis is unavailable', async () => {
+    vi.spyOn(redisClientManager, 'isRedisConnected').mockReturnValue(false);
+    const result = await pubsub.commitBoardClimb({
+      boardId: '999999',
+      emitterId: 'emitter-degraded',
+      climb: { climbUuid: 'climb-degraded', sentAt: new Date().toISOString(), seq: 1 },
+      climbUuid: 'climb-degraded',
+      effectiveAngle: 40,
+      sessionId: null,
+    });
+    expect(result).toEqual({ previousWriter: null, writerSlotOk: false });
+  });
+
+  it('reportBoardClimb publishes the climb but no hand-off when the writer slot did not verifiably execute', async () => {
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial: `DEGR-${Date.now().toString(36)}`, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      authCtx(),
+    );
+    const boardId = resolved.boardId;
+
+    // Simulate the failing-pipeline seam: previousWriter: null is a
+    // fabrication and writerSlotOk says so. The resolver must still accept
+    // the report and publish BoardClimbSet, but must NOT infer a free->held
+    // hand-off from the fabricated null.
+    vi.spyOn(pubsub, 'commitBoardClimb').mockResolvedValue({ previousWriter: null, writerSlotOk: false });
+    const publishSpy = vi.spyOn(pubsub, 'publishBoardPresenceEvent');
+
+    const accepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(accepted).toBe(true);
+
+    const publishedTypenames = publishSpy.mock.calls.map(([, event]) => event.__typename);
+    expect(publishedTypenames).toContain('BoardClimbSet');
+    expect(publishedTypenames).not.toContain('BoardConnectionChanged');
   });
 });

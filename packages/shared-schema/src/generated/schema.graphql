@@ -4289,20 +4289,21 @@ type Query {
   newClimbFeed(input: NewClimbFeedInput!): NewClimbFeedResult!
 
   """
-  Backfill the recent "now on the wall" history for a board (last ~50, 24h
-  window) from the Redis FIFO. Used by late joiners before the live
-  `boardNowPlaying` subscription takes over.
+  Backfill the recent "now on the wall" history for a board (last ~50, 1
+  week window (BOARD_HISTORY_TTL)) from the Redis FIFO. Used by late joiners
+  before the live `boardNowPlaying` subscription takes over.
   """
   boardRecentClimbs(boardId: Int!): [BoardPresenceClimb!]!
 
   """
-  Durable history of what was pushed to a board (survives past the 24h Redis
-  window), newest-first by `seq`. For keyset paging pass the `seq` of the
-  last item from the previous page as `before` (not `sentAt`) — `seq` is
-  unique and monotonic per board, so paging never repeats or skips even when
-  several sends share a `sentAt` second. A non-integer `before` is rejected
-  with BAD_USER_INPUT. `limit` is capped at 100. This is the lasting "what
-  was on the wall" record; `boardRecentClimbs` is the hot 24h cache.
+  Durable history of what was pushed to a board (survives past the 1 week
+  Redis window (BOARD_HISTORY_TTL)), newest-first by `seq`. For keyset
+  paging pass the `seq` of the last item from the previous page as
+  `before` (not `sentAt`) — `seq` is unique and monotonic per board, so
+  paging never repeats or skips even when several sends share a `sentAt`
+  second. A non-integer `before` is rejected with BAD_USER_INPUT. `limit`
+  is capped at 100. This is the lasting "what was on the wall" record;
+  `boardRecentClimbs` is the hot 1 week cache.
   """
   boardHistory(boardId: Int!, limit: Int, before: String): [BoardPresenceClimb!]!
 

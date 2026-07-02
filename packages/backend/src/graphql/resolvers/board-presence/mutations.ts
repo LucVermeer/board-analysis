@@ -391,6 +391,20 @@ export const boardPresenceMutations = {
    * Identity (`sentByDisplayName` / `sentByAvatarUrl`) is derived server-side
    * from `ctx.userId` and never read from the input, so a client can't forge
    * who lit the climb. The reported `climbUuid` must be a real catalog climb.
+   *
+   * Latency-critical path (fires on every wall send), so the Redis/Postgres
+   * work below is deliberately staged to overlap what can be overlapped:
+   *  - Stage A: board lookup + the combined report gate (proof-of-presence,
+   *    first-seen, and the write-side dedup marker) run in parallel — one
+   *    Redis pipeline instead of the old separate hasBoardMembership call.
+   *  - Stage B: the catalog climb lookup, sender identity lookup, and seq
+   *    allocation run in parallel too. This means a seq can be burned even
+   *    when the catalog lookup below turns out empty (climb unknown) — that's
+   *    a benign gap: seq only needs to stay monotonic per board, not
+   *    contiguous, and a gap never surfaces in any published event or durable
+   *    row.
+   *  - The Redis writes (history append, writer handoff, dedup marker,
+   *    session→board mapping) are one pipeline via `commitBoardClimb`.
    */
   reportBoardClimb: async (
     _: unknown,
@@ -398,19 +412,25 @@ export const boardPresenceMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
-    const board = await requireActiveBoardById(boardId);
 
     // Auth-optional: anyone connected to the board emits (logged-in or
     // anonymous). The emitter id is the userId, or `conn:{connectionId}` for an
     // anonymous client — both are stamped as board members on resolve/connect.
     const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
 
+    // Stage A: board existence + the combined report gate (proof-of-presence,
+    // first-seen for the durable dwell gate, and the A2 dedup marker) — one
+    // Redis pipeline instead of the old separate hasBoardMembership call.
+    const [board, gate] = await Promise.all([
+      requireActiveBoardById(boardId),
+      pubsub.getBoardReportGate(String(boardId), emitterId),
+    ]);
+
     // Proof-of-presence: only an emitter that selected or connected to this board
     // (stamped in resolveBoardForUuid / resolveBoardForSerial /
     // resolveBoardForConfig) may post to its feed. Stops anyone injecting climbs
     // onto a board id they guess.
-    const isConnected = await pubsub.hasBoardMembership(String(boardId), emitterId);
-    if (!isConnected) {
+    if (!gate.isMember) {
       throw new GraphQLError('Not connected to this board');
     }
 
@@ -423,7 +443,29 @@ export const boardPresenceMutations = {
     const effectiveAngle = Math.round(validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle));
     const climbUuid = validatedClimb.climb.uuid;
 
-    const [catalogClimbRows, sender] = await Promise.all([
+    // Write-side idempotency (A2): a retry of the exact same (emitter, climb,
+    // angle) within REPORT_DEDUP_WINDOW_MS is a no-op — no new seq, no event,
+    // no durable insert. Still note the WS-close backstop so a deduped retry
+    // doesn't let a stale backstop entry lapse. A different climb / angle /
+    // user is never suppressed (a user change still needs to broadcast the
+    // hand-off).
+    //
+    // The short-circuit additionally requires this emitter to STILL hold the
+    // wall (`currentWriter === emitterId`). The canonical retry is a socket
+    // drop right after the original send — and that same drop fires the
+    // WS-close backstop, which deletes the writer key and broadcasts
+    // holder:null while lastReport survives. Short-circuiting on lastReport
+    // alone would then leave the wall looking free while this emitter holds
+    // it (writer never re-taken, hand-off never re-broadcast); falling
+    // through re-takes the writer and re-broadcasts. The cost is one
+    // duplicate history/durable row in exactly that edge — holder correctness
+    // wins over row dedup.
+    if (gate.lastReport === `${emitterId}|${climbUuid}|${effectiveAngle}` && gate.currentWriter === emitterId) {
+      roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
+      return true;
+    }
+
+    const [catalogClimbRows, sender, seq] = await Promise.all([
       db
         .select({
           uuid: dbSchema.boardClimbs.uuid,
@@ -471,6 +513,7 @@ export const boardPresenceMutations = {
             .limit(1)
             .then((rows) => rows[0])
         : Promise.resolve(undefined),
+      pubsub.nextBoardSeq(String(boardId)),
     ]);
 
     const catalogClimb = catalogClimbRows[0];
@@ -478,7 +521,6 @@ export const boardPresenceMutations = {
       throw new GraphQLError('Unknown climb for this board');
     }
 
-    const seq = await pubsub.nextBoardSeq(String(boardId));
     const sentAt = new Date().toISOString();
 
     const presenceClimb: BoardPresenceClimb = {
@@ -499,15 +541,10 @@ export const boardPresenceMutations = {
       seq,
     };
 
-    await pubsub.storeBoardClimb(String(boardId), presenceClimb);
-    pubsub.publishBoardPresenceEvent(String(boardId), {
-      __typename: 'BoardClimbSet',
-      climb: presenceClimb,
-    });
-
     // Record the hold on this connection (in-memory) so the WS-close backstop can
     // free the wall if the holder crashes without an explicit reportBoardDisconnect.
-    // Outside the Redis try below since it can't fail and must not be swallowed.
+    // Before the Redis commit below: it can't fail and must not be skipped by an
+    // early return or a later throw.
     roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
 
     // Remember which board this connection's party session is on (when it's in
@@ -515,38 +552,46 @@ export const boardPresenceMutations = {
     // session — QueueState/push-token rows carry sessionId but not boardId. Best-
     // effort: a solo (no-session) sender just doesn't establish a mapping.
     const reportingSessionId = roomManager.getClient(ctx.connectionId)?.sessionId ?? null;
-    if (reportingSessionId) {
-      try {
-        await pubsub.setSessionBoard(reportingSessionId, String(boardId));
-      } catch (error) {
-        logger.warn(`[board-presence] setSessionBoard failed: ${String(error)}`);
-      }
-    }
 
-    // This emitter is now the board's connection holder. The holder is Redis-only
-    // (degrades to "no holder" without Redis), so only broadcast a hand-off when
-    // Redis actually backs the writer — otherwise setBoardWriter returns null and
-    // `null !== emitterId` would spuriously broadcast on every send. Non-fatal.
+    // One Redis pipeline: durable FIFO history append, connection-holder
+    // handoff (atomic SET..GET), the A2 dedup marker, and the session→board
+    // mapping. Non-fatal on failure (see commitBoardClimb's contract).
+    const { previousWriter, writerSlotOk } = await pubsub.commitBoardClimb({
+      boardId: String(boardId),
+      emitterId,
+      climb: presenceClimb,
+      climbUuid,
+      effectiveAngle,
+      sessionId: reportingSessionId,
+    });
+
+    // Store before publish: commitBoardClimb above already awaited the history
+    // append, so a late joiner reading the FIFO right after this publish will
+    // already see the new entry.
+    pubsub.publishBoardPresenceEvent(String(boardId), {
+      __typename: 'BoardClimbSet',
+      climb: presenceClimb,
+    });
+
+    // This emitter is now the board's connection holder. Only broadcast a
+    // hand-off when the writer slot verifiably executed (`writerSlotOk`) —
+    // that covers both Redis-off (holder degrades to "none", no broadcast)
+    // and a failing pipeline, where previousWriter: null is a fabrication and
+    // `null !== emitterId` would otherwise spuriously broadcast a hand-off
+    // (+ Live Activity push) on every send until Redis recovers.
     let writerChanged = false;
-    if (pubsub.isRedisConnected()) {
-      try {
-        const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
-        if (previousHolder !== emitterId) {
-          writerChanged = true;
-          pubsub.publishBoardPresenceEvent(String(boardId), {
-            __typename: 'BoardConnectionChanged',
-            holder: {
-              userId: ctx.userId ?? null,
-              displayName: presenceClimb.sentByDisplayName,
-              avatarUrl: presenceClimb.sentByAvatarUrl,
-              lastSentAt: sentAt,
-            },
-            seq,
-          });
-        }
-      } catch (error) {
-        logger.warn(`[board-presence] board writer update failed: ${String(error)}`);
-      }
+    if (writerSlotOk && previousWriter !== emitterId) {
+      writerChanged = true;
+      pubsub.publishBoardPresenceEvent(String(boardId), {
+        __typename: 'BoardConnectionChanged',
+        holder: {
+          userId: ctx.userId ?? null,
+          displayName: presenceClimb.sentByDisplayName,
+          avatarUrl: presenceClimb.sentByAvatarUrl,
+          lastSentAt: sentAt,
+        },
+        seq,
+      });
     }
 
     // A board hand-off (a peer took over) changes every device's
@@ -579,11 +624,10 @@ export const boardPresenceMutations = {
     const DURABLE_DWELL_MS = 60_000;
     try {
       // `sentAt` is the server-generated ISO timestamp from above, so
-      // `Date.parse(sentAt)` is always valid; `firstSeen` is already guarded to
-      // a plausible epoch-ms or null in getBoardMembershipFirstSeen. A null
-      // firstSeen correctly skips the insert (presence not yet proven for 60s).
-      const firstSeen = ctx.userId ? await pubsub.getBoardMembershipFirstSeen(String(boardId), emitterId) : null;
-      if (ctx.userId && firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
+      // `Date.parse(sentAt)` is always valid; `gate.firstSeenMs` (read in Stage
+      // A, above) is already guarded to a plausible epoch-ms or null. A null
+      // firstSeenMs correctly skips the insert (presence not yet proven for 60s).
+      if (ctx.userId && gate.firstSeenMs !== null && Date.parse(sentAt) - gate.firstSeenMs >= DURABLE_DWELL_MS) {
         await db
           .insert(dbSchema.boardClimbEvents)
           .values({
@@ -595,6 +639,12 @@ export const boardPresenceMutations = {
             // Reserved for session recaps. reportBoardClimb has no sessionId arg
             // yet, so every durable row is solo-attributed until the
             // session-attribution follow-up threads the active session through.
+            // Do NOT wire `reportingSessionId` here even though it's in scope
+            // above: it's a room-manager party-session uuid, not a
+            // `board_sessions` row id — board_climb_events.sessionId is a real
+            // FK to `board_sessions`, a different id space entirely. Writing a
+            // party-session uuid would violate the FK and roll back this whole
+            // insert, silently losing the durable row.
             sessionId: null,
             seq,
             frames: catalogClimb.frames ?? null,
