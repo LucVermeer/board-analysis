@@ -450,13 +450,7 @@ function HoldColorPickerSheet({
   const footer = <Button title={t('mobile.more.accessibility.save')} onPress={handleSave} size="large" />;
 
   return (
-    <ModalSheet
-      visible={role != null}
-      snapPoints={['95%']}
-      onClose={onClose}
-      footer={footer}
-      scrollable
-    >
+    <ModalSheet visible={role != null} snapPoints={['95%']} onClose={onClose} footer={footer} scrollable>
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
           <MarkerSwatch color={previewColor} shape={shape} size={shapeSize} />
@@ -552,13 +546,7 @@ function BrushThicknessSheet({ open, value, shapeSize, onSave, onClose }: BrushT
   const footer = <Button title={t('mobile.more.accessibility.brush.save')} onPress={handleSave} size="large" />;
 
   return (
-    <ModalSheet
-      visible={open}
-      snapPoints={['48%', '80%']}
-      onClose={onClose}
-      footer={footer}
-      scrollable
-    >
+    <ModalSheet visible={open} snapPoints={['48%', '80%']} onClose={onClose} footer={footer} scrollable>
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
           <MarkerSwatch color={systemColors.accent} shape="circle" thickness={draftValue} size={shapeSize} />
@@ -614,13 +602,7 @@ function ShapeSizeSheet({ open, value, brushThickness, onSave, onClose }: ShapeS
   const footer = <Button title={t('mobile.more.accessibility.size.save')} onPress={handleSave} size="large" />;
 
   return (
-    <ModalSheet
-      visible={open}
-      snapPoints={['48%', '80%']}
-      onClose={onClose}
-      footer={footer}
-      scrollable
-    >
+    <ModalSheet visible={open} snapPoints={['48%', '80%']} onClose={onClose} footer={footer} scrollable>
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
           <MarkerSwatch color={systemColors.accent} shape="diamond" thickness={brushThickness} size={draftValue} />

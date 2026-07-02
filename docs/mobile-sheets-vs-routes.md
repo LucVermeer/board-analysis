@@ -19,19 +19,29 @@ Most things are sheets. Routes are the exception, and each route variant earns i
 Wrapped by two helpers so they don't drift (both supply the scrim, drag handle, iOS 26 glass
 background, and keyboard avoidance natively):
 
-| Wrapper                                            | Backing            | Opened by                                         | Use when                                                                                                                          |
-| -------------------------------------------------- | ------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **`ModalSheet`** (`src/components/ModalSheet.tsx`) | `BottomSheetModal` | imperatively via ref — `present()` / `dismiss()`  | A button/handler opens it. Presents **above root chrome** (the queue bar / tab bar) for free. The default for an on-demand sheet. |
-| **`Sheet`** (`src/components/Sheet.tsx`)           | `BottomSheet`      | declaratively — its presence in the tree shows it | Its lifetime is tied to parent state. Has a **`fullWindowOverlay`** prop to float above other sheets.                             |
+| Wrapper                                            | Backing            | Opened by                                                                          | Use when                                                                                                                          |
+| -------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **`ModalSheet`** (`src/components/ModalSheet.tsx`) | `BottomSheetModal` | imperatively via ref — `present()` / `dismiss()`, or the controlled `visible` prop | A button/handler opens it. Presents **above root chrome** (the queue bar / tab bar) for free. The default for an on-demand sheet. |
+| **`Sheet`** (`src/components/Sheet.tsx`)           | `BottomSheet`      | declaratively — its presence in the tree shows it                                  | Its lifetime is tied to parent state.                                                                                             |
 
 Examples: `QueueSheet`, `BoardSheet`, `LogAscentSheet`, `AngleSelectorSheet`,
 `ClimbActionsSheet`, `AddBetaVideoSheet` (sheet surfaces), `CreateDrawer` + `HoldRoleSheet`
 (declarative `Sheet`s).
 
-**Stacking a sheet above another sheet / above everything:** add `fullWindowOverlay` to a
-`Sheet` (renders it in a higher window), or use a `FullWindowOverlay` directly. This is how
-`HoldRoleSheet` floats above the create drawer and how `ClimbReactionMenu` (the long-press
-context menu) floats above whatever's underneath.
+Prefer the controlled `visible` prop over an imperative ref + a local `isPresentedRef`: the
+coordinator reconciles present/dismiss from `visible`, and `onClose` fires only on a genuine user
+pan-down / backdrop (not on coordinator-driven closes), so parent state can't be cleared behind
+your back. `AddToPlaylistSheet` is the reference.
+
+**Stacking above everything:** a **custom, non-sheet** overlay (Reanimated + plain views) can
+render in a higher iOS window via react-native-screens' `FullWindowOverlay` — that's how
+`ClimbReactionMenu` (the long-press context menu) floats above whatever's underneath. This does
+**not** work for a native `@expo/ui` sheet: a SwiftUI `.sheet` presents off the **key window**
+regardless of a `FullWindowOverlay` wrapper (the scar the player learned — see rule 1), so
+wrapping a sheet in one pushes it _under_ the overlay window, not above. Sibling native sheets
+instead stack via their own SwiftUI hosts — that's how `HoldRoleSheet` shows over the create
+drawer (they're siblings in the create-climb route, not one nested in the other). There is **no**
+`fullWindowOverlay` prop on `Sheet`; it was an inert no-op and has been removed.
 
 **Every native sheet must go through the presentation coordinator.** `@expo/ui`
 sheets all present off the **same** root-window view controller, and the library
@@ -44,9 +54,20 @@ drive present/dismiss with `useManagedSheet` (see `QueueSheet`, `BoardSheet`,
 `LogAscentSheet`). The coordinator serializes transitions per **presenter group**
 (default `'root'`) and auto-sequences a sheet-over-sheet open as
 dismiss(A) → settle → present(B). Two exceptions, both documented in-file:
-`CreateDrawer` (a route-primary drawer that opens once and whose only sub-sheet is
-a `fullWindowOverlay`, so it never overlaps a coordinated transition) and the
-`fullWindowOverlay` menus, which live in a higher window.
+`CreateDrawer` (a route-primary drawer that renders the raw `BottomSheet` without the
+coordinator — it opens once as the create-climb route's primary sheet, and its only sub-sheet,
+`HoldRoleSheet`, presents from its own sibling SwiftUI host, so the two never contend for the same
+presenter) and the `FullWindowOverlay` menus (e.g. `ClimbReactionMenu`), which are custom overlays
+in a higher window, not native sheets.
+
+**iOS sizing — the single-flex-child contract.** Hand the native `@expo/ui` sheet exactly ONE
+flex child; multiple direct children make it size to content and collapse a `flex: 1` scroll body.
+And on iOS the SwiftUI host can propose an **unbounded** height to that child, so a `flex: 1`
+column sizes to its content instead of the detent and anything past the detent (a pinned footer)
+lands off-screen (#3330). The `Sheet` / `ModalSheet` wrappers pin that single flex child to the
+active detent's height on iOS via `useSheetColumnStyle` (`src/components/use-sheet-column-style.ts`);
+Android bounds it natively and keeps `flex: 1`. A raw-`BottomSheet` surface with a pinned footer
+(e.g. `ClimbFilterSheet`) must apply the same hook itself.
 
 ### Routes (`expo-router` `Stack.Screen`)
 
@@ -65,8 +86,9 @@ Is it a secondary surface OVER the current screen, or its own full surface?
 ├─ Secondary surface ─────────────────────────► BOTTOM SHEET
 │    ├─ Opened imperatively (button → present)?  → ModalSheet
 │    ├─ Tied to parent state (declarative)?      → Sheet
-│    └─ Must stack above an open sheet?           → Sheet + fullWindowOverlay
-│                                                   (or FullWindowOverlay)
+│    └─ Must float above everything (CUSTOM overlay,   → FullWindowOverlay
+│        not a native sheet)?                            (native sheets present off the key
+│                                                         window — a wrapper can't lift them)
 │
 └─ Its own full surface ──────────────────────► ROUTE
      ├─ Deep destination (back / URL)?            → pushed route
@@ -106,9 +128,9 @@ Is it a secondary surface OVER the current screen, or its own full surface?
    gesture competes with the board's.
 
 4. **`ModalSheet` (imperative) vs `Sheet` (declarative) is about _how it opens_**, not how it
-   looks: a ref you `.present()` vs a component whose presence in the tree shows it. Pick
-   `ModalSheet` for on-demand surfaces (the common case); `Sheet` when the sheet's lifetime is
-   bound to parent state and especially when you need `fullWindowOverlay`.
+   looks: a ref you `.present()` (or its controlled `visible` prop) vs a component whose presence
+   in the tree shows it. Pick `ModalSheet` for on-demand surfaces (the common case); `Sheet` when
+   the sheet's lifetime is bound to parent state.
 
 ## A latency footgun (any route)
 
@@ -123,9 +145,9 @@ waits out the whole transition and is disabled in screenshot mode.
 
 - **Queue / Board / LogAscent / Angle / ClimbActions / AddBetaVideo** — secondary, opened on
   demand → `ModalSheet`. The bread and butter.
-- **Create-climb** — a drawer that shows the dimmed climbs list behind it, with one sub-sheet
-  (`HoldRoleSheet`, via `fullWindowOverlay`) → `transparentModal` route hosting a `Sheet`
-  (`CreateDrawer`). Correctly _not_ a full-screen cover.
+- **Create-climb** — a drawer that shows the dimmed climbs list behind it, with one sibling
+  sub-sheet (`HoldRoleSheet`, which stacks via its own SwiftUI host) → `transparentModal` route
+  hosting a `Sheet` (`CreateDrawer`). Correctly _not_ a full-screen cover.
 - **Player (now-playing)** — immersive full-screen, hosts 5–6 sub-sheets that must stack above
   it → `transparentModal` + opaque backing route. The exception that proves rule 1.
 - **Boards picker / share-beta / join** — self-contained flows from a tab → `modal` card.
