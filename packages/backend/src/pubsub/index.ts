@@ -308,6 +308,12 @@ class PubSub {
    * Retrieve events since a given sequence number (Phase 2).
    * Used for delta sync on reconnection.
    * Returns events in ascending sequence order.
+   *
+   * Defensively drops any `PlaybackStateChanged` entries found in the buffer.
+   * `publishQueueEvent` no longer writes them (see `storeEventInBuffer` call
+   * site below), but during a mixed-version rollout an old instance may still
+   * have buffered one within the 5-minute TTL — its reused, non-monotonic
+   * sequence would otherwise break the client's replay-contiguity check.
    */
   async getEventsSince(sessionId: string, sinceSequence: number): Promise<QueueEvent[]> {
     if (!this.redisAdapter) {
@@ -326,6 +332,9 @@ class PubSub {
       for (const json of eventJsons) {
         try {
           const event = JSON.parse(json) as QueueEvent;
+          if (event.__typename === 'PlaybackStateChanged') {
+            continue;
+          }
           if (event.sequence > sinceSequence) {
             events.push(event);
           }
@@ -349,6 +358,13 @@ class PubSub {
    * Dispatches locally first, then publishes to Redis for other instances.
    * Also stores event in buffer for delta sync (Phase 2).
    *
+   * `PlaybackStateChanged` events are excluded from buffering: they reuse the
+   * room's current sequence number (rather than incrementing it) and can fire
+   * up to 3600/min, so buffering them would both evict real queue events from
+   * the 100-entry buffer within seconds and hand replaying clients
+   * non-monotonic/duplicate sequences. See `publishPlaybackState` in
+   * `graphql/resolvers/queue/mutations.ts`.
+   *
    * Note: Redis publish errors are logged but not thrown to avoid blocking
    * the local dispatch. In Redis mode, events may not reach other instances
    * if Redis publish fails.
@@ -357,12 +373,14 @@ class PubSub {
     // Always dispatch to local subscribers first (low latency)
     this.dispatchToLocalQueueSubscribers(sessionId, event);
 
-    // Store event in buffer for delta sync (Phase 2)
-    // Fire and forget - don't block on buffer storage
-    this.storeEventInBuffer(sessionId, event).catch((error) => {
-      logger.error(`[PubSub] Failed to buffer event for session ${sessionId}:`, error);
-      // Non-fatal: clients will fall back to full sync if delta sync fails
-    });
+    // Store event in buffer for delta sync (Phase 2), except playback events
+    // (see docstring above). Fire and forget - don't block on buffer storage.
+    if (event.__typename !== 'PlaybackStateChanged') {
+      this.storeEventInBuffer(sessionId, event).catch((error) => {
+        logger.error(`[PubSub] Failed to buffer event for session ${sessionId}:`, error);
+        // Non-fatal: clients will fall back to full sync if delta sync fails
+      });
+    }
 
     // Also publish to Redis if available
     if (this.redisAdapter) {
