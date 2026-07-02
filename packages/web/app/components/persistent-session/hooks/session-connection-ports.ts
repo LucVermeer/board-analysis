@@ -260,9 +260,15 @@ export function createWebSessionConnectionDeps({
         // controller's teardown discipline: `stop()` disposes the client,
         // and a disposed graphql-ws client's pending `execute` rejects with
         // a generic transport error — never a `GraphQLOperationError`
-        // carrying SESSION_ENDED — so a join resolving after teardown can't
-        // reach this branch. If the controller ever stops without
-        // disposing, thread an isStopped check through these deps instead
+        // carrying SESSION_ENDED — so a join still in flight at teardown
+        // can't reach this branch. One residual window remains: a
+        // SESSION_ENDED rejection that settled just before stop() runs its
+        // catch continuation a microtask later and still lands here (the
+        // pre-controller hook had the equivalent hole via mountedRef; the
+        // consequence is a lost activation on a pathological A→B switch
+        // timed to A's server-side end). If that ever matters, or if the
+        // controller ever stops without disposing, thread an isStopped
+        // check through these deps instead
         // of relying on this reasoning.
         if (err instanceof GraphQLOperationError && err.extensions?.code === 'SESSION_ENDED') {
           if (DEBUG) console.info('[PersistentSession] Session has ended; clearing stored session');
