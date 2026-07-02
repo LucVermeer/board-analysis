@@ -289,10 +289,7 @@ function usePersistentSessionQueueAdapter(): {
       playlistSuggestionSource,
       climbSearchParams: DEFAULT_SEARCH_PARAMS,
       hasDoneFirstFetch: false,
-      initialQueueDataReceivedFromPeers: false,
       pendingCurrentClimbUpdates: [],
-      lastReceivedSequence: null,
-      lastReceivedStateHash: null,
       needsResync: false,
     };
     let nextState = queueReducer(pseudoState, action);
