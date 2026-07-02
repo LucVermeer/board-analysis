@@ -13,10 +13,12 @@
 // promise from the dead socket.
 //
 // Extracted from
-// `packages/mobile/src/providers/queue-provider.tsx`. Web's equivalent in
-// `persistent-session/hooks/use-session-lifecycle.ts` follows a different
-// reconnect-orchestration pattern; adopting this tracker there is a
-// follow-up (see Workstream A appendix in the plan).
+// `packages/mobile/src/providers/queue-provider.tsx`. Web now uses this
+// tracker too — `session-connection.ts`'s `createSessionConnectionController`
+// (Workstream W4) wraps it for both the initial JOIN_SESSION and every
+// rejoin, layering its own epoch bookkeeping on top so a join that resolves
+// after being superseded never clobbers a newer one's result. Web's
+// `use-session-lifecycle.ts` wires the controller in.
 
 export type JoinSessionTrackerOptions = {
   /** Resolve the board path for a given sessionId at join time. Returns null
