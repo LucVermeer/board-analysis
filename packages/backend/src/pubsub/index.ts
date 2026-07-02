@@ -9,14 +9,15 @@ import type {
 } from '@boardsesh/shared-schema';
 import { redisClientManager } from '../redis/client';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from './redis-adapter';
+import { PubSubChannel, type ChannelSubscriber } from './channel';
 import { logger } from '../utils/logger';
 
-type QueueSubscriber = (event: QueueEvent) => void;
-type SessionSubscriber = (event: SessionEvent) => void;
-type NotificationSubscriber = (event: NotificationEvent) => void;
-type CommentSubscriber = (event: CommentEvent) => void;
-type NewClimbSubscriber = (event: NewClimbCreatedEvent) => void;
-type BoardPresenceSubscriber = (event: BoardPresenceEvent) => void;
+type QueueSubscriber = ChannelSubscriber<QueueEvent>;
+type SessionSubscriber = ChannelSubscriber<SessionEvent>;
+type NotificationSubscriber = ChannelSubscriber<NotificationEvent>;
+type CommentSubscriber = ChannelSubscriber<CommentEvent>;
+type NewClimbSubscriber = ChannelSubscriber<NewClimbCreatedEvent>;
+type BoardPresenceSubscriber = ChannelSubscriber<BoardPresenceEvent>;
 
 /** Result of the Stage-A report gate read (one pipeline, see `getBoardReportGate`). */
 export type BoardReportGate = {
@@ -120,14 +121,68 @@ const EVENT_BUFFER_TTL = 300; // 5 minutes
  * In local-only mode (single instance, no Redis):
  * - Events are only dispatched to local subscribers
  * - Used when REDIS_URL is not configured
+ *
+ * The six domains below (queue, session, notification, comment, new-climb,
+ * board-presence) all share the exact same subscribe/publish/fan-in mechanics
+ * — that generic behavior lives in `PubSubChannel` (./channel.ts). Each
+ * `redisSubscribe`/`redisUnsubscribe`/`redisPublish` closure below resolves to
+ * a no-op when `redisAdapter` is null (local-only mode or not-yet-initialized),
+ * which is intentional: it reproduces the old `if (this.redisAdapter) { ... }`
+ * guards without the channel needing to know about `redisAdapter` at all.
+ * Domain-specific quirks (queue's replay buffer + APNs hook; board-presence's
+ * Redis KV helpers) are NOT part of the generic channel — they're layered on
+ * top in this class, documented at their call sites below.
  */
 class PubSub {
-  private queueSubscribers = new Map<string, Set<QueueSubscriber>>();
-  private sessionSubscribers = new Map<string, Set<SessionSubscriber>>();
-  private notificationSubscribers = new Map<string, Set<NotificationSubscriber>>();
-  private commentSubscribers = new Map<string, Set<CommentSubscriber>>();
-  private newClimbSubscribers = new Map<string, Set<NewClimbSubscriber>>();
-  private boardPresenceSubscribers = new Map<string, Set<BoardPresenceSubscriber>>();
+  private readonly queueChannel = new PubSubChannel<QueueEvent>({
+    label: 'queue',
+    redisSubscribe: (sessionId) => this.redisAdapter?.subscribeQueueChannel(sessionId) ?? Promise.resolve(),
+    redisUnsubscribe: (sessionId) => this.redisAdapter?.unsubscribeQueueChannel(sessionId) ?? Promise.resolve(),
+    redisPublish: (sessionId, event) => this.redisAdapter?.publishQueueEvent(sessionId, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
+  private readonly sessionChannel = new PubSubChannel<SessionEvent>({
+    label: 'session',
+    redisSubscribe: (sessionId) => this.redisAdapter?.subscribeSessionChannel(sessionId) ?? Promise.resolve(),
+    redisUnsubscribe: (sessionId) => this.redisAdapter?.unsubscribeSessionChannel(sessionId) ?? Promise.resolve(),
+    redisPublish: (sessionId, event) => this.redisAdapter?.publishSessionEvent(sessionId, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
+  private readonly notificationChannel = new PubSubChannel<NotificationEvent>({
+    label: 'notification',
+    redisSubscribe: (userId) => this.redisAdapter?.subscribeNotificationChannel(userId) ?? Promise.resolve(),
+    redisUnsubscribe: (userId) => this.redisAdapter?.unsubscribeNotificationChannel(userId) ?? Promise.resolve(),
+    redisPublish: (userId, event) => this.redisAdapter?.publishNotificationEvent(userId, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
+  private readonly commentChannel = new PubSubChannel<CommentEvent>({
+    label: 'comment',
+    redisSubscribe: (entityKey) => this.redisAdapter?.subscribeCommentChannel(entityKey) ?? Promise.resolve(),
+    redisUnsubscribe: (entityKey) => this.redisAdapter?.unsubscribeCommentChannel(entityKey) ?? Promise.resolve(),
+    redisPublish: (entityKey, event) => this.redisAdapter?.publishCommentEvent(entityKey, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
+  private readonly newClimbChannel = new PubSubChannel<NewClimbCreatedEvent>({
+    label: 'new climb',
+    redisSubscribe: (channelKey) => this.redisAdapter?.subscribeNewClimbChannel(channelKey) ?? Promise.resolve(),
+    redisUnsubscribe: (channelKey) => this.redisAdapter?.unsubscribeNewClimbChannel(channelKey) ?? Promise.resolve(),
+    redisPublish: (channelKey, event) =>
+      this.redisAdapter?.publishNewClimbEvent(channelKey, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
+  private readonly boardPresenceChannel = new PubSubChannel<BoardPresenceEvent>({
+    label: 'board presence',
+    redisSubscribe: (boardId) => this.redisAdapter?.subscribeBoardPresenceChannel(boardId) ?? Promise.resolve(),
+    redisUnsubscribe: (boardId) => this.redisAdapter?.unsubscribeBoardPresenceChannel(boardId) ?? Promise.resolve(),
+    redisPublish: (boardId, event) => this.redisAdapter?.publishBoardPresenceEvent(boardId, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
   // Local-only fallback for the per-board monotonic seq counter. In Redis
   // mode the authoritative counter is `board:${boardId}:seq` (INCR); this map
   // only ever serves single-instance deployments that have no Redis.
@@ -227,10 +282,10 @@ class PubSub {
    *
    * **Publisher-side semantics (important for multi-instance deployments):**
    * The hook fires only on the instance that calls `publishQueueEvent`. It is
-   * NOT invoked by `dispatchToLocalQueueSubscribers` when a Redis fan-out
-   * message arrives from another instance — that path bypasses the hook
-   * intentionally so a single event published in a 3-instance cluster does
-   * not trigger 3 redundant APNs sends.
+   * NOT invoked by the Redis fan-in path (`queueChannel.dispatchLocal`) when a
+   * Redis fan-out message arrives from another instance — that path bypasses
+   * the hook intentionally so a single event published in a 3-instance cluster
+   * does not trigger 3 redundant APNs sends.
    *
    * Implication: every backend instance that receives queue mutations must
    * have APNs env vars configured, otherwise queue events that originate on
@@ -256,27 +311,27 @@ class PubSub {
     if (!this.redisAdapter) return;
 
     this.redisAdapter.onQueueMessage((sessionId, event) => {
-      this.dispatchToLocalQueueSubscribers(sessionId, event);
+      this.queueChannel.dispatchLocal(sessionId, event);
     });
 
     this.redisAdapter.onSessionMessage((sessionId, event) => {
-      this.dispatchToLocalSessionSubscribers(sessionId, event);
+      this.sessionChannel.dispatchLocal(sessionId, event);
     });
 
     this.redisAdapter.onNotificationMessage((userId, event) => {
-      this.dispatchToLocalNotificationSubscribers(userId, event);
+      this.notificationChannel.dispatchLocal(userId, event);
     });
 
     this.redisAdapter.onCommentMessage((entityKey, event) => {
-      this.dispatchToLocalCommentSubscribers(entityKey, event);
+      this.commentChannel.dispatchLocal(entityKey, event);
     });
 
     this.redisAdapter.onNewClimbMessage((channelKey, event) => {
-      this.dispatchToLocalNewClimbSubscribers(channelKey, event);
+      this.newClimbChannel.dispatchLocal(channelKey, event);
     });
 
     this.redisAdapter.onBoardPresenceMessage((boardId, event) => {
-      this.dispatchToLocalBoardPresenceSubscribers(boardId, event);
+      this.boardPresenceChannel.dispatchLocal(boardId, event);
     });
   }
 
@@ -287,47 +342,7 @@ class PubSub {
    */
   async subscribeQueue(sessionId: string, callback: QueueSubscriber): Promise<() => void> {
     this.ensureRedisIfRequired();
-
-    const isFirstSubscriber = !this.queueSubscribers.has(sessionId);
-
-    if (!this.queueSubscribers.has(sessionId)) {
-      this.queueSubscribers.set(sessionId, new Set());
-    }
-    this.queueSubscribers.get(sessionId)!.add(callback);
-
-    // Subscribe to Redis channel if this is first local subscriber for session
-    // IMPORTANT: We must await this to ensure Redis subscription is active
-    // before returning, otherwise events from other instances could be missed
-    if (isFirstSubscriber && this.redisAdapter) {
-      try {
-        await this.redisAdapter.subscribeQueueChannel(sessionId);
-      } catch (error) {
-        logger.error(`[PubSub] Failed to subscribe to Redis queue channel: ${String(error)}`);
-        // Remove the subscriber since Redis subscription failed
-        this.queueSubscribers.get(sessionId)?.delete(callback);
-        if (this.queueSubscribers.get(sessionId)?.size === 0) {
-          this.queueSubscribers.delete(sessionId);
-        }
-        if (this.redisRequired) {
-          throw error;
-        }
-      }
-    }
-
-    return () => {
-      this.queueSubscribers.get(sessionId)?.delete(callback);
-
-      // Clean up empty sets and unsubscribe from Redis
-      if (this.queueSubscribers.get(sessionId)?.size === 0) {
-        this.queueSubscribers.delete(sessionId);
-
-        if (this.redisAdapter) {
-          this.redisAdapter.unsubscribeQueueChannel(sessionId).catch((error) => {
-            logger.error(`[PubSub] Failed to unsubscribe from Redis queue channel: ${String(error)}`);
-          });
-        }
-      }
-    };
+    return this.queueChannel.subscribe(sessionId, callback);
   }
 
   /**
@@ -337,47 +352,7 @@ class PubSub {
    */
   async subscribeSession(sessionId: string, callback: SessionSubscriber): Promise<() => void> {
     this.ensureRedisIfRequired();
-
-    const isFirstSubscriber = !this.sessionSubscribers.has(sessionId);
-
-    if (!this.sessionSubscribers.has(sessionId)) {
-      this.sessionSubscribers.set(sessionId, new Set());
-    }
-    this.sessionSubscribers.get(sessionId)!.add(callback);
-
-    // Subscribe to Redis channel if this is first local subscriber for session
-    // IMPORTANT: We must await this to ensure Redis subscription is active
-    // before returning, otherwise events from other instances could be missed
-    if (isFirstSubscriber && this.redisAdapter) {
-      try {
-        await this.redisAdapter.subscribeSessionChannel(sessionId);
-      } catch (error) {
-        logger.error(`[PubSub] Failed to subscribe to Redis session channel: ${String(error)}`);
-        // Remove the subscriber since Redis subscription failed
-        this.sessionSubscribers.get(sessionId)?.delete(callback);
-        if (this.sessionSubscribers.get(sessionId)?.size === 0) {
-          this.sessionSubscribers.delete(sessionId);
-        }
-        if (this.redisRequired) {
-          throw error;
-        }
-      }
-    }
-
-    return () => {
-      this.sessionSubscribers.get(sessionId)?.delete(callback);
-
-      // Clean up empty sets and unsubscribe from Redis
-      if (this.sessionSubscribers.get(sessionId)?.size === 0) {
-        this.sessionSubscribers.delete(sessionId);
-
-        if (this.redisAdapter) {
-          this.redisAdapter.unsubscribeSessionChannel(sessionId).catch((error) => {
-            logger.error(`[PubSub] Failed to unsubscribe from Redis session channel: ${String(error)}`);
-          });
-        }
-      }
-    };
+    return this.sessionChannel.subscribe(sessionId, callback);
   }
 
   /**
@@ -458,8 +433,10 @@ class PubSub {
 
   /**
    * Publish a queue event to all subscribers of a session.
-   * Dispatches locally first, then publishes to Redis for other instances.
-   * Also stores event in buffer for delta sync (Phase 2).
+   * Dispatches locally first, then publishes to Redis for other instances
+   * (both via `queueChannel.publish`). Also stores the event in the delta-sync
+   * buffer and fires the APNs hook — these two are queue-only quirks layered
+   * on top of the generic channel, not part of `PubSubChannel` itself.
    *
    * `PlaybackStateChanged` events are excluded from buffering: they reuse the
    * room's current sequence number (rather than incrementing it) and can fire
@@ -467,14 +444,10 @@ class PubSub {
    * the 100-entry buffer within seconds and hand replaying clients
    * non-monotonic/duplicate sequences. See `publishPlaybackState` in
    * `graphql/resolvers/queue/mutations.ts`.
-   *
-   * Note: Redis publish errors are logged but not thrown to avoid blocking
-   * the local dispatch. In Redis mode, events may not reach other instances
-   * if Redis publish fails.
    */
   publishQueueEvent(sessionId: string, event: QueueEvent): void {
-    // Always dispatch to local subscribers first (low latency)
-    this.dispatchToLocalQueueSubscribers(sessionId, event);
+    // Local dispatch (low latency) + Redis publish for other instances.
+    this.queueChannel.publish(sessionId, event);
 
     // Store event in buffer for delta sync (Phase 2), except playback events
     // (see docstring above). Fire and forget - don't block on buffer storage.
@@ -482,15 +455,6 @@ class PubSub {
       this.storeEventInBuffer(sessionId, event).catch((error) => {
         logger.error(`[PubSub] Failed to buffer event for session ${sessionId}:`, error);
         // Non-fatal: clients will fall back to full sync if delta sync fails
-      });
-    }
-
-    // Also publish to Redis if available
-    if (this.redisAdapter) {
-      this.redisAdapter.publishQueueEvent(sessionId, event).catch((error) => {
-        logger.error('[PubSub] Redis queue publish failed:', error);
-        // Log but don't throw - local dispatch already succeeded
-        // Health check will report Redis as unhealthy if connection is lost
       });
     }
 
@@ -507,49 +471,9 @@ class PubSub {
   /**
    * Publish a session event to all subscribers.
    * Dispatches locally first, then publishes to Redis for other instances.
-   *
-   * Note: Redis publish errors are logged but not thrown to avoid blocking
-   * the local dispatch. In Redis mode, events may not reach other instances
-   * if Redis publish fails.
    */
   publishSessionEvent(sessionId: string, event: SessionEvent): void {
-    // Always dispatch to local subscribers first (low latency)
-    this.dispatchToLocalSessionSubscribers(sessionId, event);
-
-    // Also publish to Redis if available
-    if (this.redisAdapter) {
-      this.redisAdapter.publishSessionEvent(sessionId, event).catch((error) => {
-        logger.error('[PubSub] Redis session publish failed:', error);
-        // Log but don't throw - local dispatch already succeeded
-        // Health check will report Redis as unhealthy if connection is lost
-      });
-    }
-  }
-
-  private dispatchToLocalQueueSubscribers(sessionId: string, event: QueueEvent): void {
-    const subscribers = this.queueSubscribers.get(sessionId);
-    if (subscribers) {
-      for (const callback of subscribers) {
-        try {
-          callback(event);
-        } catch (error) {
-          logger.error('Error in queue subscriber:', error);
-        }
-      }
-    }
-  }
-
-  private dispatchToLocalSessionSubscribers(sessionId: string, event: SessionEvent): void {
-    const subscribers = this.sessionSubscribers.get(sessionId);
-    if (subscribers) {
-      for (const callback of subscribers) {
-        try {
-          callback(event);
-        } catch (error) {
-          logger.error('Error in session subscriber:', error);
-        }
-      }
-    }
+    this.sessionChannel.publish(sessionId, event);
   }
 
   /**
@@ -558,40 +482,7 @@ class PubSub {
    */
   async subscribeNotifications(userId: string, callback: NotificationSubscriber): Promise<() => void> {
     this.ensureRedisIfRequired();
-
-    const isFirstSubscriber = !this.notificationSubscribers.has(userId);
-
-    if (!this.notificationSubscribers.has(userId)) {
-      this.notificationSubscribers.set(userId, new Set());
-    }
-    this.notificationSubscribers.get(userId)!.add(callback);
-
-    if (isFirstSubscriber && this.redisAdapter) {
-      try {
-        await this.redisAdapter.subscribeNotificationChannel(userId);
-      } catch (error) {
-        logger.error(`[PubSub] Failed to subscribe to Redis notification channel: ${String(error)}`);
-        this.notificationSubscribers.get(userId)?.delete(callback);
-        if (this.notificationSubscribers.get(userId)?.size === 0) {
-          this.notificationSubscribers.delete(userId);
-        }
-        if (this.redisRequired) {
-          throw error;
-        }
-      }
-    }
-
-    return () => {
-      this.notificationSubscribers.get(userId)?.delete(callback);
-      if (this.notificationSubscribers.get(userId)?.size === 0) {
-        this.notificationSubscribers.delete(userId);
-        if (this.redisAdapter) {
-          this.redisAdapter.unsubscribeNotificationChannel(userId).catch((error) => {
-            logger.error(`[PubSub] Failed to unsubscribe from Redis notification channel: ${String(error)}`);
-          });
-        }
-      }
-    };
+    return this.notificationChannel.subscribe(userId, callback);
   }
 
   /**
@@ -599,26 +490,7 @@ class PubSub {
    * Dispatches locally first, then publishes to Redis for other instances.
    */
   publishNotificationEvent(userId: string, event: NotificationEvent): void {
-    this.dispatchToLocalNotificationSubscribers(userId, event);
-
-    if (this.redisAdapter) {
-      this.redisAdapter.publishNotificationEvent(userId, event).catch((error) => {
-        logger.error('[PubSub] Redis notification publish failed:', error);
-      });
-    }
-  }
-
-  private dispatchToLocalNotificationSubscribers(userId: string, event: NotificationEvent): void {
-    const subscribers = this.notificationSubscribers.get(userId);
-    if (subscribers) {
-      for (const callback of subscribers) {
-        try {
-          callback(event);
-        } catch (error) {
-          logger.error('Error in notification subscriber:', error);
-        }
-      }
-    }
+    this.notificationChannel.publish(userId, event);
   }
 
   /**
@@ -628,40 +500,7 @@ class PubSub {
    */
   async subscribeComments(entityKey: string, callback: CommentSubscriber): Promise<() => void> {
     this.ensureRedisIfRequired();
-
-    const isFirstSubscriber = !this.commentSubscribers.has(entityKey);
-
-    if (!this.commentSubscribers.has(entityKey)) {
-      this.commentSubscribers.set(entityKey, new Set());
-    }
-    this.commentSubscribers.get(entityKey)!.add(callback);
-
-    if (isFirstSubscriber && this.redisAdapter) {
-      try {
-        await this.redisAdapter.subscribeCommentChannel(entityKey);
-      } catch (error) {
-        logger.error(`[PubSub] Failed to subscribe to Redis comment channel: ${String(error)}`);
-        this.commentSubscribers.get(entityKey)?.delete(callback);
-        if (this.commentSubscribers.get(entityKey)?.size === 0) {
-          this.commentSubscribers.delete(entityKey);
-        }
-        if (this.redisRequired) {
-          throw error;
-        }
-      }
-    }
-
-    return () => {
-      this.commentSubscribers.get(entityKey)?.delete(callback);
-      if (this.commentSubscribers.get(entityKey)?.size === 0) {
-        this.commentSubscribers.delete(entityKey);
-        if (this.redisAdapter) {
-          this.redisAdapter.unsubscribeCommentChannel(entityKey).catch((error) => {
-            logger.error(`[PubSub] Failed to unsubscribe from Redis comment channel: ${String(error)}`);
-          });
-        }
-      }
-    };
+    return this.commentChannel.subscribe(entityKey, callback);
   }
 
   /**
@@ -669,26 +508,7 @@ class PubSub {
    * Dispatches locally first, then publishes to Redis for other instances.
    */
   publishCommentEvent(entityKey: string, event: CommentEvent): void {
-    this.dispatchToLocalCommentSubscribers(entityKey, event);
-
-    if (this.redisAdapter) {
-      this.redisAdapter.publishCommentEvent(entityKey, event).catch((error) => {
-        logger.error('[PubSub] Redis comment publish failed:', error);
-      });
-    }
-  }
-
-  private dispatchToLocalCommentSubscribers(entityKey: string, event: CommentEvent): void {
-    const subscribers = this.commentSubscribers.get(entityKey);
-    if (subscribers) {
-      for (const callback of subscribers) {
-        try {
-          callback(event);
-        } catch (error) {
-          logger.error('Error in comment subscriber:', error);
-        }
-      }
-    }
+    this.commentChannel.publish(entityKey, event);
   }
 
   /**
@@ -697,66 +517,14 @@ class PubSub {
    */
   async subscribeNewClimbs(channelKey: string, callback: NewClimbSubscriber): Promise<() => void> {
     this.ensureRedisIfRequired();
-
-    const isFirstSubscriber = !this.newClimbSubscribers.has(channelKey);
-
-    if (!this.newClimbSubscribers.has(channelKey)) {
-      this.newClimbSubscribers.set(channelKey, new Set());
-    }
-    this.newClimbSubscribers.get(channelKey)!.add(callback);
-
-    if (isFirstSubscriber && this.redisAdapter) {
-      try {
-        await this.redisAdapter.subscribeNewClimbChannel(channelKey);
-      } catch (error) {
-        logger.error(`[PubSub] Failed to subscribe to Redis new climb channel: ${String(error)}`);
-        this.newClimbSubscribers.get(channelKey)?.delete(callback);
-        if (this.newClimbSubscribers.get(channelKey)?.size === 0) {
-          this.newClimbSubscribers.delete(channelKey);
-        }
-        if (this.redisRequired) {
-          throw error;
-        }
-      }
-    }
-
-    return () => {
-      this.newClimbSubscribers.get(channelKey)?.delete(callback);
-      if (this.newClimbSubscribers.get(channelKey)?.size === 0) {
-        this.newClimbSubscribers.delete(channelKey);
-        if (this.redisAdapter) {
-          this.redisAdapter.unsubscribeNewClimbChannel(channelKey).catch((error) => {
-            logger.error(`[PubSub] Failed to unsubscribe from Redis new climb channel: ${String(error)}`);
-          });
-        }
-      }
-    };
+    return this.newClimbChannel.subscribe(channelKey, callback);
   }
 
   /**
    * Publish a new climb event to subscribers.
    */
   publishNewClimbEvent(channelKey: string, event: NewClimbCreatedEvent): void {
-    this.dispatchToLocalNewClimbSubscribers(channelKey, event);
-
-    if (this.redisAdapter) {
-      this.redisAdapter.publishNewClimbEvent(channelKey, event).catch((error) => {
-        logger.error('[PubSub] Redis new climb publish failed:', error);
-      });
-    }
-  }
-
-  private dispatchToLocalNewClimbSubscribers(channelKey: string, event: NewClimbCreatedEvent): void {
-    const subscribers = this.newClimbSubscribers.get(channelKey);
-    if (subscribers) {
-      for (const callback of subscribers) {
-        try {
-          callback(event);
-        } catch (error) {
-          logger.error('Error in new climb subscriber:', error);
-        }
-      }
-    }
+    this.newClimbChannel.publish(channelKey, event);
   }
 
   // ============================================
@@ -775,40 +543,7 @@ class PubSub {
    */
   async subscribeBoardPresence(boardId: string, callback: BoardPresenceSubscriber): Promise<() => void> {
     this.ensureRedisIfRequired();
-
-    const isFirstSubscriber = !this.boardPresenceSubscribers.has(boardId);
-
-    if (!this.boardPresenceSubscribers.has(boardId)) {
-      this.boardPresenceSubscribers.set(boardId, new Set());
-    }
-    this.boardPresenceSubscribers.get(boardId)!.add(callback);
-
-    if (isFirstSubscriber && this.redisAdapter) {
-      try {
-        await this.redisAdapter.subscribeBoardPresenceChannel(boardId);
-      } catch (error) {
-        logger.error(`[PubSub] Failed to subscribe to Redis board presence channel: ${String(error)}`);
-        this.boardPresenceSubscribers.get(boardId)?.delete(callback);
-        if (this.boardPresenceSubscribers.get(boardId)?.size === 0) {
-          this.boardPresenceSubscribers.delete(boardId);
-        }
-        if (this.redisRequired) {
-          throw error;
-        }
-      }
-    }
-
-    return () => {
-      this.boardPresenceSubscribers.get(boardId)?.delete(callback);
-      if (this.boardPresenceSubscribers.get(boardId)?.size === 0) {
-        this.boardPresenceSubscribers.delete(boardId);
-        if (this.redisAdapter) {
-          this.redisAdapter.unsubscribeBoardPresenceChannel(boardId).catch((error) => {
-            logger.error(`[PubSub] Failed to unsubscribe from Redis board presence channel: ${String(error)}`);
-          });
-        }
-      }
-    };
+    return this.boardPresenceChannel.subscribe(boardId, callback);
   }
 
   /**
@@ -816,26 +551,7 @@ class PubSub {
    * Dispatches locally first, then publishes to Redis for other instances.
    */
   publishBoardPresenceEvent(boardId: string, event: BoardPresenceEvent): void {
-    this.dispatchToLocalBoardPresenceSubscribers(boardId, event);
-
-    if (this.redisAdapter) {
-      this.redisAdapter.publishBoardPresenceEvent(boardId, event).catch((error) => {
-        logger.error('[PubSub] Redis board presence publish failed:', error);
-      });
-    }
-  }
-
-  private dispatchToLocalBoardPresenceSubscribers(boardId: string, event: BoardPresenceEvent): void {
-    const subscribers = this.boardPresenceSubscribers.get(boardId);
-    if (subscribers) {
-      for (const callback of subscribers) {
-        try {
-          callback(event);
-        } catch (error) {
-          logger.error('Error in board presence subscriber:', error);
-        }
-      }
-    }
+    this.boardPresenceChannel.publish(boardId, event);
   }
 
   /**
@@ -1368,8 +1084,8 @@ class PubSub {
    */
   getSubscriberCounts(sessionId: string): { queue: number; session: number } {
     return {
-      queue: this.queueSubscribers.get(sessionId)?.size ?? 0,
-      session: this.sessionSubscribers.get(sessionId)?.size ?? 0,
+      queue: this.queueChannel.count(sessionId),
+      session: this.sessionChannel.count(sessionId),
     };
   }
 }
