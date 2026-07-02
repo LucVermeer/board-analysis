@@ -22,6 +22,7 @@ import { boardPresenceMutations } from '../graphql/resolvers/board-presence/muta
 import { boardPresenceQueries } from '../graphql/resolvers/board-presence/queries';
 import { boardPresenceSubscriptions } from '../graphql/resolvers/board-presence/subscription';
 import { getBoardSeqFloor } from '../graphql/resolvers/board-presence/shared';
+import { setCachedBoardPresenceStats } from '../graphql/resolvers/board-presence/stats';
 import { tickMutations } from '../graphql/resolvers/ticks/mutations';
 
 // Board presence is always-on (the BOARD_PRESENCE_ENABLED env gate and the
@@ -2166,6 +2167,49 @@ describe('board-presence seq continuity across dormancy (Redis)', () => {
       pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
     }
   });
+
+  it('keeps retrying a failed floor consultation past the reseed threshold, then jumps the floor once it recovers', async () => {
+    if (!redisOn || !testRedis) return;
+    // The hazard: a fresh counter (post-dormancy) on a board whose durable
+    // floor is high, while the floor lookup fails transiently for the whole
+    // <= threshold window. Without a sticky retry, the counter would cross
+    // the threshold still below the floor and never consult Postgres again —
+    // clients holding pre-reset high seqs would treat every later event as
+    // stale and the live wall would freeze forever.
+    let providerHealthy = false;
+    let providerCalls = 0;
+    pubsub.setBoardSeqFloorProvider(async () => {
+      providerCalls += 1;
+      if (!providerHealthy) throw new Error('simulated transient Postgres blip');
+      return 500;
+    });
+    try {
+      // Fresh synthetic board = the post-counter-loss state (INCR from 1).
+      const syntheticBoardId = `sticky-${Date.now().toString(36)}`;
+      const allocatedDuringOutage: number[] = [];
+      for (let sendIndex = 0; sendIndex < 55; sendIndex++) {
+        allocatedDuringOutage.push(await pubsub.nextBoardSeq(syntheticBoardId));
+      }
+      // Every allocation degraded to the raw INCR (still below the floor)...
+      expect(allocatedDuringOutage[54]).toBe(55);
+      // ...and calls 51..55 prove the retry is sticky: without the pending
+      // flag the consultation would have stopped at the 50 threshold.
+      expect(providerCalls).toBe(55);
+
+      // Postgres recovers: the very next allocation consults the floor and
+      // jumps past it.
+      providerHealthy = true;
+      expect(await pubsub.nextBoardSeq(syntheticBoardId)).toBe(501);
+
+      // The pending flag is cleared by the success: subsequent allocations
+      // (now far past the threshold) skip the consultation again.
+      const callsAfterRecovery = providerCalls;
+      expect(await pubsub.nextBoardSeq(syntheticBoardId)).toBe(502);
+      expect(providerCalls).toBe(callsAfterRecovery);
+    } finally {
+      pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
+    }
+  });
 });
 
 describe('board-presence stats cache (Redis)', () => {
@@ -2338,6 +2382,65 @@ describe('board-presence stats cache (Redis)', () => {
 
     const afterDelete = await pollCacheUntil(testRedis, boardId, (stats) => stats.climbsSentCount === 0);
     expect(afterDelete).not.toBeNull();
+  });
+
+  it('updateTick refreshes the cache after the debounce window (attempt -> send)', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+
+    // Log an ATTEMPT: counts toward distinct climbers but not sends.
+    const saved = (await tickMutations.saveTick(
+      undefined,
+      { input: { ...baseSaveTickInput(boardId), status: 'attempt', attemptCount: 2 } },
+      authCtx(),
+    )) as { uuid: string };
+
+    const afterSave = await pollCacheUntil(
+      testRedis,
+      boardId,
+      (stats) => stats.distinctClimbersCount === 1 && stats.climbsSentCount === 0,
+    );
+    expect(afterSave).not.toBeNull();
+
+    // The motivating edit: flipping attempt -> send must refresh the wall's
+    // live tiles + cache (pre-existing staleness this PR fixes).
+    await tickMutations.updateTick(undefined, { uuid: saved.uuid, input: { status: 'send' } }, authCtx());
+
+    const afterUpdate = await pollCacheUntil(testRedis, boardId, (stats) => stats.climbsSentCount === 1);
+    expect(afterUpdate).not.toBeNull();
+  });
+
+  it('a late query-miss cache write (SET NX) never rolls back a fresher publish-path snapshot', async () => {
+    if (!redisOn || !testRedis) return;
+    const boardId = await makeStatsBoard();
+    const emptyStats: BoardPresenceStats = {
+      climbsSentCount: 0,
+      distinctClimbersCount: 0,
+      hardestGrade: null,
+      hardestSend: null,
+      topGrade: null,
+      lastSentAt: null,
+    };
+    const staleSnapshot: BoardPresenceStats = { ...emptyStats, climbsSentCount: 4 };
+    const freshSnapshot: BoardPresenceStats = { ...emptyStats, climbsSentCount: 5 };
+    const readCache = async () => JSON.parse((await testRedis!.get(statsCacheKey(boardId)))!) as BoardPresenceStats;
+    const flushFireAndForget = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    // True miss: the query-path NX write populates the key.
+    setCachedBoardPresenceStats(boardId, staleSnapshot, { onlyIfAbsent: true });
+    await flushFireAndForget();
+    expect(await readCache()).toEqual(staleSnapshot);
+
+    // The authoritative publish-path write (plain SET) overwrites it...
+    setCachedBoardPresenceStats(boardId, freshSnapshot);
+    await flushFireAndForget();
+    expect(await readCache()).toEqual(freshSnapshot);
+
+    // ...and a late query-miss write that lost the race (computed before the
+    // publish, landing after it) is a no-op instead of a rollback.
+    setCachedBoardPresenceStats(boardId, staleSnapshot, { onlyIfAbsent: true });
+    await flushFireAndForget();
+    expect(await readCache()).toEqual(freshSnapshot);
   });
 
   it('still computes stats correctly when Redis is unavailable (cache is best-effort)', async () => {

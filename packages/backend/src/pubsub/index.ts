@@ -140,6 +140,15 @@ class PubSub {
   // board that allocates during the process lifetime (bounded like
   // `localBoardSeq`); never TTL'd — see the safety analysis on the method.
   private boardSeqVerifiedThrough = new Map<string, number>();
+  // Sticky "the floor consultation FAILED and hasn't succeeded since" marker.
+  // While a board is in here, every nextBoardSeq call retries the floor
+  // consultation — regardless of the INCR value and bypassing the watermark
+  // skip — so a transient Postgres/Lua failure during the reseed window can't
+  // let the counter grow past BOARD_SEQ_RESEED_THRESHOLD while still below
+  // the durable floor (which would permanently freeze clients holding
+  // pre-reset high seqs). Cleared only by a successful verification/reseed.
+  // Same lifecycle/bounds as the watermark map.
+  private boardSeqReseedPending = new Set<string>();
   // Local-only proof-of-presence: `${boardId}:${userId}` → expiry epoch ms.
   private localBoardMembership = new Map<string, number>();
   private localBoardMembershipCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -843,7 +852,12 @@ class PubSub {
    * `ensureBoardSeqClearOfDurableFloor` checks the durable floor and, if the
    * floor is at or above the INCR result, reseeds atomically past it. The
    * check memoizes per board so a brand-new board's early sends don't repeat
-   * the Postgres lookup ~50 times (see that method's safety analysis).
+   * the Postgres lookup ~50 times (see that method's safety analysis). A
+   * FAILED consultation marks the board reseed-pending, which keeps the
+   * consultation retrying on every subsequent allocation even after the
+   * counter crosses the threshold — otherwise a transient Postgres blip in
+   * the reseed window would leave the counter permanently below the durable
+   * floor.
    */
   async nextBoardSeq(boardId: string): Promise<number> {
     if (this.redisAdapter && this.isRedisConnected()) {
@@ -858,7 +872,7 @@ class PubSub {
         if (incrError) throw incrError;
         const next = incrResult as number;
 
-        if (next <= BOARD_SEQ_RESEED_THRESHOLD) {
+        if (next <= BOARD_SEQ_RESEED_THRESHOLD || this.boardSeqReseedPending.has(boardId)) {
           return await this.ensureBoardSeqClearOfDurableFloor(boardId, next);
         }
 
@@ -878,12 +892,18 @@ class PubSub {
   }
 
   /**
-   * Ensures a small INCR result (<= BOARD_SEQ_RESEED_THRESHOLD) is clear of
-   * the durable `board_climb_events` floor, reseeding atomically via
+   * Ensures a small (or reseed-pending) INCR result is clear of the durable
+   * `board_climb_events` floor, reseeding atomically via
    * `allocateBoardSeqAtLeast` when it isn't. Returns the seq to use. Never
-   * throws: a floor-lookup or reseed failure falls back to the INCR result,
-   * matching `nextBoardSeq`'s existing non-fatal-degrade contract (and is
-   * deliberately NOT memoized, so the very next small INCR retries).
+   * throws: a floor-lookup or reseed failure falls back to the INCR result —
+   * but marks the board reseed-pending, so every subsequent allocation
+   * retries the consultation (bypassing the watermark skip) until one
+   * succeeds. Without the sticky flag, a transient Postgres blip covering
+   * the whole <= BOARD_SEQ_RESEED_THRESHOLD window would let the counter
+   * cross the threshold still below the durable floor and never consult
+   * Postgres again — clients holding pre-reset high seqs would then treat
+   * every subsequent event as stale and the live wall would freeze until the
+   * next counter loss.
    *
    * Memoization: without it, every send of a brand-new board's first
    * ~BOARD_SEQ_RESEED_THRESHOLD would run the MAX(seq) Postgres lookup. The
@@ -909,8 +929,12 @@ class PubSub {
    * concurrent sends in the reseed window, so we take the simple memo.
    */
   private async ensureBoardSeqClearOfDurableFloor(boardId: string, incrResult: number): Promise<number> {
+    const reseedPending = this.boardSeqReseedPending.has(boardId);
     const verifiedThrough = this.boardSeqVerifiedThrough.get(boardId);
-    if (verifiedThrough !== undefined && incrResult > verifiedThrough) {
+    // The watermark skip is only trustworthy when no consultation has failed
+    // since the last success — while reseed-pending, the floor may be far
+    // above anything this instance ever verified, so always re-consult.
+    if (!reseedPending && verifiedThrough !== undefined && incrResult > verifiedThrough) {
       this.boardSeqVerifiedThrough.set(boardId, incrResult);
       return incrResult;
     }
@@ -919,21 +943,30 @@ class PubSub {
     try {
       floor = await this.boardSeqFloorProvider(Number(boardId));
     } catch (error) {
-      logger.error('[PubSub] board seq floor provider failed, using INCR result:', error);
+      this.boardSeqReseedPending.add(boardId);
+      logger.error('[PubSub] board seq floor provider failed, using INCR result (reseed pending):', error);
       return incrResult;
     }
 
     if (floor < incrResult) {
+      this.boardSeqReseedPending.delete(boardId);
       this.boardSeqVerifiedThrough.set(boardId, Math.max(incrResult, verifiedThrough ?? 0));
       return incrResult;
     }
 
     try {
       const reseeded = await this.allocateBoardSeqAtLeast(boardId, floor);
+      if (reseeded === null) {
+        // Redis went away between the INCR and the reseed — keep retrying.
+        this.boardSeqReseedPending.add(boardId);
+        return incrResult;
+      }
+      this.boardSeqReseedPending.delete(boardId);
       this.boardSeqVerifiedThrough.set(boardId, Math.max(reseeded, verifiedThrough ?? 0));
       return reseeded;
     } catch (error) {
-      logger.error('[PubSub] board seq Lua reseed failed, using INCR result:', error);
+      this.boardSeqReseedPending.add(boardId);
+      logger.error('[PubSub] board seq Lua reseed failed, using INCR result (reseed pending):', error);
       return incrResult;
     }
   }
@@ -944,10 +977,13 @@ class PubSub {
    * re-arming the TTL. A single Lua script keeps the read-compare-write
    * atomic under concurrent callers — two racing reseeds still get distinct,
    * monotonic results because Redis serializes the script execution.
-   * Redis-only; callers must already know Redis is connected (internal reseed
-   * path checks this; the method is also exported for direct unit testing).
+   * Redis-only: returns null when Redis is unavailable (callers fall back to
+   * the plain INCR result and mark the reseed pending). May still reject on
+   * a command failure against a connected Redis — the internal reseed path
+   * catches that. Public for direct unit testing.
    */
-  async allocateBoardSeqAtLeast(boardId: string, floor: number): Promise<number> {
+  async allocateBoardSeqAtLeast(boardId: string, floor: number): Promise<number | null> {
+    if (!this.redisAdapter || !this.isRedisConnected()) return null;
     const { publisher } = redisClientManager.getClients();
     const key = `board:${boardId}:seq`;
     const result = await publisher.eval(

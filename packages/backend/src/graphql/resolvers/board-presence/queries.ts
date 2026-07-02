@@ -149,7 +149,11 @@ export const boardPresenceQueries = {
     if (cached) return cached;
 
     const stats = await computeBoardPresenceStats(boardId, board.boardType);
-    setCachedBoardPresenceStats(boardId, stats);
+    // NX (only-if-absent): this fire-and-forget write races the debounced
+    // publish path, which could land a FRESHER snapshot between our compute
+    // and this SET — NX keeps that one instead of rolling the cache back;
+    // on a true miss it populates the key as before.
+    setCachedBoardPresenceStats(boardId, stats, { onlyIfAbsent: true });
     return stats;
   },
 

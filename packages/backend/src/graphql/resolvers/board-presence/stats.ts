@@ -65,16 +65,35 @@ export async function getCachedBoardPresenceStats(boardId: number): Promise<Boar
   }
 }
 
-/** Fire-and-forget cache write; never blocks or throws for the caller. */
-export function setCachedBoardPresenceStats(boardId: number, stats: BoardPresenceStats): void {
+/**
+ * Fire-and-forget cache write; never blocks or throws for the caller.
+ *
+ * Two write modes keep the cache from moving backwards:
+ * - The publish path (`publishBoardStats`) writes unconditionally — it's the
+ *   authoritative snapshot, serialized per board by the debounce+nonce
+ *   machinery, so a plain SET can never clobber something fresher.
+ * - The query-miss path passes `onlyIfAbsent`, which maps to `SET NX`: its
+ *   fire-and-forget write races the publish path (a miss → compute → SET can
+ *   land AFTER a fresher publish-time SET), and NX makes the late, staler
+ *   write a no-op instead of an overwrite. On a true miss (no key) NX still
+ *   populates the cache.
+ */
+export function setCachedBoardPresenceStats(
+  boardId: number,
+  stats: BoardPresenceStats,
+  options?: { onlyIfAbsent?: boolean },
+): void {
   if (!redisClientManager.isRedisConnected()) return;
   try {
     const { publisher } = redisClientManager.getClients();
-    publisher
-      .set(boardStatsCacheKey(boardId), JSON.stringify(stats), 'EX', BOARD_STATS_CACHE_TTL_SECONDS)
-      .catch((error: unknown) => {
-        logger.error(`[board-presence] stats cache write failed for board ${boardId}:`, error);
-      });
+    const key = boardStatsCacheKey(boardId);
+    const payload = JSON.stringify(stats);
+    const write = options?.onlyIfAbsent
+      ? publisher.set(key, payload, 'EX', BOARD_STATS_CACHE_TTL_SECONDS, 'NX')
+      : publisher.set(key, payload, 'EX', BOARD_STATS_CACHE_TTL_SECONDS);
+    write.catch((error: unknown) => {
+      logger.error(`[board-presence] stats cache write failed for board ${boardId}:`, error);
+    });
   } catch (error) {
     logger.error(`[board-presence] stats cache write initiation failed for board ${boardId}:`, error);
   }
@@ -212,9 +231,10 @@ export async function computeBoardPresenceStats(boardId: number, boardType: stri
 export async function publishBoardStats(boardId: number, boardType: string): Promise<void> {
   try {
     const stats = await computeBoardPresenceStats(boardId, boardType);
-    // Refresh the cache with the exact snapshot this push carries, so a
-    // concurrent boardPresenceStats query never observes a snapshot older
-    // than what watchers just received live.
+    // Refresh the cache with the exact snapshot this push carries (plain SET
+    // — this is the authoritative, per-board-serialized write; the query-miss
+    // path uses SET NX so its racing fire-and-forget write can't land after
+    // this one and roll the cache back to a staler snapshot).
     setCachedBoardPresenceStats(boardId, stats);
     const seq = await pubsub.nextBoardSeq(String(boardId));
     pubsub.publishBoardPresenceEvent(String(boardId), {
