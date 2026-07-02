@@ -27,37 +27,29 @@ import {
   type SubscriptionWireEnvelope,
 } from '@boardsesh/queue-runtime';
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
-import type { SessionSummary, SubscriptionQueueEvent, SessionUser, UserBoard } from '@boardsesh/shared-schema';
+import type { SubscriptionQueueEvent, SessionUser } from '@boardsesh/shared-schema';
 import { execute, GraphQLOperationError, isRateLimitedExtension } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath, parseNamedBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { JOIN_SESSION, LEAVE_SESSION } from '@boardsesh/graphql/operations/queue-session';
+import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
 import {
   QUEUE_UPDATES_SUBSCRIPTION,
   SESSION_UPDATES_SUBSCRIPTION,
-  CREATE_SESSION,
-  END_SESSION,
   GET_SESSION_QUEUE_STATE,
-  type CreateSessionMutationResponse,
-  type EndSessionMutationResponse,
   type SessionUpdateEvent,
   type SessionLiveStatsEvent,
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
-import { getDeviceTimezone } from '../lib/device-timezone';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
-import { setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { clearStoredQueueSnapshot } from '../lib/queue-snapshot-store';
 import { emitWallConfirm, findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
-import { reportError, reportHandledError } from '../lib/error-reporting';
-import { extractGraphqlMessage, isGraphqlRateLimitedError } from '../lib/graphql/extract-error-message';
+import { reportHandledError } from '../lib/error-reporting';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 import {
@@ -81,6 +73,7 @@ import {
 } from './queue/queue-contexts';
 import { useQueueRegrade } from './queue/use-queue-regrade';
 import { useQueuePersistence } from './queue/use-queue-persistence';
+import { useSessionCommands } from './queue/use-session-commands';
 
 // Narrow subscription hooks moved to ./queue/queue-contexts; re-exported here so
 // the `providers/queue-provider` import path (18 call sites) stays unchanged.
@@ -779,109 +772,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setPlaylistSuggestionSourceState,
   });
 
-  // Explicit session creation — the Start button (PreSessionView) and nothing
-  // else. Sessions are never created lazily: the solo queue lives locally
-  // (queue-snapshot-store) until the user starts or joins one, matching web.
-  const createSessionWithConfig = useCallback(
-    async (config?: StartSessionConfig): Promise<string | null> => {
-      if (sessionIdRef.current) return sessionIdRef.current;
-      if (sessionCreationRef.current) return sessionCreationRef.current;
-
-      const createPromise = (async () => {
-        const activeBoard = await getStoredActiveBoard();
-        if (!activeBoard) {
-          // The Start button is gated on the React Query copy of the active board;
-          // if the stored board is somehow missing, fail loudly so the user knows
-          // to pick a board instead of tapping into a silent no-op.
-          showToast(t('mobile.queue.noBoardSelected'), 'error');
-          return null;
-        }
-
-        const boardPath = buildBoardPath(
-          activeBoard.boardType,
-          activeBoard.layoutId,
-          activeBoard.sizeId,
-          activeBoard.setIds,
-          activeBoard.angle,
-        );
-
-        try {
-          const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
-            input: {
-              boardPath,
-              latitude: 0,
-              longitude: 0,
-              discoverable: config?.discoverable ?? false,
-              ...(config?.name ? { name: config.name } : {}),
-              ...(config?.goal ? { goal: config.goal } : {}),
-              ...(config?.color ? { color: config.color } : {}),
-              ...(config?.isPermanent ? { isPermanent: config.isPermanent } : {}),
-            },
-          });
-          const newId = response.createSession.id;
-          sessionIdRef.current = newId;
-          await setStoredSessionId(newId);
-          // Seed the session with the locally-built queue BEFORE setSessionId
-          // mounts the queueUpdates subscription — the subscription's FullSync
-          // for an empty room would wipe the local queue via INITIAL_QUEUE_DATA.
-          // SET_QUEUE is connection-scoped, so JOIN first (the subscription
-          // effect's later eager ensureJoined hits the tracker cache).
-          const { queue, currentClimbQueueItem } = stateRef.current;
-          if (queue.length > 0 || currentClimbQueueItem) {
-            try {
-              await ensureJoined(newId);
-              await mutations.setQueue(queue, currentClimbQueueItem ?? undefined);
-              // Queue ownership moved to the session — drop the local snapshot
-              // so a stale copy can't resurrect after the session ends. Only on
-              // a successful seed: if seeding failed, the snapshot is the sole
-              // surviving copy and a relaunch can still recover the queue.
-              await clearStoredQueueSnapshot();
-            } catch (seedError) {
-              if (__DEV__) console.warn('[queue] session queue seed failed', seedError);
-              reportHandledError(seedError, { tags: { source: 'startSessionSeed' } });
-            }
-          }
-          setSessionId(newId);
-          track(SHARED_EVENTS.SessionStarted, {
-            boardName: activeBoard.boardType,
-            hasGoal: !!config?.goal,
-            isDiscoverable: config?.discoverable ?? false,
-          });
-          return newId;
-        } catch (error) {
-          if (isGraphqlRateLimitedError(error)) {
-            showToast(t('mobile.queue.rateLimited'), 'error');
-            return null;
-          }
-          // Production masks the GraphQL message to "Unexpected error", but the
-          // graphql-request ClientError still carries the HTTP status — so error
-          // reporting can distinguish network-down from a 4xx/5xx from a masked
-          // server throw. Capture it with boardPath context; the backend captures
-          // the unmasked cause for the same request (see createSession resolver).
-          const httpStatus =
-            error && typeof error === 'object' && 'response' in error
-              ? ((error as { response?: { status?: number } }).response?.status ?? null)
-              : null;
-          reportError(error, {
-            tags: { source: 'createSession' },
-            extra: { boardPath, httpStatus, discoverable: config?.discoverable ?? false },
-          });
-          // Against a local backend (dev) errors aren't masked, so surface the
-          // real server message to speed up diagnosis; shipped builds keep the
-          // friendly fallback.
-          const devMessage = __DEV__ ? extractGraphqlMessage(error) : null;
-          showToast(devMessage ?? t('mobile.queue.sessionCreateError'), 'error');
-          return null;
-        } finally {
-          sessionCreationRef.current = null;
-        }
-      })();
-
-      sessionCreationRef.current = createPromise;
-      return createPromise;
-    },
-    [ensureJoined, mutations, showToast, t],
-  );
+  // Explicit session lifecycle commands: create (Start button), join, end, clear.
+  // See useSessionCommands. clearSessionRef is read by the session-realtime
+  // SessionEnded handler, so keep it pointed at the latest clearSession.
+  const { createSessionWithConfig, joinSession, endSession, clearSession } = useSessionCommands({
+    showToast,
+    t,
+    stateRef,
+    ensureJoined,
+    setQueueMutation: mutations.setQueue,
+    setSessionId,
+    sessionIdRef,
+    dispatch,
+    setPlaylistSuggestionSourceState,
+    resyncInFlightRef,
+    resyncPendingRef,
+    setActiveBoard,
+    locallyEndingSessionIdRef,
+    suppressedRemoteEndSessionIdRef,
+  });
+  clearSessionRef.current = clearSession;
 
   // Reconcile the local queue against the server's authoritative snapshot after
   // a party-session mutation fails. The optimistic reducer delta already applied
@@ -1333,93 +1243,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       playlistSuggestionSourceMatches(current, source) ? source : current,
     );
   }, []);
-
-  const clearSession = useCallback(async (options?: { notifyServer?: boolean }) => {
-    // When the user intentionally leaves a session (switching into another via
-    // the join-confirm dialog), tell the backend so peers see them leave NOW —
-    // the driver/presence release shouldn't wait on the 60s disconnect grace
-    // timer. Best-effort and BEFORE we reset local state, so the WS registration
-    // for the old session is still alive: a failed/timed-out leave degrades to
-    // the prior disconnect-grace behavior. Default false keeps every other
-    // caller (remote SessionEnded, endSession) unchanged. Mirrors web's
-    // sendLeaveOnCleanup in use-session-lifecycle.ts.
-    if (options?.notifyServer && sessionIdRef.current) {
-      try {
-        await execute(getWsClient(), { query: LEAVE_SESSION }, 5000);
-      } catch (error) {
-        if (__DEV__) console.warn('[queue] leaveSession on switch failed', error);
-      }
-    }
-    // A resync fetch that never settles (hung connection) would leave the
-    // single-flight guard stuck true; a mounted provider carries that across a
-    // session switch and would block every future resync. Reset at the teardown
-    // boundary so the next session always starts clean.
-    resyncInFlightRef.current = false;
-    // Same for the coalesced-rerun flag: a pending rerun belongs to the old
-    // session and must not fire a fetch into the next one.
-    resyncPendingRef.current = false;
-    sessionIdRef.current = null;
-    setSessionId(null);
-    dispatch({
-      type: 'INITIAL_QUEUE_DATA',
-      payload: { queue: [], currentClimbQueueItem: null },
-    });
-    setPlaylistSuggestionSourceState(null);
-    await clearStoredSessionId();
-  }, []);
-  clearSessionRef.current = clearSession;
-
-  const endSession = useCallback(async (): Promise<SessionSummary | null> => {
-    const currentSessionId = sessionIdRef.current;
-    if (!currentSessionId) return null;
-
-    try {
-      locallyEndingSessionIdRef.current = currentSessionId;
-      const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, {
-        sessionId: currentSessionId,
-        // Device IANA zone so the backend can export wall-clock local times
-        // to platforms like Strava.
-        timezone: getDeviceTimezone(),
-      });
-      await clearSession();
-      locallyEndingSessionIdRef.current = null;
-      suppressedRemoteEndSessionIdRef.current = null;
-      track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
-      showToast(t('mobile.toast.sessionEnded'), 'success');
-      return response.endSession;
-    } catch {
-      const remoteEndAlreadyApplied = suppressedRemoteEndSessionIdRef.current === currentSessionId;
-      locallyEndingSessionIdRef.current = null;
-      suppressedRemoteEndSessionIdRef.current = null;
-      await clearSession();
-      if (remoteEndAlreadyApplied) {
-        showToast(t('mobile.toast.sessionEnded'), 'success');
-      } else {
-        showToast(t('mobile.queue.actionFailed'), 'error');
-      }
-      return null;
-    }
-  }, [clearSession, showToast, t]);
-
-  const joinSession = useCallback(
-    async (sessionToJoin: string, opts: { boardPath: string; userBoard: UserBoard }) => {
-      // Idempotent against double-tap / re-entrant deep links.
-      if (sessionIdRef.current === sessionToJoin) return;
-      // Switch the active board to the session's board FIRST (and persist it) so
-      // the session effect's JOIN_SESSION reads the correct boardPath and the
-      // whole tree (BLE wrapper, BoardProvider, climb list, play drawer) renders
-      // on the joined board. Unlike startSession (which reads the active board to
-      // build the new session's path), joinSession writes it from the session.
-      await setActiveBoard(opts.userBoard);
-      sessionIdRef.current = sessionToJoin;
-      setSessionId(sessionToJoin);
-      await setStoredSessionId(sessionToJoin);
-      // The session's FullSync replaces the local queue — drop the solo
-      // snapshot so a stale copy can't resurrect on a later cold start.
-      await clearStoredQueueSnapshot();
-    },
-    [setActiveBoard],
-  );
 
   const publishPlaybackState = useCallback(
     (input: PublishPlaybackStateInput) => mutations.publishPlaybackState(input),
