@@ -63,6 +63,25 @@ export function useQueueStorage({
   const boardContextRef = useRef({ soloBoardPath, dispatch });
   boardContextRef.current = { soloBoardPath, dispatch };
 
+  // Adopt the ended session's board as the solo board context when a party
+  // ends. `setBoardContext` no-ops for the duration of a party, so without this
+  // `soloBoardPath` still points at whatever board preceded the party. After
+  // the party ends the root queue holds the party board's queue, and the next
+  // navigation's board-mismatch check in `setBoardContext` would see
+  // previous=pre-party-board ≠ current-board and CLEAR_QUEUE the queue the user
+  // is still climbing on. Stamping the ended session's board here keeps the
+  // carried queue (board-route parity) and keeps solo board details coherent
+  // with it off-board.
+  const previousActiveSessionRef = useRef<ActiveSessionInfo | null>(null);
+  useEffect(() => {
+    const endedSession = previousActiveSessionRef.current;
+    previousActiveSessionRef.current = activeSession;
+    if (endedSession && !activeSession && endedSession.boardPath && endedSession.boardDetails) {
+      setSoloBoardPath(endedSession.boardPath);
+      setSoloBoardDetails(endedSession.boardDetails);
+    }
+  }, [activeSession]);
+
   // One-time cleanup: delete the old IndexedDB queue database if it exists
   useEffect(() => {
     if (typeof window !== 'undefined' && window.indexedDB) {

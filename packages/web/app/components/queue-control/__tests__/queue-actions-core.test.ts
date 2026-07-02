@@ -508,6 +508,33 @@ describe('setCurrentClimb', () => {
     expect(harness.mutations.addQueueItem).not.toHaveBeenCalled();
     expect(harness.mutations.setCurrentClimb).toHaveBeenCalledWith(existing, false, expect.any(String));
     expect(result).toEqual(existing);
+    // The mutation reuses the existing item (not a fresh-uuid clone). The
+    // optimistic-state half of this fix — that the pre-dispatch reuse
+    // resolution keeps the local queue from gaining a phantom duplicate — is
+    // pinned against the real reducer in queue-bridge-context.test.tsx, since
+    // this factory harness abstracts `applyLocal` behind the wiring seam.
+  });
+
+  it('restores the playlist suggestion source after a setQueue echo clears it (party)', async () => {
+    const source: PlaylistSuggestionSource = createPlaylistSuggestionSource({
+      playlistUuid: 'pl-echo',
+      activatedClimb: makeClimb({ uuid: 'activated' }),
+      climbs: [makeClimb({ uuid: 'activated' })],
+      boardDetails: testBoardDetails,
+    });
+    const harness = createHarness({ gateOnConnection: false });
+    harness.setPartyActive(true);
+    // Simulate the server's own UPDATE_QUEUE echo landing while the setQueue
+    // mutation is in flight: it clears the reducer-owned playlistSuggestionSource
+    // exactly as the real reducer's UPDATE_QUEUE case does.
+    harness.mutations.setQueue.mockImplementationOnce(async () => {
+      harness.setPlaylistSuggestionSourceLocal(null);
+    });
+    await harness.actions.setCurrentClimb(makeClimb(), { playlistSuggestionSource: source });
+    expect(harness.mutations.setQueue).toHaveBeenCalledTimes(1);
+    // reconcileAfterSetQueue must have re-set the source the echo wiped, so
+    // "Next" keeps drawing suggestions from the playlist.
+    expect(harness.getState().playlistSuggestionSource).toEqual(source);
   });
 
   it('does not reuse an existing entry when reuseExistingQueueItemOnSetCurrentClimb is false (QueueContext invariant)', async () => {

@@ -352,10 +352,23 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
     if (!validateClimbForQueue(climb)) return null;
 
     const nextPlaylistSuggestionSource = options.playlistSuggestionSource;
-    const previousPlaylistSuggestionSource = getSnapshot().playlistSuggestionSource;
+    const preDispatchSnapshot = getSnapshot();
+    const previousPlaylistSuggestionSource = preDispatchSnapshot.playlistSuggestionSource;
     const mode = resolveQueueOperationMode(party.isActive, party.isDisconnected);
     const newItem = buildItem(climb, false);
     const correlationId = party.nextCorrelationId();
+
+    // Resolve the reuse target BEFORE the optimistic dispatch so the optimistic
+    // state matches what the mutation actually does. Otherwise the optimistic
+    // dispatch inserts a fresh-uuid item while the reuse mutation activates the
+    // existing one; the server echo (carrying the existing item + our
+    // correlationId) is then suppressed as our own echo, stranding the phantom
+    // fresh item locally until the hash watchdog forces a visible resync.
+    const reuseTarget =
+      party.isActive && party.reuseExistingQueueItemOnSetCurrentClimb
+        ? (preDispatchSnapshot.queue.find((queueItem) => queueItem.climb?.uuid === climb.uuid) ?? null)
+        : null;
+    const optimisticItem = reuseTarget ?? newItem;
 
     setPlaylistSuggestionSourceLocal(nextPlaylistSuggestionSource);
     hooks.onSetActiveClimb({
@@ -376,11 +389,22 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
       hooks.onOperationMetric?.error('setCurrentClimb', mode);
     };
 
+    // A setQueue-based mutation broadcasts a full-state echo that carries no
+    // correlationId, so the reducer never clears the pending id we registered
+    // here (stale pending → spurious forced resync ~5-7s later) and its
+    // UPDATE_QUEUE clears the reducer-owned playlistSuggestionSource. Reconcile
+    // both locally after a successful setQueue: drop the pending id and re-set
+    // the source we just activated so "Next" keeps drawing from the playlist.
+    const reconcileAfterSetQueue = () => {
+      if (correlationId) applyLocal({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
+      if (nextPlaylistSuggestionSource) setPlaylistSuggestionSourceLocal(nextPlaylistSuggestionSource);
+    };
+
     applyLocal({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: {
-        item: newItem,
-        shouldAddToQueue: true,
+        item: optimisticItem,
+        shouldAddToQueue: reuseTarget === null,
         insertAfterCurrent: true,
         correlationId,
         playlistSuggestionSource: nextPlaylistSuggestionSource,
@@ -388,29 +412,32 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
     });
 
     if (party.isActive && party.isDisconnected && offlineBuffer) {
-      offlineBuffer.bufferAddition(newItem);
+      // A reuse target is already in the queue — the optimistic dispatch
+      // activated it, so there is nothing to buffer for reconciliation.
+      if (!reuseTarget) offlineBuffer.bufferAddition(newItem);
       finishSuccess();
-      return newItem;
+      return optimisticItem;
     }
 
     if (attemptPartyMutation()) {
       const { queue, currentClimbQueueItem } = getSnapshot();
 
-      if (party.reuseExistingQueueItemOnSetCurrentClimb) {
-        const existing = queue.find((queueItem) => queueItem.climb?.uuid === climb.uuid);
-        if (existing) {
-          try {
-            if (nextPlaylistSuggestionSource) {
-              await party.mutations.setQueue(pruneSuggestedQueueItemsAfterCurrent(queue, existing), existing);
-            } else {
-              await party.mutations.setCurrentClimb(existing, false, correlationId);
-            }
-            finishSuccess();
-            return existing;
-          } catch (error: unknown) {
-            finishError(errorMessages.setCurrentClimb.reuse, error);
-            return party.returnNullOnSetCurrentClimbFailure ? null : existing;
+      if (reuseTarget) {
+        try {
+          if (nextPlaylistSuggestionSource) {
+            await party.mutations.setQueue(
+              pruneSuggestedQueueItemsAfterCurrent(preDispatchSnapshot.queue, reuseTarget),
+              reuseTarget,
+            );
+            reconcileAfterSetQueue();
+          } else {
+            await party.mutations.setCurrentClimb(reuseTarget, false, correlationId);
           }
+          finishSuccess();
+          return reuseTarget;
+        } catch (error: unknown) {
+          finishError(errorMessages.setCurrentClimb.reuse, error);
+          return party.returnNullOnSetCurrentClimbFailure ? null : reuseTarget;
         }
       }
 
@@ -424,6 +451,7 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
           const queueWithNewItem = insertQueueItemAfterCurrent(queue, currentClimbQueueItem, newItem);
           const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queueWithNewItem, newItem);
           await party.mutations.setQueue(prunedQueue, newItem);
+          reconcileAfterSetQueue();
           finishSuccess();
           return newItem;
         } catch (error: unknown) {

@@ -206,7 +206,10 @@ export type PersistentSessionStateType = {
   /** Correlation-id tracker for local->party round trips on the current-climb
    *  mutation. Garbage-collected by `usePendingUpdateCleanup`, invoked here at
    *  the root (moved from the board-route provider — pending updates live in
-   *  root state now). Not surfaced through any consumer-facing context. */
+   *  root state now). It rides on this state type (so a party activation
+   *  re-renders state consumers as it registers then clears a correlation id),
+   *  but nothing reads it directly for display — the reducer consumes it for
+   *  echo suppression. */
   pendingCurrentClimbUpdates: string[];
 
   // Board-context bookkeeping (in-memory only, no IndexedDB persistence):

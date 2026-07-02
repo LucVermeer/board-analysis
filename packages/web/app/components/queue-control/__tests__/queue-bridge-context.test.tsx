@@ -1143,12 +1143,16 @@ describe('queue-bridge-context', () => {
         expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
         expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'u2', 'manual-future-item']);
         expect(newCurrent.uuid).toBe('u2');
-        // No optimistic assertion here on purpose: the party path REUSES the
-        // existing queued item (u2) for the setQueue payload, whereas the
-        // optimistic root dispatch (DELTA_UPDATE_CURRENT_CLIMB) inserts a fresh
-        // c2 item, so the immediate local queue briefly carries a duplicate c2
-        // until the server's UPDATE_QUEUE echo reconciles it. That divergence is
-        // expected — we pin only the authoritative party payload above.
+        // The optimistic dispatch reuses the existing u2 (resolved before the
+        // dispatch), so the local queue matches the authoritative payload with
+        // no phantom duplicate c2, and the reducer prunes the stale suggested
+        // item after the new current.
+        expect(result.current!.queue.map((item) => item.uuid)).toEqual(['u1', 'u2', 'manual-future-item']);
+        expect(result.current!.currentClimbQueueItem?.uuid).toBe('u2');
+        // The playlist suggestion source survives the activation: `setQueue`'s
+        // own UPDATE_QUEUE echo clears the reducer-owned source, so the action
+        // re-sets it after a successful setQueue (`reconcileAfterSetQueue`).
+        expect(result.current!.playlistSuggestionSource).toEqual(source);
       });
 
       it('setCurrentClimb passes undefined position when no current is set', async () => {
@@ -1340,6 +1344,14 @@ describe('queue-bridge-context', () => {
         const call = (mockPersistentSession.setCurrentClimb as ReturnType<typeof vi.fn>).mock.calls[0];
         expect(call[0].uuid).toBe('u1');
         expect(call[0].climb.uuid).toBe('c1');
+        // The optimistic dispatch must reuse the existing item, not insert a
+        // fresh-uuid phantom — otherwise the server echo (existing item +
+        // correlationId) is suppressed as our own and the phantom is stranded
+        // until the hash watchdog resyncs. Queue stays length 1 and current
+        // stays on the existing item.
+        expect(result.current!.queue).toHaveLength(1);
+        expect(result.current!.queue[0].uuid).toBe('u1');
+        expect(result.current!.currentClimbQueueItem?.uuid).toBe('u1');
       });
 
       it('setCurrentClimb populates addedBy and addedByUser from party profile', async () => {

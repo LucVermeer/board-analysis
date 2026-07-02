@@ -180,6 +180,13 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   // the one piece of behavior that needs restating now that this runs at the
   // always-mounted root instead of only inside board-route-scoped
   // `GraphQLQueueProvider`).
+  // `boardLayoutName` is sourced from the active session's board rather than the
+  // mounted route's board details (the old hook read the route's `boardDetails`
+  // from `GraphQLQueueProvider`). These agree while browsing the session's own
+  // board; they can differ if a member browses a *different* board route than
+  // the session board, in which case the analytics tag reflects the session
+  // board. Acceptable for an attribution tag; noted so it isn't mistaken for a
+  // bug.
   usePeerBroadcastAnalytics({
     subscribeToQueueEvents: subscriptions.subscribeToQueueEvents,
     isOnBoardRoute: isBoardRoutePath(pathname),
