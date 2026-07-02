@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-02T03:00:43.523Z",
+  "generatedAt": "2026-07-02T05:59:07.660Z",
   "entries": [
+    {
+      "prNumber": 3344,
+      "category": "improved",
+      "title": "Sending a climb to the wall is snappier, and an accidental double-send no longer shows up twice in board history",
+      "mergedAt": "2026-07-02T05:58:13Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3344"
+    },
     {
       "prNumber": 3340,
       "category": "fixed",

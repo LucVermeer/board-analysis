@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-02
 
+### Improved
+
+- Sending a climb to the wall is snappier, and an accidental double-send no longer shows up twice in board history ([#3344](https://github.com/boardsesh/boardsesh/pull/3344))
+
 ### Fixed
 
 - The shared queue catches up reliably after a dropped connection, even when someone in the party is running a variable-speed playback. ([#3340](https://github.com/boardsesh/boardsesh/pull/3340))
