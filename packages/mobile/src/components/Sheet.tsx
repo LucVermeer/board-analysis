@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 // Migrated off @gorhom/bottom-sheet to Expo's native bottom sheet (#3167).
 // The native sheet draws its own scrim, drag handle and (on iOS 26) glass
@@ -14,6 +14,7 @@ import { hapticMedium } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
+import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useManagedSheet, type PresenterGroup } from '../providers/sheet-presentation-provider';
 
 type SheetProps = {
@@ -86,9 +87,16 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // Track the resting detent so the iOS column bound follows drags between detents.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const columnStyle = useSheetColumnStyle(snapPoints, { enableDynamicSizing, activeIndex });
+
   const handleChange = useCallback(
     (index: number) => {
-      if (index >= 0) hapticMedium();
+      if (index >= 0) {
+        hapticMedium();
+        setActiveIndex(index);
+      }
       managed.onChange(index);
       onChangeRef.current?.(index);
     },
@@ -136,7 +144,10 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
       style={styles.sheet}
     >
       {footer ? (
-        <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // The single flex child of the native sheet: bound to the detent height on
+        // iOS (see useSheetColumnStyle) so the pinned footer can't fall off-screen
+        // (#3330); flex:1 on Android / fitToContents.
+        <KeyboardAvoidingView style={columnStyle} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           {body}
           {footerBar}
         </KeyboardAvoidingView>
@@ -160,9 +171,6 @@ const styles = StyleSheet.create({
         elevation: 16,
       },
     }),
-  },
-  fill: {
-    flex: 1,
   },
   content: {
     flex: 1,

@@ -35,6 +35,8 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (options: { ios?: unknown; android?: unknown }) => options.ios },
   View: ({ children }: ViewMockProps) => createElement('div', null, children),
   KeyboardAvoidingView: ({ children }: ViewMockProps) => createElement('div', { 'data-kav': 'true' }, children),
+  // Consumed by useSheetColumnStyle to bound the sheet column to the detent on iOS.
+  useWindowDimensions: () => ({ width: 390, height: 844 }),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
