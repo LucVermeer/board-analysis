@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-02
 
+### New
+
+- Scroll back through everything that's been up on the wall — board history no longer stops at the last 50 climbs ([#3354](https://github.com/boardsesh/boardsesh/pull/3354))
+
 ### Improved
 
 - Sending a climb to the wall is snappier, and an accidental double-send no longer shows up twice in board history ([#3344](https://github.com/boardsesh/boardsesh/pull/3344))

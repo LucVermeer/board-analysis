@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-02T05:59:07.660Z",
+  "generatedAt": "2026-07-02T06:05:47.125Z",
   "entries": [
+    {
+      "prNumber": 3354,
+      "category": "new",
+      "title": "Scroll back through everything that's been up on the wall — board history no longer stops at the last 50 climbs",
+      "mergedAt": "2026-07-02T06:00:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3354"
+    },
     {
       "prNumber": 3344,
       "category": "improved",
