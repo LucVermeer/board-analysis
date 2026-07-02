@@ -11,6 +11,13 @@ const presence = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 
+const historyPagination = vi.hoisted(() => ({
+  olderHistory: [] as BoardPresenceClimb[],
+  isLoadingOlder: false,
+  hasMore: true,
+  loadOlder: vi.fn(),
+}));
+
 const presenceControls = vi.hoisted(() => ({
   boardId: 123 as number | null,
 }));
@@ -90,20 +97,26 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
     },
   ),
   // Render the list inline so header + items + empty state appear in the DOM.
+  // A "reach end" button surfaces `onEndReached` for tests to trigger directly
+  // (real FlatList scroll-position math isn't exercised under jsdom).
   BottomSheetFlatList: ({
     data,
     renderItem,
     ListHeaderComponent,
     ListEmptyComponent,
+    ListFooterComponent,
     keyExtractor,
     refreshControl,
+    onEndReached,
   }: {
     data: BoardPresenceClimb[];
     renderItem: (info: { item: BoardPresenceClimb }) => ReactNode;
     ListHeaderComponent?: ReactNode;
     ListEmptyComponent?: ReactNode;
+    ListFooterComponent?: ReactNode;
     keyExtractor: (item: BoardPresenceClimb) => string;
     refreshControl?: ReactNode;
+    onEndReached?: () => void;
   }) =>
     createElement(
       'div',
@@ -113,6 +126,8 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
       data.length === 0
         ? ListEmptyComponent
         : data.map((item) => createElement('div', { key: keyExtractor(item) }, renderItem({ item }))),
+      ListFooterComponent,
+      createElement('button', { 'aria-label': 'reach list end', onClick: () => onEndReached?.() }),
     ),
 }));
 
@@ -167,6 +182,7 @@ vi.mock('@boardsesh/board-presence-react', () => ({
   }),
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
   useBoardPresenceActions: () => ({ refresh: presence.refresh }),
+  useBoardHistoryPagination: () => historyPagination,
 }));
 
 vi.mock('../../../providers/board-presence-provider', () => ({
@@ -328,6 +344,10 @@ describe('BoardSheet', () => {
     presence.stats = null;
     presenceControls.boardId = 123;
     presence.refresh.mockClear();
+    historyPagination.olderHistory = [];
+    historyPagination.isLoadingOlder = false;
+    historyPagination.hasMore = true;
+    historyPagination.loadOlder.mockClear();
     analytics.track.mockClear();
     graphql.request.mockReset();
     toast.showToast.mockClear();
@@ -1152,5 +1172,95 @@ describe('BoardSheet', () => {
     expect(container.querySelector('[data-icon="close"]')).toBeNull();
     fireEvent.click(getByLabelText('mobile.boardPresence.close'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  describe('load older history', () => {
+    it('calls loadOlder when the list end is reached', () => {
+      presence.history = [makeClimb('c1', 3)];
+      const ref = createRef<BoardSheetHandle>();
+      const { getByLabelText } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      fireEvent.click(getByLabelText('reach list end'));
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not wire onEndReached once hasMore is false', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.hasMore = false;
+      const ref = createRef<BoardSheetHandle>();
+      const { getByLabelText } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      fireEvent.click(getByLabelText('reach list end'));
+      expect(historyPagination.loadOlder).not.toHaveBeenCalled();
+    });
+
+    it('renders loaded older rows appended after the live history', () => {
+      presence.history = [makeClimb('c2', 4)];
+      historyPagination.olderHistory = [makeClimb('c1', 3), makeClimb('c0', 2)];
+      const ref = createRef<BoardSheetHandle>();
+      const { container } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      expect(container.textContent).toContain('Climb c2');
+      expect(container.textContent).toContain('Climb c1');
+      expect(container.textContent).toContain('Climb c0');
+    });
+
+    it('shows the footer spinner while loading older history, and hides it once resolved', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.isLoadingOlder = true;
+      const ref = createRef<BoardSheetHandle>();
+      const { queryByLabelText, rerender } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      expect(queryByLabelText('mobile.boardPresence.loadingMore')).not.toBeNull();
+
+      historyPagination.isLoadingOlder = false;
+      rerender(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByLabelText('mobile.boardPresence.loadingMore')).toBeNull();
+    });
   });
 });

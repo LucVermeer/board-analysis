@@ -30,11 +30,16 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import ButtonBase from '@mui/material/ButtonBase';
+import Button from '@mui/material/Button';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
+import {
+  useBoardHistoryPagination,
+  useBoardPresenceCurrent,
+  useBoardPresenceFeed,
+} from '@boardsesh/board-presence-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -144,6 +149,25 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
   const { currentClimb } = useBoardPresenceCurrent();
   const { history, stats } = useBoardPresenceFeed();
 
+  // "Load older" — pages further back through the durable history log, past
+  // the live feed's in-memory HISTORY_CAP window. `olderHistory` is already
+  // deduped against the live window (and every prior page) by the hook.
+  const handleHistoryPageLoaded = useCallback(
+    (info: { pageSize: number; returnedCount: number }) => {
+      track(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: boardId ?? undefined,
+        pageSize: info.pageSize,
+        returnedCount: info.returnedCount,
+      });
+    },
+    [boardId],
+  );
+  const { olderHistory, isLoadingOlder, hasMore, loadOlder } = useBoardHistoryPagination(
+    undefined,
+    handleHistoryPageLoaded,
+  );
+  const combinedHistory = useMemo(() => [...history, ...olderHistory], [history, olderHistory]);
+
   // Fires once per open, when history is first non-empty. This body mounts
   // fresh each time the Drawer opens (unmounted while closed), so the ref
   // naturally resets per open — mirrors the mobile `BoardSheetContent`.
@@ -231,11 +255,11 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
         </Box>
       ) : null}
 
-      {history.length > 0 ? (
+      {combinedHistory.length > 0 ? (
         <Box sx={{ px: 2, pb: 1 }}>
           <SectionHeader>{t('boardPresence.historyHeader')}</SectionHeader>
           <List disablePadding>
-            {history.map((climb) => (
+            {combinedHistory.map((climb) => (
               <HistoryRow
                 key={`${climb.climbUuid}-${climb.seq}`}
                 climb={climb}
@@ -245,6 +269,13 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
               />
             ))}
           </List>
+          {hasMore && history.length > 0 ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+              <Button onClick={loadOlder} disabled={isLoadingOlder} size="small">
+                {isLoadingOlder ? t('boardPresence.loadingMore') : t('boardPresence.loadMore')}
+              </Button>
+            </Box>
+          ) : null}
         </Box>
       ) : null}
     </Box>

@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import {
+  useBoardHistoryPagination,
   useBoardPresenceActions,
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
@@ -595,6 +596,26 @@ function BoardSheetContent({
     [currentClimb, history],
   );
 
+  // "Load older" — pages further back through the durable history log, past
+  // the live feed's in-memory HISTORY_CAP window. `olderHistory` is already
+  // deduped against the live window (and every prior page) by the hook, so it
+  // appends onto `visibleHistory` with no overlap.
+  const handleHistoryPageLoaded = useCallback(
+    (info: { pageSize: number; returnedCount: number }) => {
+      track(SHARED_EVENTS.BoardHistoryPageLoaded, {
+        boardId: boardPresenceBoardId ?? undefined,
+        pageSize: info.pageSize,
+        returnedCount: info.returnedCount,
+      });
+    },
+    [boardPresenceBoardId],
+  );
+  const { olderHistory, isLoadingOlder, hasMore, loadOlder } = useBoardHistoryPagination(
+    undefined,
+    handleHistoryPageLoaded,
+  );
+  const combinedHistory = useMemo(() => [...visibleHistory, ...olderHistory], [visibleHistory, olderHistory]);
+
   // Fires once per presentation, when history is FIRST non-empty — not only at
   // mount, because presenting before the initial backfill resolves would find
   // an empty list and never fire for that presentation. This component mounts
@@ -801,13 +822,29 @@ function BoardSheetContent({
     [currentClimb, systemColors, t],
   );
 
+  const listFooter = useMemo(
+    () =>
+      isLoadingOlder ? (
+        <View style={styles.historyFooter}>
+          <ActivityIndicator size="small" accessibilityLabel={t('mobile.boardPresence.loadingMore')} />
+        </View>
+      ) : null,
+    [isLoadingOlder, t],
+  );
+
   return (
     <BottomSheetFlatList
-      data={visibleHistory}
+      data={combinedHistory}
       keyExtractor={boardPresenceHistoryKeyExtractor}
       renderItem={renderHistoryItem}
       ListHeaderComponent={listHeader}
       ListEmptyComponent={listEmpty}
+      ListFooterComponent={listFooter}
+      // `loadOlder` already no-ops once `hasMore` is false, but skipping the
+      // prop entirely once there's nothing left avoids FlatList re-evaluating
+      // the end-reached threshold on every scroll frame for no reason.
+      onEndReached={hasMore ? loadOlder : undefined}
+      onEndReachedThreshold={0.6}
       contentContainerStyle={{ paddingBottom: spacing[4] }}
       refreshControl={
         <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />
@@ -1461,6 +1498,10 @@ const styles = StyleSheet.create({
   },
   emptyBody: {
     textAlign: 'center',
+  },
+  historyFooter: {
+    paddingVertical: spacing[5],
+    alignItems: 'center',
   },
   footer: {
     flexDirection: 'row',

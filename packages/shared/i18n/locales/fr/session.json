@@ -43,7 +43,9 @@
     "statHardest": "le plus dur",
     "statTopGrade": "la plus fréquente",
     "wallChanged": "Tu as changé le mur",
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "loadMore": "Charger plus",
+    "loadingMore": "Chargement…"
   },
   "detail": {
     "subtitleSends_one": "{{count}} enchaînement",
@@ -419,7 +421,8 @@
       "undo": "Annuler",
       "undoAria": "Annuler le changement du mur",
       "actionLoading": "Chargement du bloc",
-      "actionFailed": "Impossible de charger ce bloc. Réessayez."
+      "actionFailed": "Impossible de charger ce bloc. Réessayez.",
+      "loadingMore": "Chargement de l'historique"
     },
     "toast": {
       "sessionEnded": "Session terminée"

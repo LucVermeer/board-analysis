@@ -135,6 +135,11 @@ export const SHARED_EVENTS = {
   //   events were silently dropped (Redis pub/sub has no replay) and just
   //   recovered — the signal for "history was slow/stale to update".
   BoardHistoryCatchUp: 'Board History Catch Up',
+  // Fired each time "load older" resolves a page of durable history (past the
+  // live feed's in-memory HISTORY_CAP window). Props:
+  // { boardId?, pageSize: number, returnedCount: number }. `returnedCount <
+  // pageSize` means that page was the last one.
+  BoardHistoryPageLoaded: 'Board History Page Loaded',
   // External platform integrations (Apple Health, Strava). Props:
   // { integration: 'apple_health' | 'strava', trigger?: 'auto' | 'manual',
   //   enabled?: boolean }

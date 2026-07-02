@@ -11,6 +11,13 @@ const presence = vi.hoisted(() => ({
   stats: null as BoardPresenceStats | null,
 }));
 
+const historyPagination = vi.hoisted(() => ({
+  olderHistory: [] as BoardPresenceClimb[],
+  isLoadingOlder: false,
+  hasMore: true,
+  loadOlder: vi.fn(),
+}));
+
 const presenceControls = vi.hoisted(() => ({
   boardId: 123 as number | null,
 }));
@@ -35,6 +42,7 @@ vi.mock('@boardsesh/board-presence-react', () => ({
     isLive: true,
   }),
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
+  useBoardHistoryPagination: () => historyPagination,
 }));
 
 vi.mock('@/app/hooks/use-grade-format', () => ({
@@ -71,6 +79,8 @@ const SWITCH_BOARD_ARIA = tFromCatalog('session', 'boardPresence.switchBoardAria
 const CLOSE_ARIA = tFromCatalog('session', 'boardPresence.close');
 const EMPTY_TITLE = tFromCatalog('session', 'boardPresence.emptyTitle');
 const HISTORY_HEADER = tFromCatalog('session', 'boardPresence.historyHeader');
+const LOAD_MORE = tFromCatalog('session', 'boardPresence.loadMore');
+const LOADING_MORE = tFromCatalog('session', 'boardPresence.loadingMore');
 
 describe('BoardSheet', () => {
   beforeEach(() => {
@@ -78,6 +88,10 @@ describe('BoardSheet', () => {
     presence.history = [];
     presence.stats = null;
     presenceControls.boardId = 123;
+    historyPagination.olderHistory = [];
+    historyPagination.isLoadingOlder = false;
+    historyPagination.hasMore = true;
+    historyPagination.loadOlder.mockClear();
     analytics.track.mockClear();
   });
 
@@ -244,5 +258,91 @@ describe('BoardSheet', () => {
     );
 
     expect(analytics.track).toHaveBeenCalledTimes(2);
+  });
+
+  describe('load older history', () => {
+    it('renders a Load more button and calls loadOlder on click', () => {
+      presence.history = [makeClimb('c1', 3)];
+
+      const { getByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      const button = getByText(LOAD_MORE);
+      fireEvent.click(button);
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not render the Load more button when there is no history yet', () => {
+      presence.history = [];
+
+      const { queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByText(LOAD_MORE)).toBeNull();
+    });
+
+    it('hides the Load more button once hasMore is false (a short page ended pagination)', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.hasMore = false;
+
+      const { queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByText(LOAD_MORE)).toBeNull();
+    });
+
+    it('renders loaded older rows appended after the live history', () => {
+      presence.history = [makeClimb('c2', 4)];
+      historyPagination.olderHistory = [makeClimb('c1', 3), makeClimb('c0', 2, { name: 'Oldest Climb' })];
+
+      const { getByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(getByText('Climb c2')).not.toBeNull();
+      expect(getByText('Climb c1')).not.toBeNull();
+      expect(getByText('Oldest Climb')).not.toBeNull();
+    });
+
+    it('disables the button and swaps its label while loading', () => {
+      presence.history = [makeClimb('c1', 3)];
+      historyPagination.isLoadingOlder = true;
+
+      const { getByText, queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(queryByText(LOAD_MORE)).toBeNull();
+      const button = getByText(LOADING_MORE).closest('button');
+      expect(button?.disabled).toBe(true);
+    });
   });
 });

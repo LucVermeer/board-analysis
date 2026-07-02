@@ -20,18 +20,21 @@ export type {
 export {
   BoardPresenceProvider,
   useBoardPresenceActions,
+  useBoardPresenceClient,
   useBoardPresenceContext,
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
   useBoardPresenceHasClimb,
   useBoardPresenceWallClimb,
   BoardPresenceActionsContext,
+  BoardPresenceClientContext,
   BoardPresenceContext,
   BoardPresenceCurrentContext,
   BoardPresenceFeedContext,
   BoardPresenceHasClimbContext,
   BoardPresenceWallClimbContext,
 } from './board-presence-provider';
+export type { BoardPresenceClientValue } from './board-presence-provider';
 
 export { boardHistoryCursor } from './types';
 export type { BoardHistoryCursor, BoardPresenceClient } from './types';
@@ -44,3 +47,6 @@ export type {
   FullBoardPresenceClient,
   SerialResolveArgs,
 } from './create-board-presence-client';
+
+export { useBoardHistoryPagination } from './use-board-history-pagination';
+export type { BoardHistoryPageLoadedInfo, BoardHistoryPagination } from './use-board-history-pagination';

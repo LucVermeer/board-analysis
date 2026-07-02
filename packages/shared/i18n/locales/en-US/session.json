@@ -43,7 +43,9 @@
     "statHardest": "hardest",
     "statTopGrade": "most sent",
     "wallChanged": "You changed the wall",
-    "undo": "Undo"
+    "undo": "Undo",
+    "loadMore": "Load more",
+    "loadingMore": "Loading…"
   },
   "detail": {
     "subtitleSends_one": "{{count}} send",
@@ -419,7 +421,8 @@
       "undo": "Undo",
       "undoAria": "Undo the wall change",
       "actionLoading": "Loading climb",
-      "actionFailed": "Couldn't load that climb. Try again."
+      "actionFailed": "Couldn't load that climb. Try again.",
+      "loadingMore": "Loading more history"
     },
     "toast": {
       "sessionEnded": "Session ended"
