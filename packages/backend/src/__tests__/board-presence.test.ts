@@ -2136,6 +2136,36 @@ describe('board-presence seq continuity across dormancy (Redis)', () => {
     expect(first).toBe(501);
     expect(second).toBe(502);
   });
+
+  it('memoizes the floor check: one provider call while the counter grows, re-consulted after a counter loss', async () => {
+    if (!redisOn || !testRedis) return;
+    let providerCalls = 0;
+    pubsub.setBoardSeqFloorProvider(async () => {
+      providerCalls += 1;
+      return 0;
+    });
+    try {
+      const syntheticBoardId = `memo-${Date.now().toString(36)}`;
+      expect(await pubsub.nextBoardSeq(syntheticBoardId)).toBe(1);
+      expect(providerCalls).toBe(1);
+
+      // Early-life growth: each fresh INCR is strictly ahead of the
+      // watermark, so the Postgres floor lookup is not repeated.
+      await pubsub.nextBoardSeq(syntheticBoardId);
+      await pubsub.nextBoardSeq(syntheticBoardId);
+      expect(providerCalls).toBe(1);
+
+      // Counter loss while the process is up: INCR restarts at 1, which is
+      // NOT ahead of the watermark — the floor must be re-consulted (this is
+      // the hole a naive floor-value memo would leave open).
+      await testRedis.del(`board:${syntheticBoardId}:seq`);
+      await pubsub.nextBoardSeq(syntheticBoardId);
+      expect(providerCalls).toBe(2);
+    } finally {
+      // Restore this describe's real provider for any later Redis-gated test.
+      pubsub.setBoardSeqFloorProvider(getBoardSeqFloor);
+    }
+  });
 });
 
 describe('board-presence stats cache (Redis)', () => {
@@ -2317,5 +2347,63 @@ describe('board-presence stats cache (Redis)', () => {
     vi.spyOn(redisClientManager, 'isRedisConnected').mockReturnValue(false);
     const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
     expect(stats.climbsSentCount).toBe(1);
+  });
+});
+
+// ============================================================
+// commitBoardClimb degraded path: a failed / unavailable writer slot must
+// never fabricate a hand-off broadcast (the writerSlotOk gate). Appended at
+// the END of the file (see the ordering note above).
+// ============================================================
+describe('board-presence commit degradation', () => {
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('commitBoardClimb reports writerSlotOk=false (previousWriter is a fabrication) when Redis is unavailable', async () => {
+    vi.spyOn(redisClientManager, 'isRedisConnected').mockReturnValue(false);
+    const result = await pubsub.commitBoardClimb({
+      boardId: '999999',
+      emitterId: 'emitter-degraded',
+      climb: { climbUuid: 'climb-degraded', sentAt: new Date().toISOString(), seq: 1 },
+      climbUuid: 'climb-degraded',
+      effectiveAngle: 40,
+      sessionId: null,
+    });
+    expect(result).toEqual({ previousWriter: null, writerSlotOk: false });
+  });
+
+  it('reportBoardClimb publishes the climb but no hand-off when the writer slot did not verifiably execute', async () => {
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial: `DEGR-${Date.now().toString(36)}`, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      authCtx(),
+    );
+    const boardId = resolved.boardId;
+
+    // Simulate the failing-pipeline seam: previousWriter: null is a
+    // fabrication and writerSlotOk says so. The resolver must still accept
+    // the report and publish BoardClimbSet, but must NOT infer a free->held
+    // hand-off from the fabricated null.
+    vi.spyOn(pubsub, 'commitBoardClimb').mockResolvedValue({ previousWriter: null, writerSlotOk: false });
+    const publishSpy = vi.spyOn(pubsub, 'publishBoardPresenceEvent');
+
+    const accepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(accepted).toBe(true);
+
+    const publishedTypenames = publishSpy.mock.calls.map(([, event]) => event.__typename);
+    expect(publishedTypenames).toContain('BoardClimbSet');
+    expect(publishedTypenames).not.toContain('BoardConnectionChanged');
   });
 });

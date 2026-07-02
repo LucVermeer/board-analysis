@@ -132,6 +132,14 @@ class PubSub {
   // mode the authoritative counter is `board:${boardId}:seq` (INCR); this map
   // only ever serves single-instance deployments that have no Redis.
   private localBoardSeq = new Map<string, number>();
+  // Per-board watermark for the seq dormancy reseed (see
+  // `ensureBoardSeqClearOfDurableFloor`): the highest seq this instance has
+  // verified clear of the durable floor or allocated through the reseed
+  // check. Lets a brand-new board skip the repeated MAX(seq) Postgres lookup
+  // on each of its first ~BOARD_SEQ_RESEED_THRESHOLD sends. One number per
+  // board that allocates during the process lifetime (bounded like
+  // `localBoardSeq`); never TTL'd — see the safety analysis on the method.
+  private boardSeqVerifiedThrough = new Map<string, number>();
   // Local-only proof-of-presence: `${boardId}:${userId}` → expiry epoch ms.
   private localBoardMembership = new Map<string, number>();
   private localBoardMembershipCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -832,9 +840,10 @@ class PubSub {
    * `board_climb_events` rows outlive the key, restarting at 1 would collide
    * with / precede still-existing rows — so whenever INCR comes back small
    * (<= BOARD_SEQ_RESEED_THRESHOLD, the signature of a fresh key either way),
-   * we check the durable floor via `boardSeqFloorProvider` and, if the floor
-   * is at or above the INCR result, reseed atomically past it with
-   * `allocateBoardSeqAtLeast`.
+   * `ensureBoardSeqClearOfDurableFloor` checks the durable floor and, if the
+   * floor is at or above the INCR result, reseeds atomically past it. The
+   * check memoizes per board so a brand-new board's early sends don't repeat
+   * the Postgres lookup ~50 times (see that method's safety analysis).
    */
   async nextBoardSeq(boardId: string): Promise<number> {
     if (this.redisAdapter && this.isRedisConnected()) {
@@ -850,8 +859,7 @@ class PubSub {
         const next = incrResult as number;
 
         if (next <= BOARD_SEQ_RESEED_THRESHOLD) {
-          const reseeded = await this.reseedBoardSeqIfBehindDurableFloor(boardId, next);
-          if (reseeded !== null) return reseeded;
+          return await this.ensureBoardSeqClearOfDurableFloor(boardId, next);
         }
 
         return next;
@@ -870,27 +878,63 @@ class PubSub {
   }
 
   /**
-   * Compares an INCR result against the durable seq floor and, if the board's
-   * durable history has already passed it, reseeds atomically via
-   * `allocateBoardSeqAtLeast`. Returns null when no reseed is needed (the
-   * caller should use the original INCR result) — never throws; a floor
-   * lookup failure (e.g. a Postgres hiccup) just falls back to the INCR
-   * result, matching `nextBoardSeq`'s existing non-fatal-degrade contract.
+   * Ensures a small INCR result (<= BOARD_SEQ_RESEED_THRESHOLD) is clear of
+   * the durable `board_climb_events` floor, reseeding atomically via
+   * `allocateBoardSeqAtLeast` when it isn't. Returns the seq to use. Never
+   * throws: a floor-lookup or reseed failure falls back to the INCR result,
+   * matching `nextBoardSeq`'s existing non-fatal-degrade contract (and is
+   * deliberately NOT memoized, so the very next small INCR retries).
+   *
+   * Memoization: without it, every send of a brand-new board's first
+   * ~BOARD_SEQ_RESEED_THRESHOLD would run the MAX(seq) Postgres lookup. The
+   * memo is a per-board watermark = the highest seq this instance has either
+   * verified clear of the floor or allocated through this check; the lookup
+   * is skipped only when the fresh INCR result is strictly ahead of it
+   * (normal early-life counter growth, provably not a reset this instance
+   * could collide on). Deliberately NOT the raw floor value: a floor-only
+   * memo (e.g. 0 for a new board) would keep skipping after a mid-process
+   * counter loss (FLUSHALL / failover to an empty replica) once durable rows
+   * exist — INCR restarts at 1, `1 > 0` skips, collision. With the
+   * watermark, any allocation pushes it to >= 1, so the first post-reset
+   * INCR (= 1) can never be ahead of it and always re-consults the floor.
+   *
+   * Accepted residual (documented, not defended): in multi-instance, an
+   * instance holding a small stale watermark can race another instance's
+   * first post-reset reseed and skip the check for a seq the durable floor
+   * already covers. The colliding durable insert lands on the (boardId, seq)
+   * unique index's `onConflictDoNothing` — one dropped duplicate row, no
+   * corruption, and exactly the failure mode every post-dormancy send had
+   * before the reseed existed. That needs a mid-process Redis counter loss
+   * (not mere dormancy — any send or stats publish re-arms the TTL) plus
+   * concurrent sends in the reseed window, so we take the simple memo.
    */
-  private async reseedBoardSeqIfBehindDurableFloor(boardId: string, incrResult: number): Promise<number | null> {
+  private async ensureBoardSeqClearOfDurableFloor(boardId: string, incrResult: number): Promise<number> {
+    const verifiedThrough = this.boardSeqVerifiedThrough.get(boardId);
+    if (verifiedThrough !== undefined && incrResult > verifiedThrough) {
+      this.boardSeqVerifiedThrough.set(boardId, incrResult);
+      return incrResult;
+    }
+
     let floor: number;
     try {
       floor = await this.boardSeqFloorProvider(Number(boardId));
     } catch (error) {
       logger.error('[PubSub] board seq floor provider failed, using INCR result:', error);
-      return null;
+      return incrResult;
     }
-    if (floor < incrResult) return null;
+
+    if (floor < incrResult) {
+      this.boardSeqVerifiedThrough.set(boardId, Math.max(incrResult, verifiedThrough ?? 0));
+      return incrResult;
+    }
+
     try {
-      return await this.allocateBoardSeqAtLeast(boardId, floor);
+      const reseeded = await this.allocateBoardSeqAtLeast(boardId, floor);
+      this.boardSeqVerifiedThrough.set(boardId, Math.max(reseeded, verifiedThrough ?? 0));
+      return reseeded;
     } catch (error) {
       logger.error('[PubSub] board seq Lua reseed failed, using INCR result:', error);
-      return null;
+      return incrResult;
     }
   }
 
