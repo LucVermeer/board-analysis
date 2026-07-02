@@ -19,10 +19,7 @@ export const initialState = <TSearchParams extends QueueSearchParams>(
   climbSearchParams: initialSearchParams,
   playlistSuggestionSource: null,
   hasDoneFirstFetch: false,
-  initialQueueDataReceivedFromPeers: false,
   pendingCurrentClimbUpdates: [],
-  lastReceivedSequence: null,
-  lastReceivedStateHash: null,
   needsResync: false,
 });
 
@@ -79,7 +76,6 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
         currentClimbQueueItem: hasCurrentClimbQueueItem(action.payload)
           ? (action.payload.currentClimbQueueItem ?? null)
           : state.currentClimbQueueItem,
-        initialQueueDataReceivedFromPeers: true,
         playlistSuggestionSource: null,
         // Clear pending updates on full sync since we're getting complete server state
         pendingCurrentClimbUpdates: [],

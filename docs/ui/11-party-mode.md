@@ -47,7 +47,6 @@ The auto-sender uses a latest-wins queue pattern to avoid overlapping GATT opera
 
 - Populated via the `joinSession` response and kept in sync via `SessionEvent` subscription events.
 - Each user has: `id` (participant ID), `username`, `avatarUrl`, `isLeader`.
-- The `PartyContext` (`party-context.tsx`) converts `SessionUser[]` to `ConnectedUser[]`, filtering out the current user and mapping `isLeader` to `isHost`.
 
 **Avatar group:**
 

@@ -64,10 +64,7 @@ const initialState: QueueState = {
   climbSearchParams: mockSearchParams,
   playlistSuggestionSource: null,
   hasDoneFirstFetch: false,
-  initialQueueDataReceivedFromPeers: false,
   pendingCurrentClimbUpdates: [],
-  lastReceivedSequence: null,
-  lastReceivedStateHash: null,
   needsResync: false,
 };
 
@@ -394,7 +391,7 @@ describe('queueReducer', () => {
   });
 
   describe('INITIAL_QUEUE_DATA', () => {
-    it('should set initial queue data and mark as received from peers', () => {
+    it('should set initial queue data', () => {
       const newQueue = [mockClimbQueueItem];
       const newCurrentClimb = mockClimbQueueItem;
 
@@ -410,7 +407,6 @@ describe('queueReducer', () => {
 
       expect(result.queue).toEqual(newQueue);
       expect(result.currentClimbQueueItem).toEqual(newCurrentClimb);
-      expect(result.initialQueueDataReceivedFromPeers).toBe(true);
     });
 
     it('should clear current climb when explicitly set to null', () => {
@@ -431,7 +427,6 @@ describe('queueReducer', () => {
 
       expect(result.queue).toEqual([]);
       expect(result.currentClimbQueueItem).toBeNull();
-      expect(result.initialQueueDataReceivedFromPeers).toBe(true);
     });
   });
 
@@ -1177,7 +1172,6 @@ describe('queueReducer', () => {
       const result = queueReducer(stateWithPending, action);
 
       expect(result.pendingCurrentClimbUpdates).toHaveLength(0);
-      expect(result.initialQueueDataReceivedFromPeers).toBe(true);
     });
   });
 
