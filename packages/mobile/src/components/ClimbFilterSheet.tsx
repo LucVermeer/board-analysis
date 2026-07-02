@@ -816,7 +816,7 @@ export function ClimbFilterSheet({
                       ? formatSetterSelection(localFilters.setter)
                       : t('mobile.filter.none')}
                   </Text>
-                  <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+                  <Icon name="chevron.right" size={14} color={systemColors.tertiaryLabel} />
                 </View>
               </Pressable>
 
@@ -840,7 +840,7 @@ export function ClimbFilterSheet({
                       ? t('mobile.holdFilter.summaryCount', { count: holdFilterCount })
                       : t('mobile.filter.none')}
                   </Text>
-                  <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+                  <Icon name="chevron.right" size={14} color={systemColors.tertiaryLabel} />
                 </View>
               </Pressable>
 
@@ -862,7 +862,7 @@ export function ClimbFilterSheet({
                   <Text variant="footnote" style={styles.tappableRowValue}>
                     {zoneActive ? t('mobile.zoneFilter.summaryActive') : t('mobile.filter.none')}
                   </Text>
-                  <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+                  <Icon name="chevron.right" size={14} color={systemColors.tertiaryLabel} />
                 </View>
               </Pressable>
 

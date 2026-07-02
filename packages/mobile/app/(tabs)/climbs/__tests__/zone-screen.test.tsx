@@ -7,7 +7,6 @@ import type { HoldsFilter, ZoneBoxInput } from '@boardsesh/shared-schema';
 const track = vi.hoisted(() => vi.fn());
 const haptics = vi.hoisted(() => ({ selection: vi.fn() }));
 const emitZoneFilterSelection = vi.hoisted(() => vi.fn());
-const routerBack = vi.hoisted(() => vi.fn());
 // Mutable across tests so each can seed its own route params.
 const routeParams = vi.hoisted(() => ({ current: {} as Record<string, string> }));
 
@@ -38,7 +37,8 @@ vi.mock('react-native', () => ({
 
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => routeParams.current,
-  useRouter: () => ({ back: routerBack }),
+  // The screen drives the native header (title + headerRight) through setOptions.
+  useNavigation: () => ({ setOptions: vi.fn() }),
   // Route the focus effect through a real useEffect so its cleanup (the handoff
   // emit) fires on unmount — matching useFocusEffect's blur/unmount behaviour.
   useFocusEffect: (effect: () => void | (() => void)) => {
@@ -140,7 +140,6 @@ describe('ZoneFilterScreen', () => {
     track.mockClear();
     haptics.selection.mockClear();
     emitZoneFilterSelection.mockClear();
-    routerBack.mockClear();
     routeParams.current = baseParams();
   });
 
@@ -212,15 +211,6 @@ describe('ZoneFilterScreen', () => {
     expect(emitZoneFilterSelection).toHaveBeenCalled();
     const selection = emitZoneFilterSelection.mock.calls.at(-1)?.[0] as { zoneBox: ZoneBoxInput | null };
     expect(selection.zoneBox).toEqual({ edgeLeft: 20, edgeRight: 80, edgeBottom: 20, edgeTop: 80 });
-  });
-
-  it('Done pops the screen', () => {
-    const { container } = render(<ZoneFilterScreen />);
-    const doneButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'mobile.filter.done',
-    ) as HTMLButtonElement;
-    fireEvent.click(doneButton);
-    expect(routerBack).toHaveBeenCalledTimes(1);
   });
 
   // Route params arrive as strings from the navigator and can be malformed

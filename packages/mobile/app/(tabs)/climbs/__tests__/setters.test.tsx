@@ -31,7 +31,8 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => params.value,
-  useRouter: () => ({ back: vi.fn() }),
+  // The screen drives the native header (title + headerRight) through setOptions.
+  useNavigation: () => ({ setOptions: vi.fn() }),
   // Run the effect immediately and stash its cleanup so the test can fire it.
   useFocusEffect: (effect: () => void | (() => void)) => {
     const cleanup = effect();
@@ -74,14 +75,17 @@ vi.mock('../../../../src/lib/haptics', () => ({ hapticSelection: vi.fn() }));
 
 vi.mock('../../../../src/providers/theme-provider', () => ({
   useTheme: () => ({
-    systemColors: { background: '#fff', secondaryBackground: '#eee', label: '#000' },
+    systemColors: {
+      background: '#fff',
+      secondaryBackground: '#eee',
+      label: '#000',
+      secondaryLabel: '#666',
+      separator: '#ccc',
+    },
     brandColors: { primary: '#6D28D9' },
   }),
 }));
 
-vi.mock('../../../../src/theme/ios-colors', () => ({
-  iosSystemColors: { separator: '#ccc', systemGray: '#999' },
-}));
 vi.mock('../../../../src/theme/typography', () => ({ textStyles: { callout: { fontSize: 16 } } }));
 vi.mock('../../../../src/theme/tokens', () => ({
   spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24 },

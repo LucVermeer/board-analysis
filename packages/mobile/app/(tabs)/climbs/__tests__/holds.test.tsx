@@ -26,7 +26,8 @@ vi.mock('expo-router', () => ({
     setIds: '1,2',
     holdsFilter: undefined,
   }),
-  useRouter: () => ({ back: vi.fn() }),
+  // The screen drives the native header (title + headerRight) through setOptions.
+  useNavigation: () => ({ setOptions: vi.fn() }),
   // Run the effect immediately and stash its cleanup so the test can fire it.
   useFocusEffect: (effect: () => void | (() => void)) => {
     const cleanup = effect();

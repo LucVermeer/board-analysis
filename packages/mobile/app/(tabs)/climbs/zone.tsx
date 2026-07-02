@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -41,9 +41,11 @@ type Params = {
   holdsFilter?: string;
 };
 
-// Chrome above the board (header + mode island + footer) the board height budget
-// must leave room for, so the full board fits without scroll.
-const CHROME_BUDGET = 220;
+// Chrome the board height budget must leave room for so the full board fits
+// without scroll: the native header bar (title + back chevron), the mode island,
+// and the footer hint. The status bar and bottom safe area are subtracted
+// separately.
+const CHROME_BUDGET = 200;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -92,7 +94,7 @@ function parseZoneMode(raw: string | undefined): ZoneMatchMode {
  */
 export default function ZoneFilterScreen() {
   const params = useLocalSearchParams<Params>();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -171,10 +173,6 @@ export default function ZoneFilterScreen() {
         });
     }, []),
   );
-
-  const done = useCallback(() => {
-    router.back();
-  }, [router]);
 
   const handleEnable = useCallback(() => {
     if (!dims) return;
@@ -275,6 +273,23 @@ export default function ZoneFilterScreen() {
     [zoneActive, dims, handleCommitZone, brandColors.primary, t, cornerLabels],
   );
 
+  // "Clear all" moves to the native header's headerRight, shown only while a zone
+  // exists. The back chevron / swipe-back replaces the old in-body "Done" (the
+  // selection is handed back on blur via the focus-cleanup above).
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: zoneActive
+        ? () => (
+            <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button">
+              <Text variant="subheadline" color={brandColors.primary}>
+                {t('mobile.filter.clearAll')}
+              </Text>
+            </Pressable>
+          )
+        : undefined,
+    });
+  }, [navigation, zoneActive, handleClear, brandColors.primary, t]);
+
   if (!boardHolds || !boardName || !dims) {
     return (
       <View style={[styles.loading, { backgroundColor: systemColors.background }]}>
@@ -287,24 +302,6 @@ export default function ZoneFilterScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing[2] }]}>
-        <Text variant="title3">{t('mobile.zoneFilter.title')}</Text>
-        <View style={styles.headerActions}>
-          {zoneEnabled ? (
-            <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button">
-              <Text variant="subheadline" color={brandColors.primary}>
-                {t('mobile.filter.clearAll')}
-              </Text>
-            </Pressable>
-          ) : null}
-          <Pressable onPress={done} hitSlop={8} accessibilityRole="button">
-            <Text variant="subheadline" color={brandColors.primary} style={styles.doneLabel}>
-              {t('mobile.filter.done')}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
       <View style={styles.boardSection}>
         <InteractiveFilterBoard
           boardName={boardName}
@@ -365,21 +362,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-  },
-  doneLabel: {
-    fontWeight: '600',
   },
   boardSection: {
     flex: 1,
