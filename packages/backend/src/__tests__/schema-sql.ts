@@ -5,7 +5,6 @@
 
 export const schemaSQL = `
   DROP TABLE IF EXISTS "board_session_queues" CASCADE;
-  DROP TABLE IF EXISTS "board_session_clients" CASCADE;
   DROP TABLE IF EXISTS "session_health_kit_workouts" CASCADE;
   DROP TABLE IF EXISTS "board_session_participants" CASCADE;
   DROP TABLE IF EXISTS "board_sessions" CASCADE;
@@ -66,14 +65,6 @@ export const schemaSQL = `
     "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
     "joined_at" timestamp DEFAULT now() NOT NULL,
     PRIMARY KEY ("session_id", "user_id")
-  );
-
-  CREATE TABLE IF NOT EXISTS "board_session_clients" (
-    "id" text PRIMARY KEY NOT NULL,
-    "session_id" text NOT NULL REFERENCES "board_sessions"("id") ON DELETE CASCADE,
-    "username" text,
-    "connected_at" timestamp DEFAULT now() NOT NULL,
-    "is_leader" boolean DEFAULT false NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS "board_session_queues" (

@@ -21,7 +21,6 @@ let dbAvailable = false;
 const TABLES_TO_RESET = [
   'activity_push_tokens',
   'board_session_queues',
-  'board_session_clients',
   'board_session_participants',
   'board_sessions',
   'boardsesh_ticks',
@@ -79,7 +78,6 @@ beforeEach(async () => {
   if (dbAvailable && db) {
     // Clear all tables in correct order (respect foreign keys)
     await db.execute(sql`TRUNCATE TABLE board_session_queues CASCADE`);
-    await db.execute(sql`TRUNCATE TABLE board_session_clients CASCADE`);
     await db.execute(sql`TRUNCATE TABLE board_session_participants CASCADE`);
     await db.execute(sql`TRUNCATE TABLE board_sessions CASCADE`);
   }
