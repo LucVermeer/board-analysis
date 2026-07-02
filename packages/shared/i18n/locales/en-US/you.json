@@ -168,6 +168,7 @@
         "a11yGradeDelta": "you graded {{logged}}, community says {{consensus}}",
         "a11yStars": "rated {{count}} of 5 stars",
         "a11yHasNote": "has note",
+        "a11yHasBetaVideo": "has beta video",
         "a11yMirrored": "mirrored",
         "editAction": "Edit entry",
         "deleteAction": "Delete entry",

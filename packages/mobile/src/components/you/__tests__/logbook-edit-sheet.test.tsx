@@ -169,6 +169,7 @@ function makeAscent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
     comment: '',
     climbedAt: new Date(2026, 0, 8, 10, 5, 0, 0).toISOString(),
     frames: null,
+    hasBetaVideo: null,
     ...overrides,
   };
 }

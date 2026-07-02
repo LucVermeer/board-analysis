@@ -244,6 +244,23 @@ describe('LogbookRow — meta line', () => {
     expect(iconNames(container)).toContain('edit');
   });
 
+  it('shows the video glyph only when a beta video is attached', () => {
+    const { container: withBeta } = renderRow(ascent({ hasBetaVideo: true }));
+    expect(iconNames(withBeta)).toContain('video');
+
+    const { container: withoutBeta } = renderRow(ascent({ hasBetaVideo: null }));
+    expect(iconNames(withoutBeta)).not.toContain('video');
+  });
+
+  it('labels the wall by LAYOUT, ignoring the user-named board', () => {
+    // Fixture carries boardDisplayName 'Kilter'; the row must show the layout
+    // ("Kilter Original", per the profile-stats mock) — the wall product
+    // disambiguates repeat ascents, a board's pet name doesn't.
+    const { container } = renderRow(ascent({ boardDisplayName: 'My Garage Board' }));
+    expect(container.textContent).toContain('Kilter Original 40°');
+    expect(container.textContent).not.toContain('My Garage Board');
+  });
+
   it('clamps an imported 0-attempt send to 1 try', () => {
     const { container } = renderRow(ascent({ status: 'send', attemptCount: 0 }));
     expect(container.textContent).toContain('mobile.logbook.tries:1');

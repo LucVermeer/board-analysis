@@ -180,8 +180,11 @@ export const LogbookRow = memo(function LogbookRow({
   const triesShown = displayedAttemptCount(ascent.attemptCount);
   const quality = normalizeLogbookQuality(ascent.quality);
   const hasNote = logbookNoteIsVisible(ascent.comment);
-  const layoutName = getLayoutDisplayName(ascent.boardType, ascent.layoutId);
-  const boardAngleLabel = `${ascent.boardDisplayName ?? layoutName} ${ascent.angle}°`;
+  const hasBetaVideo = ascent.hasBetaVideo === true;
+  // The LAYOUT ("Kilter Homewall", "MoonBoard 2016"), not the user-named board —
+  // in a review list the wall product disambiguates a repeat ascent; the pet
+  // name of whichever gym's board it was doesn't (Alex's device-review call).
+  const boardAngleLabel = `${getLayoutDisplayName(ascent.boardType, ascent.layoutId)} ${ascent.angle}°`;
   const attemptsLabel =
     attemptsKind === 'flash'
       ? t('mobile.logbook.status.flash')
@@ -365,6 +368,7 @@ export const LogbookRow = memo(function LogbookRow({
     attemptsKind === 'flash' ? null : t('mobile.logbook.tries', { count: triesShown }),
     quality != null ? t('mobile.logbook.row.a11yStars', { count: quality }) : null,
     hasNote ? t('mobile.logbook.row.a11yHasNote') : null,
+    hasBetaVideo ? t('mobile.logbook.row.a11yHasBetaVideo') : null,
     ascent.isMirror ? t('mobile.logbook.row.a11yMirrored') : null,
     boardAngleLabel,
     timeLabel,
@@ -445,6 +449,7 @@ export const LogbookRow = memo(function LogbookRow({
                   {primaryMetaText}
                 </Text>
                 {hasNote ? <Icon name="edit" size={11} color={systemColors.secondaryLabel} /> : null}
+                {hasBetaVideo ? <Icon name="video" size={12} color={systemColors.secondaryLabel} /> : null}
                 {showTimeInline ? (
                   <Text variant="footnote" color={systemColors.tertiaryLabel}>
                     {timeLabel}

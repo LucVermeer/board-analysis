@@ -27,6 +27,7 @@ function makeItem(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
     comment: '',
     climbedAt: '2026-04-01T00:00:00Z',
     frames: 'p1r14',
+    hasBetaVideo: null,
     ...overrides,
   };
 }

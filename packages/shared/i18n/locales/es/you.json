@@ -168,6 +168,7 @@
         "a11yGradeDelta": "tu grado {{logged}}, la comunidad dice {{consensus}}",
         "a11yStars": "valorada con {{count}} de 5 estrellas",
         "a11yHasNote": "tiene nota",
+        "a11yHasBetaVideo": "con vídeo de beta",
         "a11yMirrored": "en espejo",
         "editAction": "Editar registro",
         "deleteAction": "Eliminar registro",

@@ -168,6 +168,7 @@
         "a11yGradeDelta": "ta cotation {{logged}}, la communauté dit {{consensus}}",
         "a11yStars": "notée {{count}} sur 5 étoiles",
         "a11yHasNote": "avec note",
+        "a11yHasBetaVideo": "avec vidéo de beta",
         "a11yMirrored": "en miroir",
         "editAction": "Modifier l'entrée",
         "deleteAction": "Supprimer l'entrée",
