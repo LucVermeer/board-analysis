@@ -17,7 +17,7 @@
  * exactly the determinism we want: the check only changes outcome when WE
  * change something (bump expo, edit a pin, lockfile drift).
  *
- * It enforces two invariants per non-excluded dependency that Expo tracks:
+ * It enforces two invariants per dependency that Expo tracks:
  *   1. Declared-range alignment — our declared version string in package.json
  *      must line up with the SDK's bundled range. An exact pin (e.g. "56.0.4")
  *      must satisfy the bundled range (e.g. "~56.0.4"); a range pin (e.g.
@@ -33,7 +33,8 @@
  * `expo` itself is not listed in bundledNativeModules.json, so it only gets
  * the installed-alignment check (installed satisfies declared). Deliberate
  * deviations from the SDK pins live in `expo.install.exclude` in
- * packages/mobile/package.json — this check honours that list.
+ * packages/mobile/package.json — exclusion exempts a package from rule 1
+ * only; rule 2 still guards the hand-pinned deviation against lockfile drift.
  *
  * Usage: vp run check:mobile-deps
  */
@@ -56,11 +57,28 @@ export interface DepViolation {
   reason: string;
 }
 
+export interface DepCheckResult {
+  /**
+   * Number of declared dependencies whose range was validated against the
+   * SDK's bundled map (rule 1). Zero means the map validated nothing — a
+   * degenerate pins file must fail the check, never green-light it.
+   */
+  checked: number;
+  violations: DepViolation[];
+}
+
 /**
  * Pure check: given our declared dependency map, the exclude list, the
  * installed SDK's bundled native module ranges, and a map of installed
  * versions, return every violation. No filesystem access — all inputs are
  * plain data, so this is unit-testable without a real node_modules tree.
+ *
+ * Exclusion (`expo.install.exclude`) means "deliberately deviates from the
+ * SDK's pin", NOT "exempt from drift": it skips only rule 1 (bundled-range
+ * alignment). Rule 2 (installed satisfies declared) still runs for excluded
+ * packages, so a hand-pinned deviation is still guarded against lockfile
+ * drift. Excluded entries the SDK does not track at all (e.g. `typescript`)
+ * are skipped naturally by the bundled-map gate.
  */
 export function checkMobileDeps(
   declaredDeps: Record<string, string>,
@@ -68,20 +86,20 @@ export function checkMobileDeps(
   bundledModules: Record<string, string>,
   installedVersions: Record<string, string | undefined>,
   expoPackageName: string = EXPO_PACKAGE_NAME,
-): DepViolation[] {
+): DepCheckResult {
   const excludeSet = new Set(exclude);
   const violations: DepViolation[] = [];
+  let checked = 0;
 
   for (const [name, declared] of Object.entries(declaredDeps)) {
-    if (excludeSet.has(name)) continue;
-
     const isExpoItself = name === expoPackageName;
     const bundledRange = isExpoItself ? undefined : bundledModules[name];
     // Not a package the installed SDK tracks pins for — nothing to check.
     if (!isExpoItself && bundledRange === undefined) continue;
 
-    if (bundledRange !== undefined) {
+    if (bundledRange !== undefined && !excludeSet.has(name)) {
       // (1) Declared-range alignment.
+      checked += 1;
       const declaredIsExact = semver.valid(declared) !== null;
       if (declaredIsExact) {
         if (!semver.satisfies(declared, bundledRange)) {
@@ -106,7 +124,9 @@ export function checkMobileDeps(
       }
     }
 
-    // (2) Installed alignment — catches lockfile drift independent of (1).
+    // (2) Installed alignment — catches lockfile drift independent of (1),
+    //     and runs for excluded packages too: a deliberate deviation from the
+    //     SDK pin still has to install exactly what it declares.
     const installed = installedVersions[name];
     if (installed === undefined) {
       violations.push({
@@ -127,7 +147,7 @@ export function checkMobileDeps(
     }
   }
 
-  return violations;
+  return { checked, violations };
 }
 
 /** Read the `expo.install.exclude` list from a parsed packages/mobile/package.json. */
@@ -148,7 +168,12 @@ export function readExcludeList(mobilePackageJsonPath: string): string[] {
   return pkg.expo?.install?.exclude ?? [];
 }
 
-/** Read and parse the installed SDK's bundledNativeModules.json. Throws if missing or malformed. */
+/**
+ * Read and parse the installed SDK's bundledNativeModules.json. Throws if
+ * missing or malformed — including "valid JSON but degenerate": an empty
+ * object, an array, or non-string values would make every package skip the
+ * range check and green-light the run, which is worse than a flaky check.
+ */
 export function readBundledNativeModules(bundledNativeModulesPath: string): Record<string, string> {
   let raw: string;
   try {
@@ -159,11 +184,30 @@ export function readBundledNativeModules(bundledNativeModulesPath: string): Reco
         `Run 'bun install' in the repo root so packages/mobile/node_modules/expo is populated.`,
     );
   }
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as Record<string, string>;
+    parsed = JSON.parse(raw);
   } catch (error) {
     throw new Error(`cannot parse ${bundledNativeModulesPath}: ${(error as Error).message}`);
   }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${bundledNativeModulesPath} is not a JSON object — the installed expo package looks corrupt`);
+  }
+  const entries = Object.entries(parsed as Record<string, unknown>);
+  if (entries.length === 0) {
+    throw new Error(
+      `${bundledNativeModulesPath} is empty — an empty pins map would validate nothing. ` +
+        `The installed expo package looks corrupt; re-run 'bun install'.`,
+    );
+  }
+  const nonString = entries.find(([, range]) => typeof range !== 'string');
+  if (nonString) {
+    throw new Error(
+      `${bundledNativeModulesPath} has a non-string range for "${nonString[0]}" — ` +
+        `the installed expo package looks corrupt`,
+    );
+  }
+  return parsed as Record<string, string>;
 }
 
 /**
@@ -229,7 +273,19 @@ export function main(): number {
 
   const installedVersions = readInstalledVersions(searchDirs, Object.keys(declaredDeps));
   const installedExpoVersion = installedVersions[EXPO_PACKAGE_NAME];
-  const violations = checkMobileDeps(declaredDeps, exclude, bundledModules, installedVersions);
+  const { checked, violations } = checkMobileDeps(declaredDeps, exclude, bundledModules, installedVersions);
+
+  // Belt-and-braces against a degenerate pins map: if not a single declared
+  // dependency was validated against bundledNativeModules.json, the check
+  // proved nothing — fail rather than green-light.
+  if (checked === 0) {
+    console.error(
+      `[mobile-deps] FAILED — 0 declared dependencies were validated against ${bundledNativeModulesPath}. ` +
+        `Either the pins map is degenerate or every tracked dependency is excluded; ` +
+        `this check must verify something to pass.`,
+    );
+    return 1;
+  }
 
   if (violations.length > 0) {
     console.error(`[mobile-deps] FAILED — ${violations.length} dependency violation(s) against the installed SDK:`);
@@ -248,8 +304,8 @@ export function main(): number {
   }
 
   console.log(
-    `[mobile-deps] OK — dependencies match Expo SDK ${installedExpoVersion ?? '(unknown)'}'s bundled pins ` +
-      '(or are explicitly excluded).',
+    `[mobile-deps] OK — ${checked} dependencies match Expo SDK ${installedExpoVersion ?? '(unknown)'}'s ` +
+      'bundled pins (or are explicitly excluded), and all installed versions satisfy their declared pins.',
   );
   return 0;
 }
