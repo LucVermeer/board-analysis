@@ -84,8 +84,9 @@ const RECENT_BETA_LINKS_CACHE_SIZE = RECENT_BETA_LINKS_MAX_LIMIT * 2;
 // Extract an Instagram handle from `userProfiles.instagramUrl`. The field
 // holds a profile URL — we only want the handle so we can match against
 // `board_beta_links.foreign_username`. Returns null for anything that
-// doesn't look like a recognisable instagram.com profile URL.
-function extractInstagramHandle(profileUrl: string | null): string | null {
+// doesn't look like a recognisable instagram.com profile URL. Exported for
+// the ascents feed's hasBetaVideo, which shares these ownership semantics.
+export function extractInstagramHandle(profileUrl: string | null): string | null {
   if (!profileUrl) return null;
   const trimmed = profileUrl.trim();
   if (!trimmed) return null;

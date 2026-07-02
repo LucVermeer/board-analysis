@@ -18,6 +18,7 @@ import {
 } from '../shared/sql-expressions';
 import { GetTicksInputSchema, BoardNameSchema, AscentFeedInputSchema } from '../../../validation/schemas';
 import { escapeLikePattern } from '../../../utils/like-pattern';
+import { extractInstagramHandle } from '../beta-videos/queries';
 
 // Shape of a row produced by the userAscentsFeed item mapper. Declared so
 // userAscentCaptionMatches (which reuses that builder) returns a typed ascent
@@ -522,20 +523,33 @@ export const tickQueries = {
       .limit(limit)
       .offset(offset);
 
-    // One query for the whole page: which of these ascents have a beta video
-    // directly attached (board_beta_links.tick_uuid, unique per tick). Drives
-    // the logbook row's video marker without an N+1.
+    // Which of this page's CLIMBS carry a beta video of this user's. Ownership
+    // mirrors userBetaLinks (the profile beta shelf): a link the user created,
+    // one matching their Instagram handle (Aurora-synced/backfilled legacy rows
+    // have tick_uuid NULL), or one directly attached to a tick on this page.
+    // Climb-level on purpose — "do I have beta for this climb" — and batched:
+    // two queries per page (profile handle + links), no N+1.
     const pageTickUuids = results.map(({ tick }) => tick.uuid);
-    const betaLinkRows =
-      pageTickUuids.length > 0
-        ? await db
-            .select({ tickUuid: dbSchema.boardBetaLinks.tickUuid })
-            .from(dbSchema.boardBetaLinks)
-            .where(inArray(dbSchema.boardBetaLinks.tickUuid, pageTickUuids))
-        : [];
-    const ticksWithBeta = new Set(
-      betaLinkRows.map((row) => row.tickUuid).filter((tickUuid): tickUuid is string => tickUuid !== null),
-    );
+    const pageClimbUuids = Array.from(new Set(results.map(({ tick }) => tick.climbUuid)));
+    let climbsWithBeta = new Set<string>();
+    if (pageClimbUuids.length > 0) {
+      const profileRows = await db
+        .select({ instagramUrl: dbSchema.userProfiles.instagramUrl })
+        .from(dbSchema.userProfiles)
+        .where(eq(dbSchema.userProfiles.userId, userId))
+        .limit(1);
+      const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
+      const ownershipConditions = [
+        eq(dbSchema.boardBetaLinks.createdByUserId, userId),
+        inArray(dbSchema.boardBetaLinks.tickUuid, pageTickUuids),
+        ...(igHandle ? [eq(dbSchema.boardBetaLinks.foreignUsername, igHandle)] : []),
+      ];
+      const betaLinkRows = await db
+        .select({ boardType: dbSchema.boardBetaLinks.boardType, climbUuid: dbSchema.boardBetaLinks.climbUuid })
+        .from(dbSchema.boardBetaLinks)
+        .where(and(inArray(dbSchema.boardBetaLinks.climbUuid, pageClimbUuids), or(...ownershipConditions)));
+      climbsWithBeta = new Set(betaLinkRows.map((row) => `${row.boardType}:${row.climbUuid}`));
+    }
 
     // Map results to response format
     const items = results.map(
@@ -584,7 +598,7 @@ export const tickQueries = {
           comment: tick.comment || '',
           climbedAt: tick.climbedAt,
           frames,
-          hasBetaVideo: ticksWithBeta.has(tick.uuid),
+          hasBetaVideo: climbsWithBeta.has(`${tick.boardType}:${tick.climbUuid}`),
         };
       },
     );
