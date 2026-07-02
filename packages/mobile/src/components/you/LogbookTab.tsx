@@ -271,7 +271,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
     (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => {
       if (deleteTickPendingRef.current) return;
       const targetUuid = ascent.uuid;
-      void (async () => {
+      const runGuardedDelete = async () => {
         const confirmed = await confirmDialog({
           title: t('mobile.logbook.deleteTitle'),
           message: t('mobile.logbook.deleteConfirm'),
@@ -306,7 +306,11 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
             showToast(t('mobile.logbook.deleteError'), 'error');
           },
         });
-      })();
+      };
+      // A rejected dialog promise (unmounted host, provider bug) is treated as
+      // a decline: nothing was confirmed, so nothing is deleted — the safe
+      // outcome for a destructive action. Never rethrow into the void.
+      void runGuardedDelete().catch(() => {});
     },
     [deleteTickMutate, confirmDialog, queryClient, userId, showToast, t],
   );

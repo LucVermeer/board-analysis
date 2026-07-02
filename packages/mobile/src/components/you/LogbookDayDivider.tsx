@@ -10,6 +10,10 @@ import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { selectByVariant } from '../../theme/variants';
 
+// Off-grid on purpose: 8pt (spacing[2]) reads too tall around caption1 text in
+// the compact chip, 4pt too tight against the wash edge.
+const DIVIDER_VERTICAL_PADDING = 6;
+
 type LogbookDayDividerProps = {
   /** Local start-of-day timestamp of the run (from buildLogbookListRows). */
   dayStartMs: number;
@@ -113,7 +117,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[3],
     marginBottom: spacing[1],
     paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1] + 2,
+    paddingVertical: DIVIDER_VERTICAL_PADDING,
   },
   label: {
     fontWeight: '600',
