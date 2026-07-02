@@ -82,22 +82,41 @@ export function LogbookFilterSheet({
   const [sectionResetKey, setSectionResetKey] = useState(0);
 
   // Commit-on-close: there's no Apply button — the draft applies when the sheet
-  // is dismissed (swipe down / scrim). The ref holds the latest draft so the
-  // stable dismiss handler commits the newest values, never a stale closure.
+  // closes. The ref holds the latest draft so the stable commit reads the newest
+  // values, never a stale closure.
   const draftRef = useRef({ filters: draftFilters, sort: draftSort });
   useEffect(() => {
     draftRef.current = { filters: draftFilters, sort: draftSort };
   }, [draftFilters, draftSort]);
 
-  const handleDismiss = useCallback(() => {
+  // One commit per open. A user pan-down (onClose → handleDismiss) and the
+  // unmount cleanup below both call this, so the guard prevents a double-apply.
+  const committedRef = useRef(false);
+  const commitDraft = useCallback(() => {
+    if (committedRef.current) return;
+    committedRef.current = true;
     onApply(draftRef.current.filters, draftRef.current.sort);
+  }, [onApply]);
+
+  const handleDismiss = useCallback(() => {
+    commitDraft();
     onDismiss();
-  }, [onApply, onDismiss]);
+  }, [commitDraft, onDismiss]);
 
   // The parent only mounts the sheet while it should be open, so present/dismiss
   // route through the coordinator (serialized, no overlapping native transitions).
   // A user pan-down / scrim tap fires onClose → handleDismiss (commit the draft).
   const managed = useManagedSheet({ open: true, sheetRef, onClose: handleDismiss });
+
+  // Commit on unmount too: a programmatic close — the parent unmounting the sheet,
+  // or a coordinator-driven dismiss — never fires onClose, so the draft would
+  // otherwise be discarded silently. Read commitDraft through a ref so the cleanup
+  // runs only on real unmount (empty deps), not on every onApply identity change.
+  const commitDraftRef = useRef(commitDraft);
+  commitDraftRef.current = commitDraft;
+  useEffect(() => {
+    return () => commitDraftRef.current();
+  }, []);
 
   const snapPoints = useMemo(() => androidSafeSnapPoints(['90%']), []);
   // One stable "today" ceiling so the To-date row's maximumDate prop keeps a

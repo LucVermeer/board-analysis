@@ -288,6 +288,35 @@ describe('LogbookFilterSheet', () => {
     expect(filters.fromDate).toBe('');
   });
 
+  // Behavior 5: a programmatic close (parent unmounts the sheet without a
+  // pan-down / scrim onChange(-1)) still commits the in-progress draft, so an
+  // edit isn't discarded silently.
+  it('commits the draft on unmount when closed programmatically', () => {
+    const onApply = vi.fn();
+    const { getByTestId, unmount } = renderSheet({ onApply });
+
+    fireEvent.click(getByTestId('segment-mobile.logbook.sort-hardest'));
+    // No closeSheet() — the parent just unmounts.
+    unmount();
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const { sort } = lastApply(onApply);
+    expect(sort.preset).toBe('hardest');
+  });
+
+  // Behavior 5 (continued): a user pan-down that already committed must not
+  // double-apply when the parent then unmounts the sheet.
+  it('does not double-commit when a user close is followed by unmount', () => {
+    const onApply = vi.fn();
+    const { getByTestId, unmount } = renderSheet({ onApply });
+
+    fireEvent.click(getByTestId('segment-mobile.logbook.sort-hardest'));
+    closeSheet();
+    unmount();
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
   // Behavior 4 (continued): tapping the From field reveals the picker but still
   // commits nothing until a date is actually picked — Apply leaves fromDate ''.
   it('reveals the From picker without committing a date until one is picked', () => {
