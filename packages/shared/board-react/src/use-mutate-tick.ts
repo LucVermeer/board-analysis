@@ -60,12 +60,11 @@ function stripTickFromAscentFeeds(queryClient: QueryClient, uuid: string) {
       if (!cached) return cached;
       // Each page carries a copy of the whole feed's totalCount — keep it
       // consistent with the strip so a surface reading the total isn't
-      // stale-high until the background refetch reconciles.
-      const removedCount = cached.pages.reduce(
-        (total, page) => total + page.userAscentsFeed.items.filter((item) => item.uuid === uuid).length,
-        0,
-      );
-      if (removedCount === 0) return cached;
+      // stale-high until the background refetch reconciles. One tick = one off
+      // the total, even if offset-pagination overlap duplicated its row across
+      // cached pages (the duplicates are cache artifacts, not extra ticks).
+      const anyRemoved = cached.pages.some((page) => page.userAscentsFeed.items.some((item) => item.uuid === uuid));
+      if (!anyRemoved) return cached;
       return {
         ...cached,
         pages: cached.pages.map((page) => ({
@@ -73,7 +72,7 @@ function stripTickFromAscentFeeds(queryClient: QueryClient, uuid: string) {
           userAscentsFeed: {
             ...page.userAscentsFeed,
             items: page.userAscentsFeed.items.filter((item) => item.uuid !== uuid),
-            totalCount: Math.max(0, page.userAscentsFeed.totalCount - removedCount),
+            totalCount: Math.max(0, page.userAscentsFeed.totalCount - 1),
           },
         })),
       };

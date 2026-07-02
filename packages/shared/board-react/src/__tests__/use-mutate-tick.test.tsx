@@ -159,4 +159,32 @@ describe('useDeleteTick (shared)', () => {
     expect(recent?.pages[0].userAscentsFeed.totalCount).toBe(1);
     expect(hardest?.pages[0].userAscentsFeed.totalCount).toBe(0);
   });
+
+  it('decrements totalCount by ONE even when offset overlap duplicated the row across pages', async () => {
+    const executeHttp = vi.fn().mockResolvedValue({ deleteTick: true });
+    const { wrapper, queryClient } = createWrapper({ executeHttp: executeHttp as unknown as ExecuteHttp });
+    // Offset pagination can return the same tick on two adjacent pages; the
+    // duplicates are cache artifacts — the true total drops by exactly one.
+    queryClient.setQueryData(['userAscentsFeed', 'user-1', {}], {
+      pages: [
+        { userAscentsFeed: { items: [{ uuid: 'tick-1' }, { uuid: 'tick-2' }], totalCount: 3, hasMore: true } },
+        { userAscentsFeed: { items: [{ uuid: 'tick-1' }, { uuid: 'tick-3' }], totalCount: 3, hasMore: false } },
+      ],
+      pageParams: [0, 2],
+    });
+    const { result } = renderHook(() => useDeleteTick(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate('tick-1');
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    type CachedFeed = { pages: { userAscentsFeed: { items: { uuid: string }[]; totalCount: number } }[] };
+    const cached = queryClient.getQueryData<CachedFeed>(['userAscentsFeed', 'user-1', {}]);
+    expect(cached?.pages.map((page) => page.userAscentsFeed.items)).toEqual([
+      [{ uuid: 'tick-2' }],
+      [{ uuid: 'tick-3' }],
+    ]);
+    expect(cached?.pages.map((page) => page.userAscentsFeed.totalCount)).toEqual([2, 2]);
+  });
 });
