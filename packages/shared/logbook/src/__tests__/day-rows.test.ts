@@ -50,7 +50,9 @@ describe('shouldShowLogbookDividers', () => {
     expect(shouldShowLogbookDividers(inputFor({ ...customDateSort, primaryField: 'loggedGrade' }))).toBe(false);
     // A climb-name search filters without re-sorting — dividers stay.
     expect(
-      shouldShowLogbookDividers(toAscentFeedInput({ filters: DEFAULT_LOGBOOK_FILTERS, sort: DEFAULT_LOGBOOK_SORT, name: 'purple' })),
+      shouldShowLogbookDividers(
+        toAscentFeedInput({ filters: DEFAULT_LOGBOOK_FILTERS, sort: DEFAULT_LOGBOOK_SORT, name: 'purple' }),
+      ),
     ).toBe(true);
   });
 });
