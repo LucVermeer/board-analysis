@@ -530,6 +530,25 @@ describe('tickQueries — behavior fixes', () => {
       expect(byUuid.get('tick-beta-1')).toBe(true);
       expect(byUuid.get('tick-beta-2')).toBe(false);
     });
+
+    it('flows hasBetaVideo through the caption-matches shared builder', async () => {
+      const climbUuid = `${CLIMB_PREFIX}beta-caption`;
+      await insertClimb(climbUuid, 'Beta Caption Climb');
+      await insertTick({ uuid: 'tick-beta-cap-1', climbUuid, climbedAt: '2026-06-01T10:00:00', status: 'send' });
+      await insertTick({ uuid: 'tick-beta-cap-2', climbUuid, climbedAt: '2026-06-02T10:00:00', status: 'send' });
+      await db.execute(sql`
+        INSERT INTO board_beta_links (board_type, climb_uuid, link, tick_uuid)
+        VALUES ('kilter', ${climbUuid}, 'https://instagram.com/p/test-beta-cap', 'tick-beta-cap-1')
+      `);
+
+      const matches = (await callUserAscentCaptionMatches(TEST_USER_ID, 'Sent "Beta Caption Climb" @ 40°')) as Array<{
+        uuid: string;
+        hasBetaVideo: boolean;
+      }>;
+      const byUuid = new Map(matches.map((match) => [match.uuid, match.hasBetaVideo]));
+      expect(byUuid.get('tick-beta-cap-1')).toBe(true);
+      expect(byUuid.get('tick-beta-cap-2')).toBe(false);
+    });
   });
 
   describe('userGroupedAscentsFeed — pagination & grouping', () => {
