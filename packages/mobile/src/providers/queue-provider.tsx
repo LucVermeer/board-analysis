@@ -17,6 +17,7 @@ import {
   generateClientId,
   isPlaylistPeekQueueItemUuid,
   playlistSuggestionSourceMatches,
+  computeQueueStateHash,
 } from '@boardsesh/queue';
 import type {
   QueueState,
@@ -30,7 +31,11 @@ import type {
 import {
   applySessionRuntimeEvent,
   createJoinSessionTracker,
+  createQueueSyncGate,
   mapSubscriptionEnvelopeToAction,
+  RESYNC_LOOP_THRESHOLD,
+  type QueueSyncGate,
+  type QueueSyncGateEvent,
   type RuntimeSessionState,
   type SubscriptionWireEnvelope,
 } from '@boardsesh/queue-runtime';
@@ -392,6 +397,30 @@ const defaultSearchParams: QueueSearchParams = {};
 type QueueUpdateEvent = SubscriptionWireEnvelope<SubscriptionQueueItem>;
 type MobileSessionRuntimeState = RuntimeSessionState<SessionUser>;
 
+/**
+ * Flatten a raw queueUpdates wire event into the shape createQueueSyncGate's
+ * `evaluateIncoming`/`noteApplied` expect. Every variant except FullSync
+ * already carries a top-level `stateHash` matching
+ * QUEUE_UPDATES_SUBSCRIPTION's selection (`... on QueueItemAdded { sequence
+ * stateHash ... }`, etc.) — FullSync's `stateHash` is nested one level
+ * deeper instead (the subscription selects `state { stateHash ... }`, with
+ * no top-level `stateHash` for that variant), so pull it out here. Mirrors
+ * `sync-gate.ts`'s own doc: "for FullSync, pass `stateHash:
+ * event.state.stateHash` since the real wire event nests it under `state`."
+ * Widening `SubscriptionWireEnvelope`'s FullSync member instead would ripple
+ * into every other consumer of that shared type, so the flatten stays local.
+ */
+function toSyncQueueEvent(event: QueueUpdateEvent): QueueSyncGateEvent {
+  if (event.__typename === 'FullSync') {
+    return {
+      __typename: 'FullSync',
+      sequence: event.sequence,
+      stateHash: (event.state as { stateHash?: string | null }).stateHash ?? null,
+    };
+  }
+  return event;
+}
+
 const createEmptySessionRuntimeState = (): MobileSessionRuntimeState => ({
   users: [],
   isLeader: false,
@@ -432,6 +461,29 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // burst (e.g. clearQueue removes N items, the WS is down). Coalesce them into
   // one in-flight fetch so we don't hammer the server or thrash the reducer.
   const resyncInFlightRef = useRef(false);
+  // Coalesce-then-rerun-once companion to the single-flight guard above: a
+  // resync requested while a fetch is already in flight may reflect a
+  // mutation the in-flight snapshot predates (e.g. the trailing removals of a
+  // clearQueue burst). Dropping it outright would apply the older snapshot,
+  // re-baseline the gate to it, and leave the watchdog blind (local hash ==
+  // tracked snapshot hash) — so remember the request and run exactly one more
+  // fetch after the current one settles.
+  const resyncPendingRef = useRef(false);
+  // Set by the session effect to a hook that tears down + restarts the joined
+  // WS subscriptions (its startJoinedSubscriptions closure). Used by
+  // resyncQueueFromServer as the fallback when the HTTP snapshot is
+  // unavailable — see the membership note there. Null when no session effect
+  // is live.
+  const restartJoinedSubscriptionsRef = useRef<(() => void) | null>(null);
+  // Sequence-gap / stale-event dedup / hash-drift gate for the active session's
+  // queueUpdates stream (createQueueSyncGate from @boardsesh/queue-runtime —
+  // the same decision logic web is being migrated to). One instance per
+  // session: the session effect below creates it, resets it on socket
+  // `closed`, and nulls it out when there's no session. The 60s hash watchdog
+  // effect (declared later, once resyncQueueFromServerRef exists) reads it
+  // through this ref so it always evaluates against the CURRENT session's
+  // gate rather than one captured in a stale closure.
+  const queueSyncGateRef = useRef<QueueSyncGate | null>(null);
 
   // The active board is the angle source of truth. Read it here so the
   // self-healing re-grade effect can compare each queued climb's display angle
@@ -583,10 +635,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setSessionRuntimeState(createEmptySessionRuntimeState());
       setIsSessionWallLit(false);
       joinTracker.reset();
+      queueSyncGateRef.current = null;
+      restartJoinedSubscriptionsRef.current = null;
       return;
     }
 
     const wsClient = getWsClient();
+    // One sync gate per session — this effect re-runs (and creates a fresh
+    // gate) on every session change; `unsubClosed` below calls `gate.reset()`
+    // mid-session on a socket drop (same session, but the connection's
+    // ConnectionContext and in-flight sequence tracking are no longer valid).
+    const gate = createQueueSyncGate();
+    queueSyncGateRef.current = gate;
     let disposed = false;
     let subscriptionStartToken = 0;
     let queueUpdatesCleanup: (() => void) | null = null;
@@ -671,12 +731,54 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               }
             }
             // PlaybackStateChanged is transient — it carries no queue state and
-            // reuses the room's current sequence, so it bypasses the reducer.
+            // reuses the room's current sequence, so it bypasses the reducer AND
+            // the sync gate below (the gate special-cases this typename too, but
+            // returning here keeps this path a true no-op, matching pre-gate
+            // behaviour exactly).
             if (queueEvent.__typename === 'PlaybackStateChanged') return;
+
+            // Sequence-gate every other event before touching the reducer. A
+            // stale duplicate (already-applied or older sequence — e.g. a
+            // redelivered frame after a brief reconnect) is dropped; a
+            // sequence gap (missed events) triggers the existing single-flight
+            // HTTP resync instead of applying a delta on top of state we know
+            // is incomplete.
+            const gateEvent = toSyncQueueEvent(event);
+            const decision = gate.evaluateIncoming(gateEvent);
+            if (decision === 'ignore-stale') {
+              if (__DEV__) console.info('[queue] ignoring stale queue event', event.__typename, gateEvent.sequence);
+              track(SHARED_EVENTS.QueueSyncStaleEventIgnored, {
+                eventType: event.__typename,
+                sequence: gateEvent.sequence ?? null,
+                boardName: activeBoardRef.current?.boardType,
+                layoutId: activeBoardRef.current?.layoutId,
+              });
+              return;
+            }
+            if (decision === 'resync-gap') {
+              if (__DEV__)
+                console.warn('[queue] sequence gap on queue event; resyncing', event.__typename, gateEvent.sequence);
+              track(SHARED_EVENTS.QueueSyncGapResync, {
+                eventType: event.__typename,
+                sequence: gateEvent.sequence ?? null,
+                boardName: activeBoardRef.current?.boardType,
+                layoutId: activeBoardRef.current?.layoutId,
+              });
+              void resyncQueueFromServerRef.current();
+              return;
+            }
+
             const result = mapSubscriptionEnvelopeToAction(event, {
               mapItem: toClimbQueueItem,
               context: { myClientId: coordinator.clientId },
             });
+            // Advance the gate's sequence/hash tracking for every applied
+            // event, whether or not it produced a dispatchable action — mirrors
+            // web's use-event-processor.ts, which updates tracking
+            // unconditionally after the switch that processes the delta (e.g.
+            // a QueueItemAdded with a null item payload still consumes its
+            // sequence slot).
+            gate.noteApplied(gateEvent);
             if (result.kind !== 'dispatch') return;
             dispatch(result.action);
             switch (result.eventType) {
@@ -857,16 +959,32 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       subscriptionStartToken++;
       joinRetryCount = 0;
       cleanupSubscriptions();
+      // The reconnect's FullSync re-baselines tracking on its own
+      // (evaluateIncoming always applies + resets a FullSync), but reset here
+      // too so a stray in-flight event from the dead connection can't be
+      // sequence-checked against the old connection's tracking in the gap
+      // before that FullSync arrives.
+      gate.reset();
     });
     const unsubConnected = wsClient.on('connected', () => {
       void startJoinedSubscriptions();
     });
+
+    // Expose the restart path for resyncQueueFromServer's membership
+    // fallback (see there): startJoinedSubscriptions bumps the start token
+    // and tears down first, so an external call is exactly as safe as the
+    // reconnect path calling it. Nulled on teardown so a stale closure from
+    // a previous session can never be invoked.
+    restartJoinedSubscriptionsRef.current = () => {
+      void startJoinedSubscriptions();
+    };
 
     void startJoinedSubscriptions();
 
     return () => {
       disposed = true;
       subscriptionStartToken++;
+      restartJoinedSubscriptionsRef.current = null;
       cleanupSubscriptions();
       unsubConnected();
       unsubClosed();
@@ -1146,8 +1264,33 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const resyncQueueFromServer = useCallback(async (): Promise<boolean> => {
     const activeSessionId = sessionIdRef.current;
     if (!activeSessionId) return false;
-    if (resyncInFlightRef.current) return false;
+    if (resyncInFlightRef.current) {
+      // Coalesce-then-rerun-once: this request may reflect a mutation the
+      // in-flight fetch's snapshot predates (see resyncPendingRef). The
+      // `finally` below runs exactly one trailing fetch for the whole burst.
+      resyncPendingRef.current = true;
+      return false;
+    }
     resyncInFlightRef.current = true;
+
+    // Fallback when the HTTP snapshot is unavailable: restart the joined WS
+    // subscriptions instead. The HTTP `session` query returns
+    // `queueState: null` for callers that fail the session-membership check,
+    // and anonymous HTTP callers ALWAYS fail it (membership lives on the WS
+    // connection, which HTTP requests don't carry) — so for anonymous
+    // participants this fetch can never succeed and gap/drift recovery would
+    // silently stop converging. The WS connection IS a member, and a
+    // resubscribe's guaranteed initial FullSync heals state and re-baselines
+    // the gate through the normal subscription path. At most one restart per
+    // resync request, and it can't loop: the restart itself never requests a
+    // resync, and clearing the pending flag stops the trailing rerun from
+    // chaining into another doomed fetch (the FullSync supersedes whatever
+    // that rerun could return anyway).
+    const fallbackToSubscriptionRestart = () => {
+      resyncPendingRef.current = false;
+      restartJoinedSubscriptionsRef.current?.();
+    };
+
     try {
       const response = await getHttpClient().request<GetSessionQueueStateQueryResponse>(GET_SESSION_QUEUE_STATE, {
         sessionId: activeSessionId,
@@ -1156,7 +1299,27 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // in flight — only apply when it's still the active one.
       if (sessionIdRef.current !== activeSessionId) return false;
       const queueState = response.session?.queueState;
-      if (!queueState) return false;
+      if (!queueState) {
+        fallbackToSubscriptionRestart();
+        return false;
+      }
+      // A slow snapshot can resolve AFTER a rejoin FullSync already
+      // re-baselined the gate to newer state — applying it would regress
+      // both the queue and the gate baseline backwards. Same server, so a
+      // higher sequence is strictly fresher: skip the apply/re-baseline and
+      // report success (the newer FullSync already did the refreshing). A
+      // pending trailing rerun still runs — it fetches a fresh snapshot that
+      // passes this guard, covering a resync requested after that FullSync.
+      const lastTrackedSequence = queueSyncGateRef.current?.getLastSequence() ?? -1;
+      if (queueState.sequence < lastTrackedSequence) {
+        if (__DEV__) {
+          console.info(
+            '[queue] skipping stale resync snapshot',
+            `snapshot=${queueState.sequence} tracked=${lastTrackedSequence}`,
+          );
+        }
+        return true;
+      }
       dispatch({
         type: 'INITIAL_QUEUE_DATA',
         payload: {
@@ -1166,17 +1329,109 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             : null,
         },
       });
+      // Re-baseline the sync gate to this snapshot's authoritative
+      // sequence/hash — an HTTP resync applies state exactly like a
+      // reconnect FullSync (it replaces state with the server's current
+      // snapshot), so feed the gate a synthetic FullSync rather than
+      // `gate.reset()`. reset() would zero `lastSequence` back to null, and
+      // per evaluateIncoming a null lastSequence unconditionally applies the
+      // NEXT delta regardless of its sequence — so a stale/superseded event
+      // still in flight from before this resync could slip past the
+      // dedup/gap check and corrupt the just-fetched state. Feeding the real
+      // sequence/hash keeps that protection intact immediately.
+      queueSyncGateRef.current?.evaluateIncoming({
+        __typename: 'FullSync',
+        sequence: queueState.sequence,
+        stateHash: queueState.stateHash,
+      });
       return true;
     } catch (error) {
       if (__DEV__) console.warn('[queue] resyncQueueFromServer failed', error);
       reportHandledError(error, { tags: { source: 'queue-sync', op: 'resync' } });
+      // Same membership rationale as the null-queueState branch — an errored
+      // query can't reconcile anything, but a resubscribe's FullSync can.
+      // Skip when the session changed mid-flight (the new session effect owns
+      // its own subscriptions).
+      if (sessionIdRef.current === activeSessionId) {
+        fallbackToSubscriptionRestart();
+      }
       return false;
     } finally {
       resyncInFlightRef.current = false;
+      // Trailing rerun for requests coalesced during this fetch (exactly one
+      // — the rerun clears the flag before fetching, and anything that lands
+      // during the rerun re-queues behind it the same way).
+      if (resyncPendingRef.current) {
+        resyncPendingRef.current = false;
+        void resyncQueueFromServerRef.current();
+      }
     }
   }, []);
   const resyncQueueFromServerRef = useRef(resyncQueueFromServer);
   resyncQueueFromServerRef.current = resyncQueueFromServer;
+
+  // Periodic local-vs-server hash watchdog (mirrors web's 60s interval in
+  // use-session-subscriptions.ts, ported into the shared gate's
+  // verifyLocalHash). Active only while a session is live; reads current
+  // state through refs (stateRef, queueSyncGateRef, resyncQueueFromServerRef)
+  // so the closure never goes stale between renders — `sessionId` is the only
+  // dependency, matching this file's existing ref-driven interval pattern.
+  useEffect(() => {
+    if (!sessionId) return undefined;
+    const verifyIntervalId = setInterval(() => {
+      const gate = queueSyncGateRef.current;
+      if (!gate) return;
+      const { queue, currentClimbQueueItem } = stateRef.current;
+      const localHash = computeQueueStateHash(queue, currentClimbQueueItem?.uuid ?? null);
+      const result = gate.verifyLocalHash(localHash);
+      if (result.verdict === 'ok') return;
+
+      if (result.verdict === 'resync-drift') {
+        if (__DEV__) {
+          console.warn(
+            '[queue] hash drift detected; resyncing',
+            `local=${localHash} server=${result.serverHash} strikes=${result.consecutiveResyncs}`,
+          );
+        }
+        track(SHARED_EVENTS.QueueSyncHashDrift, {
+          verdict: result.verdict,
+          consecutiveResyncs: result.consecutiveResyncs,
+          boardName: activeBoardRef.current?.boardType,
+          layoutId: activeBoardRef.current?.layoutId,
+        });
+        void resyncQueueFromServerRef.current();
+        return;
+      }
+
+      // 'backoff' — the same server hash has triggered RESYNC_LOOP_THRESHOLD
+      // consecutive resyncs without the drift resolving. Report it so we can
+      // investigate, but STOP resyncing: once this happens the resync is a
+      // server-side no-op (the client and server already agree — the local
+      // computation keeps disagreeing with itself), so retrying every minute
+      // is just noise.
+      if (__DEV__) {
+        console.warn(
+          '[queue] hash drift backoff — resync loop threshold hit',
+          `local=${localHash} server=${result.serverHash} strikes=${result.consecutiveResyncs}`,
+        );
+      }
+      // Report to analytics ONCE per drift streak — the first backoff tick
+      // (strike THRESHOLD+1). A session stuck in drift would otherwise emit
+      // an event every 60s for hours. The gate resets the counter when the
+      // hashes agree or the server hash changes, so a genuinely new streak
+      // reports again. Web one-shots its Sentry report at the same point
+      // (use-session-subscriptions.ts's sentryReportedHashRef).
+      if (result.consecutiveResyncs === RESYNC_LOOP_THRESHOLD + 1) {
+        track(SHARED_EVENTS.QueueSyncHashDrift, {
+          verdict: result.verdict,
+          consecutiveResyncs: result.consecutiveResyncs,
+          boardName: activeBoardRef.current?.boardType,
+          layoutId: activeBoardRef.current?.layoutId,
+        });
+      }
+    }, 60_000);
+    return () => clearInterval(verifyIntervalId);
+  }, [sessionId]);
 
   // After a queue mutation fails in a party session, reconcile against the
   // server and tell the user their queue was refreshed. In solo (no session)
@@ -1568,6 +1823,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     // session switch and would block every future resync. Reset at the teardown
     // boundary so the next session always starts clean.
     resyncInFlightRef.current = false;
+    // Same for the coalesced-rerun flag: a pending rerun belongs to the old
+    // session and must not fire a fetch into the next one.
+    resyncPendingRef.current = false;
     sessionIdRef.current = null;
     setSessionId(null);
     dispatch({
