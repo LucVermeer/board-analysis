@@ -124,32 +124,45 @@ class RoomManager {
 
     if (!this.inactivitySweepInterval) {
       this.inactivitySweepInterval = setInterval(() => {
-        endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS)
-          .then((endedIds) => {
-            // For every auto-ended session, mirror the side effects of the
-            // explicit endSession mutation: publish SessionEnded so connected
-            // clients tear down, and end the iOS Live Activity so lock-screen
-            // tiles don't linger with stale data until ActivityKit's stale
-            // date elapses.
-            for (const sessionId of endedIds) {
-              const event: SessionEvent = {
-                __typename: 'SessionEnded',
-                reason: 'Session ended due to inactivity',
-              };
-              pubsub.publishSessionEvent(sessionId, event);
-              endLiveActivity(sessionId).catch((err) => {
-                logger.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
-              });
-            }
-          })
-          .catch((err) => {
-            logger.error('[RoomManager] Inactivity sweep failed:', err);
-          });
+        this.runInactivitySweep().catch((err) => {
+          logger.error('[RoomManager] Inactivity sweep failed:', err);
+        });
       }, INACTIVITY_SWEEP_INTERVAL_MS);
       this.inactivitySweepInterval.unref();
       logger.info(
         `[RoomManager] Inactivity sweep enabled (threshold ${INACTIVITY_THRESHOLD_MS / 60000}m, interval ${INACTIVITY_SWEEP_INTERVAL_MS / 60000}m)`,
       );
+    }
+  }
+
+  /**
+   * Run one inactivity-sweep tick: end sessions whose `lastActivity` predates
+   * the threshold, then mirror the side effects of the explicit `endSession`
+   * mutation for each swept id — publish `SessionEnded` so connected clients
+   * tear down, end the iOS Live Activity so lock-screen tiles don't linger
+   * with stale data, and drop this instance's local board-serial /
+   * recent-climbs shadows (see `clearLocalSessionShadows`; same single-
+   * instance leak `endSession` guards against, just reached via the
+   * inactivity path instead of an explicit end).
+   *
+   * Extracted from the `setInterval` callback in `initialize()` so tests can
+   * drive a single sweep tick directly instead of waiting on the real
+   * interval. Rethrows on failure: the interval callback catches and logs so
+   * a bad tick never kills the timer, while direct callers (tests) see the
+   * error.
+   */
+  async runInactivitySweep(): Promise<void> {
+    const endedIds = await endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS);
+    for (const sessionId of endedIds) {
+      this.clearLocalSessionShadows(sessionId);
+      const event: SessionEvent = {
+        __typename: 'SessionEnded',
+        reason: 'Session ended due to inactivity',
+      };
+      pubsub.publishSessionEvent(sessionId, event);
+      endLiveActivity(sessionId).catch((err) => {
+        logger.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
+      });
     }
   }
 
@@ -613,16 +626,25 @@ class RoomManager {
     return getUserSessionsFn(userId);
   }
 
-  async endSession(sessionId: string): Promise<void> {
-    // Drop the in-memory board-serial / recent-climbs shadows for this session
-    // before delegating to the discovery layer. The shadows are local to
-    // this RoomManager instance and were growing unbounded across session
-    // lifecycles — endSession is the only deterministic hook to clear them.
-    // Distributed-state's Redis keys for these are cleaned up by
-    // `cleanupEmptySession` when the session set drains; this is the
-    // single-instance / single-process equivalent.
+  /**
+   * Drop the in-memory board-serial / recent-climbs shadows for this
+   * session. The shadows are local to this RoomManager instance (the
+   * single-instance / no-Redis fallback for `localBoardSerialBySession` and
+   * `localRecentClimbsBySession` — see their field comments) and otherwise
+   * grow unbounded across session lifecycles, since nothing else ever
+   * deletes their entries. Distributed-state's Redis keys for the same data
+   * are cleaned up by `cleanupEmptySession` when the session set drains;
+   * this is the single-instance / single-process equivalent, called from
+   * every path that durably ends a session (explicit `endSession` and the
+   * inactivity sweep).
+   */
+  private clearLocalSessionShadows(sessionId: string): void {
     this.localBoardSerialBySession.delete(sessionId);
     this.localRecentClimbsBySession.delete(sessionId);
+  }
+
+  async endSession(sessionId: string): Promise<void> {
+    this.clearLocalSessionShadows(sessionId);
     return endSessionFn(
       sessionId,
       this.sessions,

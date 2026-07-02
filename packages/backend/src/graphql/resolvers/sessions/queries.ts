@@ -90,8 +90,11 @@ export const sessionQueries = {
    * Returns empty array if user is not authenticated
    */
   mySessions: async (_: unknown, __: unknown, ctx: ConnectionContext): Promise<DiscoverableSession[]> => {
-    // For now, we use userId from context if available
-    // In production, this should use authenticated user ID
+    // ctx.userId is set by the auth middleware (middleware/auth.ts) only
+    // after verifying the caller's JWT — it is never client-supplied.
+    // Unauthenticated requests have no userId, so they get an empty list
+    // rather than an auth error (this query is used for optional
+    // "your sessions" UI, not gated behind a login wall).
     if (!ctx.userId) {
       return [];
     }

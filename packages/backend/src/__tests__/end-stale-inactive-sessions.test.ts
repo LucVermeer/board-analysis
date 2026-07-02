@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vite-plus/test';
+import { describe, it, expect, vi, afterEach } from 'vite-plus/test';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client';
 import { sessions } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { endStaleInactiveSessions } from '../services/room-manager/session-discovery';
+import { roomManager } from '../services/room-manager';
+import { pubsub } from '../pubsub/index';
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -151,5 +153,93 @@ describe('endStaleInactiveSessions', () => {
 
     expect(endedIds).toContain(stale);
     expect(endedIds).not.toContain(fresh);
+  });
+});
+
+describe('RoomManager.runInactivitySweep', () => {
+  // `roomManager.reset()` runs in the suite-wide `beforeEach` (setup.ts) and
+  // is never followed by `initialize(redis)` here, so `distributedState`
+  // stays null for every test in this file — i.e. the no-Redis,
+  // single-instance fallback path that owns `localBoardSerialBySession` /
+  // `localRecentClimbsBySession` is exactly what's under test.
+
+  // The tests below spy on the shared pubsub singleton; restore it so the
+  // no-op mock can't bleed into other suites (no global restoreMocks).
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('drains the local board-serial / recent-climbs shadows for swept sessions and still publishes SessionEnded', async () => {
+    const staleSessionId = uuidv4();
+    const climbUuid = uuidv4();
+    const boardSerial = 'KB-AB12-CD34';
+
+    await db.insert(sessions).values({
+      id: staleSessionId,
+      boardPath: '/kilter/1/2/3/40',
+      status: 'active',
+      isPermanent: false,
+      lastActivity: minutesAgo(90),
+    });
+
+    // Seed the shadow maps via the same public paths the queue-navigation /
+    // wall-confirm mutations use, rather than reaching into RoomManager's
+    // private fields.
+    await roomManager.setSessionBoardSerialAndReturnPrevious(staleSessionId, boardSerial);
+    await roomManager.pushRecentClimb(staleSessionId, climbUuid);
+
+    expect(await roomManager.getSessionBoardSerial(staleSessionId)).toBe(boardSerial);
+    expect(await roomManager.isRecentClimb(staleSessionId, climbUuid)).toBe(true);
+
+    const publishSpy = vi.spyOn(pubsub, 'publishSessionEvent').mockImplementation(() => {});
+
+    await roomManager.runInactivitySweep();
+
+    // Shadows are gone for the swept session.
+    expect(await roomManager.getSessionBoardSerial(staleSessionId)).toBeNull();
+    expect(await roomManager.isRecentClimb(staleSessionId, climbUuid)).toBe(false);
+
+    // The sweep's existing side effect (publishing SessionEnded) still fires.
+    expect(publishSpy).toHaveBeenCalledWith(staleSessionId, {
+      __typename: 'SessionEnded',
+      reason: 'Session ended due to inactivity',
+    });
+
+    const [row] = await db.select().from(sessions).where(eq(sessions.id, staleSessionId)).limit(1);
+    expect(row?.status).toBe('ended');
+  });
+
+  it('leaves shadows for unrelated, still-active sessions untouched', async () => {
+    const staleSessionId = uuidv4();
+    const activeSessionId = uuidv4();
+    const activeSerial = 'KB-EF56-GH78';
+
+    await db.insert(sessions).values([
+      {
+        id: staleSessionId,
+        boardPath: '/kilter/1/2/3/40',
+        status: 'active',
+        isPermanent: false,
+        lastActivity: minutesAgo(90),
+      },
+      {
+        id: activeSessionId,
+        boardPath: '/kilter/1/2/3/40',
+        status: 'active',
+        isPermanent: false,
+        lastActivity: minutesAgo(5),
+      },
+    ]);
+
+    await roomManager.setSessionBoardSerialAndReturnPrevious(activeSessionId, activeSerial);
+
+    vi.spyOn(pubsub, 'publishSessionEvent').mockImplementation(() => {});
+
+    await roomManager.runInactivitySweep();
+
+    expect(await roomManager.getSessionBoardSerial(activeSessionId)).toBe(activeSerial);
+
+    const [row] = await db.select().from(sessions).where(eq(sessions.id, activeSessionId)).limit(1);
+    expect(row?.status).toBe('active');
   });
 });
