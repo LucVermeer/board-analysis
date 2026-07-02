@@ -3,9 +3,8 @@ import { View, RefreshControl, Pressable, StyleSheet, Platform } from 'react-nat
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
-import type { AscentFeedItem, GetUserAscentsFeedQueryResponse } from '@boardsesh/graphql/operations';
+import type { AscentFeedItem } from '@boardsesh/graphql/operations';
 import {
   toAscentFeedInput,
   DEFAULT_LOGBOOK_FILTERS,
@@ -227,18 +226,23 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   // Tap → set the climb active and open the play drawer (own logbook and another
   // climber's read-only logbook alike). AscentFeedItem structurally satisfies the
   // `tick` kind, which builds the climb + board config from frames.
+  // Read the ordinal map through a ref so this callback (and renderItem above
+  // it) keeps its identity across page loads — the map is rebuilt with every
+  // fetched page, but a tap only needs whatever is current at fire time.
+  const entryIndexRef = useRef(entryIndexByUuid);
+  entryIndexRef.current = entryIndexByUuid;
   const handleActivate = useCallback(
     (ascent: AscentFeedItem) => {
       track(SHARED_EVENTS.LogbookRowClicked, {
         climbUuid: ascent.climbUuid,
-        rowIndex: entryIndexByUuid.get(ascent.uuid),
+        rowIndex: entryIndexRef.current.get(ascent.uuid),
         hasNote: logbookNoteIsVisible(ascent.comment),
         status: ascent.status,
       });
       // Default open mode is now "set active", so no option is needed here.
       openClimbInPlayDrawer({ kind: 'tick', tick: ascent }, { openPlayDrawer, router });
     },
-    [openPlayDrawer, router, entryIndexByUuid],
+    [openPlayDrawer, router],
   );
 
   // Swipe left-to-right → edit this tick (owner-only). The old tap behaviour.
@@ -251,13 +255,10 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   // confirm-guarded: DELETE_TICK is a real server-side delete synced to Aurora,
   // so a one-gesture commit is banned. The uuid is captured BEFORE the await —
   // the dialog blocks touches, not data, and FlashList can recycle the source
-  // row onto a different ascent while it's up. On success the tick is stripped
-  // from the cached pages immediately (the hook's invalidation refetches every
-  // loaded offset page sequentially, which is seconds on a deep list) and the
-  // background refetch then reconciles.
+  // row onto a different ascent while it's up. The optimistic removal from the
+  // cached feed pages lives inside useDeleteTick, shared by every delete path.
   const deleteTick = useDeleteTick();
   const confirmDialog = useConfirm();
-  const queryClient = useQueryClient();
   const { showToast } = useToast();
   // Depend on the STABLE pieces of the mutation, not the result object — that
   // object gets a fresh identity every render, which would recreate this
@@ -284,22 +285,6 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
           onSuccess: () => {
             track(SHARED_EVENTS.LogbookEntryDeleted, { method });
             hapticSuccess();
-            queryClient.setQueriesData<InfiniteData<GetUserAscentsFeedQueryResponse>>(
-              { queryKey: ['userAscentsFeed', userId] },
-              (cached) =>
-                cached
-                  ? {
-                      ...cached,
-                      pages: cached.pages.map((page) => ({
-                        ...page,
-                        userAscentsFeed: {
-                          ...page.userAscentsFeed,
-                          items: page.userAscentsFeed.items.filter((item) => item.uuid !== targetUuid),
-                        },
-                      })),
-                    }
-                  : cached,
-            );
           },
           onError: () => {
             hapticError();
@@ -312,7 +297,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
       // outcome for a destructive action. Never rethrow into the void.
       void runGuardedDelete().catch(() => {});
     },
-    [deleteTickMutate, confirmDialog, queryClient, userId, showToast, t],
+    [deleteTickMutate, confirmDialog, showToast, t],
   );
 
   // Long press → open the climb actions sheet. For the owner it carries an

@@ -30,6 +30,12 @@ describe('normalizeLogbookQuality', () => {
     expect(normalizeLogbookQuality(5)).toBe(5);
     expect(normalizeLogbookQuality(7)).toBe(5);
   });
+
+  it('normalises defensive float input by rounding first', () => {
+    expect(normalizeLogbookQuality(0.3)).toBeNull(); // rounds to 0 → unset, never "0★"
+    expect(normalizeLogbookQuality(0.6)).toBe(1);
+    expect(normalizeLogbookQuality(4.4)).toBe(4);
+  });
 });
 
 describe('logbookNoteIsVisible', () => {

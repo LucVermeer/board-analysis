@@ -127,4 +127,39 @@ describe('useDeleteTick (shared)', () => {
 
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
+
+  it('strips the deleted tick from every cached ascents-feed page before the refetch lands', async () => {
+    const executeHttp = vi.fn().mockResolvedValue({ deleteTick: true });
+    const { wrapper, queryClient } = createWrapper({ executeHttp: executeHttp as unknown as ExecuteHttp });
+    // Two cached feed variants (different inputs) — the strip must hit both,
+    // and only remove the deleted uuid. Invalidation's refetch never lands in
+    // this harness (no network), so the post-mutate cache IS the strip result.
+    const page = (uuids: string[]) => ({
+      pages: [
+        { userAscentsFeed: { items: uuids.map((uuid) => ({ uuid })), totalCount: uuids.length, hasMore: false } },
+      ],
+      pageParams: [0],
+    });
+    queryClient.setQueryData(['userAscentsFeed', 'user-1', { sortBy: 'recent' }], page(['tick-1', 'tick-2']));
+    queryClient.setQueryData(['userAscentsFeed', 'user-1', { sortBy: 'hardest' }], page(['tick-1']));
+    const { result } = renderHook(() => useDeleteTick(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate('tick-1');
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const recent = queryClient.getQueryData<{ pages: { userAscentsFeed: { items: { uuid: string }[] } }[] }>([
+      'userAscentsFeed',
+      'user-1',
+      { sortBy: 'recent' },
+    ]);
+    const hardest = queryClient.getQueryData<{ pages: { userAscentsFeed: { items: { uuid: string }[] } }[] }>([
+      'userAscentsFeed',
+      'user-1',
+      { sortBy: 'hardest' },
+    ]);
+    expect(recent?.pages[0].userAscentsFeed.items).toEqual([{ uuid: 'tick-2' }]);
+    expect(hardest?.pages[0].userAscentsFeed.items).toEqual([]);
+  });
 });

@@ -163,7 +163,6 @@ export const GET_USER_ASCENTS_FEED = gql`
         comment
         climbedAt
         frames
-        hasBetaVideo
       }
       totalCount
       hasMore
@@ -196,8 +195,13 @@ export type AscentFeedItem = {
   comment: string;
   climbedAt: string;
   frames: string | null;
-  /** Beta video attached to this ascent (null on feeds that don't resolve it). */
-  hasBetaVideo: boolean | null;
+  /**
+   * Beta video attached to this ascent. OPTIONAL during the backend-first
+   * rollout: the selection is re-added to the queries above once the backend
+   * exposing the field is deployed (prod GraphQL rejects unknown fields, and
+   * OTA preview bundles hit prod). UI must guard on `=== true`.
+   */
+  hasBetaVideo?: boolean | null;
 };
 
 // Type for the feed query variables
@@ -274,7 +278,6 @@ export const GET_USER_ASCENT_CAPTION_MATCHES = gql`
       comment
       climbedAt
       frames
-      hasBetaVideo
     }
   }
 `;

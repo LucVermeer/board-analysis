@@ -8237,7 +8237,6 @@ export type GetUserAscentsFeedQuery = {
       comment: string;
       climbedAt: string;
       frames?: string | null;
-      hasBetaVideo?: boolean | null;
     }>;
   };
 };
@@ -8274,7 +8273,6 @@ export type GetUserAscentCaptionMatchesQuery = {
     comment: string;
     climbedAt: string;
     frames?: string | null;
-    hasBetaVideo?: boolean | null;
   }>;
 };
 
@@ -13983,7 +13981,6 @@ export const GetUserAscentsFeedDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'climbedAt' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'hasBetaVideo' } },
                     ],
                   },
                 },
@@ -14060,7 +14057,6 @@ export const GetUserAscentCaptionMatchesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'climbedAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'hasBetaVideo' } },
               ],
             },
           },

@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Guarded-delete contract: swipe/a11y delete must go through the destructive
 // confirm dialog before DELETE_TICK fires (a real server-side, Aurora-synced
-// delete), and a success must be tracked + stripped from the cached pages.
+// delete), and a success must be tracked. (The optimistic cache strip lives
+// in useDeleteTick — covered by use-mutate-tick.test.tsx.)
 const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 const deleteTick = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 const dialog = vi.hoisted(() => ({ confirm: vi.fn<(options: unknown) => Promise<boolean>>(async () => false) }));
-const queryClient = vi.hoisted(() => ({ setQueriesData: vi.fn() }));
 const toast = vi.hoisted(() => ({ showToast: vi.fn() }));
 const haptics = vi.hoisted(() => ({ hapticSelection: vi.fn(), hapticSuccess: vi.fn(), hapticError: vi.fn() }));
 
@@ -107,7 +107,6 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 vi.mock('@boardsesh/board-react', () => ({ useDeleteTick: () => deleteTick }));
 vi.mock('../../../providers/dialog-provider', () => ({ useConfirm: () => dialog.confirm }));
 vi.mock('../../../providers/toast-provider', () => ({ useToast: () => toast }));
-vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => queryClient }));
 
 import { LogbookTab } from '../LogbookTab';
 
@@ -125,7 +124,6 @@ beforeEach(() => {
   deleteTick.mutate.mockClear();
   dialog.confirm.mockClear();
   dialog.confirm.mockImplementation(async () => false);
-  queryClient.setQueriesData.mockClear();
   toast.showToast.mockClear();
   haptics.hapticError.mockClear();
   row.requestDelete = null;
@@ -142,7 +140,7 @@ describe('LogbookTab guarded delete', () => {
     expect(deleteTick.mutate).not.toHaveBeenCalled();
   });
 
-  it('deletes the captured uuid once confirmed, tracks the method, and strips the cache on success', async () => {
+  it('deletes the captured uuid once confirmed and tracks the method on success', async () => {
     dialog.confirm.mockImplementation(async () => true);
     render(createElement(LogbookTab, { userId: 'user-1' }));
 
@@ -153,26 +151,12 @@ describe('LogbookTab guarded delete', () => {
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     );
 
-    // Drive the mutation's success path.
+    // Drive the mutation's success path. (The optimistic cache strip lives in
+    // useDeleteTick itself — covered by use-mutate-tick.test.tsx.)
     const mutateOptions = deleteTick.mutate.mock.calls[0][1] as { onSuccess: () => void };
     act(() => mutateOptions.onSuccess());
 
     expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'swipe' });
-    expect(queryClient.setQueriesData).toHaveBeenCalledWith(
-      { queryKey: ['userAscentsFeed', 'user-1'] },
-      expect.any(Function),
-    );
-
-    // The cache updater strips exactly the deleted uuid from every page.
-    const [, updater] = queryClient.setQueriesData.mock.calls[0] as [
-      unknown,
-      (cached: unknown) => { pages: { userAscentsFeed: { items: { uuid: string }[] } }[] },
-    ];
-    const updated = updater({
-      pages: [{ userAscentsFeed: { items: [{ uuid: 'tick-1' }, { uuid: 'tick-2' }] } }],
-      pageParams: [0],
-    });
-    expect(updated.pages[0].userAscentsFeed.items).toEqual([{ uuid: 'tick-2' }]);
   });
 
   it('tracks the a11y method when the delete came from an accessibility action', async () => {
@@ -187,7 +171,7 @@ describe('LogbookTab guarded delete', () => {
     expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'a11y' });
   });
 
-  it('surfaces a failed delete with the error haptic + toast and leaves the cache alone', async () => {
+  it('surfaces a failed delete with the error haptic + toast', async () => {
     dialog.confirm.mockImplementation(async () => true);
     render(createElement(LogbookTab, { userId: 'user-1' }));
 
@@ -198,7 +182,6 @@ describe('LogbookTab guarded delete', () => {
 
     expect(haptics.hapticError).toHaveBeenCalled();
     expect(toast.showToast).toHaveBeenCalledWith('mobile.logbook.deleteError', 'error');
-    expect(queryClient.setQueriesData).not.toHaveBeenCalled();
     expect(analytics.track).not.toHaveBeenCalledWith('Logbook Entry Deleted', expect.anything());
   });
 });

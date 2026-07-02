@@ -26,11 +26,15 @@ export function displayedAttemptCount(attemptCount: number): number {
 /**
  * The climber's OWN star rating, normalised for display. Quality is a 1–5
  * scale; the edit sheet's "clear" saves 0, and older rows carry null — both
- * mean "not rated" and render nothing. Values above 5 (defensive) clamp.
+ * mean "not rated" and render nothing. Defensive against out-of-range input:
+ * rounding FIRST means a sub-half float (0.3) normalises to unset instead of
+ * rendering "0★", and anything above 5 clamps.
  */
 export function normalizeLogbookQuality(quality: number | null | undefined): number | null {
-  if (quality == null || quality <= 0) return null;
-  return Math.min(5, Math.round(quality));
+  if (quality == null) return null;
+  const rounded = Math.round(quality);
+  if (rounded < 1) return null;
+  return Math.min(5, rounded);
 }
 
 /**
