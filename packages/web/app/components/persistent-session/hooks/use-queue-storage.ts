@@ -74,11 +74,12 @@ export function useQueueStorage({
   // with it off-board.
   const previousActiveSessionRef = useRef<ActiveSessionInfo | null>(null);
   useEffect(() => {
-    const endedSession = previousActiveSessionRef.current;
+    const previous = previousActiveSessionRef.current;
     previousActiveSessionRef.current = activeSession;
-    if (endedSession && !activeSession && endedSession.boardPath && endedSession.boardDetails) {
-      setSoloBoardPath(endedSession.boardPath);
-      setSoloBoardDetails(endedSession.boardDetails);
+    const adoption = resolveEndedSessionBoardAdoption(previous, activeSession);
+    if (adoption) {
+      setSoloBoardPath(adoption.boardPath);
+      setSoloBoardDetails(adoption.boardDetails);
     }
   }, [activeSession]);
 
@@ -205,6 +206,21 @@ export function useQueueStorage({
     isBoardContextLoaded,
     setBoardContext,
   };
+}
+
+// Pure transition predicate for the party-end board adoption above. Returns the
+// board to stamp as the solo context when a party ends (previous session
+// present, current gone, and the ended session carried a board), or null for
+// every other transition (activation, session→session swap, no-op). Extracted
+// so the transition is unit-testable without the hook's IndexedDB/GraphQL deps.
+export function resolveEndedSessionBoardAdoption(
+  previous: ActiveSessionInfo | null,
+  current: ActiveSessionInfo | null,
+): { boardPath: string; boardDetails: BoardDetails } | null {
+  if (previous && !current && previous.boardPath && previous.boardDetails) {
+    return { boardPath: previous.boardPath, boardDetails: previous.boardDetails };
+  }
+  return null;
 }
 
 // Null summary is ambiguous (fresh session with no ticks vs. missing) so we treat it as "still active".

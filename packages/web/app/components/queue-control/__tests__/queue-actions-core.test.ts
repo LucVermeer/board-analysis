@@ -97,9 +97,17 @@ type HarnessOptions = {
   /** When true, mimics the board-route provider: `applyLocal` always
    * dispatches into the real reducer, and party mutations are gated on
    * `hasConnected && !isDisconnected` (QueueContext model). When false,
-   * mimics the bridge: `applyLocal` no-ops while a party session is active
-   * (optimistic updates wait for the server echo) and party mutations are
-   * attempted unconditionally whenever a party session is active. */
+   * mimics the bridge, where party mutations are attempted unconditionally
+   * whenever a party session is active.
+   *
+   * NOTE: the `applyLocal` no-op below is a MODELING SHORTCUT, not production
+   * behavior. Post-W6 the real bridge dispatches optimistically for party too;
+   * its `getSnapshot` simply lags via a render-captured ref, so within one
+   * synchronous action the factory reads pre-dispatch state either way — the
+   * no-op reproduces that same mutation-payload behavior without wiring a live
+   * reducer. The optimistic-STATE half of any fix therefore can't be exercised
+   * here; it's pinned against the real reducer in queue-bridge-context.test.tsx
+   * (MockRootQueueProvider). */
   gateOnConnection: boolean;
   initialQueue?: ClimbQueueItem[];
   initialCurrent?: ClimbQueueItem | null;

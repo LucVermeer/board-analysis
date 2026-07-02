@@ -393,8 +393,15 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
     // correlationId, so the reducer never clears the pending id we registered
     // here (stale pending → spurious forced resync ~5-7s later) and its
     // UPDATE_QUEUE clears the reducer-owned playlistSuggestionSource. Reconcile
-    // both locally after a successful setQueue: drop the pending id and re-set
-    // the source we just activated so "Next" keeps drawing from the playlist.
+    // both locally after a successful setQueue.
+    //   - Dropping the pending id is race-FREE: the echo never re-adds a pending
+    //     id, so the spurious-resync symptom is fixed regardless of ordering.
+    //   - Re-setting the source is best-effort: it races the echo. The backend
+    //     dispatches the local echo synchronously inside the setQueue resolver
+    //     (before the mutation ack), so the common single-connection ordering
+    //     has the echo clear the source *before* this runs and re-sets it. The
+    //     worst case (ack observed before the echo pumps) is a transient loss of
+    //     playlist suggestions that self-heals on the next activation.
     const reconcileAfterSetQueue = () => {
       if (correlationId) applyLocal({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
       if (nextPlaylistSuggestionSource) setPlaylistSuggestionSourceLocal(nextPlaylistSuggestionSource);
