@@ -5,8 +5,8 @@
 // brings the link back. A manual "already have a link?" paste field is kept at
 // the bottom as a fallback (reuses the attachBetaLink mutation).
 //
-// Driven by a `visible` prop (mirrors ClimbActionsSheet / LogAscentSheet) so it
-// can present above the play drawer's own modal via stackBehavior="push".
+// Driven by a controlled `visible` prop (mirrors ClimbActionsSheet): the
+// ModalSheet coordinator presents it above the play drawer's own native modal.
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
@@ -129,6 +129,57 @@ export function AddBetaVideoSheet({
   const snapPoints = useMemo(() => ['85%'], []);
   const submitDisabled = !isValid || attach.isPending;
 
+  // The paste fallback lives in the sheet's `footer` slot: the wrapper wraps the
+  // footer in a KeyboardAvoidingView that lifts the input + submit clear of the
+  // software keyboard (the three share-steps scroll above). It previously sat in
+  // the scroll body with no avoidance, so the keyboard covered this bottom field.
+  const pasteFooter = (
+    <View style={styles.pasteFooter}>
+      <View style={styles.divider}>
+        <View style={[styles.dividerLine, { backgroundColor: systemColors.separator }]} />
+        <Text variant="footnote" color={systemColors.tertiaryLabel}>
+          {t('mobile.betaVideos.pasteSectionLabel')}
+        </Text>
+        <View style={[styles.dividerLine, { backgroundColor: systemColors.separator }]} />
+      </View>
+
+      <BottomSheetTextInput
+        value={url}
+        onChangeText={setUrl}
+        placeholder={t('mobile.betaVideos.urlPlaceholder')}
+        placeholderTextColor={iosSystemColors.systemGray}
+        keyboardType="url"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="send"
+        onSubmitEditing={handleSubmit}
+        style={[styles.input, { color: systemColors.label, borderColor: systemColors.separator }]}
+      />
+      {showError && (
+        <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
+          {t('mobile.betaVideos.urlInvalid')}
+        </Text>
+      )}
+
+      <Pressable
+        onPress={handleSubmit}
+        disabled={submitDisabled}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: submitDisabled }}
+        style={({ pressed }) => [
+          styles.submitButton,
+          { backgroundColor: brandColors.primaryFill },
+          submitDisabled && styles.submitButtonDisabled,
+          pressed && !submitDisabled && styles.submitButtonPressed,
+        ]}
+      >
+        <Text variant="headline" color={brandColors.onPrimary}>
+          {attach.isPending ? t('mobile.betaVideos.submitting') : t('mobile.betaVideos.submitButton')}
+        </Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <ModalSheet
       visible={visible && !!climb}
@@ -136,6 +187,7 @@ export function AddBetaVideoSheet({
       onClose={onClose}
       onFullyDismissed={handleFullyDismissed}
       scrollable
+      footer={pasteFooter}
     >
       <View style={styles.container}>
         <Text variant="title3" style={styles.title}>
@@ -175,53 +227,6 @@ export function AddBetaVideoSheet({
             {t('mobile.betaVideos.shareBackInstructions')}
           </Text>
         </StepRow>
-
-        <View style={styles.divider}>
-          <View style={[styles.dividerLine, { backgroundColor: systemColors.separator }]} />
-          <Text variant="footnote" color={systemColors.tertiaryLabel}>
-            {t('mobile.betaVideos.pasteSectionLabel')}
-          </Text>
-          <View style={[styles.dividerLine, { backgroundColor: systemColors.separator }]} />
-        </View>
-
-        {/* `BottomSheetTextInput` (vs the bare `TextInput`) is what makes the host
-            sheet stay above the keyboard — paired with ModalSheet's
-            keyboardBehavior="interactive" it lifts the input clear of the
-            software keyboard instead of letting it cover this bottom field. */}
-        <BottomSheetTextInput
-          value={url}
-          onChangeText={setUrl}
-          placeholder={t('mobile.betaVideos.urlPlaceholder')}
-          placeholderTextColor={iosSystemColors.systemGray}
-          keyboardType="url"
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="send"
-          onSubmitEditing={handleSubmit}
-          style={[styles.input, { color: systemColors.label, borderColor: systemColors.separator }]}
-        />
-        {showError && (
-          <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
-            {t('mobile.betaVideos.urlInvalid')}
-          </Text>
-        )}
-
-        <Pressable
-          onPress={handleSubmit}
-          disabled={submitDisabled}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: submitDisabled }}
-          style={({ pressed }) => [
-            styles.submitButton,
-            { backgroundColor: brandColors.primaryFill },
-            submitDisabled && styles.submitButtonDisabled,
-            pressed && !submitDisabled && styles.submitButtonPressed,
-          ]}
-        >
-          <Text variant="headline" color={brandColors.onPrimary}>
-            {attach.isPending ? t('mobile.betaVideos.submitting') : t('mobile.betaVideos.submitButton')}
-          </Text>
-        </Pressable>
       </View>
     </ModalSheet>
   );
@@ -290,6 +295,9 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     alignSelf: 'flex-start',
+  },
+  pasteFooter: {
+    gap: spacing[3],
   },
   divider: {
     flexDirection: 'row',

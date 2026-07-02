@@ -55,7 +55,9 @@ vi.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Error: 'error' },
 }));
 vi.mock('../ModalSheet', () => ({
-  ModalSheet: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  // Render both slots: the paste field + submit now live in `footer`.
+  ModalSheet: ({ children, footer }: { children?: ReactNode; footer?: ReactNode }) =>
+    createElement('div', null, children, footer),
 }));
 vi.mock('../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
