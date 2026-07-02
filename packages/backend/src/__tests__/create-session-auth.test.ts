@@ -146,6 +146,9 @@ describe('createSession authentication', () => {
     expect(result.users).toEqual([]);
     expect(result.queueState).toBeNull();
     expect(result.isLeader).toBe(false);
-    expect(result.clientId).toBeNull();
+    // '' rather than null: the schema declares clientId: ID! and the
+    // stateless HTTP request has no connection id to report. Matches
+    // buildSessionPayload's empty-string fallback convention.
+    expect(result.clientId).toBe('');
   });
 });

@@ -165,12 +165,70 @@ describe('session query — membership gate compat matrix', () => {
     expect(dbMock.limit).not.toHaveBeenCalled();
   });
 
+  it('WS caller the distributed state disowns still falls through to the durable row (pins the check order)', async () => {
+    // An authenticated WS connection whose distributed-state entry says "not
+    // in this session" (e.g. rejoin race, or a past participant on a fresh
+    // socket) must still reach the durable check — distributed-state `false`
+    // is a non-match, not a veto.
+    distributedState.enabled = true;
+    distributedState.isConnectionInSession.mockResolvedValueOnce(false);
+    dbMock.limit.mockResolvedValueOnce([{ sessionId: 'session-1' }]);
+    const ctx = makeCtx({
+      connectionId: 'ws-conn-disowned',
+      transport: 'ws',
+      userId: 'user-42',
+      isAuthenticated: true,
+    });
+
+    const result = await sessionQueries.session(undefined, { sessionId: 'session-1' }, ctx);
+
+    expect(result!.queueState).not.toBeNull();
+    expect(distributedState.isConnectionInSession).toHaveBeenCalledWith('ws-conn-disowned', 'session-1');
+    expect(dbMock.limit).toHaveBeenCalledTimes(1);
+  });
+
+  it('distributed-state failure (Redis blip) degrades to the durable check instead of 500ing: row → full payload', async () => {
+    distributedState.enabled = true;
+    distributedState.isConnectionInSession.mockRejectedValueOnce(new Error('Redis connection lost'));
+    dbMock.limit.mockResolvedValueOnce([{ sessionId: 'session-1' }]);
+    const ctx = makeCtx({
+      connectionId: 'ws-conn-redis-blip',
+      transport: 'ws',
+      userId: 'user-42',
+      isAuthenticated: true,
+    });
+
+    const result = await sessionQueries.session(undefined, { sessionId: 'session-1' }, ctx);
+
+    expect(result!.queueState).not.toBeNull();
+    expect(dbMock.limit).toHaveBeenCalledTimes(1);
+  });
+
+  it('distributed-state failure with no durable row degrades to the preview — an error never grants membership', async () => {
+    distributedState.enabled = true;
+    distributedState.isConnectionInSession.mockRejectedValueOnce(new Error('Redis connection lost'));
+    dbMock.limit.mockResolvedValueOnce([]);
+    const ctx = makeCtx({
+      connectionId: 'ws-conn-redis-blip-anon',
+      transport: 'ws',
+      userId: 'user-42',
+      isAuthenticated: true,
+    });
+
+    const result = await sessionQueries.session(undefined, { sessionId: 'session-1' }, ctx);
+
+    expect(result).not.toBeNull(); // no 500 — the query still resolves
+    expect(result!.queueState).toBeNull();
+    expect(result!.lastConnectedBoardSerial).toBeNull();
+  });
+
   it('authenticated past participant over HTTP (fresh http-* connectionId, durable participant row) gets the full payload', async () => {
     // HTTP requests are stateless (never in the `graphql/context.ts` map) and
-    // get a fresh connectionId every call — see yoga.ts — so neither the
-    // local-context nor distributed-state check can match. The durable
-    // `board_session_participants` row is the only signal.
+    // get a fresh connectionId every call — see yoga.ts — so the resolver
+    // skips the connection-based checks entirely and goes straight to the
+    // durable `board_session_participants` row.
     dbMock.limit.mockResolvedValueOnce([{ sessionId: 'session-1' }]);
+    distributedState.enabled = true; // available, but must not be consulted for HTTP
     const ctx = makeCtx({
       connectionId: 'http-11111111-1111-1111-1111-111111111111',
       transport: 'http',
@@ -184,6 +242,9 @@ describe('session query — membership gate compat matrix', () => {
     expect(result!.queueState).not.toBeNull();
     expect(result!.lastConnectedBoardSerial).toBe('SERIAL-123');
     expect(dbMock.limit).toHaveBeenCalledTimes(1);
+    // HTTP short-circuit: the connection-based checks are skipped, not just
+    // unmatched.
+    expect(distributedState.isConnectionInSession).not.toHaveBeenCalled();
   });
 
   it('anonymous HTTP caller for a live session they were "in" gets a preview — accepted degradation, no stable identity to check durably', async () => {
