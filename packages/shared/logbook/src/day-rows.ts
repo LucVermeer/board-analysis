@@ -168,34 +168,35 @@ export function buildLogbookListRows<T extends LogbookDayItem>(
   const rows: LogbookListRow<T>[] = [];
   const dayOccurrences = new Map<string, number>();
 
-  let run: T[] = [];
-  let runDayKey = '';
-
-  const flushRun = (isLastRun: boolean) => {
+  // Explicit parameters (not captured mutable outer state) so the flush can't
+  // silently read a half-updated run if this loop is ever reordered.
+  const flushRun = (run: readonly T[], dayKey: string, isLastRun: boolean) => {
     if (run.length === 0) return;
-    const occurrence = dayOccurrences.get(runDayKey) ?? 0;
-    dayOccurrences.set(runDayKey, occurrence + 1);
+    const occurrence = dayOccurrences.get(dayKey) ?? 0;
+    dayOccurrences.set(dayKey, occurrence + 1);
     const complete = !isLastRun || !options.hasMore;
     rows.push({
       type: 'divider',
-      key: occurrence === 0 ? `day-${runDayKey}` : `day-${runDayKey}-${occurrence}`,
-      dayKey: runDayKey,
+      key: occurrence === 0 ? `day-${dayKey}` : `day-${dayKey}-${occurrence}`,
+      dayKey,
       dayStartMs: parseTickTimeLocal(run[0].climbedAt).startOf('day').valueOf(),
       stats: complete ? statsForRun(run) : null,
     });
     for (const item of run) rows.push({ type: 'entry', key: item.uuid, item });
   };
 
+  let run: T[] = [];
+  let runDayKey = '';
   for (const item of deduped) {
     const dayKey = logbookDayKey(item.climbedAt);
     if (dayKey !== runDayKey && run.length > 0) {
-      flushRun(false);
+      flushRun(run, runDayKey, false);
       run = [];
     }
     runDayKey = dayKey;
     run.push(item);
   }
-  flushRun(true);
+  flushRun(run, runDayKey, true);
 
   return rows;
 }
