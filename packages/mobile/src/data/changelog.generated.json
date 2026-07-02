@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-02T12:39:46.577Z",
+  "generatedAt": "2026-07-02T12:55:46.130Z",
   "entries": [
+    {
+      "prNumber": 3352,
+      "category": "fixed",
+      "title": "Filters work again: the Apply button no longer disappears after using the hold, area, or setter pickers, so your selections stick.",
+      "mergedAt": "2026-07-02T12:54:42Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3352"
+    },
     {
       "prNumber": 3353,
       "category": "new",

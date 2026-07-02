@@ -17,6 +17,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Filters work again: the Apply button no longer disappears after using the hold, area, or setter pickers, so your selections stick. ([#3352](https://github.com/boardsesh/boardsesh/pull/3352))
 - Your session's queue is now visible only to people who've actually joined — invite links still show who's climbing before you join. ([#3341](https://github.com/boardsesh/boardsesh/pull/3341))
 - The shared queue catches up reliably after a dropped connection, even when someone in the party is running a variable-speed playback. ([#3340](https://github.com/boardsesh/boardsesh/pull/3340))
 - Board history keeps itself in sync — the wall feed catches up automatically after connection blips and when you come back to the app ([#3343](https://github.com/boardsesh/boardsesh/pull/3343))
