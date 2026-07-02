@@ -1,5 +1,14 @@
 import { useCallback, useMemo, useRef, useState, useEffect, type ComponentRef, type SetStateAction } from 'react';
-import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import {
+  View,
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  type ViewStyle,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,6 +94,11 @@ const STATUS_OPTIONS_UI = ['any', 'drafts', 'projects'] as const;
 const POPULARITY_BUCKETS: ReadonlyArray<number | undefined> = [undefined, 2, 10, 100, 1000];
 const PREWARM_BOARD_HOLDS_AFTER_REFINE_EXPAND_MS = 150;
 
+// One source of truth for the sheet's native detent and the iOS JS-side height
+// bound derived from it (see sheetColumnStyle).
+const SHEET_DETENT_FRACTION = 0.9;
+const SHEET_TOP_CHROME_PT = 20;
+
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
@@ -144,6 +158,14 @@ export function ClimbFilterSheet({
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
+  // Latest scroll offset, captured on scroll into a ref (no re-render).
+  const scrollOffsetRef = useRef(0);
+  // Snapshotted at suspend: the remounted ScrollView's initial onScroll (y=0) can
+  // land before onContentSizeChange, so a live read would restore to 0.
+  const pendingRestoreOffsetRef = useRef(0);
+  // The epoch whose offset has already been restored — makes the restore in
+  // onContentSizeChange one-shot per remount, not re-fire on later content growth.
+  const restoredScrollEpochRef = useRef(0);
   const refinePrewarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLocalDraftEditsRef = useRef(false);
   const boardName = boardConfig?.boardName ?? '';
@@ -156,6 +178,10 @@ export function ClimbFilterSheet({
   // Bumped on Reset so the Refine/Advanced sections collapse back to default.
   const [sectionResetKey, setSectionResetKey] = useState(0);
   const [refineExpanded, setRefineExpanded] = useState(false);
+  // Hoisted like refineExpanded so it survives the sheet-host remount on resume
+  // (see presentEpoch). Kept internal to the section, it would collapse back to
+  // default on every sub-picker round trip.
+  const [advancedExpanded, setAdvancedExpanded] = useState(false);
   // The sub-pickers (setters / holds / zone) are pushed routes, not stacked
   // sheets (native sheets can't stack above this one). While a sub-route is open
   // we suspend — dismiss the native sheet without unmounting, so the draft below
@@ -164,6 +190,14 @@ export function ClimbFilterSheet({
   const router = useRouter();
   const [suspended, setSuspended] = useState(false);
   const pendingResumeRef = useRef(false);
+  // A sub-picker round trip re-presents the native sheet host. On iOS a re-present
+  // of an ALREADY-MOUNTED SwiftUI sheet host loses the detent height bound, so the
+  // flex:1 column stops being clamped to the 90% detent — the ScrollView then grows
+  // to content height and pushes the pinned Apply footer off-screen (#3330). Bumping
+  // this epoch on resume remounts the host under a fresh key, so every re-present
+  // takes the same first-present path as the initial mount (Android already rebuilds
+  // its native host each present; this just makes the code path uniform).
+  const [presentEpoch, setPresentEpoch] = useState(0);
 
   // Sync committed parent filters only until the user starts editing. After that,
   // local edits are draft-only until Apply and must not be overwritten by parent
@@ -196,7 +230,24 @@ export function ClimbFilterSheet({
     };
   }, []);
 
-  const snapPoints = useMemo(() => androidSafeSnapPoints(['90%']), []);
+  const snapPoints = useMemo(() => androidSafeSnapPoints([`${SHEET_DETENT_FRACTION * 100}%`]), []);
+  // iOS cannot be trusted to bound the sheet's flex column: SwiftUI can propose
+  // an unbounded height to the RN host, so a flex:1 column sizes to its CONTENT
+  // and anything past the detent (the pinned Apply footer) lands off-screen
+  // (#3330 — reproduced on-device even on a freshly mounted host). Pin the
+  // column to the detent height computed JS-side instead. `.fraction` detents
+  // resolve against the sheet's maximum height (window minus the top safe
+  // area); the extra SHEET_TOP_CHROME_PT covers the wrapper's drag-indicator
+  // padding, erring short — a few spare points below the footer beat a clipped
+  // footer. Android bounds the column natively, so it keeps flex:1.
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetColumnStyle = useMemo<ViewStyle>(
+    () =>
+      Platform.OS === 'ios'
+        ? { height: Math.round((windowHeight - insets.top) * SHEET_DETENT_FRACTION) - SHEET_TOP_CHROME_PT }
+        : styles.fill,
+    [insets.top, windowHeight],
+  );
   const isKilter = boardName === 'kilter';
 
   // Live "Show N" preview for the in-progress edits (matches what Apply yields).
@@ -403,14 +454,23 @@ export function ClimbFilterSheet({
     updateLocalFilters(DEFAULT_FILTERS);
     updateLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
     setRefineExpanded(false);
+    setAdvancedExpanded(false);
     hasLocalDraftEditsRef.current = false;
     setSectionResetKey((key) => key + 1);
   }, [updateLocalBoardFilters, updateLocalFilters]);
 
-  const openSetters = useCallback(() => {
-    if (!boardConfig || pendingResumeRef.current) return;
+  // Shared suspend preamble for the sub-picker openers: snapshot the scroll
+  // offset for the post-remount restore, then dismiss the native sheet without
+  // unmounting (see the suspended/pendingResumeRef comment above).
+  const beginSubPickerSuspend = useCallback(() => {
+    pendingRestoreOffsetRef.current = scrollOffsetRef.current;
     pendingResumeRef.current = true;
     setSuspended(true);
+  }, []);
+
+  const openSetters = useCallback(() => {
+    if (!boardConfig || pendingResumeRef.current) return;
+    beginSubPickerSuspend();
     router.push({
       pathname: '/(tabs)/climbs/setters',
       params: {
@@ -422,7 +482,7 @@ export function ClimbFilterSheet({
         setters: JSON.stringify(localFilters.setter ?? []),
       },
     });
-  }, [boardConfig, localFilters.setter, router]);
+  }, [beginSubPickerSuspend, boardConfig, localFilters.setter, router]);
 
   const scheduleBoardHoldsPrewarm = useCallback(() => {
     if (!boardConfig) return;
@@ -446,10 +506,25 @@ export function ClimbFilterSheet({
     [scheduleBoardHoldsPrewarm],
   );
 
+  const handleAdvancedExpandedChange = useCallback((expanded: boolean) => {
+    setAdvancedExpanded(expanded);
+  }, []);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  // One-shot per epoch: a repeat restore on later content growth (e.g. a section
+  // expanding) would yank the user's scroll position.
+  const handleScrollContentSizeChange = useCallback(() => {
+    if (restoredScrollEpochRef.current === presentEpoch) return;
+    restoredScrollEpochRef.current = presentEpoch;
+    scrollRef.current?.scrollTo({ y: pendingRestoreOffsetRef.current, animated: false });
+  }, [presentEpoch]);
+
   const openHoldFilter = useCallback(() => {
     if (!boardConfig || pendingResumeRef.current) return;
-    pendingResumeRef.current = true;
-    setSuspended(true);
+    beginSubPickerSuspend();
     router.push({
       pathname: '/(tabs)/climbs/holds',
       params: {
@@ -460,12 +535,11 @@ export function ClimbFilterSheet({
         holdsFilter: JSON.stringify(localBoardFilters.holdsFilter ?? {}),
       },
     });
-  }, [boardConfig, localBoardFilters.holdsFilter, router]);
+  }, [beginSubPickerSuspend, boardConfig, localBoardFilters.holdsFilter, router]);
 
   const openZoneFilter = useCallback(() => {
     if (!boardConfig || pendingResumeRef.current) return;
-    pendingResumeRef.current = true;
-    setSuspended(true);
+    beginSubPickerSuspend();
     router.push({
       pathname: '/(tabs)/climbs/zone',
       params: {
@@ -479,7 +553,14 @@ export function ClimbFilterSheet({
         holdsFilter: JSON.stringify(localBoardFilters.holdsFilter ?? {}),
       },
     });
-  }, [boardConfig, localBoardFilters.holdsFilter, localBoardFilters.zoneBox, localBoardFilters.zoneMode, router]);
+  }, [
+    beginSubPickerSuspend,
+    boardConfig,
+    localBoardFilters.holdsFilter,
+    localBoardFilters.zoneBox,
+    localBoardFilters.zoneMode,
+    router,
+  ]);
 
   // Re-present after a sub-picker route pops (Done button OR swipe-back both
   // re-focus this screen). On initial mount the screen is already focused with no
@@ -489,6 +570,8 @@ export function ClimbFilterSheet({
       if (pendingResumeRef.current) {
         pendingResumeRef.current = false;
         setSuspended(false);
+        // Remount the native sheet host so the re-present is a first present (#3330).
+        setPresentEpoch((epoch) => epoch + 1);
       }
     }, []),
   );
@@ -601,6 +684,7 @@ export function ClimbFilterSheet({
 
   return (
     <BottomSheetModal
+      key={presentEpoch}
       ref={sheetRef}
       index={0}
       snapPoints={snapPoints}
@@ -609,11 +693,11 @@ export function ClimbFilterSheet({
       onChange={managed.onChange}
       handleIndicatorStyle={styles.indicator}
     >
-      {/* One flex:1 child so the native sheet bounds the column to the detent
-          height — the scroll body then actually scrolls and the footer pins.
-          Handed multiple direct children, the native sheet sizes to content and
-          the flex:1 ScrollView collapses (no scrolling). Matches ModalSheet. */}
-      <View style={styles.fill}>
+      {/* One column child bounded to the detent height (JS-computed on iOS, see
+          sheetColumnStyle) — the scroll body then actually scrolls and the
+          footer pins. Handed multiple direct children, the native sheet sizes
+          to content and the flex:1 ScrollView collapses (no scrolling). */}
+      <View style={sheetColumnStyle}>
         <View style={styles.header}>
           <Text variant="title3">{t('mobile.filter.title')}</Text>
           <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button" disabled={!anyActive}>
@@ -628,6 +712,9 @@ export function ClimbFilterSheet({
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={32}
+          onContentSizeChange={handleScrollContentSizeChange}
         >
           {/* PRIMARY — the levers the analytics say carry the product. Always open. */}
           <View style={styles.primary}>
@@ -725,12 +812,14 @@ export function ClimbFilterSheet({
               <View style={styles.subsectionGap} />
               <Pressable
                 onPress={openSetters}
+                disabled={!boardConfig}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.filter.setters')}
                 style={({ pressed }) => [
                   styles.tappableRow,
                   { backgroundColor: systemColors.tertiaryBackground },
                   pressed && styles.tappableRowPressed,
+                  !boardConfig && styles.tappableRowDisabled,
                 ]}
               >
                 <Text variant="body">{t('mobile.filter.setters')}</Text>
@@ -818,8 +907,10 @@ export function ClimbFilterSheet({
             {/* ADVANCED — the sub-2% long tail. Kept, off the primary surface. */}
             <CollapsibleSection
               title={t('mobile.filter.section.advanced')}
+              defaultExpanded={advancedExpanded}
               summary={advancedSummary ?? t('mobile.filter.advancedHint')}
               resetKey={sectionResetKey}
+              onExpandedChange={handleAdvancedExpandedChange}
             >
               <Text variant="footnote" style={styles.subsectionLabel}>
                 {t('mobile.filter.section.status')}
