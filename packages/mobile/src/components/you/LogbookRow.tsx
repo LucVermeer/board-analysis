@@ -181,10 +181,11 @@ export const LogbookRow = memo(function LogbookRow({
   const quality = normalizeLogbookQuality(ascent.quality);
   const hasNote = logbookNoteIsVisible(ascent.comment);
   const hasBetaVideo = ascent.hasBetaVideo === true;
-  // The LAYOUT ("Kilter Homewall", "MoonBoard 2016"), not the user-named board —
-  // in a review list the wall product disambiguates a repeat ascent; the pet
-  // name of whichever gym's board it was doesn't (Alex's device-review call).
-  const boardAngleLabel = `${getLayoutDisplayName(ascent.boardType, ascent.layoutId)} ${ascent.angle}°`;
+  // The user-named board when the tick has one ("Garage Board"), else the
+  // LAYOUT ("Kilter Homewall", "MoonBoard 2016") — a named board is personal
+  // context worth keeping; unnamed ticks still get the wall product.
+  const wallLabel = ascent.boardDisplayName ?? getLayoutDisplayName(ascent.boardType, ascent.layoutId);
+  const boardAngleLabel = `${wallLabel} ${ascent.angle}°`;
   const attemptsLabel =
     attemptsKind === 'flash'
       ? t('mobile.logbook.status.flash')

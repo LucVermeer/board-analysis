@@ -110,12 +110,13 @@ vi.mock('../../../providers/toast-provider', () => ({ useToast: () => toast }));
 
 import { LogbookTab } from '../LogbookTab';
 
-// handleDeleteRequest runs a fire-and-forget async IIFE; flush its awaits.
+// handleDeleteRequest runs a fire-and-forget async chain; a macrotask turn
+// drains ALL of its pending microtasks (counting Promise.resolve() flushes is
+// brittle — it breaks whenever an await is added to the chain).
 async function fireDeleteRequest(method: 'swipe' | 'a11y') {
   await act(async () => {
     row.requestDelete?.(method);
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 

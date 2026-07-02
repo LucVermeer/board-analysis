@@ -252,13 +252,14 @@ describe('LogbookRow — meta line', () => {
     expect(iconNames(withoutBeta)).not.toContain('video');
   });
 
-  it('labels the wall by LAYOUT, ignoring the user-named board', () => {
-    // Fixture carries boardDisplayName 'Kilter'; the row must show the layout
-    // ("Kilter Original", per the profile-stats mock) — the wall product
-    // disambiguates repeat ascents, a board's pet name doesn't.
-    const { container } = renderRow(ascent({ boardDisplayName: 'My Garage Board' }));
-    expect(container.textContent).toContain('Kilter Original 40°');
-    expect(container.textContent).not.toContain('My Garage Board');
+  it('labels the wall by the user-named board, falling back to the layout', () => {
+    // A named board is personal context and wins; ticks without one show the
+    // wall product ("Kilter Original", per the profile-stats mock).
+    const { container: named } = renderRow(ascent({ boardDisplayName: 'My Garage Board' }));
+    expect(named.textContent).toContain('My Garage Board 40°');
+
+    const { container: unnamed } = renderRow(ascent({ boardDisplayName: null }));
+    expect(unnamed.textContent).toContain('Kilter Original 40°');
   });
 
   it('clamps an imported 0-attempt send to 1 try', () => {
