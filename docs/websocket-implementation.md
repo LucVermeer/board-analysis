@@ -1223,7 +1223,7 @@ Session participation is tracked in two layers:
 
 **`board_session_participants`** records one row per (session_id, user_id) with a `joined_at` timestamp. It is upserted (`ON CONFLICT DO NOTHING`) when an authenticated user joins a session. Rows are never deleted on disconnect — they serve as a permanent historical record of who participated.
 
-> **Note:** The legacy `board_session_clients` table (one row per WebSocket connection) is no longer written to. Leader state is managed exclusively in Redis via the `DistributedStateManager`.
+> **Note:** The legacy `board_session_clients` table (one row per WebSocket connection) has been dropped. Leader state is managed exclusively in Redis via the `DistributedStateManager`.
 
 ### Key Redis Data Structures
 

@@ -1,23 +1,15 @@
 import { relations } from 'drizzle-orm/relations';
-import { boardSessions, boardSessionClients, boardSessionQueues } from '../schema/app/sessions';
+import { boardSessions, boardSessionQueues } from '../schema/app/sessions';
 import { users } from '../schema/auth/users';
 
-export const boardSessionsRelations = relations(boardSessions, ({ one, many }) => ({
+export const boardSessionsRelations = relations(boardSessions, ({ one }) => ({
   createdByUser: one(users, {
     fields: [boardSessions.createdByUserId],
     references: [users.id],
   }),
-  clients: many(boardSessionClients),
   queue: one(boardSessionQueues, {
     fields: [boardSessions.id],
     references: [boardSessionQueues.sessionId],
-  }),
-}));
-
-export const boardSessionClientsRelations = relations(boardSessionClients, ({ one }) => ({
-  session: one(boardSessions, {
-    fields: [boardSessionClients.sessionId],
-    references: [boardSessions.id],
   }),
 }));
 

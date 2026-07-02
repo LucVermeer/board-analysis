@@ -90,16 +90,6 @@ export const sessionHealthKitWorkouts = pgTable(
   }),
 );
 
-export const boardSessionClients = pgTable('board_session_clients', {
-  id: text('id').primaryKey(),
-  sessionId: text('session_id')
-    .references(() => boardSessions.id, { onDelete: 'cascade' })
-    .notNull(),
-  username: text('username'),
-  connectedAt: timestamp('connected_at').defaultNow().notNull(),
-  isLeader: boolean('is_leader').default(false).notNull(),
-});
-
 export const boardSessionQueues = pgTable('board_session_queues', {
   sessionId: text('session_id')
     .primaryKey()
@@ -137,8 +127,6 @@ export type BoardSession = typeof boardSessions.$inferSelect;
 export type NewBoardSession = typeof boardSessions.$inferInsert;
 export type SessionHealthKitWorkout = typeof sessionHealthKitWorkouts.$inferSelect;
 export type NewSessionHealthKitWorkout = typeof sessionHealthKitWorkouts.$inferInsert;
-export type BoardSessionClient = typeof boardSessionClients.$inferSelect;
-export type NewBoardSessionClient = typeof boardSessionClients.$inferInsert;
 export type BoardSessionQueue = typeof boardSessionQueues.$inferSelect;
 export type NewBoardSessionQueue = typeof boardSessionQueues.$inferInsert;
 export type SessionBoard = typeof sessionBoards.$inferSelect;

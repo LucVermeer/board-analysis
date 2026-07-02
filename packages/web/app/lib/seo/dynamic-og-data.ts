@@ -307,7 +307,6 @@ export const getSessionOgSummary = cache(async (sessionId: string): Promise<Sess
     SELECT
       bs.name,
       COALESCE(
-        NULLIF(TRIM(live_leader.username), ''),
         NULLIF(TRIM(creator_profile.display_name), ''),
         NULLIF(TRIM(creator_user.name), '')
       ) AS leader_name,
@@ -320,19 +319,9 @@ export const getSessionOgSummary = cache(async (sessionId: string): Promise<Sess
       ub.set_ids,
       GREATEST(
         COALESCE(bs.last_activity, to_timestamp(0)),
-        COALESCE((SELECT MAX(bt.updated_at) FROM boardsesh_ticks bt WHERE bt.session_id = ${sessionId}), to_timestamp(0)),
-        COALESCE((SELECT MAX(bsc.connected_at) FROM board_session_clients bsc WHERE bsc.session_id = ${sessionId}), to_timestamp(0))
+        COALESCE((SELECT MAX(bt.updated_at) FROM boardsesh_ticks bt WHERE bt.session_id = ${sessionId}), to_timestamp(0))
       ) AS version_at
     FROM board_sessions bs
-    LEFT JOIN LATERAL (
-      SELECT bsc.username
-      FROM board_session_clients bsc
-      WHERE bsc.session_id = bs.id
-        AND bsc.is_leader = true
-        AND bsc.username IS NOT NULL
-      ORDER BY bsc.connected_at DESC
-      LIMIT 1
-    ) AS live_leader ON true
     LEFT JOIN users creator_user ON creator_user.id = bs.created_by_user_id
     LEFT JOIN user_profiles creator_profile ON creator_profile.user_id = bs.created_by_user_id
     LEFT JOIN user_boards ub ON ub.id = bs.board_id
