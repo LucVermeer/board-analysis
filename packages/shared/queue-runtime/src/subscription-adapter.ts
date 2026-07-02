@@ -23,6 +23,11 @@ import {
  * conventions are accepted: `addedItem`/`item` on QueueItemAdded,
  * `currentItem`/`item` on CurrentClimbChanged, `mirroredUuid`/`uuid` on
  * ClimbMirrored.
+ *
+ * `sequence`/`stateHash` are optional on every variant so callers can pass
+ * the same envelope through `@boardsesh/queue-runtime`'s `createQueueSyncGate`
+ * (see `sync-gate.ts`) for resync decisions before lifting it to a reducer
+ * action here. Additive — existing callers that omit them are unaffected.
  */
 export type SubscriptionWireEnvelope<TWireItem> =
   | {
@@ -31,22 +36,30 @@ export type SubscriptionWireEnvelope<TWireItem> =
         queue: TWireItem[];
         currentClimbQueueItem: TWireItem | null;
       };
+      sequence?: number | null;
+      stateHash?: string | null;
     }
   | {
       __typename: 'QueueItemAdded';
       addedItem?: TWireItem;
       item?: TWireItem;
       position?: number | null;
+      sequence?: number | null;
+      stateHash?: string | null;
     }
   | {
       __typename: 'QueueItemRemoved';
       uuid: string;
+      sequence?: number | null;
+      stateHash?: string | null;
     }
   | {
       __typename: 'QueueReordered';
       uuid: string;
       oldIndex: number;
       newIndex: number;
+      sequence?: number | null;
+      stateHash?: string | null;
     }
   | {
       __typename: 'CurrentClimbChanged';
@@ -54,12 +67,16 @@ export type SubscriptionWireEnvelope<TWireItem> =
       item?: TWireItem | null;
       clientId?: string | null;
       correlationId?: string | null;
+      sequence?: number | null;
+      stateHash?: string | null;
     }
   | {
       __typename: 'ClimbMirrored';
       mirrored: boolean;
       mirroredUuid?: string | null;
       uuid?: string | null;
+      sequence?: number | null;
+      stateHash?: string | null;
     };
 
 export type MapEnvelopeOptions<TWireItem> = {
