@@ -38,9 +38,8 @@ import { hapticSelection, hapticMedium, hapticLight, hapticSuccess } from '../..
 type LogbookRowProps = {
   ascent: AscentFeedItem;
   /** Tap → the row's primary action (logbook: activate + open play drawer;
-   *  beta-share: attach the video to this climb). `index` is the row's list
-   *  position, forwarded for analytics enrichment (undefined off-list). */
-  onActivate: (ascent: AscentFeedItem, index?: number) => void;
+   *  beta-share: attach the video to this climb). */
+  onActivate: (ascent: AscentFeedItem) => void;
   /** Long press → open the climb actions sheet. Omit to disable long-press
    *  (e.g. the beta-share picker, where the row is a plain selector). */
   onOpenActions?: (ascent: AscentFeedItem) => void;
@@ -56,8 +55,6 @@ type LogbookRowProps = {
    * `method` reports how the delete was initiated, for analytics.
    */
   onDeleteRequest?: (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => void;
-  /** List position, echoed back through `onActivate` for analytics. */
-  index?: number;
 };
 
 // Swipe tuning mirrors ClimbListRow: drag up to ACTION_REVEAL wide; dragging
@@ -142,7 +139,6 @@ export const LogbookRow = memo(function LogbookRow({
   onOpenActions,
   onEdit,
   onDeleteRequest,
-  index,
 }: LogbookRowProps) {
   const { t, i18n } = useTranslation('you');
   const { systemColors, brandColors: brand } = useTheme();
@@ -205,6 +201,9 @@ export const LogbookRow = memo(function LogbookRow({
   const twoLineMeta = fontScale >= FONT_SCALE_TWO_LINE;
   // One line: results + context together, time dropping first under scale.
   // Two lines (accessibility sizes): results over context, nothing dropped.
+  // Between the tiers (1.15–1.3) the time is INTENTIONALLY absent from the
+  // visual layout — it's the lowest-value part and the a11y label still
+  // speaks it; it returns in the context line once the two-line layout kicks in.
   const primaryMetaText = twoLineMeta
     ? [attemptsLabel, starsLabel].filter(Boolean).join(' · ')
     : [attemptsLabel, boardAngleLabel, starsLabel].filter(Boolean).join(' · ');
@@ -239,14 +238,12 @@ export const LogbookRow = memo(function LogbookRow({
   onDeleteRequestRef.current = onDeleteRequest;
   const ascentRef = useRef(ascent);
   ascentRef.current = ascent;
-  const indexRef = useRef(index);
-  indexRef.current = index;
   const actionableRef = useRef(actionable);
   actionableRef.current = actionable;
 
   const handleRowPress = useCallback(() => {
     if (actionableRef.current) hapticSelection();
-    onActivateRef.current(ascentRef.current, indexRef.current);
+    onActivateRef.current(ascentRef.current);
   }, []);
 
   const handleLongPress = useCallback(() => {
@@ -426,6 +423,11 @@ export const LogbookRow = memo(function LogbookRow({
                 <Text variant="body" numberOfLines={1} style={styles.climbName}>
                   {ascent.climbName}
                 </Text>
+                {/* ClimbAttributeIcons keys the © glyph on Number(value) > 0 and
+                    never renders the value itself, so the '1' fallback only
+                    forces the glyph on for a benchmark tick whose grade names
+                    are missing — isBenchmark is authoritative here (the old
+                    null fallback silently hid the glyph on those rows). */}
                 <ClimbAttributeIcons
                   benchmarkDifficulty={
                     ascent.isBenchmark ? (ascent.consensusDifficultyName ?? ascent.difficultyName ?? '1') : null

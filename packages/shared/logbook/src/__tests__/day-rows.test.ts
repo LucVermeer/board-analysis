@@ -7,6 +7,9 @@ import {
   shouldShowLogbookDividers,
   type LogbookDayItem,
 } from '../day-rows';
+import { toAscentFeedInput } from '../to-ascent-feed-input';
+import { DEFAULT_LOGBOOK_FILTERS, DEFAULT_LOGBOOK_SORT } from '../defaults';
+import type { LogbookSortState } from '../types';
 
 // Naive-UTC timestamps, the shape `climbed_at` arrives in (no Z suffix). Tests
 // run in whatever TZ the runner uses; assertions that depend on the local day
@@ -24,6 +27,31 @@ describe('shouldShowLogbookDividers', () => {
     expect(shouldShowLogbookDividers({ sortBy: 'hardest' })).toBe(false);
     expect(shouldShowLogbookDividers({ sortBy: 'climbName' })).toBe(false);
     expect(shouldShowLogbookDividers({ sortBy: 'attemptCount' })).toBe(false);
+  });
+
+  // Roundtrip through the real feed-input builder so a rename of the sortBy
+  // value the backend expects can't silently kill dividers for one sort mode
+  // while the direct-string assertions above stay green.
+  it('agrees with toAscentFeedInput for every logbook sort mode', () => {
+    const customDateSort: LogbookSortState = {
+      mode: 'custom',
+      preset: 'recent',
+      primaryField: 'date',
+      primaryDirection: 'desc',
+      secondaryField: '',
+      secondaryDirection: 'desc',
+    };
+    const inputFor = (sort: LogbookSortState) =>
+      toAscentFeedInput({ filters: DEFAULT_LOGBOOK_FILTERS, sort, name: '' });
+
+    expect(shouldShowLogbookDividers(inputFor(DEFAULT_LOGBOOK_SORT))).toBe(true);
+    expect(shouldShowLogbookDividers(inputFor(customDateSort))).toBe(true);
+    expect(shouldShowLogbookDividers(inputFor({ ...DEFAULT_LOGBOOK_SORT, preset: 'hardest' }))).toBe(false);
+    expect(shouldShowLogbookDividers(inputFor({ ...customDateSort, primaryField: 'loggedGrade' }))).toBe(false);
+    // A climb-name search filters without re-sorting — dividers stay.
+    expect(
+      shouldShowLogbookDividers(toAscentFeedInput({ filters: DEFAULT_LOGBOOK_FILTERS, sort: DEFAULT_LOGBOOK_SORT, name: 'purple' })),
+    ).toBe(true);
   });
 });
 

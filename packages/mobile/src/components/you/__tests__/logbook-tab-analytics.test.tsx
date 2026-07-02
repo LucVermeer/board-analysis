@@ -62,13 +62,11 @@ vi.mock('../LogbookRow', () => ({
   LogbookRow: ({
     onActivate,
     ascent,
-    index,
   }: {
-    onActivate: (ascent: { climbUuid: string }, index?: number) => void;
+    onActivate: (ascent: { climbUuid: string }) => void;
     ascent: { climbUuid: string };
-    index?: number;
   }) => {
-    row.onPress = () => onActivate(ascent, index);
+    row.onPress = () => onActivate(ascent);
     return createElement('div');
   },
 }));
@@ -115,11 +113,11 @@ describe('LogbookTab analytics', () => {
 
     row.onPress?.();
 
-    // rowIndex is the FlashList index over the union rows, so the day divider
-    // above the entry (built by the real buildLogbookListRows) counts.
+    // rowIndex counts ENTRIES only — the day divider above the entry (built by
+    // the real buildLogbookListRows) must not skew position funnels.
     expect(analytics.track).toHaveBeenCalledWith('Logbook Row Clicked', {
       climbUuid: 'climb-1',
-      rowIndex: 1,
+      rowIndex: 0,
       hasNote: true,
       status: 'send',
     });

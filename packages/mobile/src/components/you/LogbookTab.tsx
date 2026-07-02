@@ -220,29 +220,35 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   // duplicate FlashList keys throw. Memoised so the FlashList `data` identity
   // is stable between unrelated re-renders.
   const showDividers = shouldShowLogbookDividers(feedInput);
-  const listRows = useMemo<LogbookListRow<AscentFeedItem>[]>(() => {
+  const { listRows, entryIndexByUuid } = useMemo(() => {
     const items = feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [];
-    if (!showDividers) {
-      return dedupeLogbookItems(items).map((item) => ({ type: 'entry', key: item.uuid, item }));
+    const rows: LogbookListRow<AscentFeedItem>[] = showDividers
+      ? buildLogbookListRows(items, { hasMore: feed.hasNextPage ?? false })
+      : dedupeLogbookItems(items).map((item) => ({ type: 'entry', key: item.uuid, item }));
+    // Entry ordinal (dividers excluded) for the analytics `rowIndex` — the raw
+    // FlashList index counts divider rows, which would skew position funnels.
+    const ordinals = new Map<string, number>();
+    for (const row of rows) {
+      if (row.type === 'entry') ordinals.set(row.item.uuid, ordinals.size);
     }
-    return buildLogbookListRows(items, { hasMore: feed.hasNextPage ?? false });
+    return { listRows: rows, entryIndexByUuid: ordinals };
   }, [feed.data, feed.hasNextPage, showDividers]);
 
   // Tap → set the climb active and open the play drawer (own logbook and another
   // climber's read-only logbook alike). AscentFeedItem structurally satisfies the
   // `tick` kind, which builds the climb + board config from frames.
   const handleActivate = useCallback(
-    (ascent: AscentFeedItem, index?: number) => {
+    (ascent: AscentFeedItem) => {
       track(SHARED_EVENTS.LogbookRowClicked, {
         climbUuid: ascent.climbUuid,
-        rowIndex: index,
+        rowIndex: entryIndexByUuid.get(ascent.uuid),
         hasNote: logbookNoteIsVisible(ascent.comment),
         status: ascent.status,
       });
       // Default open mode is now "set active", so no option is needed here.
       openClimbInPlayDrawer({ kind: 'tick', tick: ascent }, { openPlayDrawer, router });
     },
-    [openPlayDrawer, router],
+    [openPlayDrawer, router, entryIndexByUuid],
   );
 
   // Swipe left-to-right → edit this tick (owner-only). The old tap behaviour.
@@ -352,14 +358,13 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   }, [feed.refetch]);
 
   const renderItem = useCallback(
-    ({ item: row, index }: { item: LogbookListRow<AscentFeedItem>; index: number }) => {
+    ({ item: row }: { item: LogbookListRow<AscentFeedItem> }) => {
       if (row.type === 'divider') {
         return <LogbookDayDivider dayStartMs={row.dayStartMs} stats={row.stats} now={now} />;
       }
       return (
         <LogbookRow
           ascent={row.item}
-          index={index}
           onActivate={handleActivate}
           onOpenActions={handleOpenActions}
           onEdit={viewerIsOwner ? handleEdit : undefined}

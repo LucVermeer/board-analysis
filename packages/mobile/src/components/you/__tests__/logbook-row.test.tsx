@@ -160,7 +160,7 @@ function ascent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
 }
 
 type RowHandlers = {
-  onActivate?: (item: AscentFeedItem, index?: number) => void;
+  onActivate?: (item: AscentFeedItem) => void;
   onOpenActions?: (item: AscentFeedItem) => void;
   onEdit?: (item: AscentFeedItem) => void;
   onDeleteRequest?: (item: AscentFeedItem, method: 'swipe' | 'a11y') => void;
