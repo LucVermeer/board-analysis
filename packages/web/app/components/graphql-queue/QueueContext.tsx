@@ -6,21 +6,9 @@ import { useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useQueueReducer } from '../queue-control/reducer';
 import { useQueueDataFetching } from '../queue-control/hooks/use-queue-data-fetching';
-import type {
-  ClimbQueueItem,
-  UserName,
-  QueueItemUser,
-  AddToQueueSource,
-  PlaylistSuggestionSource,
-  SetCurrentClimbOptions,
-} from '../queue-control/types';
-import {
-  getPlaylistPeekQueueItemUuid,
-  getPlaylistSuggestedClimbs,
-  insertQueueItemAfterCurrent,
-  isPlaylistPeekQueueItemUuid,
-  pruneSuggestedQueueItemsAfterCurrent,
-} from '../queue-control/playlist-suggestions';
+import type { ClimbQueueItem, UserName, QueueItemUser, PlaylistSuggestionSource } from '../queue-control/types';
+import { getPlaylistPeekQueueItemUuid, getPlaylistSuggestedClimbs } from '../queue-control/playlist-suggestions';
+import { createQueueActionsCore, type QueueActionsCoreDeps } from '../queue-control/queue-actions-core';
 import { urlParamsToSearchParams, searchParamsToUrlParams } from '@/app/lib/url-utils';
 import type { Climb, SearchRequestPagination } from '@/app/lib/types';
 import { usePartyProfile } from '../party-manager/party-profile-context';
@@ -31,9 +19,8 @@ import { useClimbActionsData } from '@/app/hooks/use-climb-actions-data';
 import { SUGGESTIONS_THRESHOLD } from '../board-page/constants';
 import { useSnackbar } from '../providers/snackbar-provider';
 import SessionSummaryDialog from '../session-summary/session-summary-dialog';
-import { trackQueueOperation, trackQueueOperationError, resolveQueueOperationMode } from '@/app/lib/queue-metrics';
+import { trackQueueOperation, trackQueueOperationError } from '@/app/lib/queue-metrics';
 
-import { dispatchOpenPlayDrawer } from '../queue-control/play-drawer-event';
 import { useSessionIdManagement } from './hooks/use-session-id-management';
 import { useQueueRestoration } from './hooks/use-queue-restoration';
 import { useQueueEventSubscription } from './hooks/use-queue-event-subscription';
@@ -479,273 +466,225 @@ export const GraphQLQueueProvider = ({
     return clientId ? `${clientId}-${++correlationCounterRef.current}` : undefined;
   }, []);
 
-  const addToQueue = useCallback((climb: Climb, source: AddToQueueSource = 'unknown') => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return;
-    if (!latest.validateQueueAdd(climb)) return;
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
-    latest.dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item: newItem } });
-    const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
-    // `latest.state.queue.length` reflects the most recent committed render,
-    // so two adds dispatched back-to-back in the same tick will both report
-    // the same `currentQueueLength + 1`. Acceptable for the queue-churn
-    // dashboard tile; the dispatched reducer state will still be correct.
-    track('Climb Added to Queue', {
-      boardLayout: latest.boardDetails?.layout_name ?? null,
-      addedFromTab: source,
-      currentQueueLength: latest.state.queue.length + 1,
-      partyMode,
-    });
-    if (latest.isDisconnected && latest.isPersistentSessionActive) {
-      latest.offlineBuffer.bufferAddition(newItem);
-      trackQueueOperation('addToQueue', performance.now() - startTime, mode);
-    } else if (latest.hasConnected && latest.isPersistentSessionActive) {
-      latest.persistentSession
-        .addQueueItem(newItem)
-        .then(() => trackQueueOperation('addToQueue', performance.now() - startTime, mode))
-        .catch((error: unknown) => {
-          console.error('Failed to add queue item:', error);
-          trackQueueOperationError('addToQueue', mode);
-        });
-    } else {
-      trackQueueOperation('addToQueue', performance.now() - startTime, mode);
-    }
-  }, []);
-
-  const removeFromQueue = useCallback((item: ClimbQueueItem) => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return;
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    latest.dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid: item.uuid } });
-    const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
-    track('Climb Removed from Queue', {
-      boardLayout: latest.boardDetails?.layout_name ?? null,
-      partyMode,
-      removedBy: 'self',
-    });
-    if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
-      latest.persistentSession
-        .removeQueueItem(item.uuid)
-        .then(() => trackQueueOperation('removeFromQueue', performance.now() - startTime, mode))
-        .catch((error: unknown) => {
-          console.error('Failed to remove queue item:', error);
-          trackQueueOperationError('removeFromQueue', mode);
-        });
-    } else {
-      trackQueueOperation('removeFromQueue', performance.now() - startTime, mode);
-    }
-  }, []);
-
-  // Resolves to the freshly-created ClimbQueueItem so callers (notably the
-  // create form) can capture its uuid and later call replaceQueueItem on
-  // subsequent edits. Resolves to null when validation fails or the mutation
-  // is guarded.
-  const setCurrentClimb = useCallback(
-    async (climb: Climb, options: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
-      const startTime = performance.now();
-      const latest = latestRef.current;
-      if (latest.guardMutation()) return null;
-      if (!latest.validateQueueAdd(climb)) return null;
-      const { playlistSuggestionSource } = options;
-      const previousPlaylistSuggestionSource = latest.state.playlistSuggestionSource;
-      const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-      const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
-      const correlationId = nextCorrelationId();
-      latest.dispatch({
-        type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: {
-          item: newItem,
-          shouldAddToQueue: true,
-          insertAfterCurrent: true,
-          correlationId,
-          playlistSuggestionSource,
-        },
-      });
-      // Central funnel instrumentation — fires from every UI path that
-      // activates a new climb (queue list tap, browse preview, playlist
-      // activation, SetActiveAction button, lightbulb re-assert). Previously
-      // this event only fired from the SetActiveAction button, missing the
-      // ~7 other entry points and dropping the "Session Started → Set
-      // Active Climb" funnel conversion to ~6%.
-      track('Set Active Climb', {
-        climbUuid: climb.uuid,
-        boardType: climb.boardType ?? null,
-        layoutId: climb.layoutId ?? null,
-        source: 'setCurrentClimb' satisfies SetActiveClimbSource,
-      });
-      if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
-      if (latest.isDisconnected && latest.isPersistentSessionActive) {
-        latest.offlineBuffer.bufferAddition(newItem);
-        trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
-      } else if (latest.hasConnected && latest.isPersistentSessionActive) {
-        const currentIndex = latest.state.currentClimbQueueItem
-          ? latest.state.queue.findIndex((queueItem) => queueItem.uuid === latest.state.currentClimbQueueItem?.uuid)
-          : -1;
-        const position = currentIndex === -1 ? undefined : currentIndex + 1;
-        try {
-          if (playlistSuggestionSource) {
-            const queueWithNewItem = insertQueueItemAfterCurrent(
-              latest.state.queue,
-              latest.state.currentClimbQueueItem,
-              newItem,
-            );
-            const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queueWithNewItem, newItem);
-            await latest.persistentSession.setQueue(prunedQueue, newItem);
-          } else {
-            await latest.persistentSession.addQueueItem(newItem, position);
-            await latest.persistentSession.setCurrentClimb(newItem, false, correlationId);
-          }
-          trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
-        } catch (error: unknown) {
-          console.error('Failed to set current climb:', error);
-          if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
-          latest.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: previousPlaylistSuggestionSource });
-          trackQueueOperationError('setCurrentClimb', mode);
+  // --- Single shared queue-actions implementation (see queue-actions-core.ts) ---
+  // Every field here is a closure that reads `latestRef.current` at call
+  // time, so this can be constructed once (`useMemo(..., [])`) and still stay
+  // fresh — the callbacks it returns are as stable as `nextCorrelationId`
+  // above.
+  const actionsCoreDeps = useMemo<QueueActionsCoreDeps>(
+    () => ({
+      getSnapshot: () => ({
+        queue: latestRef.current.state.queue,
+        currentClimbQueueItem: latestRef.current.state.currentClimbQueueItem,
+        playlistSuggestionSource: latestRef.current.state.playlistSuggestionSource,
+      }),
+      applyLocal: (action) => latestRef.current.dispatch(action),
+      setPlaylistSuggestionSourceLocal: (source) =>
+        latestRef.current.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: source }),
+      // Dispatch the reducer's REFRESH action (it does the identity-match
+      // check against live reducer state, not a possibly-stale ref snapshot).
+      refreshPlaylistSuggestionSourceLocal: (source) =>
+        latestRef.current.dispatch({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source }),
+      buildItem: (climb, suggested) =>
+        createClimbQueueItem(climb, latestRef.current.clientId, latestRef.current.currentUserInfo, suggested),
+      guardMutation: () => latestRef.current.guardMutation(),
+      validateClimbForQueue: (climb) => latestRef.current.validateQueueAdd(climb),
+      offlineBuffer: {
+        bufferAddition: (item) => latestRef.current.offlineBuffer.bufferAddition(item),
+      },
+      // Only suggestion-derived items get auto-queued (mirrors the reducer's
+      // own DELTA_UPDATE_CURRENT_CLIMB `shouldAddToQueue` gate).
+      resolveShouldAddToQueueOnActivate: (item) => !!item.suggested,
+      // QueueContext always keeps the existing current climb on setQueue,
+      // even if it fell out of the new queue — callers are expected to keep
+      // it consistent themselves (e.g. drag-reorder never drops it).
+      resolveNextCurrentForSetQueue: () => latestRef.current.state.currentClimbQueueItem,
+      buildReplacementItem: (existing, climb, queueItemUuid) => {
+        const base = createClimbQueueItem(climb, latestRef.current.clientId, latestRef.current.currentUserInfo);
+        return {
+          ...base,
+          uuid: queueItemUuid,
+          addedBy: existing?.addedBy ?? base.addedBy,
+          addedByUser: existing?.addedByUser ?? base.addedByUser,
+          tickedBy: existing?.tickedBy,
+        };
+      },
+      discoverNext: (anchor) => {
+        const latest = latestRef.current;
+        const buildSuggestedQueueItem = makeBuildSuggestedQueueItem(latest);
+        const queue = latest.state.queue;
+        // With no anchor at all (no current climb, no `from`), Next surfaces
+        // queue[0] so the Queue bar's Next button can start a queue the user
+        // has built but not yet activated. If the queue is also empty, fall
+        // through to suggestedClimbs[0] so a fresh load with populated
+        // suggestions still exposes a Next.
+        if (anchor == null) {
+          if (queue[0]) return queue[0];
+          const firstSuggestion = latest.suggestedClimbs[0];
+          return firstSuggestion ? buildSuggestedQueueItem(firstSuggestion) : null;
         }
-      } else {
-        trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
-      }
-      return newItem;
-    },
+        const anchorClimbUuid = anchor.climb?.uuid;
+        const queueItemIndex = queue.findIndex((queueItem) => queueItem.uuid === anchor.uuid);
+        if (queueItemIndex >= 0 && queueItemIndex < queue.length - 1) {
+          return queue[queueItemIndex + 1];
+        }
+        // Playlist-suggestion mode: suggestedClimbs is the curated next-up
+        // feed (climbs after the activated one, queued items already
+        // filtered out). The anchor isn't in this feed, so position-based
+        // walking doesn't apply — the next-up is whatever sits at the head.
+        if (latest.state.playlistSuggestionSource) {
+          const nextClimb = latest.suggestedClimbs[0];
+          return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
+        }
+        const fromSearch = findUnqueuedNeighborInSearchResults(
+          latest.climbSearchResults,
+          anchorClimbUuid,
+          queue,
+          1,
+          buildSuggestedQueueItem,
+        );
+        if (fromSearch) return fromSearch;
+        // Cross-search-session continuity: anchor isn't in current
+        // climbSearchResults (e.g. queue was built from a previous search).
+        // Surface the first unqueued suggestion rather than dead-ending the
+        // Next button.
+        const fallback = pickUnqueuedSuggestion(latest.suggestedClimbs, queue, anchorClimbUuid);
+        return fallback ? buildSuggestedQueueItem(fallback) : null;
+      },
+      discoverPrev: (anchor) => {
+        // No anchor (no current climb, no `from`): backward navigation has
+        // no semantic answer — don't fabricate one from suggestions. Forward
+        // surfaces queue[0] to start an unactivated queue; backward has no
+        // symmetric "start" semantics.
+        if (anchor == null) return null;
+        const latest = latestRef.current;
+        const buildSuggestedQueueItem = makeBuildSuggestedQueueItem(latest);
+        const anchorClimbUuid = anchor.climb?.uuid;
+        const queue = latest.state.queue;
+        const queueItemIndex = queue.findIndex((queueItem) => queueItem.uuid === anchor.uuid);
+        if (queueItemIndex > 0) return queue[queueItemIndex - 1];
+        // In playlist-suggestion mode there's no "previous playlist climb"
+        // once the activated climb is current — the playlist is consumed
+        // forward only. Don't fall through to climbSearchResults, that would
+        // surface unrelated results.
+        if (latest.state.playlistSuggestionSource) return null;
+        // Backward navigation is history-oriented: the queue walk above is
+        // the history step. When neither queue nor search results yield a
+        // backward neighbour, don't fall through to suggestedClimbs — that's
+        // discovery (the forward direction).
+        return findUnqueuedNeighborInSearchResults(
+          latest.climbSearchResults,
+          anchorClimbUuid,
+          queue,
+          -1,
+          buildSuggestedQueueItem,
+        );
+      },
+      party: {
+        get isActive() {
+          return latestRef.current.isPersistentSessionActive;
+        },
+        get hasConnected() {
+          return latestRef.current.hasConnected;
+        },
+        get isDisconnected() {
+          return latestRef.current.isDisconnected;
+        },
+        get attemptMutation() {
+          return latestRef.current.hasConnected && !latestRef.current.isDisconnected;
+        },
+        reuseExistingQueueItemOnSetCurrentClimb: false,
+        returnNullOnSetCurrentClimbFailure: false,
+        mutations: {
+          addQueueItem: (item, position) => latestRef.current.persistentSession.addQueueItem(item, position),
+          removeQueueItem: (uuid) => latestRef.current.persistentSession.removeQueueItem(uuid),
+          setCurrentClimb: (item, shouldAddToQueue, correlationId) =>
+            latestRef.current.persistentSession.setCurrentClimb(item, shouldAddToQueue, correlationId),
+          mirrorCurrentClimb: (mirrored) => latestRef.current.persistentSession.mirrorCurrentClimb(mirrored),
+          setQueue: (queue, currentClimbQueueItem) =>
+            latestRef.current.persistentSession.setQueue(queue, currentClimbQueueItem),
+          replaceQueueItem: (uuid, item) => latestRef.current.persistentSession.replaceQueueItem(uuid, item),
+          reportWallDisconnect: () => latestRef.current.persistentSession.reportWallDisconnect(),
+        },
+        nextCorrelationId: () => nextCorrelationId(),
+      },
+      hooks: {
+        resolveSetActiveClimbSource: (kind) =>
+          (kind === 'setCurrentClimb' ? 'setCurrentClimb' : 'setCurrentClimbQueueItem') satisfies SetActiveClimbSource,
+        // Central funnel instrumentation — fires from every UI path that
+        // activates a new climb (queue list tap, browse preview, playlist
+        // activation, SetActiveAction button, lightbulb re-assert).
+        // Previously this event only fired from the SetActiveAction button,
+        // missing the ~7 other entry points and dropping the "Session
+        // Started → Set Active Climb" funnel conversion to ~6%.
+        onSetActiveClimb: (payload) => track('Set Active Climb', payload),
+        onClimbActivated: () => {
+          const { sessionId } = latestRef.current;
+          if (sessionId) incrementSessionClimbsAttempted(sessionId);
+        },
+        onQueueItemAdded: ({ source, queueLengthAfter }) => {
+          const latest = latestRef.current;
+          const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+          // `queueLengthAfter` reflects the most recent committed render, so
+          // two adds dispatched back-to-back in the same tick will both
+          // report the same length. Acceptable for the queue-churn dashboard
+          // tile; the dispatched reducer state will still be correct.
+          track('Climb Added to Queue', {
+            boardLayout: latest.boardDetails?.layout_name ?? null,
+            addedFromTab: source,
+            currentQueueLength: queueLengthAfter,
+            partyMode,
+          });
+        },
+        onQueueItemRemoved: () => {
+          const latest = latestRef.current;
+          const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+          track('Climb Removed from Queue', {
+            boardLayout: latest.boardDetails?.layout_name ?? null,
+            partyMode,
+            removedBy: 'self',
+          });
+        },
+        onOperationMetric: {
+          success: (operation, durationMs, mode) => trackQueueOperation(operation, durationMs, mode),
+          error: (operation, mode) => trackQueueOperationError(operation, mode),
+        },
+      },
+      errorMessages: {
+        addToQueue: 'Failed to add queue item:',
+        removeFromQueue: 'Failed to remove queue item:',
+        setQueue: 'Failed to set queue:',
+        mirrorClimb: 'Failed to mirror climb:',
+        replaceQueueItem: 'Failed to replace queue item:',
+        setCurrentClimb: {
+          reuse: 'Failed to set current climb:',
+          playlist: 'Failed to set current climb:',
+          add: 'Failed to set current climb:',
+          activate: 'Failed to set current climb:',
+        },
+        setCurrentClimbQueueItem: 'Failed to set current climb:',
+        reportWallDisconnect: 'Failed to report wall disconnect:',
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-
-  // Browse-initiated drawer open. Always-live model: every participant
-  // broadcasts on browse exactly like solo — pre-mutate state (which the
-  // persistent session broadcasts when a party session is active) then open
-  // the drawer. Pass `playlistSuggestionSource: null` so activating a
-  // non-playlist climb clears any stale playlist source carried over from a
-  // prior activation.
-  const previewClimbFromBrowse = useCallback(
-    (climb: Climb) => {
-      void setCurrentClimb(climb, { playlistSuggestionSource: null });
-      dispatchOpenPlayDrawer();
-    },
-    [setCurrentClimb],
-  );
-
-  // Report this client's own BLE link drop to the session so every member's
-  // wall-confirmed lightbulb clears. Best-effort and a no-op in solo (the
-  // persistent-session helper short-circuits with no active session).
-  const reportWallDisconnect = useCallback(async (): Promise<void> => {
-    const latest = latestRef.current;
-    if (!latest.isPersistentSessionActive) return;
-    if (!latest.hasConnected) return;
-    try {
-      await latest.persistentSession.reportWallDisconnect();
-    } catch (error: unknown) {
-      console.error('Failed to report wall disconnect:', error);
-    }
-  }, []);
-
-  // Replace an existing queue item in place with a new climb, preserving the
-  // queue-item uuid and the existing addedBy attribution. Used by the create
-  // form on subsequent saves so the queue item stays in the same slot instead
-  // of piling up duplicates.
-  const replaceQueueItem = useCallback((queueItemUuid: string, climb: Climb) => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return;
-    if (!latest.validateQueueAdd(climb)) return;
-    const existing = latest.state.queue.find((qItem) => qItem.uuid === queueItemUuid);
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    const base = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
-    const newItem: ClimbQueueItem = {
-      ...base,
-      uuid: queueItemUuid,
-      addedBy: existing?.addedBy ?? base.addedBy,
-      addedByUser: existing?.addedByUser ?? base.addedByUser,
-      tickedBy: existing?.tickedBy,
-    };
-    latest.dispatch({
-      type: 'DELTA_REPLACE_QUEUE_ITEM',
-      payload: { uuid: queueItemUuid, item: newItem },
-    });
-    if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
-      latest.persistentSession
-        .replaceQueueItem(queueItemUuid, newItem)
-        .then(() => trackQueueOperation('replaceQueueItem', performance.now() - startTime, mode))
-        .catch((error: unknown) => {
-          console.error('Failed to replace queue item:', error);
-          trackQueueOperationError('replaceQueueItem', mode);
-        });
-    } else {
-      trackQueueOperation('replaceQueueItem', performance.now() - startTime, mode);
-    }
-  }, []);
-
-  const setQueue = useCallback((queue: ClimbQueueItem[]) => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return;
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    latest.dispatch({
-      type: 'UPDATE_QUEUE',
-      payload: { queue, currentClimbQueueItem: latest.state.currentClimbQueueItem },
-    });
-    if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
-      latest.persistentSession
-        .setQueue(queue, latest.state.currentClimbQueueItem)
-        .then(() => trackQueueOperation('setQueue', performance.now() - startTime, mode))
-        .catch((error: unknown) => {
-          console.error('Failed to set queue:', error);
-          trackQueueOperationError('setQueue', mode);
-        });
-    } else {
-      trackQueueOperation('setQueue', performance.now() - startTime, mode);
-    }
-  }, []);
-
-  const setCurrentClimbQueueItem = useCallback((item: ClimbQueueItem) => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return;
-    // Playlist "peek" items use a deterministic synthetic uuid so repeated
-    // peeks of the same suggestion produce a stable queue uuid. Once a peek
-    // is promoted to the actual current climb, mint a fresh queue-item uuid
-    // so it lives as a regular queue entry rather than a transient peek.
-    const queueItem = isPlaylistPeekQueueItemUuid(item.uuid)
-      ? createClimbQueueItem(item.climb, latest.clientId, latest.currentUserInfo, item.suggested)
-      : item;
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    const correlationId = nextCorrelationId();
-    latest.dispatch({
-      type: 'DELTA_UPDATE_CURRENT_CLIMB',
-      payload: { item: queueItem, shouldAddToQueue: queueItem.suggested, correlationId },
-    });
-    if (queueItem.climb) {
-      track('Set Active Climb', {
-        climbUuid: queueItem.climb.uuid,
-        boardType: queueItem.climb.boardType ?? null,
-        layoutId: queueItem.climb.layoutId ?? null,
-        source: 'setCurrentClimbQueueItem' satisfies SetActiveClimbSource,
-      });
-    }
-    if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
-    if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
-      latest.persistentSession
-        .setCurrentClimb(queueItem, queueItem.suggested, correlationId)
-        .then(() => trackQueueOperation('setCurrentClimbQueueItem', performance.now() - startTime, mode))
-        .catch((error: unknown) => {
-          console.error('Failed to set current climb:', error);
-          if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
-          trackQueueOperationError('setCurrentClimbQueueItem', mode);
-        });
-    } else {
-      trackQueueOperation('setCurrentClimbQueueItem', performance.now() - startTime, mode);
-    }
-  }, []);
-
-  const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
-    latestRef.current.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: source ?? null });
-  }, []);
-
-  const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
-    latestRef.current.dispatch({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source });
-  }, []);
+  const actionsCore = useMemo(() => createQueueActionsCore(actionsCoreDeps), [actionsCoreDeps]);
+  const {
+    addToQueue,
+    removeFromQueue,
+    setCurrentClimb,
+    previewClimbFromBrowse,
+    reportWallDisconnect,
+    replaceQueueItem,
+    setQueue,
+    setCurrentClimbQueueItem,
+    setPlaylistSuggestionSource,
+    refreshPlaylistSuggestionSource,
+    mirrorClimb,
+    getNextClimbQueueItem,
+    getPreviousClimbQueueItem,
+  } = actionsCore;
 
   const setClimbSearchParams = useCallback((params: SearchRequestPagination) => {
     const latest = latestRef.current;
@@ -762,114 +701,8 @@ export const GraphQLQueueProvider = ({
     latestRef.current.setCountSearchParams(params);
   }, []);
 
-  const mirrorClimb = useCallback(() => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return;
-    if (!latest.state.currentClimbQueueItem?.climb) return;
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    const newMirroredState = !latest.state.currentClimbQueueItem.climb?.mirrored;
-    // Local-origin dispatch: pass the current climb's uuid so the reducer's
-    // server-event uuid guard is a no-op here (it only suppresses when uuid
-    // diverges).
-    latest.dispatch({
-      type: 'DELTA_MIRROR_CURRENT_CLIMB',
-      payload: { mirrored: newMirroredState, mirroredUuid: latest.state.currentClimbQueueItem.uuid },
-    });
-    if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
-      latest.persistentSession
-        .mirrorCurrentClimb(newMirroredState)
-        .then(() => trackQueueOperation('mirrorClimb', performance.now() - startTime, mode))
-        .catch((error: unknown) => {
-          console.error('Failed to mirror climb:', error);
-          trackQueueOperationError('mirrorClimb', mode);
-        });
-    } else {
-      trackQueueOperation('mirrorClimb', performance.now() - startTime, mode);
-    }
-  }, []);
-
   const stableFetchMoreClimbs = useCallback(() => {
     latestRef.current.fetchMoreClimbs();
-  }, []);
-
-  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }) => {
-    const latest = latestRef.current;
-    // `from` lets the drawer walk navigation from its locally-displayed climb
-    // without first writing to state.currentClimbQueueItem. Default anchor is
-    // the current wall climb, preserving existing callers. Always-live model:
-    // every participant navigates the shared queue (there is no non-driver
-    // suggestions-only path).
-    const anchorUuid = options?.from ? options.from.uuid : latest.state.currentClimbQueueItem?.uuid;
-    const anchorClimbUuid = options?.from ? options.from.climb?.uuid : latest.state.currentClimbQueueItem?.climb?.uuid;
-    const buildSuggestedQueueItem = makeBuildSuggestedQueueItem(latest);
-    const queue = latest.state.queue;
-    // With no anchor at all (no current climb, no `from`), Next surfaces queue[0]
-    // so the Queue bar's Next button can start a queue the user has built but
-    // not yet activated. If the queue is also empty, fall through to
-    // suggestedClimbs[0] so a fresh load with populated suggestions still
-    // exposes a Next.
-    if (anchorUuid == null) {
-      if (queue[0]) return queue[0];
-      const firstSuggestion = latest.suggestedClimbs[0];
-      return firstSuggestion ? buildSuggestedQueueItem(firstSuggestion) : null;
-    }
-    const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-    if (queueItemIndex >= 0 && queueItemIndex < queue.length - 1) {
-      return queue[queueItemIndex + 1];
-    }
-    // Playlist-suggestion mode: suggestedClimbs is the curated next-up feed
-    // (climbs after the activated one, queued items already filtered out).
-    // The anchor isn't in this feed, so position-based walking doesn't apply —
-    // the next-up is whatever sits at the head.
-    if (latest.state.playlistSuggestionSource) {
-      const nextClimb = latest.suggestedClimbs[0];
-      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
-    }
-    const fromSearch = findUnqueuedNeighborInSearchResults(
-      latest.climbSearchResults,
-      anchorClimbUuid,
-      queue,
-      1,
-      buildSuggestedQueueItem,
-    );
-    if (fromSearch) return fromSearch;
-    // Cross-search-session continuity: anchor isn't in current
-    // climbSearchResults (e.g. queue was built from a previous search). Surface
-    // the first unqueued suggestion rather than dead-ending the Next button.
-    const fallback = pickUnqueuedSuggestion(latest.suggestedClimbs, queue, anchorClimbUuid);
-    return fallback ? buildSuggestedQueueItem(fallback) : null;
-  }, []);
-
-  const getPreviousClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }) => {
-    const latest = latestRef.current;
-    const anchorUuid = options?.from ? options.from.uuid : latest.state.currentClimbQueueItem?.uuid;
-    const anchorClimbUuid = options?.from ? options.from.climb?.uuid : latest.state.currentClimbQueueItem?.climb?.uuid;
-    const buildSuggestedQueueItem = makeBuildSuggestedQueueItem(latest);
-    // No anchor (no current climb, no `from`): backward navigation has no
-    // semantic answer — don't fabricate one from suggestions. Forward
-    // surfaces queue[0] to start an unactivated queue; backward has no
-    // symmetric "start" semantics.
-    if (anchorUuid == null) return null;
-    const queue = latest.state.queue;
-    const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-    if (queueItemIndex > 0) return queue[queueItemIndex - 1];
-    // In playlist-suggestion mode there's no "previous playlist climb" once
-    // the activated climb is current — the playlist is consumed forward
-    // only. Don't fall through to climbSearchResults, that would surface
-    // unrelated results.
-    if (latest.state.playlistSuggestionSource) return null;
-    // Backward navigation is history-oriented: the queue walk above is the
-    // history step. When neither queue nor search results yield a backward
-    // neighbour, don't fall through to suggestedClimbs — that's discovery
-    // (the forward direction).
-    return findUnqueuedNeighborInSearchResults(
-      latest.climbSearchResults,
-      anchorClimbUuid,
-      queue,
-      -1,
-      buildSuggestedQueueItem,
-    );
   }, []);
 
   // Optimistic dispatch for widget navigation (Next/Previous from Live Activity).

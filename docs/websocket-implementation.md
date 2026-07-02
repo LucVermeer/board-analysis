@@ -92,6 +92,10 @@ Both `PersistentSessionContext` and `QueueContext` are split into separate **Act
 
 Targeted hooks: `useQueueActions()`, `useQueueData()`, `usePersistentSessionActions()`, `usePersistentSessionState()`.
 
+### Shared queue-actions factory
+
+The queue-action surface itself (add/remove/set-current/navigate/mirror/replace/report-wall-disconnect) has a single implementation: `createQueueActionsCore(deps)` in `packages/web/app/components/queue-control/queue-actions-core.ts`. Both `GraphQLQueueProvider` (board routes) and the bridge's `usePersistentSessionQueueAdapter` (off-board) wire it with their own dependencies — most notably `applyLocal` (how an optimistic reducer action is applied: reducer `dispatch` on board routes; the shared `queueReducer` against the local store in bridge-solo; a **no-op in bridge-party**, which waits for the server echo instead of applying optimistic updates) and `discoverNext`/`discoverPrev` (search-results neighbor walk on board routes vs the shared `findNextQueueItemWithSuggestions` off-board). Every genuine per-surface behavioral difference is an explicit injected dep on `QueueActionsCoreDeps`, documented at the definition.
+
 ### QueueBridgeProvider — root-level QueueContext
 
 `QueueBridgeProvider` (`packages/web/app/components/queue-control/queue-bridge-context.tsx`) is mounted once at the root inside `PersistentSessionWrapper` so a `QueueContext` value is always available, even off board routes (e.g. `/you/logbook`, `/session/[sessionId]`, `/playlists/...`). It has two modes:
@@ -1926,6 +1930,7 @@ A GraphQL mutation would require either the JS GraphQL client (not available in 
 - `packages/web/app/components/graphql-queue/use-queue-session.ts` - Session hook
 - `packages/web/app/components/persistent-session/persistent-session-context.tsx` - Root-level session management (split into ActionsContext + StateContext for render performance)
 - `packages/web/app/components/graphql-queue/QueueContext.tsx` - Queue state context (split into ActionsContext + DataContext; actions use `latestRef` pattern for stable callback identity)
+- `packages/web/app/components/queue-control/queue-actions-core.ts` - Single queue-actions factory (`createQueueActionsCore`) wired by both `QueueContext.tsx` and `queue-bridge-context.tsx`; per-surface differences are injected deps
 
 ### Native iOS
 
