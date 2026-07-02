@@ -43,14 +43,6 @@ type SheetProps = {
   // here (e.g. the comment composer) a KeyboardAvoidingView lifts it above the
   // keyboard on iOS; Android resizes the native sheet.
   footer?: ReactNode;
-  // The native sheet owns keyboard avoidance, lifts above root chrome, and uses
-  // the system (glass on iOS 26) background, so these legacy gorhom knobs are
-  // accepted for source-compatibility but no longer do anything.
-  keyboardBehavior?: 'extend' | 'fillParent' | 'interactive';
-  keyboardBlurBehavior?: 'none' | 'restore';
-  android_keyboardInputMode?: 'adjustPan' | 'adjustResize';
-  fullWindowOverlay?: boolean;
-  glass?: boolean;
 };
 
 export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(

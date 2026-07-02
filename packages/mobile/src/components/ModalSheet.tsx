@@ -44,10 +44,6 @@ type ModalSheetProps = {
   scrollable?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
   footer?: ReactNode;
-  // Legacy gorhom knobs kept for source-compatibility; the native sheet handles
-  // stacking, keyboard avoidance and the background itself, so these no-op now.
-  stackBehavior?: 'push' | 'replace' | 'switch';
-  glass?: boolean;
 };
 
 export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(function ModalSheet(

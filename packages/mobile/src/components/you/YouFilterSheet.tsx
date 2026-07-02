@@ -49,7 +49,6 @@ export function YouFilterSheet({
       ref={sheetRef}
       snapPoints={['55%']}
       scrollable
-      fullWindowOverlay
       footer={<Button title={t('mobile.filter.done')} onPress={() => sheetRef.current?.close()} />}
     >
       <Text variant="title3" style={styles.title}>

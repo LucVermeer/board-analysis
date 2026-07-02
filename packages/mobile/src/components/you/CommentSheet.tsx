@@ -56,11 +56,7 @@ export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClo
       ref={sheetRef}
       snapPoints={['60%', '90%']}
       scrollable
-      fullWindowOverlay
       onClose={onClose}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
       footer={
         <View style={styles.composer}>
           <BottomSheetTextInput

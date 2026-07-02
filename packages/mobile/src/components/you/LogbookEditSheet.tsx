@@ -270,11 +270,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       ref={sheetRef}
       snapPoints={['75%', '92%']}
       scrollable
-      fullWindowOverlay
       onClose={onClose}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
       footer={
         <Button title={t('mobile.logbook.save')} onPress={save} loading={updateTick.isPending} disabled={isMutating} />
       }

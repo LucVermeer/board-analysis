@@ -78,7 +78,7 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
   };
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={snapPoints} scrollable contentContainerStyle={styles.content} glass={false}>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} scrollable contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text variant="title3" style={styles.title}>
           {title}

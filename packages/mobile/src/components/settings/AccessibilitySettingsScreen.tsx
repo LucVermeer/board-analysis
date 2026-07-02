@@ -464,7 +464,6 @@ function HoldColorPickerSheet({
       snapPoints={['95%']}
       onDismiss={handleDismiss}
       footer={footer}
-      stackBehavior="push"
       scrollable
     >
       <View style={styles.pickerBody}>
@@ -575,7 +574,6 @@ function BrushThicknessSheet({ open, value, shapeSize, onSave, onClose }: BrushT
       snapPoints={['48%', '80%']}
       onDismiss={handleDismiss}
       footer={footer}
-      stackBehavior="push"
       scrollable
     >
       <View style={styles.pickerBody}>
@@ -646,7 +644,6 @@ function ShapeSizeSheet({ open, value, brushThickness, onSave, onClose }: ShapeS
       snapPoints={['48%', '80%']}
       onDismiss={handleDismiss}
       footer={footer}
-      stackBehavior="push"
       scrollable
     >
       <View style={styles.pickerBody}>

@@ -71,7 +71,7 @@ export function HoldRoleSheet({
   };
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose fullWindowOverlay scrollable>
+    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose scrollable>
       <View style={styles.content}>
         <Text variant="headline" style={styles.title}>
           {t('mobile.create.holdRole.title')}
