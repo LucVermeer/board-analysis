@@ -378,7 +378,7 @@ export async function leaveSession(deps: RoomManagerDeps, connectionId: string):
   // comment (moved verbatim into that function's doc comment) — this call
   // MUST stay after the distributed leave/election above.
   if (wentLocallyEmpty) {
-    await markInactiveIfGloballyEmpty(deps, sessionId, true);
+    await markInactiveIfGloballyEmpty(deps, sessionId, /* isExplicitLeave */ true);
   }
 
   return {
@@ -444,7 +444,7 @@ export async function disconnectClient(
   // comment — this call MUST stay after `distributedState.removeConnection`
   // above.
   if (wentLocallyEmpty) {
-    await markInactiveIfGloballyEmpty(deps, sessionId, false);
+    await markInactiveIfGloballyEmpty(deps, sessionId, /* isExplicitLeave */ false);
   }
 
   const participants = getOrCreateParticipantMap(sessionId, sessionParticipants);
@@ -517,7 +517,11 @@ export async function disconnectClient(
  * cancels pending writes (see `markInactiveIfGloballyEmpty`) when the
  * session goes globally empty, so skipping it here for that caller avoids a
  * redundant (if harmless/idempotent) call — but preserving byte-equal
- * per-caller behaviour means not adding it unconditionally. Captured by the
+ * per-caller behaviour means not adding it unconditionally. Note the flag
+ * does not add a cancellation the base lacked either: when the session is
+ * NOT globally empty, the base `leaveSession` path never cancelled pending
+ * writes anywhere (neither in its timer nor in the globally-empty block),
+ * and `false` reproduces exactly that. Captured by the
  * `cancelWritesOnExpiry` flag, threaded straight through so each caller's
  * original control flow is reproduced exactly:
  *   - `leaveSession` passes `false`.
