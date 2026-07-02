@@ -19,6 +19,7 @@
     "dayjs": "^1.11.19"
   },
   "devDependencies": {
+    "@boardsesh/profile-stats": "*",
     "typescript": "~6.0.3"
   }
 }

@@ -149,17 +149,14 @@ describe('useDeleteTick (shared)', () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const recent = queryClient.getQueryData<{ pages: { userAscentsFeed: { items: { uuid: string }[] } }[] }>([
-      'userAscentsFeed',
-      'user-1',
-      { sortBy: 'recent' },
-    ]);
-    const hardest = queryClient.getQueryData<{ pages: { userAscentsFeed: { items: { uuid: string }[] } }[] }>([
-      'userAscentsFeed',
-      'user-1',
-      { sortBy: 'hardest' },
-    ]);
+    type CachedFeed = { pages: { userAscentsFeed: { items: { uuid: string }[]; totalCount: number } }[] };
+    const recent = queryClient.getQueryData<CachedFeed>(['userAscentsFeed', 'user-1', { sortBy: 'recent' }]);
+    const hardest = queryClient.getQueryData<CachedFeed>(['userAscentsFeed', 'user-1', { sortBy: 'hardest' }]);
     expect(recent?.pages[0].userAscentsFeed.items).toEqual([{ uuid: 'tick-2' }]);
     expect(hardest?.pages[0].userAscentsFeed.items).toEqual([]);
+    // totalCount stays consistent with the strip — a stale-high count would
+    // leak to any surface reading the total before the refetch reconciles.
+    expect(recent?.pages[0].userAscentsFeed.totalCount).toBe(1);
+    expect(hardest?.pages[0].userAscentsFeed.totalCount).toBe(0);
   });
 });

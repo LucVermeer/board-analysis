@@ -56,19 +56,28 @@ export function useUpdateTick() {
 function stripTickFromAscentFeeds(queryClient: QueryClient, uuid: string) {
   queryClient.setQueriesData<InfiniteData<GetUserAscentsFeedQueryResponse>>(
     { queryKey: ['userAscentsFeed'] },
-    (cached) =>
-      cached
-        ? {
-            ...cached,
-            pages: cached.pages.map((page) => ({
-              ...page,
-              userAscentsFeed: {
-                ...page.userAscentsFeed,
-                items: page.userAscentsFeed.items.filter((item) => item.uuid !== uuid),
-              },
-            })),
-          }
-        : cached,
+    (cached) => {
+      if (!cached) return cached;
+      // Each page carries a copy of the whole feed's totalCount — keep it
+      // consistent with the strip so a surface reading the total isn't
+      // stale-high until the background refetch reconciles.
+      const removedCount = cached.pages.reduce(
+        (total, page) => total + page.userAscentsFeed.items.filter((item) => item.uuid === uuid).length,
+        0,
+      );
+      if (removedCount === 0) return cached;
+      return {
+        ...cached,
+        pages: cached.pages.map((page) => ({
+          ...page,
+          userAscentsFeed: {
+            ...page.userAscentsFeed,
+            items: page.userAscentsFeed.items.filter((item) => item.uuid !== uuid),
+            totalCount: Math.max(0, page.userAscentsFeed.totalCount - removedCount),
+          },
+        })),
+      };
+    },
   );
 }
 

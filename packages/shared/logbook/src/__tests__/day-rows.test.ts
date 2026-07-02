@@ -165,6 +165,19 @@ describe('describeLogbookDay', () => {
   });
 });
 
+describe('parseTickTimeLocal parity', () => {
+  // day-rows deliberately inlines the naive-UTC parse instead of depending on
+  // @boardsesh/profile-stats (dep-weight); this pins the two implementations
+  // together so a change to the canonical helper can't silently diverge the
+  // logbook's day buckets.
+  it('cuts the same local day as profile-stats parseTickTime', async () => {
+    const { parseTickTime } = await import('@boardsesh/profile-stats');
+    for (const climbedAt of ['2026-06-30T23:30:00', '2026-06-30T00:15:00', '2026-01-01T12:00:00.000Z']) {
+      expect(logbookDayKey(climbedAt)).toBe(parseTickTime(climbedAt).format('YYYY-MM-DD'));
+    }
+  });
+});
+
 describe('dedupeLogbookItems', () => {
   it('keeps first occurrence order', () => {
     const items = [
