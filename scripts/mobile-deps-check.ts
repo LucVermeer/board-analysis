@@ -1,40 +1,10 @@
 /// <reference types="node" />
 
 /**
- * Deterministic dependency-health check for packages/mobile.
- *
- * This used to shell out to `expo install --check`, which DOES NOT compare
- * against the locally installed SDK's `bundledNativeModules.json` as its own
- * docs imply — it consults Expo's remote versions API. That means the check
- * went red the instant Expo published a patch release, with zero changes on
- * our side, and stayed red until we bumped `expo` to match. `EXPO_OFFLINE=1`
- * does not fix this: the CLI prints "Dependency validation is unreliable in
- * offline-mode" and skips real validation.
- *
- * This script instead reads packages/mobile/node_modules/expo/bundledNativeModules.json
- * directly — the canonical pins FOR THE SDK RELEASE WE HAVE INSTALLED. That
- * file only changes when we bump the `expo` package ourselves, which is
- * exactly the determinism we want: the check only changes outcome when WE
- * change something (bump expo, edit a pin, lockfile drift).
- *
- * It enforces two invariants per dependency that Expo tracks:
- *   1. Declared-range alignment — our declared version string in package.json
- *      must line up with the SDK's bundled range. An exact pin (e.g. "56.0.4")
- *      must satisfy the bundled range (e.g. "~56.0.4"); a range pin (e.g.
- *      "~2.31.1") must be STRING-EQUAL to the bundled range — anything looser
- *      could silently resolve outside what the SDK was tested against.
- *   2. Installed alignment — the version actually installed in node_modules
- *      must satisfy our declared string. This is the caret-drift class of bug
- *      that crashed the 2.0.0 launch: a `^`/`~` range in package.json quietly
- *      resolving, via `bun install` / a transitive floor raise, to a version
- *      the installed Expo SDK was never tested against, while typecheck and
- *      the Metro bundle stay green.
- *
- * `expo` itself is not listed in bundledNativeModules.json, so it only gets
- * the installed-alignment check (installed satisfies declared). Deliberate
- * deviations from the SDK pins live in `expo.install.exclude` in
- * packages/mobile/package.json — exclusion exempts a package from rule 1
- * only; rule 2 still guards the hand-pinned deviation against lockfile drift.
+ * Deterministic dep-health check for packages/mobile: validates our declared
+ * pins against the INSTALLED SDK's bundledNativeModules.json (never the
+ * network, unlike `expo install --check`), so it only changes outcome when we
+ * bump expo, edit a pin, or the lockfile drifts.
  *
  * Usage: vp run check:mobile-deps
  */
@@ -50,36 +20,20 @@ export const EXPO_PACKAGE_NAME = 'expo';
 export interface DepViolation {
   package: string;
   declared: string;
-  /** The SDK's bundled range for this package, or null for `expo` itself (not tracked in bundledNativeModules.json). */
+  /** SDK's bundled range, or null for `expo` itself (untracked). */
   bundled: string | null;
-  /** The installed version, or null if it could not be resolved. */
   installed: string | null;
   reason: string;
 }
 
 export interface DepCheckResult {
-  /**
-   * Number of declared dependencies whose range was validated against the
-   * SDK's bundled map (rule 1). Zero means the map validated nothing — a
-   * degenerate pins file must fail the check, never green-light it.
-   */
+  /** Deps validated against the bundled map; 0 means a degenerate map must fail the run. */
   checked: number;
   violations: DepViolation[];
 }
 
-/**
- * Pure check: given our declared dependency map, the exclude list, the
- * installed SDK's bundled native module ranges, and a map of installed
- * versions, return every violation. No filesystem access — all inputs are
- * plain data, so this is unit-testable without a real node_modules tree.
- *
- * Exclusion (`expo.install.exclude`) means "deliberately deviates from the
- * SDK's pin", NOT "exempt from drift": it skips only rule 1 (bundled-range
- * alignment). Rule 2 (installed satisfies declared) still runs for excluded
- * packages, so a hand-pinned deviation is still guarded against lockfile
- * drift. Excluded entries the SDK does not track at all (e.g. `typescript`)
- * are skipped naturally by the bundled-map gate.
- */
+// Pure check (no filesystem). Exclusion ≠ exempt from drift: it skips only the
+// bundled-range rule; installed-satisfies-declared still runs for excluded packages.
 export function checkMobileDeps(
   declaredDeps: Record<string, string>,
   exclude: readonly string[],
@@ -94,8 +48,7 @@ export function checkMobileDeps(
   for (const [name, declared] of Object.entries(declaredDeps)) {
     const isExpoItself = name === expoPackageName;
     const bundledRange = isExpoItself ? undefined : bundledModules[name];
-    // Not a package the installed SDK tracks pins for — nothing to check.
-    if (!isExpoItself && bundledRange === undefined) continue;
+    if (!isExpoItself && bundledRange === undefined) continue; // not tracked by the SDK
 
     if (bundledRange !== undefined && !excludeSet.has(name)) {
       // (1) Declared-range alignment.
@@ -124,9 +77,9 @@ export function checkMobileDeps(
       }
     }
 
-    // (2) Installed alignment — catches lockfile drift independent of (1),
-    //     and runs for excluded packages too: a deliberate deviation from the
-    //     SDK pin still has to install exactly what it declares.
+    // (2) Installed alignment — the caret-drift class of bug that crashed the
+    // 2.0.0 launch: a ^/~ range silently resolving to a version the installed
+    // Expo SDK was never tested against, invisible to typecheck and Metro.
     const installed = installedVersions[name];
     if (installed === undefined) {
       violations.push({
@@ -150,7 +103,7 @@ export function checkMobileDeps(
   return { checked, violations };
 }
 
-/** Read the `expo.install.exclude` list from a parsed packages/mobile/package.json. */
+/** Read `expo.install.exclude`; throws on a non-array or non-string entries (fail loud, don't mis-exclude). */
 export function readExcludeList(mobilePackageJsonPath: string): string[] {
   let raw: string;
   try {
@@ -164,16 +117,24 @@ export function readExcludeList(mobilePackageJsonPath: string): string[] {
   } catch (error) {
     throw new Error(`cannot parse ${mobilePackageJsonPath}: ${(error as Error).message}`);
   }
-  const pkg = parsed as { expo?: { install?: { exclude?: string[] } } };
-  return pkg.expo?.install?.exclude ?? [];
+  const pkg = parsed as { expo?: { install?: { exclude?: unknown } } };
+  const exclude = pkg.expo?.install?.exclude;
+  if (exclude === undefined) return [];
+  if (!Array.isArray(exclude)) {
+    throw new Error(
+      `expo.install.exclude in ${mobilePackageJsonPath} must be an array of package names, got ${typeof exclude}`,
+    );
+  }
+  const nonString = exclude.find((entry) => typeof entry !== 'string');
+  if (nonString !== undefined) {
+    throw new Error(
+      `expo.install.exclude in ${mobilePackageJsonPath} must contain only strings, got ${JSON.stringify(nonString)}`,
+    );
+  }
+  return exclude as string[];
 }
 
-/**
- * Read and parse the installed SDK's bundledNativeModules.json. Throws if
- * missing or malformed — including "valid JSON but degenerate": an empty
- * object, an array, or non-string values would make every package skip the
- * range check and green-light the run, which is worse than a flaky check.
- */
+/** Read the installed SDK's pins map; throws on missing or degenerate (empty / array / non-string) input. */
 export function readBundledNativeModules(bundledNativeModulesPath: string): Record<string, string> {
   let raw: string;
   try {
@@ -210,18 +171,8 @@ export function readBundledNativeModules(bundledNativeModulesPath: string): Reco
   return parsed as Record<string, string>;
 }
 
-/**
- * Read the installed `version` of `name` by checking each `searchDirs` entry
- * in order and returning the first hit. Deliberately does NOT use
- * `require.resolve('<pkg>/package.json')` (as the sibling native-deps/patches
- * checks do): several Expo SDK packages (e.g. expo-symbols) ship an `exports`
- * map that only exposes `.` and specific subpaths, so `<pkg>/package.json` is
- * not a resolvable specifier even though the package is installed and would
- * resolve fine at runtime. Reading the manifest straight off disk sidesteps
- * that and mirrors Bun's isolated-linker layout: a direct dependency of
- * packages/mobile is symlinked into packages/mobile/node_modules; anything
- * hoisted to the workspace root lives in the repo root node_modules.
- */
+// Reads manifests straight off disk, not require.resolve('<pkg>/package.json'):
+// some SDK packages' exports maps (e.g. expo-symbols) make that unresolvable.
 export function readInstalledVersion(searchDirs: readonly string[], name: string): string | undefined {
   for (const dir of searchDirs) {
     const packageJsonPath = resolve(dir, ...name.split('/'), 'package.json');
@@ -230,13 +181,12 @@ export function readInstalledVersion(searchDirs: readonly string[], name: string
       const { version } = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version?: string };
       if (version) return version;
     } catch {
-      // Malformed manifest at this search dir — try the next one.
+      // Malformed manifest here — try the next search dir.
     }
   }
   return undefined;
 }
 
-/** Read the installed version of every named package via {@link readInstalledVersion}. */
 export function readInstalledVersions(
   searchDirs: readonly string[],
   packageNames: readonly string[],
@@ -254,9 +204,7 @@ export function main(): number {
   const mobileDir = resolve(repoRoot, 'packages', 'mobile');
   const mobilePackageJson = resolve(mobileDir, 'package.json');
   const bundledNativeModulesPath = resolve(mobileDir, 'node_modules', 'expo', 'bundledNativeModules.json');
-  // Bun's isolated linker symlinks packages/mobile's DIRECT deps into its own
-  // node_modules; anything hoisted to the workspace root lives at the repo
-  // root instead. Search both, mobile-local first.
+  // Bun's isolated linker: direct deps in packages/mobile/node_modules, hoisted ones at the root.
   const searchDirs = [resolve(mobileDir, 'node_modules'), resolve(repoRoot, 'node_modules')];
 
   let declaredDeps: Record<string, string>;
@@ -275,9 +223,6 @@ export function main(): number {
   const installedExpoVersion = installedVersions[EXPO_PACKAGE_NAME];
   const { checked, violations } = checkMobileDeps(declaredDeps, exclude, bundledModules, installedVersions);
 
-  // Belt-and-braces against a degenerate pins map: if not a single declared
-  // dependency was validated against bundledNativeModules.json, the check
-  // proved nothing — fail rather than green-light.
   if (checked === 0) {
     console.error(
       `[mobile-deps] FAILED — 0 declared dependencies were validated against ${bundledNativeModulesPath}. ` +
@@ -310,8 +255,7 @@ export function main(): number {
   return 0;
 }
 
-// Run only when executed directly (tsx scripts/mobile-deps-check.ts), not when
-// imported by tests.
+// Run only when executed directly, not when imported by tests.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   process.exit(main());
 }

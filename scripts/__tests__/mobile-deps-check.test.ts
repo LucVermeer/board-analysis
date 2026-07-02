@@ -277,4 +277,20 @@ describe('readExcludeList', () => {
 
     expect(() => readExcludeList(pkgPath)).toThrow(/cannot parse/);
   });
+
+  it('throws when expo.install.exclude is a string instead of an array', () => {
+    // Without the guard, new Set("react-native") iterates characters and
+    // silently excludes nothing — fail loud instead.
+    const pkgPath = join(dir, 'package.json');
+    writeFileSync(pkgPath, JSON.stringify({ expo: { install: { exclude: 'react-native' } } }));
+
+    expect(() => readExcludeList(pkgPath)).toThrow(/expo\.install\.exclude .* must be an array/);
+  });
+
+  it('throws when expo.install.exclude contains a non-string entry', () => {
+    const pkgPath = join(dir, 'package.json');
+    writeFileSync(pkgPath, JSON.stringify({ expo: { install: { exclude: ['react-native', 42] } } }));
+
+    expect(() => readExcludeList(pkgPath)).toThrow(/must contain only strings, got 42/);
+  });
 });
