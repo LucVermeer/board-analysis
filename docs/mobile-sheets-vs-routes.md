@@ -16,8 +16,9 @@ Most things are sheets. Routes are the exception, and each route variant earns i
 
 ### Bottom sheets (`@expo/ui/community/bottom-sheet`)
 
-Wrapped by two helpers so they don't drift (both supply the scrim, drag handle, iOS 26 glass
-background, and keyboard avoidance natively):
+Wrapped by two helpers so they don't drift (both supply the scrim, drag handle, and iOS 26 glass
+background natively, plus JS-side keyboard avoidance for the `footer` slot — the Android Compose
+dialog window does **not** resize for the keyboard, so the wrappers pad on both platforms):
 
 | Wrapper                                            | Backing            | Opened by                                                                          | Use when                                                                                                                          |
 | -------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |

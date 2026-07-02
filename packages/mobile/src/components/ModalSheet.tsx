@@ -103,9 +103,16 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
     [managed],
   );
 
+  // The sheet's single child must carry the iOS detent bound (see
+  // useSheetColumnStyle): with a footer the KeyboardAvoidingView below is that
+  // child and the body just fills it (flex:1); without one the body itself is
+  // the child, so it carries the bound directly — otherwise an iOS scrollable
+  // sheet sizes to its content and anything past the detent is clipped and
+  // unreachable instead of scrolling.
+  const bodyStyle = footer ? styles.content : columnStyle;
   const body = scrollable ? (
     <BottomSheetScrollView
-      style={styles.content}
+      style={bodyStyle}
       contentContainerStyle={contentContainerStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -114,7 +121,7 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       {children}
     </BottomSheetScrollView>
   ) : (
-    <View style={[styles.content, contentContainerStyle]}>{children}</View>
+    <View style={[bodyStyle, contentContainerStyle]}>{children}</View>
   );
 
   const footerBar = footer ? (
@@ -146,8 +153,10 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       {footer ? (
         // The single flex child of the native sheet: bound to the detent height on
         // iOS (see useSheetColumnStyle) so the pinned footer can't fall off-screen
-        // (#3330); flex:1 on Android / fitToContents.
-        <KeyboardAvoidingView style={columnStyle} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // (#3330); flex:1 on Android / fitToContents. `padding` on both platforms:
+        // the Android Compose dialog window does not resize for the keyboard, so
+        // without it the keyboard covers the footer's input (emulator-verified).
+        <KeyboardAvoidingView style={columnStyle} behavior="padding">
           {body}
           {footerBar}
         </KeyboardAvoidingView>

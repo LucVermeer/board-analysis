@@ -4,11 +4,16 @@ import { render } from '@testing-library/react';
 import { createElement, forwardRef, type ReactNode, type Ref } from 'react';
 
 // Captured across renders so tests can assert what Sheet hands the native sheet:
-// the onChange handler, the snap points, and whether a footer subtree rendered.
+// the onChange handler, the snap points, whether a footer subtree rendered, the
+// scroll body's style (the iOS detent bound), and the footer KeyboardAvoidingView's
+// behavior (must be "padding" on BOTH platforms — the Android Compose dialog
+// window does not resize for the keyboard).
 const captures = vi.hoisted(() => ({
   onChange: null as null | ((index: number) => void),
   snapPoints: undefined as unknown,
   scrollUsed: false,
+  scrollStyle: undefined as unknown,
+  kavBehavior: undefined as string | undefined,
 }));
 
 type SheetMockProps = {
@@ -25,8 +30,9 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
     captures.snapPoints = snapPoints;
     return createElement('div', { 'data-sheet': 'true', ref }, children);
   }),
-  BottomSheetScrollView: ({ children }: ViewMockProps) => {
+  BottomSheetScrollView: ({ children, style }: ViewMockProps & { style?: unknown }) => {
     captures.scrollUsed = true;
+    captures.scrollStyle = style;
     return createElement('div', { 'data-scroll': 'true' }, children);
   },
 }));
@@ -34,7 +40,10 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (options: { ios?: unknown; android?: unknown }) => options.ios },
   View: ({ children }: ViewMockProps) => createElement('div', null, children),
-  KeyboardAvoidingView: ({ children }: ViewMockProps) => createElement('div', { 'data-kav': 'true' }, children),
+  KeyboardAvoidingView: ({ children, behavior }: ViewMockProps & { behavior?: string }) => {
+    captures.kavBehavior = behavior;
+    return createElement('div', { 'data-kav': 'true' }, children);
+  },
   // Consumed by useSheetColumnStyle to bound the sheet column to the detent on iOS.
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
@@ -86,6 +95,8 @@ beforeEach(() => {
   captures.onChange = null;
   captures.snapPoints = undefined;
   captures.scrollUsed = false;
+  captures.scrollStyle = undefined;
+  captures.kavBehavior = undefined;
   hapticMedium.mockClear();
 });
 
@@ -125,6 +136,32 @@ describe('Sheet', () => {
       </Sheet>,
     );
     expect(captures.snapPoints).toEqual(['50%', '90%']);
+  });
+
+  it('lifts the footer above the keyboard with padding on both platforms', () => {
+    // The Android Compose dialog window does NOT resize for the keyboard
+    // (emulator-verified), so the KeyboardAvoidingView must pad unconditionally —
+    // a platform-gated `undefined` leaves the footer's input covered on Android.
+    render(
+      <Sheet footer={<div>save</div>}>
+        <div>body</div>
+      </Sheet>,
+    );
+    expect(captures.kavBehavior).toBe('padding');
+  });
+
+  it('bounds a footerless scrollable body to the detent height on iOS (#3330)', () => {
+    // Without a footer the body itself is the sheet's single child, so it must
+    // carry the iOS detent bound directly — a flex:1 body sizes to content under
+    // SwiftUI's unbounded proposal and clips anything past the detent. Default
+    // snap points ['50%','90%'] at index 0 on an 844pt window with a 0 top inset:
+    // round(844 * 0.5) - 20pt top chrome = 402.
+    render(
+      <Sheet scrollable>
+        <div>body</div>
+      </Sheet>,
+    );
+    expect(captures.scrollStyle).toEqual({ height: 402 });
   });
 
   it('fires a haptic and onChange only when the sheet opens (index >= 0)', () => {

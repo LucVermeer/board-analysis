@@ -3,7 +3,8 @@ import { KeyboardAvoidingView, Platform, StyleSheet, View, type StyleProp, type 
 // Migrated off @gorhom/bottom-sheet to Expo's native bottom sheet (#3167).
 // The native sheet draws its own scrim, drag handle and (on iOS 26) glass
 // background, so the old SheetBackdrop / GlassSheetBackground / FullWindowOverlay
-// wiring is gone. Scroll/keyboard coordination is handled natively.
+// wiring is gone. Scroll coordination is native; keyboard avoidance for a pinned
+// footer is JS-side (the KeyboardAvoidingView below) on BOTH platforms.
 //
 // Present/dismiss route through the SheetPresentationProvider coordinator so two
 // native sheet transitions never overlap (the iOS UIKit deadlock / app freeze —
@@ -41,7 +42,9 @@ type SheetProps = {
   contentContainerStyle?: StyleProp<ViewStyle>;
   // Optional bottom action area, pinned below the content. When an input lives
   // here (e.g. the comment composer) a KeyboardAvoidingView lifts it above the
-  // keyboard on iOS; Android resizes the native sheet.
+  // keyboard on BOTH platforms — the Android Compose dialog window does not
+  // resize itself when the keyboard opens (emulator-verified), so Android needs
+  // the JS-side padding just like iOS.
   footer?: ReactNode;
 };
 
@@ -101,9 +104,16 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
     [managed],
   );
 
+  // The sheet's single child must carry the iOS detent bound (see
+  // useSheetColumnStyle): with a footer the KeyboardAvoidingView below is that
+  // child and the body just fills it (flex:1); without one the body itself is
+  // the child, so it carries the bound directly — otherwise an iOS scrollable
+  // sheet sizes to its content and anything past the detent is clipped and
+  // unreachable instead of scrolling.
+  const bodyStyle = footer ? styles.content : columnStyle;
   const body = scrollable ? (
     <BottomSheetScrollView
-      style={styles.content}
+      style={bodyStyle}
       contentContainerStyle={contentContainerStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -112,7 +122,7 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
       {children}
     </BottomSheetScrollView>
   ) : (
-    <View style={[styles.content, contentContainerStyle]}>{children}</View>
+    <View style={[bodyStyle, contentContainerStyle]}>{children}</View>
   );
 
   const footerBar = footer ? (
@@ -144,8 +154,10 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
       {footer ? (
         // The single flex child of the native sheet: bound to the detent height on
         // iOS (see useSheetColumnStyle) so the pinned footer can't fall off-screen
-        // (#3330); flex:1 on Android / fitToContents.
-        <KeyboardAvoidingView style={columnStyle} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // (#3330); flex:1 on Android / fitToContents. `padding` on both platforms:
+        // the Android Compose dialog window does not resize for the keyboard, so
+        // without it the keyboard covers the footer's input (emulator-verified).
+        <KeyboardAvoidingView style={columnStyle} behavior="padding">
           {body}
           {footerBar}
         </KeyboardAvoidingView>
