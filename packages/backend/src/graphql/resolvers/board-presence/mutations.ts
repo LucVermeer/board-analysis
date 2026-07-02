@@ -449,7 +449,18 @@ export const boardPresenceMutations = {
     // doesn't let a stale backstop entry lapse. A different climb / angle /
     // user is never suppressed (a user change still needs to broadcast the
     // hand-off).
-    if (gate.lastReport === `${emitterId}|${climbUuid}|${effectiveAngle}`) {
+    //
+    // The short-circuit additionally requires this emitter to STILL hold the
+    // wall (`currentWriter === emitterId`). The canonical retry is a socket
+    // drop right after the original send — and that same drop fires the
+    // WS-close backstop, which deletes the writer key and broadcasts
+    // holder:null while lastReport survives. Short-circuiting on lastReport
+    // alone would then leave the wall looking free while this emitter holds
+    // it (writer never re-taken, hand-off never re-broadcast); falling
+    // through re-takes the writer and re-broadcasts. The cost is one
+    // duplicate history/durable row in exactly that edge — holder correctness
+    // wins over row dedup.
+    if (gate.lastReport === `${emitterId}|${climbUuid}|${effectiveAngle}` && gate.currentWriter === emitterId) {
       roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
       return true;
     }
@@ -545,7 +556,7 @@ export const boardPresenceMutations = {
     // One Redis pipeline: durable FIFO history append, connection-holder
     // handoff (atomic SET..GET), the A2 dedup marker, and the session→board
     // mapping. Non-fatal on failure (see commitBoardClimb's contract).
-    const { previousWriter } = await pubsub.commitBoardClimb({
+    const { previousWriter, writerSlotOk } = await pubsub.commitBoardClimb({
       boardId: String(boardId),
       emitterId,
       climb: presenceClimb,
@@ -562,13 +573,14 @@ export const boardPresenceMutations = {
       climb: presenceClimb,
     });
 
-    // This emitter is now the board's connection holder. The holder is Redis-only
-    // (degrades to "no holder" without Redis), so only broadcast a hand-off when
-    // Redis actually backs the writer — otherwise commitBoardClimb returns
-    // previousWriter: null and `null !== emitterId` would spuriously broadcast on
-    // every send.
+    // This emitter is now the board's connection holder. Only broadcast a
+    // hand-off when the writer slot verifiably executed (`writerSlotOk`) —
+    // that covers both Redis-off (holder degrades to "none", no broadcast)
+    // and a failing pipeline, where previousWriter: null is a fabrication and
+    // `null !== emitterId` would otherwise spuriously broadcast a hand-off
+    // (+ Live Activity push) on every send until Redis recovers.
     let writerChanged = false;
-    if (pubsub.isRedisConnected() && previousWriter !== emitterId) {
+    if (writerSlotOk && previousWriter !== emitterId) {
       writerChanged = true;
       pubsub.publishBoardPresenceEvent(String(boardId), {
         __typename: 'BoardConnectionChanged',

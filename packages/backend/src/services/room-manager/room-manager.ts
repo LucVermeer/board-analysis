@@ -187,10 +187,11 @@ class RoomManager {
 
   /**
    * Record that this connection is the board-presence holder of `boardId` (set
-   * from reportBoardClimb after setBoardWriter). The WS-close backstop
-   * (clearBoardWriterForConnection) reads this to free the wall if the holder
-   * crashes without an explicit reportBoardDisconnect. No-op if the connection
-   * isn't registered (e.g. an internal/controller transport without a client).
+   * from reportBoardClimb around the commitBoardClimb writer take). The
+   * WS-close backstop (clearBoardWriterForConnection) reads this to free the
+   * wall if the holder crashes without an explicit reportBoardDisconnect.
+   * No-op if the connection isn't registered (e.g. an internal/controller
+   * transport without a client).
    */
   noteBoardWriter(connectionId: string, boardId: number, emitterId: string): void {
     const client = this.clients.get(connectionId);

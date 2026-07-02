@@ -1324,6 +1324,7 @@ describe('board-presence durable history (board_climb_events)', () => {
       isMember: true,
       firstSeenMs: Date.now(),
       lastReport: null,
+      currentWriter: null,
     });
     const accepted = await boardPresenceMutations.reportBoardClimb(
       undefined,
@@ -1340,6 +1341,7 @@ describe('board-presence durable history (board_climb_events)', () => {
       isMember: true,
       firstSeenMs: null,
       lastReport: null,
+      currentWriter: null,
     });
     await boardPresenceMutations.reportBoardClimb(
       undefined,
@@ -1356,6 +1358,7 @@ describe('board-presence durable history (board_climb_events)', () => {
       isMember: true,
       firstSeenMs: Date.now() - 120_000,
       lastReport: null,
+      currentWriter: null,
     });
 
     const accepted = await boardPresenceMutations.reportBoardClimb(
@@ -1550,9 +1553,10 @@ describe('board-presence connection holder', () => {
     });
   });
 
-  // The holder lives in Redis (setBoardWriter / clearBoardWriterIf are Redis-only).
-  // pubsub connects only when REDIS_URL is configured (CI sets it); skip cleanly
-  // otherwise, mirroring the FIFO-history test above.
+  // The holder lives in Redis (the commitBoardClimb writer take and
+  // clearBoardWriterIf are Redis-only). pubsub connects only when REDIS_URL is
+  // configured (CI sets it); skip cleanly otherwise, mirroring the
+  // FIFO-history test above.
   describe('holder state + hand-off (Redis)', () => {
     let redisOn = false;
     beforeAll(async () => {
@@ -1945,6 +1949,51 @@ describe('board-presence write-side idempotency (Redis)', () => {
     expect(secondAccepted).toBe(true);
     const history = await testRedis.lrange(`board:${boardId}:history`, 0, -1);
     expect(history).toHaveLength(2);
+  });
+
+  it('falls through (re-takes the writer) when the wall was freed between the send and its retry', async () => {
+    if (!redisOn || !testRedis) return;
+    // The canonical A2 retry cause is a socket drop right after the send — and
+    // that same drop fires the WS-close backstop, which DELETEs the writer key
+    // and broadcasts holder:null while the 10s lastReport marker survives. The
+    // retry must NOT short-circuit then: it has to re-take the writer (and so
+    // re-broadcast the hand-off), or every watcher shows the wall free while
+    // this emitter holds it. The accepted cost is a duplicate history/durable
+    // row with a fresh seq — holder correctness over row dedup.
+    const boardId = await makeIdemBoard();
+    await stampSustainedFirstSeen(testRedis, boardId, TEST_USER_ID);
+    const writerKey = `board:${boardId}:writer`;
+
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(await testRedis.get(writerKey)).toBe(TEST_USER_ID);
+    expect(await countEvents(boardId)).toBe(1);
+
+    // Simulate the WS-close backstop: the writer key is cleared, lastReport isn't.
+    await testRedis.del(writerKey);
+    expect(await testRedis.get(`board:${boardId}:lastReport`)).not.toBeNull();
+
+    // Identical retry, well inside the dedup window.
+    const retryAccepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(retryAccepted).toBe(true);
+
+    // The retry fell through the dedup: writer re-taken, and a second
+    // history entry + durable row with a fresh, higher seq landed.
+    expect(await testRedis.get(writerKey)).toBe(TEST_USER_ID);
+    const history = await testRedis.lrange(`board:${boardId}:history`, 0, -1);
+    expect(history).toHaveLength(2);
+    expect(await countEvents(boardId)).toBe(2);
+    const [durableRow] = await db.execute(
+      sql`SELECT count(DISTINCT seq)::int AS distinct_seqs FROM board_climb_events WHERE board_id = ${boardId}`,
+    );
+    expect(Number((durableRow as { distinct_seqs: number }).distinct_seqs)).toBe(2);
   });
 });
 

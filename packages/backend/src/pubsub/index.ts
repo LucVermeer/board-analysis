@@ -26,6 +26,15 @@ export type BoardReportGate = {
   firstSeenMs: number | null;
   /** Value of `board:{id}:lastReport` ("emitterId|climbUuid|angle"), or null when never set / expired. */
   lastReport: string | null;
+  /**
+   * The board's current connection holder (`board:{id}:writer`), or null when
+   * free / unknown. The dedup short-circuit must only fire while the retrying
+   * emitter still holds the wall — a WS-close backstop clear between the
+   * original send and the retry deletes the writer key but leaves lastReport,
+   * and short-circuiting then would strand the wall looking free while the
+   * emitter holds it (no re-take, no re-broadcast).
+   */
+  currentWriter: string | null;
 };
 
 export type CommitBoardClimbInput = {
@@ -40,9 +49,17 @@ export type CommitBoardClimbInput = {
 
 export type CommitBoardClimbResult = {
   /** The writer key's previous value (from the atomic SET..GET), or null when
-   * the board was free / the commit failed. Non-fatal failures collapse to
-   * null here, matching `setBoardWriter`'s existing swallow-and-log contract. */
+   * the board was free / the commit failed. */
   previousWriter: string | null;
+  /**
+   * True only when the writer SET..GET slot actually executed without error —
+   * i.e. `previousWriter` is a real observation, not a failure collapsed to
+   * null. The caller must gate the hand-off broadcast on this: a failing
+   * pipeline otherwise looks like "board was free" (`null !== emitterId`) and
+   * would spuriously broadcast a hand-off + kick a Live Activity push on
+   * every send while Redis is unhealthy.
+   */
+  writerSlotOk: boolean;
 };
 
 // Board-presence durable history (Redis FIFO) configuration. The live
@@ -904,28 +921,6 @@ class PubSub {
   }
 
   /**
-   * Append a climb to a board's durable FIFO history (newest-first, capped at
-   * 50, 1-week TTL). No-op without Redis — late joiners then just rely on the
-   * live subscription.
-   */
-  async storeBoardClimb(boardId: string, climb: BoardPresenceClimb): Promise<void> {
-    if (!this.redisAdapter || !this.isRedisConnected()) {
-      return;
-    }
-
-    try {
-      const { publisher } = redisClientManager.getClients();
-      const key = `board:${boardId}:history`;
-      await publisher.lpush(key, JSON.stringify(climb));
-      await publisher.ltrim(key, 0, BOARD_HISTORY_SIZE - 1);
-      await publisher.expire(key, BOARD_HISTORY_TTL);
-    } catch (error) {
-      logger.error('[PubSub] Failed to store board climb in history:', error);
-      // Non-fatal: the live event was already published.
-    }
-  }
-
-  /**
    * Read a board's recent climbs, newest-first by seq (cap 50). Empty without
    * Redis.
    */
@@ -1019,38 +1014,44 @@ class PubSub {
   /**
    * One Redis pipeline (1 RTT) that answers everything `reportBoardClimb`'s
    * Stage A needs before validating the incoming climb: proof-of-presence
-   * (+ first-seen, for the durable-history dwell gate) and the last-report
-   * dedup marker (for write-side idempotency, A2). Replaces what used to be
-   * separate `hasBoardMembership` + `getBoardMembershipFirstSeen` + a
-   * `lastReport` GET — 3 RTTs collapsed into 1.
+   * (+ first-seen, for the durable-history dwell gate), the last-report dedup
+   * marker (for write-side idempotency, A2), and the current writer (so the
+   * dedup short-circuit can require the retrying emitter to still hold the
+   * wall — see `BoardReportGate.currentWriter`). Replaces what used to be
+   * separate `hasBoardMembership` + first-seen + `lastReport` reads — 3 RTTs
+   * collapsed into 1, with the writer read riding the same pipeline for free.
    *
    * Preserves `hasBoardMembership`'s fail-closed `redisRequired` semantics
-   * (throws when Redis is required but the pipeline fails) and
-   * `getBoardMembershipFirstSeen`'s plausible-epoch guard on `firstSeenMs`
-   * (a legacy/implausible stamp still counts as a member but never satisfies
-   * the dwell gate). Local-only fallback mirrors today: membership from the
-   * in-memory map, `firstSeenMs`/`lastReport` unknown (null) — durable history
-   * and write-side dedup both degrade to off without Redis, same as before.
+   * (throws when Redis is required but the pipeline fails) and the
+   * plausible-epoch guard on `firstSeenMs` (a legacy/implausible stamp still
+   * counts as a member but never satisfies the dwell gate). Local-only
+   * fallback mirrors today: membership from the in-memory map,
+   * `firstSeenMs`/`lastReport`/`currentWriter` unknown (null) — durable
+   * history and write-side dedup both degrade to off without Redis, same as
+   * before.
    */
   async getBoardReportGate(boardId: string, emitterId: string): Promise<BoardReportGate> {
     const membershipKey = `presence:board:${boardId}:user:${emitterId}`;
     const lastReportKey = `board:${boardId}:lastReport`;
+    const writerKey = `board:${boardId}:writer`;
 
     if (this.redisAdapter && this.isRedisConnected()) {
       try {
         const { publisher } = redisClientManager.getClients();
-        const results = await publisher.pipeline().get(membershipKey).get(lastReportKey).exec();
+        const results = await publisher.pipeline().get(membershipKey).get(lastReportKey).get(writerKey).exec();
         if (!results) {
           throw new Error('getBoardReportGate pipeline returned null');
         }
-        const [[membershipError, membershipRaw], [lastReportError, lastReportRaw]] = results;
+        const [[membershipError, membershipRaw], [lastReportError, lastReportRaw], [writerError, writerRaw]] = results;
         if (membershipError) throw membershipError;
         if (lastReportError) throw lastReportError;
+        if (writerError) throw writerError;
         const raw = membershipRaw as string | null;
         return {
           isMember: raw !== null,
           firstSeenMs: parsePlausibleFirstSeenMs(raw),
           lastReport: (lastReportRaw as string | null) ?? null,
+          currentWriter: (writerRaw as string | null) ?? null,
         };
       } catch (error) {
         if (this.redisRequired) {
@@ -1065,29 +1066,35 @@ class PubSub {
       isMember: this.checkLocalBoardMembership(boardId, emitterId),
       firstSeenMs: null,
       lastReport: null,
+      currentWriter: null,
     };
   }
 
   /**
    * One Redis pipeline (1 RTT) that commits an accepted `reportBoardClimb`
    * send: appends to the durable FIFO history (LPUSH/LTRIM/EXPIRE), takes the
-   * connection-holder slot (atomic `SET writer EX GET` — same single-command
-   * handoff-dedup as `setBoardWriter`, so two concurrent reports still can't
-   * both observe the same previous holder), stamps the write-side dedup
-   * marker (A2's `lastReport`), and — when this connection is in a party
-   * session — remembers the session→board mapping (`setSessionBoard`'s key).
-   * Replaces what used to be 3 separate round trips.
+   * connection-holder slot (atomic `SET writer EX GET` — a single command, so
+   * two concurrent reports still can't both observe the same previous
+   * holder), stamps the write-side dedup marker (A2's `lastReport`), and —
+   * when this connection is in a party session — remembers the session→board
+   * mapping (`session:{id}:board`). Replaces what used to be 3 separate
+   * round trips.
    *
    * Non-fatal: the whole pipeline (or an individual command within it) can
-   * fail without failing the accepted report — same swallow-and-log contract
-   * `storeBoardClimb` / `setBoardWriter` / `setSessionBoard` each had on their
-   * own. A failure returns `{ previousWriter: null }`, which the resolver
-   * treats as "board was free" — the same false-negative that a swallowed
-   * `setBoardWriter` failure already produced before this pipeline existed.
+   * fail without failing the accepted report — failures are logged and
+   * swallowed. But a swallowed failure means `previousWriter: null` is a
+   * fabrication, not an observation, so the result also carries
+   * `writerSlotOk`: false whenever the writer slot didn't verifiably execute
+   * (Redis off, pipeline threw, or the SET..GET slot itself errored). The
+   * resolver gates the hand-off broadcast on it — without that gate, a
+   * failing pipeline would look like "board was free" on every send and
+   * spuriously re-broadcast the hand-off each time (the pre-pipeline code
+   * never had this failure mode: a writer-update failure was either swallowed
+   * with no broadcast, or thrown in redisRequired mode).
    */
   async commitBoardClimb(input: CommitBoardClimbInput): Promise<CommitBoardClimbResult> {
     if (!this.redisAdapter || !this.isRedisConnected()) {
-      return { previousWriter: null };
+      return { previousWriter: null, writerSlotOk: false };
     }
 
     try {
@@ -1127,37 +1134,11 @@ class PubSub {
       });
 
       const [writerError, writerValue] = results[writerCommandIndex];
-      if (writerError) return { previousWriter: null };
-      return { previousWriter: (writerValue as string | null) ?? null };
+      if (writerError) return { previousWriter: null, writerSlotOk: false };
+      return { previousWriter: (writerValue as string | null) ?? null, writerSlotOk: true };
     } catch (error) {
       logger.error('[PubSub] commitBoardClimb pipeline failed:', error);
-      return { previousWriter: null };
-    }
-  }
-
-  /**
-   * The board's current connection holder = the emitter id (a `userId`, or
-   * `conn:{connectionId}` for an anonymous client) of the most recent confirmed
-   * send. Set as a side-effect of reportBoardClimb; drives the "who's connected"
-   * indicator. Redis-only (degrades to "no holder" without Redis, like the
-   * durable feed). Returns the previous holder so the caller can detect a
-   * hand-off and only broadcast on a real change.
-   */
-  async setBoardWriter(boardId: string, emitterId: string): Promise<string | null> {
-    if (!this.redisAdapter || !this.isRedisConnected()) return null;
-    try {
-      const { publisher } = redisClientManager.getClients();
-      const key = `board:${boardId}:writer`;
-      // Atomic set-and-return-previous (`SET key val EX ttl GET`, Redis 6.2+) so
-      // two concurrent reports can't both read the same previous holder and both
-      // broadcast a hand-off — only the real change is detected. The writer key
-      // only ever holds a string, so GET can't hit a WRONGTYPE.
-      const previous = await publisher.set(key, emitterId, 'EX', BOARD_MEMBERSHIP_TTL, 'GET');
-      return (previous as string | null) ?? null;
-    } catch (error) {
-      if (this.redisRequired) throw error;
-      logger.error('[PubSub] Failed to set board writer:', error);
-      return null;
+      return { previousWriter: null, writerSlotOk: false };
     }
   }
 
@@ -1198,29 +1179,18 @@ class PubSub {
   }
 
   /**
-   * Remember which shared board_id a party session is on, written as a
-   * side-effect of `reportBoardClimb` (the only moment a session is provably
-   * tied to a board). The APNs Live Activity path needs this to resolve the
-   * board's current holder for a given session — `QueueState` and the push-token
-   * rows carry sessionId but not boardId.
+   * The shared board_id this party session is on, or null when unknown.
    *
-   * Redis-only and TTL'd to the same window as proof-of-presence so an idle
-   * session's mapping doesn't leak; a fresh send re-stamps it. No-op without
-   * Redis: the holder lookup then degrades to "unknown" and the APNs path omits
-   * boardConnection (device falls back to its own App-Group state).
+   * The mapping (`session:{id}:board`) is written by `commitBoardClimb` as a
+   * side-effect of `reportBoardClimb` — the only moment a session is provably
+   * tied to a board. The APNs Live Activity path reads it to resolve the
+   * board's current holder for a given session (`QueueState` and the
+   * push-token rows carry sessionId but not boardId). Redis-only and TTL'd to
+   * the same window as proof-of-presence so an idle session's mapping doesn't
+   * leak; a fresh send re-stamps it. Without Redis the holder lookup degrades
+   * to "unknown" and the APNs path omits boardConnection (device falls back
+   * to its own App-Group state).
    */
-  async setSessionBoard(sessionId: string, boardId: string): Promise<void> {
-    if (!this.redisAdapter || !this.isRedisConnected()) return;
-    try {
-      const { publisher } = redisClientManager.getClients();
-      await publisher.set(`session:${sessionId}:board`, boardId, 'EX', BOARD_MEMBERSHIP_TTL);
-    } catch (error) {
-      if (this.redisRequired) throw error;
-      logger.error('[PubSub] Failed to set session board:', error);
-    }
-  }
-
-  /** The shared board_id this session is on, or null when unknown. */
   async getSessionBoard(sessionId: string): Promise<string | null> {
     if (!this.redisAdapter || !this.isRedisConnected()) return null;
     try {
