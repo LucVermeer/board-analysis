@@ -384,10 +384,13 @@ export function createWebSessionConnectionDeps({
 
     // Observability for the recovery paths the controller handles itself —
     // reproduces the pre-W4 hook's exact console calls
-    // (`use-session-lifecycle.ts:580` and `:703`).
+    // (`use-session-lifecycle.ts:580`, `:703`, and the B3
+    // `rejoinedQueueState` guard's message).
     onRecoveryEvent: (kind, recoveryError) => {
       if (kind === 'delta-sync-fallback') {
         console.warn('[PersistentSession] Delta sync failed, falling back to full sync:', recoveryError);
+      } else if (kind === 'rejoin-missing-queue-state') {
+        console.error('[PersistentSession] JoinSession returned no queue snapshot; skipping reconnect sync');
       } else {
         console.error('[PersistentSession] Session subscription error:', recoveryError);
       }

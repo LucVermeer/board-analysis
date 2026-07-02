@@ -78,12 +78,20 @@ export type SessionConnectionClient = {
 };
 
 /** Minimal shape of a joined/rejoined session the controller reasons about.
- *  Platform session types (web's `Session`) satisfy this structurally. */
+ *  Platform session types (web's `Session`) satisfy this structurally.
+ *
+ *  `queueState` is nullable to match the schema (web's `Session.queueState`
+ *  is `QueueState | null` — the server returns null on the `session` query's
+ *  non-member preview and on `createSession`'s HTTP path). `joinSession` (a
+ *  WS member payload) always returns a full snapshot, so a null here means a
+ *  malformed response; the reconnect path treats it like a failed rejoin
+ *  (see `handleReconnect`), and the initial-connect path leaves the decision
+ *  to the platform's `applyFullSync` (web's port no-ops on null). */
 export type SessionConnectionSessionData = {
   queueState: {
     sequence: number;
     stateHash: string;
-  };
+  } | null;
 };
 
 export type SessionConnectionSink<TEvent> = {
@@ -131,9 +139,15 @@ export type SessionConnectionFatalReason =
  *  path failed and the controller applied a full sync instead
  *  (`use-session-lifecycle.ts:580`, pre-W4); `session-subscription-error` =
  *  the session-updates subscription errored and recovery was scheduled
- *  (`:703`). Surfaced via the optional `onRecoveryEvent` port so the
- *  controller stays console-free. */
-export type SessionConnectionRecoveryEventKind = 'delta-sync-fallback' | 'session-subscription-error';
+ *  (`:703`); `rejoin-missing-queue-state` = a rejoin resolved without a
+ *  queue snapshot and was treated as a failed rejoin (the base hook's B3
+ *  `rejoinedQueueState` guard — `error` is null for this kind, matching the
+ *  base's message-only `console.error`). Surfaced via the optional
+ *  `onRecoveryEvent` port so the controller stays console-free. */
+export type SessionConnectionRecoveryEventKind =
+  | 'delta-sync-fallback'
+  | 'session-subscription-error'
+  | 'rejoin-missing-queue-state';
 
 export type SessionConnectionDeps<
   TClient extends SessionConnectionClient,
@@ -550,16 +564,29 @@ export function createSessionConnectionController<
       if (joinEpoch !== epochAtCall || currentClient !== clientForReconnect) return;
       if (sessionData === null) return;
 
+      // joinSession (a WS member payload) always returns a full queue
+      // snapshot — the schema field is nullable only for the `session`
+      // query's non-member preview and createSession's HTTP path, which
+      // never flow through here. Without a snapshot there is no sequence or
+      // hash to reconcile against, so treat it like a failed rejoin (silent
+      // return; subscription recovery retries) instead of guessing. Ported
+      // from the base hook's B3 `rejoinedQueueState` guard.
+      const rejoinedQueueState = sessionData.queueState;
+      if (!rejoinedQueueState) {
+        deps.onRecoveryEvent?.('rejoin-missing-queue-state', null);
+        return;
+      }
+
       // Same reset as the initial connect's success path — see the comment
       // there. Mirrors `use-session-lifecycle.ts:519-520`.
       transientRetryCount = 0;
       subscriptionRetryCount = 0;
 
-      const serverSequence = sessionData.queueState.sequence;
+      const serverSequence = rejoinedQueueState.sequence;
       const strategy = deps.gate.decideReconnectStrategy({
         lastSequence,
         serverSequence,
-        serverStateHash: sessionData.queueState.stateHash,
+        serverStateHash: rejoinedQueueState.stateHash,
         localStateHash: deps.getLocalStateHash(),
       });
 

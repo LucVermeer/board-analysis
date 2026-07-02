@@ -12,7 +12,10 @@ import type {
 // ---------------------------------------------------------------------------
 
 type TestSessionData = {
-  queueState: { sequence: number; stateHash: string };
+  // Nullable to mirror `SessionConnectionSessionData` (web's
+  // `Session.queueState` is schema-nullable); the rejoin path treats a null
+  // snapshot as a failed rejoin — see the dedicated test below.
+  queueState: { sequence: number; stateHash: string } | null;
   label: string;
 };
 
@@ -287,7 +290,7 @@ describe('createSessionConnectionController', () => {
     expect(harness.queueEvents).toHaveLength(0);
     // ...the controller falls back to a full sync instead.
     expect(harness.fullSyncCalls).toHaveLength(1);
-    expect(harness.fullSyncCalls[0]?.queueState.sequence).toBe(8);
+    expect(harness.fullSyncCalls[0]?.queueState?.sequence).toBe(8);
     // The fallback is surfaced through the observability port.
     expect(harness.recoveryEvents).toHaveLength(1);
     expect(harness.recoveryEvents[0]?.kind).toBe('delta-sync-fallback');
@@ -706,5 +709,32 @@ describe('createSessionConnectionController', () => {
     await flushMicrotasks();
     expect(harness.sessionDataCalls).toHaveLength(1);
     expect(harness.sessionDataCalls[0]?.client).toBe(harness.clientsCreated[1]);
+  });
+
+  it('treats a rejoin without a queue snapshot as a failed rejoin (B3 guard)', async () => {
+    // `Session.queueState` is schema-nullable (null on the non-member
+    // preview / createSession HTTP paths); joinSession always returns a
+    // snapshot, so a null on rejoin is a malformed response. Without a
+    // sequence/hash there is nothing to reconcile against — the controller
+    // must bail silently (no strategy consult, no sync, no onSessionData)
+    // and surface only the observability event, exactly like the base
+    // hook's `rejoinedQueueState` guard.
+    const harness = createHarness();
+    harness.controller.start();
+    await flushMicrotasks();
+    expect(harness.sessionDataCalls).toHaveLength(1);
+    harness.fullSyncCalls.length = 0;
+
+    harness.joinImpl.mockResolvedValue({ queueState: null, label: 'malformed' });
+    harness.triggerReconnect();
+    await flushMicrotasks();
+
+    expect(harness.recoveryEvents).toEqual([{ kind: 'rejoin-missing-queue-state', error: null }]);
+    // No sync applied, no session data delivered, nothing surfaced as an error.
+    expect(harness.fullSyncCalls).toEqual([]);
+    expect(harness.queueEvents).toEqual([]);
+    expect(harness.sessionDataCalls).toHaveLength(1);
+    expect(harness.errors).toEqual([]);
+    expect(harness.fatalReasons).toEqual([]);
   });
 });
