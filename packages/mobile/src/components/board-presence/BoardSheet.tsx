@@ -11,18 +11,9 @@
 // contexts, which are inert when the `board-presence` flag is off — so this
 // sheet is only ever opened from the board glyph when the flag is on.
 //
-// PERF: the sheet stays MOUNTED across dismiss (like QueueSheet — see
-// `useManagedSheet` below), but its presence-consuming content does not. The
-// header/footer chrome here is cheap and always rendered; everything that
-// reads `useBoardPresenceCurrent`/`useBoardPresenceFeed` (hero, stats, the
-// virtualized history list) lives in `BoardSheetContent`, gated on an explicit
-// `isPresented` flag this component owns and flips itself — NOT the sheet
-// library's own child-mounting behavior, which isn't reliable here. That
-// content component mounts fresh on every `present()` and unmounts on
-// `handleFullyDismissed`, so a dismissed sheet does zero list/hero work.
-// `BoardNowPlayingReceived` telemetry moved OUT of this file entirely — it now
-// lives in `BoardPresenceInstrument` (mobile provider), so it keeps firing
-// while the sheet is dismissed.
+// Presence-consuming content is gated on `isPresented` (see `BoardSheetContent`)
+// so a dismissed sheet does zero work; `BoardNowPlayingReceived` telemetry lives
+// in the provider's `BoardPresenceInstrument` so it fires while dismissed.
 
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl, StyleSheet, View, type ColorValue } from 'react-native';
@@ -440,16 +431,11 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     [managed.handle, invalidatePendingActions],
   );
 
-  // Index-based re-mount backstop for a re-present that lands inside a dismiss
-  // settle window. Sequence without this: dismiss starts → user re-taps →
-  // `present()` sets isPresented(true) (no-op, still true) and the coordinator
-  // QUEUES the present (its pump early-returns while the dismiss is in flight)
-  // → the dismiss settles → `handleFullyDismissed` sets isPresented(false) →
-  // only THEN does the coordinator present the native sheet — leaving it fully
-  // up with the content unmounted until a close+reopen. The native `onChange`
-  // fires with index >= 0 whenever the sheet is actually up, so re-mounting
-  // here closes that gap. The synchronous set in `present()` stays as the fast
-  // path for the common (no-race) open.
+  // Re-mount backstop: a re-present queued inside a dismiss settle window gets
+  // its isPresented(true) clobbered by the late-settling `handleFullyDismissed`
+  // BEFORE the coordinator presents the native sheet — which would leave the
+  // sheet up with the content unmounted. index >= 0 means the sheet is really
+  // up, so re-mount here; the synchronous set in `present()` is the fast path.
   const managedOnChange = managed.onChange;
   const handleSheetChange = useCallback(
     (index: number) => {

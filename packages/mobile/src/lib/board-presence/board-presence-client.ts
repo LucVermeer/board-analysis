@@ -1,16 +1,6 @@
-// Mobile transport for the board-presence ("now on the wall") feature.
-//
-// A thin wrapper around the shared `createBoardPresenceClient` factory
-// (`@boardsesh/board-presence-react`) — the operation strings, response
-// unwrapping, and reconnect-catch-up semantics all live there now, shared with
-// the web adapter (`packages/web/app/components/board-presence/board-presence-client.ts`),
-// so a fix in one place lands on both platforms. This file only supplies the
-// mobile graphql-ws `Client` (the same one the queue provider uses) as the
-// three transport primitives the factory needs.
-//
-// Pass a getter (not the client itself) so the live client — which graphql-ws
-// may dispose and recreate — is read at call time, matching
-// `getClient: () => getWsClient()` in the queue provider.
+// Mobile board-presence transport: binds the mobile graphql-ws `Client` to the
+// shared `createBoardPresenceClient` factory (see there for all semantics).
+// A getter (not the client) so a graphql-ws-recreated client is read at call time.
 
 import { type Client, execute, subscribe } from '@boardsesh/graphql-client';
 import {

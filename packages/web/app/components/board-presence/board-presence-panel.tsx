@@ -26,12 +26,6 @@ import { useBoardPresenceControls } from './board-presence-context';
 import { BoardSheet } from './board-sheet';
 import { BOARD_PRESENCE_SWITCH_BOARD_EVENT } from './board-presence-events';
 
-// PERF: this panel is always mounted once a board is bound (it's the entry
-// pill's host), so it must stay off the volatile Feed context — reading
-// `useBoardPresenceFeed()` here would re-render the whole always-on pill on
-// every history change even while the sheet is closed. `BoardHistoryViewed`
-// moved into `BoardSheet` (keyed on its own `open` prop), which already
-// consumes the feed for its own rendering.
 export function BoardPresencePanel() {
   const { t } = useTranslation('session');
   const { boardId } = useBoardPresenceControls();

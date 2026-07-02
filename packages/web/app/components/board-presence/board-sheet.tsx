@@ -101,7 +101,7 @@ export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSh
       </Box>
       <Divider />
 
-      <BoardSheetBody open={open} boardId={boardId} />
+      <BoardSheetBody boardId={boardId} />
 
       <Divider />
       <ButtonBase
@@ -138,29 +138,24 @@ export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSh
  * gated by a prop check) so it mounts/unmounts with the Drawer itself — a
  * closed sheet subscribes to none of the presence contexts.
  */
-function BoardSheetBody({ open, boardId }: { open: boolean; boardId: number | null }) {
+function BoardSheetBody({ boardId }: { boardId: number | null }) {
   const { t } = useTranslation('session');
   const { formatGrade, getGradeColor } = useGradeFormat();
   const { currentClimb } = useBoardPresenceCurrent();
   const { history, stats } = useBoardPresenceFeed();
 
-  // Fires once per open (not on every history change while open) — reset when
-  // the sheet closes so the next open re-evaluates. Keyed on `open` rather
-  // than relying solely on Drawer's own unmount timing, so this stays correct
-  // even if a future change adds `keepMounted`.
+  // Fires once per open, when history is first non-empty. This body mounts
+  // fresh each time the Drawer opens (unmounted while closed), so the ref
+  // naturally resets per open — mirrors the mobile `BoardSheetContent`.
   const historyViewedForOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) {
-      historyViewedForOpenRef.current = false;
-      return;
-    }
     if (historyViewedForOpenRef.current || history.length === 0) return;
     historyViewedForOpenRef.current = true;
     track(SHARED_EVENTS.BoardHistoryViewed, {
       boardId: boardId ?? undefined,
       itemCount: history.length,
     });
-  }, [open, history.length, boardId]);
+  }, [history.length, boardId]);
 
   const statTiles = useMemo(() => {
     if (!stats) return [];

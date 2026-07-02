@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import React, { createElement } from 'react';
 import type { BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -208,10 +208,10 @@ describe('BoardSheet', () => {
     expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
   });
 
-  it('re-arms BoardHistoryViewed after a close/re-open cycle', () => {
+  it('re-arms BoardHistoryViewed after a close/re-open cycle (body unmounts with the Drawer)', async () => {
     presence.history = [makeClimb('c1', 3)];
 
-    const { rerender } = render(
+    const { rerender, queryByText } = render(
       createElement(BoardSheet, {
         open: true,
         boardLabel: 'Garage Wall',
@@ -229,6 +229,11 @@ describe('BoardSheet', () => {
         onSwitchBoard: noop,
       }),
     );
+    // The MUI temporary Drawer (no keepMounted) unmounts the body once the
+    // close transition finishes — that unmount is what resets the
+    // once-per-open ref, so wait for it before reopening.
+    await waitFor(() => expect(queryByText(HISTORY_HEADER)).toBeNull());
+
     rerender(
       createElement(BoardSheet, {
         open: true,
