@@ -58,6 +58,7 @@ import IosShare from '@mui/icons-material/IosShare';
 import { QRCodeSVG } from 'qrcode.react';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
+import { clearClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import styles from './queue-control-bar.module.css';
 import { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
@@ -614,17 +615,44 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const reconnectMessage =
     connectionState === 'error' ? t('queueBar.reconnect.connectionError') : t('queueBar.reconnect.reconnecting');
 
+  // Bar "leave session" (user-approved behaviour change). It used to always end
+  // the session for the whole crew. Now it branches on the roster:
+  //   - Peers still present → truly LEAVE. This participant departs, the
+  //     session keeps going for everyone else, and no summary shows.
+  //   - Sole participant → END the session (root summary dialog).
+  //
+  // "Last participant" reads the WHOLE roster (no connectionState filter):
+  // RECONNECTING peers count as present because their socket merely dropped and
+  // they may return — ending the session would pull it out from under them.
   const handleLeaveSession = useCallback(() => {
-    if (endSession) {
-      endSession();
+    const otherParticipantsPresent = myUserId
+      ? uniqueSessionUsers.some((user) => (user.userId ?? user.id) !== myUserId)
+      : uniqueSessionUsers.length > 1;
+
+    if (otherParticipantsPresent) {
+      // Leave path: `disconnect` (deactivateSession) sends LEAVE_SESSION; clear
+      // the cookie so a board-route remount doesn't re-activate the session we
+      // just left (mirrors the sesh-settings drawer's quiet stop).
+      if (disconnect) {
+        disconnect();
+        clearClimbSessionCookie();
+      } else {
+        showMessage(t('queueBar.leaveFailed'), 'warning');
+      }
       return;
     }
-    if (disconnect) {
+
+    // End path: `endSession` emits the lifecycle event, clears the cookie, and
+    // routes through the root `endSessionWithSummary` (the single summary dialog).
+    if (endSession) {
+      endSession();
+    } else if (disconnect) {
       disconnect();
+      clearClimbSessionCookie();
     } else {
       showMessage(t('queueBar.leaveFailed'), 'warning');
     }
-  }, [endSession, disconnect, showMessage, t]);
+  }, [endSession, disconnect, uniqueSessionUsers, myUserId, showMessage, t]);
 
   // Reconnect-only view helpers
   const renderReconnectingRow = () => (

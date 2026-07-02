@@ -26,6 +26,7 @@ let mockSession: Record<string, unknown> | null = {
   startedAt: new Date(Date.now() - 30 * 60000).toISOString(),
 };
 const mockDeactivateSession = vi.fn();
+const mockEndSessionWithSummary = vi.fn();
 let mockAngle: number | undefined = 40;
 let mockBoardDetails: Record<string, unknown> | null = { board_name: 'kilter' };
 let mockSessionDetail: Record<string, unknown> | null = {
@@ -65,6 +66,7 @@ vi.mock('@/app/components/persistent-session/persistent-session-context', () => 
     session: mockSession,
     users: [],
     deactivateSession: mockDeactivateSession,
+    endSessionWithSummary: mockEndSessionWithSummary,
   }),
   usePersistentSessionState: () => ({
     activeSession: mockActiveSession,
@@ -320,6 +322,9 @@ describe('SeshSettingsDrawer', () => {
       expect(mockDeactivateSession).toHaveBeenCalled();
       expect(mockClearClimbSessionCookie).toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
+      // The drawer's stop keeps quiet-leave semantics — it never ends the
+      // session for the crew, so no summary dialog is triggered.
+      expect(mockEndSessionWithSummary).not.toHaveBeenCalled();
     });
 
     it('shows Dismiss button after stopping session', () => {

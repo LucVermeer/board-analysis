@@ -51,7 +51,8 @@ vi.mock('@/app/components/graphql-queue', () => ({
     canMutate: mockQueueContext.canMutate ?? true,
     isDisconnected: mockQueueContext.isDisconnected ?? false,
     users: mockQueueContext.users ?? [],
-    clientId: null,
+    clientId: mockQueueContext.clientId ?? null,
+    participantId: mockQueueContext.participantId ?? null,
     isLeader: true,
     isBackendMode: false,
     hasConnected: true,
@@ -454,5 +455,86 @@ describe('QueueControlBar pivot', () => {
     const orderedUsernames = Array.from(items).map((el) => el.textContent?.trim());
     expect(orderedUsernames).toEqual(['alice', 'bob', 'carol']);
     expect(screen.queryByLabelText(/is driving/)).toBeNull();
+  });
+});
+
+// The bar's "Leave session" button (reached by cancelling a failed reconnect)
+// used to end the session for the whole crew. It now branches on the roster:
+// leave when peers remain, end only when the caller is the last participant.
+describe('QueueControlBar leave session branch', () => {
+  const makeRosterUser = (id: string, connectionState: 'CONNECTED' | 'RECONNECTING' = 'CONNECTED') => ({
+    id,
+    username: id,
+    isLeader: false,
+    userId: `user-${id}`,
+    connectionState,
+  });
+
+  // Drive the bar into the reconnect-cancel confirm row and click "Leave
+  // session". Returns the end/leave spies so each test can assert which fired.
+  const leaveFromBar = (options: {
+    users: ReturnType<typeof makeRosterUser>[];
+    clientId: string | null;
+  }): { endSession: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> } => {
+    const endSession = vi.fn();
+    const disconnect = vi.fn();
+    mockQueueContext = {
+      ...baseQueueContext,
+      sessionId: 'session-1',
+      connectionState: 'reconnecting',
+      isDisconnected: false,
+      clientId: options.clientId,
+      endSession,
+      disconnect,
+    };
+    mockPersistentSessionState = {
+      activeSession: { sessionId: 'session-1', sessionName: 'Test Session' },
+      session: { id: 'session-1', name: 'Test Session' },
+      users: options.users,
+    };
+    render(<QueueControlBar {...defaultProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByLabelText('Leave session'));
+    return { endSession, disconnect };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockQueueContext = { ...baseQueueContext };
+    mockPersistentSessionState = { activeSession: null, session: null, users: [] };
+    mockGetPreference.mockResolvedValue(null);
+    mockSetPreference.mockResolvedValue(undefined);
+  });
+
+  it('ends the session (summary path) when the caller is the sole participant', () => {
+    const { endSession, disconnect } = leaveFromBar({ users: [makeRosterUser('me')], clientId: 'me' });
+    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it('leaves (no summary) when other participants remain', () => {
+    const { endSession, disconnect } = leaveFromBar({
+      users: [makeRosterUser('me'), makeRosterUser('friend')],
+      clientId: 'me',
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(endSession).not.toHaveBeenCalled();
+  });
+
+  it('counts a RECONNECTING peer as present, so it leaves instead of ending', () => {
+    const { endSession, disconnect } = leaveFromBar({
+      users: [makeRosterUser('me'), makeRosterUser('friend', 'RECONNECTING')],
+      clientId: 'me',
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(endSession).not.toHaveBeenCalled();
+  });
+
+  it('ends the session when only the caller remains, even if clientId is unknown', () => {
+    // clientId null (e.g. mid-reconnect): fall back to roster size — a single
+    // entry is the caller, so end.
+    const { endSession, disconnect } = leaveFromBar({ users: [makeRosterUser('me')], clientId: null });
+    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
   });
 });

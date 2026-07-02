@@ -1,15 +1,16 @@
 import type { QueueActionsType, QueueDataType, ClimbQueueItem, ClimbQueue } from '../queue-control/types';
 import type { ConnectionState } from '../connection-manager/websocket-connection-manager';
-import type { SessionSummary, SessionUser } from '@boardsesh/shared-schema';
+import type { SessionUser } from '@boardsesh/shared-schema';
 import type { ReactNode } from 'react';
 import type { ParsedBoardRouteParameters, BoardDetails, Climb, SearchRequestPagination } from '@/app/lib/types';
 
-// Stable action functions extended with session management
+// Stable action functions extended with session management. The session-summary
+// dialog + its dismiss are owned by the root persistent session
+// (persistent-session-wrapper.tsx), so they no longer live on the queue actions.
 export type GraphQLQueueActionsType = {
   startSession: (options?: { discoverable?: boolean; name?: string; sessionId?: string }) => Promise<string>;
   joinSession: (sessionId: string) => Promise<void>;
   endSession: () => void;
-  dismissSessionSummary: () => void;
 } & QueueActionsType;
 
 // Combined type for the test-only `useQueueContext` hook + the queue-bridge
@@ -24,7 +25,6 @@ export type GraphQLQueueContextType = GraphQLQueueActionsType &
      *  reading the combined queue context don't need a second hook. */
     isPersistentSessionActive: boolean;
     sessionId: string | null;
-    sessionSummary: SessionSummary | null;
     sessionGoal: string | null;
     connectionState: ConnectionState;
     canMutate: boolean;
@@ -66,7 +66,6 @@ export type SessionDataType = {
    *  still drive the BLE send as today. */
   isPersistentSessionActive: boolean;
   sessionId: string | null;
-  sessionSummary: SessionSummary | null;
   sessionGoal: string | null;
   connectionState: ConnectionState;
   canMutate: boolean;

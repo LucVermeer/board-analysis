@@ -25,7 +25,6 @@ import { PlaylistsProvider } from '../climb-actions/playlists-batch-context';
 import { useClimbActionsData } from '@/app/hooks/use-climb-actions-data';
 import { SUGGESTIONS_THRESHOLD } from '../board-page/constants';
 import { useSnackbar } from '../providers/snackbar-provider';
-import SessionSummaryDialog from '../session-summary/session-summary-dialog';
 import { trackQueueOperation, trackQueueOperationError } from '@/app/lib/queue-metrics';
 
 import { useSessionIdManagement } from './hooks/use-session-id-management';
@@ -178,8 +177,6 @@ export const GraphQLQueueProvider = ({
     startSession,
     joinSession,
     endSession,
-    sessionSummary,
-    dismissSessionSummary,
   } = useSessionIdManagement({
     isOffBoardMode,
     propsBaseBoardPath,
@@ -469,7 +466,6 @@ export const GraphQLQueueProvider = ({
     startSession,
     joinSession,
     endSession,
-    dismissSessionSummary,
     fetchMoreClimbs,
     validateQueueAdd,
     boardDetails,
@@ -495,7 +491,6 @@ export const GraphQLQueueProvider = ({
     startSession,
     joinSession,
     endSession,
-    dismissSessionSummary,
     fetchMoreClimbs,
     validateQueueAdd,
     boardDetails,
@@ -773,10 +768,6 @@ export const GraphQLQueueProvider = ({
     latestRef.current.endSession();
   }, []);
 
-  const stableDismissSessionSummary = useCallback(() => {
-    latestRef.current.dismissSessionSummary();
-  }, []);
-
   const stableDisconnect = useCallback(() => {
     latestRef.current.persistentSession.deactivateSession();
   }, []);
@@ -810,7 +801,6 @@ export const GraphQLQueueProvider = ({
       startSession: stableStartSession,
       joinSession: stableJoinSession,
       endSession: stableEndSession,
-      dismissSessionSummary: stableDismissSessionSummary,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -841,7 +831,6 @@ export const GraphQLQueueProvider = ({
       isSessionActive,
       isPersistentSessionActive,
       sessionId,
-      sessionSummary,
       sessionGoal: isPersistentSessionActive ? (persistentSession.session?.goal ?? null) : null,
       connectionState,
       canMutate,
@@ -873,7 +862,6 @@ export const GraphQLQueueProvider = ({
       parsedParams,
       isSessionActive,
       sessionId,
-      sessionSummary,
       isPersistentSessionActive,
       persistentSession.session?.goal,
       connectionState,
@@ -939,7 +927,6 @@ export const GraphQLQueueProvider = ({
       isSessionActive,
       isPersistentSessionActive,
       sessionId,
-      sessionSummary,
       sessionGoal: isPersistentSessionActive ? (persistentSession.session?.goal ?? null) : null,
       connectionState,
       canMutate,
@@ -958,7 +945,6 @@ export const GraphQLQueueProvider = ({
       viewOnlyMode,
       isSessionActive,
       sessionId,
-      sessionSummary,
       isPersistentSessionActive,
       persistentSession.session?.goal,
       connectionState,
@@ -987,7 +973,9 @@ export const GraphQLQueueProvider = ({
                   <FavoritesProvider {...favoritesProviderProps}>
                     <PlaylistsProvider {...playlistsProviderProps}>{children}</PlaylistsProvider>
                   </FavoritesProvider>
-                  <SessionSummaryDialog summary={sessionSummary} onDismiss={stableDismissSessionSummary} />
+                  {/* Session summary dialog is rendered once at the root
+                      (persistent-session-wrapper.tsx), reading the single
+                      root-owned summary state — no board-route-local copy. */}
                 </SessionContext.Provider>
               </SearchContext.Provider>
             </QueueListContext.Provider>
