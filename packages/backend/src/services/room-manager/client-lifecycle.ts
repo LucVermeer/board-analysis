@@ -362,7 +362,11 @@ export async function leaveSession(
     const result = await distributedState.leaveSession(connectionId, sessionId);
     if (result.newLeaderId) {
       newLeaderId = result.newLeaderId;
-      newLeaderParticipantId = await resolveLeaderParticipantId(newLeaderId, clients, distributedState);
+      // Populated when the leave went through the fallback election (which
+      // resolves it as part of electing); the atomic happy path doesn't
+      // carry it, so resolve it ourselves in that case.
+      newLeaderParticipantId =
+        result.newLeaderParticipantId || (await resolveLeaderParticipantId(newLeaderId, clients, distributedState));
       const localNewLeader = clients.get(newLeaderId);
       if (localNewLeader) {
         localNewLeader.isLeader = true;
@@ -526,7 +530,11 @@ export async function disconnectClient(
     remainingConnections = result.remainingParticipantConnections ?? 0;
     newLeaderId = result.newLeaderId || undefined;
     if (newLeaderId) {
-      newLeaderParticipantId = await resolveLeaderParticipantId(newLeaderId, clients, distributedState);
+      // The election already resolved the participantId from the leader's
+      // connection hash; only fall back to our own resolution when it
+      // couldn't (missing hash / no participantId recorded).
+      newLeaderParticipantId =
+        result.newLeaderParticipantId || (await resolveLeaderParticipantId(newLeaderId, clients, distributedState));
     }
   }
 

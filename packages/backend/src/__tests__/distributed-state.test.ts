@@ -825,11 +825,15 @@ describe.skipIf(!redisAvailable)('DistributedStateManager - leader election Lua 
     await manager.registerConnection('fallback-removal-leader', 'Leader');
     await manager.joinSession('fallback-removal-leader', 'fallback-removal-session');
 
-    // Distinct connectedAt timestamps so the earliest-connected candidate is unambiguous.
+    // The sleeps guarantee strictly increasing Date.now()-based connectedAt
+    // values, so "earliest-connected remaining member" is unambiguous. Don't
+    // remove them: without the gaps two registrations can land on the same
+    // millisecond and the assertion below becomes flaky.
     await new Promise((resolve) => setTimeout(resolve, 5));
     await manager.registerConnection('fallback-removal-earliest', 'Earliest');
     await manager.joinSession('fallback-removal-earliest', 'fallback-removal-session');
 
+    // ensure distinct connectedAt timestamps (see above)
     await new Promise((resolve) => setTimeout(resolve, 5));
     await manager.registerConnection('fallback-removal-later', 'Later');
     await manager.joinSession('fallback-removal-later', 'fallback-removal-session');
@@ -866,10 +870,14 @@ describe.skipIf(!redisAvailable)('DistributedStateManager - leader election Lua 
     await manager.registerConnection('fallback-leave-leader', 'Leader');
     await manager.joinSession('fallback-leave-leader', 'fallback-leave-session');
 
+    // Sleeps guarantee strictly increasing connectedAt timestamps so the
+    // earliest-connected candidate is unambiguous (same rationale as the
+    // connection-removal test above).
     await new Promise((resolve) => setTimeout(resolve, 5));
     await manager.registerConnection('fallback-leave-earliest', 'Earliest');
     await manager.joinSession('fallback-leave-earliest', 'fallback-leave-session');
 
+    // ensure distinct connectedAt timestamps (see above)
     await new Promise((resolve) => setTimeout(resolve, 5));
     await manager.registerConnection('fallback-leave-later', 'Later');
     await manager.joinSession('fallback-leave-later', 'fallback-leave-session');

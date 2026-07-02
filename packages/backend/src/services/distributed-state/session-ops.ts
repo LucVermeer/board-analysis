@@ -84,12 +84,15 @@ export async function joinSession(
  * Leave a session. Handles leader election if leaving member was leader.
  * Uses atomic Lua script to prevent race conditions.
  * Returns the new leader's connectionId if leadership changed.
+ * `newLeaderParticipantId` is only populated on the fallback path, where the
+ * election helper already resolved it; the atomic happy path returns just
+ * the connectionId and callers resolve the participantId themselves.
  */
 export async function leaveSession(
   redis: Redis,
   connectionId: string,
   sessionId: string,
-): Promise<{ newLeaderId: string | null }> {
+): Promise<{ newLeaderId: string | null; newLeaderParticipantId?: string | null }> {
   validateConnectionId(connectionId);
   validateSessionId(sessionId);
 
@@ -138,7 +141,7 @@ async function leaveSessionFallback(
   redis: Redis,
   connectionId: string,
   sessionId: string,
-): Promise<{ newLeaderId: string | null }> {
+): Promise<{ newLeaderId: string | null; newLeaderParticipantId?: string | null }> {
   try {
     await redis.watch(KEYS.sessionLeader(sessionId));
 
@@ -169,9 +172,14 @@ async function leaveSessionFallback(
         // failure instead of actually electing someone, unlike the
         // connection-removal path. Unified via electNewLeaderAfterRemoval so
         // both paths behave the same way.
-        const { newLeaderId } = await electNewLeaderAfterRemoval(redis, sessionId, connectionId, 'leave-fallback');
+        const { newLeaderId, newLeaderParticipantId } = await electNewLeaderAfterRemoval(
+          redis,
+          sessionId,
+          connectionId,
+          'leave-fallback',
+        );
         if (newLeaderId) {
-          return { newLeaderId };
+          return { newLeaderId, newLeaderParticipantId };
         }
       }
     } finally {

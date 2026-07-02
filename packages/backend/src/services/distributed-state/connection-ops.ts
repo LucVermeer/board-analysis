@@ -80,6 +80,7 @@ export async function removeConnection(
   participantId: string | null;
   wasLeader: boolean;
   newLeaderId: string | null;
+  newLeaderParticipantId: string | null;
   remainingParticipantConnections: number | null;
 }> {
   validateConnectionId(connectionId);
@@ -92,6 +93,7 @@ export async function removeConnection(
       participantId: null,
       wasLeader: false,
       newLeaderId: null,
+      newLeaderParticipantId: null,
       remainingParticipantConnections: null,
     };
   }
@@ -127,12 +129,14 @@ export async function removeConnection(
 
   // Automatically elect new leader if was leader and requested
   let newLeaderId: string | null = null;
+  let newLeaderParticipantId: string | null = null;
   if (sessionId && wasLeader && electNewLeader) {
     const electionResult = await electNewLeaderAfterRemoval(redis, sessionId, connectionId, 'connection-removal');
     newLeaderId = electionResult.newLeaderId;
+    newLeaderParticipantId = electionResult.newLeaderParticipantId;
   }
 
-  return { sessionId, participantId, wasLeader, newLeaderId, remainingParticipantConnections };
+  return { sessionId, participantId, wasLeader, newLeaderId, newLeaderParticipantId, remainingParticipantConnections };
 }
 
 export async function countLiveParticipantConnections(

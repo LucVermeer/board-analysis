@@ -96,7 +96,7 @@ export async function electNewLeaderAfterRemoval(
       );
     }
     // Fallback: try to manually elect a leader from remaining members
-    newLeaderId = await electLeaderFallback(redis, sessionId, excludedConnectionId);
+    newLeaderId = await electLeaderFallback(redis, sessionId, excludedConnectionId, context);
   }
 
   return {
@@ -107,9 +107,18 @@ export async function electNewLeaderAfterRemoval(
 
 /**
  * Fallback leader election when the Lua script fails.
- * Verbatim move from the former `connection-ops.ts::electLeaderFallback`.
+ * Verbatim move from the former `connection-ops.ts::electLeaderFallback`,
+ * except the success log is context-aware: the leave path never had a TS
+ * election before this consolidation, so it gets its own message rather
+ * than inheriting the removal path's "after removing" wording (which ops
+ * dashboards may filter on).
  */
-async function electLeaderFallback(redis: Redis, sessionId: string, connectionId: string): Promise<string | null> {
+async function electLeaderFallback(
+  redis: Redis,
+  sessionId: string,
+  connectionId: string,
+  context: LeaderElectionContext,
+): Promise<string | null> {
   try {
     const remainingMembers = await redis.smembers(KEYS.sessionMembers(sessionId));
     const candidates = remainingMembers.filter((id) => id !== connectionId);
@@ -143,9 +152,15 @@ async function electLeaderFallback(redis: Redis, sessionId: string, connectionId
       const chosenLeader = earliestCandidate || candidates[0];
       await redis.set(KEYS.sessionLeader(sessionId), chosenLeader, 'EX', TTL.sessionMembership);
       await redis.hset(KEYS.connection(chosenLeader), 'isLeader', 'true');
-      logger.info(
-        `[DistributedState] Fallback elected leader: ${chosenLeader.slice(0, 8)} after removing ${connectionId.slice(0, 8)}`,
-      );
+      if (context === 'leave-fallback') {
+        logger.info(
+          `[DistributedState] Fallback elected leader: ${chosenLeader.slice(0, 8)} for session ${sessionId.slice(0, 8)} after leave`,
+        );
+      } else {
+        logger.info(
+          `[DistributedState] Fallback elected leader: ${chosenLeader.slice(0, 8)} after removing ${connectionId.slice(0, 8)}`,
+        );
+      }
       return chosenLeader;
     } else {
       // No candidates, clear the leader key
