@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, Pressable, StyleSheet, Platform } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import type { BottomSheet } from '@expo/ui/community/bottom-sheet';
@@ -201,16 +201,6 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   // resolving avoids an early default fetch for the flag-on cohort.)
   const feed = useUserAscentsFeed(userId, feedInput, { enabled: hydrated });
 
-  // One clock shared by every day divider, re-evaluated on focus and on
-  // pull-to-refresh (not per frame) so a screen left mounted across midnight
-  // stops labelling yesterday's climbs "Today". Mirrors SessionsTab.
-  const [now, setNow] = useState(() => Date.now());
-  useFocusEffect(
-    useCallback(() => {
-      setNow(Date.now());
-    }, []),
-  );
-
   // Day dividers render only on a date-ordered feed (the Latest preset or a
   // custom date sort) — keyed off the EFFECTIVE feedInput, so the flag-off
   // default (date-desc) gets dividers and a stale persisted custom sort can't
@@ -360,7 +350,10 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const renderItem = useCallback(
     ({ item: row }: { item: LogbookListRow<AscentFeedItem> }) => {
       if (row.type === 'divider') {
-        return <LogbookDayDivider dayStartMs={row.dayStartMs} stats={row.stats} now={now} />;
+        // The divider owns its "now" clock (focus-refreshed) so this callback's
+        // identity survives tab focus — a `now` dep here would re-render every
+        // climb row for a value only dividers read.
+        return <LogbookDayDivider dayStartMs={row.dayStartMs} stats={row.stats} />;
       }
       return (
         <LogbookRow
@@ -372,13 +365,10 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
         />
       );
     },
-    [handleActivate, handleOpenActions, handleEdit, handleDeleteRequest, viewerIsOwner, now],
+    [handleActivate, handleOpenActions, handleEdit, handleDeleteRequest, viewerIsOwner],
   );
 
-  const handleRefresh = useCallback(() => {
-    setNow(Date.now());
-    void feed.refetch();
-  }, [feed.refetch]);
+  const handleRefresh = useCallback(() => void feed.refetch(), [feed.refetch]);
 
   if (!userId) {
     return (

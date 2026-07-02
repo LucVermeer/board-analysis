@@ -1,6 +1,22 @@
 import dayjs from 'dayjs';
-import { parseTickTime } from '@boardsesh/profile-stats';
+import utc from 'dayjs/plugin/utc';
 import type { AscentFeedInput } from './to-ascent-feed-input';
+
+dayjs.extend(utc);
+
+/**
+ * `boardsesh_ticks.climbed_at` is a naive `timestamp` column serialized with no
+ * `Z` suffix; parsing it as local time would shift day buckets by the device's
+ * UTC offset. Parse as UTC, then convert to local — the same recovery
+ * `@boardsesh/profile-stats`' `parseTickTime` does. Duplicated here (3 lines)
+ * rather than importing it so this package doesn't take profile-stats' whole
+ * transitive dependency surface for one date wrapper; if the tick timestamp
+ * format ever changes, update both.
+ */
+function parseTickTimeLocal(climbedAt: string) {
+  if (!climbedAt) throw new TypeError('day bucketing requires a non-empty timestamp string');
+  return dayjs.utc(climbedAt).local();
+}
 
 /**
  * Day-divider derivation for the logbook list. The logbook renders date anchors
@@ -72,7 +88,7 @@ export function shouldShowLogbookDividers(input: Pick<AscentFeedInput, 'sortBy'>
  * local day.
  */
 export function logbookDayKey(climbedAt: string): string {
-  return parseTickTime(climbedAt).format('YYYY-MM-DD');
+  return parseTickTimeLocal(climbedAt).format('YYYY-MM-DD');
 }
 
 export type LogbookDayDescription = {
@@ -164,7 +180,7 @@ export function buildLogbookListRows<T extends LogbookDayItem>(
       type: 'divider',
       key: occurrence === 0 ? `day-${runDayKey}` : `day-${runDayKey}-${occurrence}`,
       dayKey: runDayKey,
-      dayStartMs: parseTickTime(run[0].climbedAt).startOf('day').valueOf(),
+      dayStartMs: parseTickTimeLocal(run[0].climbedAt).startOf('day').valueOf(),
       stats: complete ? statsForRun(run) : null,
     });
     for (const item of run) rows.push({ type: 'entry', key: item.uuid, item });

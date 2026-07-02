@@ -1,5 +1,6 @@
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { describeLogbookDay, type LogbookDayStats } from '@boardsesh/logbook';
 import { Text } from '../Text';
@@ -18,8 +19,6 @@ type LogbookDayDividerProps = {
    * shows its date alone until its boundary loads.
    */
   stats: LogbookDayStats | null;
-  /** Injected clock (re-evaluated on focus) so "Today" doesn't lie past midnight. */
-  now: number;
 };
 
 /**
@@ -29,10 +28,21 @@ type LogbookDayDividerProps = {
  * gets an M3-style list subheader (no chip). `accessibilityRole="header"` puts
  * each day in the VoiceOver/TalkBack rotor for day-jumping.
  */
-export const LogbookDayDivider = memo(function LogbookDayDivider({ dayStartMs, stats, now }: LogbookDayDividerProps) {
+export const LogbookDayDivider = memo(function LogbookDayDivider({ dayStartMs, stats }: LogbookDayDividerProps) {
   const { t, i18n } = useTranslation('you');
   const { brandColors: brand, systemColors, variant } = useTheme();
   const { formatGrade } = useGradeFormat();
+
+  // The divider owns its clock: refreshing on focus keeps "Today" honest past
+  // midnight while re-rendering ONLY dividers — a tab-level `now` in
+  // renderItem's deps would re-render every climb row on each focus for a
+  // value none of them read.
+  const [now, setNow] = useState(() => Date.now());
+  useFocusEffect(
+    useCallback(() => {
+      setNow(Date.now());
+    }, []),
+  );
 
   const { kind } = describeLogbookDay(dayStartMs, now);
   const label =

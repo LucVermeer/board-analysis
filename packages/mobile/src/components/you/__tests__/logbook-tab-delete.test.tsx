@@ -10,6 +10,8 @@ const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 const deleteTick = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 const dialog = vi.hoisted(() => ({ confirm: vi.fn<(options: unknown) => Promise<boolean>>(async () => false) }));
 const queryClient = vi.hoisted(() => ({ setQueriesData: vi.fn() }));
+const toast = vi.hoisted(() => ({ showToast: vi.fn() }));
+const haptics = vi.hoisted(() => ({ hapticSelection: vi.fn(), hapticSuccess: vi.fn(), hapticError: vi.fn() }));
 
 // Capture the per-row onDeleteRequest LogbookTab wires up, so the test can fire
 // a delete without a real list renderer.
@@ -82,7 +84,7 @@ vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
-vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn(), hapticSuccess: vi.fn(), hapticError: vi.fn() }));
+vi.mock('../../../lib/haptics', () => haptics);
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { black: '#000' } }));
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
@@ -104,7 +106,7 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 }));
 vi.mock('@boardsesh/board-react', () => ({ useDeleteTick: () => deleteTick }));
 vi.mock('../../../providers/dialog-provider', () => ({ useConfirm: () => dialog.confirm }));
-vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => toast }));
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => queryClient }));
 
 import { LogbookTab } from '../LogbookTab';
@@ -124,6 +126,8 @@ beforeEach(() => {
   dialog.confirm.mockClear();
   dialog.confirm.mockImplementation(async () => false);
   queryClient.setQueriesData.mockClear();
+  toast.showToast.mockClear();
+  haptics.hapticError.mockClear();
   row.requestDelete = null;
 });
 
@@ -169,5 +173,32 @@ describe('LogbookTab guarded delete', () => {
       pageParams: [0],
     });
     expect(updated.pages[0].userAscentsFeed.items).toEqual([{ uuid: 'tick-2' }]);
+  });
+
+  it('tracks the a11y method when the delete came from an accessibility action', async () => {
+    dialog.confirm.mockImplementation(async () => true);
+    render(createElement(LogbookTab, { userId: 'user-1' }));
+
+    await fireDeleteRequest('a11y');
+
+    const mutateOptions = deleteTick.mutate.mock.calls[0][1] as { onSuccess: () => void };
+    act(() => mutateOptions.onSuccess());
+
+    expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'a11y' });
+  });
+
+  it('surfaces a failed delete with the error haptic + toast and leaves the cache alone', async () => {
+    dialog.confirm.mockImplementation(async () => true);
+    render(createElement(LogbookTab, { userId: 'user-1' }));
+
+    await fireDeleteRequest('swipe');
+
+    const mutateOptions = deleteTick.mutate.mock.calls[0][1] as { onError: () => void };
+    act(() => mutateOptions.onError());
+
+    expect(haptics.hapticError).toHaveBeenCalled();
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.logbook.deleteError', 'error');
+    expect(queryClient.setQueriesData).not.toHaveBeenCalled();
+    expect(analytics.track).not.toHaveBeenCalledWith('Logbook Entry Deleted', expect.anything());
   });
 });
