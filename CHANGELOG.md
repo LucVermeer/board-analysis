@@ -4,6 +4,14 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-02
+
+### Fixed
+
+- The shared queue catches up reliably after a dropped connection, even when someone in the party is running a variable-speed playback. ([#3340](https://github.com/boardsesh/boardsesh/pull/3340))
+- Board history keeps itself in sync — the wall feed catches up automatically after connection blips and when you come back to the app ([#3343](https://github.com/boardsesh/boardsesh/pull/3343))
+  Smoother board history: no more full-list redraws when you reopen the app
+
 ## 2026-07-01
 
 ### New

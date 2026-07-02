@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-01T22:05:24.641Z",
+  "generatedAt": "2026-07-02T03:00:43.523Z",
   "entries": [
+    {
+      "prNumber": 3340,
+      "category": "fixed",
+      "title": "The shared queue catches up reliably after a dropped connection, even when someone in the party is running a variable-speed playback.",
+      "mergedAt": "2026-07-02T02:52:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3340"
+    },
+    {
+      "prNumber": 3343,
+      "category": "fixed",
+      "title": "Board history keeps itself in sync — the wall feed catches up automatically after connection blips and when you come back to the app",
+      "mergedAt": "2026-07-02T02:50:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3343",
+      "body": "Smoother board history: no more full-list redraws when you reopen the app"
+    },
     {
       "prNumber": 3334,
       "category": "new",
