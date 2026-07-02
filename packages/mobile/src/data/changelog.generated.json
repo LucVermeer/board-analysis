@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-02T07:06:54.421Z",
+  "generatedAt": "2026-07-02T12:39:46.577Z",
   "entries": [
+    {
+      "prNumber": 3353,
+      "category": "new",
+      "title": "Party queues on your phone stay in step with the crew even on flaky gym wifi — dropped or out-of-order updates get caught and quietly resynced instead of drifting silently.",
+      "mergedAt": "2026-07-02T12:38:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3353"
+    },
     {
       "prNumber": 3341,
       "category": "fixed",

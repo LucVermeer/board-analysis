@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Party queues on your phone stay in step with the crew even on flaky gym wifi — dropped or out-of-order updates get caught and quietly resynced instead of drifting silently. ([#3353](https://github.com/boardsesh/boardsesh/pull/3353))
 - Scroll back through everything that's been up on the wall — board history no longer stops at the last 50 climbs ([#3354](https://github.com/boardsesh/boardsesh/pull/3354))
 
 ### Improved
