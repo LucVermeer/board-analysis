@@ -14,12 +14,12 @@ import {
 import {
   JOIN_SESSION_SCRIPT,
   LEAVE_SESSION_SCRIPT,
-  ELECT_NEW_LEADER_SCRIPT,
   REFRESH_TTL_SCRIPT,
   PRUNE_STALE_SESSION_MEMBERS_SCRIPT,
   REMOVE_PARTICIPANT_CONNECTION_SCRIPT,
   REMOVE_PARTICIPANT_SCRIPT,
 } from './lua-scripts';
+import { electNewLeaderAfterRemoval } from './leader-election';
 import { logger } from '../../utils/logger';
 
 /**
@@ -164,26 +164,14 @@ async function leaveSessionFallback(
       }
 
       if (wasLeader) {
-        try {
-          const newLeaderId = (await redis.eval(
-            ELECT_NEW_LEADER_SCRIPT,
-            2,
-            KEYS.sessionMembers(sessionId),
-            KEYS.sessionLeader(sessionId),
-            connectionId,
-            TTL.sessionMembership.toString(),
-            TTL.sessionMembership.toString(),
-          )) as string | null;
-
-          if (newLeaderId) {
-            logger.info(
-              `[DistributedState] Fallback: elected new leader ${newLeaderId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
-            );
-            return { newLeaderId };
-          }
-        } catch (electionErr) {
-          logger.error(`[DistributedState] Fallback leader election failed:`, electionErr);
-          await redis.del(KEYS.sessionLeader(sessionId)).catch(() => {});
+        // Lua first, then a real TS-side election (earliest connectedAt) on
+        // failure — previously this fallback only cleared the leader key on
+        // failure instead of actually electing someone, unlike the
+        // connection-removal path. Unified via electNewLeaderAfterRemoval so
+        // both paths behave the same way.
+        const { newLeaderId } = await electNewLeaderAfterRemoval(redis, sessionId, connectionId, 'leave-fallback');
+        if (newLeaderId) {
+          return { newLeaderId };
         }
       }
     } finally {

@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vite-plus/test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vite-plus/test';
 import Redis from 'ioredis';
 import { DistributedStateManager, forceResetDistributedState } from '../services/distributed-state';
+import { ELECT_NEW_LEADER_SCRIPT, LEAVE_SESSION_SCRIPT } from '../services/distributed-state/lua-scripts';
+import { logger } from '../utils/logger';
 
 // Integration tests require Redis to be running
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380';
@@ -784,6 +786,120 @@ describe.skipIf(!redisAvailable)('DistributedStateManager - removeConnection wit
     // Leader should still be leader-conn
     const leader = await manager.getSessionLeader('non-leader-session');
     expect(leader).toBe('leader-conn');
+  });
+});
+
+describe.skipIf(!redisAvailable)('DistributedStateManager - leader election Lua fallback', () => {
+  let redis: Redis;
+  let manager: DistributedStateManager;
+
+  beforeAll(async () => {
+    redis = new Redis(REDIS_URL);
+    await new Promise<void>((resolve) => redis.once('ready', resolve));
+  });
+
+  afterAll(async () => {
+    forceResetDistributedState();
+    await redis.quit();
+  });
+
+  beforeEach(async () => {
+    forceResetDistributedState();
+    try {
+      const keys = await redis.keys('boardsesh:*');
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } catch (err) {
+      console.warn('Failed to clean up test keys:', err);
+    }
+    manager = new DistributedStateManager(redis, 'fallback-test-instance');
+  });
+
+  afterEach(async () => {
+    await manager.stop();
+    forceResetDistributedState();
+  });
+
+  it('falls back to a TS election (earliest connectedAt) when ELECT_NEW_LEADER_SCRIPT eval throws, via the connection-removal path', async () => {
+    await manager.registerConnection('fallback-removal-leader', 'Leader');
+    await manager.joinSession('fallback-removal-leader', 'fallback-removal-session');
+
+    // Distinct connectedAt timestamps so the earliest-connected candidate is unambiguous.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await manager.registerConnection('fallback-removal-earliest', 'Earliest');
+    await manager.joinSession('fallback-removal-earliest', 'fallback-removal-session');
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await manager.registerConnection('fallback-removal-later', 'Later');
+    await manager.joinSession('fallback-removal-later', 'fallback-removal-session');
+
+    const originalEval = redis.eval.bind(redis) as (...args: unknown[]) => Promise<unknown>;
+    const errSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const evalSpy = vi.spyOn(redis, 'eval').mockImplementation(((...args: unknown[]) => {
+      if (args[0] === ELECT_NEW_LEADER_SCRIPT) {
+        return Promise.reject(new Error('Simulated ELECT_NEW_LEADER_SCRIPT failure'));
+      }
+      return originalEval(...args);
+    }) as unknown as typeof redis.eval);
+
+    try {
+      const result = await manager.removeConnection('fallback-removal-leader');
+
+      expect(result.wasLeader).toBe(true);
+      // The TS fallback (not the Lua script) must have picked the
+      // earliest-connected remaining member.
+      expect(result.newLeaderId).toBe('fallback-removal-earliest');
+
+      const newLeaderConn = await manager.getConnection('fallback-removal-earliest');
+      expect(newLeaderConn!.isLeader).toBe(true);
+
+      const leader = await manager.getSessionLeader('fallback-removal-session');
+      expect(leader).toBe('fallback-removal-earliest');
+    } finally {
+      evalSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+  });
+
+  it('falls back to a TS election (earliest connectedAt) when both LEAVE_SESSION_SCRIPT and ELECT_NEW_LEADER_SCRIPT eval throw, via the leaveSession fallback path', async () => {
+    await manager.registerConnection('fallback-leave-leader', 'Leader');
+    await manager.joinSession('fallback-leave-leader', 'fallback-leave-session');
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await manager.registerConnection('fallback-leave-earliest', 'Earliest');
+    await manager.joinSession('fallback-leave-earliest', 'fallback-leave-session');
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await manager.registerConnection('fallback-leave-later', 'Later');
+    await manager.joinSession('fallback-leave-later', 'fallback-leave-session');
+
+    const originalEval = redis.eval.bind(redis) as (...args: unknown[]) => Promise<unknown>;
+    const errSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const evalSpy = vi.spyOn(redis, 'eval').mockImplementation(((...args: unknown[]) => {
+      // Forcing LEAVE_SESSION_SCRIPT to throw drives leaveSession into
+      // leaveSessionFallback; forcing ELECT_NEW_LEADER_SCRIPT to also
+      // throw then drives that fallback's own election into the TS path.
+      if (args[0] === LEAVE_SESSION_SCRIPT || args[0] === ELECT_NEW_LEADER_SCRIPT) {
+        return Promise.reject(new Error('Simulated Lua failure'));
+      }
+      return originalEval(...args);
+    }) as unknown as typeof redis.eval);
+
+    try {
+      const result = await manager.leaveSession('fallback-leave-leader', 'fallback-leave-session');
+
+      expect(result.newLeaderId).toBe('fallback-leave-earliest');
+
+      const newLeaderConn = await manager.getConnection('fallback-leave-earliest');
+      expect(newLeaderConn!.isLeader).toBe(true);
+
+      const leader = await manager.getSessionLeader('fallback-leave-session');
+      expect(leader).toBe('fallback-leave-earliest');
+    } finally {
+      evalSpy.mockRestore();
+      errSpy.mockRestore();
+    }
   });
 });
 
