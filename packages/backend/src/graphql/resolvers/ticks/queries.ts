@@ -533,7 +533,9 @@ export const tickQueries = {
             .from(dbSchema.boardBetaLinks)
             .where(inArray(dbSchema.boardBetaLinks.tickUuid, pageTickUuids))
         : [];
-    const ticksWithBeta = new Set(betaLinkRows.map((row) => row.tickUuid));
+    const ticksWithBeta = new Set(
+      betaLinkRows.map((row) => row.tickUuid).filter((tickUuid): tickUuid is string => tickUuid !== null),
+    );
 
     // Map results to response format
     const items = results.map(

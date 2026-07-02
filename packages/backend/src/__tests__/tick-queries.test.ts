@@ -539,16 +539,34 @@ describe('tickQueries — behavior fixes', () => {
     });
 
     it('flows hasBetaVideo through the caption-matches shared builder', async () => {
-      const climbUuid = `${CLIMB_PREFIX}beta-caption`;
-      await insertClimb(climbUuid, 'Beta Caption Climb');
-      await insertTick({ uuid: 'tick-beta-cap-1', climbUuid, climbedAt: '2026-06-01T10:00:00', status: 'send' });
-      await insertTick({ uuid: 'tick-beta-cap-2', climbUuid, climbedAt: '2026-06-02T10:00:00', status: 'send' });
+      // Caption matches de-dupe by CLIMB (keeping the most recent send), so
+      // use two climbs with one tick each — a same-climb pair would collapse
+      // to the newest tick and hide the beta-carrying one.
+      const withBetaUuid = `${CLIMB_PREFIX}beta-cap-with`;
+      const withoutBetaUuid = `${CLIMB_PREFIX}beta-cap-without`;
+      await insertClimb(withBetaUuid, 'Beta Caption With');
+      await insertClimb(withoutBetaUuid, 'Beta Caption Without');
+      await insertTick({
+        uuid: 'tick-beta-cap-1',
+        climbUuid: withBetaUuid,
+        climbedAt: '2026-06-01T10:00:00',
+        status: 'send',
+      });
+      await insertTick({
+        uuid: 'tick-beta-cap-2',
+        climbUuid: withoutBetaUuid,
+        climbedAt: '2026-06-02T10:00:00',
+        status: 'send',
+      });
       await db.execute(sql`
         INSERT INTO board_beta_links (board_type, climb_uuid, link, tick_uuid)
-        VALUES ('kilter', ${climbUuid}, 'https://instagram.com/p/test-beta-cap', 'tick-beta-cap-1')
+        VALUES ('kilter', ${withBetaUuid}, 'https://instagram.com/p/test-beta-cap', 'tick-beta-cap-1')
       `);
 
-      const matches = await callUserAscentCaptionMatches(TEST_USER_ID, 'Sent "Beta Caption Climb" @ 40°');
+      const matches = await callUserAscentCaptionMatches(
+        TEST_USER_ID,
+        'Sent "Beta Caption With" and "Beta Caption Without" @ 40°',
+      );
       const byUuid = new Map(matches.map((match) => [match.uuid, match.hasBetaVideo]));
       expect(byUuid.get('tick-beta-cap-1')).toBe(true);
       expect(byUuid.get('tick-beta-cap-2')).toBe(false);
