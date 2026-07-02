@@ -599,6 +599,39 @@ describe('queue-bridge-context', () => {
         expect(newQueue[0].climb.mirrored).toBe(true);
       });
 
+      it('replaceQueueItem updates the current item in place when the replaced uuid is current', () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const item2 = createTestQueueItem(climb2, 'u2');
+        const { result } = renderWithLocalQueue([item1, item2], item1);
+        const editedClimb = createTestClimb({ uuid: 'c1-edited', name: 'Edited Climb' });
+        act(() => {
+          result.current!.replaceQueueItem('u1', editedClimb);
+        });
+        expect(mockSetLocalQueueState).toHaveBeenCalled();
+        const [newQueue, newCurrent] = mockSetLocalQueueState.mock.calls[0];
+        // Slot uuid preserved, climb swapped, and the current item follows the
+        // replacement (it was the replaced entry).
+        expect(newQueue.map((queueItem: ClimbQueueItem) => queueItem.uuid)).toEqual(['u1', 'u2']);
+        expect(newQueue[0].climb.uuid).toBe('c1-edited');
+        expect(newCurrent.uuid).toBe('u1');
+        expect(newCurrent.climb.uuid).toBe('c1-edited');
+      });
+
+      it('replaceQueueItem leaves the current item alone when a different uuid is replaced', () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const item2 = createTestQueueItem(climb2, 'u2');
+        const { result } = renderWithLocalQueue([item1, item2], item1);
+        const editedClimb = createTestClimb({ uuid: 'c2-edited', name: 'Edited Climb 2' });
+        act(() => {
+          result.current!.replaceQueueItem('u2', editedClimb);
+        });
+        expect(mockSetLocalQueueState).toHaveBeenCalled();
+        const [newQueue, newCurrent] = mockSetLocalQueueState.mock.calls[0];
+        expect(newQueue[1].climb.uuid).toBe('c2-edited');
+        expect(newCurrent.uuid).toBe('u1');
+        expect(newCurrent.climb.uuid).toBe('c1');
+      });
+
       it('setQueue replaces queue and preserves current if present', () => {
         const item1 = createTestQueueItem(climb1, 'u1');
         const item2 = createTestQueueItem(climb2, 'u2');

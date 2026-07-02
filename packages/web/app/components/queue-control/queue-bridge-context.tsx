@@ -265,8 +265,11 @@ function usePersistentSessionQueueAdapter(): {
   }, []);
 
   // --- Single shared queue-actions implementation (see queue-actions-core.ts) ---
-  // Every field here is a closure over `latestRef`, so this can be built once
-  // (`useMemo(..., [])`) and stay fresh — same pattern as GraphQLQueueProvider.
+  // Every field is a closure over `latestRef`, so the deps memo below only
+  // needs its three helper callbacks — each itself a `[]`-dep hook — meaning
+  // it still computes exactly once and the returned actions keep stable
+  // identity for the provider's lifetime (same net effect as
+  // GraphQLQueueProvider's `useMemo(..., [])`).
 
   // Bridge-solo local store: reduce against the shared `@boardsesh/queue`
   // reducer (the same one QueueContext dispatches to) and persist the result
@@ -293,6 +296,11 @@ function usePersistentSessionQueueAdapter(): {
       needsResync: false,
     };
     let nextState = queueReducer(pseudoState, action);
+    // Reducer returned the same reference (a guard no-op, e.g. re-activating
+    // the already-current item, or an idempotent duplicate add) — skip the
+    // persist call AND the bridge-quirk overrides below, so a reducer no-op
+    // can never be turned into a spurious state write.
+    if (nextState === pseudoState) return;
     // Two bridge-only quirks the shared reducer's generic DELTA_ADD_QUEUE_ITEM
     // / DELTA_REMOVE_QUEUE_ITEM cases don't reproduce (they only touch `queue`,
     // matching QueueContext, whose addToQueue/removeFromQueue never set the
@@ -308,9 +316,6 @@ function usePersistentSessionQueueAdapter(): {
     ) {
       nextState = { ...nextState, currentClimbQueueItem: nextState.queue[0] ?? null };
     }
-    // Reducer returned the same reference (a guard no-op, e.g. re-activating
-    // the already-current item) — skip the redundant persist call.
-    if (nextState === pseudoState) return;
     ps.setLocalQueueState(nextState.queue, nextState.currentClimbQueueItem, baseBoardPath, boardDetails);
   }, []);
 
