@@ -122,6 +122,7 @@ function createHarness(
   const errors: unknown[] = [];
   const fatalReasons: string[] = [];
   const connectStarts: number[] = [];
+  const recoveryEvents: Array<{ kind: string; error: unknown }> = [];
 
   let nextClientId = 1;
   let reconnectHandler: (() => void) | null = null;
@@ -167,6 +168,9 @@ function createHarness(
     onFatal: (reason) => {
       fatalReasons.push(reason);
     },
+    onRecoveryEvent: (kind, error) => {
+      recoveryEvents.push({ kind, error });
+    },
     retryPolicy: {
       initialRetryDelayMs: 1000,
       maxRetryDelayMs: 30000,
@@ -198,6 +202,7 @@ function createHarness(
     errors,
     fatalReasons,
     connectStarts,
+    recoveryEvents,
     gate,
     triggerReconnect: () => reconnectHandler?.(),
   };
@@ -283,6 +288,9 @@ describe('createSessionConnectionController', () => {
     // ...the controller falls back to a full sync instead.
     expect(harness.fullSyncCalls).toHaveLength(1);
     expect(harness.fullSyncCalls[0]?.queueState.sequence).toBe(8);
+    // The fallback is surfaced through the observability port.
+    expect(harness.recoveryEvents).toHaveLength(1);
+    expect(harness.recoveryEvents[0]?.kind).toBe('delta-sync-fallback');
   });
 
   it('falls back to full sync when replayEvents returns null', async () => {
@@ -474,5 +482,229 @@ describe('createSessionConnectionController', () => {
 
     expect(harness.fatalReasons).toEqual([]);
     expect(harness.timers.pendingCount).toBe(1);
+  });
+
+  it('abandons a superseded initial join silently when the STALE join resolves first', async () => {
+    // The reproduced regression: socket bounces mid-initial-join, the
+    // reconnect bumps the epoch and fires join #2 — and then join #1
+    // resolves FIRST (the normal ordering on flaky wifi, since graphql-ws
+    // re-executes pending operations on the new socket). Pre-fix, connect()
+    // read `lastJoinResult === null` (the stale epoch-gated write was
+    // discarded), misclassified the SUCCESSFUL join as a no-payload
+    // failure, burned a retry strike, surfaced an error, and disposed the
+    // client the in-flight reconnect was still using — and the retry's
+    // fresh client then hit the tracker cache so JOIN_SESSION never went
+    // over its connection.
+    let callCount = 0;
+    const firstJoin = deferred<TestSessionData | null>();
+    const secondJoin = deferred<TestSessionData | null>();
+    const harness = createHarness({
+      join: async () => {
+        callCount++;
+        return callCount === 1 ? firstJoin.promise : secondJoin.promise;
+      },
+    });
+
+    harness.controller.start();
+    await flushMicrotasks();
+    expect(callCount).toBe(1);
+
+    // Socket bounce mid-initial-join: reconnect bumps the epoch, fires join #2.
+    harness.triggerReconnect();
+    await flushMicrotasks();
+    expect(callCount).toBe(2);
+
+    // The STALE (pre-bump) join resolves FIRST — successfully.
+    firstJoin.resolve({ queueState: { sequence: 5, stateHash: 'hash-5' }, label: 'stale' });
+    await flushMicrotasks();
+
+    // Abandoned silently: no error, no fatal, no retry timer scheduled, no
+    // onSessionData from the stale flow — and critically the shared client
+    // was NOT disposed out from under the in-flight reconnect.
+    expect(harness.errors).toEqual([]);
+    expect(harness.fatalReasons).toEqual([]);
+    expect(harness.timers.pendingCount).toBe(0);
+    expect(harness.sessionDataCalls).toHaveLength(0);
+    expect(harness.clientsCreated[0]?.disposed).toBe(false);
+
+    // The fresh join completes normally on the same (undisposed) client.
+    secondJoin.resolve({ queueState: { sequence: 20, stateHash: 'hash-20' }, label: 'fresh' });
+    await flushMicrotasks();
+    expect(harness.sessionDataCalls).toHaveLength(1);
+    expect(harness.sessionDataCalls[0]?.sessionData.label).toBe('fresh');
+    expect(harness.sessionDataCalls[0]?.client).toBe(harness.clientsCreated[0]);
+    expect(harness.errors).toEqual([]);
+  });
+
+  it('stop() mid-delta-replay suppresses every port callback after stop returns', async () => {
+    // Contract hole the reviewer reproduced: a session-A replay resolving
+    // after teardown would re-dispatch A's events after the hook reset the
+    // gate — a cross-session leak on an A->B switch.
+    const harness = createHarness();
+    harness.gate.lastSequence = 5;
+    harness.joinImpl.mockResolvedValue({ queueState: { sequence: 8, stateHash: 'hash-8' }, label: 'joined' });
+    const replayGate = deferred<SessionConnectionReplayResult<TestQueueEvent> | null>();
+    harness.replayImpl.mockImplementation(async () => replayGate.promise);
+
+    harness.controller.start();
+    await flushMicrotasks();
+    harness.fullSyncCalls.length = 0;
+    harness.queueEvents.length = 0;
+    const sessionDataCallsBeforeStop = harness.sessionDataCalls.length;
+
+    // Reconnect: join resolves, replay is now in flight (pending).
+    harness.triggerReconnect();
+    await flushMicrotasks();
+    expect(harness.replayImpl).toHaveBeenCalledTimes(1);
+
+    harness.controller.stop({ sendLeave: false });
+
+    replayGate.resolve({
+      events: [
+        { __typename: 'QueueItemAdded', sequence: 6, stateHash: 'hash-6' },
+        { __typename: 'QueueItemAdded', sequence: 7, stateHash: 'hash-7' },
+        { __typename: 'QueueItemAdded', sequence: 8, stateHash: 'hash-8' },
+      ],
+      currentSequence: 8,
+    });
+    await flushMicrotasks();
+
+    // Zero port callbacks after stop() returned.
+    expect(harness.queueEvents).toEqual([]);
+    expect(harness.fullSyncCalls).toEqual([]);
+    expect(harness.sessionDataCalls).toHaveLength(sessionDataCallsBeforeStop);
+    expect(harness.errors).toEqual([]);
+    expect(harness.recoveryEvents).toEqual([]);
+  });
+
+  it('stop() mid-delta-replay on the failure path suppresses the full-sync fallback too', async () => {
+    // Same teardown window, but the replay REJECTS after stop() — the
+    // catch-side guard must suppress both the recovery event and the
+    // post-teardown full sync.
+    const harness = createHarness();
+    harness.gate.lastSequence = 5;
+    harness.joinImpl.mockResolvedValue({ queueState: { sequence: 8, stateHash: 'hash-8' }, label: 'joined' });
+    const replayGate = deferred<SessionConnectionReplayResult<TestQueueEvent> | null>();
+    harness.replayImpl.mockImplementation(async () => replayGate.promise);
+
+    harness.controller.start();
+    await flushMicrotasks();
+    harness.fullSyncCalls.length = 0;
+    harness.queueEvents.length = 0;
+    const sessionDataCallsBeforeStop = harness.sessionDataCalls.length;
+
+    harness.triggerReconnect();
+    await flushMicrotasks();
+    expect(harness.replayImpl).toHaveBeenCalledTimes(1);
+
+    harness.controller.stop({ sendLeave: false });
+
+    replayGate.reject(new Error('socket torn down'));
+    await flushMicrotasks();
+
+    expect(harness.queueEvents).toEqual([]);
+    expect(harness.fullSyncCalls).toEqual([]);
+    expect(harness.sessionDataCalls).toHaveLength(sessionDataCallsBeforeStop);
+    expect(harness.errors).toEqual([]);
+    expect(harness.recoveryEvents).toEqual([]);
+  });
+
+  it('createClient throwing is fatal: onError + onFatal(connect-failed), no retry', async () => {
+    const clientCreationError = new Error('WebSocket constructor unavailable');
+    const harness = createHarness({
+      createClient: () => {
+        throw clientCreationError;
+      },
+    });
+
+    harness.controller.start();
+    await flushMicrotasks();
+
+    expect(harness.errors).toEqual([clientCreationError]);
+    expect(harness.fatalReasons).toEqual(['connect-failed']);
+    // Fatal, not transient: no backoff retry scheduled.
+    expect(harness.timers.pendingCount).toBe(0);
+    expect(harness.joinCalls).toHaveLength(0);
+  });
+
+  it('stop({ sendLeave: true }) sends LEAVE_SESSION before disposing the client', async () => {
+    const harness = createHarness();
+
+    harness.controller.start();
+    await flushMicrotasks();
+    const client = harness.clientsCreated[0];
+    expect(client).toBeDefined();
+
+    harness.controller.stop({ sendLeave: true });
+    await flushMicrotasks();
+
+    expect(harness.leaveImpl).toHaveBeenCalledTimes(1);
+    expect(harness.leaveImpl).toHaveBeenCalledWith(client);
+    expect(client?.disposed).toBe(true);
+  });
+
+  it('stop({ sendLeave: false }) disposes without sending LEAVE_SESSION', async () => {
+    const harness = createHarness();
+
+    harness.controller.start();
+    await flushMicrotasks();
+
+    harness.controller.stop({ sendLeave: false });
+    await flushMicrotasks();
+
+    expect(harness.leaveImpl).not.toHaveBeenCalled();
+    expect(harness.clientsCreated[0]?.disposed).toBe(true);
+  });
+
+  it('triggerResync() forces a rejoin and re-delivers session data', async () => {
+    const harness = createHarness();
+
+    harness.controller.start();
+    await flushMicrotasks();
+    expect(harness.joinCalls).toHaveLength(1);
+    expect(harness.sessionDataCalls).toHaveLength(1);
+
+    // External resync (the hook wires this into useSessionSubscriptions'
+    // triggerResync action) — must re-join rather than serve the cached
+    // join, and must hand fresh session data back through the port.
+    harness.controller.triggerResync();
+    await flushMicrotasks();
+
+    expect(harness.joinCalls).toHaveLength(2);
+    expect(harness.sessionDataCalls).toHaveLength(2);
+    expect(harness.errors).toEqual([]);
+    expect(harness.fatalReasons).toEqual([]);
+  });
+
+  it('triggerResync() after a failed connect is a no-op (no disposed-client rejoin)', async () => {
+    // After connect()'s failure path disposes its client, the controller
+    // drops the reference — a triggerResync during the retry-backoff window
+    // must not attempt a rejoin against the disposed client.
+    let joinShouldFail = true;
+    const harness = createHarness({
+      join: async () => {
+        if (joinShouldFail) return null;
+        return { queueState: { sequence: 1, stateHash: 'h1' }, label: 'ok' };
+      },
+    });
+
+    harness.controller.start();
+    await flushMicrotasks();
+    // First attempt failed; retry scheduled; client #1 disposed.
+    expect(harness.clientsCreated[0]?.disposed).toBe(true);
+    expect(harness.timers.pendingCount).toBe(1);
+
+    const joinCallsAfterFailure = harness.joinCalls.length;
+    harness.controller.triggerResync();
+    await flushMicrotasks();
+    // No rejoin attempted against the dead client.
+    expect(harness.joinCalls).toHaveLength(joinCallsAfterFailure);
+
+    // The scheduled retry still recovers normally with a fresh client.
+    joinShouldFail = false;
+    harness.timers.flushAll();
+    await flushMicrotasks();
+    expect(harness.sessionDataCalls).toHaveLength(1);
+    expect(harness.sessionDataCalls[0]?.client).toBe(harness.clientsCreated[1]);
   });
 });

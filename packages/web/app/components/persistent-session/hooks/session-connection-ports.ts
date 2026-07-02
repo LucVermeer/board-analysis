@@ -253,6 +253,17 @@ export function createWebSessionConnectionDeps({
         // scheduled retry via a React re-render before it ever fired) — see
         // the controller's `onFatal` doc comment for the genuinely-fatal
         // call sites.
+        //
+        // Post-stop safety: this branch has destructive side effects
+        // (removePreference + setActiveSession(null)) and no isStopped
+        // signal from the controller. That's sound because of the
+        // controller's teardown discipline: `stop()` disposes the client,
+        // and a disposed graphql-ws client's pending `execute` rejects with
+        // a generic transport error — never a `GraphQLOperationError`
+        // carrying SESSION_ENDED — so a join resolving after teardown can't
+        // reach this branch. If the controller ever stops without
+        // disposing, thread an isStopped check through these deps instead
+        // of relying on this reasoning.
         if (err instanceof GraphQLOperationError && err.extensions?.code === 'SESSION_ENDED') {
           if (DEBUG) console.info('[PersistentSession] Session has ended; clearing stored session');
           removePreference(ACTIVE_SESSION_KEY).catch(() => {});
@@ -369,6 +380,17 @@ export function createWebSessionConnectionDeps({
       console.warn(`[PersistentSession] Fatal connection failure (${reason}), clearing session`);
       removePreference(ACTIVE_SESSION_KEY).catch(() => {});
       setActiveSession(null);
+    },
+
+    // Observability for the recovery paths the controller handles itself —
+    // reproduces the pre-W4 hook's exact console calls
+    // (`use-session-lifecycle.ts:580` and `:703`).
+    onRecoveryEvent: (kind, recoveryError) => {
+      if (kind === 'delta-sync-fallback') {
+        console.warn('[PersistentSession] Delta sync failed, falling back to full sync:', recoveryError);
+      } else {
+        console.error('[PersistentSession] Session subscription error:', recoveryError);
+      }
     },
 
     retryPolicy: {

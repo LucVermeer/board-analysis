@@ -44,13 +44,27 @@
 // Join-epoch mapping: `createJoinSessionTracker` (`ensure-joined.ts`) caches
 // the in-flight JOIN_SESSION promise keyed by (sessionId, epoch); the epoch
 // must bump whenever the underlying connection is replaced so a stale
-// cached join from the dead connection is never reused. Web has no direct
-// socket 'closed' event to hook (see `createClient` below) — the earliest
-// point web can act is `onReconnect`, fired once graphql-ws has already
-// re-established the new connection. Bumping the epoch at the top of
-// `handleReconnect` achieves the same invariant the 'closed' handler
-// documents: any join cached against the previous connection is discarded
-// before rejoining.
+// cached join from the dead connection is never reused. Two bump sites
+// enforce that invariant:
+//   1. `connect()` bumps right after creating a client — a new client IS a
+//      new connection, so nothing cached against a previous client (e.g. a
+//      join that succeeded on the old connection) can be served on this
+//      one. Without this, a transient-retry's fresh client could hit the
+//      tracker cache and never send JOIN_SESSION over its own connection —
+//      every subsequent mutation would trip the server's `requireSession`
+//      guard until the next reconnect.
+//   2. `handleReconnect()` bumps at its top — web has no direct socket
+//      'closed' event to hook (see `createClient` below); the earliest
+//      point web can act is `onReconnect`, fired once graphql-ws has
+//      already re-established the new connection. This is the equivalent
+//      of mobile's 'closed'-handler bump.
+// Every `ensureJoined` await captures the epoch beforehand and, on resume,
+// abandons SILENTLY (no error, no retry strike, no dispose) when the epoch
+// has moved — whatever resolved belongs to a superseded connection, and
+// the newer owner (reconnect or retry) is already running its own join.
+// This restores the old `connectionGenerationRef` discipline for the one
+// async hop the `stopped` flag can't cover: the controller is still live,
+// just on a newer connection generation.
 
 import { createJoinSessionTracker } from './ensure-joined';
 import { hasContiguousReplayCoverage } from './sync-gate';
@@ -111,6 +125,15 @@ export type SessionConnectionFatalReason =
   | 'transient-retries-exhausted'
   | 'subscription-retries-exhausted'
   | 'connect-failed';
+
+/** Recovery paths the controller handles itself (no `onError`) but that the
+ *  original hook still logged. `delta-sync-fallback` = the EVENTS_REPLAY
+ *  path failed and the controller applied a full sync instead
+ *  (`use-session-lifecycle.ts:580`, pre-W4); `session-subscription-error` =
+ *  the session-updates subscription errored and recovery was scheduled
+ *  (`:703`). Surfaced via the optional `onRecoveryEvent` port so the
+ *  controller stays console-free. */
+export type SessionConnectionRecoveryEventKind = 'delta-sync-fallback' | 'session-subscription-error';
 
 export type SessionConnectionDeps<
   TClient extends SessionConnectionClient,
@@ -192,6 +215,10 @@ export type SessionConnectionDeps<
    *  (subscription retries exhausted), and `:824-827` (non-transient
    *  connect failure). */
   onFatal: (reason: SessionConnectionFatalReason) => void;
+  /** Optional observability hook for the recovery paths the controller
+   *  swallows itself (see `SessionConnectionRecoveryEventKind`). Web's
+   *  implementation reproduces the pre-W4 hook's exact console calls. */
+  onRecoveryEvent?: (kind: SessionConnectionRecoveryEventKind, error: unknown) => void;
   retryPolicy: SessionConnectionRetryPolicy;
   /** Injectable for tests (fake timers). Defaults to the real
    *  `setTimeout`/`clearTimeout`. */
@@ -329,6 +356,11 @@ export function createSessionConnectionController<
         },
         error: (err) => {
           queueUnsubscribe = null;
+          // A late error after stop() (e.g. the unsubscribe itself, or the
+          // socket closing during teardown) must not surface through the
+          // ports — the original gated the setError on mountedRef
+          // (`use-session-lifecycle.ts:663`).
+          if (stopped) return;
           deps.onError(err);
           scheduleSubscriptionRecovery();
         },
@@ -347,8 +379,11 @@ export function createSessionConnectionController<
         },
         // Deliberately no `deps.onError` here — matches the original
         // hook's asymmetry (see the `onError` doc comment above).
-        error: () => {
+        error: (err) => {
           sessionUnsubscribe = null;
+          // Same post-stop guard as the queue sink above.
+          if (stopped) return;
+          deps.onRecoveryEvent?.('session-subscription-error', err);
           scheduleSubscriptionRecovery();
         },
         complete: () => {
@@ -381,10 +416,13 @@ export function createSessionConnectionController<
     }
 
     currentClient = client;
+    // A new client IS a new underlying connection: bump the join epoch so
+    // nothing cached against a previous client can be served on this one
+    // (bump site 1 in the module doc comment's join-epoch mapping).
+    bumpJoinEpoch();
 
-    // Defensive — see the "First stale check" note in the module doc
-    // comment: unreachable in practice today (nothing yields between
-    // `start()`/a prior `stop()` and here), kept because the original
+    // Defensive: nothing yields between `start()` (or a prior `stop()`) and
+    // here, so this is unreachable today. Kept because the original hook
     // guarded the equivalent point (`use-session-lifecycle.ts:745-749`).
     if (stopped) {
       void client.dispose();
@@ -393,6 +431,7 @@ export function createSessionConnectionController<
     }
 
     try {
+      const epochAtCall = joinEpoch;
       let sessionData: TSessionData | null;
       try {
         await joinTracker.ensureJoined(deps.sessionId);
@@ -403,6 +442,20 @@ export function createSessionConnectionController<
 
       if (stopped) {
         void client.dispose();
+        return;
+      }
+
+      // Superseded mid-join: a reconnect bumped the epoch while this join
+      // was in flight (the socket bounced — graphql-ws re-executes pending
+      // operations on the new socket, so the STALE join commonly resolves
+      // FIRST). Whatever resolved — success or failure — belongs to the
+      // stale epoch; `handleReconnect` owns the connection now and is
+      // running its own join. Abandon SILENTLY: no error (a healthy join
+      // must not be misclassified as a no-payload failure), no retry
+      // strike, and critically no dispose — the client is shared with the
+      // in-flight reconnect that superseded us.
+      if (joinEpoch !== epochAtCall) {
+        connecting = false;
         return;
       }
 
@@ -451,6 +504,15 @@ export function createSessionConnectionController<
       // Always dispose on failure, mounted or not — matches
       // `use-session-lifecycle.ts:829-831` (outside the mounted guard).
       void client.dispose();
+      // Drop the reference so nothing (a `triggerResync()` during the retry
+      // window, a spurious late `onReconnect` from the disposed client) can
+      // start a rejoin against the dead client — `handleReconnect` bails on
+      // a null `currentClient`. Guarded: any superseded flow already
+      // returned at the epoch check above, so `currentClient === client`
+      // here unless `stop()` nulled it first.
+      if (currentClient === client) {
+        currentClient = null;
+      }
     }
   }
 
@@ -462,7 +524,10 @@ export function createSessionConnectionController<
     reconnecting = true;
 
     try {
+      // Bump site 2 (module doc comment): the connection was replaced under
+      // us, so any join cached against the previous connection is stale.
       bumpJoinEpoch();
+      const epochAtCall = joinEpoch;
 
       const lastSequence = deps.gate.getLastSequence();
 
@@ -474,7 +539,16 @@ export function createSessionConnectionController<
         sessionData = null;
       }
 
-      if (sessionData === null || stopped) return;
+      if (stopped) return;
+      // Superseded mid-rejoin: a newer connect() (transient retry) replaced
+      // the client — and bumped the epoch — while this join was in flight.
+      // That connect flow owns the session now; abandon silently. The
+      // client identity check is belt-and-braces on top of the epoch: both
+      // change together on client replacement, but only the client check
+      // guarantees we never hand a replaced (disposed) client to
+      // `onSessionData`/`startSubscriptions` below.
+      if (joinEpoch !== epochAtCall || currentClient !== clientForReconnect) return;
+      if (sessionData === null) return;
 
       // Same reset as the initial connect's success path — see the comment
       // there. Mirrors `use-session-lifecycle.ts:519-520`.
@@ -496,6 +570,12 @@ export function createSessionConnectionController<
       if (strategy === 'delta-replay' && lastSequence !== null) {
         try {
           const replay = await deps.replayEvents(clientForReconnect, lastSequence);
+          // stop() while the replay was in flight: the hook has already
+          // reset the sync gate and disposed the client — re-dispatching
+          // this session's events after teardown would leak them into a
+          // successor session on an A->B switch. Bail before any port
+          // callback fires.
+          if (stopped) return;
           if (!replay) {
             throw new Error('eventsReplay payload missing');
           }
@@ -512,7 +592,11 @@ export function createSessionConnectionController<
           for (const event of replay.events) {
             deps.onQueueEvent(event);
           }
-        } catch {
+        } catch (err) {
+          // Same teardown guard as the success path — a replay that REJECTS
+          // after stop() must not apply a post-teardown full sync either.
+          if (stopped) return;
+          deps.onRecoveryEvent?.('delta-sync-fallback', err);
           // Any failure above (network error, missing payload, sequence
           // regression, non-contiguous coverage) falls back to full sync —
           // matches `use-session-lifecycle.ts:579-582`.

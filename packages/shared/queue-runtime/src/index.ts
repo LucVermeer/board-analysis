@@ -23,6 +23,7 @@ export type {
   SessionConnectionDeps,
   SessionConnectionFatalReason,
   SessionConnectionGate,
+  SessionConnectionRecoveryEventKind,
   SessionConnectionReplayResult,
   SessionConnectionRetryPolicy,
   SessionConnectionSessionData,
