@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const cfg = vi.hoisted(() => ({
   enabled: true,
   boardId: 1 as number | null,
-  isLive: true,
+  // Mirrors `BoardPresenceWallClimbContext`'s own value: `isLive ? currentClimb
+  // : null` is computed by the provider, so the hook under test only ever sees
+  // the already-collapsed wall climb (or null).
   wallClimb: { climbUuid: 'wall-1', name: 'Wax On', difficulty: 15 } as {
     climbUuid: string;
     name: string;
@@ -17,7 +19,7 @@ vi.mock('../../../providers/board-presence-provider', () => ({
   useBoardPresenceControls: () => ({ enabled: cfg.enabled, boardId: cfg.boardId }),
 }));
 vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceCurrent: () => ({ currentClimb: cfg.wallClimb, isLive: cfg.isLive }),
+  useBoardPresenceWallClimb: () => cfg.wallClimb,
 }));
 
 import { useWallClimbIfDistinct } from '../use-wall-or-queue-climb';
@@ -26,7 +28,6 @@ describe('useWallClimbIfDistinct', () => {
   beforeEach(() => {
     cfg.enabled = true;
     cfg.boardId = 1;
-    cfg.isLive = true;
     cfg.wallClimb = { climbUuid: 'wall-1', name: 'Wax On', difficulty: 15 };
   });
 
@@ -57,8 +58,8 @@ describe('useWallClimbIfDistinct', () => {
     expect(result.current).toBeNull();
   });
 
-  it('returns null when the feed is not live', () => {
-    cfg.isLive = false;
+  it('returns null when the feed is not live (context already collapses to null)', () => {
+    cfg.wallClimb = null;
     const { result } = renderHook(() => useWallClimbIfDistinct('queue-head'));
     expect(result.current).toBeNull();
   });

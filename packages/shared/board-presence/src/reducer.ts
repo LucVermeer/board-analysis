@@ -33,15 +33,47 @@ function historyHasEntry(history: BoardPresenceClimb[], climb: BoardPresenceClim
   return history.some((entry) => entry.climbUuid === climb.climbUuid && entry.seq === climb.seq);
 }
 
-/** Merge into history, dedup by `(climbUuid, seq)`, sort newest-first, cap. */
+/**
+ * Merge into history, dedup by `(climbUuid, seq)`, sort newest-first, cap.
+ *
+ * Identity-preserving: seeded from `existing` FIRST, so an incoming entry that
+ * duplicates an already-present key is skipped rather than replacing it — the
+ * existing object identity wins. This is what lets `React.memo`'d history rows
+ * bail on a backfill that repeats everything the client already has (every app
+ * resume, foreground catch-up, and pull-to-refresh when nothing new happened).
+ * When the merged result is element-wise identical to `existing`, we return
+ * `existing` itself so callers can cheaply detect "nothing changed" by
+ * reference.
+ *
+ * On "the same key is the same data": that holds within one source (the live
+ * feed and `boardRecentClimbs` share the Redis-backed payload verbatim), but
+ * the durable `boardHistory` query is a known asymmetry — it re-resolves the
+ * sender identity via a live users/profiles join and nulls `queueItemUuid` /
+ * `gradeColor` (backend board-presence queries.ts), so the same
+ * `(climbUuid, seq)` CAN differ in those fields across sources. Existing-wins
+ * is still the right policy (the live-feed shape is the richer one), but a
+ * future caller routing `fetchHistory` results through BACKFILL_HISTORY should
+ * know the merge keeps the already-present variant rather than "refreshing"
+ * those fields.
+ */
 function mergeHistory(existing: BoardPresenceClimb[], incoming: BoardPresenceClimb[]): BoardPresenceClimb[] {
   const byKey = new Map<string, BoardPresenceClimb>();
-  for (const climb of [...existing, ...incoming]) {
+  for (const climb of existing) {
     byKey.set(`${climb.climbUuid}:${climb.seq}`, climb);
   }
-  return Array.from(byKey.values())
+  for (const climb of incoming) {
+    const key = `${climb.climbUuid}:${climb.seq}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, climb);
+    }
+  }
+  const merged = Array.from(byKey.values())
     .sort((left, right) => right.seq - left.seq)
     .slice(0, HISTORY_CAP);
+  if (merged.length === existing.length && merged.every((entry, index) => entry === existing[index])) {
+    return existing;
+  }
+  return merged;
 }
 
 export function boardPresenceReducer(state: BoardPresenceState, action: BoardPresenceAction): BoardPresenceState {
@@ -55,9 +87,13 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
         if (historyHasEntry(state.history, incomingClimb)) {
           return state;
         }
+        const mergedHistory = mergeHistory(state.history, [incomingClimb]);
+        if (mergedHistory === state.history) {
+          return state;
+        }
         return {
           ...state,
-          history: mergeHistory(state.history, [incomingClimb]),
+          history: mergedHistory,
         };
       }
 
@@ -105,6 +141,15 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
       // in flight.
       const newestHistoryClimb = mergedHistory[0] ?? null;
       const shouldAdoptHistoryClimb = newestHistoryClimb !== null && newestHistoryClimb.seq > state.lastSeq;
+
+      // Nothing actually changed: the merge produced the same history array
+      // (by reference — every entry already present) and the seq cursor + the
+      // adoption decision are also unchanged. Returning `state` lets a
+      // foreground/reconnect catch-up that finds nothing new be a total render
+      // no-op instead of a full-list re-render.
+      if (mergedHistory === state.history && highestSeq === state.lastSeq && !shouldAdoptHistoryClimb) {
+        return state;
+      }
 
       return {
         ...state,

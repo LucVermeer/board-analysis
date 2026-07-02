@@ -13,6 +13,7 @@ import {
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
   useBoardPresenceHasClimb,
+  useBoardPresenceWallClimb,
 } from '../board-presence-provider';
 import type { BoardPresenceClient } from '../types';
 
@@ -958,5 +959,50 @@ describe('BoardPresenceProvider — split contexts', () => {
       harness.emit(clearEvent(3));
     });
     await waitFor(() => expect(hasClimbSnapshots.at(-1)).toBe(false));
+  });
+
+  it('narrows wall-climb consumers to climb changes only — no re-render on stats/connection churn', async () => {
+    const harness = makeClient();
+    let wallClimbRenderCount = 0;
+    const wallClimbSnapshots: Array<BoardPresenceClimb | null> = [];
+
+    function WallClimbConsumer() {
+      wallClimbRenderCount += 1;
+      wallClimbSnapshots.push(useBoardPresenceWallClimb());
+      return null;
+    }
+
+    render(
+      <BoardPresenceProvider boardId={1} client={harness.client}>
+        <WallClimbConsumer />
+      </BoardPresenceProvider>,
+    );
+
+    // Live feed, no climb yet → null.
+    await waitFor(() => expect(wallClimbRenderCount).toBeGreaterThan(0));
+    expect(wallClimbSnapshots.at(-1)).toBeNull();
+
+    // A climb lights up → the consumer re-renders with the new wall climb.
+    act(() => {
+      harness.emit(setEvent(climb('wall-1', 1)));
+    });
+    await waitFor(() => expect(wallClimbSnapshots.at(-1)?.climbUuid).toBe('wall-1'));
+    const rendersAfterClimb = wallClimbRenderCount;
+
+    // Stats and connection pushes must NOT re-render this narrow consumer — it
+    // only reads the wall's lit climb, not the whole current/feed state.
+    act(() => {
+      harness.emit(statsEvent(2, { climbsSentCount: 5 }));
+      harness.emit(connectionEvent(3, holder({ userId: 'holder-1' })));
+    });
+    expect(wallClimbRenderCount).toBe(rendersAfterClimb);
+    expect(wallClimbSnapshots.at(-1)?.climbUuid).toBe('wall-1');
+
+    // A genuine new climb set DOES re-render it.
+    act(() => {
+      harness.emit(setEvent(climb('wall-2', 4)));
+    });
+    await waitFor(() => expect(wallClimbSnapshots.at(-1)?.climbUuid).toBe('wall-2'));
+    expect(wallClimbRenderCount).toBeGreaterThan(rendersAfterClimb);
   });
 });

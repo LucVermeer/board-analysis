@@ -400,6 +400,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@boardsesh/board-presence": "*",
+        "@boardsesh/graphql": "*",
         "@boardsesh/shared-schema": "*",
       },
       "devDependencies": {

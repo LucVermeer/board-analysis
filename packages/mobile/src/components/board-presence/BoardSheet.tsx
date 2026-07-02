@@ -10,6 +10,10 @@
 // State comes from `@boardsesh/board-presence-react`'s split current/feed
 // contexts, which are inert when the `board-presence` flag is off — so this
 // sheet is only ever opened from the board glyph when the flag is on.
+//
+// Presence-consuming content is gated on `isPresented` (see `BoardSheetContent`)
+// so a dismissed sheet does zero work; `BoardNowPlayingReceived` telemetry lives
+// in the provider's `BoardPresenceInstrument` so it fires while dismissed.
 
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl, StyleSheet, View, type ColorValue } from 'react-native';
@@ -183,9 +187,8 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 ) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
-  const { systemColors, brandColors, sheet } = useTheme();
+  const { systemColors, sheet } = useTheme();
   const { showToast } = useToast();
-  const { formatGrade } = useGradeFormat();
   const sheetRef = useRef<BottomSheetModal>(null);
   const boardConfigRef = useRef(boardConfig);
   boardConfigRef.current = boardConfig;
@@ -193,70 +196,18 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   const boardConfigSignatureRef = useRef(boardConfigSignature);
   boardConfigSignatureRef.current = boardConfigSignature;
 
-  const { currentClimb } = useBoardPresenceCurrent();
-  const { history, stats } = useBoardPresenceFeed();
-  const { refresh } = useBoardPresenceActions();
-  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
-  const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
-  boardPresenceBoardIdRef.current = boardPresenceBoardId;
+  // Gates `BoardSheetContent` (the presence-consuming hero/stats/history list)
+  // so it does zero work while dismissed. Flipped true SYNCHRONOUSLY in the
+  // imperative `present()` below (before the sheet's own present animation
+  // starts) and false once the dismiss animation has fully settled — see
+  // `handleFullyDismissed`.
+  const [isPresented, setIsPresented] = useState(false);
 
-  // Pull-to-refresh: a manual catch-up for when a user notices the wall feed is
-  // stale. `refresh()` is fire-and-forget (the durable history merges back in
-  // via context), so show the spinner briefly, then clear it.
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleRefresh = useCallback(() => {
-    refresh('manual');
-    setIsRefreshing(true);
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-    refreshTimerRef.current = setTimeout(() => setIsRefreshing(false), 800);
-  }, [refresh]);
-  useEffect(
-    () => () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    },
-    [],
-  );
-  const visibleHistory = useMemo(
-    () =>
-      currentClimb
-        ? history.filter((historyClimb) => {
-            return historyClimb.climbUuid !== currentClimb.climbUuid || historyClimb.seq !== currentClimb.seq;
-          })
-        : history,
-    [currentClimb, history],
-  );
-  const historyCountRef = useRef(visibleHistory.length);
-  historyCountRef.current = visibleHistory.length;
-
-  const lastReceivedWallClimbRef = useRef<string | null>(null);
-  // `seq` rides along in the telemetry payload but must NOT trigger the effect —
-  // a same-uuid seq bump (e.g. a backfill merge) shouldn't re-evaluate the
-  // "new climb on the wall" event. Read it from a ref so the effect keys only on
-  // the climb uuid.
-  const currentClimbSeqRef = useRef(currentClimb?.seq);
-  currentClimbSeqRef.current = currentClimb?.seq;
   const actionClimbCacheRef = useRef(new Map<string, Climb>());
   const actionClimbRequestRef = useRef(new Map<string, Promise<Climb | null>>());
   const pendingActionKeysRef = useRef(new Set<string>());
   const actionGenerationRef = useRef(0);
   const [pendingActionKeys, setPendingActionKeys] = useState<ReadonlySet<string>>(() => new Set());
-  useEffect(() => {
-    const currentClimbUuid = currentClimb?.climbUuid;
-    if (!currentClimbUuid) return;
-    if (lastReceivedWallClimbRef.current === currentClimbUuid) return;
-    lastReceivedWallClimbRef.current = currentClimbUuid;
-    track(SHARED_EVENTS.BoardNowPlayingReceived, {
-      boardId: boardPresenceBoardIdRef.current ?? undefined,
-      climbUuid: currentClimbUuid,
-      // `seq` lets PostHog spot gaps in the live stream (a jump = dropped pushes).
-      seq: currentClimbSeqRef.current ?? undefined,
-    });
-  }, [currentClimb?.climbUuid]);
 
   const snapPoints = useMemo(() => ['55%', '92%'], []);
   const rowBoard = useMemo<BoardSheetRowBoard | null>(
@@ -445,8 +396,10 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 
   // Fired once the dismiss animation has actually SETTLED (coordinator), not on
   // the synchronous early callback — so we never tear anything down mid-animation.
+  // This is also where `BoardSheetContent` unmounts (zero work while dismissed).
   const handleFullyDismissed = useCallback(() => {
     invalidatePendingActions();
+    setIsPresented(false);
     onDismissed?.();
   }, [invalidatePendingActions, onDismissed]);
 
@@ -464,12 +417,10 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     ref,
     () => ({
       present: () => {
-        if (historyCountRef.current > 0) {
-          track(SHARED_EVENTS.BoardHistoryViewed, {
-            boardId: boardPresenceBoardIdRef.current ?? undefined,
-            itemCount: historyCountRef.current,
-          });
-        }
+        // Synchronous, before the sheet's own present animation starts, so
+        // `BoardSheetContent` mounts (and its history/hero read) right away —
+        // no reliance on the sheet library's own child-mounting timing.
+        setIsPresented(true);
         managed.handle.present();
       },
       dismiss: () => {
@@ -479,6 +430,185 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     }),
     [managed.handle, invalidatePendingActions],
   );
+
+  // Re-mount backstop: a re-present queued inside a dismiss settle window gets
+  // its isPresented(true) clobbered by the late-settling `handleFullyDismissed`
+  // BEFORE the coordinator presents the native sheet — which would leave the
+  // sheet up with the content unmounted. index >= 0 means the sheet is really
+  // up, so re-mount here; the synchronous set in `present()` is the fast path.
+  const managedOnChange = managed.onChange;
+  const handleSheetChange = useCallback(
+    (index: number) => {
+      if (index >= 0) {
+        setIsPresented(true);
+      }
+      managedOnChange(index);
+    },
+    [managedOnChange],
+  );
+
+  return (
+    <BottomSheetModal
+      ref={sheetRef}
+      index={0}
+      snapPoints={snapPoints}
+      // Height is driven by explicit snapPoints, so disable gorhom's dynamic
+      // content sizing — it doesn't play well with a BottomSheetFlatList (no
+      // bounded content height to measure).
+      enableDynamicSizing={false}
+      enablePanDownToClose
+      onChange={handleSheetChange}
+      handleIndicatorStyle={sheet.handleStyle}
+      style={styles.sheet}
+    >
+      <View style={[styles.header, { borderBottomColor: systemColors.separator }]}>
+        <Pressable
+          onPress={handleClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.boardPresence.close')}
+          style={styles.headerAction}
+        >
+          <Icon name="chevron.down" size={20} color={systemColors.secondaryLabel} />
+        </Pressable>
+        <Text variant="title3" color={systemColors.label} numberOfLines={1} style={styles.headerTitle}>
+          {boardLabel ?? t('mobile.boardPresence.title')}
+        </Text>
+        <View pointerEvents="none" style={styles.headerAction} />
+      </View>
+
+      {isPresented ? (
+        <BoardSheetContent
+          boardConfig={boardConfig}
+          rowBoard={rowBoard}
+          canUseInteractiveRows={canUseInteractiveRows}
+          onClimbPress={onClimbPress}
+          isActionLoading={isActionLoading}
+          pendingActionKeys={pendingActionKeys}
+          onInteractiveClimbPress={handleInteractiveClimbPress}
+          onInteractiveAddToQueue={handleInteractiveAddToQueue}
+          onInteractiveOpenPlaylist={handleInteractiveOpenPlaylist}
+          onInteractiveOpenActions={handleInteractiveOpenActions}
+        />
+      ) : null}
+
+      <Pressable
+        onPress={handleSwitchBoard}
+        accessibilityRole="button"
+        accessibilityLabel={t('mobile.boardPresence.switchBoardAria')}
+        style={[styles.footer, { borderTopColor: systemColors.separator, paddingBottom: insets.bottom + spacing[3] }]}
+      >
+        <View style={[styles.footerIcon, { backgroundColor: systemColors.secondaryBackground }]}>
+          <Icon name="transfer" size={20} color={systemColors.label} />
+        </View>
+        <View style={styles.footerText}>
+          <Text variant="body" color={systemColors.label}>
+            {t('mobile.boardPresence.switchBoard')}
+          </Text>
+          {boardLabel ? (
+            <Text variant="caption1" color={systemColors.secondaryLabel} numberOfLines={1}>
+              {boardLabel}
+            </Text>
+          ) : null}
+        </View>
+        <Icon name="chevron.right" size={16} color={systemColors.tertiaryLabel} />
+      </Pressable>
+    </BottomSheetModal>
+  );
+});
+
+type BoardSheetContentProps = {
+  boardConfig: BoardConfig | null;
+  rowBoard: BoardSheetRowBoard | null;
+  canUseInteractiveRows: boolean;
+  onClimbPress?: (action: BoardSheetClimbAction) => void;
+  isActionLoading: (presenceClimb: BoardPresenceClimb) => boolean;
+  pendingActionKeys: ReadonlySet<string>;
+  onInteractiveClimbPress: (presenceClimb: BoardPresenceClimb) => void;
+  onInteractiveAddToQueue: (presenceClimb: BoardPresenceClimb) => void;
+  onInteractiveOpenPlaylist: (presenceClimb: BoardPresenceClimb) => void;
+  onInteractiveOpenActions: (presenceClimb: BoardPresenceClimb) => void;
+};
+
+/**
+ * Everything that reads the wall's live state: the hero, stat tiles, and the
+ * virtualized history list. Mounted by `BoardSheet` only while `isPresented`
+ * is true, so a dismissed sheet subscribes to none of the presence contexts
+ * and does none of this rendering work — this component mounts fresh on every
+ * `present()` and unmounts on `handleFullyDismissed`.
+ *
+ * The action-hydration state (`pendingActionKeys`, the climb cache, generation
+ * counter) stays in the parent `BoardSheet` — it doesn't depend on presence
+ * data, and keeping it there means an in-flight action survives this
+ * component's own mount/unmount cycle exactly as before (the parent's
+ * `invalidatePendingActions` on close/dismiss is unaffected by this refactor).
+ */
+function BoardSheetContent({
+  boardConfig,
+  rowBoard,
+  canUseInteractiveRows,
+  onClimbPress,
+  isActionLoading,
+  pendingActionKeys,
+  onInteractiveClimbPress,
+  onInteractiveAddToQueue,
+  onInteractiveOpenPlaylist,
+  onInteractiveOpenActions,
+}: BoardSheetContentProps) {
+  const { t } = useTranslation('session');
+  const { systemColors, brandColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
+  const { currentClimb } = useBoardPresenceCurrent();
+  const { history, stats } = useBoardPresenceFeed();
+  const { refresh } = useBoardPresenceActions();
+  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
+
+  // Pull-to-refresh: a manual catch-up for when a user notices the wall feed is
+  // stale. `refresh()` is fire-and-forget (the durable history merges back in
+  // via context), so show the spinner briefly, then clear it.
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleRefresh = useCallback(() => {
+    refresh('manual');
+    setIsRefreshing(true);
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => setIsRefreshing(false), 800);
+  }, [refresh]);
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const visibleHistory = useMemo(
+    () =>
+      currentClimb
+        ? history.filter((historyClimb) => {
+            return historyClimb.climbUuid !== currentClimb.climbUuid || historyClimb.seq !== currentClimb.seq;
+          })
+        : history,
+    [currentClimb, history],
+  );
+
+  // Fires once per presentation, when history is FIRST non-empty — not only at
+  // mount, because presenting before the initial backfill resolves would find
+  // an empty list and never fire for that presentation. This component mounts
+  // fresh every time the sheet opens (`BoardSheet`'s `isPresented` gate), so
+  // the ref naturally resets per presentation. Mirrors web's `BoardSheetBody`.
+  const historyViewedForPresentationRef = useRef(false);
+  useEffect(() => {
+    if (historyViewedForPresentationRef.current || visibleHistory.length === 0) return;
+    historyViewedForPresentationRef.current = true;
+    track(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: boardPresenceBoardId ?? undefined,
+      itemCount: visibleHistory.length,
+    });
+  }, [visibleHistory.length, boardPresenceBoardId]);
 
   const renderHistoryItem = useCallback(
     ({ item }: { item: BoardPresenceClimb }) => {
@@ -496,10 +626,10 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             formattedGrade={formattedGrade}
             gradeColor={gradeColor}
             isActionLoading={isActionLoading(item)}
-            onPress={onClimbPress ? handleInteractiveClimbPress : undefined}
-            onAddToQueue={handleInteractiveAddToQueue}
-            onOpenPlaylist={handleInteractiveOpenPlaylist}
-            onOpenActions={handleInteractiveOpenActions}
+            onPress={onClimbPress ? onInteractiveClimbPress : undefined}
+            onAddToQueue={onInteractiveAddToQueue}
+            onOpenPlaylist={onInteractiveOpenPlaylist}
+            onOpenActions={onInteractiveOpenActions}
           />
         );
       }
@@ -522,14 +652,31 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       systemColors.label,
       systemColors.secondaryLabel,
       formatGrade,
-      handleInteractiveClimbPress,
-      handleInteractiveAddToQueue,
-      handleInteractiveOpenPlaylist,
-      handleInteractiveOpenActions,
+      onInteractiveClimbPress,
+      onInteractiveAddToQueue,
+      onInteractiveOpenPlaylist,
+      onInteractiveOpenActions,
+      // `isActionLoading` (a function of `pendingActionKeys`, ANY row's action
+      // state) is intentionally kept here — rows are `React.memo`'d, so this
+      // only re-renders the specific row whose own loading flag actually
+      // changed. `listHeader` below deliberately does NOT depend on this same
+      // function for the hero — see `heroActionLoading`.
       isActionLoading,
       onClimbPress,
     ],
   );
+
+  // Primitive derived from `pendingActionKeys` for just the hero's own climb —
+  // NOT the `isActionLoading` function itself, which changes identity on every
+  // row's action-state flip. Keeping `listHeader` keyed on this boolean instead
+  // means an unrelated history-row tap no longer rebuilds the whole header
+  // (hero + stat tiles + hardest-send row).
+  const heroActionLoading =
+    currentClimb && boardConfig
+      ? pendingActionKeys.has(
+          actionCacheKey(actionBoardConfigForPresenceClimb(boardConfig, currentClimb), currentClimb.climbUuid),
+        )
+      : false;
 
   const listHeader = useMemo(
     () => (
@@ -545,11 +692,11 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             surfaceColor={systemColors.secondaryBackground}
             formattedGrade={currentClimb.grade ? formatGrade(currentClimb.grade) : null}
             gradeColor={getGradeColor(currentClimb.grade ?? '') ?? DEFAULT_GRADE_COLOR}
-            isActionLoading={isActionLoading(currentClimb)}
-            onPress={onClimbPress ? handleInteractiveClimbPress : undefined}
-            onAddToQueue={handleInteractiveAddToQueue}
-            onOpenPlaylist={handleInteractiveOpenPlaylist}
-            onOpenActions={handleInteractiveOpenActions}
+            isActionLoading={heroActionLoading}
+            onPress={onClimbPress ? onInteractiveClimbPress : undefined}
+            onAddToQueue={onInteractiveAddToQueue}
+            onOpenPlaylist={onInteractiveOpenPlaylist}
+            onOpenActions={onInteractiveOpenActions}
           />
         ) : (
           <NowOnTheWallHero
@@ -629,11 +776,11 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       t,
       canUseInteractiveRows,
       rowBoard,
-      handleInteractiveClimbPress,
-      handleInteractiveAddToQueue,
-      handleInteractiveOpenPlaylist,
-      handleInteractiveOpenActions,
-      isActionLoading,
+      onInteractiveClimbPress,
+      onInteractiveAddToQueue,
+      onInteractiveOpenPlaylist,
+      onInteractiveOpenActions,
+      heroActionLoading,
       onClimbPress,
     ],
   );
@@ -655,71 +802,19 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   );
 
   return (
-    <BottomSheetModal
-      ref={sheetRef}
-      index={0}
-      snapPoints={snapPoints}
-      // Height is driven by explicit snapPoints, so disable gorhom's dynamic
-      // content sizing — it doesn't play well with a BottomSheetFlatList (no
-      // bounded content height to measure).
-      enableDynamicSizing={false}
-      enablePanDownToClose
-      onChange={managed.onChange}
-      handleIndicatorStyle={sheet.handleStyle}
-      style={styles.sheet}
-    >
-      <View style={[styles.header, { borderBottomColor: systemColors.separator }]}>
-        <Pressable
-          onPress={handleClose}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.boardPresence.close')}
-          style={styles.headerAction}
-        >
-          <Icon name="chevron.down" size={20} color={systemColors.secondaryLabel} />
-        </Pressable>
-        <Text variant="title3" color={systemColors.label} numberOfLines={1} style={styles.headerTitle}>
-          {boardLabel ?? t('mobile.boardPresence.title')}
-        </Text>
-        <View pointerEvents="none" style={styles.headerAction} />
-      </View>
-
-      <BottomSheetFlatList
-        data={visibleHistory}
-        keyExtractor={boardPresenceHistoryKeyExtractor}
-        renderItem={renderHistoryItem}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={listEmpty}
-        contentContainerStyle={{ paddingBottom: spacing[4] }}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />
-        }
-      />
-
-      <Pressable
-        onPress={handleSwitchBoard}
-        accessibilityRole="button"
-        accessibilityLabel={t('mobile.boardPresence.switchBoardAria')}
-        style={[styles.footer, { borderTopColor: systemColors.separator, paddingBottom: insets.bottom + spacing[3] }]}
-      >
-        <View style={[styles.footerIcon, { backgroundColor: systemColors.secondaryBackground }]}>
-          <Icon name="transfer" size={20} color={systemColors.label} />
-        </View>
-        <View style={styles.footerText}>
-          <Text variant="body" color={systemColors.label}>
-            {t('mobile.boardPresence.switchBoard')}
-          </Text>
-          {boardLabel ? (
-            <Text variant="caption1" color={systemColors.secondaryLabel} numberOfLines={1}>
-              {boardLabel}
-            </Text>
-          ) : null}
-        </View>
-        <Icon name="chevron.right" size={16} color={systemColors.tertiaryLabel} />
-      </Pressable>
-    </BottomSheetModal>
+    <BottomSheetFlatList
+      data={visibleHistory}
+      keyExtractor={boardPresenceHistoryKeyExtractor}
+      renderItem={renderHistoryItem}
+      ListHeaderComponent={listHeader}
+      ListEmptyComponent={listEmpty}
+      contentContainerStyle={{ paddingBottom: spacing[4] }}
+      refreshControl={
+        <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />
+      }
+    />
   );
-});
+}
 
 type HeroProps = {
   climb: BoardPresenceClimb | null;

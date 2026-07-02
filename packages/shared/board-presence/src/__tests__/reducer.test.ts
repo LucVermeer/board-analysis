@@ -114,6 +114,36 @@ describe('APPLY_CLIMB_SET', () => {
     expect(result).toBe(state);
   });
 
+  it('preserves object identity of a previously-merged stale entry across another stale merge', () => {
+    const current = makeClimb({ seq: 10 });
+    let state = makeState({ currentClimb: current, history: [current], lastSeq: 10 });
+
+    const staleA = makeClimb({ seq: 6, climbUuid: 'stale-a' });
+    state = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: staleA });
+    const mergedStaleA = state.history.find((entry) => entry.climbUuid === 'stale-a');
+    expect(mergedStaleA).toBe(staleA);
+
+    const staleB = makeClimb({ seq: 4, climbUuid: 'stale-b' });
+    const result = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: staleB });
+
+    // The previously-merged stale entry keeps its exact reference across the
+    // second merge — mergeHistory seeds from `existing` first.
+    expect(result.history.find((entry) => entry.climbUuid === 'stale-a')).toBe(mergedStaleA);
+    expect(result.history.map((entry) => entry.seq)).toEqual([10, 6, 4]);
+  });
+
+  it('returns the SAME state object when a stale climb set is immediately capped away', () => {
+    let state = initialBoardPresenceState;
+    for (let seq = HISTORY_CAP + 1; seq <= 2 * HISTORY_CAP; seq += 1) {
+      state = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: makeClimb({ seq }) });
+    }
+
+    const tooOldToKeep = makeClimb({ seq: 1, climbUuid: 'ancient' });
+    const result = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: tooOldToKeep });
+
+    expect(result).toBe(state);
+  });
+
   it('applies a re-send of the same climbUuid when the server assigns a new seq', () => {
     const firstSend = makeClimb({ climbUuid: 'project', seq: 4 });
     const afterFirst = boardPresenceReducer(initialBoardPresenceState, {
@@ -249,6 +279,56 @@ describe('BACKFILL_HISTORY', () => {
   it('no-ops on an empty backfill', () => {
     const state = makeState({ lastSeq: 4 });
     const result = boardPresenceReducer(state, { type: 'BACKFILL_HISTORY', payload: [] });
+    expect(result).toBe(state);
+  });
+
+  it('re-backfilling identical climbs returns the SAME state object (render no-op)', () => {
+    const backfill = [makeClimb({ seq: 1 }), makeClimb({ seq: 2 }), makeClimb({ seq: 3 })];
+
+    const once = boardPresenceReducer(initialBoardPresenceState, {
+      type: 'BACKFILL_HISTORY',
+      payload: backfill,
+    });
+    const twice = boardPresenceReducer(once, { type: 'BACKFILL_HISTORY', payload: backfill });
+
+    // Reference equality, not just deep equality — a foreground/reconnect
+    // catch-up that finds nothing new must not force a full history re-render.
+    expect(twice).toBe(once);
+  });
+
+  it('preserves per-entry object identity for pre-existing keys, even when the backfill payload carries a different (re-fetched) object for the same key', () => {
+    const existingEntry = makeClimb({ seq: 5, climbUuid: 'stable' });
+    const state = makeState({ history: [existingEntry], lastSeq: 5 });
+
+    // Same (climbUuid, seq) key, but a distinct object instance — as a real
+    // re-fetch over the wire would produce.
+    const refetchedDuplicate = makeClimb({ seq: 5, climbUuid: 'stable' });
+    expect(refetchedDuplicate).not.toBe(existingEntry);
+    const genuinelyNew = makeClimb({ seq: 6, climbUuid: 'fresh' });
+
+    const result = boardPresenceReducer(state, {
+      type: 'BACKFILL_HISTORY',
+      payload: [refetchedDuplicate, genuinelyNew],
+    });
+
+    // The pre-existing key keeps ITS original object, not the backfill's.
+    expect(result.history.find((entry) => entry.climbUuid === 'stable')).toBe(existingEntry);
+    expect(result.history.map((entry) => entry.climbUuid)).toEqual(['fresh', 'stable']);
+  });
+
+  it('preserves state identity when a backfilled climb is older than everything in a full history (immediately capped away)', () => {
+    let state = initialBoardPresenceState;
+    for (let seq = HISTORY_CAP + 1; seq <= 2 * HISTORY_CAP; seq += 1) {
+      state = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: makeClimb({ seq }) });
+    }
+    expect(state.history).toHaveLength(HISTORY_CAP);
+
+    // Older than every entry already in the (full, capped) history, and not
+    // already present, so it merges in then immediately falls off the cap —
+    // the visible history is unchanged.
+    const tooOldToKeep = makeClimb({ seq: 1, climbUuid: 'ancient' });
+    const result = boardPresenceReducer(state, { type: 'BACKFILL_HISTORY', payload: [tooOldToKeep] });
+
     expect(result).toBe(state);
   });
 });

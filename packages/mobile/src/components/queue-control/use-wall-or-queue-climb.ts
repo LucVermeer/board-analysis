@@ -13,7 +13,7 @@
 
 import { useMemo } from 'react';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
+import { useBoardPresenceWallClimb } from '@boardsesh/board-presence-react';
 import { useBoardPresenceControls } from '../../providers/board-presence-provider';
 
 /**
@@ -34,16 +34,19 @@ import { useBoardPresenceControls } from '../../providers/board-presence-provide
  */
 export function useWallClimbIfDistinct(localClimbUuid: string | null): BoardPresenceClimb | null {
   const { enabled, boardId } = useBoardPresenceControls();
-  const { currentClimb: wallClimb, isLive } = useBoardPresenceCurrent();
+  // Already `null` unless a feed is live with a current climb — the isLive gate
+  // is subsumed by this narrower context, so this hook re-renders only on an
+  // actual wall-climb change instead of every presence event (holder/stats too).
+  const wallClimb = useBoardPresenceWallClimb();
 
   // `wallClimb` only changes on a wall event (bounded, not per-frame), so the memo
   // recomputes off a stable input set and the read stays O(1) on the hot path.
   return useMemo(() => {
-    const live = enabled && boardId !== null && isLive && wallClimb !== null;
+    const live = enabled && boardId !== null && wallClimb !== null;
     if (!live || !wallClimb) return null;
     // Hide when the wall is showing the user's own current climb — the bottom
     // queue bar already carries it.
     if (wallClimb.climbUuid === localClimbUuid) return null;
     return wallClimb;
-  }, [enabled, boardId, isLive, wallClimb, localClimbUuid]);
+  }, [enabled, boardId, wallClimb, localClimbUuid]);
 }

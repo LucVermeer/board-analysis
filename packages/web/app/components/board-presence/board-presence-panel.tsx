@@ -11,14 +11,14 @@
 // Mounted as a child of WebBoardPresenceProvider (so it can read the wall
 // context) and of the queue bridge (so it can label the active board).
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ButtonBase from '@mui/material/ButtonBase';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import { themeTokens } from '@/app/theme/theme-config';
 import { track } from '@/app/lib/analytics';
 import { useQueueBridgeBoardInfo } from '../queue-control/queue-bridge-context';
@@ -31,9 +31,7 @@ export function BoardPresencePanel() {
   const { boardId } = useBoardPresenceControls();
   const { boardDetails, angle } = useQueueBridgeBoardInfo();
   const { currentClimb } = useBoardPresenceCurrent();
-  const { history } = useBoardPresenceFeed();
   const [open, setOpen] = useState(false);
-  const historyViewedForOpenRef = useRef(false);
 
   const boardLabel = boardDetails
     ? [boardDetails.layout_name, Number.isFinite(angle) ? `${angle}°` : null].filter(Boolean).join(' • ') || null
@@ -54,19 +52,6 @@ export function BoardPresencePanel() {
     setOpen(false);
     window.dispatchEvent(new CustomEvent(BOARD_PRESENCE_SWITCH_BOARD_EVENT));
   }, [boardId]);
-
-  useEffect(() => {
-    if (!open) {
-      historyViewedForOpenRef.current = false;
-      return;
-    }
-    if (historyViewedForOpenRef.current || history.length === 0) return;
-    historyViewedForOpenRef.current = true;
-    track(SHARED_EVENTS.BoardHistoryViewed, {
-      boardId: boardId ?? undefined,
-      itemCount: history.length,
-    });
-  }, [open, history.length, boardId]);
 
   // No board bound: render nothing. The shared wall context is inert in this
   // state, so there's nothing meaningful to show anyway.

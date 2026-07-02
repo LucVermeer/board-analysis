@@ -1,9 +1,11 @@
 // Injected platform I/O for the board-presence React hook.
 //
 // This package never imports a GraphQL client (it must stay renderer-agnostic
-// and platform-free), so the consumer supplies a `BoardPresenceClient` that
-// wires the actual transport — graphql-ws on web/mobile, or a fake in tests.
-// The hook only sees these five methods.
+// and platform-free) — `create-board-presence-client.ts` imports only plain
+// operation strings from `@boardsesh/graphql/operations/board-presence`, never
+// a client — so the consumer supplies a `BoardPresenceClient` that wires the
+// actual transport — graphql-ws on web/mobile, or a fake in tests. The hook
+// only sees these methods.
 
 import type {
   BoardConnectionHolder,

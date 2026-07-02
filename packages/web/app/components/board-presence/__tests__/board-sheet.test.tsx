@@ -1,13 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import React, { createElement } from 'react';
 import type { BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
 const presence = vi.hoisted(() => ({
   currentClimb: null as BoardPresenceClimb | null,
   history: [] as BoardPresenceClimb[],
   stats: null as BoardPresenceStats | null,
+}));
+
+const presenceControls = vi.hoisted(() => ({
+  boardId: 123 as number | null,
+}));
+
+const analytics = vi.hoisted(() => ({
+  track: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -33,6 +42,12 @@ vi.mock('@/app/hooks/use-grade-format', () => ({
     formatGrade: (grade: string | null | undefined) => grade ?? null,
     getGradeColor: () => '#abcdef',
   }),
+}));
+
+vi.mock('@/app/lib/analytics', () => ({ track: analytics.track }));
+
+vi.mock('../board-presence-context', () => ({
+  useBoardPresenceControls: () => ({ boardId: presenceControls.boardId }),
 }));
 
 import { BoardSheet } from '../board-sheet';
@@ -62,6 +77,8 @@ describe('BoardSheet', () => {
     presence.currentClimb = null;
     presence.history = [];
     presence.stats = null;
+    presenceControls.boardId = 123;
+    analytics.track.mockClear();
   });
 
   it('renders nothing visible when closed', () => {
@@ -145,5 +162,87 @@ describe('BoardSheet', () => {
     );
     fireEvent.click(getByLabelText(CLOSE_ARIA));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires BoardHistoryViewed once on open, with the item count and boardId', () => {
+    presence.history = [makeClimb('c1', 3), makeClimb('c0', 2)];
+
+    const { rerender } = render(
+      createElement(BoardSheet, {
+        open: false,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
+
+    rerender(
+      createElement(BoardSheet, {
+        open: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: 123,
+      itemCount: 2,
+    });
+    expect(analytics.track).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire BoardHistoryViewed on open when there is no history', () => {
+    presence.history = [];
+
+    render(
+      createElement(BoardSheet, {
+        open: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    expect(analytics.track).not.toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, expect.anything());
+  });
+
+  it('re-arms BoardHistoryViewed after a close/re-open cycle (body unmounts with the Drawer)', async () => {
+    presence.history = [makeClimb('c1', 3)];
+
+    const { rerender, queryByText } = render(
+      createElement(BoardSheet, {
+        open: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    expect(analytics.track).toHaveBeenCalledTimes(1);
+
+    rerender(
+      createElement(BoardSheet, {
+        open: false,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    // The MUI temporary Drawer (no keepMounted) unmounts the body once the
+    // close transition finishes — that unmount is what resets the
+    // once-per-open ref, so wait for it before reopening.
+    await waitFor(() => expect(queryByText(HISTORY_HEADER)).toBeNull());
+
+    rerender(
+      createElement(BoardSheet, {
+        open: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    expect(analytics.track).toHaveBeenCalledTimes(2);
   });
 });
