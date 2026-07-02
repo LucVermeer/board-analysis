@@ -58,6 +58,7 @@ vi.mock('react-native', () => ({
   },
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   RefreshControl: () => null,
+  useWindowDimensions: () => ({ fontScale: 1, width: 375, height: 800 }),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
   Pressable: ({
     children,

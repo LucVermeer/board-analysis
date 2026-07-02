@@ -170,6 +170,8 @@ describe('parseTickTimeLocal parity', () => {
   // @boardsesh/profile-stats (dep-weight); this pins the two implementations
   // together so a change to the canonical helper can't silently diverge the
   // logbook's day buckets.
+  // Covers the naive shape climbed_at normally arrives in AND a Z-suffixed
+  // string, so the two parsers can't diverge on either form.
   it('cuts the same local day as profile-stats parseTickTime', async () => {
     const { parseTickTime } = await import('@boardsesh/profile-stats');
     for (const climbedAt of ['2026-06-30T23:30:00', '2026-06-30T00:15:00', '2026-01-01T12:00:00.000Z']) {

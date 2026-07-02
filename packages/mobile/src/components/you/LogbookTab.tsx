@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, RefreshControl, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, RefreshControl, Pressable, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -90,6 +90,8 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const router = useRouter();
   const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
+  // One dimension subscription for the whole list; rows take fontScale as a prop.
+  const { fontScale } = useWindowDimensions();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
   const editSheetRef = useRef<BottomSheet | null>(null);
@@ -268,9 +270,15 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const { mutate: deleteTickMutate } = deleteTick;
   const deleteTickPendingRef = useRef(deleteTick.isPending);
   deleteTickPendingRef.current = deleteTick.isPending;
+  // Covers the CONFIRM window (swipe-commit → dialog resolution), where
+  // isPending is still false — a second swipe there would stack a second
+  // dialog. The modal itself blocks touches on both platforms; this flag makes
+  // single-flight true by construction rather than by dialog behaviour.
+  const deleteFlowActiveRef = useRef(false);
   const handleDeleteRequest = useCallback(
     (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => {
-      if (deleteTickPendingRef.current) return;
+      if (deleteFlowActiveRef.current || deleteTickPendingRef.current) return;
+      deleteFlowActiveRef.current = true;
       const targetUuid = ascent.uuid;
       const runGuardedDelete = async () => {
         const confirmed = await confirmDialog({
@@ -280,13 +288,18 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
           cancelLabel: t('mobile.cancel'),
           destructive: true,
         });
-        if (!confirmed) return;
+        if (!confirmed) {
+          deleteFlowActiveRef.current = false;
+          return;
+        }
         deleteTickMutate(targetUuid, {
           onSuccess: () => {
+            deleteFlowActiveRef.current = false;
             track(SHARED_EVENTS.LogbookEntryDeleted, { method });
             hapticSuccess();
           },
           onError: () => {
+            deleteFlowActiveRef.current = false;
             hapticError();
             showToast(t('mobile.logbook.deleteError'), 'error');
           },
@@ -295,7 +308,9 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
       // A rejected dialog promise (unmounted host, provider bug) is treated as
       // a decline: nothing was confirmed, so nothing is deleted — the safe
       // outcome for a destructive action. Never rethrow into the void.
-      void runGuardedDelete().catch(() => {});
+      void runGuardedDelete().catch(() => {
+        deleteFlowActiveRef.current = false;
+      });
     },
     [deleteTickMutate, confirmDialog, showToast, t],
   );
@@ -347,6 +362,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
       return (
         <LogbookRow
           ascent={row.item}
+          fontScale={fontScale}
           onActivate={handleActivate}
           onOpenActions={handleOpenActions}
           onEdit={viewerIsOwner ? handleEdit : undefined}
@@ -354,7 +370,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
         />
       );
     },
-    [handleActivate, handleOpenActions, handleEdit, handleDeleteRequest, viewerIsOwner],
+    [handleActivate, handleOpenActions, handleEdit, handleDeleteRequest, viewerIsOwner, fontScale],
   );
 
   const handleRefresh = useCallback(() => void feed.refetch(), [feed.refetch]);

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet, useWindowDimensions, type AccessibilityActionEvent } from 'react-native';
+import { View, StyleSheet, type AccessibilityActionEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   useAnimatedStyle,
@@ -55,6 +55,14 @@ type LogbookRowProps = {
    * `method` reports how the delete was initiated, for analytics.
    */
   onDeleteRequest?: (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => void;
+  /**
+   * Device font scale, passed by the host so a 50-row list holds ONE dimension
+   * subscription (the tab's) instead of one per row — useWindowDimensions in a
+   * memo'd row re-renders every visible row on any dimension event (keyboard,
+   * rotation, split-screen). Defaults to 1 for hosts that don't scale (the
+   * share-beta picker).
+   */
+  fontScale?: number;
 };
 
 // Swipe tuning mirrors ClimbListRow: drag up to ACTION_REVEAL wide; dragging
@@ -139,11 +147,11 @@ export const LogbookRow = memo(function LogbookRow({
   onOpenActions,
   onEdit,
   onDeleteRequest,
+  fontScale = 1,
 }: LogbookRowProps) {
   const { t, i18n } = useTranslation('you');
   const { systemColors, brandColors: brand } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
-  const { fontScale } = useWindowDimensions();
 
   const statusColor =
     ascent.status === 'flash' ? brand.warning : ascent.status === 'send' ? brand.success : iosSystemColors.systemGray;

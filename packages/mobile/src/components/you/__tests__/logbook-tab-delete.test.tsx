@@ -51,6 +51,7 @@ vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   RefreshControl: () => null,
   Pressable: () => null,
+  useWindowDimensions: () => ({ fontScale: 1, width: 375, height: 800 }),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
   Platform: { OS: 'ios', select: (specifics: Record<string, unknown>) => specifics.ios ?? specifics.default },
 }));
@@ -170,6 +171,32 @@ describe('LogbookTab guarded delete', () => {
     act(() => mutateOptions.onSuccess());
 
     expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'a11y' });
+  });
+
+  it('ignores a second delete request while the confirm dialog is open', async () => {
+    // Controllable confirm: hold the dialog open across both requests.
+    let resolveConfirm: ((confirmed: boolean) => void) | undefined;
+    dialog.confirm.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveConfirm = resolve;
+        }),
+    );
+    render(createElement(LogbookTab, { userId: 'user-1' }));
+
+    await fireDeleteRequest('swipe');
+    await fireDeleteRequest('swipe'); // second swipe while the dialog is up
+
+    expect(dialog.confirm).toHaveBeenCalledTimes(1);
+
+    // Declining re-arms the flow for the next request.
+    await act(async () => {
+      resolveConfirm?.(false);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    dialog.confirm.mockImplementation(async () => false);
+    await fireDeleteRequest('swipe');
+    expect(dialog.confirm).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces a failed delete with the error haptic + toast', async () => {
