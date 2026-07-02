@@ -64,7 +64,14 @@ const callUserGroupedAscentsFeed = (userId: string, input: Record<string, unknow
 
 const callUserAscentCaptionMatches = (userId: string, caption: string) =>
   tickQueries.userAscentCaptionMatches(undefined, { userId, caption }) as Promise<
-    Array<{ uuid: string; climbUuid: string; climbName: string; status: string; frames: string | null }>
+    Array<{
+      uuid: string;
+      climbUuid: string;
+      climbName: string;
+      status: string;
+      frames: string | null;
+      hasBetaVideo: boolean;
+    }>
   >;
 
 const callUserClimbPercentile = (userId: string) =>
@@ -541,10 +548,7 @@ describe('tickQueries — behavior fixes', () => {
         VALUES ('kilter', ${climbUuid}, 'https://instagram.com/p/test-beta-cap', 'tick-beta-cap-1')
       `);
 
-      const matches = (await callUserAscentCaptionMatches(TEST_USER_ID, 'Sent "Beta Caption Climb" @ 40°')) as Array<{
-        uuid: string;
-        hasBetaVideo: boolean;
-      }>;
+      const matches = await callUserAscentCaptionMatches(TEST_USER_ID, 'Sent "Beta Caption Climb" @ 40°');
       const byUuid = new Map(matches.map((match) => [match.uuid, match.hasBetaVideo]));
       expect(byUuid.get('tick-beta-cap-1')).toBe(true);
       expect(byUuid.get('tick-beta-cap-2')).toBe(false);
