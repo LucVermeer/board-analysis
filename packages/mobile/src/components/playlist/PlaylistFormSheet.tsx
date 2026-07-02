@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
+import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import { ModalSheet } from '../ModalSheet';
@@ -63,7 +63,6 @@ export function PlaylistFormSheet({
 }: PlaylistFormSheetProps) {
   const { t } = useTranslation('playlists');
   const { systemColors, brandColors } = useTheme();
-  const sheetRef = useRef<BottomSheetModal>(null);
   const isEdit = mode === 'edit';
 
   const [name, setName] = useState('');
@@ -81,13 +80,12 @@ export function PlaylistFormSheet({
   }, [submitError]);
   const dismissSubmitError = useCallback(() => setSubmitErrorDismissed(true), []);
 
-  // Seed (edit) or clear (create) the fields when the sheet opens, then drive
-  // the modal off the `visible` prop. `isPresentedRef` guards against calling
-  // dismiss() on a not-presented modal (which makes the next present() a no-op)
-  // and is reset in onDismiss so a swipe-dismiss + reopen works.
-  const isPresentedRef = useRef(false);
+  // Seed (edit) or clear (create) the fields each time the sheet opens; the
+  // ModalSheet is driven declaratively off `visible`, so this only tracks the
+  // closed→open transition to re-seed.
+  const wasVisibleRef = useRef(false);
   useEffect(() => {
-    if (visible && !isPresentedRef.current) {
+    if (visible && !wasVisibleRef.current) {
       if (isEdit && playlist) {
         setName(playlist.name);
         setDescription(playlist.description ?? '');
@@ -102,18 +100,9 @@ export function PlaylistFormSheet({
         setIsPublic(false);
       }
       setError(null);
-      sheetRef.current?.present();
-      isPresentedRef.current = true;
-    } else if (!visible && isPresentedRef.current) {
-      sheetRef.current?.dismiss();
-      isPresentedRef.current = false;
     }
+    wasVisibleRef.current = visible;
   }, [visible, isEdit, playlist]);
-
-  const handleDismiss = useCallback(() => {
-    isPresentedRef.current = false;
-    onClose();
-  }, [onClose]);
 
   const handleSubmit = useCallback(() => {
     const result = buildPlaylistFormValues(mode, { name, description, color, icon, isPublic });
@@ -162,7 +151,7 @@ export function PlaylistFormSheet({
   );
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={['90%']} onDismiss={handleDismiss} scrollable footer={footer}>
+    <ModalSheet visible={visible} snapPoints={['90%']} onClose={onClose} scrollable footer={footer}>
       <View style={styles.body}>
         <View style={styles.header}>
           <PlaylistPreviewSquare color={color} icon={icon} size={56} />

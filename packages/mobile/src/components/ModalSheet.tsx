@@ -34,9 +34,6 @@ type ModalSheetProps = {
   onClose?: () => void;
   /** Fired AFTER the dismiss animation has really settled (the accurate hook). */
   onFullyDismissed?: () => void;
-  /** @deprecated source-compat: fires on every close (user or programmatic),
-   * synchronously, like the old native onDismiss. Prefer onClose/onFullyDismissed. */
-  onDismiss?: () => void;
   /** Serialization domain. Sheets presented off the same view controller share a
    * group; defaults to the root window VC. */
   presenterGroup?: PresenterGroup;
@@ -55,7 +52,6 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
     onChange,
     onClose,
     onFullyDismissed,
-    onDismiss,
     presenterGroup,
     enablePanDownToClose = true,
     scrollable = false,
@@ -84,8 +80,6 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const onDismissRef = useRef(onDismiss);
-  onDismissRef.current = onDismiss;
 
   // Track the resting detent so the iOS column bound follows drags between detents.
   const [activeIndex, setActiveIndex] = useState(0);
@@ -98,7 +92,6 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
         setActiveIndex(index);
       }
       managed.onChange(index);
-      if (index === -1) onDismissRef.current?.();
       onChangeRef.current?.(index);
     },
     [managed],
