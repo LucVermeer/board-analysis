@@ -239,9 +239,11 @@ export type AscentFeedItem = {
   /** Encoded hold frames for thumbnail display */
   frames?: Maybe<Scalars['String']['output']>;
   /**
-   * Whether a beta video is attached to this ascent (board_beta_links.tick_uuid).
-   * Populated by userAscentsFeed/userAscentCaptionMatches; null on feeds that
-   * don't resolve it (following/global activity).
+   * Whether the user has a beta video for this CLIMB — a board_beta_links row
+   * they created, one matching their Instagram handle (legacy synced rows), or
+   * one attached to the tick. Populated by userAscentsFeed and
+   * userAscentCaptionMatches; null on feeds that don't resolve it
+   * (following/global activity).
    */
   hasBetaVideo?: Maybe<Scalars['Boolean']['output']>;
   /** Whether this is a benchmark climb */

@@ -520,14 +520,19 @@ describe('tickQueries — behavior fixes', () => {
   });
 
   describe('userAscentsFeed — hasBetaVideo', () => {
-    it('marks only the ascents with a directly-attached beta link', async () => {
-      const climbUuid = `${CLIMB_PREFIX}beta`;
-      await insertClimb(climbUuid, 'Beta Test Climb');
-      await insertTick({ uuid: 'tick-beta-1', climbUuid, climbedAt: '2026-06-01T10:00:00', status: 'send' });
-      await insertTick({ uuid: 'tick-beta-2', climbUuid, climbedAt: '2026-06-02T10:00:00', status: 'send' });
+    it('marks every ascent of a climb with an attached beta link, and no others', async () => {
+      // Climb-level semantics: "do I have beta for this climb" — a tick-attached
+      // link lights up ALL of the user's ascents of that climb.
+      const withBetaUuid = `${CLIMB_PREFIX}beta`;
+      const withoutBetaUuid = `${CLIMB_PREFIX}no-beta`;
+      await insertClimb(withBetaUuid, 'Beta Test Climb');
+      await insertClimb(withoutBetaUuid, 'No Beta Climb');
+      await insertTick({ uuid: 'tick-beta-1', climbUuid: withBetaUuid, climbedAt: '2026-06-01T10:00:00', status: 'send' });
+      await insertTick({ uuid: 'tick-beta-2', climbUuid: withBetaUuid, climbedAt: '2026-06-02T10:00:00', status: 'send' });
+      await insertTick({ uuid: 'tick-beta-3', climbUuid: withoutBetaUuid, climbedAt: '2026-06-03T10:00:00', status: 'send' });
       await db.execute(sql`
         INSERT INTO board_beta_links (board_type, climb_uuid, link, tick_uuid)
-        VALUES ('kilter', ${climbUuid}, 'https://instagram.com/p/test-beta', 'tick-beta-1')
+        VALUES ('kilter', ${withBetaUuid}, 'https://instagram.com/p/test-beta', 'tick-beta-1')
       `);
 
       const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'recent' });
@@ -535,7 +540,26 @@ describe('tickQueries — behavior fixes', () => {
         (result.items as Array<FeedItem & { hasBetaVideo: boolean }>).map((item) => [item.uuid, item.hasBetaVideo]),
       );
       expect(byUuid.get('tick-beta-1')).toBe(true);
-      expect(byUuid.get('tick-beta-2')).toBe(false);
+      expect(byUuid.get('tick-beta-2')).toBe(true);
+      expect(byUuid.get('tick-beta-3')).toBe(false);
+    });
+
+    it('matches legacy links by createdByUserId when tick_uuid is null', async () => {
+      // Aurora-synced/backfilled rows carry no tick_uuid — ownership matches
+      // the shelf's userBetaLinks semantics instead.
+      const legacyUuid = `${CLIMB_PREFIX}beta-legacy`;
+      await insertClimb(legacyUuid, 'Legacy Beta Climb');
+      await insertTick({ uuid: 'tick-beta-legacy', climbUuid: legacyUuid, climbedAt: '2026-06-04T10:00:00', status: 'send' });
+      await db.execute(sql`
+        INSERT INTO board_beta_links (board_type, climb_uuid, link, created_by_user_id)
+        VALUES ('kilter', ${legacyUuid}, 'https://instagram.com/p/test-beta-legacy', ${TEST_USER_ID})
+      `);
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'recent' });
+      const byUuid = new Map(
+        (result.items as Array<FeedItem & { hasBetaVideo: boolean }>).map((item) => [item.uuid, item.hasBetaVideo]),
+      );
+      expect(byUuid.get('tick-beta-legacy')).toBe(true);
     });
 
     it('flows hasBetaVideo through the caption-matches shared builder', async () => {
