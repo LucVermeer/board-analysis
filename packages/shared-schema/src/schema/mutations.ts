@@ -85,24 +85,6 @@ export const mutationsTypeDefs = /* GraphQL */ `
     setQueue(queue: [ClimbQueueItemInput!]!, currentClimbQueueItem: ClimbQueueItemInput): QueueState!
 
     """
-    Deprecated. Sessions are always-live, so there is no wall driver to claim. Kept one
-    release as an inert compat shim for stale clients (cached web bundles, un-OTA'd native
-    apps) that still call it: if \`climb\` is provided it is set as the current climb (so the
-    stale client's wall change still propagates), otherwise it is a no-op. Never publishes
-    \`DriverChanged\`. Remove after the rollout window.
-    """
-    takeControl(climb: ClimbQueueItemInput): Session!
-      @deprecated(
-        reason: "Always-live; no driver. Sets the climb (if given) and returns the session. Remove after rollout."
-      )
-
-    """
-    Deprecated. No wall driver exists; inert no-op kept one release for stale clients.
-    Returns the session unchanged and never publishes \`DriverChanged\`. Remove after rollout.
-    """
-    releaseControl: Session! @deprecated(reason: "Always-live; no driver. No-op. Remove after rollout.")
-
-    """
     Confirm to all session participants that a climb was successfully relayed to the wall
     over BLE from this client's phone. Any session participant may call — the BLE-capable
     phone that handled the send is the source of truth for confirmation. The server stamps
