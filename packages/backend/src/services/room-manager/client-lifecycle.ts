@@ -276,17 +276,7 @@ export async function joinSession(
  * Leave a session - handles leader re-election and cleanup.
  */
 export async function leaveSession(deps: RoomManagerDeps, connectionId: string): Promise<SessionLeaveResult | null> {
-  const {
-    clients,
-    sessions: sessionsMap,
-    sessionParticipants,
-    redisStore,
-    distributedState,
-    writeScheduler,
-    sessionGraceTimers,
-    pendingJoinPersists,
-    sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS,
-  } = deps;
+  const { clients, sessionParticipants, distributedState } = deps;
 
   const client = clients.get(connectionId);
   if (!client || !client.sessionId) {
@@ -297,27 +287,11 @@ export async function leaveSession(deps: RoomManagerDeps, connectionId: string):
   const participantId = client.participantId || connectionId;
   const wasLeader = client.isLeader;
 
-  const sessionClientIds = sessionsMap.get(sessionId);
-  let wentLocallyEmpty = false;
-  if (sessionClientIds) {
-    sessionClientIds.delete(connectionId);
-    wentLocallyEmpty = sessionClientIds.size === 0;
-  }
-
-  if (wentLocallyEmpty) {
-    const existingGraceTimer = sessionGraceTimers.get(sessionId);
-    if (existingGraceTimer) clearTimeout(existingGraceTimer);
-
-    const timer = setTimeout(() => {
-      const currentClients = sessionsMap.get(sessionId);
-      if (currentClients && currentClients.size === 0) {
-        sessionsMap.delete(sessionId);
-        logger.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
-      }
-      sessionGraceTimers.delete(sessionId);
-    }, SESSION_GRACE_PERIOD_MS);
-    sessionGraceTimers.set(sessionId, timer);
-  }
+  // ORIGINAL SOURCE (post-B4 numbering): lines 300-320. `false` here means
+  // this explicit-leave caller does NOT cancel pending writes from the grace
+  // timer body — see `detachConnectionFromLocalSession`'s doc comment for why
+  // that differs from `disconnectClient`.
+  const { wentLocallyEmpty } = detachConnectionFromLocalSession(deps, sessionId, connectionId, false);
 
   // Reset client state
   client.sessionId = null;
@@ -381,18 +355,13 @@ export async function leaveSession(deps: RoomManagerDeps, connectionId: string):
       // participant entry.
       await distributedState.removeParticipantConnection(sessionId, participantId, connectionId);
     }
-  } else if (wasLeader && sessionClientIds && sessionClientIds.size > 0) {
-    const clientsArray = Array.from(sessionClientIds)
-      .map((id) => clients.get(id))
-      .filter((c): c is ConnectedClient => c !== undefined)
-      .sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime());
-
-    if (clientsArray.length > 0) {
-      const newLeader = clientsArray[0];
-      newLeader.isLeader = true;
-      newLeaderId = newLeader.connectionId;
-      newLeaderParticipantId = newLeader.participantId || newLeader.connectionId;
-    }
+  } else {
+    // ORIGINAL SOURCE (post-B4 numbering): lines 380-392. See
+    // `electLocalLeaderFallback` for the shared no-Redis election logic
+    // (including its own `wasLeader`/non-empty-session guard).
+    const fallback = electLocalLeaderFallback(deps, sessionId, wasLeader);
+    newLeaderId = fallback.newLeaderId;
+    newLeaderParticipantId = fallback.newLeaderParticipantId;
   }
 
   if (newLeaderId) {
@@ -404,56 +373,12 @@ export async function leaveSession(deps: RoomManagerDeps, connectionId: string):
     }
   }
 
-  // Decide whether to mark the session globally inactive and cancel pending
-  // Postgres writes. The check must run AFTER `distributedState.leaveSession`
-  // — querying members beforehand opens a TOCTOU race where two instances
-  // concurrently see each other in the membership snapshot, both decide to
-  // skip the inactive path, then both leave the session globally empty
-  // without anyone calling `markInactive` or `cancelPendingWrites`. Running
-  // the check after our own leave (and against the post-leave Redis set
-  // membership) collapses both branches of that race into "the last
-  // instance to leave wins and runs the cleanup".
-  //
-  // It's still possible for two instances to both observe `globallyEmpty`
-  // when they leave simultaneously and both run `markInactive` /
-  // `cancelPendingWrites`. Both operations are idempotent:
-  // `markInactive` is `SREM` on the active set, `cancelPendingWrites` is
-  // a no-op when there are no pending writes for this session. Last writer
-  // wins; double-calls are safe.
-  //
-  // INVARIANT: `getSessionMembers` returns active stable participants. The
-  // explicit leave path removes the leaving participant before this check, so
-  // a non-empty result means another participant is still active globally.
+  // ORIGINAL SOURCE (post-B4 numbering): lines 403-453. See
+  // `markInactiveIfGloballyEmpty` for the full TOCTOU ordering-contract
+  // comment (moved verbatim into that function's doc comment) — this call
+  // MUST stay after the distributed leave/election above.
   if (wentLocallyEmpty) {
-    let globallyEmpty = true;
-    if (distributedState) {
-      try {
-        const members = await distributedState.getSessionMembers(sessionId);
-        globallyEmpty = members.length === 0;
-      } catch (error) {
-        // If the distributed check fails, default to the legacy behaviour
-        // (mark inactive) rather than risk a leaked session.
-        logger.error(`[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`, error);
-      }
-    }
-
-    if (globallyEmpty) {
-      writeScheduler.cancelPendingWrites(sessionId);
-
-      if (redisStore) {
-        await redisStore.markInactive(sessionId);
-        if (!distributedState) {
-          await redisStore.saveUsers(sessionId, []);
-        }
-        logger.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
-      }
-    }
-
-    // Await pending session insert for brand-new sessions.
-    const pending = pendingJoinPersists.get(sessionId);
-    if (pending) {
-      await pending;
-    }
+    await markInactiveIfGloballyEmpty(deps, sessionId, true);
   }
 
   return {
@@ -474,17 +399,7 @@ export async function disconnectClient(
   connectionId: string,
   onParticipantExpired?: (sessionId: string, participantId: string) => void,
 ): Promise<SessionDisconnectResult | null> {
-  const {
-    clients,
-    sessions: sessionsMap,
-    sessionParticipants,
-    redisStore,
-    distributedState,
-    writeScheduler,
-    sessionGraceTimers,
-    pendingJoinPersists,
-    sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS,
-  } = deps;
+  const { clients, sessionParticipants, distributedState } = deps;
 
   const client = clients.get(connectionId);
   if (!client) {
@@ -503,26 +418,10 @@ export async function disconnectClient(
     return null;
   }
 
-  const sessionClientIds = sessionsMap.get(sessionId);
-  const wentLocallyEmpty = sessionClientIds
-    ? (sessionClientIds.delete(connectionId), sessionClientIds.size === 0)
-    : false;
-
-  if (wentLocallyEmpty) {
-    const existingGraceTimer = sessionGraceTimers.get(sessionId);
-    if (existingGraceTimer) clearTimeout(existingGraceTimer);
-
-    const timer = setTimeout(() => {
-      const currentClients = sessionsMap.get(sessionId);
-      if (currentClients && currentClients.size === 0) {
-        sessionsMap.delete(sessionId);
-        writeScheduler.cancelPendingWrites(sessionId);
-        logger.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
-      }
-      sessionGraceTimers.delete(sessionId);
-    }, SESSION_GRACE_PERIOD_MS);
-    sessionGraceTimers.set(sessionId, timer);
-  }
+  // ORIGINAL SOURCE (post-B4 numbering): lines 502-521. `true` here means
+  // this implicit-disconnect caller DOES cancel pending writes from the
+  // grace timer body — see `detachConnectionFromLocalSession`'s doc comment.
+  const { wentLocallyEmpty } = detachConnectionFromLocalSession(deps, sessionId, connectionId, true);
 
   let remainingConnections = 0;
   let newLeaderId: string | undefined;
@@ -540,30 +439,12 @@ export async function disconnectClient(
     }
   }
 
+  // ORIGINAL SOURCE (post-B4 numbering): lines 535-559. See
+  // `markInactiveIfGloballyEmpty` for the full TOCTOU ordering-contract
+  // comment — this call MUST stay after `distributedState.removeConnection`
+  // above.
   if (wentLocallyEmpty) {
-    let globallyNoLiveConnections = true;
-    if (distributedState) {
-      try {
-        globallyNoLiveConnections = (await distributedState.getSessionMemberCount(sessionId)) === 0;
-      } catch (error) {
-        // If Redis cannot answer, keep the legacy conservative behaviour:
-        // mark inactive rather than leave hot session state indefinitely.
-        logger.error(
-          `[RoomManager] Failed to query distributed member count for ${sessionId} during disconnectClient:`,
-          error,
-        );
-      }
-    }
-
-    if (globallyNoLiveConnections && redisStore) {
-      await redisStore.markInactive(sessionId);
-      logger.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
-    }
-
-    const pending = pendingJoinPersists.get(sessionId);
-    if (pending) {
-      await pending;
-    }
+    await markInactiveIfGloballyEmpty(deps, sessionId, false);
   }
 
   const participants = getOrCreateParticipantMap(sessionId, sessionParticipants);
@@ -584,19 +465,11 @@ export async function disconnectClient(
   participant.connectionIds.delete(connectionId);
   if (!distributedState) {
     remainingConnections = participant.connectionIds.size;
-    if (wasLeader && sessionClientIds && sessionClientIds.size > 0) {
-      const clientsArray = Array.from(sessionClientIds)
-        .map((id) => clients.get(id))
-        .filter((c): c is ConnectedClient => c !== undefined)
-        .sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime());
-
-      const newLeader = clientsArray[0];
-      if (newLeader) {
-        newLeader.isLeader = true;
-        newLeaderId = newLeader.connectionId;
-        newLeaderParticipantId = newLeader.participantId || newLeader.connectionId;
-      }
-    }
+    // ORIGINAL SOURCE (post-B4 numbering): lines 579-591. See
+    // `electLocalLeaderFallback` for the shared no-Redis election logic.
+    const fallback = electLocalLeaderFallback(deps, sessionId, wasLeader);
+    newLeaderId = fallback.newLeaderId;
+    newLeaderParticipantId = fallback.newLeaderParticipantId;
   }
 
   client.sessionId = null;
@@ -620,6 +493,267 @@ export async function disconnectClient(
     return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
   }
 
+  // ORIGINAL SOURCE (post-B4 numbering): lines 615-697. See
+  // `beginParticipantGraceWindow` (presence marking + timer arm) and
+  // `evictParticipantIfGhost` (the timer body) for the full ordering
+  // contract and the Redis-failure conservatism comments, moved verbatim.
+  const presenceUser = await beginParticipantGraceWindow(deps, sessionId, participant, onParticipantExpired);
+
+  return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
+}
+
+/**
+ * Detach a connection from the in-memory session roster and, if that drains
+ * the session locally, (re)arm the grace timer that deletes the session's
+ * client-id `Set` from `deps.sessions` after `SESSION_GRACE_PERIOD_MS`.
+ *
+ * ORIGINAL SOURCE (post-B4 numbering): `leaveSession` lines 300-320 and
+ * `disconnectClient` lines 502-521 — near-duplicate blocks unified here.
+ *
+ * The two call sites differ in exactly one place: `disconnectClient`'s grace
+ * timer additionally calls `writeScheduler.cancelPendingWrites(sessionId)`
+ * right before logging that the session was removed from memory;
+ * `leaveSession`'s timer does not. `leaveSession` already unconditionally
+ * cancels pending writes (see `markInactiveIfGloballyEmpty`) when the
+ * session goes globally empty, so skipping it here for that caller avoids a
+ * redundant (if harmless/idempotent) call — but preserving byte-equal
+ * per-caller behaviour means not adding it unconditionally. Captured by the
+ * `cancelWritesOnExpiry` flag, threaded straight through so each caller's
+ * original control flow is reproduced exactly:
+ *   - `leaveSession` passes `false`.
+ *   - `disconnectClient` passes `true`.
+ *
+ * ORDERING CONTRACT: in both callers this is the first mutation of local
+ * session/timer state after the connection + session are resolved, and it
+ * runs before any leader-election or distributed-state call.
+ */
+function detachConnectionFromLocalSession(
+  deps: RoomManagerDeps,
+  sessionId: string,
+  connectionId: string,
+  cancelWritesOnExpiry: boolean,
+): { wentLocallyEmpty: boolean } {
+  const {
+    sessions: sessionsMap,
+    sessionGraceTimers,
+    writeScheduler,
+    sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS,
+  } = deps;
+
+  const sessionClientIds = sessionsMap.get(sessionId);
+  const wentLocallyEmpty = sessionClientIds
+    ? (sessionClientIds.delete(connectionId), sessionClientIds.size === 0)
+    : false;
+
+  if (wentLocallyEmpty) {
+    const existingGraceTimer = sessionGraceTimers.get(sessionId);
+    if (existingGraceTimer) clearTimeout(existingGraceTimer);
+
+    const timer = setTimeout(() => {
+      const currentClients = sessionsMap.get(sessionId);
+      if (currentClients && currentClients.size === 0) {
+        sessionsMap.delete(sessionId);
+        if (cancelWritesOnExpiry) {
+          writeScheduler.cancelPendingWrites(sessionId);
+        }
+        logger.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
+      }
+      sessionGraceTimers.delete(sessionId);
+    }, SESSION_GRACE_PERIOD_MS);
+    sessionGraceTimers.set(sessionId, timer);
+  }
+
+  return { wentLocallyEmpty };
+}
+
+/**
+ * Mark a session globally inactive (and, for the explicit-leave path,
+ * cancel its pending Postgres writes) once no live presence remains
+ * anywhere in the cluster. Only called when `wentLocallyEmpty` was true for
+ * this connection's removal.
+ *
+ * ORIGINAL SOURCE (post-B4 numbering): `leaveSession` lines 403-453 and
+ * `disconnectClient` lines 535-559 — unified via `isExplicitLeave`, which
+ * captures every systematic difference between the two call sites:
+ *   - Explicit leave (`leaveSession`) checks "are there still active
+ *     *participants*" (`getSessionMembers().length === 0`); implicit
+ *     disconnect (`disconnectClient`) checks "are there still *live
+ *     connections*" (`getSessionMemberCount() === 0`). This is intentional,
+ *     not incidental: a just-disconnected participant may still sit in the
+ *     member list as RECONNECTING with zero live connections, so
+ *     `disconnectClient` needs the connection-count view to declare the
+ *     session empty; `leaveSession` already removed the leaving participant
+ *     from the member list above, so the participant-count view is correct
+ *     there.
+ *   - Explicit leave unconditionally cancels pending writes the moment the
+ *     session is globally empty; implicit disconnect defers that to the
+ *     grace-timer callback (see `detachConnectionFromLocalSession`'s
+ *     `cancelWritesOnExpiry` flag) so a reconnect within the grace window
+ *     doesn't lose in-flight writes.
+ *   - Explicit leave also wipes the legacy (no-distributed-state) user list
+ *     via `saveUsers(sessionId, [])`; implicit disconnect does not, since a
+ *     disconnect always continues into the RECONNECTING grace path rather
+ *     than an immediate teardown.
+ *
+ * ORDERING CONTRACT: this check MUST run AFTER `distributedState.leaveSession`
+ * / `distributedState.removeConnection` — querying membership beforehand
+ * opens a TOCTOU race where two instances concurrently see each other in the
+ * membership snapshot, both decide to skip the inactive path, then both
+ * leave the session globally empty without anyone calling `markInactive` or
+ * `cancelPendingWrites`. Running the check after our own leave/disconnect
+ * (and against the post-leave Redis set membership) collapses both branches
+ * of that race into "the last instance to leave wins and runs the cleanup".
+ *
+ * It's still possible for two instances to both observe "globally empty"
+ * when they leave simultaneously and both run `markInactive` /
+ * `cancelPendingWrites`. Both operations are idempotent: `markInactive` is
+ * `SREM` on the active set, `cancelPendingWrites` is a no-op when there are
+ * no pending writes for this session. Last writer wins; double-calls are
+ * safe.
+ *
+ * INVARIANT: `getSessionMembers` returns active stable participants. The
+ * explicit leave path removes the leaving participant before this check, so
+ * a non-empty result means another participant is still active globally.
+ */
+async function markInactiveIfGloballyEmpty(
+  deps: RoomManagerDeps,
+  sessionId: string,
+  isExplicitLeave: boolean,
+): Promise<void> {
+  const { redisStore, distributedState, writeScheduler, pendingJoinPersists } = deps;
+
+  let globallyEmpty = true;
+  if (distributedState) {
+    try {
+      if (isExplicitLeave) {
+        const members = await distributedState.getSessionMembers(sessionId);
+        globallyEmpty = members.length === 0;
+      } else {
+        globallyEmpty = (await distributedState.getSessionMemberCount(sessionId)) === 0;
+      }
+    } catch (error) {
+      // If the distributed check fails, default to the legacy behaviour
+      // (mark inactive) rather than risk a leaked session.
+      if (isExplicitLeave) {
+        logger.error(`[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`, error);
+      } else {
+        // If Redis cannot answer, keep the legacy conservative behaviour:
+        // mark inactive rather than leave hot session state indefinitely.
+        logger.error(
+          `[RoomManager] Failed to query distributed member count for ${sessionId} during disconnectClient:`,
+          error,
+        );
+      }
+    }
+  }
+
+  if (isExplicitLeave) {
+    if (globallyEmpty) {
+      writeScheduler.cancelPendingWrites(sessionId);
+
+      if (redisStore) {
+        await redisStore.markInactive(sessionId);
+        if (!distributedState) {
+          await redisStore.saveUsers(sessionId, []);
+        }
+        logger.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+      }
+    }
+  } else if (globallyEmpty && redisStore) {
+    await redisStore.markInactive(sessionId);
+    logger.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+  }
+
+  // Await pending session insert for brand-new sessions.
+  const pending = pendingJoinPersists.get(sessionId);
+  if (pending) {
+    await pending;
+  }
+}
+
+/**
+ * No-Redis (single-instance) local leader election fallback: when the
+ * departing connection was the session leader and other local connections
+ * remain, promote the earliest-connected one.
+ *
+ * ORIGINAL SOURCE (post-B4 numbering): `leaveSession` lines 380-392 and
+ * `disconnectClient` lines 579-591 — duplicated verbatim modulo trivial
+ * style (`if (clientsArray.length > 0)` vs `if (newLeader)`, which are
+ * equivalent: `clientsArray[0]` is `undefined` exactly when the array is
+ * empty). The `wasLeader`/non-empty-session guard that used to live at each
+ * call site is folded into this function so both callers can invoke it
+ * unconditionally.
+ *
+ * NOTE (B6 interplay): PR #3345 ("consolidate leader-election fallbacks
+ * into one path", based on `main`, not yet in this branch's base as of this
+ * writing) rewires the leader-election call sites in this file around where
+ * `newLeaderParticipantId` is consumed. Whoever rebases this stack onto a
+ * merged #3345 second needs to re-apply this extraction around B6's changed
+ * call sites — this PR deliberately does not touch or absorb B6's changes.
+ *
+ * ORDERING CONTRACT: only reached when `distributedState` is null — the
+ * distributed path (Redis-backed election) always takes precedence and
+ * short-circuits before this runs.
+ */
+function electLocalLeaderFallback(
+  deps: RoomManagerDeps,
+  sessionId: string,
+  wasLeader: boolean,
+): { newLeaderId?: string; newLeaderParticipantId?: string } {
+  const { clients, sessions: sessionsMap } = deps;
+  const sessionClientIds = sessionsMap.get(sessionId);
+
+  if (!wasLeader || !sessionClientIds || sessionClientIds.size === 0) {
+    return {};
+  }
+
+  const clientsArray = Array.from(sessionClientIds)
+    .map((id) => clients.get(id))
+    .filter((c): c is ConnectedClient => c !== undefined)
+    .sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime());
+
+  const newLeader = clientsArray[0];
+  if (!newLeader) {
+    return {};
+  }
+
+  newLeader.isLeader = true;
+  return {
+    newLeaderId: newLeader.connectionId,
+    newLeaderParticipantId: newLeader.participantId || newLeader.connectionId,
+  };
+}
+
+/**
+ * Begin the reconnect grace window for a participant whose last live
+ * connection just dropped: mark them RECONNECTING (broadcasting presence),
+ * then arm a timer that evicts them as a ghost if nothing reconnects within
+ * `SESSION_GRACE_PERIOD_MS`.
+ *
+ * ORIGINAL SOURCE (post-B4 numbering): `disconnectClient` lines 615-697.
+ * Only reached when `remainingConnections === 0` for this participant after
+ * the disconnecting connection was removed (checked by the caller). Takes
+ * the resolved `participant` object directly rather than re-deriving it
+ * from `sessionId`/`participantId` — the caller already has it in hand from
+ * its own get-or-create lookup, and re-deriving here would just repeat that
+ * map lookup for no benefit.
+ *
+ * ORDERING CONTRACT: sets `connectionState = 'RECONNECTING'` before the
+ * presence broadcast so `markParticipantPresence`/the local fallback both
+ * report the state peers should see during the grace window. Arms the
+ * reconnect timer last, after clearing any pre-existing one, so a rapid
+ * disconnect/reconnect/disconnect sequence never leaves two timers racing
+ * for the same participant.
+ */
+async function beginParticipantGraceWindow(
+  deps: RoomManagerDeps,
+  sessionId: string,
+  participant: LocalSessionParticipant,
+  onParticipantExpired?: (sessionId: string, participantId: string) => void,
+): Promise<SessionUser> {
+  const { distributedState, sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS } = deps;
+  const participantId = participant.id;
+
   participant.connectionState = 'RECONNECTING';
   // markParticipantPresence returns null when the Redis participant hash has
   // already expired (TTL elapsed before the disconnect cleanup ran). Fall
@@ -636,75 +770,95 @@ export async function disconnectClient(
     clearTimeout(participant.reconnectTimer);
   }
   participant.reconnectTimer = setTimeout(() => {
-    void (async () => {
-      if (distributedState) {
-        // Do NOT swallow Redis errors here. A failed getSessionMembers
-        // previously returned [], the participant looked absent, and we
-        // expelled them — the exact opposite of what the grace period is
-        // for. On infra failure, keep the participant alive and let the
-        // next reconnect run the grace logic again.
-        let users;
-        try {
-          users = await distributedState.getSessionMembers(sessionId);
-        } catch (err) {
-          logger.error(
-            `[RoomManager] Grace timer failed to query session ${sessionId.slice(0, 8)} members; keeping participant ${participantId.slice(0, 8)} alive:`,
-            err,
-          );
-          return;
-        }
-        const currentUser = users.find((user) => user.id === participantId);
-        // The participant might be present in the user list as RECONNECTING
-        // with zero live connections — `getSessionParticipants` intentionally
-        // retains those entries so peers continue to see the RECONNECTING
-        // badge during the grace window. So "present in user list" alone
-        // does NOT mean "still reconnecting"; it could equally mean "ghost".
-        // Disambiguate by querying the actual live-connection count.
-        //
-        // - CONNECTED user → live conns > 0 → spare (active participant).
-        // - RECONNECTING + live conns > 0 → in-flight reconnect, spare.
-        // - RECONNECTING + 0 live conns → ghost, evict.
-        // - Not in user list at all → already cleaned up, fall through.
-        if (currentUser?.connectionState === 'CONNECTED') {
-          return;
-        }
-        if (currentUser?.connectionState === 'RECONNECTING') {
-          let liveConnectionCount: number;
-          try {
-            liveConnectionCount = await distributedState.getParticipantLiveConnectionCount(sessionId, participantId);
-          } catch (err) {
-            // Same conservative behaviour as the getSessionMembers failure
-            // above: if Redis can't answer, don't expel; the next reconnect
-            // will run the grace logic again.
-            logger.error(
-              `[RoomManager] Grace timer failed to count live connections for participant ${participantId.slice(0, 8)}; keeping them alive:`,
-              err,
-            );
-            return;
-          }
-          if (liveConnectionCount > 0) {
-            return; // In-flight reconnect; let the rejoin promote them back to CONNECTED.
-          }
-          // Fall through to eviction: RECONNECTING with no live connections is a ghost.
-        }
-        await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
-          logger.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
-        });
-      }
-
-      const currentParticipants = sessionParticipants.get(sessionId);
-      const currentParticipant = currentParticipants?.get(participantId);
-      if (currentParticipant && currentParticipant.connectionIds.size === 0) {
-        currentParticipants?.delete(participantId);
-        if (currentParticipants?.size === 0) {
-          sessionParticipants.delete(sessionId);
-        }
-        onParticipantExpired?.(sessionId, participantId);
-      }
-    })();
+    void evictParticipantIfGhost(deps, sessionId, participantId, onParticipantExpired);
   }, SESSION_GRACE_PERIOD_MS);
 
-  return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
+  return presenceUser;
+}
+
+/**
+ * Timer body for `beginParticipantGraceWindow`: runs `SESSION_GRACE_PERIOD_MS`
+ * after the timer was armed, unless a reconnect within the window cancelled
+ * it first. Disambiguates "still reconnecting" from "ghost" and, if the
+ * participant is a ghost, evicts them from both distributed and local state.
+ *
+ * ORIGINAL SOURCE (post-B4 numbering): `disconnectClient` lines 631-696 —
+ * body of the reconnect-grace-window `setTimeout` callback.
+ *
+ * The Redis-error handling here is intentionally NOT the same "default to
+ * conservative" pattern used elsewhere in this file. A failed
+ * `getSessionMembers` previously returned `[]`, the participant looked
+ * absent, and we expelled them — the exact opposite of what the grace
+ * period is for. On infra failure, keep the participant alive and let the
+ * next reconnect run the grace logic again.
+ */
+async function evictParticipantIfGhost(
+  deps: RoomManagerDeps,
+  sessionId: string,
+  participantId: string,
+  onParticipantExpired?: (sessionId: string, participantId: string) => void,
+): Promise<void> {
+  const { distributedState, sessionParticipants } = deps;
+
+  if (distributedState) {
+    let users;
+    try {
+      users = await distributedState.getSessionMembers(sessionId);
+    } catch (err) {
+      logger.error(
+        `[RoomManager] Grace timer failed to query session ${sessionId.slice(0, 8)} members; keeping participant ${participantId.slice(0, 8)} alive:`,
+        err,
+      );
+      return;
+    }
+    const currentUser = users.find((user) => user.id === participantId);
+    // The participant might be present in the user list as RECONNECTING
+    // with zero live connections — `getSessionParticipants` intentionally
+    // retains those entries so peers continue to see the RECONNECTING
+    // badge during the grace window. So "present in user list" alone
+    // does NOT mean "still reconnecting"; it could equally mean "ghost".
+    // Disambiguate by querying the actual live-connection count.
+    //
+    // - CONNECTED user → live conns > 0 → spare (active participant).
+    // - RECONNECTING + live conns > 0 → in-flight reconnect, spare.
+    // - RECONNECTING + 0 live conns → ghost, evict.
+    // - Not in user list at all → already cleaned up, fall through.
+    if (currentUser?.connectionState === 'CONNECTED') {
+      return;
+    }
+    if (currentUser?.connectionState === 'RECONNECTING') {
+      let liveConnectionCount: number;
+      try {
+        liveConnectionCount = await distributedState.getParticipantLiveConnectionCount(sessionId, participantId);
+      } catch (err) {
+        // Same conservative behaviour as the getSessionMembers failure
+        // above: if Redis can't answer, don't expel; the next reconnect
+        // will run the grace logic again.
+        logger.error(
+          `[RoomManager] Grace timer failed to count live connections for participant ${participantId.slice(0, 8)}; keeping them alive:`,
+          err,
+        );
+        return;
+      }
+      if (liveConnectionCount > 0) {
+        return; // In-flight reconnect; let the rejoin promote them back to CONNECTED.
+      }
+      // Fall through to eviction: RECONNECTING with no live connections is a ghost.
+    }
+    await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
+      logger.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
+    });
+  }
+
+  const currentParticipants = sessionParticipants.get(sessionId);
+  const currentParticipant = currentParticipants?.get(participantId);
+  if (currentParticipant && currentParticipant.connectionIds.size === 0) {
+    currentParticipants?.delete(participantId);
+    if (currentParticipants?.size === 0) {
+      sessionParticipants.delete(sessionId);
+    }
+    onParticipantExpired?.(sessionId, participantId);
+  }
 }
 
 async function resolveLeaderParticipantId(
