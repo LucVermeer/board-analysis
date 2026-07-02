@@ -535,10 +535,15 @@ jobs:
       # push-to-main. Runs before the heavier Metro bundle so it fails fast.
       - name: Check native build-phase deps resolve
         run: vp run check:mobile-native-deps
-      # Read-only `expo install --check`: fails the moment a native module drifts
-      # from the Expo SDK pin (the caret-drift class behind the 2.0.0 launch
-      # crash). Intentional deviations live in expo.install.exclude. Cheap, so it
-      # runs before the heavier Metro bundle.
+      # Deterministic, read-only dep-health check: compares our declared pins
+      # against packages/mobile/node_modules/expo/bundledNativeModules.json for
+      # the SDK release we actually have installed, and flags installed-version
+      # drift from those pins (the caret-drift class behind the 2.0.0 launch
+      # crash). It never consults the network or Expo's remote versions API, so
+      # it only changes outcome when WE change something (bump expo, edit a
+      # pin, lockfile drift) — not when Expo ships an unrelated patch release.
+      # Intentional deviations live in expo.install.exclude. Cheap, so it runs
+      # before the heavier Metro bundle.
       - name: Mobile dep-health check
         run: vp run check:mobile-deps
       # A Bun patch is keyed by an exact version, so an Expo/RN bump can silently
