@@ -8,7 +8,8 @@ import {
   hashToConnection,
   type DistributedConnection,
 } from './constants';
-import { ELECT_NEW_LEADER_SCRIPT, UPDATE_USERNAME_SCRIPT } from './lua-scripts';
+import { UPDATE_USERNAME_SCRIPT } from './lua-scripts';
+import { electNewLeaderAfterRemoval } from './leader-election';
 import { logger } from '../../utils/logger';
 
 /**
@@ -79,6 +80,7 @@ export async function removeConnection(
   participantId: string | null;
   wasLeader: boolean;
   newLeaderId: string | null;
+  newLeaderParticipantId: string | null;
   remainingParticipantConnections: number | null;
 }> {
   validateConnectionId(connectionId);
@@ -91,6 +93,7 @@ export async function removeConnection(
       participantId: null,
       wasLeader: false,
       newLeaderId: null,
+      newLeaderParticipantId: null,
       remainingParticipantConnections: null,
     };
   }
@@ -126,11 +129,14 @@ export async function removeConnection(
 
   // Automatically elect new leader if was leader and requested
   let newLeaderId: string | null = null;
+  let newLeaderParticipantId: string | null = null;
   if (sessionId && wasLeader && electNewLeader) {
-    newLeaderId = await electLeaderAfterRemoval(redis, sessionId, connectionId);
+    const electionResult = await electNewLeaderAfterRemoval(redis, sessionId, connectionId, 'connection-removal');
+    newLeaderId = electionResult.newLeaderId;
+    newLeaderParticipantId = electionResult.newLeaderParticipantId;
   }
 
-  return { sessionId, participantId, wasLeader, newLeaderId, remainingParticipantConnections };
+  return { sessionId, participantId, wasLeader, newLeaderId, newLeaderParticipantId, remainingParticipantConnections };
 }
 
 export async function countLiveParticipantConnections(
@@ -168,91 +174,6 @@ export async function countLiveParticipantConnections(
   }
 
   return live;
-}
-
-/**
- * Elect a new leader after a connection is removed, with fallback logic.
- */
-async function electLeaderAfterRemoval(redis: Redis, sessionId: string, connectionId: string): Promise<string | null> {
-  try {
-    const newLeaderId = (await redis.eval(
-      ELECT_NEW_LEADER_SCRIPT,
-      2,
-      KEYS.sessionMembers(sessionId),
-      KEYS.sessionLeader(sessionId),
-      connectionId,
-      TTL.sessionMembership.toString(),
-      TTL.sessionMembership.toString(), // Leader TTL matches session TTL
-    )) as string | null;
-
-    if (newLeaderId) {
-      logger.info(
-        `[DistributedState] Elected new leader: ${newLeaderId.slice(0, 8)} after removing ${connectionId.slice(0, 8)}`,
-      );
-    }
-    return newLeaderId;
-  } catch (err) {
-    logger.error(`[DistributedState] Failed to elect new leader after removing ${connectionId.slice(0, 8)}:`, err);
-    // Fallback: try to manually elect a leader from remaining members
-    return electLeaderFallback(redis, sessionId, connectionId);
-  }
-}
-
-/**
- * Fallback leader election when Lua script fails.
- */
-async function electLeaderFallback(redis: Redis, sessionId: string, connectionId: string): Promise<string | null> {
-  try {
-    const remainingMembers = await redis.smembers(KEYS.sessionMembers(sessionId));
-    const candidates = remainingMembers.filter((id) => id !== connectionId);
-
-    if (candidates.length > 0) {
-      // Get connection data to find earliest connected
-      const pipeline = redis.pipeline();
-      for (const candidateId of candidates) {
-        pipeline.hget(KEYS.connection(candidateId), 'connectedAt');
-      }
-      const results = await pipeline.exec();
-
-      // Find earliest connected candidate
-      let earliestCandidate: string | null = null;
-      let earliestTime = Infinity;
-
-      if (results) {
-        for (let i = 0; i < candidates.length; i++) {
-          const result = results[i];
-          if (result && result[1]) {
-            const connectedAt = parseInt(result[1] as string, 10);
-            if (!isNaN(connectedAt) && connectedAt < earliestTime) {
-              earliestTime = connectedAt;
-              earliestCandidate = candidates[i];
-            }
-          }
-        }
-      }
-
-      // Fall back to first candidate if no valid timestamps
-      const chosenLeader = earliestCandidate || candidates[0];
-      await redis.set(KEYS.sessionLeader(sessionId), chosenLeader, 'EX', TTL.sessionMembership);
-      await redis.hset(KEYS.connection(chosenLeader), 'isLeader', 'true');
-      logger.info(
-        `[DistributedState] Fallback elected leader: ${chosenLeader.slice(0, 8)} after removing ${connectionId.slice(0, 8)}`,
-      );
-      return chosenLeader;
-    } else {
-      // No candidates, clear the leader key
-      await redis.del(KEYS.sessionLeader(sessionId));
-      return null;
-    }
-  } catch {
-    // Last resort: clear leader to allow next join to become leader
-    try {
-      await redis.del(KEYS.sessionLeader(sessionId));
-    } catch {
-      // Ignore cleanup error
-    }
-    return null;
-  }
 }
 
 /**

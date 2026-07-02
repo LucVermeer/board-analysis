@@ -131,6 +131,7 @@ export class DistributedStateManager {
     participantId: string | null;
     wasLeader: boolean;
     newLeaderId: string | null;
+    newLeaderParticipantId: string | null;
     remainingParticipantConnections: number | null;
   }> {
     return removeConnection(this.redis, this.instanceId, connectionId, electNewLeader);
@@ -158,7 +159,10 @@ export class DistributedStateManager {
   }
 
   /** Leave a session. Handles leader election if leaving member was leader. */
-  async leaveSession(connectionId: string, sessionId: string): Promise<{ newLeaderId: string | null }> {
+  async leaveSession(
+    connectionId: string,
+    sessionId: string,
+  ): Promise<{ newLeaderId: string | null; newLeaderParticipantId?: string | null }> {
     return leaveSession(this.redis, connectionId, sessionId);
   }
 
