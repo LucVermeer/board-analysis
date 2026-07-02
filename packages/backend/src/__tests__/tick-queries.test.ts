@@ -527,9 +527,24 @@ describe('tickQueries — behavior fixes', () => {
       const withoutBetaUuid = `${CLIMB_PREFIX}no-beta`;
       await insertClimb(withBetaUuid, 'Beta Test Climb');
       await insertClimb(withoutBetaUuid, 'No Beta Climb');
-      await insertTick({ uuid: 'tick-beta-1', climbUuid: withBetaUuid, climbedAt: '2026-06-01T10:00:00', status: 'send' });
-      await insertTick({ uuid: 'tick-beta-2', climbUuid: withBetaUuid, climbedAt: '2026-06-02T10:00:00', status: 'send' });
-      await insertTick({ uuid: 'tick-beta-3', climbUuid: withoutBetaUuid, climbedAt: '2026-06-03T10:00:00', status: 'send' });
+      await insertTick({
+        uuid: 'tick-beta-1',
+        climbUuid: withBetaUuid,
+        climbedAt: '2026-06-01T10:00:00',
+        status: 'send',
+      });
+      await insertTick({
+        uuid: 'tick-beta-2',
+        climbUuid: withBetaUuid,
+        climbedAt: '2026-06-02T10:00:00',
+        status: 'send',
+      });
+      await insertTick({
+        uuid: 'tick-beta-3',
+        climbUuid: withoutBetaUuid,
+        climbedAt: '2026-06-03T10:00:00',
+        status: 'send',
+      });
       await db.execute(sql`
         INSERT INTO board_beta_links (board_type, climb_uuid, link, tick_uuid)
         VALUES ('kilter', ${withBetaUuid}, 'https://instagram.com/p/test-beta', 'tick-beta-1')
@@ -549,7 +564,12 @@ describe('tickQueries — behavior fixes', () => {
       // the shelf's userBetaLinks semantics instead.
       const legacyUuid = `${CLIMB_PREFIX}beta-legacy`;
       await insertClimb(legacyUuid, 'Legacy Beta Climb');
-      await insertTick({ uuid: 'tick-beta-legacy', climbUuid: legacyUuid, climbedAt: '2026-06-04T10:00:00', status: 'send' });
+      await insertTick({
+        uuid: 'tick-beta-legacy',
+        climbUuid: legacyUuid,
+        climbedAt: '2026-06-04T10:00:00',
+        status: 'send',
+      });
       await db.execute(sql`
         INSERT INTO board_beta_links (board_type, climb_uuid, link, created_by_user_id)
         VALUES ('kilter', ${legacyUuid}, 'https://instagram.com/p/test-beta-legacy', ${TEST_USER_ID})
