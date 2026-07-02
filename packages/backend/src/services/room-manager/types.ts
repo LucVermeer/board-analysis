@@ -1,4 +1,7 @@
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
+import type { RedisSessionStore } from '../redis-session-store';
+import type { DistributedStateManager } from '../distributed-state';
+import type { WriteScheduler } from './write-scheduler';
 
 // Custom error for version conflicts
 export class VersionConflictError extends Error {
@@ -47,6 +50,26 @@ export type LocalSessionParticipant = {
   connectionState: 'CONNECTED' | 'RECONNECTING';
   connectionIds: Set<string>;
   reconnectTimer?: NodeJS.Timeout;
+};
+
+/**
+ * Plumbing RoomManager injects into the room-manager/* free functions
+ * (client-lifecycle.ts, session-discovery.ts, queue-state.ts) instead of
+ * passing every private map/store as a positional argument. Built fresh per
+ * call by RoomManager's private `deps()` method — never cached, since
+ * `redisStore` / `distributedState` are (re)assigned in `initialize()` and
+ * nulled in `reset()`, so a cached object would go stale.
+ */
+export type RoomManagerDeps = {
+  clients: Map<string, ConnectedClient>;
+  sessions: Map<string, Set<string>>;
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>;
+  redisStore: RedisSessionStore | null;
+  distributedState: DistributedStateManager | null;
+  writeScheduler: WriteScheduler;
+  sessionGraceTimers: Map<string, NodeJS.Timeout>;
+  pendingJoinPersists: Map<string, Promise<void>>;
+  sessionGracePeriodMs: number;
 };
 
 export type DiscoverableSession = {

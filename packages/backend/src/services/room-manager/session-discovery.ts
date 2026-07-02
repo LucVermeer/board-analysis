@@ -2,11 +2,8 @@ import { db } from '../../db/client';
 import { sessions, type Session } from '../../db/schema';
 import { userBoards } from '@boardsesh/db/schema/app';
 import { eq, and, gt, gte, lt, lte, ne, isNull, sql } from 'drizzle-orm';
-import type { RedisSessionStore } from '../redis-session-store';
-import type { DistributedStateManager } from '../distributed-state';
-import type { WriteScheduler } from './write-scheduler';
 import { haversineDistance, getBoundingBox, DEFAULT_SEARCH_RADIUS_METERS } from '../../utils/geo';
-import type { DiscoverableSession } from './types';
+import type { DiscoverableSession, RoomManagerDeps } from './types';
 import { logger } from '../../utils/logger';
 
 /**
@@ -133,13 +130,12 @@ export async function createDiscoverableSession(
  * Uses bounding box for initial SQL filter, then precise Haversine distance.
  */
 export async function findNearbySessions(
+  deps: RoomManagerDeps,
   latitude: number,
   longitude: number,
   radiusMeters: number = DEFAULT_SEARCH_RADIUS_METERS,
-  sessionsMap: Map<string, Set<string>>,
-  redisStore: RedisSessionStore | null,
-  distributedState: DistributedStateManager | null,
 ): Promise<DiscoverableSession[]> {
+  const { sessions: sessionsMap, redisStore, distributedState } = deps;
   const box = getBoundingBox(latitude, longitude, radiusMeters);
 
   const candidates = await db
@@ -231,14 +227,9 @@ export async function getUserSessions(userId: string): Promise<Session[]> {
 /**
  * Explicitly end a session (user action).
  */
-export async function endSession(
-  sessionId: string,
-  sessionsMap: Map<string, Set<string>>,
-  redisStore: RedisSessionStore | null,
-  writeScheduler: WriteScheduler,
-  sessionGraceTimers: Map<string, NodeJS.Timeout>,
-  pendingJoinPersists: Map<string, Promise<void>>,
-): Promise<void> {
+export async function endSession(deps: RoomManagerDeps, sessionId: string): Promise<void> {
+  const { sessions: sessionsMap, redisStore, writeScheduler, sessionGraceTimers, pendingJoinPersists } = deps;
+
   // Cancel any pending writes to prevent FK violations after session ends
   writeScheduler.cancelPendingWrites(sessionId);
 
