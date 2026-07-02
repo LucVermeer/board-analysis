@@ -3,10 +3,6 @@ import type { Session } from '../../db/schema';
 import type { RedisSessionStore } from '../redis-session-store';
 import type { DistributedStateManager } from '../distributed-state';
 import type { WriteScheduler } from './write-scheduler';
-// Type-only import — safe despite client-lifecycle.ts importing RoomManagerDeps
-// back from this module; `import type` is erased at compile time, so there's
-// no runtime circular dependency, only a type-level one.
-import type { SessionLeaveResult } from './client-lifecycle';
 
 // Custom error for version conflicts
 export class VersionConflictError extends Error {
@@ -75,6 +71,29 @@ export type RoomManagerDeps = {
   sessionGraceTimers: Map<string, NodeJS.Timeout>;
   pendingJoinPersists: Map<string, Promise<void>>;
   sessionGracePeriodMs: number;
+};
+
+export type SessionLeaveResult = {
+  sessionId: string;
+  participantId?: string;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+  /**
+   * True when this leave drained the last connection for the participant —
+   * peers should see a `UserLeft` event. False when the participant still has
+   * sibling connections (e.g. another tab open as the same authenticated
+   * user); in that case the leave is per-tab and peers should not be told
+   * the user departed.
+   */
+  participantFullyLeft: boolean;
+};
+
+export type SessionDisconnectResult = {
+  sessionId: string;
+  participantId: string;
+  presenceUser?: SessionUser;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
 };
 
 /**

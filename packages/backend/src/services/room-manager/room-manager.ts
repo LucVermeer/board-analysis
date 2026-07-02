@@ -16,6 +16,8 @@ import type {
   LocalSessionParticipant,
   QueueState,
   RoomManagerDeps,
+  SessionDisconnectResult,
+  SessionLeaveResult,
 } from './types';
 import { WriteScheduler } from './write-scheduler';
 import {
@@ -30,8 +32,6 @@ import {
   leaveSession as leaveSessionFn,
   disconnectClient as disconnectClientFn,
   removeClient as removeClientFn,
-  type SessionDisconnectResult,
-  type SessionLeaveResult,
 } from './client-lifecycle';
 import { pubsub } from '../../pubsub/index';
 import { endLiveActivity } from '../apns/index';

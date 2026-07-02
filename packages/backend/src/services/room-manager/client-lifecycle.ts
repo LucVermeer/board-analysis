@@ -9,6 +9,8 @@ import type {
   RoomManagerDeps,
   JoinSessionCallbacks,
   JoinSessionOptions,
+  SessionLeaveResult,
+  SessionDisconnectResult,
 } from './types';
 import { restoreSessionWithLock } from './session-restoration';
 import { logger } from '../../utils/logger';
@@ -704,29 +706,6 @@ export async function disconnectClient(
 
   return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
 }
-
-export type SessionLeaveResult = {
-  sessionId: string;
-  participantId?: string;
-  newLeaderId?: string;
-  newLeaderParticipantId?: string;
-  /**
-   * True when this leave drained the last connection for the participant —
-   * peers should see a `UserLeft` event. False when the participant still has
-   * sibling connections (e.g. another tab open as the same authenticated
-   * user); in that case the leave is per-tab and peers should not be told
-   * the user departed.
-   */
-  participantFullyLeft: boolean;
-};
-
-export type SessionDisconnectResult = {
-  sessionId: string;
-  participantId: string;
-  presenceUser?: SessionUser;
-  newLeaderId?: string;
-  newLeaderParticipantId?: string;
-};
 
 async function resolveLeaderParticipantId(
   leaderConnectionId: string,
