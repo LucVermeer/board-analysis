@@ -200,7 +200,7 @@ _Goal:_ make BLE delivery observable as a backend-visible event, and use that ev
 
 #### Trust model for `setSessionBoardSerial`
 
-`setSessionBoardSerial` is gated only by `requireSessionMember`, which accepts anonymous participants (the same trust level we grant for `addToQueue` and other browse mutations). That means any anonymous joiner with a valid share link can redirect the party's stored auto-connect target to an arbitrary board serial. Unlike `takeControl` / `releaseControl` — which are transient (driver state flips back the next time someone takes control) — this is a persistent side-effect: the next lightbulb-fallback auto-connect across the whole session will dial that serial.
+`setSessionBoardSerial` is gated only by `requireSessionMember`, which accepts anonymous participants (the same trust level we grant for `addToQueue` and other browse mutations). That means any anonymous joiner with a valid share link can redirect the party's stored auto-connect target to an arbitrary board serial. Unlike `takeControl` / `releaseControl` — which were transient (driver state flipped back the next time someone took control; both mutations have since been removed) — this is a persistent side-effect: the next lightbulb-fallback auto-connect across the whole session will dial that serial.
 
 We accept this for now because party sessions are share-link gated and the failure mode is recoverable (the next legit BLE-connector overwrites the stored serial). If we see griefing in production, tighten the guard to authenticated-only or "current driver only" before the write.
 

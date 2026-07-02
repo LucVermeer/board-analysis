@@ -113,9 +113,13 @@ describe('native iOS queue subscription drift guard', () => {
 // whose sessionUpdates subscriptions still contain `... on DriverChanged`. Whole-document
 // GraphQL validation means removing those would break the ENTIRE document (join, or the
 // whole subscription) for those clients — a much bigger blast radius than a single unknown
-// mutation failing on its own. takeControl/releaseControl carry no such risk: a stale
-// bundle calling either now gets an unknown-mutation error and the gesture no-ops: every
-// other mutation/subscription on that bundle keeps working.
+// mutation failing on its own. The removed mutations were NOT pure no-ops: takeControl
+// with a `climb` argument still propagated that climb via setCurrentClimbAndPublish, and
+// stale bundles' party-mode lightbulb press routed through it — those users now lose the
+// go-live gesture in party mode (their client's catch handler rolls back and resyncs;
+// join and subscriptions are unaffected). That degradation is an accepted,
+// telemetry-bounded trade-off (coordinator ruling, reduced-B7): the cohort is a shrinking
+// stale-bundle tail whose fix is one app open (OTA).
 //
 // This is the safety contract of the reduced variant, made explicit as an assertion split:
 //   - legacy JoinSession / SessionUpdates documents (driverParticipantId, DriverChanged)
@@ -189,7 +193,13 @@ describe('previous-release driver operations: reduced-B7 validation split', () =
     it(`${name} now fails validation (mutation removed by reduced-B7)`, () => {
       const document = parse(source);
       const errors = validate(schema, document);
-      expect(errors.length).toBeGreaterThan(0);
+      // Pin the failure reason: it must be the removed mutation field itself, not an
+      // incidental error elsewhere in the document (e.g. driverParticipantId, which
+      // deliberately still validates).
+      const unknownMutationErrors = errors.filter((error) =>
+        /Cannot query field "(takeControl|releaseControl)"/.test(error.message),
+      );
+      expect(unknownMutationErrors.length).toBeGreaterThan(0);
     });
   }
 });
