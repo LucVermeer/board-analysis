@@ -1,4 +1,8 @@
-import type { ClimbQueueItem } from '@boardsesh/shared-schema';
+import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
+import type { Session } from '../../db/schema';
+import type { RedisSessionStore } from '../redis-session-store';
+import type { DistributedStateManager } from '../distributed-state';
+import type { WriteScheduler } from './write-scheduler';
 
 // Custom error for version conflicts
 export class VersionConflictError extends Error {
@@ -47,6 +51,86 @@ export type LocalSessionParticipant = {
   connectionState: 'CONNECTED' | 'RECONNECTING';
   connectionIds: Set<string>;
   reconnectTimer?: NodeJS.Timeout;
+};
+
+/**
+ * Plumbing RoomManager injects into the room-manager/* free functions
+ * (client-lifecycle.ts, session-discovery.ts, queue-state.ts) instead of
+ * passing every private map/store as a positional argument. Built fresh per
+ * call by RoomManager's private `deps()` method — never cached, since
+ * `redisStore` / `distributedState` are (re)assigned in `initialize()` and
+ * nulled in `reset()`, so a cached object would go stale.
+ */
+export type RoomManagerDeps = {
+  clients: Map<string, ConnectedClient>;
+  sessions: Map<string, Set<string>>;
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>;
+  redisStore: RedisSessionStore | null;
+  distributedState: DistributedStateManager | null;
+  writeScheduler: WriteScheduler;
+  sessionGraceTimers: Map<string, NodeJS.Timeout>;
+  pendingJoinPersists: Map<string, Promise<void>>;
+  sessionGracePeriodMs: number;
+};
+
+export type SessionLeaveResult = {
+  sessionId: string;
+  participantId?: string;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+  /**
+   * True when this leave drained the last connection for the participant —
+   * peers should see a `UserLeft` event. False when the participant still has
+   * sibling connections (e.g. another tab open as the same authenticated
+   * user); in that case the leave is per-tab and peers should not be told
+   * the user departed.
+   */
+  participantFullyLeft: boolean;
+};
+
+export type SessionDisconnectResult = {
+  sessionId: string;
+  participantId: string;
+  presenceUser?: SessionUser;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+};
+
+/**
+ * Injected functions `joinSession` needs but doesn't own — mostly
+ * RoomManager methods that themselves delegate elsewhere (e.g.
+ * `getQueueState`/`updateQueueStateImmediate` route through Redis vs.
+ * Postgres, `leaveSession` is the sibling free function in client-lifecycle.ts).
+ * Passed separately from `RoomManagerDeps` since these are behaviour, not
+ * plumbing state.
+ */
+export type JoinSessionCallbacks = {
+  getQueueState: (sessionId: string) => Promise<{
+    queue: ClimbQueueItem[];
+    currentClimbQueueItem: ClimbQueueItem | null;
+    version: number;
+    sequence: number;
+    stateHash: string;
+  }>;
+  getSessionUsers: (sessionId: string) => Promise<SessionUser[]>;
+  getSessionUsersLocal: (sessionId: string) => SessionUser[];
+  getSessionById: (sessionId: string) => Promise<Session | null>;
+  updateQueueStateImmediate: (
+    sessionId: string,
+    queue: ClimbQueueItem[],
+    currentClimbQueueItem: ClimbQueueItem | null,
+    expectedVersion?: number,
+  ) => Promise<number>;
+  leaveSession: (connectionId: string) => Promise<SessionLeaveResult | null>;
+};
+
+export type JoinSessionOptions = {
+  username?: string;
+  avatarUrl?: string;
+  initialQueue?: ClimbQueueItem[];
+  initialCurrentClimb?: ClimbQueueItem | null;
+  sessionName?: string;
+  participantId?: string | null;
 };
 
 export type DiscoverableSession = {

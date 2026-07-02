@@ -1,12 +1,18 @@
 import { GraphQLError } from 'graphql';
 import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
 import { db } from '../../db/client';
-import { sessions, boardSessionParticipants, type Session } from '../../db/schema';
-import type { RedisSessionStore } from '../redis-session-store';
+import { sessions, boardSessionParticipants } from '../../db/schema';
 import type { DistributedStateManager } from '../distributed-state';
-import type { ConnectedClient, LocalSessionParticipant } from './types';
+import type {
+  ConnectedClient,
+  LocalSessionParticipant,
+  RoomManagerDeps,
+  JoinSessionCallbacks,
+  JoinSessionOptions,
+  SessionLeaveResult,
+  SessionDisconnectResult,
+} from './types';
 import { restoreSessionWithLock } from './session-restoration';
-import type { WriteScheduler } from './write-scheduler';
 import { logger } from '../../utils/logger';
 import { markErrorReported } from '../../utils/sentry-dedupe';
 
@@ -51,40 +57,12 @@ export async function registerClient(
  * Join a session - handles restoration, leader election, and initial state setup.
  */
 export async function joinSession(
+  deps: RoomManagerDeps,
   connectionId: string,
   sessionId: string,
   boardPath: string,
-  clients: Map<string, ConnectedClient>,
-  sessionsMap: Map<string, Set<string>>,
-  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
-  redisStore: RedisSessionStore | null,
-  distributedState: DistributedStateManager | null,
-  writeScheduler: WriteScheduler,
-  sessionGraceTimers: Map<string, NodeJS.Timeout>,
-  pendingJoinPersists: Map<string, Promise<void>>,
-  getQueueStateFn: (sessionId: string) => Promise<{
-    queue: ClimbQueueItem[];
-    currentClimbQueueItem: ClimbQueueItem | null;
-    version: number;
-    sequence: number;
-    stateHash: string;
-  }>,
-  getSessionUsers: (sessionId: string) => Promise<SessionUser[]>,
-  getSessionUsersLocal: (sessionId: string) => SessionUser[],
-  getSessionById: (sessionId: string) => Promise<Session | null>,
-  updateQueueStateImmediate: (
-    sessionId: string,
-    queue: ClimbQueueItem[],
-    currentClimbQueueItem: ClimbQueueItem | null,
-    expectedVersion?: number,
-  ) => Promise<number>,
-  leaveSessionFn: (connectionId: string) => Promise<SessionLeaveResult | null>,
-  username?: string,
-  avatarUrl?: string,
-  initialQueue?: ClimbQueueItem[],
-  initialCurrentClimb?: ClimbQueueItem | null,
-  sessionName?: string,
-  participantId?: string | null,
+  callbacks: JoinSessionCallbacks,
+  options: JoinSessionOptions = {},
 ): Promise<{
   clientId: string;
   users: SessionUser[];
@@ -98,6 +76,25 @@ export async function joinSession(
   participantWasKnown: boolean;
   participantWasReconnecting: boolean;
 }> {
+  const {
+    clients,
+    sessions: sessionsMap,
+    sessionParticipants,
+    redisStore,
+    distributedState,
+    sessionGraceTimers,
+    pendingJoinPersists,
+  } = deps;
+  const {
+    getQueueState: getQueueStateFn,
+    getSessionUsers,
+    getSessionUsersLocal,
+    getSessionById,
+    updateQueueStateImmediate,
+    leaveSession: leaveSessionFn,
+  } = callbacks;
+  const { username, avatarUrl, initialQueue, initialCurrentClimb, sessionName, participantId } = options;
+
   const client = clients.get(connectionId);
   if (!client) {
     throw new Error('Client not registered');
@@ -278,18 +275,19 @@ export async function joinSession(
 /**
  * Leave a session - handles leader re-election and cleanup.
  */
-export async function leaveSession(
-  connectionId: string,
-  clients: Map<string, ConnectedClient>,
-  sessionsMap: Map<string, Set<string>>,
-  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
-  redisStore: RedisSessionStore | null,
-  distributedState: DistributedStateManager | null,
-  writeScheduler: WriteScheduler,
-  sessionGraceTimers: Map<string, NodeJS.Timeout>,
-  pendingJoinPersists: Map<string, Promise<void>>,
-  SESSION_GRACE_PERIOD_MS: number,
-): Promise<SessionLeaveResult | null> {
+export async function leaveSession(deps: RoomManagerDeps, connectionId: string): Promise<SessionLeaveResult | null> {
+  const {
+    clients,
+    sessions: sessionsMap,
+    sessionParticipants,
+    redisStore,
+    distributedState,
+    writeScheduler,
+    sessionGraceTimers,
+    pendingJoinPersists,
+    sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS,
+  } = deps;
+
   const client = clients.get(connectionId);
   if (!client || !client.sessionId) {
     return null;
@@ -472,18 +470,22 @@ export async function leaveSession(
  * as having explicitly left the session.
  */
 export async function disconnectClient(
+  deps: RoomManagerDeps,
   connectionId: string,
-  clients: Map<string, ConnectedClient>,
-  sessionsMap: Map<string, Set<string>>,
-  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
-  redisStore: RedisSessionStore | null,
-  distributedState: DistributedStateManager | null,
-  writeScheduler: WriteScheduler,
-  sessionGraceTimers: Map<string, NodeJS.Timeout>,
-  pendingJoinPersists: Map<string, Promise<void>>,
-  SESSION_GRACE_PERIOD_MS: number,
   onParticipantExpired?: (sessionId: string, participantId: string) => void,
 ): Promise<SessionDisconnectResult | null> {
+  const {
+    clients,
+    sessions: sessionsMap,
+    sessionParticipants,
+    redisStore,
+    distributedState,
+    writeScheduler,
+    sessionGraceTimers,
+    pendingJoinPersists,
+    sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS,
+  } = deps;
+
   const client = clients.get(connectionId);
   if (!client) {
     return null;
@@ -705,29 +707,6 @@ export async function disconnectClient(
   return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
 }
 
-export type SessionLeaveResult = {
-  sessionId: string;
-  participantId?: string;
-  newLeaderId?: string;
-  newLeaderParticipantId?: string;
-  /**
-   * True when this leave drained the last connection for the participant —
-   * peers should see a `UserLeft` event. False when the participant still has
-   * sibling connections (e.g. another tab open as the same authenticated
-   * user); in that case the leave is per-tab and peers should not be told
-   * the user departed.
-   */
-  participantFullyLeft: boolean;
-};
-
-export type SessionDisconnectResult = {
-  sessionId: string;
-  participantId: string;
-  presenceUser?: SessionUser;
-  newLeaderId?: string;
-  newLeaderParticipantId?: string;
-};
-
 async function resolveLeaderParticipantId(
   leaderConnectionId: string,
   clients: Map<string, ConnectedClient>,
@@ -756,11 +735,10 @@ async function resolveLeaderParticipantId(
  * Remove a client from the system entirely.
  */
 export async function removeClient(
+  deps: RoomManagerDeps,
   connectionId: string,
-  clients: Map<string, ConnectedClient>,
-  sessionsMap: Map<string, Set<string>>,
-  distributedState: DistributedStateManager | null,
 ): Promise<{ distributedStateCleanedUp: boolean }> {
+  const { clients, sessions: sessionsMap, distributedState } = deps;
   let distributedStateCleanedUp = true;
 
   if (distributedState) {

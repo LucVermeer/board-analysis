@@ -10,7 +10,15 @@ import {
 } from '../distributed-state';
 import { RECENT_CLIMBS_BUFFER_SIZE } from '../distributed-state/constants';
 import { logger } from '../../utils/logger';
-import type { ConnectedClient, DiscoverableSession, LocalSessionParticipant, QueueState } from './types';
+import type {
+  ConnectedClient,
+  DiscoverableSession,
+  LocalSessionParticipant,
+  QueueState,
+  RoomManagerDeps,
+  SessionDisconnectResult,
+  SessionLeaveResult,
+} from './types';
 import { WriteScheduler } from './write-scheduler';
 import {
   updateQueueState as updateQueueStateFn,
@@ -24,8 +32,6 @@ import {
   leaveSession as leaveSessionFn,
   disconnectClient as disconnectClientFn,
   removeClient as removeClientFn,
-  type SessionDisconnectResult,
-  type SessionLeaveResult,
 } from './client-lifecycle';
 import { pubsub } from '../../pubsub/index';
 import { endLiveActivity } from '../apns/index';
@@ -65,6 +71,28 @@ class RoomManager {
   private pendingJoinPersists = new Map<string, Promise<void>>();
   private writeScheduler = new WriteScheduler();
   private inactivitySweepInterval: NodeJS.Timeout | null = null;
+
+  /**
+   * Build the plumbing object passed to the room-manager/* free functions
+   * (client-lifecycle.ts, session-discovery.ts, queue-state.ts). Built fresh
+   * on every call rather than cached on the instance — `redisStore` and
+   * `distributedState` are (re)assigned in `initialize()` and nulled in
+   * `reset()`, so a cached object would silently go stale (e.g. keep
+   * pointing at a pre-reset `distributedState` after `reset()` nulls it).
+   */
+  private deps(): RoomManagerDeps {
+    return {
+      clients: this.clients,
+      sessions: this.sessions,
+      sessionParticipants: this.sessionParticipants,
+      redisStore: this.redisStore,
+      distributedState: this.distributedState,
+      writeScheduler: this.writeScheduler,
+      sessionGraceTimers: this.sessionGraceTimers,
+      pendingJoinPersists: this.pendingJoinPersists,
+      sessionGracePeriodMs: this.SESSION_GRACE_PERIOD_MS,
+    };
+  }
 
   /**
    * Reset all state (for testing purposes)
@@ -289,71 +317,45 @@ class RoomManager {
     participantWasReconnecting: boolean;
   }> {
     return joinSessionFn(
+      this.deps(),
       connectionId,
       sessionId,
       boardPath,
-      this.clients,
-      this.sessions,
-      this.sessionParticipants,
-      this.redisStore,
-      this.distributedState,
-      this.writeScheduler,
-      this.sessionGraceTimers,
-      this.pendingJoinPersists,
-      (sid) => this.getQueueState(sid),
-      (sid) => this.getSessionUsers(sid),
-      (sid) => this.getSessionUsersLocal(sid),
-      (sid) => this.getSessionById(sid),
-      (sid, q, c, v) => this.updateQueueStateImmediate(sid, q, c, v),
-      (cid) => this.leaveSession(cid),
-      username,
-      avatarUrl,
-      initialQueue,
-      initialCurrentClimb,
-      sessionName,
-      participantId,
-    );
-  }
-
-  async leaveSession(connectionId: string): Promise<SessionLeaveResult | null> {
-    const result = await leaveSessionFn(
-      connectionId,
-      this.clients,
-      this.sessions,
-      this.sessionParticipants,
-      this.redisStore,
-      this.distributedState,
-      this.writeScheduler,
-      this.sessionGraceTimers,
-      this.pendingJoinPersists,
-      this.SESSION_GRACE_PERIOD_MS,
-    );
-    return result;
-  }
-
-  async disconnectClient(connectionId: string): Promise<SessionDisconnectResult | null> {
-    return disconnectClientFn(
-      connectionId,
-      this.clients,
-      this.sessions,
-      this.sessionParticipants,
-      this.redisStore,
-      this.distributedState,
-      this.writeScheduler,
-      this.sessionGraceTimers,
-      this.pendingJoinPersists,
-      this.SESSION_GRACE_PERIOD_MS,
-      (sessionId, participantId) => {
-        pubsub.publishSessionEvent(sessionId, {
-          __typename: 'UserLeft',
-          userId: participantId,
-        });
+      {
+        getQueueState: (sid) => this.getQueueState(sid),
+        getSessionUsers: (sid) => this.getSessionUsers(sid),
+        getSessionUsersLocal: (sid) => this.getSessionUsersLocal(sid),
+        getSessionById: (sid) => this.getSessionById(sid),
+        updateQueueStateImmediate: (sid, q, c, v) => this.updateQueueStateImmediate(sid, q, c, v),
+        leaveSession: (cid) => this.leaveSession(cid),
+      },
+      {
+        username,
+        avatarUrl,
+        initialQueue,
+        initialCurrentClimb,
+        sessionName,
+        participantId,
       },
     );
   }
 
+  async leaveSession(connectionId: string): Promise<SessionLeaveResult | null> {
+    const result = await leaveSessionFn(this.deps(), connectionId);
+    return result;
+  }
+
+  async disconnectClient(connectionId: string): Promise<SessionDisconnectResult | null> {
+    return disconnectClientFn(this.deps(), connectionId, (sessionId, participantId) => {
+      pubsub.publishSessionEvent(sessionId, {
+        __typename: 'UserLeft',
+        userId: participantId,
+      });
+    });
+  }
+
   async removeClient(connectionId: string): Promise<{ distributedStateCleanedUp: boolean }> {
-    return removeClientFn(connectionId, this.clients, this.sessions, this.distributedState);
+    return removeClientFn(this.deps(), connectionId);
   }
 
   /**
@@ -534,15 +536,7 @@ class RoomManager {
     currentClimbQueueItem: ClimbQueueItem | null,
     expectedVersion?: number,
   ): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
-    return updateQueueStateFn(
-      sessionId,
-      queue,
-      currentClimbQueueItem,
-      expectedVersion,
-      this.redisStore,
-      this.writeScheduler,
-      this.distributedState,
-    );
+    return updateQueueStateFn(this.deps(), sessionId, queue, currentClimbQueueItem, expectedVersion);
   }
 
   async updateQueueStateImmediate(
@@ -551,7 +545,7 @@ class RoomManager {
     currentClimbQueueItem: ClimbQueueItem | null,
     expectedVersion?: number,
   ): Promise<number> {
-    return updateQueueStateImmediateFn(sessionId, queue, currentClimbQueueItem, expectedVersion, this.redisStore);
+    return updateQueueStateImmediateFn(this.deps(), sessionId, queue, currentClimbQueueItem, expectedVersion);
   }
 
   async updateQueueOnly(
@@ -559,14 +553,7 @@ class RoomManager {
     queue: ClimbQueueItem[],
     expectedVersion?: number,
   ): Promise<{ version: number; sequence: number; stateHash: string }> {
-    return updateQueueOnlyFn(
-      sessionId,
-      queue,
-      expectedVersion,
-      this.redisStore,
-      this.writeScheduler,
-      this.distributedState,
-    );
+    return updateQueueOnlyFn(this.deps(), sessionId, queue, expectedVersion);
   }
 
   async getQueueState(sessionId: string): Promise<QueueState> {
@@ -612,14 +599,7 @@ class RoomManager {
   }
 
   async findNearbySessions(latitude: number, longitude: number, radiusMeters?: number): Promise<DiscoverableSession[]> {
-    return findNearbySessionsFn(
-      latitude,
-      longitude,
-      radiusMeters,
-      this.sessions,
-      this.redisStore,
-      this.distributedState,
-    );
+    return findNearbySessionsFn(this.deps(), latitude, longitude, radiusMeters);
   }
 
   async getUserSessions(userId: string): Promise<Session[]> {
@@ -645,14 +625,7 @@ class RoomManager {
 
   async endSession(sessionId: string): Promise<void> {
     this.clearLocalSessionShadows(sessionId);
-    return endSessionFn(
-      sessionId,
-      this.sessions,
-      this.redisStore,
-      this.writeScheduler,
-      this.sessionGraceTimers,
-      this.pendingJoinPersists,
-    );
+    return endSessionFn(this.deps(), sessionId);
   }
 
   async flushPendingWrites(): Promise<void> {

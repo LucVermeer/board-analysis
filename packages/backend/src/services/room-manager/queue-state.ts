@@ -3,23 +3,22 @@ import { db } from '../../db/client';
 import { sessionQueues } from '../../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import type { RedisSessionStore } from '../redis-session-store';
-import type { DistributedStateManager } from '../distributed-state';
 import { computeQueueStateHash } from '@boardsesh/queue';
-import { VersionConflictError, type QueueState } from './types';
-import { type WriteScheduler, writeQueueStateToPostgres } from './write-scheduler';
+import { VersionConflictError, type QueueState, type RoomManagerDeps } from './types';
+import { writeQueueStateToPostgres } from './write-scheduler';
 
 /**
  * Update queue state with Redis as source of truth and debounced Postgres writes.
  */
 export async function updateQueueState(
+  deps: RoomManagerDeps,
   sessionId: string,
   queue: ClimbQueueItem[],
   currentClimbQueueItem: ClimbQueueItem | null,
   expectedVersion: number | undefined,
-  redisStore: RedisSessionStore | null,
-  writeScheduler: WriteScheduler,
-  distributedState: DistributedStateManager | null,
 ): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
+  const { redisStore, writeScheduler, distributedState } = deps;
+
   // Get current version, sequence, and prior state hash from Redis if
   // available, otherwise from Postgres. The prior hash is returned so
   // callers (currently setQueue) can detect no-op resyncs without a
@@ -100,12 +99,14 @@ export async function updateQueueState(
  * Use this when you need immediate Postgres consistency (e.g., session creation).
  */
 export async function updateQueueStateImmediate(
+  deps: RoomManagerDeps,
   sessionId: string,
   queue: ClimbQueueItem[],
   currentClimbQueueItem: ClimbQueueItem | null,
   expectedVersion: number | undefined,
-  redisStore: RedisSessionStore | null,
 ): Promise<number> {
+  const { redisStore } = deps;
+
   if (expectedVersion !== undefined) {
     if (expectedVersion === 0) {
       // Version 0 means no row exists yet - try to insert
@@ -215,13 +216,13 @@ export async function updateQueueStateImmediate(
  * Uses Redis as source of truth for real-time state. Postgres writes are debounced.
  */
 export async function updateQueueOnly(
+  deps: RoomManagerDeps,
   sessionId: string,
   queue: ClimbQueueItem[],
   expectedVersion: number | undefined,
-  redisStore: RedisSessionStore | null,
-  writeScheduler: WriteScheduler,
-  distributedState: DistributedStateManager | null,
 ): Promise<{ version: number; sequence: number; stateHash: string }> {
+  const { redisStore, writeScheduler, distributedState } = deps;
+
   // Get current state from Redis (source of truth for real-time sync)
   let currentVersion = 0;
   let currentSequence = 0;
