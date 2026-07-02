@@ -46,6 +46,7 @@ type AscentFeedRow = {
   comment: string;
   climbedAt: string;
   frames: string | null;
+  hasBetaVideo: boolean;
 };
 
 export const tickQueries = {
@@ -521,6 +522,19 @@ export const tickQueries = {
       .limit(limit)
       .offset(offset);
 
+    // One query for the whole page: which of these ascents have a beta video
+    // directly attached (board_beta_links.tick_uuid, unique per tick). Drives
+    // the logbook row's video marker without an N+1.
+    const pageTickUuids = results.map(({ tick }) => tick.uuid);
+    const betaLinkRows =
+      pageTickUuids.length > 0
+        ? await db
+            .select({ tickUuid: dbSchema.boardBetaLinks.tickUuid })
+            .from(dbSchema.boardBetaLinks)
+            .where(inArray(dbSchema.boardBetaLinks.tickUuid, pageTickUuids))
+        : [];
+    const ticksWithBeta = new Set(betaLinkRows.map((row) => row.tickUuid));
+
     // Map results to response format
     const items = results.map(
       ({
@@ -568,6 +582,7 @@ export const tickQueries = {
           comment: tick.comment || '',
           climbedAt: tick.climbedAt,
           frames,
+          hasBetaVideo: ticksWithBeta.has(tick.uuid),
         };
       },
     );

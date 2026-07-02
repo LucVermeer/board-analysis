@@ -235,6 +235,12 @@ export type AscentFeedItem = {
   difficultyName?: Maybe<Scalars['String']['output']>;
   /** Encoded hold frames for thumbnail display */
   frames?: Maybe<Scalars['String']['output']>;
+  /**
+   * Whether a beta video is attached to this ascent (board_beta_links.tick_uuid).
+   * Populated by userAscentsFeed/userAscentCaptionMatches; null on feeds that
+   * don't resolve it (following/global activity).
+   */
+  hasBetaVideo?: Maybe<Scalars['Boolean']['output']>;
   /** Whether this is a benchmark climb */
   isBenchmark: Scalars['Boolean']['output'];
   /** Whether climb was mirrored */
