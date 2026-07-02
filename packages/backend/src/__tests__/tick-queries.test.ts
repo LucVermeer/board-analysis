@@ -64,7 +64,14 @@ const callUserGroupedAscentsFeed = (userId: string, input: Record<string, unknow
 
 const callUserAscentCaptionMatches = (userId: string, caption: string) =>
   tickQueries.userAscentCaptionMatches(undefined, { userId, caption }) as Promise<
-    Array<{ uuid: string; climbUuid: string; climbName: string; status: string; frames: string | null }>
+    Array<{
+      uuid: string;
+      climbUuid: string;
+      climbName: string;
+      status: string;
+      frames: string | null;
+      hasBetaVideo: boolean;
+    }>
   >;
 
 const callUserClimbPercentile = (userId: string) =>
@@ -156,6 +163,7 @@ const insertBoardClimbStats = async (params: {
 
 const cleanup = async () => {
   await db.execute(sql`DELETE FROM user_climb_percentiles WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
+  await db.execute(sql`DELETE FROM board_beta_links WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(
@@ -508,6 +516,60 @@ describe('tickQueries — behavior fixes', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0].climbName).toBe('Sloper Madness');
+    });
+  });
+
+  describe('userAscentsFeed — hasBetaVideo', () => {
+    it('marks only the ascents with a directly-attached beta link', async () => {
+      const climbUuid = `${CLIMB_PREFIX}beta`;
+      await insertClimb(climbUuid, 'Beta Test Climb');
+      await insertTick({ uuid: 'tick-beta-1', climbUuid, climbedAt: '2026-06-01T10:00:00', status: 'send' });
+      await insertTick({ uuid: 'tick-beta-2', climbUuid, climbedAt: '2026-06-02T10:00:00', status: 'send' });
+      await db.execute(sql`
+        INSERT INTO board_beta_links (board_type, climb_uuid, link, tick_uuid)
+        VALUES ('kilter', ${climbUuid}, 'https://instagram.com/p/test-beta', 'tick-beta-1')
+      `);
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { sortBy: 'recent' });
+      const byUuid = new Map(
+        (result.items as Array<FeedItem & { hasBetaVideo: boolean }>).map((item) => [item.uuid, item.hasBetaVideo]),
+      );
+      expect(byUuid.get('tick-beta-1')).toBe(true);
+      expect(byUuid.get('tick-beta-2')).toBe(false);
+    });
+
+    it('flows hasBetaVideo through the caption-matches shared builder', async () => {
+      // Caption matches de-dupe by CLIMB (keeping the most recent send), so
+      // use two climbs with one tick each — a same-climb pair would collapse
+      // to the newest tick and hide the beta-carrying one.
+      const withBetaUuid = `${CLIMB_PREFIX}beta-cap-with`;
+      const withoutBetaUuid = `${CLIMB_PREFIX}beta-cap-without`;
+      await insertClimb(withBetaUuid, 'Beta Caption With');
+      await insertClimb(withoutBetaUuid, 'Beta Caption Without');
+      await insertTick({
+        uuid: 'tick-beta-cap-1',
+        climbUuid: withBetaUuid,
+        climbedAt: '2026-06-01T10:00:00',
+        status: 'send',
+      });
+      await insertTick({
+        uuid: 'tick-beta-cap-2',
+        climbUuid: withoutBetaUuid,
+        climbedAt: '2026-06-02T10:00:00',
+        status: 'send',
+      });
+      await db.execute(sql`
+        INSERT INTO board_beta_links (board_type, climb_uuid, link, tick_uuid)
+        VALUES ('kilter', ${withBetaUuid}, 'https://instagram.com/p/test-beta-cap', 'tick-beta-cap-1')
+      `);
+
+      const matches = await callUserAscentCaptionMatches(
+        TEST_USER_ID,
+        'Sent "Beta Caption With" and "Beta Caption Without" @ 40°',
+      );
+      const byUuid = new Map(matches.map((match) => [match.uuid, match.hasBetaVideo]));
+      expect(byUuid.get('tick-beta-cap-1')).toBe(true);
+      expect(byUuid.get('tick-beta-cap-2')).toBe(false);
     });
   });
 

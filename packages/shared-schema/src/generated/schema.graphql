@@ -983,6 +983,12 @@ type AscentFeedItem {
   consensusDifficultyName: String
   "Average quality rating from all users"
   qualityAverage: Float
+  """
+  Whether a beta video is attached to this ascent (board_beta_links.tick_uuid).
+  Populated by userAscentsFeed/userAscentCaptionMatches; null on feeds that
+  don't resolve it (following/global activity).
+  """
+  hasBetaVideo: Boolean
   "Whether this is a benchmark climb"
   isBenchmark: Boolean!
   "Whether matching is disallowed on this climb"
