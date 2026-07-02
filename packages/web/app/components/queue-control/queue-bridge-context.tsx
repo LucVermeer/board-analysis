@@ -27,7 +27,7 @@ import { usePersistentSession } from '../persistent-session';
 import { usePartyProfile } from '../party-manager/party-profile-context';
 import { getBaseBoardPath, extractAngleFromPathname, DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { BoardDetails, Angle, Climb, SearchRequestPagination } from '@/app/lib/types';
-import type { ClimbQueueItem, QueueItemUser, PlaylistSuggestionSource, SetCurrentClimbOptions } from './types';
+import type { ClimbQueueItem, QueueItemUser, PlaylistSuggestionSource, QueueState, QueueAction } from './types';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
@@ -35,22 +35,20 @@ import { getBoardDetailsForPlaylist } from '@/app/lib/board-config-for-playlist'
 import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
-import { dispatchOpenPlayDrawer } from './play-drawer-event';
-import type { SetActiveClimbSource } from '../graphql-queue/set-active-climb-event';
 import { track } from '@/app/lib/analytics';
-import {
-  getPlaylistSuggestedClimbs,
-  insertQueueItemAfterCurrent,
-  isPlaylistPeekQueueItemUuid,
-  playlistSuggestionSourceMatches,
-  pruneSuggestedQueueItemsAfterCurrent,
-} from './playlist-suggestions';
+import { getPlaylistSuggestedClimbs, playlistSuggestionSourceMatches } from './playlist-suggestions';
 import { findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
+import { queueReducer } from '@boardsesh/queue';
 import type {
   ClimbQueue as SharedClimbQueue,
   ClimbQueueItem as SharedClimbQueueItem,
   PlaylistSuggestionSource as SharedPlaylistSuggestionSource,
 } from '@boardsesh/queue';
+import {
+  createQueueActionsCore,
+  type QueueActionsCoreColdStart,
+  type QueueActionsCoreDeps,
+} from './queue-actions-core';
 
 const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-activity-bridge'), {
   ssr: false,
@@ -266,311 +264,205 @@ function usePersistentSessionQueueAdapter(): {
     return false;
   }, []);
 
-  // Bridge-mode nav delegates to the shared @boardsesh/play-view helper
-  // (`findNextQueueItemWithSuggestions`) so web's off-board swipe path stays in
-  // lockstep with mobile, which already uses that helper. The helper is
-  // queue-first and, once the queue is exhausted, re-walks the playlist from
-  // the CURRENT climb's position in the source — re-activating a playlist
-  // climb starts a fresh pass instead of jumping to the first un-queued climb.
-  //
-  // `from`: pass `options.from ?? current` as the helper's
-  // currentClimbQueueItem. This reproduces the old anchor selection
-  // (anchor = the `from` item when supplied, else the current wall climb).
-  // The web↔shared type-seam casts live in `findNextQueueItemAcrossSeam`.
-  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }): ClimbQueueItem | null => {
-    const { queue, currentClimbQueueItem: current, playlistSuggestionSource } = latestRef.current;
-    const anchor = options?.from ?? current;
-    return findNextQueueItemAcrossSeam(queue, anchor, playlistSuggestionSource);
-  }, []);
+  // --- Single shared queue-actions implementation (see queue-actions-core.ts) ---
+  // Every field here is a closure over `latestRef`, so this can be built once
+  // (`useMemo(..., [])`) and stay fresh — same pattern as GraphQLQueueProvider.
 
-  const getPreviousClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }): ClimbQueueItem | null => {
-    const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
-    const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
-    return idx > 0 ? queue[idx - 1] : null;
-  }, []);
-
-  const setCurrentClimbQueueItem = useCallback(
-    (item: ClimbQueueItem) => {
-      const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-      const queueItem = isPlaylistPeekQueueItemUuid(item.uuid)
-        ? { ...buildQueueItem(item.climb), suggested: item.suggested }
-        : item;
-      const alreadyInQueue = queue.some((q) => q.uuid === item.uuid);
-      const fireSetActive = (source: SetActiveClimbSource) => {
-        if (!queueItem.climb) return;
-        track('Set Active Climb', {
-          climbUuid: queueItem.climb.uuid,
-          boardType: queueItem.climb.boardType ?? null,
-          layoutId: queueItem.climb.layoutId ?? null,
-          source,
-        });
-      };
-      if (ps.activeSession) {
-        // Don't bail on the "already current" optimistic state in party mode —
-        // a peer may have moved the current climb away and our local view
-        // hasn't caught up yet. Always re-send so the server reconciles.
-        const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
-        ps.setCurrentClimb(queueItem, queueItem.suggested, correlationId).catch((err: unknown) => {
-          console.error('Failed to set current climb queue item:', err);
-        });
-        fireSetActive('bridge.setCurrentClimbQueueItem.party');
-        return;
-      }
-      if (alreadyInQueue && current?.uuid === queueItem.uuid) return;
-      if (!boardDetails) return;
-      const newQueue = alreadyInQueue ? queue : [...queue, queueItem];
-      ps.setLocalQueueState(newQueue, queueItem, baseBoardPath, boardDetails);
-      fireSetActive('bridge.setCurrentClimbQueueItem.solo');
-    },
-    [buildQueueItem],
-  );
-
-  const addToQueue = useCallback(
-    (climb: Climb) => {
-      const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-      if (!validateClimbForQueue(climb)) return;
-      const newItem = buildQueueItem(climb);
-      if (ps.activeSession) {
-        ps.addQueueItem(newItem).catch((err: unknown) => {
-          console.error('Failed to add queue item:', err);
-        });
-        return;
-      }
-      if (!boardDetails) {
-        // Cold-start path: no active board yet. Seed local state from the
-        // climb's own board config so the queue bar begins showing.
-        const seed = deriveSeedStateFromClimb(climb);
-        if (!seed) return;
-        ps.setLocalQueueState([newItem], newItem, seed.baseBoardPath, seed.boardDetails);
-        return;
-      }
-      ps.setLocalQueueState([...queue, newItem], current ?? newItem, baseBoardPath, boardDetails);
-    },
-    [validateClimbForQueue, buildQueueItem],
-  );
-
-  const removeFromQueue = useCallback((item: ClimbQueueItem) => {
-    const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-    if (ps.activeSession) {
-      ps.removeQueueItem(item.uuid).catch((err: unknown) => {
-        console.error('Failed to remove queue item:', err);
-      });
-      return;
-    }
+  // Bridge-solo local store: reduce against the shared `@boardsesh/queue`
+  // reducer (the same one QueueContext dispatches to) and persist the result
+  // via `ps.setLocalQueueState`. This makes the reducer the single semantic
+  // definition of "apply a queue action" even for the bridge's useState-backed
+  // local store. Bridge PARTY mode is untouched: `applyLocal` no-ops there
+  // (returns before running the reducer), matching the pre-existing behavior
+  // of waiting for the server echo instead of applying an optimistic update.
+  const applyLocalSolo = useCallback((action: QueueAction) => {
+    const { ps, boardDetails, baseBoardPath, queue, currentClimbQueueItem, playlistSuggestionSource } =
+      latestRef.current;
+    if (ps.activeSession) return;
     if (!boardDetails) return;
-    const newQueue = queue.filter((q) => q.uuid !== item.uuid);
-    const newCurrent = current?.uuid === item.uuid ? (newQueue[0] ?? null) : current;
-    ps.setLocalQueueState(newQueue, newCurrent, baseBoardPath, boardDetails);
-  }, []);
-
-  const setQueue = useCallback((newQueue: ClimbQueueItem[]) => {
-    const { currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-    // Pick the new current climb: keep the existing one if it survived the
-    // queue update, otherwise fall back to the first item (or null when empty).
-    const pickCurrent = (): ClimbQueueItem | null => {
-      if (newQueue.length === 0) return null;
-      if (current && newQueue.some((q) => q.uuid === current.uuid)) return current;
-      return newQueue[0];
+    const pseudoState: QueueState = {
+      queue,
+      currentClimbQueueItem,
+      playlistSuggestionSource,
+      climbSearchParams: DEFAULT_SEARCH_PARAMS,
+      hasDoneFirstFetch: false,
+      initialQueueDataReceivedFromPeers: false,
+      pendingCurrentClimbUpdates: [],
+      lastReceivedSequence: null,
+      lastReceivedStateHash: null,
+      needsResync: false,
     };
-    if (ps.activeSession) {
-      ps.setQueue(newQueue, pickCurrent()).catch((err: unknown) => {
-        console.error('Failed to set queue:', err);
-      });
-      return;
+    let nextState = queueReducer(pseudoState, action);
+    // Two bridge-only quirks the shared reducer's generic DELTA_ADD_QUEUE_ITEM
+    // / DELTA_REMOVE_QUEUE_ITEM cases don't reproduce (they only touch `queue`,
+    // matching QueueContext, whose addToQueue/removeFromQueue never set the
+    // current climb as a side effect). The bridge's pre-refactor local-state
+    // math did, and existing tests pin it: adding to an un-activated queue also
+    // activates the new item; removing the current item promotes the new head
+    // instead of clearing to null. Behavior-preserving overrides, kept narrow.
+    if (action.type === 'DELTA_ADD_QUEUE_ITEM' && !pseudoState.currentClimbQueueItem) {
+      nextState = { ...nextState, currentClimbQueueItem: action.payload.item };
+    } else if (
+      action.type === 'DELTA_REMOVE_QUEUE_ITEM' &&
+      pseudoState.currentClimbQueueItem?.uuid === action.payload.uuid
+    ) {
+      nextState = { ...nextState, currentClimbQueueItem: nextState.queue[0] ?? null };
     }
-    if (!boardDetails) return;
-    ps.setLocalQueueState(newQueue, pickCurrent(), baseBoardPath, boardDetails);
+    // Reducer returned the same reference (a guard no-op, e.g. re-activating
+    // the already-current item) — skip the redundant persist call.
+    if (nextState === pseudoState) return;
+    ps.setLocalQueueState(nextState.queue, nextState.currentClimbQueueItem, baseBoardPath, boardDetails);
   }, []);
 
-  const mirrorClimb = useCallback(() => {
-    const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-    if (!current?.climb) return;
-    const mirrored = !current.climb.mirrored;
-    if (ps.activeSession) {
-      ps.mirrorCurrentClimb(mirrored).catch((err: unknown) => {
-        console.error('Failed to mirror current climb:', err);
-      });
-      return;
-    }
-    if (!boardDetails) return;
-    const updatedItem: ClimbQueueItem = {
-      ...current,
-      climb: { ...current.climb, mirrored },
-    };
-    const newQueue = queue.map((q) => (q.uuid === updatedItem.uuid ? updatedItem : q));
-    ps.setLocalQueueState(newQueue, updatedItem, baseBoardPath, boardDetails);
-  }, []);
-
-  const setCurrentClimb = useCallback(
-    async (climb: Climb, options: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
-      const {
-        queue,
-        currentClimbQueueItem: current,
-        ps,
-        boardDetails,
-        baseBoardPath,
-        playlistSuggestionSource: previousPlaylistSuggestionSource,
-      } = latestRef.current;
-      if (!validateClimbForQueue(climb)) return null;
-      const nextPlaylistSuggestionSource = options.playlistSuggestionSource;
-      const rollbackPlaylistSuggestionSource = () => {
-        setPlaylistSuggestionSourceState(previousPlaylistSuggestionSource);
-      };
-      setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
-      track('Set Active Climb', {
-        climbUuid: climb.uuid,
-        boardType: climb.boardType ?? null,
-        layoutId: climb.layoutId ?? null,
-        source: 'bridge.setCurrentClimb' satisfies SetActiveClimbSource,
-      });
-      if (ps.activeSession) {
-        const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
-        // If the climb is already in the queue, reuse the existing item
-        // instead of adding a duplicate. This mirrors the natural behavior
-        // expected by users tapping a logbook/session-view climb that's
-        // already queued from another peer or earlier in the sesh.
-        const existing = queue.find((q) => q.climb?.uuid === climb.uuid);
-        if (existing) {
-          try {
-            if (nextPlaylistSuggestionSource) {
-              await ps.setQueue(pruneSuggestedQueueItemsAfterCurrent(queue, existing), existing);
-            } else {
-              await ps.setCurrentClimb(existing, false, correlationId);
-            }
-            return existing;
-          } catch (err: unknown) {
-            console.error('Failed to set current climb:', err);
-            rollbackPlaylistSuggestionSource();
-            return null;
-          }
-        }
-        const newItem = buildQueueItem(climb);
-        const currentIdx = current ? queue.findIndex((q) => q.uuid === current.uuid) : -1;
-        const position = currentIdx === -1 ? undefined : currentIdx + 1;
-        if (nextPlaylistSuggestionSource) {
-          const queueWithNewItem = insertQueueItemAfterCurrent(queue, current, newItem);
-          const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queueWithNewItem, newItem);
-          try {
-            await ps.setQueue(prunedQueue, newItem);
-            return newItem;
-          } catch (err: unknown) {
-            console.error('Failed to replace queue before setting playlist current:', err);
-            rollbackPlaylistSuggestionSource();
-            return null;
-          }
-        }
-        // Split the awaits so a partial failure is observable: addQueueItem
-        // adds the item to the shared queue, then setCurrentClimb activates
-        // it. If addQueueItem fails, nothing landed on the server. If
-        // setCurrentClimb fails after addQueueItem succeeded, the item is
-        // queued but not active — return null so the caller (e.g.
-        // SessionDetailContent.navigateToClimb) doesn't navigate to a climb
-        // the board never actually got told to display.
-        try {
-          await ps.addQueueItem(newItem, position);
-        } catch (err: unknown) {
-          console.error('Failed to add queue item before setting current:', err);
-          rollbackPlaylistSuggestionSource();
-          return null;
-        }
-        try {
-          // Sequential awaits over a single graphql-ws connection preserve
-          // FIFO ordering, so the server processes the add before the
-          // setCurrentClimb that references it. This mirrors
-          // GraphQLQueueProvider.setCurrentClimb.
-          await ps.setCurrentClimb(newItem, false, correlationId);
-          return newItem;
-        } catch (err: unknown) {
-          console.error('Failed to set current climb after queue add:', err);
-          rollbackPlaylistSuggestionSource();
-          return null;
-        }
-      }
-      const newItem = buildQueueItem(climb);
-      if (!boardDetails) {
-        // Cold-start path: no active board yet. Seed local state from the
-        // climb's own board config so the queue bar begins showing.
-        const seed = deriveSeedStateFromClimb(climb);
-        if (!seed) {
-          rollbackPlaylistSuggestionSource();
-          return null;
-        }
-        ps.setLocalQueueState([newItem], newItem, seed.baseBoardPath, seed.boardDetails);
-        return newItem;
-      }
-      const currentIdx = current ? queue.findIndex((q) => q.uuid === current.uuid) : -1;
-      const newQueue = [...queue];
-      if (currentIdx >= 0) {
-        newQueue.splice(currentIdx + 1, 0, newItem);
-      } else {
-        newQueue.push(newItem);
-      }
-      const nextQueue = nextPlaylistSuggestionSource
-        ? pruneSuggestedQueueItemsAfterCurrent(newQueue, newItem)
-        : newQueue;
-      ps.setLocalQueueState(nextQueue, newItem, baseBoardPath, boardDetails);
-      return newItem;
-    },
-    [validateClimbForQueue, buildQueueItem],
+  // Cold-start seeding: selecting a climb from a surface with no active board
+  // (e.g. a playlist view) auto-activates the climb's own board. Solo-only —
+  // party mode always has a board (the session carries one).
+  const coldStart: QueueActionsCoreColdStart = useMemo(
+    () => ({
+      tryAddToQueue: (item) => {
+        const { boardDetails, ps } = latestRef.current;
+        if (boardDetails) return false;
+        const seed = deriveSeedStateFromClimb(item.climb);
+        if (!seed) return true;
+        ps.setLocalQueueState([item], item, seed.baseBoardPath, seed.boardDetails);
+        return true;
+      },
+      trySetCurrentClimb: (item) => {
+        const { boardDetails, ps } = latestRef.current;
+        if (boardDetails) return 'not-applicable';
+        const seed = deriveSeedStateFromClimb(item.climb);
+        if (!seed) return 'failed';
+        ps.setLocalQueueState([item], item, seed.baseBoardPath, seed.boardDetails);
+        return 'seeded';
+      },
+    }),
+    [],
   );
 
-  // Bridge-mode browse helper. Always-live model: every participant broadcasts
-  // via setCurrentClimb so the wall climb changes for everyone, then opens the
-  // drawer. Mirrors QueueContext.previewClimbFromBrowse.
-  const previewClimbFromBrowse = useCallback(
-    (climb: Climb) => {
-      void setCurrentClimb(climb, { playlistSuggestionSource: null });
-      dispatchOpenPlayDrawer();
-    },
-    [setCurrentClimb],
+  const actionsCoreDeps = useMemo<QueueActionsCoreDeps>(
+    () => ({
+      getSnapshot: () => ({
+        queue: latestRef.current.queue,
+        currentClimbQueueItem: latestRef.current.currentClimbQueueItem,
+        playlistSuggestionSource: latestRef.current.playlistSuggestionSource,
+      }),
+      applyLocal: applyLocalSolo,
+      setPlaylistSuggestionSourceLocal: (source) => setPlaylistSuggestionSourceState(source),
+      // Functional updater so the identity-match check reads the latest state
+      // (including same-tick updates a `latestRef` snapshot would miss).
+      refreshPlaylistSuggestionSourceLocal: (source) =>
+        setPlaylistSuggestionSourceState((current) =>
+          playlistSuggestionSourceMatches(current, source) ? source : current,
+        ),
+      // `buildQueueItem` always builds `suggested: false`; override it here so
+      // peek-promotion (setCurrentClimbQueueItem) can carry the peek's own flag
+      // through, mirroring the pre-refactor `{ ...buildQueueItem(climb), suggested }`.
+      buildItem: (climb, suggested) => ({ ...buildQueueItem(climb), suggested: !!suggested }),
+      guardMutation: () => false,
+      validateClimbForQueue,
+      offlineBuffer: null,
+      resolveShouldAddToQueueOnActivate: () => true,
+      resolveNextCurrentForSetQueue: (newQueue, currentClimbQueueItem) => {
+        if (newQueue.length === 0) return null;
+        if (currentClimbQueueItem && newQueue.some((queueItem) => queueItem.uuid === currentClimbQueueItem.uuid)) {
+          return currentClimbQueueItem;
+        }
+        return newQueue[0];
+      },
+      buildReplacementItem: (existing, climb) => (existing ? { ...existing, climb } : null),
+      // Bridge-mode nav delegates to the shared @boardsesh/play-view helper
+      // (`findNextQueueItemWithSuggestions`) so web's off-board swipe path
+      // stays in lockstep with mobile, which already uses that helper. The
+      // helper is queue-first and, once the queue is exhausted, re-walks the
+      // playlist from the CURRENT climb's position in the source —
+      // re-activating a playlist climb starts a fresh pass instead of
+      // jumping to the first un-queued climb. The web↔shared type-seam casts
+      // live in `findNextQueueItemAcrossSeam`.
+      discoverNext: (anchor) => {
+        const { queue, playlistSuggestionSource } = latestRef.current;
+        return findNextQueueItemAcrossSeam(queue, anchor, playlistSuggestionSource);
+      },
+      discoverPrev: (anchor) => {
+        const { queue } = latestRef.current;
+        const idx = queue.findIndex(({ uuid }) => uuid === anchor?.uuid);
+        return idx > 0 ? queue[idx - 1] : null;
+      },
+      coldStart,
+      party: {
+        get isActive() {
+          return !!latestRef.current.ps.activeSession;
+        },
+        get hasConnected() {
+          return latestRef.current.ps.hasConnected;
+        },
+        isDisconnected: false,
+        attemptMutation: true,
+        // The bridge (unlike QueueContext) reuses an existing queue entry
+        // matched by climb.uuid instead of adding a duplicate — a peer may
+        // have already queued this same climb from a logbook/session-view tap.
+        reuseExistingQueueItemOnSetCurrentClimb: true,
+        returnNullOnSetCurrentClimbFailure: true,
+        mutations: {
+          addQueueItem: (item, position) => latestRef.current.ps.addQueueItem(item, position),
+          removeQueueItem: (uuid) => latestRef.current.ps.removeQueueItem(uuid),
+          setCurrentClimb: (item, shouldAddToQueue, correlationId) =>
+            latestRef.current.ps.setCurrentClimb(item, shouldAddToQueue, correlationId),
+          mirrorCurrentClimb: (mirrored) => latestRef.current.ps.mirrorCurrentClimb(mirrored),
+          setQueue: (queue, currentClimbQueueItem) => latestRef.current.ps.setQueue(queue, currentClimbQueueItem),
+          replaceQueueItem: (uuid, item) => latestRef.current.ps.replaceQueueItem(uuid, item),
+          reportWallDisconnect: () => latestRef.current.ps.reportWallDisconnect(),
+        },
+        nextCorrelationId: () => {
+          const { ps } = latestRef.current;
+          return ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
+        },
+      },
+      hooks: {
+        resolveSetActiveClimbSource: (kind, variant) => {
+          if (kind === 'setCurrentClimb') return 'bridge.setCurrentClimb';
+          return variant === 'party' ? 'bridge.setCurrentClimbQueueItem.party' : 'bridge.setCurrentClimbQueueItem.solo';
+        },
+        onSetActiveClimb: (payload) => track('Set Active Climb', payload),
+        // onClimbActivated / onQueueItemAdded / onQueueItemRemoved /
+        // onOperationMetric are intentionally omitted — the bridge has never
+        // tracked session-climbs-attempted, 'Climb Added/Removed to/from
+        // Queue', or per-operation timing metrics.
+      },
+      errorMessages: {
+        addToQueue: 'Failed to add queue item:',
+        removeFromQueue: 'Failed to remove queue item:',
+        setQueue: 'Failed to set queue:',
+        mirrorClimb: 'Failed to mirror current climb:',
+        replaceQueueItem: 'Failed to replace queue item:',
+        setCurrentClimb: {
+          reuse: 'Failed to set current climb:',
+          playlist: 'Failed to replace queue before setting playlist current:',
+          add: 'Failed to add queue item before setting current:',
+          activate: 'Failed to set current climb after queue add:',
+        },
+        setCurrentClimbQueueItem: 'Failed to set current climb queue item:',
+        reportWallDisconnect: 'Failed to report wall disconnect:',
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [applyLocalSolo, coldStart, validateClimbForQueue],
   );
-
-  // Bridge-mode wall-disconnect report. Tells the session this client's own
-  // BLE link dropped so every member's wall-confirmed lightbulb clears.
-  // Best-effort; no-op in solo or while disconnected. Mirrors
-  // QueueContext.reportWallDisconnect.
-  const reportWallDisconnect = useCallback(async (): Promise<void> => {
-    const { ps } = latestRef.current;
-    if (!ps.activeSession) return;
-    if (!ps.hasConnected) return;
-    try {
-      await ps.reportWallDisconnect();
-    } catch (err: unknown) {
-      console.error('Failed to report wall disconnect:', err);
-    }
-  }, []);
-
-  // Bridge-mode replace: in party mode, delegate to the persistent session's
-  // WebSocket-backed replaceQueueItem; otherwise mirror the local-state update
-  // with a new climb while preserving the queue-item uuid and existing
-  // addedBy attribution.
-  const replaceQueueItem = useCallback((queueItemUuid: string, climb: Climb) => {
-    const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-    const existing = queue.find((q) => q.uuid === queueItemUuid);
-    if (!existing) return;
-    const updated: ClimbQueueItem = { ...existing, climb };
-    if (ps.activeSession) {
-      ps.replaceQueueItem(queueItemUuid, updated).catch((err: unknown) => {
-        console.error('Failed to replace queue item:', err);
-      });
-      return;
-    }
-    if (!boardDetails) return;
-    const newQueue = queue.map((q) => (q.uuid === queueItemUuid ? updated : q));
-    const nextCurrent = current?.uuid === queueItemUuid ? updated : current;
-    ps.setLocalQueueState(newQueue, nextCurrent, baseBoardPath, boardDetails);
-  }, []);
-
-  const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
-    setPlaylistSuggestionSourceState(source);
-  }, []);
-
-  const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
-    setPlaylistSuggestionSourceState((current) =>
-      playlistSuggestionSourceMatches(current, source) ? source : current,
-    );
-  }, []);
+  const actionsCore = useMemo(() => createQueueActionsCore(actionsCoreDeps), [actionsCoreDeps]);
+  const {
+    addToQueue,
+    removeFromQueue,
+    setCurrentClimb,
+    previewClimbFromBrowse,
+    setCurrentClimbQueueItem,
+    setPlaylistSuggestionSource,
+    refreshPlaylistSuggestionSource,
+    replaceQueueItem,
+    mirrorClimb,
+    getNextClimbQueueItem,
+    getPreviousClimbQueueItem,
+    setQueue,
+    reportWallDisconnect,
+  } = actionsCore;
 
   // No-op functions for fields not used by the bottom bar
   const noop = useCallback(() => {}, []);
