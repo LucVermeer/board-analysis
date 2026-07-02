@@ -255,6 +255,56 @@ describe('useBoardHistoryPagination', () => {
     expect(fetchHistory).toHaveBeenLastCalledWith(2, { limit: 2, before: '5' });
   });
 
+  it('ignores a page that resolves after a board switch (stale generation)', async () => {
+    const { client, fetchHistory } = makeClient();
+    const boardOnePage = deferred<BoardPresenceClimb[]>();
+    fetchHistory.mockReturnValueOnce(boardOnePage.promise);
+    const resultBox: ResultBox = { current: null };
+
+    const { rerender } = render(
+      <TestHarness boardId={1} client={client} history={[climb('c100', 100)]} pageSize={2} resultBox={resultBox} />,
+    );
+
+    act(() => resultBox.current?.loadOlder());
+    expect(resultBox.current?.isLoadingOlder).toBe(true);
+
+    // Switch boards while board 1's page is still in flight — the reset
+    // effect bumps the generation and clears the loading flag.
+    rerender(<TestHarness boardId={2} client={client} history={[]} pageSize={2} resultBox={resultBox} />);
+    expect(resultBox.current?.isLoadingOlder).toBe(false);
+
+    await act(async () => {
+      boardOnePage.resolve([climb('c99', 99), climb('c98', 98)]);
+      await boardOnePage.promise;
+    });
+
+    // Board 1's late page must not bleed into board 2's state.
+    expect(resultBox.current?.olderHistory).toEqual([]);
+    expect(resultBox.current?.isLoadingOlder).toBe(false);
+    expect(resultBox.current?.hasMore).toBe(true);
+  });
+
+  it('ignores a page that resolves after unmount', async () => {
+    const { client, fetchHistory } = makeClient();
+    const page = deferred<BoardPresenceClimb[]>();
+    fetchHistory.mockReturnValueOnce(page.promise);
+    const resultBox: ResultBox = { current: null };
+
+    const { unmount } = render(
+      <TestHarness boardId={1} client={client} history={[climb('c100', 100)]} pageSize={2} resultBox={resultBox} />,
+    );
+
+    act(() => resultBox.current?.loadOlder());
+    unmount();
+
+    // Resolving after unmount must not throw (the isActive guard swallows the
+    // late continuation instead of setting state on an unmounted tree).
+    await act(async () => {
+      page.resolve([climb('c99', 99), climb('c98', 98)]);
+      await page.promise;
+    });
+  });
+
   it('coalesces loadOlder calls while a fetch is already in flight', async () => {
     const { client, fetchHistory } = makeClient();
     const page = deferred<BoardPresenceClimb[]>();

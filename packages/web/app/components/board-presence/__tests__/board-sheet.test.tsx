@@ -327,6 +327,27 @@ describe('BoardSheet', () => {
       expect(getByText('Oldest Climb')).not.toBeNull();
     });
 
+    it('renders an overlapping older row only once — the live window wins (backfill overlap)', () => {
+      // The live window gained c1/3 AFTER the page containing it resolved
+      // (backfill / foreground catch-up merge); the render-path dedup must
+      // drop the durable copy or the list would have duplicate React keys.
+      presence.history = [makeClimb('c2', 4), makeClimb('c1', 3)];
+      historyPagination.olderHistory = [makeClimb('c1', 3, { name: 'Durable Variant' }), makeClimb('c0', 2)];
+
+      const { getAllByText, getByText, queryByText } = render(
+        createElement(BoardSheet, {
+          open: true,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          onSwitchBoard: noop,
+        }),
+      );
+
+      expect(getAllByText('Climb c1')).toHaveLength(1);
+      expect(queryByText('Durable Variant')).toBeNull();
+      expect(getByText('Climb c0')).not.toBeNull();
+    });
+
     it('disables the button and swaps its label while loading', () => {
       presence.history = [makeClimb('c1', 3)];
       historyPagination.isLoadingOlder = true;

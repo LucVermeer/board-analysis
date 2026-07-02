@@ -97,8 +97,9 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
     },
   ),
   // Render the list inline so header + items + empty state appear in the DOM.
-  // A "reach end" button surfaces `onEndReached` for tests to trigger directly
-  // (real FlatList scroll-position math isn't exercised under jsdom).
+  // "begin scroll" / "reach end" buttons surface `onScrollBeginDrag` /
+  // `onEndReached` for tests to trigger directly (real FlatList
+  // scroll-position math isn't exercised under jsdom).
   BottomSheetFlatList: ({
     data,
     renderItem,
@@ -108,6 +109,7 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
     keyExtractor,
     refreshControl,
     onEndReached,
+    onScrollBeginDrag,
   }: {
     data: BoardPresenceClimb[];
     renderItem: (info: { item: BoardPresenceClimb }) => ReactNode;
@@ -117,6 +119,7 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
     keyExtractor: (item: BoardPresenceClimb) => string;
     refreshControl?: ReactNode;
     onEndReached?: () => void;
+    onScrollBeginDrag?: () => void;
   }) =>
     createElement(
       'div',
@@ -127,6 +130,7 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
         ? ListEmptyComponent
         : data.map((item) => createElement('div', { key: keyExtractor(item) }, renderItem({ item }))),
       ListFooterComponent,
+      createElement('button', { 'aria-label': 'begin scroll', onClick: () => onScrollBeginDrag?.() }),
       createElement('button', { 'aria-label': 'reach list end', onClick: () => onEndReached?.() }),
     ),
 }));
@@ -1175,7 +1179,7 @@ describe('BoardSheet', () => {
   });
 
   describe('load older history', () => {
-    it('calls loadOlder when the list end is reached', () => {
+    it('calls loadOlder when the list end is reached after a user scroll', () => {
       presence.history = [makeClimb('c1', 3)];
       const ref = createRef<BoardSheetHandle>();
       const { getByLabelText } = render(
@@ -1189,6 +1193,32 @@ describe('BoardSheet', () => {
       );
       act(() => ref.current?.present());
 
+      fireEvent.click(getByLabelText('begin scroll'));
+      fireEvent.click(getByLabelText('reach list end'));
+      expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores an end-reach that fires without a user scroll (short-content auto-fire)', () => {
+      // FlatList fires onEndReached immediately when the content is shorter
+      // than the viewport — presenting on a quiet wall must not auto-fetch.
+      presence.history = [makeClimb('c1', 3)];
+      const ref = createRef<BoardSheetHandle>();
+      const { getByLabelText } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      fireEvent.click(getByLabelText('reach list end'));
+      expect(historyPagination.loadOlder).not.toHaveBeenCalled();
+
+      // A real scroll afterwards arms the gate.
+      fireEvent.click(getByLabelText('begin scroll'));
       fireEvent.click(getByLabelText('reach list end'));
       expect(historyPagination.loadOlder).toHaveBeenCalledTimes(1);
     });
@@ -1208,8 +1238,42 @@ describe('BoardSheet', () => {
       );
       act(() => ref.current?.present());
 
+      fireEvent.click(getByLabelText('begin scroll'));
       fireEvent.click(getByLabelText('reach list end'));
       expect(historyPagination.loadOlder).not.toHaveBeenCalled();
+    });
+
+    it('drops olderHistory entries the live window has since absorbed (backfill overlap)', () => {
+      // The live window gained seqs 5..3 (e.g. the initial backfill resolved
+      // AFTER a page load); the loaded page overlaps on c1/3 and even carries
+      // a durable copy of the current climb (c3/5). Each key must render once.
+      presence.currentClimb = makeClimb('c3', 5);
+      presence.history = [makeClimb('c3', 5), makeClimb('c2', 4), makeClimb('c1', 3)];
+      historyPagination.olderHistory = [
+        makeClimb('c3', 5, { name: 'Durable Current' }),
+        makeClimb('c1', 3, { name: 'Durable Variant' }),
+        makeClimb('c0', 2),
+      ];
+      const ref = createRef<BoardSheetHandle>();
+      const { container } = render(
+        createElement(BoardSheet, {
+          ref,
+          boardLabel: 'Garage Wall',
+          onClose: noop,
+          boardConfig,
+          onSwitchBoard: noop,
+        }),
+      );
+      act(() => ref.current?.present());
+
+      // The live variants win; the overlapping durable copies never render.
+      expect(container.textContent).not.toContain('Durable Variant');
+      expect(container.textContent).not.toContain('Durable Current');
+      expect(container.textContent?.match(/Climb c1/g)).toHaveLength(1);
+      // c3 renders once — in the hero only (visibleHistory excludes it).
+      expect(container.textContent?.match(/Climb c3/g)).toHaveLength(1);
+      // Non-overlapping older entries still append.
+      expect(container.textContent).toContain('Climb c0');
     });
 
     it('renders loaded older rows appended after the live history', () => {

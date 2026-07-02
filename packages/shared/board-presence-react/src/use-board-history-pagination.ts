@@ -13,20 +13,33 @@
 // never scrolls that far, and keeps `use-board-presence`'s invariants/tests
 // untouched.
 //
-// KNOWN SEAM: on a very busy wall with the history sheet open a long time,
-// live events keep pushing into the capped in-memory window, evicting older
-// entries out the bottom (`HISTORY_CAP`). If that eviction races ahead of
-// this hook's own paging, a gap can open between the live window's oldest
-// entry and this hook's most recently loaded page. This is accepted as a rare
-// edge case — sheet sessions are short, and every `loadOlder` call re-anchors
-// its cursor on the current minimum known `seq` (across the live window AND
-// everything already paged in), so at worst a climb near that boundary is
-// skipped rather than duplicated.
+// KNOWN SEAMS between the live window and loaded pages:
+//
+// 1. Eviction gap: on a very busy wall with the history sheet open a long
+//    time, live events keep pushing into the capped in-memory window,
+//    evicting older entries out the bottom (`HISTORY_CAP`). If that eviction
+//    races ahead of this hook's own paging, a gap can open between the live
+//    window's oldest entry and this hook's most recently loaded page.
+//    Accepted as a rare edge case — sheet sessions are short, and every
+//    `loadOlder` call re-anchors its cursor on the current minimum known
+//    `seq` (across the live window AND everything already paged in), so at
+//    worst a climb near that boundary is skipped.
+//
+// 2. Backfill overlap: the live window can gain LOWER seqs AFTER a page has
+//    resolved — BACKFILL_HISTORY (and the stale-seq APPLY_CLIMB_SET branch)
+//    merge older entries into the window while it is under `HISTORY_CAP`.
+//    Concretely: present the sheet while the initial `fetchRecentClimbs`
+//    backfill is still in flight (the window holds only live-subscription
+//    events), a `loadOlder` resolves seqs the backfill also covers, then the
+//    backfill lands and merges those same seqs into the live window. This
+//    hook's dedup runs at page-RESOLVE time only, so `olderHistory` can end
+//    up overlapping the live window. Consumers that concatenate the two MUST
+//    therefore re-filter `olderHistory` against the live window's
+//    `(climbUuid, seq)` keys at render — both board sheets do.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { useBoardPresenceClient } from './board-presence-provider';
-import { useBoardPresenceFeed } from './board-presence-provider';
+import { useBoardPresenceClient, useBoardPresenceFeed } from './board-presence-provider';
 import { boardHistoryCursor } from './types';
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -43,7 +56,11 @@ export type BoardHistoryPageLoadedInfo = {
 
 export type BoardHistoryPagination = {
   /** Older-than-the-live-window climbs loaded so far, newest-first, deduped
-   * against the live window and every prior page. */
+   * against the live window and every prior page AS OF EACH PAGE'S RESOLVE
+   * TIME. The live window can subsequently grow to overlap these entries
+   * (backfill merge — seam 2 in the file header), so consumers concatenating
+   * this with the live window must re-filter against the window's
+   * `(climbUuid, seq)` keys at render. */
   olderHistory: BoardPresenceClimb[];
   isLoadingOlder: boolean;
   /** False once a page came back shorter than `pageSize`, or a page fetch

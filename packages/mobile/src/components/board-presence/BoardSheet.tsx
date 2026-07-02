@@ -597,9 +597,7 @@ function BoardSheetContent({
   );
 
   // "Load older" — pages further back through the durable history log, past
-  // the live feed's in-memory HISTORY_CAP window. `olderHistory` is already
-  // deduped against the live window (and every prior page) by the hook, so it
-  // appends onto `visibleHistory` with no overlap.
+  // the live feed's in-memory HISTORY_CAP window.
   const handleHistoryPageLoaded = useCallback(
     (info: { pageSize: number; returnedCount: number }) => {
       track(SHARED_EVENTS.BoardHistoryPageLoaded, {
@@ -614,7 +612,33 @@ function BoardSheetContent({
     undefined,
     handleHistoryPageLoaded,
   );
-  const combinedHistory = useMemo(() => [...visibleHistory, ...olderHistory], [visibleHistory, olderHistory]);
+  // The hook dedupes each page only at resolve time; the live window can gain
+  // lower seqs AFTERWARDS (backfill / pull-to-refresh merge — seam 2 in the
+  // hook's header), so re-filter here or overlapping entries would render
+  // twice with duplicate list keys. Filter against the FULL feed history, not
+  // `visibleHistory`: the current climb is excluded from the list but its key
+  // must still suppress a durable copy of it leaking in from a page.
+  const combinedHistory = useMemo(() => {
+    if (olderHistory.length === 0) return visibleHistory;
+    const liveKeys = new Set(history.map(boardPresenceHistoryKeyExtractor));
+    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(boardPresenceHistoryKeyExtractor(climb)));
+    return dedupedOlder.length === 0 ? visibleHistory : [...visibleHistory, ...dedupedOlder];
+  }, [visibleHistory, history, olderHistory]);
+
+  // FlatList fires onEndReached immediately when the content is shorter than
+  // the viewport, so without this gate every presentation of a quiet wall
+  // would auto-fire a durable history fetch (guaranteed-rejected for
+  // logged-out users). Require a real user scroll first. The ref lives in
+  // this component, which mounts fresh per presentation, so the gate re-arms
+  // on every open.
+  const hasUserScrolledRef = useRef(false);
+  const handleScrollBeginDrag = useCallback(() => {
+    hasUserScrolledRef.current = true;
+  }, []);
+  const handleEndReached = useCallback(() => {
+    if (!hasUserScrolledRef.current) return;
+    loadOlder();
+  }, [loadOlder]);
 
   // Fires once per presentation, when history is FIRST non-empty — not only at
   // mount, because presenting before the initial backfill resolves would find
@@ -842,9 +866,12 @@ function BoardSheetContent({
       ListFooterComponent={listFooter}
       // `loadOlder` already no-ops once `hasMore` is false, but skipping the
       // prop entirely once there's nothing left avoids FlatList re-evaluating
-      // the end-reached threshold on every scroll frame for no reason.
-      onEndReached={hasMore ? loadOlder : undefined}
+      // the end-reached threshold on every scroll frame for no reason. The
+      // handler itself is additionally gated on a real user scroll — see
+      // `hasUserScrolledRef` above.
+      onEndReached={hasMore ? handleEndReached : undefined}
       onEndReachedThreshold={0.6}
+      onScrollBeginDrag={handleScrollBeginDrag}
       contentContainerStyle={{ paddingBottom: spacing[4] }}
       refreshControl={
         <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />

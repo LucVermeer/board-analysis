@@ -47,6 +47,11 @@ import { track } from '@/app/lib/analytics';
 import { DEFAULT_GRADE_COLOR, getGradeTextColor } from '@/app/lib/grade-colors';
 import { useBoardPresenceControls } from './board-presence-context';
 
+/** History rows are keyed (and deduped) by the immutable `(climbUuid, seq)` pair. */
+function historyRowKey(climb: BoardPresenceClimb): string {
+  return `${climb.climbUuid}-${climb.seq}`;
+}
+
 type BoardSheetProps = {
   open: boolean;
   /** The active board label, shown as the sheet subtitle + footer subtitle. */
@@ -150,8 +155,7 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
   const { history, stats } = useBoardPresenceFeed();
 
   // "Load older" — pages further back through the durable history log, past
-  // the live feed's in-memory HISTORY_CAP window. `olderHistory` is already
-  // deduped against the live window (and every prior page) by the hook.
+  // the live feed's in-memory HISTORY_CAP window.
   const handleHistoryPageLoaded = useCallback(
     (info: { pageSize: number; returnedCount: number }) => {
       track(SHARED_EVENTS.BoardHistoryPageLoaded, {
@@ -166,7 +170,16 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
     undefined,
     handleHistoryPageLoaded,
   );
-  const combinedHistory = useMemo(() => [...history, ...olderHistory], [history, olderHistory]);
+  // The hook dedupes each page only at resolve time; the live window can gain
+  // lower seqs AFTERWARDS (backfill / foreground catch-up merge — seam 2 in
+  // the hook's header), so re-filter here or overlapping entries would render
+  // twice with duplicate React keys.
+  const combinedHistory = useMemo(() => {
+    if (olderHistory.length === 0) return history;
+    const liveKeys = new Set(history.map(historyRowKey));
+    const dedupedOlder = olderHistory.filter((climb) => !liveKeys.has(historyRowKey(climb)));
+    return dedupedOlder.length === 0 ? history : [...history, ...dedupedOlder];
+  }, [history, olderHistory]);
 
   // Fires once per open, when history is first non-empty. This body mounts
   // fresh each time the Drawer opens (unmounted while closed), so the ref
@@ -261,7 +274,7 @@ function BoardSheetBody({ boardId }: { boardId: number | null }) {
           <List disablePadding>
             {combinedHistory.map((climb) => (
               <HistoryRow
-                key={`${climb.climbUuid}-${climb.seq}`}
+                key={historyRowKey(climb)}
                 climb={climb}
                 formattedGrade={climb.grade ? formatGrade(climb.grade) : null}
                 gradeColor={getGradeColor(climb.grade) ?? DEFAULT_GRADE_COLOR}
