@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vite-plus/test';
+import { describe, it, expect, vi, afterEach } from 'vite-plus/test';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client';
 import { sessions } from '../db/schema';
@@ -162,6 +162,12 @@ describe('RoomManager.runInactivitySweep', () => {
   // stays null for every test in this file — i.e. the no-Redis,
   // single-instance fallback path that owns `localBoardSerialBySession` /
   // `localRecentClimbsBySession` is exactly what's under test.
+
+  // The tests below spy on the shared pubsub singleton; restore it so the
+  // no-op mock can't bleed into other suites (no global restoreMocks).
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('drains the local board-serial / recent-climbs shadows for swept sessions and still publishes SessionEnded', async () => {
     const staleSessionId = uuidv4();

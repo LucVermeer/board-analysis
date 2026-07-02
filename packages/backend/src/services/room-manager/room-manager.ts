@@ -147,25 +147,22 @@ class RoomManager {
    *
    * Extracted from the `setInterval` callback in `initialize()` so tests can
    * drive a single sweep tick directly instead of waiting on the real
-   * interval. Errors are caught and logged rather than rethrown, matching
-   * the original inline callback's behavior.
+   * interval. Rethrows on failure: the interval callback catches and logs so
+   * a bad tick never kills the timer, while direct callers (tests) see the
+   * error.
    */
   async runInactivitySweep(): Promise<void> {
-    try {
-      const endedIds = await endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS);
-      for (const sessionId of endedIds) {
-        this.clearLocalSessionShadows(sessionId);
-        const event: SessionEvent = {
-          __typename: 'SessionEnded',
-          reason: 'Session ended due to inactivity',
-        };
-        pubsub.publishSessionEvent(sessionId, event);
-        endLiveActivity(sessionId).catch((err) => {
-          logger.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
-        });
-      }
-    } catch (err) {
-      logger.error('[RoomManager] Inactivity sweep failed:', err);
+    const endedIds = await endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS);
+    for (const sessionId of endedIds) {
+      this.clearLocalSessionShadows(sessionId);
+      const event: SessionEvent = {
+        __typename: 'SessionEnded',
+        reason: 'Session ended due to inactivity',
+      };
+      pubsub.publishSessionEvent(sessionId, event);
+      endLiveActivity(sessionId).catch((err) => {
+        logger.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
+      });
     }
   }
 
