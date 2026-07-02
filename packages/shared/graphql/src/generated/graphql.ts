@@ -4813,10 +4813,10 @@ export type Session = {
   lastConnectedBoardSerial?: Maybe<Scalars['String']['output']>;
   /** Optional name for the session */
   name?: Maybe<Scalars['String']['output']>;
-  /** Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) for self-checks against broadcast participant ids — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. TEMPORARILY NULLABLE: a follow-up release will flip this back to ID! once every Session-returning resolver has been audited to confirm it populates the field. Clients should treat null as 'unknown — fall back to clientId for self-checks'. */
-  participantId?: Maybe<Scalars['ID']['output']>;
-  /** Current queue state */
-  queueState: QueueState;
+  /** Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) for self-checks against broadcast participant ids — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. */
+  participantId: Scalars['ID']['output'];
+  /** Current queue state. Null for a non-member preview payload (see the session query resolver) or the HTTP path of createSession, which returns before the creator has joined via WebSocket. */
+  queueState?: Maybe<QueueState>;
   /** When the session was started (ISO 8601) */
   startedAt?: Maybe<Scalars['String']['output']>;
   /** Users currently in the session */

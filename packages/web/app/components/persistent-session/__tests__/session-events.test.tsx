@@ -156,7 +156,7 @@ describe('applySessionEvent reducer', () => {
     expect(next?.clientId).toBe('client-restore');
     expect(next?.participantId).toBe('participant-restore');
     expect(next?.boardPath).toBe('/kilter/1/10/1,2/40/list');
-    expect(next?.queueState.sequence).toBe(7);
+    expect(next?.queueState?.sequence).toBe(7);
   });
 
   it('returns null when prev is null (no session to mutate)', () => {

@@ -37,8 +37,8 @@ export const sessionTypeDefs = /* GraphQL */ `
     boardPath: String!
     "Users currently in the session"
     users: [SessionUser!]!
-    "Current queue state"
-    queueState: QueueState!
+    "Current queue state. Null for a non-member preview payload (see the session query resolver) or the HTTP path of createSession, which returns before the creator has joined via WebSocket."
+    queueState: QueueState
     "Whether the current client is the session leader (presentation/backward compatibility only)"
     isLeader: Boolean!
     driverParticipantId: ID
@@ -49,8 +49,8 @@ export const sessionTypeDefs = /* GraphQL */ `
     lastConnectedBoardSerial: String
     "Unique identifier for this client's connection"
     clientId: ID!
-    "Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) for self-checks against broadcast participant ids — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. TEMPORARILY NULLABLE: a follow-up release will flip this back to ID! once every Session-returning resolver has been audited to confirm it populates the field. Clients should treat null as 'unknown — fall back to clientId for self-checks'."
-    participantId: ID
+    "Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) for self-checks against broadcast participant ids — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity."
+    participantId: ID!
     "Optional session goal text"
     goal: String
     "Whether session is publicly discoverable"

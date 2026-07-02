@@ -317,7 +317,12 @@ export const sessionMutations = {
         queueState: null,
         isLeader: false,
         lastConnectedBoardSerial: null,
-        clientId: null,
+        // `''`, not null: the schema declares `clientId: ID!` and the
+        // stateless HTTP request has no meaningful connection id to report.
+        // Matches buildSessionPayload's empty-string fallback convention
+        // (same class of skew as the queueState-vs-QueueState! mismatch this
+        // PR fixed).
+        clientId: '',
         participantId: ctx.participantId || ctx.connectionId || '',
         goal: input.goal || null,
         isPublic: true,

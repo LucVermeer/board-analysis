@@ -5,8 +5,8 @@ import { checkRateLimitRedis } from '../../../utils/redis-rate-limiter';
 import { getContext } from '../../context';
 import { getDistributedState } from '../../../services/distributed-state';
 import { db } from '../../../db/client';
-import { esp32Controllers } from '@boardsesh/db/schema/app';
-import { eq } from 'drizzle-orm';
+import { esp32Controllers, boardSessionParticipants } from '@boardsesh/db/schema/app';
+import { and, eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 
 // Re-export validateInput from validation schemas
@@ -159,6 +159,87 @@ export async function requireSessionMember(
     });
     throw new Error(`Unauthorized: session mismatch (have: ${finalCtx.sessionId}, requested: ${sessionId})`);
   }
+}
+
+/**
+ * Non-throwing, single-shot membership check for the `session` query gate.
+ *
+ * Unlike `requireSessionMember`, this does NOT retry with backoff — it's read
+ * by a query resolver that needs an immediate member/non-member decision to
+ * choose between a full payload and a redacted preview, not to block a
+ * mutation/subscription while `joinSession` context propagation catches up.
+ * The retrying behavior stays exclusively on `requireSessionMember`.
+ *
+ * Checked in order, short-circuiting on the first match:
+ *   1. Local context — the connection's tracked context has a matching
+ *      `sessionId` (fast path, same backend instance).
+ *   2. Distributed state — `isConnectionInSession` for a WS connection
+ *      tracked on a different instance. A failed lookup (Redis blip) logs
+ *      and falls through to 3 rather than throwing — an error can never
+ *      grant membership, but it must not 500 the query either (that would
+ *      take the mobile pre-join preview down with it).
+ *   3. Durable participant record — PK lookup on `board_session_participants`
+ *      (same predicate as `verifyWidgetSession` in widget-session-guard.ts).
+ *      Only meaningful when `ctx.userId` is set. HTTP requests get a fresh
+ *      `http-<uuid>` connectionId per request (see yoga.ts), so 1–2 can never
+ *      match an HTTP caller — they skip straight here — and this is the only
+ *      durable signal available for an authenticated one.
+ *
+ * Anonymous HTTP callers with no local/distributed match — including a
+ * genuine past participant who isn't currently logged in — fall through to
+ * `false`. There's no stable identity to check durably in that case; this is
+ * an accepted degradation (they still get the invite-preview payload, not an
+ * error).
+ */
+export async function isSessionMember(ctx: ConnectionContext, sessionId: string): Promise<boolean> {
+  // HTTP requests are stateless — never in the local context map, never in
+  // distributed state — so the connection-based checks can't match; skip
+  // straight to the durable record.
+  if (ctx.transport !== 'http') {
+    const latestCtx = getContext(ctx.connectionId);
+    if (latestCtx?.sessionId === sessionId) {
+      return true;
+    }
+
+    const distributedState = getDistributedState();
+    if (distributedState) {
+      try {
+        const isInSession = await distributedState.isConnectionInSession(ctx.connectionId, sessionId);
+        if (isInSession) {
+          return true;
+        }
+      } catch (error) {
+        logger.warn('[Auth] isSessionMember: distributed-state check failed; falling through to durable check', {
+          connectionId: ctx.connectionId,
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  if (ctx.userId) {
+    // Primary client (`db`, not `dbRead`), matching verifyWidgetSession: the
+    // participant row is written on join, and reading it from a lagging
+    // replica could demote a freshly-joined authenticated HTTP caller to the
+    // preview payload. A single PK-indexed row read is cheap on the primary.
+    //
+    // Note this also grants the full payload to an authenticated WS
+    // connection that holds a past-participant row but isn't currently
+    // joined. Intentional: it's the same trust signal the HTTP resync path
+    // accepts — that user could fetch the same payload over HTTP anyway,
+    // and could simply rejoin.
+    const rows = await db
+      .select({ sessionId: boardSessionParticipants.sessionId })
+      .from(boardSessionParticipants)
+      .where(and(eq(boardSessionParticipants.userId, ctx.userId), eq(boardSessionParticipants.sessionId, sessionId)))
+      .limit(1);
+    if (rows.length > 0) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**

@@ -513,6 +513,16 @@ The `sessionStatus(sessionId)` query exists solely for this disambiguation:
 - It requires no auth by design: it exposes only existence + ended-state, and auth may not be restored yet at cold start. This is also why mobile can't reuse the web flow described above — the `GET_SESSION_SUMMARY` pre-flight requires an authenticated caller.
 - Client behaviour (`packages/mobile/src/providers/queue-provider.tsx`): anything but `active` (so `ended` or `null`) → clear the stored id; `active` → restore; fetch failure (offline cold start) → restore optimistically so the queue still comes back, since a dead session stays escapable via End Session.
 
+### Session Query Membership Gate (`session`)
+
+The `session(sessionId)` query serves two audiences with one payload shape, split by membership:
+
+- **Members** get the full payload: queue state, roster, `lastConnectedBoardSerial`, metadata. Membership is resolved by `isSessionMember` (`resolvers/shared/helpers.ts`) — a **single-shot, non-throwing** check, unlike the retrying `requireSessionMember` used by mutations/subscriptions. It short-circuits through: the connection's local context → `distributedState.isConnectionInSession` (cross-instance WS) → a durable `board_session_participants` row when `ctx.userId` is set (primary DB, same predicate as the widget guard). The durable fallback exists because HTTP GraphQL requests are stateless — each gets a fresh `http-<uuid>` connectionId (`yoga.ts`), so connection-based checks can never match an HTTP caller.
+- **Non-members** get a redacted invite-preview instead of an error: session metadata plus the full `users` roster (mobile's join-confirmation screen shows who's climbing before the user commits — `GET_SESSION`), with `queueState: null`, `lastConnectedBoardSerial: null`, `isLeader: false`. The roster-in-preview contract applies to private (`isPublic: false`) sessions too — an invite link is the access token. An **anonymous** HTTP caller who is genuinely in the session also lands here (no stable identity to check durably) — accepted degradation, relevant to mobile's `GET_SESSION_QUEUE_STATE` resync, which already null-guards `session?.queueState`.
+- **Empty live roster** returns `null` before any membership check runs (the dormant-session contract `sessionStatus` disambiguates, above).
+
+The compat matrix is pinned by `packages/backend/src/__tests__/session-query-gate.test.ts`.
+
 ### Multi-Board Sessions
 
 Sessions can be linked to multiple boards within the same gym via the `sessionBoards` junction table. This is validated at creation time:

@@ -497,6 +497,17 @@ export function useSessionLifecycle({
         const lastSeq = lastReceivedSequenceRef.current;
         const sessionData = await joinSession(clientForReconnect);
         if (!sessionData || !mountedRef.current) return;
+        // joinSession (WS member payload) always returns a full queue
+        // snapshot — the schema field is nullable only for the `session`
+        // query's non-member preview and createSession's HTTP path, which
+        // never flow through here. Without a snapshot there is no sequence
+        // or hash to reconcile against, so treat it like a failed rejoin
+        // (the reconnect supervisor will retry) instead of guessing.
+        const rejoinedQueueState = sessionData.queueState;
+        if (!rejoinedQueueState) {
+          console.error('[PersistentSession] JoinSession returned no queue snapshot; skipping reconnect sync');
+          return;
+        }
 
         // Match the initial `connect()` success path: reset both retry
         // counters now that we know the rejoin succeeded. Otherwise a
@@ -509,7 +520,7 @@ export function useSessionLifecycle({
         transientRetryCount = 0;
         subscriptionRetryCount = 0;
 
-        const currentSeq = sessionData.queueState.sequence;
+        const currentSeq = rejoinedQueueState.sequence;
         const gap = lastSeq !== null ? currentSeq - lastSeq : 0;
 
         if (DEBUG)
@@ -564,11 +575,11 @@ export function useSessionLifecycle({
           applyFullSync(sessionData);
         } else if (gap === 0) {
           const localHash = computeQueueStateHash(queueRef.current, currentClimbQueueItemRef.current?.uuid || null);
-          if (localHash !== sessionData.queueState.stateHash) {
+          if (localHash !== rejoinedQueueState.stateHash) {
             if (DEBUG) console.info('[PersistentSession] Hash mismatch on reconnect despite gap=0, applying full sync');
             applyFullSync(sessionData);
           } else {
-            setLastReceivedStateHash(sessionData.queueState.stateHash);
+            setLastReceivedStateHash(rejoinedQueueState.stateHash);
             if (DEBUG) console.info('[PersistentSession] No missed events, already in sync');
           }
         }
