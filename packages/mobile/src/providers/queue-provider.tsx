@@ -39,20 +39,18 @@ import {
   SESSION_UPDATES_SUBSCRIPTION,
   CREATE_SESSION,
   END_SESSION,
-  SESSION_STATUS,
   GET_SESSION_QUEUE_STATE,
   type CreateSessionMutationResponse,
   type EndSessionMutationResponse,
   type SessionUpdateEvent,
   type SessionLiveStatsEvent,
-  type SessionStatusQueryResponse,
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
 import { getDeviceTimezone } from '../lib/device-timezone';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
-import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { getStoredQueueSnapshot, setStoredQueueSnapshot, clearStoredQueueSnapshot } from '../lib/queue-snapshot-store';
+import { setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
+import { clearStoredQueueSnapshot } from '../lib/queue-snapshot-store';
 import { emitWallConfirm, findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
@@ -82,6 +80,7 @@ import {
   type QueuePlaylistSuggestionContextValue,
 } from './queue/queue-contexts';
 import { useQueueRegrade } from './queue/use-queue-regrade';
+import { useQueuePersistence } from './queue/use-queue-persistence';
 
 // Narrow subscription hooks moved to ./queue/queue-contexts; re-exported here so
 // the `providers/queue-provider` import path (18 call sites) stays unchanged.
@@ -330,9 +329,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
-
-  // Cold-start restore lives below, after restoreQueueSnapshot is defined —
-  // it needs the snapshot helper for the solo-queue branch.
 
   // showToast and t aren't stable callbacks — capture via refs so the WS
   // subscription effect doesn't tear down & re-subscribe on locale change
@@ -769,21 +765,19 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // shared mutation already swallows transport errors and is a true no-op in
   // solo (never lazily creates a session), so callers can fire it freely.
   const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
-  const restoreQueueSnapshot = useCallback(
-    (snapshot: {
-      queue: ClimbQueueItem[];
-      currentClimbQueueItem: ClimbQueueItem | null;
-      playlistSuggestionSource: PlaylistSuggestionSource | null;
-    }) => {
-      dispatch({
-        type: 'UPDATE_QUEUE',
-        payload: { queue: snapshot.queue, currentClimbQueueItem: snapshot.currentClimbQueueItem },
-      });
-      dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: snapshot.playlistSuggestionSource });
-      setPlaylistSuggestionSourceState(snapshot.playlistSuggestionSource);
-    },
-    [],
-  );
+  // Solo-queue persistence: cold-start restore (explicit session first, then the
+  // local snapshot) + the debounced solo snapshot save. See useQueuePersistence.
+  useQueuePersistence({
+    dispatch,
+    sessionIdRef,
+    setSessionId,
+    stateRef,
+    sessionId,
+    queue: state.queue,
+    currentClimbQueueItem: state.currentClimbQueueItem,
+    playlistSuggestionSource,
+    setPlaylistSuggestionSourceState,
+  });
 
   // Explicit session creation — the Start button (PreSessionView) and nothing
   // else. Sessions are never created lazily: the solo queue lives locally
@@ -888,102 +882,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     },
     [ensureJoined, mutations, showToast, t],
   );
-
-  // Cold-start restore, explicit-session first: a stored session id (persisted
-  // only on explicit start/join) is verified and rejoined; otherwise the local
-  // solo queue snapshot hydrates the reducer. The gate flag below keeps the
-  // save effect from clobbering a stored snapshot with the initial empty state.
-  const snapshotHydratedRef = useRef(false);
-  useEffect(() => {
-    let cancelled = false;
-    const hydrateLocalSnapshot = async () => {
-      const snapshot = await getStoredQueueSnapshot();
-      if (cancelled || !snapshot) return;
-      // The user may have started acting — or a session may have appeared —
-      // before the async load resolved; never clobber newer state.
-      if (sessionIdRef.current !== null) return;
-      if (stateRef.current.queue.length > 0 || stateRef.current.currentClimbQueueItem) return;
-      restoreQueueSnapshot(snapshot);
-    };
-    void getStoredSessionId()
-      .then(async (storedId) => {
-        if (__DEV__) {
-          console.info(`[session] restored from store: ${storedId ?? '(none)'}`);
-        }
-        if (!storedId) {
-          await hydrateLocalSnapshot();
-          return;
-        }
-        try {
-          // Verify the stored session is still alive before rejoining. Without
-          // this, JOIN_SESSION recreates a server-ended room as an empty zombie
-          // and we land in InSessionView with no peers (#2683). sessionStatus
-          // reads the durable session row, NOT the presence-gated `session`
-          // query — that one returns null for any empty session, so it can't
-          // tell an ended session apart from a dormant-but-active solo session.
-          // null means the session row no longer exists; anything but 'active'
-          // means drop the stored id.
-          const { sessionStatus } = await getHttpClient().request<SessionStatusQueryResponse>(SESSION_STATUS, {
-            sessionId: storedId,
-          });
-          if (cancelled) return;
-          if (sessionStatus !== 'active') {
-            if (__DEV__) {
-              console.info(`[session] stored session ${storedId} ended/missing; clearing`);
-            }
-            await clearStoredSessionId();
-            await hydrateLocalSnapshot();
-            return;
-          }
-          setSessionId(storedId);
-        } catch (err) {
-          // graphql-request's ClientError always carries `response`; a genuine
-          // network failure (fetch reject) doesn't — same structural check as
-          // createSessionWithConfig's error handling above.
-          const isServerResponse = !!err && typeof err === 'object' && 'response' in err;
-          if (isServerResponse) {
-            // The backend answered but the query failed (version skew — an
-            // older backend without sessionStatus — or a masked 500). Don't
-            // restore: a zombie session would put the whole app "in session".
-            // Don't clear either: the id may verify fine once backend/app
-            // versions align, so the next launch retries.
-            reportError(err, { tags: { source: 'sessionRestore' } });
-            await hydrateLocalSnapshot();
-            return;
-          }
-          // Offline cold start: can't verify the session status, so restore
-          // optimistically so the queue still comes back. A genuinely-dead
-          // session stays escapable via End Session.
-          if (__DEV__) {
-            console.warn('[session] status check failed; restoring optimistically', err);
-          }
-          if (!cancelled) setSessionId(storedId);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) snapshotHydratedRef.current = true;
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [restoreQueueSnapshot]);
-
-  // Persist the SOLO queue across launches. Only while no session is active —
-  // a session's queue is server-owned (the rejoin FullSync restores it) — and
-  // only after the cold-start hydrate settles. Writing the empty state doubles
-  // as the clear when the user empties the queue or a session teardown resets
-  // it; the debounce coalesces mutation bursts (swipes, clear-queue removals).
-  useEffect(() => {
-    if (!snapshotHydratedRef.current || sessionId !== null) return undefined;
-    const persistTimeout = setTimeout(() => {
-      void setStoredQueueSnapshot({
-        queue: state.queue,
-        currentClimbQueueItem: state.currentClimbQueueItem,
-        playlistSuggestionSource,
-      });
-    }, 500);
-    return () => clearTimeout(persistTimeout);
-  }, [state.queue, state.currentClimbQueueItem, playlistSuggestionSource, sessionId]);
 
   // Reconcile the local queue against the server's authoritative snapshot after
   // a party-session mutation fails. The optimistic reducer delta already applied
