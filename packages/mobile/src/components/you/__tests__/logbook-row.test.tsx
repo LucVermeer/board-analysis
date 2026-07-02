@@ -246,10 +246,10 @@ describe('LogbookRow — meta line', () => {
 
   it('shows the video glyph only when a beta video is attached', () => {
     const { container: withBeta } = renderRow(ascent({ hasBetaVideo: true }));
-    expect(iconNames(withBeta)).toContain('video');
+    expect(iconNames(withBeta)).toContain('video.fill');
 
     const { container: withoutBeta } = renderRow(ascent({ hasBetaVideo: null }));
-    expect(iconNames(withoutBeta)).not.toContain('video');
+    expect(iconNames(withoutBeta)).not.toContain('video.fill');
   });
 
   it('labels the wall by the user-named board, falling back to the layout', () => {

@@ -450,7 +450,10 @@ export const LogbookRow = memo(function LogbookRow({
                   {primaryMetaText}
                 </Text>
                 {hasNote ? <Icon name="edit" size={11} color={systemColors.secondaryLabel} /> : null}
-                {hasBetaVideo ? <Icon name="video" size={12} color={systemColors.secondaryLabel} /> : null}
+                {/* Filled + brand-violet on purpose (vs the grey note pencil):
+                    "you have beta for this climb" is the marker climbers hunt
+                    for, and colour-as-content is sanctioned for media presence. */}
+                {hasBetaVideo ? <Icon name="video.fill" size={13} color={brand.primary} /> : null}
                 {showTimeInline ? (
                   <Text variant="footnote" color={systemColors.tertiaryLabel}>
                     {timeLabel}
