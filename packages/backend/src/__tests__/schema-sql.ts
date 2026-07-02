@@ -21,6 +21,15 @@ export const schemaSQL = `
     "updated_at" timestamp DEFAULT now() NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS "user_profiles" (
+    "user_id" text PRIMARY KEY,
+    "display_name" text,
+    "avatar_url" text,
+    "instagram_url" text,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS "user_climb_percentiles" (
     "user_id" text PRIMARY KEY NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
     "total_distinct_climbs" integer DEFAULT 0 NOT NULL,
