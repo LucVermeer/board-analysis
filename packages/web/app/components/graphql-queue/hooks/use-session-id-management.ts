@@ -61,10 +61,14 @@ export function useSessionIdManagement({
   //     the user browses board Y must not leak X's id into board Y (which would
   //     flicker `isPersistentSessionActive` true on the wrong board); the match
   //     keeps board Y reading its own cookie.
+  //
+  // The match is intentionally strict: an active session with no `boardPath`
+  // matches NOTHING (its `activeSessionBoardPath` is null), so every board route
+  // falls back to its own cookie rather than adopting the boardless session.
+  // A permissive `!activeSessionBoardPath` arm would re-open the multi-session
+  // restore race the deleted sync effects guarded against.
   const boardMatchedPersistentSessionId =
-    persistentSessionId && (!activeSessionBoardPath || activeSessionBoardPath === baseBoardPath)
-      ? persistentSessionId
-      : null;
+    persistentSessionId && activeSessionBoardPath === baseBoardPath ? persistentSessionId : null;
 
   const sessionId = isOffBoardMode ? persistentSessionId : (boardMatchedPersistentSessionId ?? cookieSessionId);
 
@@ -162,10 +166,13 @@ export function useSessionIdManagement({
   const endSession = useCallback(() => {
     const endingSessionId = sessionId;
     if (endingSessionId) emitSessionEnded(endingSessionId, 'user_left');
+    // Eager clear. `endSessionWithSummary` below deactivates the persistent
+    // session, which trips the `prevPersistentSessionIdRef` effect to clear the
+    // cookie again — a harmless, idempotent double-clear.
     clearClimbSessionCookie();
     setCookieSessionId(null);
     const boardType =
-      persistentSession.activeSession?.parsedParams.board_name ?? baseBoardPath.split('/').filter(Boolean)[0] ?? null;
+      persistentSession.activeSession?.parsedParams?.board_name ?? baseBoardPath.split('/').filter(Boolean)[0] ?? null;
     persistentSession.endSessionWithSummary({ sessionId: endingSessionId, boardType });
   }, [persistentSession, sessionId, baseBoardPath]);
 

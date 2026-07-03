@@ -114,6 +114,17 @@ describe('useSessionIdManagement — session id derivation', () => {
     expect(result.current.isPersistentSessionActive).toBe(false);
   });
 
+  it('board route: does NOT adopt a persistent session that has no boardPath (falls back to the cookie)', () => {
+    // A malformed/boardless active session must match NOTHING — the strict match
+    // (activeSessionBoardPath === baseBoardPath) makes its null board path fail
+    // for every route, so the derivation reads the cookie rather than adopting it.
+    mockCookie = 'cookie-sess';
+    mockActiveSession = { sessionId: 'boardless-sess', boardPath: '' };
+    const { result } = renderSessionId();
+    expect(result.current.sessionId).toBe('cookie-sess');
+    expect(result.current.isPersistentSessionActive).toBe(false);
+  });
+
   it('board route: keeps reading the cookie during the IndexedDB-load window (persistent id briefly null)', () => {
     mockCookie = 'cookie-sess';
     mockActiveSession = null; // restore not yet complete

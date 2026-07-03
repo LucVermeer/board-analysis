@@ -648,6 +648,9 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         disconnect();
         clearClimbSessionCookie();
       } else {
+        // Unreachable while a session is active: both queue providers expose
+        // `disconnect` whenever there's a session to leave, so this only
+        // satisfies the optional type.
         showMessage(t('queueBar.leaveFailed'), 'warning');
       }
       return;
@@ -658,6 +661,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     if (endSession) {
       endSession();
     } else if (disconnect) {
+      // Unreachable while a session is active: both queue providers always
+      // expose `endSession` then, so this fallback only satisfies the optional
+      // type. It intentionally leaves WITHOUT a summary — if it ever ran (no
+      // active session) there's no recap to show anyway.
       disconnect();
       clearClimbSessionCookie();
     } else {

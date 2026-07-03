@@ -217,6 +217,14 @@ vi.mock('@/app/lib/share-utils', () => ({
   shareWithFallback: vi.fn(),
 }));
 
+// Spy on the session cookie clear so the leave-path assertion can check it.
+const mockClearClimbSessionCookie = vi.fn();
+vi.mock('@/app/lib/climb-session-cookie', () => ({
+  clearClimbSessionCookie: () => mockClearClimbSessionCookie(),
+  getClimbSessionCookie: vi.fn(() => null),
+  setClimbSessionCookie: vi.fn(),
+}));
+
 // jsdom doesn't provide window.matchMedia — stub it before the component
 // accesses it (the swipe-hint effect calls matchMedia on mount).
 Object.defineProperty(window, 'matchMedia', {
@@ -557,7 +565,7 @@ describe('QueueControlBar leave session branch', () => {
     expect(disconnect).not.toHaveBeenCalled();
   });
 
-  it('leaves (no summary) when other participants remain', () => {
+  it('leaves (no summary) when other participants remain, and clears the session cookie', () => {
     const { endSession, disconnect } = leaveFromBar({
       users: [
         makeRosterUser('user-uuid', { userId: 'user-uuid' }),
@@ -568,6 +576,9 @@ describe('QueueControlBar leave session branch', () => {
     });
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect(endSession).not.toHaveBeenCalled();
+    // The leave path clears the cookie so a board-route remount doesn't
+    // re-activate the session this participant just left.
+    expect(mockClearClimbSessionCookie).toHaveBeenCalledTimes(1);
   });
 
   it('counts a RECONNECTING peer as present, so it leaves instead of ending', () => {
