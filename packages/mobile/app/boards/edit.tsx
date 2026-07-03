@@ -56,6 +56,26 @@ export default function EditBoard() {
     );
   }
 
+  // The edit affordance is only shown when the viewer can edit, but a direct
+  // deep-link can still land here. The server rejects the save regardless, so
+  // show a clear "no access" state instead of a form that can only fail.
+  if (!board.canEdit) {
+    return (
+      <View style={[styles.centered, { backgroundColor: systemColors.background }]}>
+        <Icon name="lock" size={40} color={iosSystemColors.systemGray} />
+        <Text variant="headline" style={styles.stateTitle}>
+          {t('mobile.edit.noAccess')}
+        </Text>
+        <Button
+          title={t('mobile.edit.back')}
+          variant="outlined"
+          onPress={() => router.back()}
+          style={styles.stateButton}
+        />
+      </View>
+    );
+  }
+
   // Remount the form per board so the builder seeds (incl. the More-options meta,
   // which only applies via the state initialisers) from a fully-loaded board.
   return <EditBoardForm key={board.uuid} board={board} />;
