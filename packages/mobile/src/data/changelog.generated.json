@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T22:03:17.414Z",
+  "generatedAt": "2026-07-03T22:08:43.401Z",
   "entries": [
+    {
+      "prNumber": 3321,
+      "category": "new",
+      "title": "Dev/tester OTA-tooling screens; RN → native rendering with no behaviour change.",
+      "mergedAt": "2026-07-03T22:03:23Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3321"
+    },
     {
       "prNumber": 3425,
       "category": "fixed",

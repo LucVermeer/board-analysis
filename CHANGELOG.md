@@ -14,6 +14,7 @@ A new version shipped to the Play Store.
 
 ### New
 
+- Dev/tester OTA-tooling screens; RN → native rendering with no behaviour change. ([#3321](https://github.com/boardsesh/boardsesh/pull/3321))
 - Working a climb all session no longer floods your logbook — burns and the send collapse into one row with the day's total tries. Tap-and-hold or swipe still reaches every individual entry. ([#3384](https://github.com/boardsesh/boardsesh/pull/3384))
   Your projects now show alongside your sends by default. Flip back to sends-only anytime with the Show filter — your choice sticks.
   Open any climb you've worked and see your history per angle: total tries, sessions, and sends at 40° vs 45°.
