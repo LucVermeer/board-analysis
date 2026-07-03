@@ -38,6 +38,7 @@ type GroupedItem = {
   uuid: string;
   status: string;
   climbedAt: string;
+  isBenchmark: boolean;
 };
 
 type Group = {
@@ -48,6 +49,7 @@ type Group = {
   flashCount: number;
   sendCount: number;
   attemptCount: number;
+  isBenchmark: boolean;
 };
 
 type GroupedResult = {
@@ -161,13 +163,14 @@ const insertBoardClimbStats = async (params: {
   boardType?: string;
   angle?: number;
   displayDifficulty: number;
+  benchmarkDifficulty?: number;
 }) => {
   const boardType = params.boardType ?? 'kilter';
   const angle = params.angle ?? 40;
   await db.execute(sql`
-    INSERT INTO board_climb_stats (board_type, climb_uuid, angle, display_difficulty, ascensionist_count, difficulty_average, quality_average)
-    VALUES (${boardType}, ${params.climbUuid}, ${angle}, ${params.displayDifficulty}, 10, ${params.displayDifficulty}, 4)
-    ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET display_difficulty = excluded.display_difficulty
+    INSERT INTO board_climb_stats (board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty, ascensionist_count, difficulty_average, quality_average)
+    VALUES (${boardType}, ${params.climbUuid}, ${angle}, ${params.displayDifficulty}, ${params.benchmarkDifficulty ?? null}, 10, ${params.displayDifficulty}, 4)
+    ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET display_difficulty = excluded.display_difficulty, benchmark_difficulty = excluded.benchmark_difficulty
   `);
 };
 
@@ -1191,6 +1194,27 @@ describe('tickQueries — behavior fixes', () => {
       const projectGroup = both.groups.find((group) => group.climbUuid === projectUuid);
       expect(sentGroup?.items.every((item) => item.hasBetaVideo)).toBe(true);
       expect(projectGroup?.items.every((item) => !item.hasBetaVideo)).toBe(true);
+    });
+
+    it('flags the group header as benchmark when the consensus stats say so, matching its rows', async () => {
+      // Consensus-benchmark climb (benchmark_difficulty > 0) ticked without the
+      // tick's own is_benchmark flag. Both the header and the rows must resolve
+      // to benchmark — regression guard for #3393 (header was on the raw flag).
+      const climbUuid = `${CLIMB_PREFIX}grouped-benchmark`;
+      await insertClimb(climbUuid, 'Consensus Benchmark');
+      await insertBoardClimbStats({ climbUuid, displayDifficulty: 15, benchmarkDifficulty: 15 });
+      await insertTick({
+        uuid: 'grp-bench-1',
+        climbUuid,
+        climbedAt: '2026-06-25T10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserGroupedAscentsFeed(TEST_USER_ID, { limit: 20, offset: 0 });
+      const group = result.groups.find((candidate) => candidate.climbUuid === climbUuid);
+
+      expect(group?.isBenchmark).toBe(true);
+      expect(group?.items.every((item) => item.isBenchmark)).toBe(true);
     });
   });
 
