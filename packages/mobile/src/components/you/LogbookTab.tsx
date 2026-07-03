@@ -217,9 +217,12 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
     // The wall label ("Alex's board 35°") feeds the divider/subdivider context;
     // derivation needs the app's board metadata so it happens here, not in the
     // shared builder.
+    // Board identity only — the angle stays on every row (it varies per climb
+    // on adjustable boards and is the repeat-ascent disambiguator; a per-angle
+    // wall key would ping-pong sub-dividers through an angle-hopping session).
     const withWalls = items.map((item) => ({
       ...item,
-      wall: `${item.boardDisplayName ?? getLayoutDisplayName(item.boardType, item.layoutId)} ${item.angle}°`,
+      wall: item.boardDisplayName ?? getLayoutDisplayName(item.boardType, item.layoutId),
     }));
     const rows: LogbookListRow<AscentFeedItem>[] = showDividers
       ? buildLogbookListRows(withWalls, { hasMore: feed.hasNextPage ?? false })
@@ -373,7 +376,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
       return (
         <LogbookRow
           ascent={row.item}
-          showWallInMeta={!row.wallCovered}
+          showBoardInMeta={!row.wallCovered}
           fontScale={fontScale}
           onActivate={handleActivate}
           onOpenActions={handleOpenActions}

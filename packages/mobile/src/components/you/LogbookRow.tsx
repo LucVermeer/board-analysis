@@ -56,11 +56,13 @@ type LogbookRowProps = {
    */
   onDeleteRequest?: (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => void;
   /**
-   * Whether the meta line carries the wall (board + angle). The logbook tab
-   * passes false when a divider or subdivider above already names it; defaults
-   * to true so flat views and the share-beta picker never lose the wall.
+   * Whether the meta line carries the BOARD name. The logbook tab passes false
+   * when a divider or subdivider above already names the board; the angle
+   * stays on the row either way (it varies per climb on adjustable boards and
+   * disambiguates repeat ascents). Defaults to true so flat views and the
+   * share-beta picker never lose the wall.
    */
-  showWallInMeta?: boolean;
+  showBoardInMeta?: boolean;
   /**
    * Device font scale, passed by the host so a 50-row list holds ONE dimension
    * subscription (the tab's) instead of one per row — useWindowDimensions in a
@@ -153,7 +155,7 @@ export const LogbookRow = memo(function LogbookRow({
   onOpenActions,
   onEdit,
   onDeleteRequest,
-  showWallInMeta = true,
+  showBoardInMeta = true,
   fontScale = 1,
 }: LogbookRowProps) {
   const { t, i18n } = useTranslation('you');
@@ -223,7 +225,7 @@ export const LogbookRow = memo(function LogbookRow({
   // Between the tiers (1.15–1.3) the time is INTENTIONALLY absent from the
   // visual layout — it's the lowest-value part and the a11y label still
   // speaks it; it returns in the context line once the two-line layout kicks in.
-  const metaWall = showWallInMeta ? boardAngleLabel : null;
+  const metaWall = showBoardInMeta ? boardAngleLabel : `${ascent.angle}°`;
   const primaryMetaText = twoLineMeta ? attemptsLabel : [attemptsLabel, metaWall].filter(Boolean).join(' · ');
   const contextMetaText = twoLineMeta ? [metaWall, timeLabel].filter(Boolean).join(' · ') : null;
 
