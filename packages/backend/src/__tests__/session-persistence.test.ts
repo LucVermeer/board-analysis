@@ -762,6 +762,56 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       const session = nearby.find((s) => s.id === sessionId);
       expect(session).toBeUndefined();
     });
+
+    it('gates liveness on live connections, not the RECONNECTING ghost, for a solo authenticated user', async () => {
+      // Discovery reports two different counters: liveness follows the live
+      // *connection* count (`getSessionMemberCount`, `0 ⟺ nobody connected`),
+      // while the displayed head-count is the deduped *participant* count
+      // (`getSessionParticipantCount`, which intentionally still includes an
+      // authenticated user parked in their 60s RECONNECTING grace window). If
+      // liveness trusted the deduped count instead, a solo climber mid-reconnect
+      // — zero live connections — would keep advertising a session nobody is in.
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+      const userId = 'grace-window-user';
+
+      await db.execute(sql`
+        INSERT INTO users (id, email, name, created_at, updated_at)
+        VALUES (${userId}, ${userId + '@grace.test'}, ${userId}, now(), now())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      try {
+        await roomManager.createDiscoverableSession(sessionId, boardPath, userId, 37.7749, -122.4194, 'Grace Session');
+
+        // Authenticated solo user → stable participantId == userId.
+        await registerAndJoinSession('client-1', sessionId, boardPath, 'User1', userId);
+
+        let nearby = await roomManager.findNearbySessions(37.7749, -122.4194, 10000);
+        let found = nearby.find((s) => s.id === sessionId);
+        expect(found?.isActive).toBe(true);
+        expect(found?.participantCount).toBe(1);
+
+        // Passive disconnect parks the user as RECONNECTING: zero live
+        // connections, but the participant entry lingers so a reconnect resumes.
+        const disconnectResult = await roomManager.disconnectClient('client-1');
+        expect(disconnectResult?.presenceUser).toEqual(expect.objectContaining({ connectionState: 'RECONNECTING' }));
+
+        // Simulate the discovery session hash lapsing (independent TTL) while the
+        // grace ghost is still parked under its own participant keys. Liveness now
+        // has zero live connections AND no Redis existence, so the session must
+        // drop out of discovery — the lingering deduped participant must NOT keep
+        // it alive.
+        await mockRedis.del(`boardsesh:session:${sessionId}`);
+
+        nearby = await roomManager.findNearbySessions(37.7749, -122.4194, 10000);
+        found = nearby.find((s) => s.id === sessionId);
+        expect(found).toBeUndefined();
+      } finally {
+        await db.execute(sql`DELETE FROM board_sessions WHERE created_by_user_id = ${userId}`);
+        await db.execute(sql`DELETE FROM users WHERE id = ${userId}`);
+      }
+    });
   });
 
   describe('Graceful Degradation - Redis Unavailable', () => {

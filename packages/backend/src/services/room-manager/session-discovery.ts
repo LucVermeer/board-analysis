@@ -172,14 +172,29 @@ export async function findNearbySessions(
 
   const result: DiscoverableSession[] = [];
   for (const { session, distance } of sessionsWithDistance) {
+    // Liveness and the displayed head-count come from two different counters.
+    // `getSessionMemberCount` counts live *connections* — its `0 ⟺ no live
+    // connections` contract is what liveness depends on. `getSessionParticipantCount`
+    // counts distinct *participants* (deduped), and deliberately still includes
+    // an authenticated user parked in their RECONNECTING grace window (0 live
+    // connections). Gating visibility on the participant count would advertise a
+    // solo climber's session as active while they're mid-reconnect with nobody
+    // actually connected, so liveness uses the connection count and the deduped
+    // participant count is display-only.
+    let liveConnectionCount: number;
     let participantCount: number;
     if (distributedState) {
+      liveConnectionCount = await distributedState.getSessionMemberCount(session.id);
       participantCount = await distributedState.getSessionParticipantCount(session.id);
     } else {
-      participantCount = sessionsMap.get(session.id)?.size || 0;
+      // Non-distributed fallback: the local session map holds connection ids and
+      // has no participant/connection split, so use it for both to keep liveness
+      // and display consistent.
+      liveConnectionCount = sessionsMap.get(session.id)?.size || 0;
+      participantCount = liveConnectionCount;
     }
 
-    let isActive = participantCount > 0;
+    let isActive = liveConnectionCount > 0;
     if (!isActive && redisStore) {
       isActive = redisExistsMap.get(session.id) || false;
     }

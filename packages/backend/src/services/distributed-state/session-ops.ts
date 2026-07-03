@@ -597,6 +597,14 @@ export async function getSessionMemberCount(redis: Redis, sessionId: string): Pr
  * NOT interchangeable with `getSessionMemberCount`, which counts live
  * *connections* — that connection count backs liveness checks whose `0 ⟺ no
  * live connections` contract must hold during the RECONNECTING grace window.
+ *
+ * Deliberately a full `getSessionMembers` fetch rather than an O(1)
+ * `SCARD(sessionParticipants)`: `getSessionMembers` prunes participants whose
+ * hash has expired but whose id lingers in the `sessionParticipants` set (a
+ * TTL race the sweep hasn't caught yet). `SCARD` would count those stale ids,
+ * re-introducing a smaller version of the ghost inflation this path exists to
+ * avoid. The extra hash reads run only on discovery/display queries, not a hot
+ * loop, so the accuracy is worth the cost.
  */
 export async function getSessionParticipantCount(redis: Redis, sessionId: string): Promise<number> {
   validateSessionId(sessionId);
