@@ -18,7 +18,9 @@ const saveAscentSchema = z.object({
       is_mirror: z.boolean(),
       attempt_id: z.number(),
       bid_count: z.number(),
-      quality: z.number(),
+      // Aurora-scale rating, matching the proxied Aurora API: 0 = unrated,
+      // 1-3 = stars. Converted to the Boardsesh 1-5 scale on storage.
+      quality: z.number().int().min(0).max(3),
       difficulty: z.number(),
       is_benchmark: z.boolean(),
       comment: z.string(),

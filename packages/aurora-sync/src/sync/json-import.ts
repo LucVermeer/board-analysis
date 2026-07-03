@@ -13,7 +13,7 @@ import { randomUUID, createHash } from 'crypto';
 import { fontGradeToDifficultyId } from '@boardsesh/board-config';
 import { LAYOUTS, HOLE_PLACEMENTS } from '@boardsesh/board-constants/product-sizes';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
-import { isNoMatchClimb, CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
+import { isNoMatchClimb, CLIMB_CHARACTERISTICS, convertQuality } from '@boardsesh/shared-schema';
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 
 const BATCH_SIZE = 100;
@@ -33,6 +33,8 @@ const auroraExportAscentSchema = z.object({
   created_at: z.string(),
   grade: z.string(),
 });
+
+export type AuroraExportAscent = z.infer<typeof auroraExportAscentSchema>;
 
 const auroraExportAttemptSchema = z.object({
   climb: z.string(),
@@ -173,6 +175,52 @@ export function generateJsonImportAuroraId(
     .digest('hex')
     .slice(0, 32);
   return `json-import-${hash}`;
+}
+
+export type JsonImportTickRow = typeof boardseshTicks.$inferInsert;
+
+/**
+ * Map one export ascent to a boardsesh_ticks insert row. Extracted from the
+ * import loop so the field mapping — in particular the stars -> quality
+ * scale conversion — is unit-testable without a database.
+ */
+export function buildJsonImportAscentTickRow(
+  userId: string,
+  boardType: BoardType,
+  ascent: AuroraExportAscent,
+  climbUuid: string,
+  climbedAt: string,
+  now: string,
+): JsonImportTickRow {
+  return {
+    uuid: randomUUID(),
+    userId,
+    boardType,
+    climbUuid,
+    angle: ascent.angle,
+    isMirror: false,
+    // Conservative initial value. Aurora's `count` is attempts within a
+    // single climbed_at session, not "no prior attempts ever" — so we can't
+    // call this a flash here. correctFlashStatusForUser runs on the final
+    // chunk and promotes true first-evers across the user's full history.
+    status: 'send',
+    attemptCount: ascent.count,
+    // The JSON export 'stars' field is the raw Aurora 0-3 rating, same as
+    // the API 'quality' field — NOT the user-facing 1-5 scale. Convert it
+    // like the API sync path does (0 -> null, 1 -> 1, 2 -> 3, 3 -> 5).
+    // Rows imported before this conversion existed were rescaled by the
+    // backfill migration scoped to aurora_id LIKE 'json-import-%'.
+    quality: convertQuality(ascent.stars),
+    difficulty: fontGradeToDifficultyId(ascent.grade),
+    isBenchmark: false,
+    comment: '',
+    climbedAt,
+    createdAt: ascent.created_at ? normalizeTimestamp(ascent.created_at) : now,
+    updatedAt: now,
+    auroraType: 'ascents' as const,
+    auroraId: generateJsonImportAuroraId(userId, climbUuid, ascent.angle, climbedAt, 'ascents'),
+    auroraSyncedAt: now,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -927,9 +975,7 @@ export async function importJsonExportData(
   const existingKeys = await getExistingTickKeys(db, userId, boardType);
 
   // Step 5: Collect ascent rows to insert (in-memory dedup first)
-  type TickRow = typeof boardseshTicks.$inferInsert;
-
-  const ascentRows = data.ascents.reduce<TickRow[]>((rows, ascent) => {
+  const ascentRows = data.ascents.reduce<JsonImportTickRow[]>((rows, ascent) => {
     const climbUuid = nameToUuid.get(ascent.climb);
     if (!climbUuid) {
       result.ascents.failed++;
@@ -944,37 +990,12 @@ export async function importJsonExportData(
     }
 
     existingKeys.add(tickKey);
-    rows.push({
-      uuid: randomUUID(),
-      userId,
-      boardType,
-      climbUuid,
-      angle: ascent.angle,
-      isMirror: false,
-      // Conservative initial value. Aurora's `count` is attempts within a
-      // single climbed_at session, not "no prior attempts ever" — so we can't
-      // call this a flash here. correctFlashStatusForUser runs on the final
-      // chunk and promotes true first-evers across the user's full history.
-      status: 'send',
-      attemptCount: ascent.count,
-      // The JSON export 'stars' field is already on a 1-5 scale (user-facing),
-      // unlike the Aurora API 'quality' field which is 0-3.
-      quality: ascent.stars,
-      difficulty: fontGradeToDifficultyId(ascent.grade),
-      isBenchmark: false,
-      comment: '',
-      climbedAt,
-      createdAt: ascent.created_at ? normalizeTimestamp(ascent.created_at) : now,
-      updatedAt: now,
-      auroraType: 'ascents' as const,
-      auroraId: generateJsonImportAuroraId(userId, climbUuid, ascent.angle, climbedAt, 'ascents'),
-      auroraSyncedAt: now,
-    });
+    rows.push(buildJsonImportAscentTickRow(userId, boardType, ascent, climbUuid, climbedAt, now));
     return rows;
   }, []);
 
   // Step 6: Collect attempt rows to insert
-  const attemptRows = data.attempts.reduce<TickRow[]>((rows, attempt) => {
+  const attemptRows = data.attempts.reduce<JsonImportTickRow[]>((rows, attempt) => {
     const climbUuid = nameToUuid.get(attempt.climb);
     if (!climbUuid) {
       result.attempts.failed++;

@@ -63,3 +63,20 @@ export function normalizeQualityTo5(quality: number | null | undefined): number 
   if (!Number.isFinite(q) || q <= 0) return null;
   return (q * 5) / 3;
 }
+
+/**
+ * Convert a Boardsesh quality rating (1-5) back to an Aurora rating (1-3),
+ * for pushing ticks to Aurora backends (which reject values above 3).
+ *
+ * Inverse of convertQuality: endpoints map exactly (1->1, 5->3) and the
+ * middle interpolates linearly (2->2, 3->2, 4->3), so convertQuality
+ * round-trips (1->1->1, 2->3->2, 3->5->3). 0/null ("unrated") stays null;
+ * out-of-range input is clamped to 1-5 defensively.
+ */
+export function convertQualityToAurora(quality: number | null | undefined): number | null {
+  if (quality == null) return null;
+  const q = Number(quality);
+  if (!Number.isFinite(q) || q <= 0) return null;
+  const clamped = Math.min(5, Math.max(1, q));
+  return Math.round(((clamped - 1) / 4) * 2) + 1;
+}

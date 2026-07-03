@@ -32,6 +32,7 @@ export type LogPushItem = {
    */
   topped: boolean;
   attemptCount: number;
+  /** Aurora scale (1-3), NOT the Boardsesh 1-5 scale — see convertQualityToAurora. */
   quality?: number;
   difficulty?: number;
   isMirror: boolean;

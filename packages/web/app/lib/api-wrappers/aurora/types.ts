@@ -76,6 +76,7 @@ export type SaveAscentOptions = {
   is_mirror: boolean;
   attempt_id: number | null;
   bid_count: number;
+  /** Aurora-scale rating: 0 = unrated, 1-3 = stars (NOT the Boardsesh 1-5 scale). */
   quality: number;
   difficulty: number;
   is_benchmark: boolean;

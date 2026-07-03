@@ -184,7 +184,7 @@ export const newClimbFeedTypeDefs = /* GraphQL */ `
     frames: String
     "Difficulty grade name at this climb's angle (e.g. 6c+, V5)."
     difficultyName: String
-    "Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle."
+    "Average quality at this angle on the canonical 1-5 scale (board_climb_stats.quality_average)."
     qualityAverage: Float
     "Number of recorded ascents at this angle."
     ascensionistCount: Int

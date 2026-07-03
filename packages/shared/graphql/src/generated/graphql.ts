@@ -5401,7 +5401,7 @@ export type SimilarClimb = {
   frames?: Maybe<Scalars['String']['output']>;
   layoutId: Scalars['Int']['output'];
   name?: Maybe<Scalars['String']['output']>;
-  /** Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle. */
+  /** Average quality at this angle on the canonical 1-5 scale (board_climb_stats.quality_average). */
   qualityAverage?: Maybe<Scalars['Float']['output']>;
   setterUsername?: Maybe<Scalars['String']['output']>;
   /** Number of hold positions present in both climbs. */
