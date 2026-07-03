@@ -1134,10 +1134,16 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeResumePoller = nil
         guard let resume = pendingWriteResume else { return }
         pendingWriteResume = nil
-        if let parkStartedAt {
+        if let parkStartedAt, var telemetry = currentWriteTelemetry {
+            // Copy-mutate-writeback: reading `currentWriteTelemetry?.maxParkMs`
+            // inside `max(...)` while assigning back through the same optional
+            // chain is an overlapping access the Swift 6 / SDK 57 toolchain
+            // rejects (exclusivity error). Mutate a local struct copy instead —
+            // same idiom used by `finishWriteTelemetry` below.
             let parkMs = Int((DispatchTime.now().uptimeNanoseconds - parkStartedAt.uptimeNanoseconds) / 1_000_000)
-            currentWriteTelemetry?.maxParkMs = max(currentWriteTelemetry?.maxParkMs ?? 0, parkMs)
-            currentWriteTelemetry?.totalParkMs += parkMs
+            telemetry.maxParkMs = max(telemetry.maxParkMs, parkMs)
+            telemetry.totalParkMs += parkMs
+            currentWriteTelemetry = telemetry
         }
         parkStartedAt = nil
         currentWriteTelemetry?.lastResumeSource = source
