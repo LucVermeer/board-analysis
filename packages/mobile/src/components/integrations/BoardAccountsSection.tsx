@@ -99,10 +99,8 @@ function buildKilterDataRequestMailto(t: TFunction<'settings'>): string {
 }
 
 function buildMoonBoardDataRequestMailto(t: TFunction<'settings'>): string {
-  const name = t('aurora.moonboard.email.namePlaceholder');
-  const email = t('aurora.moonboard.email.emailPlaceholder');
   const subject = t('aurora.moonboard.email.subject');
-  const body = t('aurora.moonboard.email.body', { name, email });
+  const body = t('aurora.moonboard.email.body');
   return dataRequestMailto(MOONBOARD_SUPPORT_EMAIL, subject, body);
 }
 
