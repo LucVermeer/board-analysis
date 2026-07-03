@@ -324,6 +324,33 @@ describe('createQueueSyncGate', () => {
         serverHash: 'ordered-b',
       });
     });
+
+    // Rolling-deploy hardening: a new-backend FullSync seeds an ordered hash, then
+    // a delta from an OLD backend instance still draining carries only v1 (no
+    // ordered). advanceTracking must CLEAR the seeded ordered hash so the gate
+    // never compares local-ordered against the now-stale FullSync ordered value —
+    // it falls back to the v1 comparison the same delta just refreshed.
+    it('clears a stale seeded ordered hash when a v1-only delta arrives (rolling-deploy mixed signal)', () => {
+      const gate = createQueueSyncGate();
+      // New backend: FullSync seeds BOTH hashes.
+      gate.evaluateIncoming(fullSyncDual(1, 'v1-a', 'ordered-a'));
+
+      // Old backend instance mid-rollout: a real queue-mutating delta with a v1
+      // hash but NO ordered hash (the plain `delta()` helper omits it).
+      const v1OnlyDelta = delta('QueueItemAdded', 2, 'v1-b');
+      expect(gate.evaluateIncoming(v1OnlyDelta)).toBe('apply');
+      gate.noteApplied(v1OnlyDelta);
+
+      // The caller still computes a local ordered hash that DIVERGES from the
+      // stale 'ordered-a'. Had the seed survived, the gate would prefer the
+      // ordered comparison and (wrongly) flag drift. Because the v1-only delta
+      // cleared it, the gate compares v1 ('v1-b' vs 'v1-b') → 'ok'.
+      expect(gate.verifyLocalHash({ stateHash: 'v1-b', stateHashOrdered: 'ordered-local-diverged' })).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: 'v1-b',
+      });
+    });
   });
 
   describe('evaluateCorruption', () => {
@@ -411,6 +438,25 @@ describe('createQueueSyncGate', () => {
           localStateHashOrdered: 'ordered-local-diverged',
         }),
       ).toBe('full-sync');
+    });
+
+    // The inverse of the test above, and the load-bearing proof that at gap 0 the
+    // ordered comparison REPLACES v1 rather than supplementing it: v1 hashes
+    // DIVERGE but the ordered (v2) hashes AGREE. If the gate OR-ed the two
+    // comparisons (v1-mismatch → full-sync) this would wrongly resync. Because the
+    // ordered pair is preferred outright, the v1 divergence is ignored → 'none'.
+    it('does nothing at gap 0 when the ordered (v2) hashes match even though v1 diverges', () => {
+      const gate = createQueueSyncGate();
+      expect(
+        gate.decideReconnectStrategy({
+          lastSequence: 10,
+          serverSequence: 10,
+          serverStateHash: 'v1-server',
+          localStateHash: 'v1-local-diverged',
+          serverStateHashOrdered: 'ordered-same',
+          localStateHashOrdered: 'ordered-same',
+        }),
+      ).toBe('none');
     });
 
     it('does nothing at gap 0 when both v1 and ordered hashes match', () => {

@@ -203,10 +203,22 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
     // unconditional `setLastReceivedStateHash(event.stateHash)` assignment.
     if (event.stateHash != null) {
       lastServerStateHash = event.stateHash;
-    }
-    // Track the ordered hash the same way. A null (old backend) doesn't clobber
-    // a previously-tracked ordered hash — matching the v1 conditional above.
-    if (event.stateHashOrdered != null) {
+      // Mixed-signal hardening for a rolling deploy. The backend sends BOTH
+      // hashes on every queue-mutating event, so a delta that carries a v1
+      // stateHash but NO ordered hash came from an OLD backend instance still
+      // draining mid-rollout. Sync the ordered tracking to exactly what THIS
+      // delta carried: track it when present, and CLEAR any ordered hash a
+      // prior (new-backend) FullSync seeded when absent. Without the clear,
+      // `verifyLocalHash`/`decideReconnectStrategy` would keep preferring the
+      // ordered comparison and match local-ordered against a now-stale FullSync
+      // ordered value; clearing makes both fall back to the v1 comparison, which
+      // the same delta just refreshed. (The invariant makes the clear a no-op in
+      // practice — it only fires against a genuinely old, ordered-less backend.)
+      lastServerStateHashOrdered = event.stateHashOrdered ?? null;
+    } else if (event.stateHashOrdered != null) {
+      // A v1-less event that still carries an ordered hash isn't produced by the
+      // real backend (both or neither), but keep tracking it rather than dropping
+      // the signal — mirrors the pre-hardening tolerance for a lone hash.
       lastServerStateHashOrdered = event.stateHashOrdered;
     }
   }
