@@ -120,15 +120,25 @@ const insertTick = async (params: {
   boardType?: string;
   difficulty?: number;
   angle?: number;
+  boardId?: number;
 }) => {
   const userId = params.userId ?? TEST_USER_ID;
   const attemptCount = params.attemptCount ?? 1;
   const boardType = params.boardType ?? 'kilter';
   const angle = params.angle ?? 40;
   await db.execute(sql`
-    INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, attempt_count, difficulty, climbed_at)
-    VALUES (${params.uuid}, ${userId}, ${boardType}, ${params.climbUuid}, ${angle}, ${params.status}, ${attemptCount}, ${params.difficulty ?? null}, ${params.climbedAt})
+    INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, attempt_count, difficulty, climbed_at, board_id)
+    VALUES (${params.uuid}, ${userId}, ${boardType}, ${params.climbUuid}, ${angle}, ${params.status}, ${attemptCount}, ${params.difficulty ?? null}, ${params.climbedAt}, ${params.boardId ?? null})
   `);
+};
+
+const insertPrivateBoard = async (name: string): Promise<number> => {
+  const rows = (await db.execute(sql`
+    INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, is_public)
+    VALUES (${`${CLIMB_PREFIX}board-${name}`}, ${`${CLIMB_PREFIX}slug-${name}`}, ${TEST_USER_ID}, 'kilter', 1, 1, '1', ${name}, false)
+    RETURNING id
+  `)) as unknown as Array<{ id: number }>;
+  return Number(rows[0].id);
 };
 
 const insertAlias = async (params: {
@@ -165,6 +175,7 @@ const cleanup = async () => {
   await db.execute(sql`DELETE FROM user_climb_percentiles WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM board_beta_links WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
+  await db.execute(sql`DELETE FROM user_boards WHERE owner_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(
     sql`DELETE FROM board_climb_aliases WHERE alias_uuid LIKE ${CLIMB_PREFIX + '%'} OR canonical_uuid LIKE ${CLIMB_PREFIX + '%'}`,
@@ -1136,6 +1147,36 @@ describe('tickQueries — behavior fixes', () => {
       expect(named.groups).toHaveLength(1);
       expect(named.totalCount).toBe(1);
       expect(named.hasMore).toBe(false);
+    });
+
+    it('gates board identity on group items by viewer, like the flat feed', async () => {
+      const climbUuid = `${CLIMB_PREFIX}grouped-board`;
+      await insertClimb(climbUuid, 'Grouped Board Climb');
+      const boardId = await insertPrivateBoard('Secret Garage');
+      await insertTick({ uuid: 'grp-b1', climbUuid, climbedAt: '2026-06-21T10:00:00', status: 'send', boardId });
+
+      type BoardItem = { uuid: string; boardDisplayName: string | null };
+      const asOwner = (await tickQueries.userGroupedAscentsFeed(
+        undefined,
+        { userId: TEST_USER_ID, input: {} },
+        {
+          connectionId: 'grouped-test-conn',
+          isAuthenticated: true,
+          userId: TEST_USER_ID,
+          sessionId: undefined,
+          controllerId: undefined,
+          controllerApiKey: undefined,
+        },
+      )) as { groups: Array<{ climbUuid: string; items: BoardItem[] }> };
+      const ownGroup = asOwner.groups.find((group) => group.climbUuid === climbUuid);
+      expect(ownGroup?.items[0]?.boardDisplayName).toBe('Secret Garage');
+
+      const asPublic = (await tickQueries.userGroupedAscentsFeed(undefined, {
+        userId: TEST_USER_ID,
+        input: {},
+      })) as { groups: Array<{ climbUuid: string; items: BoardItem[] }> };
+      const publicGroup = asPublic.groups.find((group) => group.climbUuid === climbUuid);
+      expect(publicGroup?.items[0]?.boardDisplayName).toBeNull();
     });
 
     it('enriches group items with hasBetaVideo under ownership semantics', async () => {

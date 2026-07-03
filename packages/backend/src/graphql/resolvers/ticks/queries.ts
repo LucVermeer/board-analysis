@@ -16,6 +16,7 @@ import {
   consensusGradeTable,
   consensusGradeJoinCondition,
 } from '../shared/sql-expressions';
+import type { z } from 'zod';
 import { GetTicksInputSchema, BoardNameSchema, AscentFeedInputSchema } from '../../../validation/schemas';
 import { escapeLikePattern } from '../../../utils/like-pattern';
 import { extractInstagramHandle } from '../beta-videos/queries';
@@ -33,23 +34,9 @@ END`;
 // in range. See docs/ascents-and-attempts.md.
 const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
 
-// The validated slice of AscentFeedInput both feeds filter on.
-type AscentFeedFilterInput = {
-  boardType?: string;
-  boardTypes?: string[];
-  layoutIds?: number[];
-  climbName?: string;
-  statusMode?: string;
-  status?: string;
-  flashOnly?: boolean;
-  minDifficulty?: number;
-  maxDifficulty?: number;
-  minAngle?: number;
-  maxAngle?: number;
-  benchmarkOnly?: boolean;
-  fromDate?: string;
-  toDate?: string;
-};
+// The validated AscentFeedInput both feeds filter on — inferred from the zod
+// schema so a new filter field can't silently diverge from validation.
+type AscentFeedFilterInput = z.infer<typeof AscentFeedInputSchema>;
 
 /**
  * WHERE conditions over the ticks table (+ stats/consensus joins for grade and
@@ -132,6 +119,9 @@ async function fetchUserBetaClimbKeys(userId: string, climbUuids: string[], tick
     .where(eq(dbSchema.userProfiles.userId, userId))
     .limit(1);
   const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
+  // createdByUserId is unconditional, so this array is never empty — or()
+  // always gets at least one condition (single-arg or() is valid but don't
+  // let a refactor remove the guaranteed first element).
   const ownershipConditions = [
     eq(dbSchema.boardBetaLinks.createdByUserId, userId),
     ...(tickUuids.length > 0 ? [inArray(dbSchema.boardBetaLinks.tickUuid, tickUuids)] : []),
@@ -739,9 +729,11 @@ export const tickQueries = {
 
     // 1) Page of (climbUuid, day) keys, ordered by latest activity in that group.
     //    Bounds the SQL fetch to exactly the groups we'll return.
-    // The filter joins (canonical climb for layout/name, stats + consensus for
-    // grade/benchmark) are 1:1 per tick, so they never multiply group rows.
-    const pageGroups = await db
+    // One filtered-groups base: joins (canonical climb for layout/name, stats +
+    // consensus for grade/benchmark — 1:1 per tick, never multiplying group
+    // rows) and WHERE applied ONCE, then both the page query and the count read
+    // from it, so a join change can't drift between them.
+    const filteredGroupsBase = db
       .select({
         climbUuid: dbSchema.boardseshTicks.climbUuid,
         day: dayExpr.as('day'),
@@ -773,45 +765,21 @@ export const tickQueries = {
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
       .where(and(...groupFilterConditions))
       .groupBy(dbSchema.boardseshTicks.climbUuid, dayExpr)
-      .orderBy(sql`max(${dbSchema.boardseshTicks.climbedAt}) desc`)
+      .as('filtered_groups');
+
+    const pageGroups = await db
+      .select({
+        climbUuid: filteredGroupsBase.climbUuid,
+        day: filteredGroupsBase.day,
+        latestClimbedAt: filteredGroupsBase.latestClimbedAt,
+      })
+      .from(filteredGroupsBase)
+      .orderBy(sql`${filteredGroupsBase.latestClimbedAt} desc`)
       .limit(limit)
       .offset(offset);
 
     // 2) True total group count — runs in parallel with the data fetch below.
-    const totalCountPromise = db.select({ count: count() }).from(
-      db
-        .select({
-          climbUuid: dbSchema.boardseshTicks.climbUuid,
-          day: dayExpr.as('day'),
-        })
-        .from(dbSchema.boardseshTicks)
-        .leftJoin(
-          dbSchema.boardClimbAliases,
-          and(
-            eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
-            eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
-          ),
-        )
-        .leftJoin(
-          dbSchema.boardClimbs,
-          and(
-            sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
-            eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
-          ),
-        )
-        .leftJoin(
-          dbSchema.boardClimbStats,
-          and(
-            sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbStats.climbUuid}`,
-            eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
-            eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
-          ),
-        )
-        .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
-        .where(and(...groupFilterConditions))
-        .groupBy(dbSchema.boardseshTicks.climbUuid, dayExpr)
-        .as('group_keys'),
-    );
+    const totalCountPromise = db.select({ count: count() }).from(filteredGroupsBase);
 
     if (pageGroups.length === 0) {
       const totalCountResult = await totalCountPromise;
