@@ -110,6 +110,21 @@ describe('registerBluetoothConnection', () => {
     expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
   });
 
+  it('resets the dedup flag on a fresh module instance (e.g. app restart)', async () => {
+    registerBluetoothConnection(vi.fn());
+    expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
+
+    // Simulate an app restart: a fresh module instance must not remember the
+    // previous session's flag, so the first connect there fires it again.
+    vi.resetModules();
+    setPersonPropertiesMock.mockClear();
+    const freshModule = await import('../bluetooth-status-store');
+
+    freshModule.registerBluetoothConnection(vi.fn());
+
+    expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
+  });
+
   it('notifies listeners when a connection is registered', () => {
     // We can access the subscribe/getSnapshot pattern by importing
     // the module and using useSyncExternalStore's contract manually.
