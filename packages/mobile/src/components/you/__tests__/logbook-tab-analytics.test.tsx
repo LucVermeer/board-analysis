@@ -14,7 +14,19 @@ const feed = vi.hoisted(() => ({
     pages: [
       {
         userAscentsFeed: {
-          items: [{ uuid: 'ascent-1', climbUuid: 'climb-1' }],
+          items: [
+            {
+              uuid: 'ascent-1',
+              climbUuid: 'climb-1',
+              status: 'send',
+              comment: 'so good',
+              climbedAt: '2026-06-15T10:00:00.000Z',
+              boardType: 'kilter',
+              layoutId: 1,
+              angle: 40,
+              boardDisplayName: 'Test Board',
+            },
+          ],
         },
       },
     ],
@@ -33,20 +45,21 @@ vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   RefreshControl: () => null,
   Pressable: () => null,
+  useWindowDimensions: () => ({ fontScale: 1, width: 375, height: 800 }),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
   Platform: { OS: 'ios', select: (specifics: Record<string, unknown>) => specifics.ios ?? specifics.default },
 }));
 
-// Render every data row through renderItem so the mocked LogbookRow mounts and
-// captures its onPress.
+// Render every list row (dividers included) through renderItem with its index,
+// so the mocked LogbookRow mounts and captures its onPress.
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data,
     renderItem,
   }: {
-    data: Array<{ uuid: string }>;
-    renderItem: (info: { item: { uuid: string } }) => ReactNode;
-  }) => createElement('div', null, ...data.map((item) => renderItem({ item }))),
+    data: Array<unknown>;
+    renderItem: (info: { item: unknown; index: number }) => ReactNode;
+  }) => createElement('div', null, ...data.map((item, index) => renderItem({ item, index }))),
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -62,10 +75,11 @@ vi.mock('../LogbookRow', () => ({
     return createElement('div');
   },
 }));
+vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
-vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
+vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn(), hapticSuccess: vi.fn(), hapticError: vi.fn() }));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { black: '#000' } }));
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
@@ -78,13 +92,17 @@ vi.mock('../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: {} }),
 }));
-vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }), useFocusEffect: () => {} }));
 vi.mock('../../../lib/open-climb-in-play-drawer', () => ({ openClimbInPlayDrawer: vi.fn() }));
 vi.mock('../../../lib/tick-to-climb', () => ({ tickToClimb: vi.fn() }));
 vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: vi.fn() }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: vi.fn(), openClimbActions: vi.fn() }),
 }));
+vi.mock('@boardsesh/board-react', () => ({ useDeleteTick: () => ({ mutate: vi.fn(), isPending: false }) }));
+vi.mock('../../../providers/dialog-provider', () => ({ useConfirm: () => vi.fn(async () => false) }));
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ setQueriesData: vi.fn() }) }));
 
 import { LogbookTab } from '../LogbookTab';
 
@@ -94,12 +112,19 @@ beforeEach(() => {
 });
 
 describe('LogbookTab analytics', () => {
-  it('fires "Logbook Row Clicked" with the climb uuid when a row is tapped', () => {
+  it('fires "Logbook Row Clicked" with the climb uuid + row context when a row is tapped', () => {
     render(createElement(LogbookTab, { userId: 'user-1' }));
     expect(row.onPress).not.toBeNull();
 
     row.onPress?.();
 
-    expect(analytics.track).toHaveBeenCalledWith('Logbook Row Clicked', { climbUuid: 'climb-1' });
+    // rowIndex counts ENTRIES only — the day divider above the entry (built by
+    // the real buildLogbookListRows) must not skew position funnels.
+    expect(analytics.track).toHaveBeenCalledWith('Logbook Row Clicked', {
+      climbUuid: 'climb-1',
+      rowIndex: 0,
+      hasNote: true,
+      status: 'send',
+    });
   });
 });

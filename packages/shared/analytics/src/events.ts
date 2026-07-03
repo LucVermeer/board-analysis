@@ -63,6 +63,14 @@ export const SHARED_EVENTS = {
   LogbookSearched: 'Logbook Searched',
   LogbookFilterChanged: 'Logbook Filter Changed',
   LogbookSortChanged: 'Logbook Sort Changed',
+  // Logbook entry mutations — the redesign's edit/delete UX previously had zero
+  // baseline telemetry. Props: { method } for how the mutation was initiated;
+  // never the entry's content. Deleted: 'swipe' | 'sheet' | 'a11y' (three
+  // distinct commit paths). Edited: always 'sheet' today — swipe and the a11y
+  // action only OPEN the edit sheet, and the save is committed there, so the
+  // initiation isn't tracked separately.
+  LogbookEntryEdited: 'Logbook Entry Edited',
+  LogbookEntryDeleted: 'Logbook Entry Deleted',
   // Ticks / logbook
   TickButtonClicked: 'Tick Button Clicked',
   QuickTickSaved: 'Quick Tick Saved',

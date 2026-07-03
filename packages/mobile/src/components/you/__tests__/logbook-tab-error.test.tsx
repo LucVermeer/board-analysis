@@ -22,6 +22,7 @@ vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   RefreshControl: () => null,
+  useWindowDimensions: () => ({ fontScale: 1, width: 375, height: 800 }),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
   Platform: { OS: 'ios', select: (specifics: Record<string, unknown>) => specifics.ios ?? specifics.default },
   Pressable: ({ children, onPress, disabled }: { children?: ReactNode; onPress?: () => void; disabled?: boolean }) =>
@@ -47,10 +48,11 @@ vi.mock('@shopify/flash-list', () => ({
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../LogbookRow', () => ({ LogbookRow: () => createElement('div') }));
+vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
-vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
+vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn(), hapticSuccess: vi.fn(), hapticError: vi.fn() }));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { black: '#000' } }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -68,9 +70,13 @@ vi.mock('../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: {} }),
 }));
-vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }), useFocusEffect: () => {} }));
 vi.mock('../../../lib/open-climb-in-play-drawer', () => ({ openClimbInPlayDrawer: vi.fn() }));
 vi.mock('../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
+vi.mock('@boardsesh/board-react', () => ({ useDeleteTick: () => ({ mutate: vi.fn(), isPending: false }) }));
+vi.mock('../../../providers/dialog-provider', () => ({ useConfirm: () => vi.fn(async () => false) }));
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ setQueriesData: vi.fn() }) }));
 
 import { LogbookTab } from '../LogbookTab';
 

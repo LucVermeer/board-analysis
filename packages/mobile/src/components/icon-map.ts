@@ -146,6 +146,7 @@ export const iconMap = {
   photo: { ios: 'photo', android: 'image-outline' },
   camera: { ios: 'camera', android: 'camera-outline' },
   video: { ios: 'video', android: 'video-outline' },
+  'video.fill': { ios: 'video.fill', android: 'video' },
   instagram: { ios: 'camera.fill', android: 'instagram' },
   // MaterialCommunityIcons has no standalone tiktok glyph — `play-box` is the
   // closest neutral "short-form video clip" cue and matches our visual

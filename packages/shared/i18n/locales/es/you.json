@@ -158,6 +158,30 @@
         "sends": "Encadenes",
         "attempts": "Intentos",
         "both": "Ambos"
+      },
+      "row": {
+        "project": "Proyecto",
+        "stars": "{{count}}★",
+        "a11ySent": "Encadenada",
+        "a11yFlashed": "Flasheada",
+        "a11yCommunityGrade": "grado de la comunidad {{grade}}",
+        "a11yGradeDelta": "tu grado {{logged}}, la comunidad dice {{consensus}}",
+        "a11yStars": "valorada con {{count}} de 5 estrellas",
+        "a11yHasNote": "tiene nota",
+        "a11yHasBetaVideo": "con vídeo de beta",
+        "a11yMirrored": "en espejo",
+        "editAction": "Editar registro",
+        "deleteAction": "Eliminar registro",
+        "moreActions": "Más acciones"
+      },
+      "day": {
+        "today": "Hoy",
+        "yesterday": "Ayer",
+        "climbs_one": "{{count}} bloque",
+        "climbs_other": "{{count}} bloques",
+        "sends_one": "{{count}} encadene",
+        "sends_other": "{{count}} encadenes",
+        "top": "máx. {{grade}}"
       }
     }
   }

@@ -158,6 +158,30 @@
         "sends": "Réussies",
         "attempts": "Essais",
         "both": "Tout"
+      },
+      "row": {
+        "project": "Projet",
+        "stars": "{{count}}★",
+        "a11ySent": "Réussie",
+        "a11yFlashed": "Flashée",
+        "a11yCommunityGrade": "cotation de la communauté {{grade}}",
+        "a11yGradeDelta": "ta cotation {{logged}}, la communauté dit {{consensus}}",
+        "a11yStars": "notée {{count}} sur 5 étoiles",
+        "a11yHasNote": "avec note",
+        "a11yHasBetaVideo": "avec vidéo de beta",
+        "a11yMirrored": "en miroir",
+        "editAction": "Modifier l'entrée",
+        "deleteAction": "Supprimer l'entrée",
+        "moreActions": "Plus d'actions"
+      },
+      "day": {
+        "today": "Aujourd'hui",
+        "yesterday": "Hier",
+        "climbs_one": "{{count}} bloc",
+        "climbs_other": "{{count}} blocs",
+        "sends_one": "{{count}} réussite",
+        "sends_other": "{{count}} réussites",
+        "top": "max {{grade}}"
       }
     }
   }

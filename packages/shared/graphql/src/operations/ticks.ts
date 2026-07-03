@@ -163,6 +163,7 @@ export const GET_USER_ASCENTS_FEED = gql`
         comment
         climbedAt
         frames
+        hasBetaVideo
       }
       totalCount
       hasMore
@@ -195,6 +196,12 @@ export type AscentFeedItem = {
   comment: string;
   climbedAt: string;
   frames: string | null;
+  /**
+   * Beta video attached to this ascent (board_beta_links.tick_uuid). Kept
+   * optional so fixtures and non-feed producers of this shape stay valid; UI
+   * guards on `=== true`.
+   */
+  hasBetaVideo?: boolean | null;
 };
 
 // Type for the feed query variables
@@ -271,6 +278,7 @@ export const GET_USER_ASCENT_CAPTION_MATCHES = gql`
       comment
       climbedAt
       frames
+      hasBetaVideo
     }
   }
 `;

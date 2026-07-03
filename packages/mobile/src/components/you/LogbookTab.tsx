@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, RefreshControl, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, RefreshControl, Pressable, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -9,9 +9,15 @@ import {
   toAscentFeedInput,
   DEFAULT_LOGBOOK_FILTERS,
   DEFAULT_LOGBOOK_SORT,
+  buildLogbookListRows,
+  dedupeLogbookItems,
+  shouldShowLogbookDividers,
+  logbookNoteIsVisible,
   type LogbookFilterState,
   type LogbookSortPreset,
+  type LogbookListRow,
 } from '@boardsesh/logbook';
+import { useDeleteTick } from '@boardsesh/board-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { Text } from '../Text';
@@ -19,6 +25,7 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { LogbookRow } from './LogbookRow';
+import { LogbookDayDivider, LogbookWallSubDivider } from './LogbookDayDivider';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { LogbookFilterSheet } from './LogbookFilterSheet';
 import { LogbookChipRow } from './LogbookChipRow';
@@ -30,11 +37,14 @@ import type { Grade } from '@boardsesh/shared-schema';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { tickToClimb } from '../../lib/tick-to-climb';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
+import { getLayoutDisplayName } from '@boardsesh/profile-stats';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useFeatureFlag } from '../../providers/feature-flags-provider';
+import { useConfirm } from '../../providers/dialog-provider';
+import { useToast } from '../../providers/toast-provider';
 import { normalizeSearchName } from '../../lib/search-name';
-import { hapticSelection } from '../../lib/haptics';
+import { hapticSelection, hapticSuccess, hapticError } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -81,6 +91,8 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const router = useRouter();
   const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
+  // One dimension subscription for the whole list; rows take fontScale as a prop.
+  const { fontScale } = useWindowDimensions();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
   const editSheetRef = useRef<BottomSheet | null>(null);
@@ -190,15 +202,56 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   // defaults once hydration settles. Keeping the gate while the flag is still
   // resolving avoids an early default fetch for the flag-on cohort.)
   const feed = useUserAscentsFeed(userId, feedInput, { enabled: hydrated });
-  // Stabilise the FlashList `data` identity so it doesn't re-diff every render.
-  const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
+
+  // Day dividers render only on a date-ordered feed (the Latest preset or a
+  // custom date sort) — keyed off the EFFECTIVE feedInput, so the flag-off
+  // default (date-desc) gets dividers and a stale persisted custom sort can't
+  // suppress them wrongly. A climb-name search keeps them: it filters, the
+  // result is still a timeline. Both paths dedupe by uuid — offset pagination
+  // can repeat a row across page boundaries (swipe-delete shifts offsets), and
+  // duplicate FlashList keys throw. Memoised so the FlashList `data` identity
+  // is stable between unrelated re-renders.
+  const showDividers = shouldShowLogbookDividers(feedInput);
+  const { listRows, entryIndexByUuid } = useMemo(() => {
+    const items = feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [];
+    // The wall label ("Alex's board 35°") feeds the divider/subdivider context;
+    // derivation needs the app's board metadata so it happens here, not in the
+    // shared builder.
+    // Board identity only — the angle stays on every row (it varies per climb
+    // on adjustable boards and is the repeat-ascent disambiguator; a per-angle
+    // wall key would ping-pong sub-dividers through an angle-hopping session).
+    const withWalls = items.map((item) => ({
+      ...item,
+      wall: item.boardDisplayName ?? getLayoutDisplayName(item.boardType, item.layoutId),
+    }));
+    const rows: LogbookListRow<AscentFeedItem>[] = showDividers
+      ? buildLogbookListRows(withWalls, { hasMore: feed.hasNextPage ?? false })
+      : dedupeLogbookItems(items).map((item) => ({ type: 'entry', key: item.uuid, item, wallCovered: false }));
+    // Entry ordinal (dividers excluded) for the analytics `rowIndex` — the raw
+    // FlashList index counts divider rows, which would skew position funnels.
+    const ordinals = new Map<string, number>();
+    for (const row of rows) {
+      if (row.type === 'entry') ordinals.set(row.item.uuid, ordinals.size);
+    }
+    return { listRows: rows, entryIndexByUuid: ordinals };
+  }, [feed.data, feed.hasNextPage, showDividers]);
 
   // Tap → set the climb active and open the play drawer (own logbook and another
   // climber's read-only logbook alike). AscentFeedItem structurally satisfies the
   // `tick` kind, which builds the climb + board config from frames.
+  // Read the ordinal map through a ref so this callback (and renderItem above
+  // it) keeps its identity across page loads — the map is rebuilt with every
+  // fetched page, but a tap only needs whatever is current at fire time.
+  const entryIndexRef = useRef(entryIndexByUuid);
+  entryIndexRef.current = entryIndexByUuid;
   const handleActivate = useCallback(
     (ascent: AscentFeedItem) => {
-      track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });
+      track(SHARED_EVENTS.LogbookRowClicked, {
+        climbUuid: ascent.climbUuid,
+        rowIndex: entryIndexRef.current.get(ascent.uuid),
+        hasNote: logbookNoteIsVisible(ascent.comment),
+        status: ascent.status,
+      });
       // Default open mode is now "set active", so no option is needed here.
       openClimbInPlayDrawer({ kind: 'tick', tick: ascent }, { openPlayDrawer, router });
     },
@@ -210,6 +263,68 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
     setEditAscent(ascent);
     editSheetRef.current?.snapToIndex(0);
   }, []);
+
+  // Swipe right-to-left (or the a11y action) → delete this tick, owner-only and
+  // confirm-guarded: DELETE_TICK is a real server-side delete synced to Aurora,
+  // so a one-gesture commit is banned. The uuid is captured BEFORE the await —
+  // the dialog blocks touches, not data, and FlashList can recycle the source
+  // row onto a different ascent while it's up. The optimistic removal from the
+  // cached feed pages lives inside useDeleteTick, shared by every delete path.
+  const deleteTick = useDeleteTick();
+  const confirmDialog = useConfirm();
+  const { showToast } = useToast();
+  // Depend on the STABLE pieces of the mutation, not the result object — that
+  // object gets a fresh identity every render, which would recreate this
+  // callback → recreate renderItem → re-render every visible row on each tab
+  // render (each search keystroke). `mutate` is identity-stable; the pending
+  // guard reads a ref for the same reason.
+  const { mutate: deleteTickMutate } = deleteTick;
+  const deleteTickPendingRef = useRef(deleteTick.isPending);
+  deleteTickPendingRef.current = deleteTick.isPending;
+  // Covers the CONFIRM window (swipe-commit → dialog resolution), where
+  // isPending is still false — a second swipe there would stack a second
+  // dialog. The modal itself blocks touches on both platforms; this flag makes
+  // single-flight true by construction rather than by dialog behaviour.
+  const deleteFlowActiveRef = useRef(false);
+  const handleDeleteRequest = useCallback(
+    (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => {
+      if (deleteFlowActiveRef.current || deleteTickPendingRef.current) return;
+      deleteFlowActiveRef.current = true;
+      const targetUuid = ascent.uuid;
+      const runGuardedDelete = async () => {
+        const confirmed = await confirmDialog({
+          title: t('mobile.logbook.deleteTitle'),
+          message: t('mobile.logbook.deleteConfirm'),
+          confirmLabel: t('mobile.logbook.delete'),
+          cancelLabel: t('mobile.cancel'),
+          destructive: true,
+        });
+        if (!confirmed) {
+          deleteFlowActiveRef.current = false;
+          return;
+        }
+        deleteTickMutate(targetUuid, {
+          onSuccess: () => {
+            deleteFlowActiveRef.current = false;
+            track(SHARED_EVENTS.LogbookEntryDeleted, { method });
+            hapticSuccess();
+          },
+          onError: () => {
+            deleteFlowActiveRef.current = false;
+            hapticError();
+            showToast(t('mobile.logbook.deleteError'), 'error');
+          },
+        });
+      };
+      // A rejected dialog promise (unmounted host, provider bug) is treated as
+      // a decline: nothing was confirmed, so nothing is deleted — the safe
+      // outcome for a destructive action. Never rethrow into the void.
+      void runGuardedDelete().catch(() => {
+        deleteFlowActiveRef.current = false;
+      });
+    },
+    [deleteTickMutate, confirmDialog, showToast, t],
+  );
 
   // Long press → open the climb actions sheet. For the owner it carries an
   // "Edit entry" row wired back to the tick editor. No-op when the board can't
@@ -248,15 +363,29 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   }, [feed.refetch]);
 
   const renderItem = useCallback(
-    ({ item }: { item: AscentFeedItem }) => (
-      <LogbookRow
-        ascent={item}
-        onActivate={handleActivate}
-        onOpenActions={handleOpenActions}
-        onEdit={viewerIsOwner ? handleEdit : undefined}
-      />
-    ),
-    [handleActivate, handleOpenActions, handleEdit, viewerIsOwner],
+    ({ item: row }: { item: LogbookListRow<AscentFeedItem> }) => {
+      if (row.type === 'divider') {
+        // The divider owns its "now" clock (focus-refreshed) so this callback's
+        // identity survives tab focus — a `now` dep here would re-render every
+        // climb row for a value only dividers read.
+        return <LogbookDayDivider dayStartMs={row.dayStartMs} stats={row.stats} wallLabel={row.wallLabel} />;
+      }
+      if (row.type === 'subdivider') {
+        return <LogbookWallSubDivider wallLabel={row.wallLabel} />;
+      }
+      return (
+        <LogbookRow
+          ascent={row.item}
+          showBoardInMeta={!row.wallCovered}
+          fontScale={fontScale}
+          onActivate={handleActivate}
+          onOpenActions={handleOpenActions}
+          onEdit={viewerIsOwner ? handleEdit : undefined}
+          onDeleteRequest={viewerIsOwner ? handleDeleteRequest : undefined}
+        />
+      );
+    },
+    [handleActivate, handleOpenActions, handleEdit, handleDeleteRequest, viewerIsOwner, fontScale],
   );
 
   const handleRefresh = useCallback(() => void feed.refetch(), [feed.refetch]);
@@ -381,9 +510,10 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
         </View>
       ) : (
         <FlashList
-          data={items}
+          data={listRows}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          getItemType={getRowType}
           contentInsetAdjustmentBehavior="never"
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
@@ -429,8 +559,14 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   );
 }
 
-function keyExtractor(item: AscentFeedItem) {
-  return item.uuid;
+function keyExtractor(row: LogbookListRow<AscentFeedItem>) {
+  return row.key;
+}
+
+// Divider vs entry recycling pools — FlashList must never recycle a divider
+// into a climb row or vice versa.
+function getRowType(row: LogbookListRow<AscentFeedItem>) {
+  return row.type;
 }
 
 const styles = StyleSheet.create({

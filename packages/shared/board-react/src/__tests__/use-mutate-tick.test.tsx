@@ -127,4 +127,64 @@ describe('useDeleteTick (shared)', () => {
 
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
+
+  it('strips the deleted tick from every cached ascents-feed page before the refetch lands', async () => {
+    const executeHttp = vi.fn().mockResolvedValue({ deleteTick: true });
+    const { wrapper, queryClient } = createWrapper({ executeHttp: executeHttp as unknown as ExecuteHttp });
+    // Two cached feed variants (different inputs) — the strip must hit both,
+    // and only remove the deleted uuid. Invalidation's refetch never lands in
+    // this harness (no network), so the post-mutate cache IS the strip result.
+    const page = (uuids: string[]) => ({
+      pages: [
+        { userAscentsFeed: { items: uuids.map((uuid) => ({ uuid })), totalCount: uuids.length, hasMore: false } },
+      ],
+      pageParams: [0],
+    });
+    queryClient.setQueryData(['userAscentsFeed', 'user-1', { sortBy: 'recent' }], page(['tick-1', 'tick-2']));
+    queryClient.setQueryData(['userAscentsFeed', 'user-1', { sortBy: 'hardest' }], page(['tick-1']));
+    const { result } = renderHook(() => useDeleteTick(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate('tick-1');
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    type CachedFeed = { pages: { userAscentsFeed: { items: { uuid: string }[]; totalCount: number } }[] };
+    const recent = queryClient.getQueryData<CachedFeed>(['userAscentsFeed', 'user-1', { sortBy: 'recent' }]);
+    const hardest = queryClient.getQueryData<CachedFeed>(['userAscentsFeed', 'user-1', { sortBy: 'hardest' }]);
+    expect(recent?.pages[0].userAscentsFeed.items).toEqual([{ uuid: 'tick-2' }]);
+    expect(hardest?.pages[0].userAscentsFeed.items).toEqual([]);
+    // totalCount stays consistent with the strip — a stale-high count would
+    // leak to any surface reading the total before the refetch reconciles.
+    expect(recent?.pages[0].userAscentsFeed.totalCount).toBe(1);
+    expect(hardest?.pages[0].userAscentsFeed.totalCount).toBe(0);
+  });
+
+  it('decrements totalCount by ONE even when offset overlap duplicated the row across pages', async () => {
+    const executeHttp = vi.fn().mockResolvedValue({ deleteTick: true });
+    const { wrapper, queryClient } = createWrapper({ executeHttp: executeHttp as unknown as ExecuteHttp });
+    // Offset pagination can return the same tick on two adjacent pages; the
+    // duplicates are cache artifacts — the true total drops by exactly one.
+    queryClient.setQueryData(['userAscentsFeed', 'user-1', {}], {
+      pages: [
+        { userAscentsFeed: { items: [{ uuid: 'tick-1' }, { uuid: 'tick-2' }], totalCount: 3, hasMore: true } },
+        { userAscentsFeed: { items: [{ uuid: 'tick-1' }, { uuid: 'tick-3' }], totalCount: 3, hasMore: false } },
+      ],
+      pageParams: [0, 2],
+    });
+    const { result } = renderHook(() => useDeleteTick(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate('tick-1');
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    type CachedFeed = { pages: { userAscentsFeed: { items: { uuid: string }[]; totalCount: number } }[] };
+    const cached = queryClient.getQueryData<CachedFeed>(['userAscentsFeed', 'user-1', {}]);
+    expect(cached?.pages.map((page) => page.userAscentsFeed.items)).toEqual([
+      [{ uuid: 'tick-2' }],
+      [{ uuid: 'tick-3' }],
+    ]);
+    expect(cached?.pages.map((page) => page.userAscentsFeed.totalCount)).toEqual([2, 2]);
+  });
 });

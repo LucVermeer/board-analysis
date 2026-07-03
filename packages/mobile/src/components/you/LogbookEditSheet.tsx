@@ -7,6 +7,8 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { useTranslation } from 'react-i18next';
 import { useUpdateTick, useDeleteTick } from '@boardsesh/board-react';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { track } from '../../lib/analytics';
 import type { AscentFeedItem, UpdateTickInput } from '@boardsesh/graphql/operations';
 import { parseTickTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
@@ -221,6 +223,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       },
       {
         onSuccess: () => {
+          track(SHARED_EVENTS.LogbookEntryEdited, { method: 'sheet' });
           hapticSuccess();
           sheetRef.current?.close();
         },
@@ -257,7 +260,10 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     });
     if (!confirmed) return;
     deleteTick.mutate(ascent.uuid, {
-      onSuccess: () => sheetRef.current?.close(),
+      onSuccess: () => {
+        track(SHARED_EVENTS.LogbookEntryDeleted, { method: 'sheet' });
+        sheetRef.current?.close();
+      },
       onError: () => {
         hapticError();
         showToast(t('mobile.logbook.deleteError'), 'error');

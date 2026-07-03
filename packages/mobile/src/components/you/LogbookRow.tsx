@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, type AccessibilityActionEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   useAnimatedStyle,
@@ -12,18 +12,24 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
-import { getLayoutDisplayName, formatTickRelativeTime } from '@boardsesh/profile-stats';
-import { getGradeTextColor } from '@boardsesh/play-view';
+import { getLayoutDisplayName, parseTickTime } from '@boardsesh/profile-stats';
+import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
+import {
+  deriveLogbookGradeDisplay,
+  consensusDeltaDirection,
+  logbookAttemptsKind,
+  displayedAttemptCount,
+  normalizeLogbookQuality,
+  logbookNoteIsVisible,
+} from '@boardsesh/logbook';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
-import { ClimbListItemContent, type ClimbListItemClimb } from '../ClimbListItemContent';
+import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
 import { useSwipeArm } from '../use-swipe-arm';
-import { gradeBadgeColor } from './profile-chart-colors';
-import { deriveLogbookGradeDisplay } from '@boardsesh/logbook';
-import { brandColors, withAlpha } from '../../theme/colors';
+import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing, borderRadius } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
@@ -40,46 +46,66 @@ type LogbookRowProps = {
   /** Swipe left-to-right → edit the logbook entry. Owner-only; when omitted the
    *  left swipe action is disabled (you can't edit another climber's ticks). */
   onEdit?: (ascent: AscentFeedItem) => void;
+  /**
+   * Swipe right-to-left → delete the logbook entry, behind the host's confirm
+   * dialog (DELETE_TICK is a real server-side, Aurora-synced delete). Owner-only;
+   * when omitted the right swipe action is disabled. The ascent is captured at
+   * commit time — the host must not re-read row state after its confirm awaits
+   * (FlashList can recycle this row onto a different ascent meanwhile).
+   * `method` reports how the delete was initiated, for analytics.
+   */
+  onDeleteRequest?: (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => void;
+  /**
+   * Whether the meta line carries the BOARD name. The logbook tab passes false
+   * when a divider or subdivider above already names the board; the angle
+   * stays on the row either way (it varies per climb on adjustable boards and
+   * disambiguates repeat ascents). Defaults to true so flat views and the
+   * share-beta picker never lose the wall.
+   */
+  showBoardInMeta?: boolean;
+  /**
+   * Device font scale, passed by the host so a 50-row list holds ONE dimension
+   * subscription (the tab's) instead of one per row — useWindowDimensions in a
+   * memo'd row re-renders every visible row on any dimension event (keyboard,
+   * rotation, split-screen). Defaults to 1 for hosts that don't scale (the
+   * share-beta picker).
+   */
+  fontScale?: number;
 };
 
 // Swipe tuning mirrors ClimbListRow: drag up to ACTION_REVEAL wide; dragging
-// past COMMIT_THRESHOLD and releasing commits the edit action (no resting-open
+// past COMMIT_THRESHOLD and releasing commits the action (no resting-open
 // state). friction=1 tracks the finger 1:1.
 const ACTION_REVEAL = 150;
 const COMMIT_THRESHOLD = 96;
 const SWIPE_FRICTION = 1;
 
-// Module-level status metadata keeps the virtualised list from allocating icon
-// maps per row. The shared climb-list row uses these colours as tints; the
-// fallback text row keeps the older filled badge.
-const STATUS_META: Record<AscentFeedItem['status'], { icon: IconName; color: string }> = {
-  flash: { icon: 'flash', color: brandColors.warning },
-  send: { icon: 'tick', color: brandColors.success },
-  attempt: { icon: 'circle', color: iosSystemColors.systemGray },
-};
+// Meta-line width tiers (device fontScale). The Text primitive caps scaling at
+// 1.5×, so 1.5 is the true worst case. Below DROP_TIME everything fits on one
+// line; between the tiers the time-of-day (the lowest-value part) drops; at
+// TWO_LINE the meta wraps to a results line + context line so nothing is lost.
+// Whole parts drop — never character ellipsis mid-part (a "3★" cut to "3…"
+// misreports the rating). Thresholds are a starting point, tuned on device.
+const FONT_SCALE_DROP_TIME = 1.15;
+const FONT_SCALE_TWO_LINE = 1.3;
 
-function ascentToClimb(ascent: AscentFeedItem): ClimbListItemClimb | null {
-  if (!ascent.frames) return null;
-  return {
-    uuid: ascent.climbUuid,
-    name: ascent.climbName,
-    frames: ascent.frames,
-    difficulty: ascent.difficultyName ?? ascent.consensusDifficultyName ?? '',
-    ascensionist_count: 0,
-    quality_average: ascent.qualityAverage != null ? String(ascent.qualityAverage) : '0',
-    setter_username: ascent.setterUsername ?? '',
-    benchmark_difficulty: ascent.isBenchmark ? (ascent.consensusDifficultyName ?? ascent.difficultyName ?? null) : null,
-    mirrored: ascent.isMirror,
-    is_no_match: ascent.isNoMatch,
-  };
-}
+// Status is the hero of a logbook entry — a bare ~22pt glyph, shape-first
+// (⚡ flashed, ✓ sent, ○ project) with colour as reinforcement, replacing the
+// search row's small trailing status glyph. Icon names are static; colours
+// resolve per-scheme in the component.
+const STATUS_ICON: Record<AscentFeedItem['status'], IconName> = {
+  flash: 'flash',
+  send: 'tick.outline',
+  attempt: 'circle',
+};
+const STATUS_GLYPH_SIZE = 22;
 
 /**
- * Drag-driven inner of the leading "Edit" swipe action — the pencil grows in
- * with the drag plus a haptic detent at the commit threshold. Only mounted while
- * the row is being dragged; the edit itself fires from onSwipeableWillOpen.
+ * Drag-driven inner of a swipe action — the icon grows in with the drag plus a
+ * haptic detent at the commit threshold. Only mounted while the row is being
+ * dragged; the action itself fires from onSwipeableWillOpen.
  */
-function EditSwipeActionInner({ translation }: { translation: SharedValue<number> }) {
+function SwipeActionInner({ translation, icon }: { translation: SharedValue<number>; icon: IconName }) {
   useAnimatedReaction(
     () => Math.abs(translation.value) >= COMMIT_THRESHOLD,
     (armed, wasArmed) => {
@@ -94,36 +120,61 @@ function EditSwipeActionInner({ translation }: { translation: SharedValue<number
   }));
   return (
     <Animated.View style={iconStyle}>
-      <Icon name="edit" size={24} color={iosSystemColors.white} />
+      <Icon name={icon} size={24} color={iosSystemColors.white} />
     </Animated.View>
   );
 }
 
 /**
- * Leading "Edit" swipe action (left-to-right swipe) — commit-on-release opens
- * the logbook edit sheet. Cheap shell while resting; mounts the animated inner
- * once a drag starts (`active`). At translation=0 the pencil is fully
- * transparent, so the resting shell renders no icon.
+ * Swipe action shell (either side) — commit-on-release fires the action. Cheap
+ * shell while resting; mounts the animated inner once a drag starts (`active`).
+ * At translation=0 the icon is fully transparent, so the resting shell renders
+ * no icon.
  */
-function EditSwipeAction({ translation, active }: { translation: SharedValue<number>; active: boolean }) {
-  return <View style={styles.swipeAction}>{active ? <EditSwipeActionInner translation={translation} /> : null}</View>;
+function SwipeAction({
+  translation,
+  active,
+  icon,
+  side,
+}: {
+  translation: SharedValue<number>;
+  active: boolean;
+  icon: IconName;
+  side: 'left' | 'right';
+}) {
+  return (
+    <View style={[styles.swipeAction, side === 'left' ? styles.swipeActionLeft : styles.swipeActionRight]}>
+      {active ? <SwipeActionInner translation={translation} icon={icon} /> : null}
+    </View>
+  );
 }
 
-export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenActions, onEdit }: LogbookRowProps) {
-  const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+export const LogbookRow = memo(function LogbookRow({
+  ascent,
+  onActivate,
+  onOpenActions,
+  onEdit,
+  onDeleteRequest,
+  showBoardInMeta = true,
+  fontScale = 1,
+}: LogbookRowProps) {
+  const { t, i18n } = useTranslation('you');
+  const { systemColors, brandColors: brand } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
-  const meta = STATUS_META[ascent.status];
+  const statusColor =
+    ascent.status === 'flash' ? brand.warning : ascent.status === 'send' ? brand.success : iosSystemColors.systemGray;
+
+  // --- Grade column: the big grade is always the climber's effective grade
+  // (their own, or the consensus when they never graded it — marked with the
+  // `people` glyph). The consensus shows as a small secondary only when the
+  // crowd disagrees, with an arrow for the direction of the disagreement.
   const rawGradeLabel = ascent.difficultyName ?? ascent.consensusDifficultyName;
   const gradeLabel =
     formatGradeByDifficultyId(ascent.difficulty ?? ascent.consensusDifficulty) ??
     formatGrade(rawGradeLabel) ??
     rawGradeLabel;
-  const gradeColor = gradeLabel ? gradeBadgeColor(rawGradeLabel ?? gradeLabel) : undefined;
-  // Dual grade: the big grade is what you logged (or consensus when ungraded);
-  // surface the consensus as a small `people`-marked secondary only when the
-  // crowd disagrees, and mark an ungraded row's grade as consensus-sourced.
+  const gradeColor = rawGradeLabel ? (getGradeColor(rawGradeLabel) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
   const { showConsensusSecondary, gradeIsConsensus } = deriveLogbookGradeDisplay(
     ascent.difficulty,
     ascent.consensusDifficulty,
@@ -133,19 +184,61 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
       formatGrade(ascent.consensusDifficultyName) ??
       ascent.consensusDifficultyName)
     : null;
-  const layoutName = getLayoutDisplayName(ascent.boardType, ascent.layoutId);
-  const boardLabel = ascent.boardDisplayName ?? layoutName;
-  const triesLabel = t('mobile.logbook.tries', { count: ascent.attemptCount });
-  const subtitleParts = [boardLabel, triesLabel, `${ascent.angle}°`, formatTickRelativeTime(ascent.climbedAt)];
-  const subtitle = subtitleParts.join(' · ');
-  const climb = ascentToClimb(ascent);
-  const boardConfig = getBoardConfigForPlaylist(ascent.boardType, ascent.layoutId);
+  // 'up' = you found it harder than the crowd. Informational, not a warning —
+  // the sub-line renders in secondaryLabel, never an alert tone.
+  const deltaDirection = showConsensusSecondary
+    ? consensusDeltaDirection(ascent.difficulty, ascent.consensusDifficulty)
+    : null;
+
+  // --- Meta line parts (review data — the climber's own record, not the
+  // crowd's). Board+angle always renders: with no thumbnail it is the only
+  // repeat-ascent disambiguator, and it must not mutate with the result set.
+  const attemptsKind = logbookAttemptsKind(ascent.status);
+  const triesShown = displayedAttemptCount(ascent.attemptCount);
+  const quality = normalizeLogbookQuality(ascent.quality);
+  const hasNote = logbookNoteIsVisible(ascent.comment);
+  const hasBetaVideo = ascent.hasBetaVideo === true;
+  // The user-named board when the tick has one ("Garage Board"), else the
+  // LAYOUT ("Kilter Homewall", "MoonBoard 2016") — a named board is personal
+  // context worth keeping; unnamed ticks still get the wall product.
+  const wallLabel = ascent.boardDisplayName ?? getLayoutDisplayName(ascent.boardType, ascent.layoutId);
+  const boardAngleLabel = `${wallLabel} ${ascent.angle}°`;
+  const attemptsLabel =
+    attemptsKind === 'flash'
+      ? t('mobile.logbook.status.flash')
+      : attemptsKind === 'send'
+        ? t('mobile.logbook.tries', { count: triesShown })
+        : `${t('mobile.logbook.row.project')} · ${t('mobile.logbook.tries', { count: triesShown })}`;
+  const starsLabel = quality != null ? t('mobile.logbook.row.stars', { count: quality }) : null;
+  const timeLabel = useMemo(
+    () =>
+      parseTickTime(ascent.climbedAt)
+        .toDate()
+        .toLocaleTimeString(i18n.language, { hour: 'numeric', minute: '2-digit' }),
+    [ascent.climbedAt, i18n.language],
+  );
+
+  const showTimeInline = fontScale < FONT_SCALE_DROP_TIME;
+  const twoLineMeta = fontScale >= FONT_SCALE_TWO_LINE;
+  // One line: results + context together, time dropping first under scale.
+  // Two lines (accessibility sizes): results over context, nothing dropped.
+  // Between the tiers (1.15–1.3) the time is INTENTIONALLY absent from the
+  // visual layout — it's the lowest-value part and the a11y label still
+  // speaks it; it returns in the context line once the two-line layout kicks in.
+  const metaWall = showBoardInMeta ? boardAngleLabel : `${ascent.angle}°`;
+  const primaryMetaText = twoLineMeta ? attemptsLabel : [attemptsLabel, metaWall].filter(Boolean).join(' · ');
+  const contextMetaText = twoLineMeta ? [metaWall, timeLabel].filter(Boolean).join(' · ') : null;
+
+  // Rows whose board config can't resolve (frameless MoonBoard ticks) dead-end
+  // in the play drawer today; keep the tap (analytics + a future detail view)
+  // but don't fire a success haptic for a no-op.
+  const actionable = !!ascent.frames && !!getBoardConfigForPlaylist(ascent.boardType, ascent.layoutId);
 
   const swipeableRef = useRef<SwipeableMethods>(null);
 
-  // Lazy swipe panel: the heavy animated inner only mounts once a drag actually
-  // starts on this row. The hook resets the machine on recycle (ascent.uuid) and
-  // exposes a ref so the render callback stays dep-free (see useSwipeArm).
+  // Lazy swipe panels: the heavy animated inner only mounts once a drag actually
+  // starts on this row (either side — the non-dragged side stays occluded by the
+  // opaque row). The hook resets the machine on recycle (ascent.uuid).
   const { armedRef: dragArmedRef, arm, disarm } = useSwipeArm(ascent.uuid);
 
   // FlashList recycles rows (same instance, new ascent). Snap any open swipe shut
@@ -161,11 +254,15 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
   onOpenActionsRef.current = onOpenActions;
   const onEditRef = useRef(onEdit);
   onEditRef.current = onEdit;
+  const onDeleteRequestRef = useRef(onDeleteRequest);
+  onDeleteRequestRef.current = onDeleteRequest;
   const ascentRef = useRef(ascent);
   ascentRef.current = ascent;
+  const actionableRef = useRef(actionable);
+  actionableRef.current = actionable;
 
   const handleRowPress = useCallback(() => {
-    hapticSelection();
+    if (actionableRef.current) hapticSelection();
     onActivateRef.current(ascentRef.current);
   }, []);
 
@@ -183,7 +280,17 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
     edit(ascentRef.current);
   }, []);
 
-  // Snap shut once fully settled open (the edit already fired on willOpen).
+  // Capture the ascent NOW — the host's confirm dialog awaits, and FlashList can
+  // recycle this row onto a different ascent while it's up. Deleting whatever
+  // the ref points at after the await could delete the wrong tick.
+  const handleDeleteRequest = useCallback(() => {
+    const requestDelete = onDeleteRequestRef.current;
+    if (!requestDelete) return;
+    hapticMedium();
+    requestDelete(ascentRef.current, 'swipe');
+  }, []);
+
+  // Snap shut once fully settled open (the action already fired on willOpen).
   const handleSwipeableOpened = useCallback(() => {
     swipeableRef.current?.close();
   }, []);
@@ -198,11 +305,13 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
 
   const handleSwipeWillOpen = useCallback(
     (direction: 'left' | 'right') => {
-      // ReanimatedSwipeable reports the SWIPE direction: 'right' fires when the
-      // LEFT actions (Edit) open (left-to-right swipe). Only the left side exists.
+      // ReanimatedSwipeable reports the SWIPE direction, not the actions side:
+      // 'right' fires when the LEFT actions (Edit) open (left-to-right swipe);
+      // 'left' fires when the RIGHT actions (Delete) open (right-to-left).
       if (direction === 'right') handleEdit();
+      else handleDeleteRequest();
     },
-    [handleEdit],
+    [handleEdit, handleDeleteRequest],
   );
 
   const singleTapGesture = useMemo(
@@ -235,79 +344,69 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
     [onOpenActions, longPressGesture, singleTapGesture],
   );
 
-  // Reads dragArmedRef.current rather than the armed state directly so it stays
+  // Read dragArmedRef.current rather than the armed state directly so these stay
   // dep-free: a changed render-callback reference makes ReanimatedSwipeable
   // re-create the action-panel subtree (remounting the heavy inner). The armed
   // state change re-renders the row, while the stable identity keeps the
   // shell→inner swap in place.
   const renderLeftActions = useCallback(
     (_progress: SharedValue<number>, translation: SharedValue<number>) => (
-      <EditSwipeAction translation={translation} active={dragArmedRef.current} />
+      <SwipeAction translation={translation} active={dragArmedRef.current} icon="edit" side="left" />
+    ),
+    [dragArmedRef],
+  );
+  const renderRightActions = useCallback(
+    (_progress: SharedValue<number>, translation: SharedValue<number>) => (
+      <SwipeAction translation={translation} active={dragArmedRef.current} icon="delete" side="right" />
     ),
     [dragArmedRef],
   );
 
-  const rowContent =
-    climb && boardConfig ? (
-      <View style={[styles.row, { backgroundColor: systemColors.secondaryBackground }]}>
-        <View style={styles.statusSlot}>
-          <View style={[styles.statusIcon, { backgroundColor: withAlpha(meta.color, 0.15) }]}>
-            <Icon name={meta.icon} size={14} color={meta.color} />
-          </View>
-        </View>
-        <ClimbListItemContent
-          climb={climb}
-          boardName={boardConfig.boardName}
-          layoutId={boardConfig.layoutId}
-          sizeId={boardConfig.sizeId}
-          setIds={boardConfig.setIds.join(',')}
-          angle={ascent.angle}
-          subtitleDetailParts={subtitleParts}
-          showAscentStatus={false}
-          consensusGrade={consensusGradeLabel}
-          gradeIsConsensus={gradeIsConsensus}
-        />
-      </View>
-    ) : (
-      <View style={[styles.fallbackRow, { backgroundColor: systemColors.background }]}>
-        <View style={[styles.badge, { backgroundColor: meta.color }]}>
-          <Icon name={meta.icon} size={14} color={iosSystemColors.white} />
-        </View>
-        <View style={styles.fallbackText}>
-          <Text variant="body" numberOfLines={1}>
-            {ascent.climbName}
-          </Text>
-          <Text variant="subheadline" style={styles.fallbackSubtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        </View>
-        <View style={styles.trailing}>
-          {gradeLabel && gradeColor ? (
-            <View style={styles.iconGradeRow}>
-              {gradeIsConsensus ? <Icon name="people" size={11} color={systemColors.secondaryLabel} /> : null}
-              <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
-                <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
-                  {gradeLabel}
-                </Text>
-              </View>
-            </View>
-          ) : null}
-          {consensusGradeLabel ? (
-            <View style={styles.iconGradeRow}>
-              <Icon name="people" size={10} color={systemColors.secondaryLabel} />
-              <Text variant="caption2" color={systemColors.secondaryLabel}>
-                {consensusGradeLabel}
-              </Text>
-            </View>
-          ) : null}
-          <Text variant="caption2" color={systemColors.tertiaryLabel}>
-            {triesLabel}
-          </Text>
-        </View>
-      </View>
-    );
+  // --- Non-visual parity: the label reads as a log entry ("Sent X, V7, you
+  // graded V7 community says V6, 3 tries, rated 3 of 5 stars, has note, ...")
+  // and the swipe-only affordances are exposed as accessibility actions —
+  // otherwise edit/delete are invisible to VoiceOver/TalkBack.
+  const statusA11y =
+    ascent.status === 'flash'
+      ? t('mobile.logbook.row.a11yFlashed')
+      : ascent.status === 'send'
+        ? t('mobile.logbook.row.a11ySent')
+        : t('mobile.logbook.row.project');
+  const accessibilityLabel = [
+    `${statusA11y} ${ascent.climbName}`,
+    gradeLabel
+      ? gradeIsConsensus
+        ? t('mobile.logbook.row.a11yCommunityGrade', { grade: gradeLabel })
+        : gradeLabel
+      : null,
+    consensusGradeLabel
+      ? t('mobile.logbook.row.a11yGradeDelta', { logged: gradeLabel, consensus: consensusGradeLabel })
+      : null,
+    attemptsKind === 'flash' ? null : t('mobile.logbook.tries', { count: triesShown }),
+    quality != null ? t('mobile.logbook.row.a11yStars', { count: quality }) : null,
+    hasNote ? t('mobile.logbook.row.a11yHasNote') : null,
+    hasBetaVideo ? t('mobile.logbook.row.a11yHasBetaVideo') : null,
+    ascent.isMirror ? t('mobile.logbook.row.a11yMirrored') : null,
+    boardAngleLabel,
+    timeLabel,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
-  const separatorStyle = climb && boardConfig ? styles.separatorRich : styles.separatorFallback;
+  const accessibilityActions = useMemo(() => {
+    const actions: { name: string; label: string }[] = [];
+    if (onEdit) actions.push({ name: 'edit', label: t('mobile.logbook.row.editAction') });
+    if (onDeleteRequest) actions.push({ name: 'delete', label: t('mobile.logbook.row.deleteAction') });
+    if (onOpenActions) actions.push({ name: 'more', label: t('mobile.logbook.row.moreActions') });
+    return actions;
+  }, [onEdit, onDeleteRequest, onOpenActions, t]);
+
+  const handleAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
+    const actionName = event.nativeEvent.actionName;
+    if (actionName === 'edit') onEditRef.current?.(ascentRef.current);
+    else if (actionName === 'delete') onDeleteRequestRef.current?.(ascentRef.current, 'a11y');
+    else if (actionName === 'more') onOpenActionsRef.current?.(ascentRef.current);
+  }, []);
 
   return (
     <View style={styles.outerContainer}>
@@ -315,20 +414,114 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
         ref={swipeableRef}
         friction={SWIPE_FRICTION}
         leftThreshold={COMMIT_THRESHOLD}
+        rightThreshold={COMMIT_THRESHOLD}
         overshootLeft={false}
+        overshootRight={false}
         renderLeftActions={onEdit ? renderLeftActions : undefined}
+        renderRightActions={onDeleteRequest ? renderRightActions : undefined}
         onSwipeableOpenStartDrag={handleSwipeStartDrag}
         onSwipeableWillOpen={handleSwipeWillOpen}
         onSwipeableOpen={handleSwipeableOpened}
         onSwipeableClose={handleSwipeableClosed}
       >
         <GestureDetector gesture={tapGesture}>
-          <View accessible accessibilityRole="button" accessibilityLabel={ascent.climbName}>
-            {rowContent}
+          <View
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={accessibilityLabel}
+            accessibilityActions={accessibilityActions}
+            onAccessibilityAction={handleAccessibilityAction}
+            style={[styles.row, { backgroundColor: systemColors.secondaryBackground }]}
+          >
+            {/* Status — the hero of a log entry. Shape carries the meaning. */}
+            <View style={styles.statusSlot}>
+              <Icon name={STATUS_ICON[ascent.status]} size={STATUS_GLYPH_SIZE} color={statusColor} />
+            </View>
+
+            {/* Name + intrinsic attributes, then the review meta line(s). */}
+            <View style={styles.centerColumn}>
+              <View style={styles.nameRow}>
+                <Text variant="body" numberOfLines={1} style={styles.climbName}>
+                  {ascent.climbName}
+                </Text>
+                {/* ClimbAttributeIcons keys the © glyph on Number(value) > 0 and
+                    never renders the value itself, so the '1' fallback only
+                    forces the glyph on for a benchmark tick whose grade names
+                    are missing — isBenchmark is authoritative here (the old
+                    null fallback silently hid the glyph on those rows). */}
+                <ClimbAttributeIcons
+                  benchmarkDifficulty={
+                    ascent.isBenchmark ? (ascent.consensusDifficultyName ?? ascent.difficultyName ?? '1') : null
+                  }
+                  isNoMatch={ascent.isNoMatch}
+                />
+                {ascent.isMirror ? (
+                  <View style={styles.mirrorIcon}>
+                    <Icon name="mirror" size={12} color={systemColors.secondaryLabel} />
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.metaRow}>
+                <Text variant="footnote" color={systemColors.secondaryLabel} numberOfLines={1} style={styles.metaText}>
+                  {primaryMetaText}
+                </Text>
+                {hasNote ? <Icon name="edit" size={11} color={systemColors.secondaryLabel} /> : null}
+                {showTimeInline ? (
+                  <Text variant="footnote" color={systemColors.tertiaryLabel}>
+                    {timeLabel}
+                  </Text>
+                ) : null}
+              </View>
+              {contextMetaText ? (
+                <Text variant="footnote" color={systemColors.tertiaryLabel} numberOfLines={1}>
+                  {contextMetaText}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Grade column — your grade big; the crowd's as a small secondary
+                with the disagreement direction. flexShrink:0 so the title never
+                squeezes the grade. */}
+            <View style={styles.trailing}>
+              {gradeLabel || starsLabel || hasBetaVideo ? (
+                <View style={styles.iconGradeRow}>
+                  {/* Your rating + beta marker sit LEFT of the grade (review
+                      feedback: the meta line was too crowded to scan them).
+                      Camera keeps its filled brand-violet emphasis. */}
+                  {starsLabel ? (
+                    <Text variant="caption1" color={systemColors.secondaryLabel}>
+                      {starsLabel}
+                    </Text>
+                  ) : null}
+                  {hasBetaVideo ? <Icon name="video.fill" size={13} color={brand.primary} /> : null}
+                  {gradeIsConsensus ? <Icon name="people" size={13} color={systemColors.secondaryLabel} /> : null}
+                  {gradeLabel ? (
+                    <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
+                      {gradeLabel}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+              {consensusGradeLabel ? (
+                <View style={styles.iconGradeRow}>
+                  <Icon name="people" size={11} color={systemColors.secondaryLabel} />
+                  <Text variant="caption2" numberOfLines={1} color={systemColors.secondaryLabel}>
+                    {consensusGradeLabel}
+                  </Text>
+                  {deltaDirection ? (
+                    <Icon
+                      name={deltaDirection === 'up' ? 'chevron.up' : 'chevron.down'}
+                      size={9}
+                      color={systemColors.secondaryLabel}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
           </View>
         </GestureDetector>
       </ReanimatedSwipeable>
-      <View style={[separatorStyle, { backgroundColor: systemColors.separator }]} />
+      <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
     </View>
   );
 });
@@ -343,72 +536,77 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: spacing[3],
     paddingVertical: spacing[2],
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: spacing[4],
+    // Touch floor even for single-line rows at small type sizes.
+    minHeight: 44,
   },
   statusSlot: {
     width: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statusIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
+  centerColumn: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
+    gap: 2,
   },
-  separatorRich: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: spacing[3] + 28 + spacing[3],
-  },
-  separatorFallback: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 16 + 12 + 28,
-  },
-  fallbackRow: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 44,
+    minWidth: 0,
   },
-  fallbackText: {
-    flex: 1,
-    justifyContent: 'center',
-    marginLeft: 12,
+  climbName: {
+    fontWeight: '600',
+    // Shrink so the name (not the trailing attribute glyphs) absorbs truncation.
+    flexShrink: 1,
   },
-  fallbackSubtitle: {
-    opacity: 0.6,
-    marginTop: 2,
+  mirrorIcon: {
+    marginLeft: 4,
+    flexShrink: 0,
   },
-  badge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  metaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    columnGap: 4,
+    minWidth: 0,
+  },
+  metaText: {
+    flexShrink: 1,
   },
   trailing: {
+    flexShrink: 0,
     alignItems: 'flex-end',
-    gap: 2,
-    marginLeft: 8,
+    gap: 1,
+    marginLeft: spacing[2],
+    maxWidth: 120,
   },
-  gradePill: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
+  gradeText: {
+    fontWeight: '700',
+    textAlign: 'right',
   },
   iconGradeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
   },
-  gradeText: { fontWeight: '700' },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    // Inset to the text column: row padding + status slot + column gap.
+    marginLeft: spacing[4] + 28 + spacing[3],
+  },
   swipeAction: {
     width: ACTION_REVEAL,
     justifyContent: 'center',
+  },
+  swipeActionLeft: {
     alignItems: 'flex-start',
     paddingLeft: 22,
     backgroundColor: brandColors.primary,
+  },
+  swipeActionRight: {
+    alignItems: 'flex-end',
+    paddingRight: 22,
+    backgroundColor: brandColors.error,
   },
 });

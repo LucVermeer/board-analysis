@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type QueryClient, type InfiniteData } from '@tanstack/react-query';
 import {
   UPDATE_TICK,
   DELETE_TICK,
@@ -7,6 +7,7 @@ import {
   type UpdateTickResponse,
   type DeleteTickMutationVariables,
   type DeleteTickMutationResponse,
+  type GetUserAscentsFeedQueryResponse,
 } from '@boardsesh/graphql/operations';
 import { useBoardAdapter } from './adapter';
 
@@ -44,6 +45,44 @@ export function useUpdateTick() {
   });
 }
 
+/**
+ * Strip a deleted tick from every cached ascents-feed page by uuid. The
+ * invalidation below refetches each loaded 20-item offset page sequentially —
+ * seconds on a deep logbook — so without this edit the deleted row would sit
+ * visibly in the list until the refetch lands. Lives here (beside the
+ * invalidation list) so every delete path — swipe, edit sheet, web — behaves
+ * the same and the query-key shape isn't duplicated at call sites.
+ */
+function stripTickFromAscentFeeds(queryClient: QueryClient, uuid: string) {
+  queryClient.setQueriesData<InfiniteData<GetUserAscentsFeedQueryResponse>>(
+    { queryKey: ['userAscentsFeed'] },
+    (cached) => {
+      if (!cached) return cached;
+      // Each page carries a copy of the whole feed's totalCount — keep it
+      // consistent with the strip so a surface reading the total isn't
+      // stale-high until the background refetch reconciles. One tick = one off
+      // the total, even if offset-pagination overlap duplicated its row across
+      // cached pages (the duplicates are cache artifacts, not extra ticks).
+      // Decrementing EVERY page (not just pages holding the row) is deliberate:
+      // the copies must stay in lockstep, and the refetch re-syncs any page
+      // whose copy had already drifted.
+      const anyRemoved = cached.pages.some((page) => page.userAscentsFeed.items.some((item) => item.uuid === uuid));
+      if (!anyRemoved) return cached;
+      return {
+        ...cached,
+        pages: cached.pages.map((page) => ({
+          ...page,
+          userAscentsFeed: {
+            ...page.userAscentsFeed,
+            items: page.userAscentsFeed.items.filter((item) => item.uuid !== uuid),
+            totalCount: Math.max(0, page.userAscentsFeed.totalCount - 1),
+          },
+        })),
+      };
+    },
+  );
+}
+
 /** Delete a tick by uuid. */
 export function useDeleteTick() {
   const { isAuthenticated, executeHttp } = useBoardAdapter();
@@ -57,6 +96,9 @@ export function useDeleteTick() {
       });
       return response.deleteTick;
     },
-    onSuccess: () => invalidateTickDependents(queryClient),
+    onSuccess: (_data, uuid) => {
+      stripTickFromAscentFeeds(queryClient, uuid);
+      invalidateTickDependents(queryClient);
+    },
   });
 }

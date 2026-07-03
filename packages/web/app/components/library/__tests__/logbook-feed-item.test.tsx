@@ -210,6 +210,7 @@ function makeItem(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
     comment: 'Nice send!',
     climbedAt: new Date('2026-04-01T12:00:00Z').toISOString(),
     frames: 'p1r14',
+    hasBetaVideo: null,
     ...overrides,
   };
 }

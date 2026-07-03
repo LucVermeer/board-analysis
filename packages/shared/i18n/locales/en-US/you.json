@@ -158,6 +158,30 @@
         "sends": "Sends",
         "attempts": "Attempts",
         "both": "Both"
+      },
+      "row": {
+        "project": "Project",
+        "stars": "{{count}}★",
+        "a11ySent": "Sent",
+        "a11yFlashed": "Flashed",
+        "a11yCommunityGrade": "community grade {{grade}}",
+        "a11yGradeDelta": "you graded {{logged}}, community says {{consensus}}",
+        "a11yStars": "rated {{count}} of 5 stars",
+        "a11yHasNote": "has note",
+        "a11yHasBetaVideo": "has beta video",
+        "a11yMirrored": "mirrored",
+        "editAction": "Edit entry",
+        "deleteAction": "Delete entry",
+        "moreActions": "More actions"
+      },
+      "day": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "climbs_one": "{{count}} climb",
+        "climbs_other": "{{count}} climbs",
+        "sends_one": "{{count}} send",
+        "sends_other": "{{count}} sends",
+        "top": "top {{grade}}"
       }
     }
   }
