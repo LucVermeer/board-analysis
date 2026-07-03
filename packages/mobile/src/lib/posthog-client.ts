@@ -1,4 +1,5 @@
-import { PostHog } from 'posthog-react-native';
+import { PostHog, type PostHogOptions } from 'posthog-react-native';
+import { getAnalyticsBootstrapId } from './analytics-bootstrap-id';
 
 // PostHog flags events with an empty User-Agent as bots, and the RN SDK sends no
 // UA it stores — so without this, real mobile traffic hides behind the bot filter.
@@ -36,6 +37,27 @@ export const isAnalyticsEnabled = !!apiKey && !__DEV__;
 let client: PostHog | null = null;
 let initAttempted = false;
 
+// Pure so the bootstrap wiring is unit-testable without constructing a real
+// PostHog client (isAnalyticsEnabled is always false in the test env).
+// `bootstrapDistinctId` is the party-profile UUID resolved synchronously by the
+// caller, or null if that read/create failed — in which case bootstrap is
+// omitted entirely and the SDK falls back to its own anonymous id, exactly as
+// before this option existed.
+export function buildPostHogOptions(postHogHost: string, bootstrapDistinctId: string | null): PostHogOptions {
+  return {
+    host: postHogHost,
+    bootstrap: bootstrapDistinctId ? { distinctId: bootstrapDistinctId, isIdentifiedId: false } : undefined,
+    // `enableSessionReplay` defaults false, so the SDK never auto-records.
+    // Capture only begins when setSessionRecordingEnabled() calls
+    // startSessionRecording(), which lazily initialises the native replay SDK.
+    sessionReplayConfig: {
+      maskAllTextInputs: true,
+      maskAllImages: true,
+      captureLog: true,
+    },
+  };
+}
+
 // Construct or return the single PostHog client. Returns null in dev / when
 // unkeyed, which makes every wrapper method a no-op. PostHog is product
 // analytics only — error/crash reporting goes to Sentry (src/lib/sentry.ts).
@@ -48,24 +70,19 @@ export function getPostHogClient(): PostHog | null {
   // expo-device + expo-application (installed) enrich events with $device_model,
   // $os_version, $app_version. Screen autocapture is handled in AnalyticsProvider.
   //
-  // Known gap: this client is constructed at AnalyticsProvider mount (top of the
-  // tree), so the first Application Opened fires under PostHog's auto-generated
-  // anonymous distinct_id before PartyProfileProvider has run identify() with
-  // the party-profile UUID (and, for signed-in users, the alias to the user).
-  // PostHog merges those early events into the person record once the alias is
-  // processed, so this is acceptable (web has the same cold-start window), but
-  // don't be surprised to see a few lifecycle events on a transient anon id.
-  client = new PostHog(apiKey, {
-    host,
-    // `enableSessionReplay` defaults false, so the SDK never auto-records.
-    // Capture only begins when setSessionRecordingEnabled() calls
-    // startSessionRecording(), which lazily initialises the native replay SDK.
-    sessionReplayConfig: {
-      maskAllTextInputs: true,
-      maskAllImages: true,
-      captureLog: true,
-    },
-  });
+  // This client is constructed at AnalyticsProvider mount (top of the tree),
+  // before PartyProfileProvider has loaded the party-profile UUID and run
+  // identify()/alias() with it — so captureAppLifecycleEvents would otherwise
+  // fire Application Installed/Opened under PostHog's own transient anonymous
+  // id, an id the later alias-to-user step never reliably reconnects.
+  // getAnalyticsBootstrapId() reads a slot that analytics-bootstrap.ts (wired
+  // up in app/_layout.tsx, ahead of anything that imports this module)
+  // resolves synchronously via expo-secure-store's JSI sync API — passing it
+  // as `bootstrap` seeds the SDK's anonymous id with it before
+  // captureAppLifecycleEvents runs, so those events land on the same id
+  // PartyProfileProvider later identifies/aliases.
+  const bootstrapDistinctId = getAnalyticsBootstrapId();
+  client = new PostHog(apiKey, buildPostHogOptions(host, bootstrapDistinctId));
   registerMobileUserAgent(client);
   return client;
 }

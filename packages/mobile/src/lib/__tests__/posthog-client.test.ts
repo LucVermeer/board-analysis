@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MOBILE_USER_AGENT, registerMobileUserAgent } from '../posthog-client';
+import { MOBILE_USER_AGENT, registerMobileUserAgent, buildPostHogOptions } from '../posthog-client';
 
 // The whole point of MOBILE_USER_AGENT is to give mobile events a User-Agent that
 // PostHog's classifier reads as "Regular" rather than the bot it assigns to an
@@ -33,5 +33,32 @@ describe('registerMobileUserAgent', () => {
     expect(() => registerMobileUserAgent({ register })).not.toThrow();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+// Guards the fix for the install/open identity race: the party-profile UUID
+// must reach the PostHog constructor as `bootstrap.distinctId` so
+// captureAppLifecycleEvents (which fires during construction) lands on the
+// same id PartyProfileProvider later identifies/aliases, instead of a
+// transient SDK-generated anonymous id that never reliably reconnects.
+describe('buildPostHogOptions', () => {
+  it('bootstraps the anonymous distinct_id from a resolved party-profile UUID', () => {
+    const options = buildPostHogOptions('https://us.i.posthog.com', 'party-profile-uuid');
+    expect(options.bootstrap).toEqual({ distinctId: 'party-profile-uuid', isIdentifiedId: false });
+    expect(options.host).toBe('https://us.i.posthog.com');
+  });
+
+  it('omits bootstrap when the party-profile UUID could not be resolved', () => {
+    const options = buildPostHogOptions('https://us.i.posthog.com', null);
+    expect(options.bootstrap).toBeUndefined();
+  });
+
+  it('always configures session replay masking regardless of bootstrap', () => {
+    const options = buildPostHogOptions('https://us.i.posthog.com', null);
+    expect(options.sessionReplayConfig).toEqual({
+      maskAllTextInputs: true,
+      maskAllImages: true,
+      captureLog: true,
+    });
   });
 });
