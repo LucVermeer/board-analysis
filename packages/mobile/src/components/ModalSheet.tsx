@@ -32,7 +32,9 @@ type ModalSheetProps = {
   /** Fired when the user closes the sheet themselves (pan-down / backdrop), so a
    * controlled parent can clear the state driving `visible`. */
   onClose?: () => void;
-  /** Fired AFTER the dismiss animation has really settled (the accurate hook). */
+  /** Fired AFTER the dismiss animation has really settled. On iOS this rides the
+   * native post-animation `onDismiss` (accurate); on Android it settles off the
+   * coordinator's ceiling timer (no native signal there). */
   onFullyDismissed?: () => void;
   /** Serialization domain. Sheets presented off the same view controller share a
    * group; defaults to the root window VC. */
@@ -148,6 +150,7 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       enablePanDownToClose={enablePanDownToClose}
       handleIndicatorStyle={sheet.handleStyle}
       onChange={handleChange}
+      onFullyDismissed={managed.onFullyDismissed}
       style={styles.sheet}
     >
       {footer ? (

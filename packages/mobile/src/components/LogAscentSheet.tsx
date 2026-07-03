@@ -75,6 +75,7 @@ export function LogAscentSheet({
       snapPoints={snapPoints}
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={styles.indicator}
       keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
