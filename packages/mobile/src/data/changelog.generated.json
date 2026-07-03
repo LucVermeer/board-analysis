@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T06:48:34.443Z",
+  "generatedAt": "2026-07-03T07:11:44.933Z",
   "entries": [
+    {
+      "prNumber": 3313,
+      "category": "new",
+      "title": "Outdated board and gym listings can now be fixed by the community — the setups you browse stay accurate as walls get reconfigured.",
+      "mergedAt": "2026-07-03T07:10:55Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3313"
+    },
     {
       "prNumber": 3338,
       "category": "fixed",

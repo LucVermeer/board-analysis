@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Outdated board and gym listings can now be fixed by the community — the setups you browse stay accurate as walls get reconfigured. ([#3313](https://github.com/boardsesh/boardsesh/pull/3313))
 - Log a climb on a date other than today — backdate a send you forgot to tick, right from the log sheet. ([#3389](https://github.com/boardsesh/boardsesh/pull/3389))
 - Requesting your MoonBoard data now sends a formal GDPR request that spells out exactly what Moon owes you — including what happened to any logbook that went missing. The letter lands on your clipboard so it pastes cleanly into your email. ([#3378](https://github.com/boardsesh/boardsesh/pull/3378))
 - Your logbook now reads like a climbing diary — day headers with your send count and hardest send of the day, plus which board you were on. ([#3350](https://github.com/boardsesh/boardsesh/pull/3350))
