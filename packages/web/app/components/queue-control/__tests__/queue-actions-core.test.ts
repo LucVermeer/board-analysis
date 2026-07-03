@@ -97,9 +97,17 @@ type HarnessOptions = {
   /** When true, mimics the board-route provider: `applyLocal` always
    * dispatches into the real reducer, and party mutations are gated on
    * `hasConnected && !isDisconnected` (QueueContext model). When false,
-   * mimics the bridge: `applyLocal` no-ops while a party session is active
-   * (optimistic updates wait for the server echo) and party mutations are
-   * attempted unconditionally whenever a party session is active. */
+   * mimics the bridge, where party mutations are attempted unconditionally
+   * whenever a party session is active.
+   *
+   * NOTE: the `applyLocal` no-op below is a MODELING SHORTCUT, not production
+   * behavior. Post-W6 the real bridge dispatches optimistically for party too;
+   * its `getSnapshot` simply lags via a render-captured ref, so within one
+   * synchronous action the factory reads pre-dispatch state either way — the
+   * no-op reproduces that same mutation-payload behavior without wiring a live
+   * reducer. The optimistic-STATE half of any fix therefore can't be exercised
+   * here; it's pinned against the real reducer in queue-bridge-context.test.tsx
+   * (MockRootQueueProvider). */
   gateOnConnection: boolean;
   initialQueue?: ClimbQueueItem[];
   initialCurrent?: ClimbQueueItem | null;
@@ -475,6 +483,26 @@ describe('setCurrentClimb', () => {
     expect(harness.mutations.setCurrentClimb).toHaveBeenCalledWith(expect.any(Object), false, expect.any(String));
   });
 
+  it('fires analytics, then applies the optimistic local dispatch, before the party mutation initiates', async () => {
+    // Locks the ordering contract this PR relies on when flipping bridge-party
+    // `applyLocal` from a no-op to a real dispatch (W6). `setCurrentClimb`
+    // fires 'Set Active Climb' analytics first (it doesn't depend on queue
+    // state), then applies the optimistic local dispatch, and only then
+    // initiates the party mutation — so a consumer reading state from the
+    // moment the mutation promise starts always sees the optimistic update
+    // already applied, and analytics never observes a torn intermediate state.
+    const harness = createHarness({ gateOnConnection: true });
+    harness.setPartyActive(true);
+    await harness.actions.setCurrentClimb(makeClimb(), { playlistSuggestionSource: null });
+
+    const analyticsOrder = harness.onSetActiveClimb.mock.invocationCallOrder[0];
+    const applyLocalOrder = harness.applyLocal.mock.invocationCallOrder[0];
+    const mutationOrder = harness.mutations.addQueueItem.mock.invocationCallOrder[0];
+
+    expect(analyticsOrder).toBeLessThan(applyLocalOrder);
+    expect(applyLocalOrder).toBeLessThan(mutationOrder);
+  });
+
   it('reuses an existing queue entry matched by climb.uuid instead of adding a duplicate (bridge invariant)', async () => {
     const climb = makeClimb({ uuid: 'shared-climb' });
     const existing = makeQueueItem({ climb, uuid: 'existing-item' });
@@ -488,6 +516,33 @@ describe('setCurrentClimb', () => {
     expect(harness.mutations.addQueueItem).not.toHaveBeenCalled();
     expect(harness.mutations.setCurrentClimb).toHaveBeenCalledWith(existing, false, expect.any(String));
     expect(result).toEqual(existing);
+    // The mutation reuses the existing item (not a fresh-uuid clone). The
+    // optimistic-state half of this fix — that the pre-dispatch reuse
+    // resolution keeps the local queue from gaining a phantom duplicate — is
+    // pinned against the real reducer in queue-bridge-context.test.tsx, since
+    // this factory harness abstracts `applyLocal` behind the wiring seam.
+  });
+
+  it('restores the playlist suggestion source after a setQueue echo clears it (party)', async () => {
+    const source: PlaylistSuggestionSource = createPlaylistSuggestionSource({
+      playlistUuid: 'pl-echo',
+      activatedClimb: makeClimb({ uuid: 'activated' }),
+      climbs: [makeClimb({ uuid: 'activated' })],
+      boardDetails: testBoardDetails,
+    });
+    const harness = createHarness({ gateOnConnection: false });
+    harness.setPartyActive(true);
+    // Simulate the server's own UPDATE_QUEUE echo landing while the setQueue
+    // mutation is in flight: it clears the reducer-owned playlistSuggestionSource
+    // exactly as the real reducer's UPDATE_QUEUE case does.
+    harness.mutations.setQueue.mockImplementationOnce(async () => {
+      harness.setPlaylistSuggestionSourceLocal(null);
+    });
+    await harness.actions.setCurrentClimb(makeClimb(), { playlistSuggestionSource: source });
+    expect(harness.mutations.setQueue).toHaveBeenCalledTimes(1);
+    // reconcileAfterSetQueue must have re-set the source the echo wiped, so
+    // "Next" keeps drawing suggestions from the playlist.
+    expect(harness.getState().playlistSuggestionSource).toEqual(source);
   });
 
   it('does not reuse an existing entry when reuseExistingQueueItemOnSetCurrentClimb is false (QueueContext invariant)', async () => {

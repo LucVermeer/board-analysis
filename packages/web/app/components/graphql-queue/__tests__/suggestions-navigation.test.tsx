@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Climb } from '@/app/lib/types';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '../../queue-control/types';
 import { getPlaylistPeekQueueItemUuid } from '../../queue-control/playlist-suggestions';
+import { MockRootQueueProvider, useMockRootQueueState } from '@/app/test-utils/mock-persistent-session-queue';
 
 // --- Mocks must come before importing GraphQLQueueProvider ---
 
@@ -49,15 +50,12 @@ const mockPersistentSession = {
   participantId: null,
   isLeader: false,
   users: [],
-  currentClimbQueueItem: null,
-  queue: [],
-  localQueue: [],
-  localCurrentClimbQueueItem: null,
-  localBoardPath: null,
-  localBoardDetails: null,
-  isLocalQueueLoaded: true,
-  setLocalQueueState: vi.fn(),
-  clearLocalQueue: vi.fn(),
+  // W6: queue/currentClimbQueueItem/playlistSuggestionSource + dispatch come
+  // from the MockRootQueueProvider (real reducer) via the factory below.
+  soloBoardPath: null,
+  soloBoardDetails: null,
+  isBoardContextLoaded: true,
+  setBoardContext: vi.fn(),
   activateSession: vi.fn(),
   deactivateSession: vi.fn(),
   setInitialQueueForSession: vi.fn(),
@@ -96,10 +94,23 @@ vi.mock('../../connection-manager/connection-settings-context', () => ({
   useConnectionSettings: () => ({ backendUrl: 'wss://example.com/graphql' }),
 }));
 
+// W6: queue state is root-owned. The mocked hooks merge the shared reducer's
+// live `state` + stable `dispatch` (from the MockRootQueueProvider in the test
+// wrapper) onto the static session mock, so the navigation helpers walk a real
+// reducer-backed queue.
 vi.mock('../../persistent-session', () => ({
-  usePersistentSession: () => mockPersistentSession,
-  usePersistentSessionState: () => mockPersistentSession,
-  usePersistentSessionActions: () => mockPersistentSession,
+  usePersistentSession: () => {
+    const rootQueue = useMockRootQueueState();
+    return { ...mockPersistentSession, ...rootQueue.state, dispatch: rootQueue.dispatch };
+  },
+  usePersistentSessionState: () => {
+    const rootQueue = useMockRootQueueState();
+    return { ...mockPersistentSession, ...rootQueue.state, dispatch: rootQueue.dispatch };
+  },
+  usePersistentSessionActions: () => {
+    const rootQueue = useMockRootQueueState();
+    return { ...mockPersistentSession, ...rootQueue.state, dispatch: rootQueue.dispatch };
+  },
   PersistentSessionProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -191,7 +202,9 @@ function createWrapper() {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <GraphQLQueueProvider {...defaultProps}>{children}</GraphQLQueueProvider>
+        <MockRootQueueProvider>
+          <GraphQLQueueProvider {...defaultProps}>{children}</GraphQLQueueProvider>
+        </MockRootQueueProvider>
       </QueryClientProvider>
     );
   };

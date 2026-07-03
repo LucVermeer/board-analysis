@@ -9,10 +9,14 @@
  *
  * Every dependency here exists because the two call sites genuinely differ,
  * not for abstraction's own sake:
- *   - `applyLocal` differs in mechanism (dispatch a reducer action / reduce
- *     against a useState-backed local store / no-op while a party mutation is
- *     in flight — party mode intentionally waits for the server echo instead
- *     of applying an optimistic update; see docs/websocket-implementation.md).
+ *   - `applyLocal` differs in mechanism, not in whether it applies: both
+ *     surfaces dispatch straight to the single root queue reducer now (W6);
+ *     QueueContext dispatches unconditionally, the bridge additionally
+ *     layers two solo-only UX quirks on top (see the doc on `applyLocal` in
+ *     `queue-bridge-context.tsx`). Party mode used to no-op `applyLocal`
+ *     entirely and wait for the server echo instead of an optimistic
+ *     update — that's gone; off-board party mutations are optimistic now
+ *     too, matching board-route behavior (see docs/websocket-implementation.md).
  *   - `party.attemptMutation` differs in *when* a party mutation fires:
  *     QueueContext gates on `hasConnected && !isDisconnected` (buffering adds
  *     while offline); the bridge has no such gate and always attempts the
@@ -348,11 +352,42 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
     if (!validateClimbForQueue(climb)) return null;
 
     const nextPlaylistSuggestionSource = options.playlistSuggestionSource;
-    const previousPlaylistSuggestionSource = getSnapshot().playlistSuggestionSource;
+    const preDispatchSnapshot = getSnapshot();
+    const previousPlaylistSuggestionSource = preDispatchSnapshot.playlistSuggestionSource;
     const mode = resolveQueueOperationMode(party.isActive, party.isDisconnected);
     const newItem = buildItem(climb, false);
     const correlationId = party.nextCorrelationId();
 
+    // Resolve the reuse target BEFORE the optimistic dispatch so the optimistic
+    // state matches what the mutation actually does. Otherwise the optimistic
+    // dispatch inserts a fresh-uuid item while the reuse mutation activates the
+    // existing one; the server echo (carrying the existing item + our
+    // correlationId) is then suppressed as our own echo, stranding the phantom
+    // fresh item locally until the hash watchdog forces a visible resync.
+    const reuseTarget =
+      party.isActive && party.reuseExistingQueueItemOnSetCurrentClimb
+        ? (preDispatchSnapshot.queue.find((queueItem) => queueItem.climb?.uuid === climb.uuid) ?? null)
+        : null;
+    const optimisticItem = reuseTarget ?? newItem;
+
+    // Set the playlist source here AND again inside the DELTA_UPDATE_CURRENT_CLIMB
+    // payload below. This is an intentional double-set, not dead code — the two
+    // writes cover disjoint cases and neither is safely removable:
+    //   - The DELTA payload's `playlistSuggestionSource` is load-bearing beyond
+    //     just writing the field: the reducer uses it to gate
+    //     `pruneSuggestedQueueItemsAfterCurrent` on the optimistic queue
+    //     (reducer.ts `DELTA_UPDATE_CURRENT_CLIMB`). Dropping it would leave
+    //     stale suggested items in the local queue until the server echo.
+    //   - This early unconditional set is load-bearing for the reuse-existing
+    //     branch: when `optimisticItem` is already the current climb (reuse
+    //     target === current), the reducer's own-tap guard short-circuits
+    //     DELTA_UPDATE_CURRENT_CLIMB and returns state unchanged, so the DELTA
+    //     never applies its `playlistSuggestionSource`. Without this call the
+    //     source would silently not update when re-activating the current climb
+    //     with a new playlist context.
+    // On the common path (fresh-uuid item) both write the same value; the
+    // duplicate reducer dispatch batches into one render and is a negligible
+    // cost next to the correctness the two cases require.
     setPlaylistSuggestionSourceLocal(nextPlaylistSuggestionSource);
     hooks.onSetActiveClimb({
       climbUuid: climb.uuid,
@@ -372,11 +407,29 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
       hooks.onOperationMetric?.error('setCurrentClimb', mode);
     };
 
+    // A setQueue-based mutation broadcasts a full-state echo that carries no
+    // correlationId, so the reducer never clears the pending id we registered
+    // here (stale pending → spurious forced resync ~5-7s later) and its
+    // UPDATE_QUEUE clears the reducer-owned playlistSuggestionSource. Reconcile
+    // both locally after a successful setQueue.
+    //   - Dropping the pending id is race-FREE: the echo never re-adds a pending
+    //     id, so the spurious-resync symptom is fixed regardless of ordering.
+    //   - Re-setting the source is best-effort: it races the echo. The backend
+    //     dispatches the local echo synchronously inside the setQueue resolver
+    //     (before the mutation ack), so the common single-connection ordering
+    //     has the echo clear the source *before* this runs and re-sets it. The
+    //     worst case (ack observed before the echo pumps) is a transient loss of
+    //     playlist suggestions that self-heals on the next activation.
+    const reconcileAfterSetQueue = () => {
+      if (correlationId) applyLocal({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
+      if (nextPlaylistSuggestionSource) setPlaylistSuggestionSourceLocal(nextPlaylistSuggestionSource);
+    };
+
     applyLocal({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: {
-        item: newItem,
-        shouldAddToQueue: true,
+        item: optimisticItem,
+        shouldAddToQueue: reuseTarget === null,
         insertAfterCurrent: true,
         correlationId,
         playlistSuggestionSource: nextPlaylistSuggestionSource,
@@ -384,29 +437,32 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
     });
 
     if (party.isActive && party.isDisconnected && offlineBuffer) {
-      offlineBuffer.bufferAddition(newItem);
+      // A reuse target is already in the queue — the optimistic dispatch
+      // activated it, so there is nothing to buffer for reconciliation.
+      if (!reuseTarget) offlineBuffer.bufferAddition(newItem);
       finishSuccess();
-      return newItem;
+      return optimisticItem;
     }
 
     if (attemptPartyMutation()) {
       const { queue, currentClimbQueueItem } = getSnapshot();
 
-      if (party.reuseExistingQueueItemOnSetCurrentClimb) {
-        const existing = queue.find((queueItem) => queueItem.climb?.uuid === climb.uuid);
-        if (existing) {
-          try {
-            if (nextPlaylistSuggestionSource) {
-              await party.mutations.setQueue(pruneSuggestedQueueItemsAfterCurrent(queue, existing), existing);
-            } else {
-              await party.mutations.setCurrentClimb(existing, false, correlationId);
-            }
-            finishSuccess();
-            return existing;
-          } catch (error: unknown) {
-            finishError(errorMessages.setCurrentClimb.reuse, error);
-            return party.returnNullOnSetCurrentClimbFailure ? null : existing;
+      if (reuseTarget) {
+        try {
+          if (nextPlaylistSuggestionSource) {
+            await party.mutations.setQueue(
+              pruneSuggestedQueueItemsAfterCurrent(preDispatchSnapshot.queue, reuseTarget),
+              reuseTarget,
+            );
+            reconcileAfterSetQueue();
+          } else {
+            await party.mutations.setCurrentClimb(reuseTarget, false, correlationId);
           }
+          finishSuccess();
+          return reuseTarget;
+        } catch (error: unknown) {
+          finishError(errorMessages.setCurrentClimb.reuse, error);
+          return party.returnNullOnSetCurrentClimbFailure ? null : reuseTarget;
         }
       }
 
@@ -420,6 +476,7 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
           const queueWithNewItem = insertQueueItemAfterCurrent(queue, currentClimbQueueItem, newItem);
           const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queueWithNewItem, newItem);
           await party.mutations.setQueue(prunedQueue, newItem);
+          reconcileAfterSetQueue();
           finishSuccess();
           return newItem;
         } catch (error: unknown) {

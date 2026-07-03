@@ -1,10 +1,10 @@
 import { type Dispatch, useEffect, useRef } from 'react';
-import type { QueueAction } from '../../queue-control/types';
+import type { QueueAction, QueueSearchParams } from '@boardsesh/queue';
 
 type UsePendingUpdateCleanupParams = {
   isPersistentSessionActive: boolean;
   pendingCurrentClimbUpdates: string[];
-  dispatch: Dispatch<QueueAction>;
+  dispatch: Dispatch<QueueAction<QueueSearchParams>>;
   onStalePendingUpdates?: () => void;
 };
 

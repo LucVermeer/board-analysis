@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vite-plus/test';
 import type { Climb, ClimbQueueItem, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import { mapSubscriptionEnvelopeToAction } from '@boardsesh/queue-runtime';
-import { toWireEnvelope, type QueueStateEvent } from '../use-queue-event-subscription';
+import { toWireEnvelope, type QueueStateEvent } from '../../../persistent-session/event-utils';
 
 const climb: Climb = {
   uuid: 'climb-1',

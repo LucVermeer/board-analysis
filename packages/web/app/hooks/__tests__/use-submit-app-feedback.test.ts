@@ -48,8 +48,7 @@ const baseArgs = (): BuildFeedbackEnrichmentArgs => ({
   boardDetails: null,
   angle: 0,
   activeSession: null,
-  partyClimbQueueItem: null,
-  localClimbQueueItem: null,
+  currentClimbQueueItem: null,
   url: undefined,
   userAgent: undefined,
 });
@@ -117,28 +116,30 @@ describe('compactContext', () => {
 });
 
 describe('buildFeedbackEnrichment', () => {
-  it('falls back to bridge board + local climb when no party session is active', () => {
-    const localClimb = makeClimbItem('Local');
+  it('falls back to the bridge board when no party session is active', () => {
+    const currentClimb = makeClimbItem('Solo');
     const result = buildFeedbackEnrichment({
       ...baseArgs(),
       boardDetails: makeBoard({ board_name: 'kilter', layout_id: 1, size_id: 5, set_ids: [1, 2] }),
       angle: 40,
       activeSession: null,
-      // partyClimbQueueItem is set but should be IGNORED while no session is active.
-      partyClimbQueueItem: makeClimbItem('Should-Not-Be-Used'),
-      localClimbQueueItem: localClimb,
+      currentClimbQueueItem: currentClimb,
     });
     expect(result.boardName).toBe('kilter');
     expect(result.layoutId).toBe(1);
     expect(result.sizeId).toBe(5);
     expect(result.setIds).toEqual([1, 2]);
     expect(result.angle).toBe(40);
-    expect(result.context?.climbName).toBe('Local');
-    expect(result.context?.climbUuid).toBe('c-Local');
+    expect(result.context?.climbName).toBe('Solo');
+    expect(result.context?.climbUuid).toBe('c-Solo');
   });
 
   it('prefers the active session board over the bridge board (mirrors sesh-settings-drawer)', () => {
-    const partyClimb = makeClimbItem('Party');
+    // `currentClimbQueueItem` is root-owned (single source, W6) — the caller
+    // resolves it once, regardless of party/solo mode, so this only needs to
+    // pin BOARD precedence (session over bridge). Climb selection is no
+    // longer this function's concern.
+    const currentClimb = makeClimbItem('Party');
     const result = buildFeedbackEnrichment({
       ...baseArgs(),
       // Bridge says kilter — but the party session overrides to tension.
@@ -149,8 +150,7 @@ describe('buildFeedbackEnrichment', () => {
         sessionName: 'Friday Sesh',
         boardDetails: makeBoard({ board_name: 'tension', layout_id: 9, size_id: 3, set_ids: [7] }),
       },
-      partyClimbQueueItem: partyClimb,
-      localClimbQueueItem: makeClimbItem('Should-Not-Be-Used'),
+      currentClimbQueueItem: currentClimb,
     });
     expect(result.boardName).toBe('tension');
     expect(result.layoutId).toBe(9);
@@ -158,7 +158,6 @@ describe('buildFeedbackEnrichment', () => {
     expect(result.setIds).toEqual([7]);
     expect(result.context?.sessionId).toBe('sess-1');
     expect(result.context?.sessionName).toBe('Friday Sesh');
-    // And the climb comes from the party item, not the local one.
     expect(result.context?.climbName).toBe('Party');
   });
 

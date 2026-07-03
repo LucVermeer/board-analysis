@@ -4,13 +4,20 @@ import React, { useState, useContext, createContext, useCallback, useMemo, useRe
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import { useQueueReducer } from '../queue-control/reducer';
+import type { QueueAction as RootQueueAction, QueueSearchParams as RootQueueSearchParams } from '@boardsesh/queue';
 import { useQueueDataFetching } from '../queue-control/hooks/use-queue-data-fetching';
-import type { ClimbQueueItem, UserName, QueueItemUser, PlaylistSuggestionSource } from '../queue-control/types';
+import type {
+  ClimbQueueItem,
+  UserName,
+  QueueItemUser,
+  PlaylistSuggestionSource,
+  QueueAction,
+} from '../queue-control/types';
 import { getPlaylistPeekQueueItemUuid, getPlaylistSuggestedClimbs } from '../queue-control/playlist-suggestions';
 import { createQueueActionsCore, type QueueActionsCoreDeps } from '../queue-control/queue-actions-core';
 import { urlParamsToSearchParams, searchParamsToUrlParams } from '@/app/lib/url-utils';
 import type { Climb, SearchRequestPagination } from '@/app/lib/types';
+import { usePersistentSession } from '../persistent-session';
 import { usePartyProfile } from '../party-manager/party-profile-context';
 import { useWebSocketConnection } from '../connection-manager/websocket-connection-provider';
 import { FavoritesProvider } from '../climb-actions/favorites-batch-context';
@@ -22,9 +29,6 @@ import SessionSummaryDialog from '../session-summary/session-summary-dialog';
 import { trackQueueOperation, trackQueueOperationError } from '@/app/lib/queue-metrics';
 
 import { useSessionIdManagement } from './hooks/use-session-id-management';
-import { useQueueRestoration } from './hooks/use-queue-restoration';
-import { useQueueEventSubscription } from './hooks/use-queue-event-subscription';
-import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
 import { useMutationGuard } from './hooks/use-mutation-guard';
 import { useOfflineQueueBuffer } from './hooks/use-offline-queue-buffer';
 import { useOfflineReconciliation } from './hooks/use-offline-reconciliation';
@@ -135,7 +139,15 @@ export const GraphQLQueueProvider = ({
 }: GraphQLQueueContextProps) => {
   const searchParamsHook = useSearchParams();
   const initialSearchParams = urlParamsToSearchParams(searchParamsHook);
-  const [state, dispatch] = useQueueReducer(initialSearchParams);
+  // Route-scoped search/pagination UI state. W6: the shared queue reducer no
+  // longer lives here — `queue`/`currentClimbQueueItem`/`playlistSuggestionSource`
+  // are read from the root persistent-session provider below (the single
+  // queue-state owner, on and off board routes). `climbSearchParams` and
+  // `hasDoneFirstFetch` stay board-route-local plain state: they're pure
+  // search/pagination UI concerns the root (and mobile, which shares the root
+  // reducer's shape) has no use for.
+  const [climbSearchParams, setClimbSearchParamsState] = useState<SearchRequestPagination>(initialSearchParams);
+  const [hasDoneFirstFetch, setHasDoneFirstFetchState] = useState(false);
   const [countSearchParams, setCountSearchParams] = useState<SearchRequestPagination>(initialSearchParams);
 
   const isOffBoardMode = propsBaseBoardPath !== undefined;
@@ -145,6 +157,15 @@ export const GraphQLQueueProvider = ({
 
   const { profile, username, avatarUrl } = usePartyProfile();
   const { state: connectionState } = useWebSocketConnection();
+
+  // Root-owned queue state (W6: the ONLY queue state). Read directly via
+  // `usePersistentSession()` here (rather than only through
+  // `useSessionIdManagement`'s return below) so `currentQueue`/
+  // `currentClimbQueueItem` are available to seed `useSessionIdManagement`'s
+  // `startSession` — `useSessionIdManagement` internally reads the same
+  // context, so `persistentSession` below the next call resolves to the
+  // identical object.
+  const rootQueueState = usePersistentSession();
 
   // --- Session ID management ---
   const {
@@ -162,18 +183,46 @@ export const GraphQLQueueProvider = ({
   } = useSessionIdManagement({
     isOffBoardMode,
     propsBaseBoardPath,
-    currentQueue: state.queue,
-    currentClimbQueueItem: state.currentClimbQueueItem,
+    currentQueue: rootQueueState.queue,
+    currentClimbQueueItem: rootQueueState.currentClimbQueueItem,
   });
 
-  // --- Queue restoration (from in-memory bridge state or party session) ---
-  useQueueRestoration({
-    isPersistentSessionActive,
-    sessionId,
-    baseBoardPath,
-    dispatch,
-    persistentSession,
-  });
+  // Composite view merging root-owned queue fields with board-route-local
+  // search UI fields, under the field names the rest of this provider (and
+  // its tests) already use — this keeps every `state.X` read below unchanged
+  // regardless of which store `X` actually lives in now.
+  const state = useMemo(
+    () => ({
+      queue: persistentSession.queue,
+      currentClimbQueueItem: persistentSession.currentClimbQueueItem,
+      playlistSuggestionSource: persistentSession.playlistSuggestionSource,
+      climbSearchParams,
+      hasDoneFirstFetch,
+    }),
+    [
+      persistentSession.queue,
+      persistentSession.currentClimbQueueItem,
+      persistentSession.playlistSuggestionSource,
+      climbSearchParams,
+      hasDoneFirstFetch,
+    ],
+  );
+
+  // Type-seam dispatch: `queue-actions-core` and the widget-navigation path
+  // only ever construct DELTA_*/UPDATE_QUEUE/*_PLAYLIST_SUGGESTION_SOURCE
+  // action variants, none of which depend on the reducer's `TSearchParams`
+  // generic (only `SET_CLIMB_SEARCH_PARAMS` does, and this provider never
+  // sends that one to the root — see `setClimbSearchParams` below, which
+  // stays board-route-local). The root exposes `QueueAction<QueueSearchParams>`
+  // (the minimal `Record<string, unknown>` params mobile/the root share);
+  // this provider's local `QueueAction` type is `SharedQueueAction<SearchRequestPagination>`.
+  // Structurally identical for every variant this file dispatches — the cast
+  // below is the one seam boundary, matching the pattern documented in
+  // `queue-control/types.ts`.
+  const dispatchToRoot = useCallback(
+    (action: QueueAction) => persistentSession.dispatch(action as unknown as RootQueueAction<RootQueueSearchParams>),
+    [persistentSession.dispatch],
+  );
 
   // --- Session & connection derived state ---
   const clientId = isPersistentSessionActive ? persistentSession.clientId : null;
@@ -257,21 +306,18 @@ export const GraphQLQueueProvider = ({
     users,
     lastReceivedSequenceRef: isPersistentSessionActive ? persistentSession.lastReceivedSequenceRef : { current: null },
     persistentSession,
-    currentQueue: state.queue,
-    currentClimbQueueItem: state.currentClimbQueueItem,
+    currentQueue: persistentSession.queue,
+    currentClimbQueueItem: persistentSession.currentClimbQueueItem,
   });
 
-  // --- Queue event subscription ---
-  const queueLengthRef = useRef(state.queue.length);
-  queueLengthRef.current = state.queue.length;
-  useQueueEventSubscription({
-    isPersistentSessionActive,
-    dispatch,
-    persistentSession,
-    needsResync: state.needsResync,
-    boardLayoutName: boardDetails.layout_name ?? null,
-    queueLengthRef,
-  });
+  // Queue events no longer need a board-route subscription: the root
+  // persistent-session provider (`use-event-processor.ts`) is the ONLY
+  // queue-state owner now, so this component already re-renders whenever
+  // `persistentSession.queue`/`currentClimbQueueItem` change — no separate
+  // dispatch-mirroring subscription to maintain. `needsResync` handling and
+  // the peer-broadcast 'Climb Added/Removed to/from Queue' analytics moved
+  // to the root provider too (the latter gated to board routes there, since
+  // this file is now the only thing that used to make that true implicitly).
 
   // --- Session-event relay ---
   // The BLE-paired phone broadcasts WallConfirmedClimb whenever it relays a
@@ -291,13 +337,9 @@ export const GraphQLQueueProvider = ({
     return unsubscribe;
   }, [isPersistentSessionActive, persistentSession.subscribeToSessionEvents]);
 
-  // --- Pending update cleanup ---
-  usePendingUpdateCleanup({
-    isPersistentSessionActive,
-    pendingCurrentClimbUpdates: state.pendingCurrentClimbUpdates,
-    dispatch,
-    onStalePendingUpdates: persistentSession.triggerResync,
-  });
+  // Pending-update cleanup (garbage-collects orphaned correlation ids on the
+  // current-climb mutation) now runs at the root — `pendingCurrentClimbUpdates`
+  // lives in root state, so the cleanup has to run wherever that state lives.
 
   // --- Session lifecycle: keep peer-count high-water-mark current, emit
   // Session Ended on tab_closed (pagehide). Explicit user_left fires from
@@ -349,7 +391,7 @@ export const GraphQLQueueProvider = ({
     queue: state.queue,
     parsedParams,
     hasDoneFirstFetch: state.hasDoneFirstFetch,
-    setHasDoneFirstFetch: () => dispatch({ type: 'SET_FIRST_FETCH', payload: true }),
+    setHasDoneFirstFetch: () => setHasDoneFirstFetchState(true),
   });
 
   const playlistSuggestedClimbs = useMemo(
@@ -410,7 +452,7 @@ export const GraphQLQueueProvider = ({
   // --- Ref holding latest values so action callbacks can be stable ---
   const latestRef = useRef({
     state,
-    dispatch,
+    dispatch: dispatchToRoot,
     isPersistentSessionActive,
     persistentSession,
     clientId,
@@ -436,7 +478,7 @@ export const GraphQLQueueProvider = ({
   // Sync ref every render (synchronous — safe for refs)
   latestRef.current = {
     state,
-    dispatch,
+    dispatch: dispatchToRoot,
     isPersistentSessionActive,
     persistentSession,
     clientId,
@@ -687,8 +729,11 @@ export const GraphQLQueueProvider = ({
   } = actionsCore;
 
   const setClimbSearchParams = useCallback((params: SearchRequestPagination) => {
+    // Board-route-local UI state — `setClimbSearchParamsState` is a stable
+    // `useState` setter, so this can call it directly without going through
+    // `latestRef` (no staleness risk).
+    setClimbSearchParamsState(params);
     const latest = latestRef.current;
-    latest.dispatch({ type: 'SET_CLIMB_SEARCH_PARAMS', payload: params });
     if (!latest.isOffBoardMode) {
       const urlParams = searchParamsToUrlParams(params);
       const queryString = urlParams.toString();

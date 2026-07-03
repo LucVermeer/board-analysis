@@ -36,6 +36,17 @@ type UseEventProcessorArgs = {
 export type EventProcessorState = {
   queue: LocalClimbQueueItem[];
   currentClimbQueueItem: LocalClimbQueueItem | null;
+  /**
+   * W6: the root reducer is now the ONLY queue state — board routes and the
+   * off-board bridge both read it instead of keeping their own copies.
+   * `playlistSuggestionSource` is client-local queue-UI state (not a backend
+   * room field); `pendingCurrentClimbUpdates` is the correlation-id tracker
+   * for local->party round trips, garbage-collected by
+   * `usePendingUpdateCleanup` (now invoked at the root — see
+   * `persistent-session-context.tsx`).
+   */
+  playlistSuggestionSource: QueueState<QueueSearchParams>['playlistSuggestionSource'];
+  pendingCurrentClimbUpdates: string[];
   lastReceivedStateHash: string | null;
   /** Reducer-detected corruption: INITIAL_QUEUE_DATA / UPDATE_QUEUE filtered
    *  null (or climbless) items out of an incoming payload.
@@ -51,6 +62,16 @@ export type EventProcessorActions = {
   clearResyncFlag: () => void;
   notifyQueueSubscribers: (event: SubscriptionQueueEvent) => void;
   notifySessionSubscribers: (event: SessionEvent) => void;
+  /**
+   * The root reducer's dispatch, exposed so board routes (`GraphQLQueueProvider`)
+   * and the off-board bridge (`usePersistentSessionQueueAdapter`) can apply
+   * local/optimistic queue actions against the SAME state this processor
+   * mirrors from the server. Consumers only ever construct action variants
+   * whose payload doesn't depend on `TSearchParams` (DELTA_*, UPDATE_QUEUE,
+   * SET_PLAYLIST_SUGGESTION_SOURCE, CLEAR_QUEUE, ...) — `SET_CLIMB_SEARCH_PARAMS`
+   * stays board-route-local (see QueueContext's own `climbSearchParams` state).
+   */
+  dispatch: (action: QueueAction<QueueSearchParams>) => void;
 };
 
 /**
@@ -294,6 +315,8 @@ export function useEventProcessor({
     // web ClimbQueueItem (see the seam note in queue-control/types.ts).
     queue: reducerState.queue as LocalClimbQueueItem[],
     currentClimbQueueItem: reducerState.currentClimbQueueItem as LocalClimbQueueItem | null,
+    playlistSuggestionSource: reducerState.playlistSuggestionSource,
+    pendingCurrentClimbUpdates: reducerState.pendingCurrentClimbUpdates,
     lastReceivedStateHash,
     needsResync: reducerState.needsResync,
     handleQueueEvent,
@@ -301,5 +324,6 @@ export function useEventProcessor({
     clearResyncFlag,
     notifyQueueSubscribers,
     notifySessionSubscribers,
+    dispatch,
   };
 }

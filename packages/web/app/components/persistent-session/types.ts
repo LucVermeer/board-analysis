@@ -8,6 +8,7 @@ import type {
   QueueState,
   ClimbQueueItemInput,
 } from '@boardsesh/shared-schema';
+import type { QueueAction, QueueSearchParams, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../queue-control/types';
 import type { BoardDetails, ParsedBoardRouteParameters } from '@/app/lib/types';
 // Re-export QueueState from shared-schema for convenience
@@ -66,14 +67,29 @@ export type ActiveSessionInfo = {
 
 // Stable action functions — identity rarely changes
 export type PersistentSessionActionsType = {
-  // Local queue management (in-memory only, no IndexedDB persistence)
-  setLocalQueueState: (
-    queue: LocalClimbQueueItem[],
-    currentItem: LocalClimbQueueItem | null,
-    boardPath: string,
-    boardDetails: BoardDetails,
-  ) => void;
-  clearLocalQueue: () => void;
+  /**
+   * The root queue reducer's dispatch (W6: the ONLY queue state — board
+   * routes and the off-board bridge both apply local/optimistic actions
+   * here instead of keeping their own copies). See
+   * `hooks/use-event-processor.ts` for the accepted action shape.
+   */
+  dispatch: (action: QueueAction<QueueSearchParams>) => void;
+  // Board-context bookkeeping (in-memory only, no IndexedDB persistence):
+  // which board the current (root-owned) solo queue belongs to. Queue items
+  // themselves are no longer stored here — they live in the root reducer,
+  // read via `dispatch` above and the `queue`/`currentClimbQueueItem` state
+  // slices. Solo-only: no-ops while a party session is active (mirrors the
+  // old `setLocalQueueState` guard).
+  //
+  // Replaces the old `setLocalQueueState`/`clearLocalQueue` pair: previously
+  // `use-queue-restoration.ts` (board route) reactively compared its route's
+  // `baseBoardPath` against `ps.localBoardPath` and called `clearLocalQueue()`
+  // on a mismatch (a different board's stale local queue must not bleed into
+  // the new board). Since the queue is now single-owned at the root instead
+  // of duplicated per board route, that same "different board → drop the
+  // stale queue" decision has to happen HERE, inside `setBoardContext`,
+  // before it overwrites the board-context fields — see `use-queue-storage.ts`.
+  setBoardContext: (boardPath: string, boardDetails: BoardDetails) => void;
 
   // Session lifecycle
   activateSession: (info: ActiveSessionInfo) => void;
@@ -177,16 +193,34 @@ export type PersistentSessionStateType = {
    */
   isSessionWallLit: boolean;
 
-  // Queue state synced from backend
+  // Root-owned queue state — the ONLY queue state (W6). Populated from the
+  // server in party mode; applied optimistically via `dispatch` in solo mode
+  // too. Board routes and the off-board bridge both read these directly
+  // instead of keeping their own reducer/local-state copies.
   currentClimbQueueItem: LocalClimbQueueItem | null;
   queue: LocalClimbQueueItem[];
+  /** Client-side queue-UI state, not a backend room field (see `setBoardContext`
+   *  doc and docs/websocket-implementation.md). Reducer-owned so
+   *  INITIAL_QUEUE_DATA / UPDATE_QUEUE clear it for free on a full sync. */
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
+  /** Correlation-id tracker for local->party round trips on the current-climb
+   *  mutation. Garbage-collected by `usePendingUpdateCleanup`, invoked here at
+   *  the root (moved from the board-route provider — pending updates live in
+   *  root state now). It rides on this state type (so a party activation
+   *  re-renders state consumers as it registers then clears a correlation id),
+   *  but nothing reads it directly for display — the reducer consumes it for
+   *  echo suppression. */
+  pendingCurrentClimbUpdates: string[];
 
-  // Local queue state (persists without WebSocket session)
-  localQueue: LocalClimbQueueItem[];
-  localCurrentClimbQueueItem: LocalClimbQueueItem | null;
-  localBoardPath: string | null;
-  localBoardDetails: BoardDetails | null;
-  isLocalQueueLoaded: boolean;
+  // Board-context bookkeeping (in-memory only, no IndexedDB persistence):
+  // which board the current (root-owned) solo queue belongs to. Renamed from
+  // `localBoardPath`/`localBoardDetails`/`isLocalQueueLoaded` now that
+  // `localQueue`/`localCurrentClimbQueueItem` are gone — these three no
+  // longer describe a separate "local queue" copy, only which board the
+  // single root queue is scoped to while off a party session.
+  soloBoardPath: string | null;
+  soloBoardDetails: BoardDetails | null;
+  isBoardContextLoaded: boolean;
 
   // Ref for offline queue buffer (used by QueueContext to populate, read by event processor during FullSync)
   offlineBufferRef: MutableRefObject<LocalClimbQueueItem[]>;

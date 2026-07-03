@@ -258,7 +258,7 @@ describe('PersistentSession mutations (solo / error handling)', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isLocalQueueLoaded).toBe(true);
+      expect(result.current.isBoardContextLoaded).toBe(true);
     });
     expect(result.current.session).toBeNull();
     expect(result.current.activeSession).toBeNull();
@@ -279,7 +279,7 @@ describe('PersistentSession mutations (solo / error handling)', () => {
     // short-circuits.
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
     await waitFor(() => {
-      expect(result.current.isLocalQueueLoaded).toBe(true);
+      expect(result.current.isBoardContextLoaded).toBe(true);
     });
 
     // Even if the execute mock is set to throw, the helper should short-circuit

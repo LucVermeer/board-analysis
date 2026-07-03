@@ -22,6 +22,8 @@ import { useQueueStorage } from './hooks/use-queue-storage';
 import { useQueueMutations } from './hooks/use-queue-mutations';
 import { useSessionSubscriptions } from './hooks/use-session-subscriptions';
 import { useSessionLifecycle } from './hooks/use-session-lifecycle';
+import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
+import { usePeerBroadcastAnalytics } from './hooks/use-peer-broadcast-analytics';
 
 // Re-export types for backwards compatibility
 export type {
@@ -41,6 +43,7 @@ const PersistentSessionContext = createContext<PersistentSessionContextType | un
 export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token: wsAuthToken, isLoading: isAuthLoading } = useWsAuthToken();
   const { username, avatarUrl } = usePartyProfile();
+  const pathname = usePathname();
 
   // Shared refs used across hooks
   const offlineBufferRef = useRef<LocalClimbQueueItem[]>([]);
@@ -102,13 +105,18 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   // 1. Event processor: queue state (shared queueReducer) + event handling
   const eventProcessor = useEventProcessor({ syncGate, refs });
 
-  // Keep queue refs in sync with event processor state
-  useEffect(() => {
-    queueRef.current = eventProcessor.queue;
-  }, [eventProcessor.queue]);
-  useEffect(() => {
-    currentClimbQueueItemRef.current = eventProcessor.currentClimbQueueItem;
-  }, [eventProcessor.currentClimbQueueItem]);
+  // Keep queue refs in sync with event processor state. Assigned DURING RENDER
+  // (not in a useEffect) so the refs are current before paint. Peer queue
+  // events fire synchronously through the subscription and read these refs in
+  // the same tick as the queue mutation they carry — e.g.
+  // `use-peer-broadcast-analytics` reads `queueRef.current.length`. A post-paint
+  // useEffect assignment leaves the ref one render behind, so the analytics
+  // would report the pre-event queue length. Assign-during-render matches the
+  // sibling refs in this provider tree (`activeSessionRef`/`boardContextRef`)
+  // and restores the behavior of the deleted `use-queue-event-subscription`
+  // hook, which updated its length ref in the render body.
+  queueRef.current = eventProcessor.queue;
+  currentClimbQueueItemRef.current = eventProcessor.currentClimbQueueItem;
 
   // 2. Session lifecycle: connect/disconnect, join/leave
   const lifecycle = useSessionLifecycle({
@@ -130,13 +138,16 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     [lifecycle.activateSession],
   );
 
-  // 3. Queue storage: in-memory local queue state
+  // 3. Queue storage: board-context bookkeeping (which board the root-owned
+  // solo queue belongs to). The queue itself lives in the event processor's
+  // reducer (step 1) — this hook no longer stores a separate copy.
   const queueStorage = useQueueStorage({
     activeSession: lifecycle.activeSession,
     setActiveSession: handleQueueStorageSetActiveSession,
     onSessionAutoFinished: lifecycle.setAutoFinishedSummary,
     wsAuthToken,
     isAuthLoading,
+    dispatch: eventProcessor.dispatch,
   });
 
   // 4. Queue mutations: GraphQL mutation wrappers
@@ -155,6 +166,37 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     clearResyncFlag: eventProcessor.clearResyncFlag,
     syncGate,
     refs,
+  });
+
+  // 6. Pending-update cleanup: garbage-collects orphaned correlation ids on
+  // the current-climb mutation. Moved here from the board-route provider —
+  // `pendingCurrentClimbUpdates` lives in root state now, so the cleanup has
+  // to run wherever that state lives, on and off board routes alike.
+  usePendingUpdateCleanup({
+    isPersistentSessionActive: !!lifecycle.session,
+    pendingCurrentClimbUpdates: eventProcessor.pendingCurrentClimbUpdates,
+    dispatch: eventProcessor.dispatch,
+    onStalePendingUpdates: subscriptions.triggerResync,
+  });
+
+  // 7. Peer-broadcast queue-add/-remove analytics, board-route-gated. See
+  // `use-peer-broadcast-analytics.ts` for the full rationale (moved from the
+  // deleted board-route hook `use-queue-event-subscription.ts`; the gate is
+  // the one piece of behavior that needs restating now that this runs at the
+  // always-mounted root instead of only inside board-route-scoped
+  // `GraphQLQueueProvider`).
+  // `boardLayoutName` is sourced from the active session's board rather than the
+  // mounted route's board details (the old hook read the route's `boardDetails`
+  // from `GraphQLQueueProvider`). These agree while browsing the session's own
+  // board; they can differ if a member browses a *different* board route than
+  // the session board, in which case the analytics tag reflects the session
+  // board. Acceptable for an attribution tag; noted so it isn't mistaken for a
+  // bug.
+  usePeerBroadcastAnalytics({
+    subscribeToQueueEvents: subscriptions.subscribeToQueueEvents,
+    isOnBoardRoute: isBoardRoutePath(pathname),
+    boardLayoutName: lifecycle.activeSession?.boardDetails.layout_name ?? null,
+    queueRef,
   });
 
   // Session-scoped "the wall is lit" indicator, owned here (root, always
@@ -193,8 +235,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       reportWallDisconnect: mutations.reportWallDisconnect,
       setSessionBoardSerial: mutations.setSessionBoardSerial,
       setSessionBoardPath: mutations.setSessionBoardPath,
-      setLocalQueueState: queueStorage.setLocalQueueState,
-      clearLocalQueue: queueStorage.clearLocalQueue,
+      dispatch: eventProcessor.dispatch,
+      setBoardContext: queueStorage.setBoardContext,
       subscribeToQueueEvents: subscriptions.subscribeToQueueEvents,
       subscribeToSessionEvents: subscriptions.subscribeToSessionEvents,
       triggerResync: subscriptions.triggerResync,
@@ -220,8 +262,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       mutations.reportWallDisconnect,
       mutations.setSessionBoardSerial,
       mutations.setSessionBoardPath,
-      queueStorage.setLocalQueueState,
-      queueStorage.clearLocalQueue,
+      eventProcessor.dispatch,
+      queueStorage.setBoardContext,
       subscriptions.subscribeToQueueEvents,
       subscriptions.subscribeToSessionEvents,
       subscriptions.triggerResync,
@@ -243,11 +285,11 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       isSessionWallLit,
       currentClimbQueueItem: eventProcessor.currentClimbQueueItem,
       queue: eventProcessor.queue,
-      localQueue: queueStorage.localQueue,
-      localCurrentClimbQueueItem: queueStorage.localCurrentClimbQueueItem,
-      localBoardPath: queueStorage.localBoardPath,
-      localBoardDetails: queueStorage.localBoardDetails,
-      isLocalQueueLoaded: queueStorage.isLocalQueueLoaded,
+      playlistSuggestionSource: eventProcessor.playlistSuggestionSource,
+      pendingCurrentClimbUpdates: eventProcessor.pendingCurrentClimbUpdates,
+      soloBoardPath: queueStorage.soloBoardPath,
+      soloBoardDetails: queueStorage.soloBoardDetails,
+      isBoardContextLoaded: queueStorage.isBoardContextLoaded,
       offlineBufferRef,
       lastReceivedSequenceRef,
       sessionSummary: lifecycle.sessionSummary,
@@ -268,11 +310,11 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       isSessionWallLit,
       eventProcessor.currentClimbQueueItem,
       eventProcessor.queue,
-      queueStorage.localQueue,
-      queueStorage.localCurrentClimbQueueItem,
-      queueStorage.localBoardPath,
-      queueStorage.localBoardDetails,
-      queueStorage.isLocalQueueLoaded,
+      eventProcessor.playlistSuggestionSource,
+      eventProcessor.pendingCurrentClimbUpdates,
+      queueStorage.soloBoardPath,
+      queueStorage.soloBoardDetails,
+      queueStorage.isBoardContextLoaded,
     ],
   );
 

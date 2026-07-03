@@ -40,10 +40,11 @@ export type BuildFeedbackEnrichmentArgs = {
   boardDetails: BoardDetails | null;
   angle: Angle;
   activeSession: Pick<ActiveSessionInfo, 'sessionId' | 'sessionName' | 'boardDetails'> | null;
-  /** ps.currentClimbQueueItem — the climb selected in an active party session. */
-  partyClimbQueueItem: ClimbQueueItem | null;
-  /** ps.localCurrentClimbQueueItem — the climb selected locally, no party. */
-  localClimbQueueItem: ClimbQueueItem | null;
+  /** ps.currentClimbQueueItem — the currently-selected climb. Root-owned
+   *  (single source, W6): reflects the party session's climb while one is
+   *  active, or the solo climb otherwise — no more separate party/local
+   *  split to pick between here. */
+  currentClimbQueueItem: ClimbQueueItem | null;
   /** Typically `window.location.pathname + window.location.search`. */
   url: string | undefined;
   /** Typically `navigator.userAgent`. */
@@ -88,9 +89,10 @@ export function compactContext(input: FeedbackContextInput): FeedbackContextInpu
  * to a feedback submission. Kept separate from the React hook so it can be
  * tested without rendering. Selection rules:
  *
- * - When a party session is active, prefer its board and current climb (mirrors
- *   `sesh-settings-drawer`).
- * - Otherwise fall back to the bridge board and the local current climb.
+ * - When a party session is active, prefer its board (mirrors
+ *   `sesh-settings-drawer`); otherwise fall back to the bridge board.
+ * - The current climb is root-owned (single source): `currentClimbQueueItem`
+ *   already reflects whichever mode is active, party or solo.
  * - When no board is available at all, all board fields are null and `angle`
  *   is null too — `angle` only makes sense alongside a board.
  *
@@ -98,7 +100,7 @@ export function compactContext(input: FeedbackContextInput): FeedbackContextInpu
  */
 export function buildFeedbackEnrichment(args: BuildFeedbackEnrichmentArgs): FeedbackEnrichment {
   const board = args.activeSession?.boardDetails ?? args.boardDetails;
-  const climb = (args.activeSession ? args.partyClimbQueueItem : args.localClimbQueueItem)?.climb;
+  const climb = args.currentClimbQueueItem?.climb;
 
   return {
     boardName: clipBoardName(board?.board_name),
@@ -165,8 +167,7 @@ export function useSubmitAppFeedback() {
         boardDetails,
         angle,
         activeSession: ps.activeSession,
-        partyClimbQueueItem: ps.currentClimbQueueItem,
-        localClimbQueueItem: ps.localCurrentClimbQueueItem,
+        currentClimbQueueItem: ps.currentClimbQueueItem,
         url: typeof window !== 'undefined' ? window.location.pathname + window.location.search : undefined,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
       });

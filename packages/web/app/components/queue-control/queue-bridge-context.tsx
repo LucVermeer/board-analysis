@@ -27,7 +27,7 @@ import { usePersistentSession } from '../persistent-session';
 import { usePartyProfile } from '../party-manager/party-profile-context';
 import { getBaseBoardPath, extractAngleFromPathname, DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { BoardDetails, Angle, Climb, SearchRequestPagination } from '@/app/lib/types';
-import type { ClimbQueueItem, QueueItemUser, PlaylistSuggestionSource, QueueState, QueueAction } from './types';
+import type { ClimbQueueItem, QueueItemUser, PlaylistSuggestionSource, QueueAction } from './types';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
@@ -36,13 +36,14 @@ import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { track } from '@/app/lib/analytics';
-import { getPlaylistSuggestedClimbs, playlistSuggestionSourceMatches } from './playlist-suggestions';
+import { getPlaylistSuggestedClimbs } from './playlist-suggestions';
 import { findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
-import { queueReducer } from '@boardsesh/queue';
 import type {
   ClimbQueue as SharedClimbQueue,
   ClimbQueueItem as SharedClimbQueueItem,
   PlaylistSuggestionSource as SharedPlaylistSuggestionSource,
+  QueueAction as RootQueueAction,
+  QueueSearchParams as RootQueueSearchParams,
 } from '@boardsesh/queue';
 import {
   createQueueActionsCore,
@@ -75,10 +76,10 @@ function findNextQueueItemAcrossSeam(
 /**
  * Derive BoardDetails + baseBoardPath from a climb's own boardType/layoutId.
  *
- * Used to seed `ps.localBoardDetails` when a user selects a climb from a
+ * Used to seed `ps.soloBoardDetails` when a user selects a climb from a
  * surface that has no active board context (e.g. a playlist view when the
  * user has never been on a board route). The resulting `baseBoardPath` must
- * match `getBaseBoardPath` output so queue restoration (`use-queue-restoration`)
+ * match `getBaseBoardPath` output so board-context tracking (`use-queue-storage.ts`)
  * and party-session transfer (`start-sesh-drawer`) keep working.
  */
 function deriveSeedStateFromClimb(climb: Climb): { boardDetails: BoardDetails; baseBoardPath: string } | null {
@@ -137,7 +138,7 @@ function usePersistentSessionQueueAdapter(): {
   hasResolvedAngle: boolean;
   hasActiveQueue: boolean;
   isHydrated: boolean;
-  syncFromInjected: (q: ClimbQueueItem[], current: ClimbQueueItem | null, boardPath: string, bd: BoardDetails) => void;
+  syncFromInjected: (boardPath: string, bd: BoardDetails) => void;
 } {
   const ps = usePersistentSession();
   const { showMessage } = useSnackbar();
@@ -149,19 +150,16 @@ function usePersistentSessionQueueAdapter(): {
     if (!profile?.id) return undefined;
     return { id: profile.id, username: username || '', avatarUrl };
   }, [profile?.id, username, avatarUrl]);
-  // NOTE: the main QueueContext keeps `playlistSuggestionSource` inside the
-  // queue reducer (so `INITIAL_QUEUE_DATA` / `UPDATE_QUEUE` clear it for free).
-  // The bridge stores it in component state because the bridge doesn't own a
-  // reducer — full-queue replacement paths in the bridge (FullSync, peer
-  // replace) must remember to call `setPlaylistSuggestionSourceState(null)`
-  // explicitly. If you add a new full-queue reset path to the bridge, plumb
-  // the clear through here too.
-  const [playlistSuggestionSource, setPlaylistSuggestionSourceState] = useState<PlaylistSuggestionSource | null>(null);
 
+  // W6: `queue`/`currentClimbQueueItem`/`playlistSuggestionSource` are
+  // root-owned (single source, on and off board routes, party and solo
+  // alike) — no more separate bridge-local store to keep in sync. See
+  // `dispatchToRoot` below for how local/optimistic actions reach it.
   const isParty = !!ps.activeSession;
-  const queue = isParty ? ps.queue : ps.localQueue;
-  const currentClimbQueueItem = isParty ? ps.currentClimbQueueItem : ps.localCurrentClimbQueueItem;
-  const boardDetails = isParty ? ps.activeSession!.boardDetails : ps.localBoardDetails;
+  const queue = ps.queue;
+  const currentClimbQueueItem = ps.currentClimbQueueItem;
+  const playlistSuggestionSource = ps.playlistSuggestionSource;
+  const boardDetails = isParty ? ps.activeSession!.boardDetails : ps.soloBoardDetails;
 
   // Read angle live from the URL when the user is on a board route. The
   // session's `parsedParams.angle` is parsed from `Session.boardPath` at
@@ -170,7 +168,7 @@ function usePersistentSessionQueueAdapter(): {
   // with whenever `useDrawerUrlSync` rewrote the URL (see queue-control-bar
   // pivot — group-session feedback fix). Off-board surfaces (home, /you,
   // /playlists) get no route angle, so they still fall through to the
-  // session angle (party) or the current local climb's angle (solo).
+  // session angle (party) or the current climb's angle (solo).
   //
   // `resolvedAngle` is null when nothing in the chain produced a value —
   // distinct from numeric 0 (a real angle on vertical-board configs).
@@ -183,7 +181,7 @@ function usePersistentSessionQueueAdapter(): {
   const routeAngle = extractAngleFromPathname(pathnameForAngle ?? '');
   const resolvedAngle: Angle | null = isParty
     ? (routeAngle ?? ps.activeSession!.parsedParams.angle)
-    : (routeAngle ?? ps.localCurrentClimbQueueItem?.climb?.angle ?? null);
+    : (routeAngle ?? currentClimbQueueItem?.climb?.angle ?? null);
   const hasResolvedAngle = resolvedAngle != null;
   const angle: Angle = resolvedAngle ?? 0;
 
@@ -191,8 +189,8 @@ function usePersistentSessionQueueAdapter(): {
     if (isParty && ps.activeSession?.boardPath) {
       return getBaseBoardPath(ps.activeSession.boardPath);
     }
-    return ps.localBoardPath ?? '';
-  }, [isParty, ps.activeSession?.boardPath, ps.localBoardPath]);
+    return ps.soloBoardPath ?? '';
+  }, [isParty, ps.activeSession?.boardPath, ps.soloBoardPath]);
 
   const hasActiveQueue = (queue.length > 0 || !!currentClimbQueueItem || isParty) && !!boardDetails;
 
@@ -271,54 +269,94 @@ function usePersistentSessionQueueAdapter(): {
   // identity for the provider's lifetime (same net effect as
   // GraphQLQueueProvider's `useMemo(..., [])`).
 
-  // Bridge-solo local store: reduce against the shared `@boardsesh/queue`
-  // reducer (the same one QueueContext dispatches to) and persist the result
-  // via `ps.setLocalQueueState`. This makes the reducer the single semantic
-  // definition of "apply a queue action" even for the bridge's useState-backed
-  // local store. Bridge PARTY mode is untouched: `applyLocal` no-ops there
-  // (returns before running the reducer), matching the pre-existing behavior
-  // of waiting for the server echo instead of applying an optimistic update.
-  const applyLocalSolo = useCallback((action: QueueAction) => {
-    const { ps, boardDetails, baseBoardPath, queue, currentClimbQueueItem, playlistSuggestionSource } =
-      latestRef.current;
-    if (ps.activeSession) return;
+  // Type-seam dispatch — see the matching comment in `QueueContext.tsx`.
+  // `queue-actions-core` only ever constructs action variants that don't
+  // depend on the reducer's `TSearchParams` generic; the cast is the one
+  // seam boundary between this file's local `QueueAction` type and the
+  // root's `QueueAction<QueueSearchParams>`.
+  const dispatchToRoot = useCallback(
+    (action: QueueAction) => latestRef.current.ps.dispatch(action as unknown as RootQueueAction<RootQueueSearchParams>),
+    [],
+  );
+
+  // Unified local/optimistic apply — root-owned (W6): both solo AND party
+  // dispatch straight to the shared root reducer now. This is the flagged
+  // behavior change: off-board party mutations used to no-op here entirely
+  // (waiting for the server echo instead of an optimistic update); now they
+  // apply immediately, exactly like the board-route provider always has, and
+  // the real party mutation call still follows below in `queue-actions-core`.
+  // Correlation-id tracking for the current-climb mutation falls out of this
+  // for free — the reducer's own `pendingCurrentClimbUpdates` bookkeeping
+  // (and its root-level cleanup, see `persistent-session-context.tsx`) treats
+  // this dispatch exactly like any other local-origin action.
+  const applyLocal = useCallback((action: QueueAction) => {
+    const { ps, boardDetails, queue, currentClimbQueueItem } = latestRef.current;
     if (!boardDetails) return;
-    const pseudoState: QueueState = {
-      queue,
-      currentClimbQueueItem,
-      playlistSuggestionSource,
-      climbSearchParams: DEFAULT_SEARCH_PARAMS,
-      hasDoneFirstFetch: false,
-      pendingCurrentClimbUpdates: [],
-      needsResync: false,
-    };
-    let nextState = queueReducer(pseudoState, action);
-    // Reducer returned the same reference (a guard no-op, e.g. re-activating
-    // the already-current item, or an idempotent duplicate add) — skip the
-    // persist call AND the bridge-quirk overrides below, so a reducer no-op
-    // can never be turned into a spurious state write.
-    if (nextState === pseudoState) return;
-    // Two bridge-only quirks the shared reducer's generic DELTA_ADD_QUEUE_ITEM
-    // / DELTA_REMOVE_QUEUE_ITEM cases don't reproduce (they only touch `queue`,
-    // matching QueueContext, whose addToQueue/removeFromQueue never set the
-    // current climb as a side effect). The bridge's pre-refactor local-state
-    // math did, and existing tests pin it: adding to an un-activated queue also
-    // activates the new item; removing the current item promotes the new head
-    // instead of clearing to null. Behavior-preserving overrides, kept narrow.
-    if (action.type === 'DELTA_ADD_QUEUE_ITEM' && !pseudoState.currentClimbQueueItem) {
-      nextState = { ...nextState, currentClimbQueueItem: action.payload.item };
-    } else if (
-      action.type === 'DELTA_REMOVE_QUEUE_ITEM' &&
-      pseudoState.currentClimbQueueItem?.uuid === action.payload.uuid
-    ) {
-      nextState = { ...nextState, currentClimbQueueItem: nextState.queue[0] ?? null };
+
+    dispatchToRoot(action);
+
+    // Two solo-only UX quirks the shared reducer's generic
+    // DELTA_ADD_QUEUE_ITEM / DELTA_REMOVE_QUEUE_ITEM cases don't reproduce on
+    // their own (they only touch `queue`, matching QueueContext, whose
+    // addToQueue/removeFromQueue never set the current climb as a side
+    // effect): adding to an un-activated queue also activates the new item;
+    // removing the current item promotes the new head instead of clearing to
+    // null. Pre-refactor, solo's local pseudo-reducer applied these
+    // unconditionally (solo has no server to correct a wrong optimistic
+    // guess); PARTY mode never got them (`applyLocal` used to no-op there
+    // entirely, so party's actual state only ever reflected the server's
+    // echo, which has no such auto-activate/promote semantics). Restricting
+    // these overrides to solo here preserves that same split now that both
+    // modes share one dispatch path — extending them to party would show a
+    // locally-fabricated "current climb" the party mutation never actually
+    // requested and the server would never confirm.
+    //
+    // Implemented as a follow-up dispatch (not a locally-computed compound
+    // action). The guard conditions below read `currentClimbQueueItem` / `queue`
+    // from the pre-dispatch `latestRef` snapshot taken at the top of this
+    // handler — intentionally pre-dispatch: the reducer hasn't committed a
+    // re-render yet, so the ref still holds the state as it was BEFORE
+    // `dispatchToRoot(action)` above, which is exactly what these checks need
+    // (auto-activate only when there was no current climb before the add;
+    // promote the head computed from the pre-remove queue). This mirrors the old
+    // solo reduce-then-override, just against the root store instead of a local one.
+    //
+    // The add branch also re-checks idempotency: `DELTA_ADD_QUEUE_ITEM` is a
+    // no-op when an item with the same uuid is already queued — the reducer
+    // returns the SAME state reference (see reducer.ts / insertQueueItemIdempotent).
+    // A duplicate-uuid add must NOT fabricate a spurious current-climb
+    // activation, so fire the auto-activate follow-up only when the item is
+    // genuinely new. This restores the pre-W6 `if (nextState === pseudoState) return;`
+    // guard the unified dispatch path dropped.
+    if (!ps.activeSession) {
+      if (
+        action.type === 'DELTA_ADD_QUEUE_ITEM' &&
+        !currentClimbQueueItem &&
+        !queue.some((item) => item.uuid === action.payload.item.uuid)
+      ) {
+        dispatchToRoot({
+          type: 'DELTA_UPDATE_CURRENT_CLIMB',
+          payload: { item: action.payload.item, shouldAddToQueue: false },
+        });
+      } else if (action.type === 'DELTA_REMOVE_QUEUE_ITEM' && currentClimbQueueItem?.uuid === action.payload.uuid) {
+        const remaining = queue.filter((item) => item.uuid !== action.payload.uuid);
+        dispatchToRoot({
+          type: 'DELTA_UPDATE_CURRENT_CLIMB',
+          payload: { item: remaining[0] ?? null, shouldAddToQueue: false },
+        });
+      }
     }
-    ps.setLocalQueueState(nextState.queue, nextState.currentClimbQueueItem, baseBoardPath, boardDetails);
   }, []);
 
   // Cold-start seeding: selecting a climb from a surface with no active board
   // (e.g. a playlist view) auto-activates the climb's own board. Solo-only —
-  // party mode always has a board (the session carries one).
+  // party mode always has a board (the session carries one). Seeds via a
+  // single `DELTA_UPDATE_CURRENT_CLIMB` dispatch (queue is empty at cold
+  // start, by construction) rather than an `INITIAL_QUEUE_DATA`/`UPDATE_QUEUE`
+  // overwrite — those two clear `playlistSuggestionSource` unconditionally,
+  // which would wipe out `setCurrentClimb`'s `setPlaylistSuggestionSourceLocal`
+  // dispatch moments earlier in the same call. Omitting the field here
+  // preserves whatever was just set.
   const coldStart: QueueActionsCoreColdStart = useMemo(
     () => ({
       tryAddToQueue: (item) => {
@@ -326,7 +364,8 @@ function usePersistentSessionQueueAdapter(): {
         if (boardDetails) return false;
         const seed = deriveSeedStateFromClimb(item.climb);
         if (!seed) return true;
-        ps.setLocalQueueState([item], item, seed.baseBoardPath, seed.boardDetails);
+        ps.setBoardContext(seed.baseBoardPath, seed.boardDetails);
+        dispatchToRoot({ type: 'DELTA_UPDATE_CURRENT_CLIMB', payload: { item, shouldAddToQueue: true } });
         return true;
       },
       trySetCurrentClimb: (item) => {
@@ -334,7 +373,8 @@ function usePersistentSessionQueueAdapter(): {
         if (boardDetails) return 'not-applicable';
         const seed = deriveSeedStateFromClimb(item.climb);
         if (!seed) return 'failed';
-        ps.setLocalQueueState([item], item, seed.baseBoardPath, seed.boardDetails);
+        ps.setBoardContext(seed.baseBoardPath, seed.boardDetails);
+        dispatchToRoot({ type: 'DELTA_UPDATE_CURRENT_CLIMB', payload: { item, shouldAddToQueue: true } });
         return 'seeded';
       },
     }),
@@ -348,14 +388,14 @@ function usePersistentSessionQueueAdapter(): {
         currentClimbQueueItem: latestRef.current.currentClimbQueueItem,
         playlistSuggestionSource: latestRef.current.playlistSuggestionSource,
       }),
-      applyLocal: applyLocalSolo,
-      setPlaylistSuggestionSourceLocal: (source) => setPlaylistSuggestionSourceState(source),
-      // Functional updater so the identity-match check reads the latest state
-      // (including same-tick updates a `latestRef` snapshot would miss).
+      applyLocal,
+      setPlaylistSuggestionSourceLocal: (source) =>
+        dispatchToRoot({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: source }),
+      // Dispatch the reducer's REFRESH action (it does the identity-match
+      // check against live reducer state, not a possibly-stale ref snapshot)
+      // — same as QueueContext.
       refreshPlaylistSuggestionSourceLocal: (source) =>
-        setPlaylistSuggestionSourceState((current) =>
-          playlistSuggestionSourceMatches(current, source) ? source : current,
-        ),
+        dispatchToRoot({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source }),
       // `buildQueueItem` always builds `suggested: false`; override it here so
       // peek-promotion (setCurrentClimbQueueItem) can carry the peek's own flag
       // through, mirroring the pre-refactor `{ ...buildQueueItem(climb), suggested }`.
@@ -447,7 +487,7 @@ function usePersistentSessionQueueAdapter(): {
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [applyLocalSolo, coldStart, validateClimbForQueue],
+    [applyLocal, coldStart, validateClimbForQueue],
   );
   const actionsCore = useMemo(() => createQueueActionsCore(actionsCoreDeps), [actionsCoreDeps]);
   const {
@@ -585,15 +625,16 @@ function usePersistentSessionQueueAdapter(): {
     ],
   );
 
-  // Sync injected queue state to local queue so the adapter has fresh data
-  // when the bridge falls back from injected mode. Only effective in local
-  // (non-party) mode — setLocalQueueState no-ops when a party session is active.
-  const syncFromInjected = useCallback(
-    (q: ClimbQueueItem[], current: ClimbQueueItem | null, boardPath: string, bd: BoardDetails) => {
-      latestRef.current.ps.setLocalQueueState(q, current, boardPath, bd);
-    },
-    [],
-  );
+  // Sync the injected board context (board-context bookkeeping only — the
+  // queue itself is root-owned, so there's nothing left to copy back when
+  // the bridge falls back from injected mode). Only effective in solo mode —
+  // `setBoardContext` no-ops when a party session is active. Also runs the
+  // board-config-change clear (see `setBoardContext` doc): if the board the
+  // root queue currently belongs to differs from `boardPath`, it clears the
+  // queue before recording the new context.
+  const syncFromInjected = useCallback((boardPath: string, bd: BoardDetails) => {
+    latestRef.current.ps.setBoardContext(boardPath, bd);
+  }, []);
 
   return {
     context,
@@ -602,7 +643,7 @@ function usePersistentSessionQueueAdapter(): {
     angle,
     hasResolvedAngle,
     hasActiveQueue,
-    isHydrated: ps.isLocalQueueLoaded,
+    isHydrated: ps.isBoardContextLoaded,
     syncFromInjected,
   };
 }
@@ -710,6 +751,16 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       setIsInjected(true);
       setActionsVersion((v) => v + 1);
       setDataVersion((v) => v + 1);
+      // Proactively record the board context on every injection (mount, and
+      // whenever the board route's own boardDetails/angle change — this
+      // fires on the same cadence as the injector's layout effect). This is
+      // the board-config-change clear trigger (see `setBoardContext` doc):
+      // navigating directly from board A's route to board B's route, with no
+      // intervening off-board stop, needs this to catch the mismatch and
+      // clear board A's stale queue before board B's route starts adding to
+      // it — the injector mount effect is the only thing that reliably knows
+      // "a different board route is now current" as soon as it happens.
+      adapterSyncRef.current(baseBoardPath, bd);
     },
     [],
   );
@@ -733,15 +784,15 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const clear = useCallback(() => {
-    // Before clearing: sync the last injected queue state to the persistent
-    // session's local queue so the adapter has up-to-date data when it takes
-    // over. In party mode this is a no-op (setLocalQueueState guards on
-    // activeSession).
-    const lastCtx = injectedContextRef.current;
+    // Before clearing: record the board context being left so the adapter's
+    // board-context bookkeeping (`ps.soloBoardPath`/`soloBoardDetails`) has
+    // up-to-date data when it takes over. The queue itself needs no copy-back
+    // — it's root-owned, so it already has up-to-date data. In party mode
+    // this is a no-op (`setBoardContext` guards on `activeSession`).
     const bd = injectedBoardDetailsRef.current;
     const bbp = injectedBaseBoardPathRef.current;
-    if (lastCtx && bd && bbp) {
-      adapterSyncRef.current(lastCtx.queue, lastCtx.currentClimbQueueItem, bbp, bd);
+    if (bd && bbp) {
+      adapterSyncRef.current(bbp, bd);
     }
 
     injectedContextRef.current = null;
@@ -937,10 +988,21 @@ export function QueueBridgeInjector({ boardDetails, angle, boardUuid = null }: Q
       hasInjectedRef.current = false;
       clear();
     };
-    // Only re-run when board details or angle change (navigation between boards)
-    // and not when pathname changes during transition off the board route.
+    // Re-run on board-details change (navigation between boards), NOT on angle.
+    // `boardDetails` and `angle` are both resolved from the same server render
+    // of this route's layout (`[angle]/layout.tsx`), so they change in lockstep:
+    // any navigation that changes the angle re-renders the layout and hands down
+    // a fresh `boardDetails` object (new identity), which already re-fires this
+    // effect. Listing `angle` is therefore redundant — it can never trigger a run
+    // `boardDetails` wouldn't — and it makes solo angle changes fire redundant
+    // `setBoardContext` writes (the base path strips the angle, so the CLEAR_QUEUE
+    // guard short-circuits anyway). Dropping it keeps `setInjectedAngle` correct
+    // (the effect still re-runs via `boardDetails`, reading the current `angle`
+    // from scope) while avoiding the redundant writes. `usePathname`-driven angle
+    // rewrites (`useDrawerUrlSync` via raw `history.replaceState`) don't touch the
+    // server-resolved `angle` prop, so they never needed this dep either.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardDetails, angle, inject, clear]);
+  }, [boardDetails, inject, clear]);
 
   // Update the context ref whenever any of the queue context values change.
   // Also handles deferred injection if contexts were null during the useLayoutEffect.

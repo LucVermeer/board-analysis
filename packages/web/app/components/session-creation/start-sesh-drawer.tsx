@@ -44,7 +44,6 @@ import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { setClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import { usePersistentSession } from '@/app/components/persistent-session/persistent-session-context';
 import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
-import { useQueueList, useCurrentClimb } from '@/app/components/graphql-queue';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
 import type { StoredBoardConfig } from '@/app/lib/saved-boards-db';
@@ -73,18 +72,10 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const router = useLocaleRouter();
   const { showMessage } = useSnackbar();
   const { createSession, isCreating } = useCreateSession();
-  const {
-    activateSession,
-    setInitialQueueForSession,
-    localQueue,
-    localCurrentClimbQueueItem,
-    localBoardPath,
-    localBoardDetails,
-  } = usePersistentSession();
+  const { activateSession, setInitialQueueForSession, queue, currentClimbQueueItem, soloBoardPath, soloBoardDetails } =
+    usePersistentSession();
   const pathname = usePathname();
   const { boardDetails: bridgeBoardDetails, angle: bridgeAngle } = useQueueBridgeBoardInfo();
-  const { queue: bridgeQueue } = useQueueList();
-  const { currentClimbQueueItem: bridgeCurrentClimbQueueItem } = useCurrentClimb();
   const { boards, error: boardsError } = useMyBoards(open);
 
   const [selectedBoard, setSelectedBoard] = useState<(typeof boards)[number] | null>(null);
@@ -106,7 +97,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const runBufferRef = useRef<ClimbQueueItem[]>([]);
 
   const selectedBoardDetails = useBoardDetails(selectedBoard ?? undefined, selectedCustomConfig ?? undefined);
-  const generatorBoardDetails = selectedBoardDetails ?? bridgeBoardDetails ?? localBoardDetails ?? null;
+  const generatorBoardDetails = selectedBoardDetails ?? bridgeBoardDetails ?? soloBoardDetails ?? null;
   const generatorDefaultAngle =
     selectedBoard?.angle ??
     selectedCustomConfig?.angle ??
@@ -139,7 +130,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
     // Prefer the current pathname over the persistent session's last route —
     // the user's intent is whatever they're looking at now.
-    const effectivePathname = pathname && isBoardRoutePath(pathname) ? pathname : localBoardPath;
+    const effectivePathname = pathname && isBoardRoutePath(pathname) ? pathname : soloBoardPath;
     if (!effectivePathname) {
       hasAutoSelectedRef.current = true;
       return;
@@ -157,7 +148,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
     // Generic board route → build a custom config from the route's resolved
     // board details (bridge for the current route, fall back to the session).
-    const effectiveBoardDetails = bridgeBoardDetails ?? localBoardDetails;
+    const effectiveBoardDetails = bridgeBoardDetails ?? soloBoardDetails;
     if (!effectiveBoardDetails) return; // wait for details to resolve
 
     const angle = bridgeAngle ?? getDefaultAngleForBoard(effectiveBoardDetails.board_name);
@@ -177,7 +168,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       createdAt: new Date().toISOString(),
     });
     hasAutoSelectedRef.current = true;
-  }, [open, boards, localBoardPath, localBoardDetails, bridgeBoardDetails, bridgeAngle, pathname]);
+  }, [open, boards, soloBoardPath, soloBoardDetails, bridgeBoardDetails, bridgeAngle, pathname]);
 
   const isLoggedIn = status === 'authenticated';
 
@@ -300,20 +291,22 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     try {
       const sessionId = await createSession(formData, boardPath);
 
-      // Effective values: prefer local state, fall back to bridge context.
-      // Local state may be empty when the QueueBridgeInjector is active on a
-      // board route — it only syncs to local state on cleanup (navigating away).
-      const effectiveBoardDetails = localBoardDetails ?? bridgeBoardDetails;
+      // Effective board details: prefer the root's board-context bookkeeping,
+      // fall back to the bridge (board-context only; solo-scoped, so it's
+      // null while a party session is active).
+      const effectiveBoardDetails = soloBoardDetails ?? bridgeBoardDetails;
       let effectiveBaseBoardPath: string | null;
-      if (localBoardPath) {
-        effectiveBaseBoardPath = getBaseBoardPath(localBoardPath);
+      if (soloBoardPath) {
+        effectiveBaseBoardPath = getBaseBoardPath(soloBoardPath);
       } else if (bridgeBoardDetails && pathname) {
         effectiveBaseBoardPath = getBaseBoardPath(pathname);
       } else {
         effectiveBaseBoardPath = null;
       }
-      const effectiveQueue = localQueue.length > 0 ? localQueue : bridgeQueue;
-      const effectiveCurrentClimb = localCurrentClimbQueueItem ?? bridgeCurrentClimbQueueItem;
+      // The queue itself is root-owned now (single source on and off board
+      // routes) — no more local-vs-bridge distinction to reconcile.
+      const effectiveQueue = queue;
+      const effectiveCurrentClimb = currentClimbQueueItem;
       const boardsMatch = effectiveBaseBoardPath != null && effectiveBaseBoardPath === getBaseBoardPath(boardPath);
 
       // Merge any existing same-board queue with the generated queue: existing
