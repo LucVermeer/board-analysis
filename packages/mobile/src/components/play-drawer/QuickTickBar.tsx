@@ -20,7 +20,7 @@ import { InlineStarPicker } from './InlineStarPicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
 import { GradeSingleSelectRail } from '../grade';
 import { ClimbedAtField } from '../logbook/ClimbedAtField';
-import { clampToNow } from '../logbook/climbed-at';
+import { clampToNow, MAXIMUM_CLIMBED_AT_REFRESH_MS } from '../logbook/climbed-at';
 import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import {
@@ -38,8 +38,6 @@ import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
-
-const MAXIMUM_CLIMBED_AT_REFRESH_MS = 60_000;
 
 type QuickTickBarProps = {
   climbUuid: string;

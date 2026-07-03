@@ -15,7 +15,7 @@ import { SegmentedControl } from '../SegmentedControl';
 import { SectionHeader } from '../SectionHeader';
 import { GradeSingleSelectRail } from '../grade';
 import { ClimbedAtField } from '../logbook/ClimbedAtField';
-import { clampToNow, toEditableDate } from '../logbook/climbed-at';
+import { clampToNow, toEditableDate, MAXIMUM_CLIMBED_AT_REFRESH_MS } from '../logbook/climbed-at';
 import { useGrades } from '../../lib/graphql/hooks';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -24,8 +24,6 @@ import { useToast } from '../../providers/toast-provider';
 import { useConfirm } from '../../providers/dialog-provider';
 
 type TickStatus = 'flash' | 'send' | 'attempt';
-
-const MAXIMUM_CLIMBED_AT_REFRESH_MS = 60_000;
 
 type LogbookEditSheetProps = {
   sheetRef: RefObject<BottomSheet | null>;

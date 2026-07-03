@@ -3,6 +3,10 @@
 // React Native imports — kept pure so the merge/clamp rules are unit-testable.
 import { parseTickTime } from '@boardsesh/profile-stats';
 
+/** How often the tick sheets re-sample "now" so a long-open sheet's picker
+ *  bound (and the create sheet's unedited default) can't drift into the past. */
+export const MAXIMUM_CLIMBED_AT_REFRESH_MS = 60_000;
+
 /** Parse a stored `climbedAt` ISO string into a local `Date`, falling back to
  *  now when the value is missing or unparseable. */
 export function toEditableDate(climbedAt: string): Date {
