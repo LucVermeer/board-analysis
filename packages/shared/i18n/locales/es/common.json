@@ -469,8 +469,7 @@
       "manualSection": "Introduce un canal manualmente",
       "manualHint": "No se pudo cargar la lista de versiones de prueba. Introduce un nombre de canal (como pr-1234) para cambiar manualmente.",
       "manualPlaceholder": "nombre del canal",
-      "manualInputA11y": "Nombre del canal al que cambiar",
-      "manualSwitchA11y": "Cambiar al canal introducido"
+      "manualInputA11y": "Nombre del canal al que cambiar"
     }
   },
   "lightControl": {

@@ -1,12 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { View, ScrollView, ActivityIndicator, Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Alert } from 'react-native';
 import * as Updates from 'expo-updates';
-import { Text } from './Text';
-import { SectionHeader } from './SectionHeader';
-import { ListRow } from './ListRow';
-import { Icon } from './Icon';
-import { InfoRow } from './InfoRow';
-import { useTheme } from '../providers/theme-provider';
 import { useConfirm } from '../providers/dialog-provider';
 import { hapticLight, hapticError } from '../lib/haptics';
 import { reportHandledError } from '../lib/error-reporting';
@@ -20,6 +14,9 @@ import {
   type ChannelSwitchDeps,
 } from '../lib/channel-switch';
 import { isPreviewBuild } from '../lib/preview-build';
+import { SwitcherForm } from './SwitcherForm';
+import { deriveSwitchRowState, isSwitchRowPressable } from './SwitcherForm.logic';
+import type { SwitcherFormModel, SwitcherRow, SwitcherSection } from './SwitcherForm.types';
 
 // The branch baked into the running update's manifest metadata (set by the OTA
 // server). Read-only and tokenless — surfaced so a tester can see which branch
@@ -38,15 +35,14 @@ function getCurrentBranchName(): string | null {
   return null;
 }
 
-// Preview-build sibling of the tester OTA Channel Switcher. Both repoint the
-// running build at a different update target device-locally — overriding only the
-// `expo-channel-name` request header (no EAS API token, no project-wide channel
-// remap) — so they share the same override key and the same commit/revert state
-// machine in `channel-switch.ts`. This screen is framed around branches: a tester
-// picks a preview channel/branch (or types one) and the build pulls that branch's
-// OTA on restart.
+// Preview-build sibling of the tester OTA Channel Switcher, rendered as a single
+// native @expo/ui form via the shared <SwitcherForm />. Both repoint the running
+// build at a different update target device-locally — overriding only the
+// `expo-channel-name` request header — so they share the same override key and the
+// same commit/revert state machine in `channel-switch.ts`. This screen is framed
+// around branches: a tester picks a preview channel/branch (or types one) and the
+// build pulls that branch's OTA on restart. Tester-only, so copy is `i18n-ignore`d.
 export function BranchSwitcherScreen() {
-  const { systemColors, spacing, borderRadius } = useTheme();
   const confirm = useConfirm();
   const [override, setOverride] = useState<string | null>(null);
   const [customBranch, setCustomBranch] = useState('');
@@ -184,205 +180,146 @@ export function BranchSwitcherScreen() {
     }
   }, [confirm, buildChannel, makeDeps]);
 
+  // Build the native form's view-model. Memoized so the Host's children don't
+  // rebuild every render; `branches` is derived inside so the dep set stays stable.
+  const model = useMemo<SwitcherFormModel>(() => {
+    const sections: SwitcherSection[] = [];
+
+    // Current update info. Conditional rows mirror the original card.
+    const currentRows: SwitcherRow[] = [];
+    if (isEmbedded) {
+      // i18n-ignore-next-line
+      currentRows.push({ kind: 'info', key: 'status', label: 'Status', value: 'No OTA update applied' });
+    }
+    // i18n-ignore-next-line
+    currentRows.push({ kind: 'info', key: 'build', label: 'Build channel', value: buildChannel });
+    currentRows.push({
+      kind: 'info',
+      key: 'selected',
+      // i18n-ignore-next-line
+      label: 'Selected branch',
+      // i18n-ignore-next-line
+      value: override ?? `${buildChannel} (default)`,
+    });
+    if (currentBranch) {
+      // i18n-ignore-next-line
+      currentRows.push({ kind: 'info', key: 'running', label: 'Running branch', value: currentBranch });
+    }
+    if (currentUpdateId) {
+      // i18n-ignore-next-line
+      currentRows.push({ kind: 'info', key: 'update-id', label: 'Update ID', value: currentUpdateId.slice(0, 8) });
+    }
+    // i18n-ignore-next-line
+    currentRows.push({ kind: 'info', key: 'runtime', label: 'Runtime version', value: runtimeVersion });
+    sections.push({
+      key: 'current',
+      // i18n-ignore-next-line
+      title: 'Current Update',
+      footer: updatesUsable
+        ? undefined
+        : // i18n-ignore-next-line
+          'OTA updates are disabled in this build (development or updates not enabled), so branch switching is unavailable here.',
+      rows: currentRows,
+    });
+
+    if (updatesUsable) {
+      // Switch Branch — preview channels/branches, no chevron.
+      const branches = buildChannelList(override);
+      sections.push({
+        key: 'switch',
+        // i18n-ignore-next-line
+        title: 'Switch Branch',
+        rows: branches.map((branch) => {
+          const state = deriveSwitchRowState({
+            target: branch,
+            activeTarget,
+            switchingTarget: switchingTo,
+            updatesUsable,
+          });
+          return {
+            kind: 'target',
+            key: branch,
+            title: branch,
+            state,
+            showChevronWhenPressable: false,
+            onPress: isSwitchRowPressable(state) ? () => void switchToBranch(branch) : undefined,
+          };
+        }),
+      });
+
+      // Custom branch entry.
+      const trimmedCustomBranch = customBranch.trim();
+      const submitCustom = () => {
+        const value = customBranch.trim();
+        if (value) void switchToBranch(value);
+      };
+      sections.push({
+        key: 'custom',
+        // i18n-ignore-next-line
+        title: 'Custom Branch',
+        rows: [
+          {
+            kind: 'field',
+            key: 'custom-field',
+            // i18n-ignore-next-line
+            label: 'Custom branch name',
+            // i18n-ignore-next-line
+            placeholder: 'branch name',
+            value: customBranch,
+            onChangeText: setCustomBranch,
+            onSubmit: submitCustom,
+            editable: !isSwitching,
+          },
+          {
+            kind: 'action',
+            key: 'custom-switch',
+            // i18n-ignore-next-line
+            label: 'Switch',
+            icon: 'switch',
+            disabled: isSwitching || trimmedCustomBranch.length === 0,
+            onPress: submitCustom,
+          },
+        ],
+      });
+
+      // Reset — always offered (not gated on `override`) so a native override
+      // stranded after an app-data clear stays clearable.
+      sections.push({
+        key: 'reset',
+        rows: [
+          {
+            kind: 'action',
+            key: 'reset',
+            // i18n-ignore-next-line
+            label: `Reset to build branch (${buildChannel})`,
+            icon: 'reset',
+            disabled: isSwitching,
+            onPress: () => void resetToBuildBranch(),
+          },
+        ],
+      });
+    }
+
+    return { sections };
+  }, [
+    buildChannel,
+    override,
+    currentBranch,
+    currentUpdateId,
+    runtimeVersion,
+    isEmbedded,
+    updatesUsable,
+    activeTarget,
+    switchingTo,
+    isSwitching,
+    customBranch,
+    switchToBranch,
+    resetToBuildBranch,
+  ]);
+
   if (!preview) {
     return null;
   }
 
-  const branches = buildChannelList(override);
-  const trimmedCustomBranch = customBranch.trim();
-  const customBranchDisabled = isSwitching || trimmedCustomBranch.length === 0;
-
-  return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic">
-      {/* i18n-ignore-next-line */}
-      <SectionHeader title="Current Update" />
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: systemColors.secondaryBackground,
-            borderRadius: borderRadius.lg,
-            marginHorizontal: spacing[4],
-          },
-        ]}
-      >
-        {isEmbedded ? (
-          // i18n-ignore-next-line
-          <InfoRow label="Status" value="No OTA update applied" />
-        ) : null}
-        {/* i18n-ignore-next-line */}
-        <InfoRow label="Build channel" value={buildChannel} />
-        {/* i18n-ignore-next-line */}
-        <InfoRow label="Selected branch" value={override ?? `${buildChannel} (default)`} />
-        {currentBranch ? (
-          // i18n-ignore-next-line
-          <InfoRow label="Running branch" value={currentBranch} />
-        ) : null}
-        {currentUpdateId ? (
-          // i18n-ignore-next-line
-          <InfoRow label="Update ID" value={currentUpdateId.slice(0, 8)} />
-        ) : null}
-        {/* i18n-ignore-next-line */}
-        <InfoRow label="Runtime version" value={runtimeVersion} showSeparator={false} />
-      </View>
-
-      {!updatesUsable ? (
-        <View style={[styles.notice, { marginHorizontal: spacing[4] }]}>
-          <Text variant="footnote" color={systemColors.secondaryLabel}>
-            {/* i18n-ignore-next-line */}
-            OTA updates are disabled in this build (development or updates not enabled), so branch switching is
-            unavailable here.
-          </Text>
-        </View>
-      ) : (
-        <>
-          {/* i18n-ignore-next-line */}
-          <SectionHeader title="Switch Branch" />
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: systemColors.secondaryBackground,
-                borderRadius: borderRadius.lg,
-                marginHorizontal: spacing[4],
-              },
-            ]}
-          >
-            {branches.map((branch, index) => {
-              const isActive = branch === activeTarget;
-              const isThisSwitching = switchingTo === branch;
-              const isDisabled = isSwitching && !isThisSwitching;
-              const trailing = isThisSwitching ? (
-                <ActivityIndicator size="small" />
-              ) : isActive ? (
-                <Icon name="check.small" size={20} color={systemColors.label} />
-              ) : null;
-
-              return (
-                <ListRow
-                  key={branch}
-                  title={branch}
-                  trailing={trailing}
-                  onPress={isActive || isDisabled ? undefined : () => void switchToBranch(branch)}
-                  showSeparator={index < branches.length - 1}
-                  style={isDisabled ? styles.disabledRow : undefined}
-                />
-              );
-            })}
-          </View>
-
-          {/* i18n-ignore-next-line */}
-          <SectionHeader title="Custom Branch" />
-          <View style={[styles.customRow, { marginHorizontal: spacing[4] }]}>
-            <TextInput
-              value={customBranch}
-              onChangeText={setCustomBranch}
-              // i18n-ignore-next-line
-              placeholder="branch name"
-              placeholderTextColor={systemColors.secondaryLabel}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isSwitching}
-              // i18n-ignore-next-line
-              accessibilityLabel="Custom branch name"
-              style={[
-                styles.input,
-                {
-                  color: systemColors.label,
-                  backgroundColor: systemColors.secondaryBackground,
-                  borderRadius: borderRadius.md,
-                },
-              ]}
-            />
-            <Pressable
-              onPress={() => {
-                if (trimmedCustomBranch) void switchToBranch(trimmedCustomBranch);
-              }}
-              disabled={customBranchDisabled}
-              accessibilityRole="button"
-              // i18n-ignore-next-line
-              accessibilityLabel="Switch to the entered branch"
-              accessibilityState={{ disabled: customBranchDisabled }}
-              style={[
-                styles.goButton,
-                {
-                  backgroundColor: systemColors.tertiaryBackground,
-                  borderRadius: borderRadius.md,
-                  opacity: customBranchDisabled ? 0.5 : 1,
-                },
-              ]}
-            >
-              <Icon name="transfer" size={16} color={systemColors.label} />
-              <Text variant="footnote" color={systemColors.label}>
-                {/* i18n-ignore-next-line */}
-                Switch
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Always offered (not gated on `override`) so a native override stranded
-              after an app-data clear — when the display mirror is gone — stays
-              clearable. */}
-          <Pressable
-            onPress={() => void resetToBuildBranch()}
-            disabled={isSwitching}
-            accessibilityRole="button"
-            // i18n-ignore-next-line
-            accessibilityLabel="Reset to build branch"
-            accessibilityState={{ disabled: isSwitching }}
-            style={[styles.resetButton, { marginHorizontal: spacing[4], opacity: isSwitching ? 0.5 : 1 }]}
-          >
-            <Icon name="refresh" size={16} color={systemColors.label} />
-            <Text variant="footnote" color={systemColors.label}>
-              {/* i18n-ignore-next-line */}
-              Reset to build branch ({buildChannel})
-            </Text>
-          </Pressable>
-        </>
-      )}
-
-      <View style={styles.bottomSpacer} />
-    </ScrollView>
-  );
+  return <SwitcherForm model={model} />;
 }
-
-const styles = StyleSheet.create({
-  card: {
-    padding: 12,
-    overflow: 'hidden',
-  },
-  notice: {
-    paddingVertical: 16,
-  },
-  customRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  goButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    marginTop: 16,
-  },
-  disabledRow: {
-    opacity: 0.5,
-  },
-  bottomSpacer: {
-    height: 40,
-  },
-});

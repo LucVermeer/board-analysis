@@ -202,6 +202,18 @@ export default defineConfig({
         find: /^(.*\/)?FeatureFlagsForm$/,
         replacement: fileURLToPath(new URL('./test/feature-flags-form-stub.tsx', import.meta.url)),
       },
+      // SwitcherForm is platform-split (SwitcherForm.ios.tsx renders a native
+      // @expo/ui SwiftUI `Form`; SwitcherForm.android.tsx a native Compose
+      // `LazyColumn` of cards) and backs both the OTA Channel + Branch switcher
+      // screens. Vitest doesn't resolve `.ios`/`.android` extensions and can't mount
+      // either native tree, so redirect the extensionless import to a faithful
+      // passthrough stub that keeps the public API + button/field accessibility
+      // roles. Suites that assert the switcher screens' model register their own
+      // vi.mock (takes precedence).
+      {
+        find: /^(.*\/)?SwitcherForm$/,
+        replacement: fileURLToPath(new URL('./test/switcher-form-stub.tsx', import.meta.url)),
+      },
       // MoreForm is platform-split (MoreForm.ios.tsx renders a native @expo/ui
       // SwiftUI `Form`; MoreForm.android.tsx a native Compose `LazyColumn`).
       // Vitest doesn't resolve `.ios`/`.android` extensions and can't mount either

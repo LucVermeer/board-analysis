@@ -268,8 +268,7 @@
       "manualSection": "Enter a channel manually",
       "manualHint": "Couldn't load the preview list. Enter a channel name (like pr-1234) to switch manually.",
       "manualPlaceholder": "channel name",
-      "manualInputA11y": "Channel name to switch to",
-      "manualSwitchA11y": "Switch to the entered channel"
+      "manualInputA11y": "Channel name to switch to"
     }
   },
   "lightControl": {

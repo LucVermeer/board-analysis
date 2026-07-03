@@ -268,8 +268,7 @@
       "manualSection": "Saisir un canal manuellement",
       "manualHint": "Impossible de charger la liste des préversions. Saisissez un nom de canal (comme pr-1234) pour changer manuellement.",
       "manualPlaceholder": "nom du canal",
-      "manualInputA11y": "Nom du canal vers lequel basculer",
-      "manualSwitchA11y": "Basculer vers le canal saisi"
+      "manualInputA11y": "Nom du canal vers lequel basculer"
     }
   },
   "lightControl": {
