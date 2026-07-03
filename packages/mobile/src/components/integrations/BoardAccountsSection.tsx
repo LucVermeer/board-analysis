@@ -527,16 +527,21 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
 
   const handleRequestData = useCallback(() => {
     // The GDPR letter is too long to encode into the mailto: body reliably, so
-    // copy it to the clipboard and open a draft with just the subject — the
-    // toast tells the user to paste it in.
+    // copy it to the clipboard and open a draft with just the subject.
     const openRequest = async () => {
-      await Clipboard.setStringAsync(t('aurora.moonboard.email.body'));
-      await Linking.openURL(buildMoonBoardDataRequestMailto(t));
+      try {
+        await Clipboard.setStringAsync(t('aurora.moonboard.email.body'));
+      } catch {
+        showToast(t('aurora.mobile.requestDataCopyFailed'), 'error');
+        return;
+      }
+      // The letter is safely on the clipboard now, so the toast tells the user
+      // to paste it in. Opening the mail draft is best-effort — a missing mail
+      // app isn't a failure worth surfacing since the copy already succeeded.
       showToast(t('aurora.mobile.requestDataCopied'), 'success');
+      void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {});
     };
-    void openRequest().catch(() => {
-      showToast(t('aurora.mobile.requestDataFailed'), 'error');
-    });
+    void openRequest();
   }, [showToast, t]);
 
   const handleOpenDiscord = useCallback(() => {

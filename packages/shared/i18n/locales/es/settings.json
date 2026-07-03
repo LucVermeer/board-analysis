@@ -244,6 +244,7 @@
       "importInterrupted": "La importación se detuvo antes de terminar. Volver a importar el archivo es seguro.",
       "requestDataFailed": "No se pudo abrir el correo. Inténtalo de nuevo.",
       "requestDataCopied": "Solicitud copiada. Pégala en el borrador de tu correo.",
+      "requestDataCopyFailed": "No se pudo copiar la solicitud. Inténtalo de nuevo.",
       "passwordHelp": "Tus credenciales se cifran antes de guardarse."
     },
     "import": {

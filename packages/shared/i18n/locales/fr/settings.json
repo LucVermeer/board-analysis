@@ -244,6 +244,7 @@
       "importInterrupted": "L'import s'est arrêté avant la fin. Réimporter le fichier est sans risque.",
       "requestDataFailed": "Impossible d'ouvrir l'e-mail. Réessaie.",
       "requestDataCopied": "Demande copiée. Colle-la dans ton brouillon d'e-mail.",
+      "requestDataCopyFailed": "Impossible de copier la demande. Réessaie.",
       "passwordHelp": "Tes identifiants sont chiffrés avant d'être stockés."
     },
     "import": {
