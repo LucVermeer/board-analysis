@@ -35,12 +35,17 @@ export const FEATURE_FLAG_DEFINITIONS = [
   {
     key: 'logbook-filters',
     label: 'Logbook filters',
-    description: 'Search box and filter sheet on the logbook (unfinished UI).',
+    description: 'Search box and filter sheet on the logbook (shipped: 100% rollout since 2026-07-03).',
   },
   {
     key: 'kilter-oauth-linking',
     label: 'Kilter account linking',
     description: 'Show the Kilter username/password sign-in card in Integrations.',
+  },
+  {
+    key: 'logbook-grouping-kill',
+    label: 'Disable logbook grouping',
+    description: 'Emergency kill switch: fall back to flat logbook entries if day-scoped repeat grouping misbehaves.',
   },
 ] as const satisfies readonly FeatureFlagDefinition[];
 

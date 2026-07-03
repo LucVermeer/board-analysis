@@ -86,6 +86,7 @@ vi.mock('../LogbookRow', () => ({
   },
 }));
 vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
+vi.mock('../LogbookEntryChooserSheet', () => ({ LogbookEntryChooserSheet: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
@@ -94,7 +95,12 @@ vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { black: '#000' }
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
-vi.mock('../../../lib/graphql/hooks', () => ({ useUserAscentsFeed: () => feed, useGrades: () => ({ data: [] }) }));
+
+vi.mock('../../../lib/graphql/hooks', () => ({
+  useUserAscentsFeed: () => feed,
+  useUserGroupedAscentsFeed: () => toGroupedFeed(feed as unknown as Record<string, unknown>),
+  useGrades: () => ({ data: [] }),
+}));
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));
@@ -111,9 +117,13 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 }));
 vi.mock('@boardsesh/board-react', () => ({ useDeleteTick: () => deleteTick }));
 vi.mock('../../../providers/dialog-provider', () => ({ useConfirm: () => dialog.confirm }));
+// Pin the flags explicitly: kill switch off, filters off — the suite must
+// not silently change code path if a provider default ever moves.
+vi.mock('../../../providers/feature-flags-provider', () => ({ useFeatureFlag: () => undefined }));
 vi.mock('../../../providers/toast-provider', () => ({ useToast: () => toast }));
 
 import { LogbookTab } from '../LogbookTab';
+import { toGroupedFeed } from './helpers/grouped-feed-factory';
 
 // handleDeleteRequest runs a fire-and-forget async chain; a macrotask turn
 // drains ALL of its pending microtasks (counting Promise.resolve() flushes is
@@ -162,7 +172,7 @@ describe('LogbookTab guarded delete', () => {
     const mutateOptions = deleteTick.mutate.mock.calls[0][1] as { onSuccess: () => void };
     act(() => mutateOptions.onSuccess());
 
-    expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'swipe' });
+    expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'swipe', viaChooser: false });
   });
 
   it('tracks the a11y method when the delete came from an accessibility action', async () => {
@@ -174,7 +184,7 @@ describe('LogbookTab guarded delete', () => {
     const mutateOptions = deleteTick.mutate.mock.calls[0][1] as { onSuccess: () => void };
     act(() => mutateOptions.onSuccess());
 
-    expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'a11y' });
+    expect(analytics.track).toHaveBeenCalledWith('Logbook Entry Deleted', { method: 'a11y', viaChooser: false });
   });
 
   it('ignores a second delete request while the confirm dialog is open', async () => {

@@ -49,6 +49,7 @@ vi.mock('@shopify/flash-list', () => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../LogbookRow', () => ({ LogbookRow: () => createElement('div') }));
 vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
+vi.mock('../LogbookEntryChooserSheet', () => ({ LogbookEntryChooserSheet: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
@@ -61,6 +62,7 @@ vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
 vi.mock('../../../lib/graphql/hooks', () => ({
   useUserAscentsFeed: () => feed.current,
+  useUserGroupedAscentsFeed: () => toGroupedFeed(feed.current as unknown as Record<string, unknown>),
   useGrades: () => ({ data: [] }),
 }));
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
@@ -79,6 +81,7 @@ vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToa
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ setQueriesData: vi.fn() }) }));
 
 import { LogbookTab } from '../LogbookTab';
+import { toGroupedFeed } from './helpers/grouped-feed-factory';
 
 beforeEach(() => {
   feed.current.refetch = vi.fn();

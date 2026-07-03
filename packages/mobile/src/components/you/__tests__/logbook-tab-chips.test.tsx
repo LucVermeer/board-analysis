@@ -123,6 +123,7 @@ vi.mock('../LogbookFilterSheet', () => ({
 
 vi.mock('../LogbookRow', () => ({ LogbookRow: () => createElement('div') }));
 vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
+vi.mock('../LogbookEntryChooserSheet', () => ({ LogbookEntryChooserSheet: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -132,6 +133,7 @@ vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
 
 vi.mock('../../../lib/graphql/hooks', () => ({
   useUserAscentsFeed: () => feed,
+  useUserGroupedAscentsFeed: () => toGroupedFeed(feed as unknown as Record<string, unknown>),
   useGrades: () => ({ data: [] }),
 }));
 vi.mock('../../../lib/logbook-prefs-store', () => ({
@@ -166,6 +168,7 @@ vi.mock('../../../providers/feature-flags-provider', () => ({
 // preset into the feed through the real reducer.
 import { LogbookTab } from '../LogbookTab';
 import { loadLogbookPrefs } from '../../../lib/logbook-prefs-store';
+import { toGroupedFeed } from './helpers/grouped-feed-factory';
 
 beforeEach(() => {
   captured.chipMounted = false;

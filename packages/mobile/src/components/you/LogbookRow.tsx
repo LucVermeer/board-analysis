@@ -45,7 +45,7 @@ type LogbookRowProps = {
   onOpenActions?: (ascent: AscentFeedItem) => void;
   /** Swipe left-to-right → edit the logbook entry. Owner-only; when omitted the
    *  left swipe action is disabled (you can't edit another climber's ticks). */
-  onEdit?: (ascent: AscentFeedItem) => void;
+  onEdit?: (ascent: AscentFeedItem, method: 'swipe' | 'a11y') => void;
   /**
    * Swipe right-to-left → delete the logbook entry, behind the host's confirm
    * dialog (DELETE_TICK is a real server-side, Aurora-synced delete). Owner-only;
@@ -63,6 +63,12 @@ type LogbookRowProps = {
    * share-beta picker never lose the wall.
    */
   showBoardInMeta?: boolean;
+  /**
+   * Day-summed tries for a grouped row (same climb, same day collapsed).
+   * Overrides the single entry's count; the best-outcome entry supplies
+   * everything else on the row. Absent for ungrouped rows.
+   */
+  groupTries?: number;
   /**
    * Device font scale, passed by the host so a 50-row list holds ONE dimension
    * subscription (the tab's) instead of one per row — useWindowDimensions in a
@@ -156,6 +162,7 @@ export const LogbookRow = memo(function LogbookRow({
   onEdit,
   onDeleteRequest,
   showBoardInMeta = true,
+  groupTries,
   fontScale = 1,
 }: LogbookRowProps) {
   const { t, i18n } = useTranslation('you');
@@ -194,7 +201,7 @@ export const LogbookRow = memo(function LogbookRow({
   // crowd's). Board+angle always renders: with no thumbnail it is the only
   // repeat-ascent disambiguator, and it must not mutate with the result set.
   const attemptsKind = logbookAttemptsKind(ascent.status);
-  const triesShown = displayedAttemptCount(ascent.attemptCount);
+  const triesShown = groupTries ?? displayedAttemptCount(ascent.attemptCount);
   const quality = normalizeLogbookQuality(ascent.quality);
   const hasNote = logbookNoteIsVisible(ascent.comment);
   const hasBetaVideo = ascent.hasBetaVideo === true;
@@ -203,9 +210,16 @@ export const LogbookRow = memo(function LogbookRow({
   // context worth keeping; unnamed ticks still get the wall product.
   const wallLabel = ascent.boardDisplayName ?? getLayoutDisplayName(ascent.boardType, ascent.layoutId);
   const boardAngleLabel = `${wallLabel} ${ascent.angle}°`;
+  // A grouped flash day (flash + later repeats) still owns its summed tries —
+  // "Flash · 5 tries" — while a plain flash stays a bare "Flash". Scoped to
+  // grouped rows (groupTries != null): a lone imported flash tick carrying a
+  // contradictory attemptCount > 1 must not grow a tries suffix in flat views.
+  const flashShowsTries = groupTries != null && triesShown > 1;
   const attemptsLabel =
     attemptsKind === 'flash'
-      ? t('mobile.logbook.status.flash')
+      ? flashShowsTries
+        ? `${t('mobile.logbook.status.flash')} · ${t('mobile.logbook.tries', { count: triesShown })}`
+        : t('mobile.logbook.status.flash')
       : attemptsKind === 'send'
         ? t('mobile.logbook.tries', { count: triesShown })
         : `${t('mobile.logbook.row.project')} · ${t('mobile.logbook.tries', { count: triesShown })}`;
@@ -277,7 +291,7 @@ export const LogbookRow = memo(function LogbookRow({
     const edit = onEditRef.current;
     if (!edit) return;
     hapticSuccess();
-    edit(ascentRef.current);
+    edit(ascentRef.current, 'swipe');
   }, []);
 
   // Capture the ascent NOW — the host's confirm dialog awaits, and FlashList can
@@ -382,7 +396,7 @@ export const LogbookRow = memo(function LogbookRow({
     consensusGradeLabel
       ? t('mobile.logbook.row.a11yGradeDelta', { logged: gradeLabel, consensus: consensusGradeLabel })
       : null,
-    attemptsKind === 'flash' ? null : t('mobile.logbook.tries', { count: triesShown }),
+    attemptsKind === 'flash' && !flashShowsTries ? null : t('mobile.logbook.tries', { count: triesShown }),
     quality != null ? t('mobile.logbook.row.a11yStars', { count: quality }) : null,
     hasNote ? t('mobile.logbook.row.a11yHasNote') : null,
     hasBetaVideo ? t('mobile.logbook.row.a11yHasBetaVideo') : null,
@@ -403,7 +417,7 @@ export const LogbookRow = memo(function LogbookRow({
 
   const handleAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
     const actionName = event.nativeEvent.actionName;
-    if (actionName === 'edit') onEditRef.current?.(ascentRef.current);
+    if (actionName === 'edit') onEditRef.current?.(ascentRef.current, 'a11y');
     else if (actionName === 'delete') onDeleteRequestRef.current?.(ascentRef.current, 'a11y');
     else if (actionName === 'more') onOpenActionsRef.current?.(ascentRef.current);
   }, []);

@@ -31,12 +31,43 @@ export {
 export type BoardFilter = 'all' | 'moonboard' | AuroraBoardName;
 
 export type LogbookPreferences = {
-  version: 2;
+  version: 3;
   boardFilter: BoardFilter;
   layoutSelections: Record<Exclude<BoardFilter, 'all'>, number[]>;
   filters: LogbookFilterState;
   sort: LogbookSortState;
 };
+
+// The v2 resting filter (sends-only). Frozen so the v3 "did the user diverge?"
+// check compares against the historical v2 default, not today's default (now
+// sends+attempts). Only the status pair distinguishes it from the v3 default,
+// so that pair is what the check reads.
+// Frozen LITERALLY (not spread from the live defaults): the never-diverged
+// check must compare against what v2 actually persisted, and a future change
+// to any live default would silently redefine history through a spread.
+const V2_DEFAULT_FILTERS: LogbookFilterState = {
+  includeSends: true,
+  includeAttempts: false,
+  flashOnly: false,
+  minGrade: '',
+  maxGrade: '',
+  fromDate: '',
+  toDate: '',
+  // Frozen LITERAL, deliberately not DEFAULT_LOGBOOK_ANGLE_RANGE: if the live
+  // constant ever changes, this historical snapshot must NOT move with it.
+  angleRange: [0, 70],
+  benchmarkOnly: false,
+};
+
+/**
+ * True when a filter state matches the frozen v1 both-on resting default.
+ * Defined by derivation, not a snapshot constant: historically the v2 default
+ * changed ONLY includeAttempts, so "v1 resting" is exactly "attempts on, and
+ * everything else equal to the frozen v2 shape".
+ */
+function filtersEqualV1Defaults(filters: LogbookFilterState): boolean {
+  return filters.includeAttempts === true && filtersEqualV2Defaults({ ...filters, includeAttempts: false });
+}
 
 export const ALL_LAYOUT_SELECTIONS: Record<Exclude<BoardFilter, 'all'>, number[]> = {
   kilter: getAllLayouts('kilter').map((layout) => layout.id),
@@ -49,12 +80,28 @@ export const ALL_LAYOUT_SELECTIONS: Record<Exclude<BoardFilter, 'all'>, number[]
 };
 
 export const DEFAULT_LOGBOOK_PREFERENCES: LogbookPreferences = {
-  version: 2,
+  version: 3,
   boardFilter: 'all',
   layoutSelections: ALL_LAYOUT_SELECTIONS,
   filters: DEFAULT_LOGBOOK_FILTERS,
   sort: DEFAULT_LOGBOOK_SORT,
 };
+
+/** True when a filter state matches the frozen v2 sends-only default exactly. */
+function filtersEqualV2Defaults(filters: LogbookFilterState): boolean {
+  return (
+    filters.includeSends === V2_DEFAULT_FILTERS.includeSends &&
+    filters.includeAttempts === V2_DEFAULT_FILTERS.includeAttempts &&
+    filters.flashOnly === V2_DEFAULT_FILTERS.flashOnly &&
+    filters.minGrade === V2_DEFAULT_FILTERS.minGrade &&
+    filters.maxGrade === V2_DEFAULT_FILTERS.maxGrade &&
+    filters.fromDate === V2_DEFAULT_FILTERS.fromDate &&
+    filters.toDate === V2_DEFAULT_FILTERS.toDate &&
+    filters.benchmarkOnly === V2_DEFAULT_FILTERS.benchmarkOnly &&
+    filters.angleRange[0] === V2_DEFAULT_FILTERS.angleRange[0] &&
+    filters.angleRange[1] === V2_DEFAULT_FILTERS.angleRange[1]
+  );
+}
 
 const VALID_BOARD_FILTERS: BoardFilter[] = ['all', 'moonboard', ...AURORA_BOARDS];
 
@@ -98,17 +145,27 @@ export function sanitizeLogbookPreferences(value: unknown): LogbookPreferences {
   // mobile coerce persisted state identically.
   const filters = sanitizeLogbookFilters(source.filters);
 
-  // One-time migration to the sends-only default (schema v2): legacy prefs (no v2
-  // stamp) that still carry the old "both" default get attempts dropped, so an
-  // untouched logbook stops showing a phantom filter badge. An explicit "both" is
-  // clobbered too (rare; re-add attempts from the filters). Stamping version 2
-  // below makes this run once — "both" is fully selectable afterward.
-  if (storedVersion !== 2 && filters.includeSends && filters.includeAttempts) {
-    filters.includeAttempts = false;
+  // →v3: attempts show by default again. The obsolete v1→v2 attempts-drop is
+  // gone — chaining it would strand never-touched legacy payloads on
+  // sends-only, the opposite of the new default (v1's "both" resting state
+  // already matches where v3 lands). One rule for every pre-v3 payload: a
+  // filter set still deep-equal to EITHER historical resting default (v1
+  // both-on or v2 sends-only) means the user never diverged — refresh to the
+  // current defaults. Anything else was a deliberate choice and round-trips.
+  // Known unrecoverable cohort: a v1 user with extra filters whom the OLD
+  // v1→v2 attempts-drop already migrated is stored as a diverged v2 state;
+  // their attempts-on intent was destroyed before v3 existed and can't be
+  // told apart from a genuine sends-only choice, so they keep sends-only.
+  if (
+    (storedVersion == null || storedVersion < 3) &&
+    (filtersEqualV2Defaults(filters) || filtersEqualV1Defaults(filters))
+  ) {
+    filters.includeAttempts = DEFAULT_LOGBOOK_FILTERS.includeAttempts;
+    filters.includeSends = DEFAULT_LOGBOOK_FILTERS.includeSends;
   }
 
   return {
-    version: 2,
+    version: 3,
     boardFilter,
     layoutSelections: sanitizeLayoutSelections(source.layoutSelections),
     filters,

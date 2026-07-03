@@ -290,12 +290,20 @@
     "logbook": {
       "title": "Registro",
       "noEntries": "Sin ascensiones todavía",
-      "sendsAndAttempts": "{{sends}} envios, {{attempts}} intentos",
-      "sendsOnly": "{{sends}} envios",
+      "sendsAndAttempts": "{{sends}} encadenes, {{attempts}} intentos",
+      "sendsOnly": "{{sends}} encadenes",
       "attemptsOnly": "{{attempts}} intentos",
       "tries_one": "{{count}} intento",
       "tries_other": "{{count}} intentos",
-      "mirroredTag": "Espejo"
+      "mirroredTag": "Espejo",
+      "lifetimeTries_one": "{{count}} intento",
+      "lifetimeTries_other": "{{count}} intentos",
+      "lifetimeSessions_one": "en {{count}} sesión",
+      "lifetimeSessions_other": "en {{count}} sesiones",
+      "lifetimeSends_one": "{{count}} encadene",
+      "lifetimeSends_other": "{{count}} encadenes",
+      "lifetimeRecap": "{{tries}} {{sessions}}",
+      "lifetimeRecapWithSends": "{{tries}} {{sessions}} · {{sends}}"
     },
     "similarClimbs": {
       "title": "Escaladas similares",

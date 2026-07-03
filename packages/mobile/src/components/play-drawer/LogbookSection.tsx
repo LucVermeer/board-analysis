@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { useLogbook } from '@boardsesh/board-react';
+import { groupEntriesByAngle } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { LogbookEntryRow } from './LogbookEntryRow';
@@ -36,12 +37,55 @@ export const LogbookSection = memo(function LogbookSection({
   // Only Tension/Decoy log mirrored sends, so the mirror tag is board-gated.
   const showMirrorTag = boardName === 'tension' || boardName === 'decoy';
 
+  // Entries bucketed under per-angle headers, steepest angle first (the
+  // hardest version of the climb leads). Each header recaps the lifetime at
+  // that angle — "13 tries over 3 sessions · 2 sends" — so the rows below drop
+  // their own angle chip. Sessions = distinct days, matching the logbook's
+  // day-scoped grouping.
+  const angleSections = useMemo(() => groupEntriesByAngle(entries), [entries]);
+
   if (entries.length > 0) {
     return (
       <View style={styles.container}>
-        {entries.map((entry) => (
-          <LogbookEntryRow key={entry.uuid} entry={entry} showMirrorTag={showMirrorTag} />
-        ))}
+        {angleSections.map((section) => {
+          // Segments pluralize individually; the recap TEMPLATE owns word order
+          // and joining so a locale can rearrange the clauses.
+          const triesLabel = t('mobile.logbook.lifetimeTries', { count: section.stats.totalTries });
+          const sessionsLabel = t('mobile.logbook.lifetimeSessions', { count: section.stats.sessionCount });
+          const recap =
+            section.stats.sendCount > 0
+              ? t('mobile.logbook.lifetimeRecapWithSends', {
+                  tries: triesLabel,
+                  sessions: sessionsLabel,
+                  sends: t('mobile.logbook.lifetimeSends', { count: section.stats.sendCount }),
+                })
+              : t('mobile.logbook.lifetimeRecap', { tries: triesLabel, sessions: sessionsLabel });
+          return (
+            <View key={section.angle} style={styles.angleSection}>
+              <View
+                accessible
+                accessibilityRole="header"
+                accessibilityLabel={`${section.angle}°, ${recap}`}
+                style={styles.angleHeader}
+              >
+                <Text variant="caption1" color={iosSystemColors.systemGray} style={styles.angleHeaderLabel}>
+                  {`${section.angle}°`}
+                </Text>
+                <Text
+                  variant="caption1"
+                  color={iosSystemColors.systemGray}
+                  style={styles.angleHeaderRecap}
+                  numberOfLines={1}
+                >
+                  {recap}
+                </Text>
+              </View>
+              {section.entries.map((entry) => (
+                <LogbookEntryRow key={entry.uuid} entry={entry} showMirrorTag={showMirrorTag} showAngleChip={false} />
+              ))}
+            </View>
+          );
+        })}
       </View>
     );
   }
@@ -89,7 +133,26 @@ export const LogbookSection = memo(function LogbookSection({
 
 const styles = StyleSheet.create({
   container: {
+    gap: spacing[2],
+  },
+  angleSection: {
     gap: spacing[1],
+  },
+  angleHeader: {
+    flexDirection: 'row',
+    // Wrap instead of colliding at accessibility type sizes — the recap drops
+    // below the angle label when one line can't hold both.
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    columnGap: spacing[2],
+    marginTop: spacing[1],
+  },
+  angleHeaderLabel: {
+    fontWeight: '600',
+  },
+  angleHeaderRecap: {
+    flexShrink: 1,
   },
   emptyContainer: {
     flexDirection: 'row',

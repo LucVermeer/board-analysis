@@ -76,6 +76,7 @@ vi.mock('../LogbookRow', () => ({
   },
 }));
 vi.mock('../LogbookDayDivider', () => ({ LogbookDayDivider: () => null }));
+vi.mock('../LogbookEntryChooserSheet', () => ({ LogbookEntryChooserSheet: () => null }));
 vi.mock('../LogbookEditSheet', () => ({ LogbookEditSheet: () => null }));
 vi.mock('../LogbookFilterSheet', () => ({ LogbookFilterSheet: () => null }));
 vi.mock('../../SearchHeader', () => ({ SearchHeader: () => null }));
@@ -84,7 +85,12 @@ vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { black: '#000' }
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
-vi.mock('../../../lib/graphql/hooks', () => ({ useUserAscentsFeed: () => feed, useGrades: () => ({ data: [] }) }));
+
+vi.mock('../../../lib/graphql/hooks', () => ({
+  useUserAscentsFeed: () => feed,
+  useUserGroupedAscentsFeed: () => toGroupedFeed(feed as unknown as Record<string, unknown>),
+  useGrades: () => ({ data: [] }),
+}));
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));
@@ -101,10 +107,14 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 }));
 vi.mock('@boardsesh/board-react', () => ({ useDeleteTick: () => ({ mutate: vi.fn(), isPending: false }) }));
 vi.mock('../../../providers/dialog-provider', () => ({ useConfirm: () => vi.fn(async () => false) }));
+// Pin the flags explicitly: kill switch off, filters off — the suite must
+// not silently change code path if a provider default ever moves.
+vi.mock('../../../providers/feature-flags-provider', () => ({ useFeatureFlag: () => undefined }));
 vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ setQueriesData: vi.fn() }) }));
 
 import { LogbookTab } from '../LogbookTab';
+import { toGroupedFeed } from './helpers/grouped-feed-factory';
 
 beforeEach(() => {
   analytics.track.mockClear();
@@ -125,6 +135,8 @@ describe('LogbookTab analytics', () => {
       rowIndex: 0,
       hasNote: true,
       status: 'send',
+      grouped: false,
+      groupSize: 1,
     });
   });
 });

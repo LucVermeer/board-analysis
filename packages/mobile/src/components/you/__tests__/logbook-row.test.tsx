@@ -162,6 +162,7 @@ function ascent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
 type RowHandlers = {
   onActivate?: (item: AscentFeedItem) => void;
   showBoardInMeta?: boolean;
+  groupTries?: number;
   onOpenActions?: (item: AscentFeedItem) => void;
   onEdit?: (item: AscentFeedItem) => void;
   onDeleteRequest?: (item: AscentFeedItem, method: 'swipe' | 'a11y') => void;
@@ -273,6 +274,21 @@ describe('LogbookRow — meta line', () => {
     expect(uncovered.textContent).toContain('Kilter 40°');
   });
 
+  it('renders the composite "Flash · N tries" label when a grouped flash day carries extra tries', () => {
+    const { container } = renderRow(ascent({ status: 'flash', attemptCount: 1 }), { groupTries: 5 });
+    expect(container.textContent).toContain('mobile.logbook.status.flash · mobile.logbook.tries:5');
+    expect(a11y.props?.accessibilityLabel).toContain('mobile.logbook.tries:5');
+  });
+
+  it('keeps an ungrouped flash bare even with a contradictory imported attemptCount', () => {
+    // Imported data can carry status=flash with attemptCount > 1; without
+    // groupTries (flat views) the row must not grow a tries suffix.
+    const { container } = renderRow(ascent({ status: 'flash', attemptCount: 3 }));
+    expect(container.textContent).toContain('mobile.logbook.status.flash');
+    expect(container.textContent).not.toContain('mobile.logbook.tries:3');
+    expect(a11y.props?.accessibilityLabel).not.toContain('mobile.logbook.tries');
+  });
+
   it('clamps an imported 0-attempt send to 1 try', () => {
     const { container } = renderRow(ascent({ status: 'send', attemptCount: 0 }));
     expect(container.textContent).toContain('mobile.logbook.tries:1');
@@ -295,7 +311,7 @@ describe('LogbookRow — swipe wiring', () => {
     expect(onEdit).not.toHaveBeenCalled();
 
     willOpen('right');
-    expect(onEdit).toHaveBeenCalledWith(item);
+    expect(onEdit).toHaveBeenCalledWith(item, 'swipe');
     expect(onDeleteRequest).toHaveBeenCalledTimes(1);
   });
 });

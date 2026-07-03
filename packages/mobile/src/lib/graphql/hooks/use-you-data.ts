@@ -4,6 +4,7 @@ import {
   GET_USER_PROFILE_STATS,
   GET_USER_CLIMB_PERCENTILE,
   GET_USER_ASCENTS_FEED,
+  GET_USER_GROUPED_ASCENTS_FEED,
   GET_USER_ASCENT_CAPTION_MATCHES,
   GET_ACTIVITY_FEED,
   GET_SESSION_GROUPED_FEED,
@@ -11,6 +12,7 @@ import {
   type GetUserProfileStatsQueryResponse,
   type GetUserClimbPercentileQueryResponse,
   type GetUserAscentsFeedQueryResponse,
+  type GetUserGroupedAscentsFeedQueryResponse,
   type GetUserAscentsFeedQueryVariables,
   type GetUserAscentCaptionMatchesQueryResponse,
   type GetUserAscentCaptionMatchesQueryVariables,
@@ -107,10 +109,40 @@ export function useUserAscentsFeed(
         // Spread caller input first so the paginator's limit/offset always win.
         input: { ...input, limit: FEED_PAGE_SIZE, offset: pageParam },
       }),
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.userAscentsFeed.hasMore
-        ? allPages.reduce((total, page) => total + page.userAscentsFeed.items.length, 0)
-        : undefined,
+    // Offset from pageParam arithmetic, NOT from summing cached item counts:
+    // the optimistic delete strip shrinks cached pages, and a count-derived
+    // offset would then re-request (and re-receive) rows the list already has.
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.userAscentsFeed.hasMore ? lastPageParam + FEED_PAGE_SIZE : undefined,
+    enabled: !!userId && (options?.enabled ?? true),
+  });
+}
+
+/**
+ * Paginated (climb, day)-grouped logbook feed — the Logbook tab's data source
+ * in date-ordered views, where repeats of a climb collapse to one row. Same
+ * input as the flat feed (filters share one backend definition); pagination is
+ * at GROUP level, so a day's groups can straddle pages exactly like ticks do
+ * (the complete-day rule handles both).
+ */
+export function useUserGroupedAscentsFeed(
+  userId: string | undefined,
+  input?: GetUserAscentsFeedQueryVariables['input'],
+  options?: { enabled?: boolean },
+) {
+  return useInfiniteQuery({
+    queryKey: ['userGroupedAscentsFeed', userId, input],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      getHttpClient().request<GetUserGroupedAscentsFeedQueryResponse>(GET_USER_GROUPED_ASCENTS_FEED, {
+        userId,
+        // Spread caller input first so the paginator's limit/offset always win.
+        input: { ...input, limit: FEED_PAGE_SIZE, offset: pageParam },
+      }),
+    // Same pageParam arithmetic as the flat feed: group-strips must not shift
+    // the server offset (see the note on useUserAscentsFeed).
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.userGroupedAscentsFeed.hasMore ? lastPageParam + FEED_PAGE_SIZE : undefined,
     enabled: !!userId && (options?.enabled ?? true),
   });
 }
