@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createElement, type ReactNode, type Ref } from 'react';
+import { createElement, type ReactNode } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
 
-// The sheet is mounted always-on inside the Play Drawer and toggled via
-// `visible`; it must present/dismiss on real visible transitions (the only way a
-// BottomSheetModal stacks above the already-open drawer). The ModalSheet mock
-// exposes the present/dismiss it would call through the forwarded ref.
-const modal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
+// The sheet is mounted always-on inside the Play Drawer and toggled via the
+// controlled `visible` prop (the ModalSheet coordinator drives present/dismiss).
+// The mock captures the latest `visible` it was handed.
+const sheet = vi.hoisted(() => ({ visible: undefined as boolean | undefined }));
 const preview = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
 const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material', canUpdate: false }));
 const clipboard = vi.hoisted(() => ({ setStringAsync: vi.fn() }));
@@ -21,15 +20,12 @@ vi.mock('react-native', () => ({
 
 vi.mock('@expo/ui/community/bottom-sheet', () => ({ BottomSheetModal: function BottomSheetModal() {} }));
 
-vi.mock('../ModalSheet', async () => {
-  const React = await vi.importActual<typeof import('react')>('react');
-  return {
-    ModalSheet: React.forwardRef(({ children }: { children?: ReactNode }, ref: Ref<unknown>) => {
-      React.useImperativeHandle(ref, () => ({ present: modal.present, dismiss: modal.dismiss }));
-      return React.createElement('div', { 'data-modal-sheet': 'true' }, children);
-    }),
-  };
-});
+vi.mock('../ModalSheet', () => ({
+  ModalSheet: ({ children, visible }: { children?: ReactNode; visible?: boolean }) => {
+    sheet.visible = visible;
+    return createElement('div', { 'data-modal-sheet': 'true', 'data-visible': String(visible) }, children);
+  },
+}));
 
 vi.mock('../ClimbPreviewCard', () => ({
   ClimbPreviewCard: (props: Record<string, unknown>) => {
@@ -103,8 +99,7 @@ const baseProps = {
 };
 
 beforeEach(() => {
-  modal.present.mockClear();
-  modal.dismiss.mockClear();
+  sheet.visible = undefined;
   clipboard.setStringAsync.mockClear();
   urlBuilder.buildReadableClimbViewPath.mockClear();
   preview.props = null;
@@ -112,36 +107,33 @@ beforeEach(() => {
   ctrl.canUpdate = false;
 });
 
-describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
-  it('stays mounted while closed without presenting or dismissing', () => {
+describe('ClimbActionsSheet controlled visible (always-mounted toggle)', () => {
+  it('hands the sheet visible=false while closed', () => {
     render(<ClimbActionsSheet visible={false} {...baseProps} />);
-    expect(modal.present).not.toHaveBeenCalled();
-    expect(modal.dismiss).not.toHaveBeenCalled();
+    expect(sheet.visible).toBe(false);
   });
 
-  it('presents when visible flips true, dismisses when false, and re-presents on the next open', () => {
+  it('drives the coordinator open on visible+climb and closed otherwise', () => {
     const { rerender } = render(<ClimbActionsSheet visible={false} {...baseProps} />);
-    expect(modal.present).not.toHaveBeenCalled();
+    expect(sheet.visible).toBe(false);
 
     rerender(<ClimbActionsSheet visible={true} {...baseProps} />);
-    expect(modal.present).toHaveBeenCalledTimes(1);
-    expect(modal.dismiss).not.toHaveBeenCalled();
+    expect(sheet.visible).toBe(true);
 
     rerender(<ClimbActionsSheet visible={false} {...baseProps} />);
-    expect(modal.dismiss).toHaveBeenCalledTimes(1);
+    expect(sheet.visible).toBe(false);
 
     rerender(<ClimbActionsSheet visible={true} {...baseProps} />);
-    expect(modal.present).toHaveBeenCalledTimes(2);
+    expect(sheet.visible).toBe(true);
   });
 
-  it('never dismisses an instance that was never presented (no gorhom no-op trap)', () => {
-    // Mounting straight to visible=false (drawer open, actions closed), then
-    // clearing the climb, must not fire dismiss() — calling dismiss on a
-    // not-presented modal leaves gorhom unable to present() it next time.
+  it('stays closed when visible is true but the climb is null', () => {
+    // The coordinator only presents on a real climb; a null climb keeps it closed
+    // (the wrapper reconciles the controlled prop, so there is no gorhom no-op trap).
     const { rerender } = render(<ClimbActionsSheet {...baseProps} visible={false} />);
-    rerender(<ClimbActionsSheet {...baseProps} visible={false} climb={null} />);
-    expect(modal.present).not.toHaveBeenCalled();
-    expect(modal.dismiss).not.toHaveBeenCalled();
+    expect(sheet.visible).toBe(false);
+    rerender(<ClimbActionsSheet {...baseProps} visible={true} climb={null} />);
+    expect(sheet.visible).toBe(false);
   });
 
   it('renders the climb preview with the climb + board config when open', () => {

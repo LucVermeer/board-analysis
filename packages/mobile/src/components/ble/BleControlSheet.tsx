@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import type { BottomSheetMethods } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { ModalSheet } from '../ModalSheet';
 import { ListRow } from '../ListRow';
@@ -41,27 +40,6 @@ function BleControlSheet({
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
   const { brandColors, systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheetMethods>(null);
-  // Present/dismiss imperatively via ModalSheet (BottomSheetModal): it presents as
-  // its OWN modal view controller so it stacks ABOVE the play route. The old
-  // declarative `Sheet` (regular BottomSheet) presented inline and dismissed the
-  // route instead. The presented-state guard avoids dismiss()-ing a not-presented
-  // modal (which would wedge present() — the "nothing happens" bug).
-  const isPresentedRef = useRef(false);
-  useEffect(() => {
-    if (visible && !isPresentedRef.current) {
-      sheetRef.current?.present();
-      isPresentedRef.current = true;
-    } else if (!visible && isPresentedRef.current) {
-      sheetRef.current?.dismiss();
-      isPresentedRef.current = false;
-    }
-  }, [visible]);
-
-  const handleDismiss = useCallback(() => {
-    isPresentedRef.current = false;
-    onClose();
-  }, [onClose]);
 
   const handleReassert = useCallback(() => {
     onReassert();
@@ -81,7 +59,7 @@ function BleControlSheet({
   const snapPoints = useMemo(() => ['32%'], []);
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>
+    <ModalSheet visible={visible} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose>
       <View style={styles.content}>
         <ListRow
           title={tSettings('ble.relightBoard')}

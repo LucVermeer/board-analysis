@@ -8,7 +8,6 @@ import {
   type ColorValue,
   type GestureResponderEvent,
 } from 'react-native';
-import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { toBoardName } from '@boardsesh/board-config';
@@ -403,12 +402,13 @@ function HoldColorPickerSheet({
 }: HoldColorPickerSheetProps) {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheetModal>(null);
   const [mode, setMode] = useState<ColorMode>('default');
   const [userColor, setUserColor] = useState<string>('#00ff00');
   const [shape, setShape] = useState<HoldMarkerShape>(DEFAULT_HOLD_MARKER_SHAPE);
   const [seedCounter, setSeedCounter] = useState(0);
-  const isPresentedRef = useRef(false);
+  // Tracks the closed→open transition so the fields re-seed each time the picker
+  // opens; the ModalSheet is driven declaratively off `role != null`.
+  const wasOpenRef = useRef(false);
 
   const modeOptions = useMemo<{ key: ColorMode; label: string }[]>(
     () => [
@@ -419,26 +419,17 @@ function HoldColorPickerSheet({
   );
 
   useEffect(() => {
-    if (role && !isPresentedRef.current) {
+    if (role != null && !wasOpenRef.current) {
       const seedColor = currentColor ?? getDefaultHoldRoleColor(boardName, role, 'led');
       setMode(currentColor ? 'user' : 'default');
       setUserColor(seedColor);
       setShape(currentShape);
       setSeedCounter((value) => value + 1);
-      sheetRef.current?.present();
-      isPresentedRef.current = true;
-    } else if (!role && isPresentedRef.current) {
-      sheetRef.current?.dismiss();
-      isPresentedRef.current = false;
     }
+    wasOpenRef.current = role != null;
   }, [boardName, currentColor, currentShape, role]);
 
   const previewColor = mode === 'user' ? userColor : role ? getDefaultHoldRoleColor(boardName, role) : '#000000';
-
-  const handleDismiss = useCallback(() => {
-    isPresentedRef.current = false;
-    onClose();
-  }, [onClose]);
 
   const handleModeSelect = useCallback(
     (nextMode: ColorMode) => {
@@ -459,14 +450,7 @@ function HoldColorPickerSheet({
   const footer = <Button title={t('mobile.more.accessibility.save')} onPress={handleSave} size="large" />;
 
   return (
-    <ModalSheet
-      ref={sheetRef}
-      snapPoints={['95%']}
-      onDismiss={handleDismiss}
-      footer={footer}
-      stackBehavior="push"
-      scrollable
-    >
+    <ModalSheet visible={role != null} snapPoints={['95%']} onClose={onClose} footer={footer} scrollable>
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
           <MarkerSwatch color={previewColor} shape={shape} size={shapeSize} />
@@ -542,25 +526,17 @@ type BrushThicknessSheetProps = {
 function BrushThicknessSheet({ open, value, shapeSize, onSave, onClose }: BrushThicknessSheetProps) {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const isPresentedRef = useRef(false);
+  // Tracks the closed→open transition so the draft re-seeds each time the sheet
+  // opens; the ModalSheet is driven declaratively off `open`.
+  const wasOpenRef = useRef(false);
   const [draftValue, setDraftValue] = useState(value);
 
   useEffect(() => {
-    if (open && !isPresentedRef.current) {
+    if (open && !wasOpenRef.current) {
       setDraftValue(value);
-      sheetRef.current?.present();
-      isPresentedRef.current = true;
-    } else if (!open && isPresentedRef.current) {
-      sheetRef.current?.dismiss();
-      isPresentedRef.current = false;
     }
+    wasOpenRef.current = open;
   }, [open, value]);
-
-  const handleDismiss = useCallback(() => {
-    isPresentedRef.current = false;
-    onClose();
-  }, [onClose]);
 
   const handleSave = useCallback(() => {
     onSave(draftValue);
@@ -570,14 +546,7 @@ function BrushThicknessSheet({ open, value, shapeSize, onSave, onClose }: BrushT
   const footer = <Button title={t('mobile.more.accessibility.brush.save')} onPress={handleSave} size="large" />;
 
   return (
-    <ModalSheet
-      ref={sheetRef}
-      snapPoints={['48%', '80%']}
-      onDismiss={handleDismiss}
-      footer={footer}
-      stackBehavior="push"
-      scrollable
-    >
+    <ModalSheet visible={open} snapPoints={['48%', '80%']} onClose={onClose} footer={footer} scrollable>
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
           <MarkerSwatch color={systemColors.accent} shape="circle" thickness={draftValue} size={shapeSize} />
@@ -613,25 +582,17 @@ type ShapeSizeSheetProps = {
 function ShapeSizeSheet({ open, value, brushThickness, onSave, onClose }: ShapeSizeSheetProps) {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const isPresentedRef = useRef(false);
+  // Tracks the closed→open transition so the draft re-seeds each time the sheet
+  // opens; the ModalSheet is driven declaratively off `open`.
+  const wasOpenRef = useRef(false);
   const [draftValue, setDraftValue] = useState(value);
 
   useEffect(() => {
-    if (open && !isPresentedRef.current) {
+    if (open && !wasOpenRef.current) {
       setDraftValue(value);
-      sheetRef.current?.present();
-      isPresentedRef.current = true;
-    } else if (!open && isPresentedRef.current) {
-      sheetRef.current?.dismiss();
-      isPresentedRef.current = false;
     }
+    wasOpenRef.current = open;
   }, [open, value]);
-
-  const handleDismiss = useCallback(() => {
-    isPresentedRef.current = false;
-    onClose();
-  }, [onClose]);
 
   const handleSave = useCallback(() => {
     onSave(draftValue);
@@ -641,14 +602,7 @@ function ShapeSizeSheet({ open, value, brushThickness, onSave, onClose }: ShapeS
   const footer = <Button title={t('mobile.more.accessibility.size.save')} onPress={handleSave} size="large" />;
 
   return (
-    <ModalSheet
-      ref={sheetRef}
-      snapPoints={['48%', '80%']}
-      onDismiss={handleDismiss}
-      footer={footer}
-      stackBehavior="push"
-      scrollable
-    >
+    <ModalSheet visible={open} snapPoints={['48%', '80%']} onClose={onClose} footer={footer} scrollable>
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
           <MarkerSwatch color={systemColors.accent} shape="diamond" thickness={brushThickness} size={draftValue} />

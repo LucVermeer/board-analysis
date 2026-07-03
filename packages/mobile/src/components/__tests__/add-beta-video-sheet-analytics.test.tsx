@@ -55,7 +55,9 @@ vi.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Error: 'error' },
 }));
 vi.mock('../ModalSheet', () => ({
-  ModalSheet: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  // Render both slots: the paste field + submit now live in `footer`.
+  ModalSheet: ({ children, footer }: { children?: ReactNode; footer?: ReactNode }) =>
+    createElement('div', null, children, footer),
 }));
 vi.mock('../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -73,11 +75,10 @@ vi.mock('../../lib/graphql/extract-error-message', () => ({ extractGraphqlMessag
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
-    brandColors: { primary: '#000', primaryFill: '#000', onPrimary: '#fff' },
+    brandColors: { primary: '#000', primaryFill: '#000', onPrimary: '#fff', error: '#C81E1E' },
     systemColors: { separator: '#ccc', secondaryLabel: '#666', tertiaryLabel: '#999', label: '#000' },
   }),
 }));
-vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: {} }));
 vi.mock('../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
 
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';

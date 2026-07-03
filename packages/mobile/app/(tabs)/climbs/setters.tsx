@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, TextInput } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BoardName } from '@boardsesh/shared-schema';
@@ -12,7 +12,6 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useSetterStats } from '../../../src/lib/graphql/hooks';
 import { emitSetterFilterSelection } from '../../../src/lib/setter-filter-handoff';
 import { hapticSelection } from '../../../src/lib/haptics';
-import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { textStyles } from '../../../src/theme/typography';
 import { spacing, borderRadius } from '../../../src/theme/tokens';
 
@@ -43,7 +42,8 @@ function parseSelectedSetters(serialized: string | undefined): string[] {
 }
 
 const SetterSeparator = memo(function SetterSeparator() {
-  return <View style={[styles.separator, { backgroundColor: iosSystemColors.separator }]} />;
+  const { systemColors } = useTheme();
+  return <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />;
 });
 
 type SetterRowProps = {
@@ -83,7 +83,7 @@ const SetterRow = memo(function SetterRow({ setter, isSelected, onToggle }: Sett
  */
 export default function SettersFilterScreen() {
   const params = useLocalSearchParams<Params>();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -162,9 +162,23 @@ export default function SettersFilterScreen() {
     setSelectedSetters([]);
   }, []);
 
-  const done = useCallback(() => {
-    router.back();
-  }, [router]);
+  // "Clear all" moves to the native header's headerRight, shown only when setters
+  // are selected. The back chevron / swipe-back replaces the old in-body "Done"
+  // (the selection is handed back on blur via the focus-cleanup above).
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight:
+        selectedSet.size > 0
+          ? () => (
+              <Pressable onPress={clear} hitSlop={8} accessibilityRole="button">
+                <Text variant="subheadline" color={brandColors.primary}>
+                  {t('mobile.filter.clearAll')}
+                </Text>
+              </Pressable>
+            )
+          : undefined,
+    });
+  }, [navigation, selectedSet.size, clear, brandColors.primary, t]);
 
   const renderRow = useCallback(
     ({ item }: { item: SetterStat }) => (
@@ -175,31 +189,14 @@ export default function SettersFilterScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing[2] }]}>
-        <Text variant="title3">{t('mobile.filter.setters')}</Text>
-        <View style={styles.headerActions}>
-          {selectedSet.size > 0 ? (
-            <Pressable onPress={clear} hitSlop={8} accessibilityRole="button">
-              <Text variant="subheadline" color={brandColors.primary}>
-                {t('mobile.filter.clearAll')}
-              </Text>
-            </Pressable>
-          ) : null}
-          <Pressable onPress={done} hitSlop={8} accessibilityRole="button">
-            <Text variant="subheadline" color={brandColors.primary} style={styles.doneLabel}>
-              {t('mobile.filter.done')}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
       <View style={[styles.searchBarWrapper, { backgroundColor: systemColors.secondaryBackground }]}>
-        <Icon name="search" size={16} color={iosSystemColors.systemGray} />
+        <Icon name="search" size={16} color={systemColors.secondaryLabel} />
         <TextInput
           value={searchInput}
           onChangeText={handleSearchChange}
           placeholder={t('mobile.filter.searchSetters')}
-          placeholderTextColor={iosSystemColors.systemGray}
+          placeholderTextColor={systemColors.secondaryLabel}
+          accessibilityLabel={t('mobile.filter.searchSetters')}
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
@@ -229,7 +226,7 @@ export default function SettersFilterScreen() {
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing[6] }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text variant="subheadline" style={styles.emptyText}>
@@ -246,21 +243,6 @@ export default function SettersFilterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-  },
-  doneLabel: {
-    fontWeight: '600',
   },
   searchBarWrapper: {
     flexDirection: 'row',
@@ -314,9 +296,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  listContent: {
-    paddingBottom: spacing[6],
   },
   empty: {
     paddingTop: spacing[6],

@@ -12,6 +12,7 @@ import { Button } from '../Button';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useManagedSheet } from '../../providers/sheet-presentation-provider';
+import { androidSafeSnapPoints } from '../sheet-snap-points';
 import { hapticSelection } from '../../lib/haptics';
 import { spacing, borderRadius, sheetStyles } from '../../theme/tokens';
 import { buildSessionShareUrl } from '../../lib/session-share';
@@ -43,7 +44,10 @@ export function InviteSheet({ visible, onDismiss, sessionId }: InviteSheetProps)
   // on a user pan-down / backdrop.
   const managed = useManagedSheet({ open: visible, sheetRef, onClose: onDismiss });
 
-  const snapPoints = useMemo(() => ['60%'], []);
+  // Route the single detent through androidSafeSnapPoints: a lone '60%' would make
+  // @expo/ui's Material sheet skip the partial state and open full-screen; this
+  // adds a full detent so Android opens partial (draggable to full). iOS keeps 60%.
+  const snapPoints = useMemo(() => androidSafeSnapPoints(['60%']), []);
 
   const handleCopyLink = useCallback(() => {
     hapticSelection();

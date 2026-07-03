@@ -39,32 +39,34 @@ export default function ClimbsLayout() {
       <Stack.Screen
         name="holds"
         options={{
-          // Full-screen interactive board for the hold-type filter. Owns its own
-          // header (Done / Clear all), and the board gestures need the full card,
-          // so the native header is hidden and it's a pushed route (not a modal,
-          // which would compete with the board's pan/pinch).
+          // Full-screen interactive board for the hold-type filter (a pushed route,
+          // not a modal, so the board's pan/pinch never competes with a modal's
+          // pan). The native stack header carries the title + back chevron; "Clear
+          // all" is a headerRight (set per-screen). Opaque, not the app's glass push
+          // header, so the board lays out below the bar (mirrors users/[userId]).
           title: t('mobile.nav.holdFilter'),
-          headerShown: false,
+          headerTransparent: false,
         }}
       />
       <Stack.Screen
         name="zone"
         options={{
-          // Full-screen interactive board for the board-region (zone) filter.
-          // Like the hold filter: owns its own header and a pushed route so the
-          // board's drag/pinch never competes with a modal sheet's pan.
+          // Full-screen interactive board for the board-region (zone) filter. Same
+          // as the hold filter: native header (title + back chevron), opaque so the
+          // board sits below the bar, headerRight "Clear all" set per-screen.
           title: t('mobile.nav.zoneFilter'),
-          headerShown: false,
+          headerTransparent: false,
         }}
       />
       <Stack.Screen
         name="setters"
         options={{
           // Setter search/multi-select for the climb filter. A pushed route (not a
-          // stacked sheet) because native sheets can't stack above the filter
-          // sheet; owns its own header (Done / Clear all).
+          // stacked sheet) because native sheets can't stack above the filter sheet.
+          // Native header (title + back chevron), opaque so the search bar sits below
+          // the bar; headerRight "Clear all" set per-screen.
           title: t('mobile.nav.setters'),
-          headerShown: false,
+          headerTransparent: false,
         }}
       />
     </Stack>

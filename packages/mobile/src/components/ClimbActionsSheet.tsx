@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -70,22 +69,6 @@ function ClimbActionsSheet({
   const { showToast } = useToast();
   const theme = useTheme();
   const router = useRouter();
-  const sheetRef = useRef<BottomSheetModal>(null);
-  // Track presented state so we never dismiss() a not-presented modal (which
-  // leaves gorhom unable to present() again — the "nothing happens" bug).
-  // Presenting on a real `visible` transition is also what lets this sheet stack
-  // reliably above the Play Drawer's own modal. Mirrors LogAscentSheet.
-  const isPresentedRef = useRef(false);
-
-  useEffect(() => {
-    if (visible && climb && !isPresentedRef.current) {
-      sheetRef.current?.present();
-      isPresentedRef.current = true;
-    } else if ((!visible || !climb) && isPresentedRef.current) {
-      sheetRef.current?.dismiss();
-      isPresentedRef.current = false;
-    }
-  }, [visible, climb]);
 
   const handleAddToQueue = useCallback(() => {
     onAddToQueue?.();
@@ -149,11 +132,6 @@ function ClimbActionsSheet({
     }
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose, showToast, t]);
 
-  const handleDismiss = useCallback(() => {
-    isPresentedRef.current = false;
-    onClose();
-  }, [onClose]);
-
   const handleFork = useCallback(() => {
     if (!climb) return;
     onClose();
@@ -216,7 +194,7 @@ function ClimbActionsSheet({
   } = theme.actionColors;
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>
+    <ModalSheet visible={visible && !!climb} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose>
       {climb && (
         <ClimbPreviewCard
           climb={climb}

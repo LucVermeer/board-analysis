@@ -10,7 +10,7 @@
 // serializes native sheet transitions so two never overlap on the same presenter
 // (the iOS UIKit deadlock / app freeze — see sheet-presentation-provider.tsx).
 
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { BottomSheetModal, BottomSheetScrollView, type BottomSheetMethods } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import { hapticMedium } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
+import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useManagedSheet, type PresenterGroup } from '../providers/sheet-presentation-provider';
 
 type ModalSheetProps = {
@@ -33,9 +34,6 @@ type ModalSheetProps = {
   onClose?: () => void;
   /** Fired AFTER the dismiss animation has really settled (the accurate hook). */
   onFullyDismissed?: () => void;
-  /** @deprecated source-compat: fires on every close (user or programmatic),
-   * synchronously, like the old native onDismiss. Prefer onClose/onFullyDismissed. */
-  onDismiss?: () => void;
   /** Serialization domain. Sheets presented off the same view controller share a
    * group; defaults to the root window VC. */
   presenterGroup?: PresenterGroup;
@@ -43,10 +41,6 @@ type ModalSheetProps = {
   scrollable?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
   footer?: ReactNode;
-  // Legacy gorhom knobs kept for source-compatibility; the native sheet handles
-  // stacking, keyboard avoidance and the background itself, so these no-op now.
-  stackBehavior?: 'push' | 'replace' | 'switch';
-  glass?: boolean;
 };
 
 export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(function ModalSheet(
@@ -58,7 +52,6 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
     onChange,
     onClose,
     onFullyDismissed,
-    onDismiss,
     presenterGroup,
     enablePanDownToClose = true,
     scrollable = false,
@@ -87,22 +80,39 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const onDismissRef = useRef(onDismiss);
-  onDismissRef.current = onDismiss;
+
+  // Track the resting detent so the iOS column bound follows drags between detents.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const columnStyle = useSheetColumnStyle(snapPoints, { enableDynamicSizing, activeIndex });
 
   const handleChange = useCallback(
     (index: number) => {
-      if (index >= 0) hapticMedium();
+      if (index >= 0) {
+        hapticMedium();
+        setActiveIndex(index);
+      } else {
+        // Reset on close so a re-open of an always-mounted sheet starts at the
+        // first detent's (shortest) column height until the native onChange
+        // confirms the detent — erring short beats a stale taller column pushing
+        // the pinned footer off-screen for a frame.
+        setActiveIndex(0);
+      }
       managed.onChange(index);
-      if (index === -1) onDismissRef.current?.();
       onChangeRef.current?.(index);
     },
     [managed],
   );
 
+  // The sheet's single child must carry the iOS detent bound (see
+  // useSheetColumnStyle): with a footer the KeyboardAvoidingView below is that
+  // child and the body just fills it (flex:1); without one the body itself is
+  // the child, so it carries the bound directly — otherwise an iOS scrollable
+  // sheet sizes to its content and anything past the detent is clipped and
+  // unreachable instead of scrolling.
+  const bodyStyle = footer ? styles.content : columnStyle;
   const body = scrollable ? (
     <BottomSheetScrollView
-      style={styles.content}
+      style={bodyStyle}
       contentContainerStyle={contentContainerStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -111,7 +121,7 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       {children}
     </BottomSheetScrollView>
   ) : (
-    <View style={[styles.content, contentContainerStyle]}>{children}</View>
+    <View style={[bodyStyle, contentContainerStyle]}>{children}</View>
   );
 
   const footerBar = footer ? (
@@ -141,7 +151,12 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       style={styles.sheet}
     >
       {footer ? (
-        <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // The single flex child of the native sheet: bound to the detent height on
+        // iOS (see useSheetColumnStyle) so the pinned footer can't fall off-screen
+        // (#3330); flex:1 on Android / fitToContents. `padding` on both platforms:
+        // the Android Compose dialog window does not resize for the keyboard, so
+        // without it the keyboard covers the footer's input (emulator-verified).
+        <KeyboardAvoidingView style={columnStyle} behavior="padding">
           {body}
           {footerBar}
         </KeyboardAvoidingView>
@@ -165,9 +180,6 @@ const styles = StyleSheet.create({
         elevation: 16,
       },
     }),
-  },
-  fill: {
-    flex: 1,
   },
   content: {
     flex: 1,

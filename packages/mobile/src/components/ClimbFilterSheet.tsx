@@ -1,10 +1,8 @@
 import { useCallback, useMemo, useRef, useState, useEffect, type ComponentRef, type SetStateAction } from 'react';
 import {
   View,
-  Platform,
   Pressable,
   StyleSheet,
-  useWindowDimensions,
   type ViewStyle,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -44,6 +42,7 @@ import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
 import { useManagedSheet } from '../providers/sheet-presentation-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
+import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { buildFilterLabels, formatSettersLabel } from '../lib/filter-labels';
@@ -94,10 +93,9 @@ const STATUS_OPTIONS_UI = ['any', 'drafts', 'projects'] as const;
 const POPULARITY_BUCKETS: ReadonlyArray<number | undefined> = [undefined, 2, 10, 100, 1000];
 const PREWARM_BOARD_HOLDS_AFTER_REFINE_EXPAND_MS = 150;
 
-// One source of truth for the sheet's native detent and the iOS JS-side height
-// bound derived from it (see sheetColumnStyle).
+// The sheet's single native detent. The iOS JS-side height bound derived from it
+// lives in the shared useSheetColumnStyle hook (see the sheetColumnStyle below).
 const SHEET_DETENT_FRACTION = 0.9;
-const SHEET_TOP_CHROME_PT = 20;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -230,24 +228,13 @@ export function ClimbFilterSheet({
     };
   }, []);
 
-  const snapPoints = useMemo(() => androidSafeSnapPoints([`${SHEET_DETENT_FRACTION * 100}%`]), []);
-  // iOS cannot be trusted to bound the sheet's flex column: SwiftUI can propose
-  // an unbounded height to the RN host, so a flex:1 column sizes to its CONTENT
-  // and anything past the detent (the pinned Apply footer) lands off-screen
-  // (#3330 — reproduced on-device even on a freshly mounted host). Pin the
-  // column to the detent height computed JS-side instead. `.fraction` detents
-  // resolve against the sheet's maximum height (window minus the top safe
-  // area); the extra SHEET_TOP_CHROME_PT covers the wrapper's drag-indicator
-  // padding, erring short — a few spare points below the footer beat a clipped
-  // footer. Android bounds the column natively, so it keeps flex:1.
-  const { height: windowHeight } = useWindowDimensions();
-  const sheetColumnStyle = useMemo<ViewStyle>(
-    () =>
-      Platform.OS === 'ios'
-        ? { height: Math.round((windowHeight - insets.top) * SHEET_DETENT_FRACTION) - SHEET_TOP_CHROME_PT }
-        : styles.fill,
-    [insets.top, windowHeight],
-  );
+  const detentSnapPoints = useMemo(() => [`${SHEET_DETENT_FRACTION * 100}%`], []);
+  const snapPoints = useMemo(() => androidSafeSnapPoints(detentSnapPoints), [detentSnapPoints]);
+  // On iOS the SwiftUI sheet host can propose an unbounded height, so a flex:1
+  // column sizes to its CONTENT and the pinned Apply footer lands off-screen
+  // (#3330). The shared hook pins the column to this single detent's height;
+  // Android bounds the column natively, so it keeps flex:1.
+  const sheetColumnStyle = useSheetColumnStyle(detentSnapPoints);
   const isKilter = boardName === 'kilter';
 
   // Live "Show N" preview for the in-progress edits (matches what Apply yields).
@@ -691,7 +678,7 @@ export function ClimbFilterSheet({
       enableDynamicSizing={false}
       enablePanDownToClose
       onChange={managed.onChange}
-      handleIndicatorStyle={styles.indicator}
+      handleIndicatorStyle={[styles.indicator, { backgroundColor: systemColors.separator }]}
     >
       {/* One column child bounded to the detent height (JS-computed on iOS, see
           sheetColumnStyle) — the scroll body then actually scrolls and the
@@ -829,7 +816,7 @@ export function ClimbFilterSheet({
                       ? formatSetterSelection(localFilters.setter)
                       : t('mobile.filter.none')}
                   </Text>
-                  <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+                  <Icon name="chevron.right" size={14} color={systemColors.tertiaryLabel} />
                 </View>
               </Pressable>
 
@@ -853,7 +840,7 @@ export function ClimbFilterSheet({
                       ? t('mobile.holdFilter.summaryCount', { count: holdFilterCount })
                       : t('mobile.filter.none')}
                   </Text>
-                  <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+                  <Icon name="chevron.right" size={14} color={systemColors.tertiaryLabel} />
                 </View>
               </Pressable>
 
@@ -875,7 +862,7 @@ export function ClimbFilterSheet({
                   <Text variant="footnote" style={styles.tappableRowValue}>
                     {zoneActive ? t('mobile.zoneFilter.summaryActive') : t('mobile.filter.none')}
                   </Text>
-                  <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+                  <Icon name="chevron.right" size={14} color={systemColors.tertiaryLabel} />
                 </View>
               </Pressable>
 
@@ -995,11 +982,9 @@ export function ClimbFilterSheet({
 }
 
 const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
   indicator: {
-    backgroundColor: iosSystemColors.separator,
+    // Colour is themed at the call site (systemColors.separator adapts light/dark);
+    // only the static dimensions live here.
     width: 36,
     height: 5,
     borderRadius: 3,
@@ -1094,7 +1079,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing[3],
     paddingBottom: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
+    // borderTopColor is themed at the call site (systemColors.separator).
   },
   applyButton: {
     width: '100%',
