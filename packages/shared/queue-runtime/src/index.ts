@@ -16,6 +16,21 @@ export type {
 export { createJoinSessionTracker } from './ensure-joined';
 export type { JoinSessionTracker, JoinSessionTrackerOptions } from './ensure-joined';
 
+export { createSessionConnectionController } from './session-connection';
+export type {
+  SessionConnectionClient,
+  SessionConnectionController,
+  SessionConnectionDeps,
+  SessionConnectionFatalReason,
+  SessionConnectionGate,
+  SessionConnectionRecoveryEventKind,
+  SessionConnectionReplayResult,
+  SessionConnectionRetryPolicy,
+  SessionConnectionSessionData,
+  SessionConnectionSink,
+  SessionConnectionTimerHandle,
+} from './session-connection';
+
 export { applySessionRuntimeEvent, upsertRuntimeSessionUser } from './session-events';
 export type {
   ApplySessionRuntimeEventOptions,

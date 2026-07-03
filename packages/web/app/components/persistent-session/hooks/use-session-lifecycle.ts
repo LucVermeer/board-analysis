@@ -1,157 +1,39 @@
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import { type Client } from '../../graphql-queue/graphql-client';
 import {
-  type Client,
-  createGraphQLClient,
-  execute,
-  subscribe,
-  GraphQLOperationError,
-} from '../../graphql-queue/graphql-client';
-import {
-  INITIAL_RETRY_DELAY_MS,
-  MAX_RETRY_DELAY_MS,
-  BACKOFF_MULTIPLIER,
-  MAX_TRANSIENT_RETRIES,
-} from '@boardsesh/graphql-client';
-import {
-  JOIN_SESSION,
-  LEAVE_SESSION,
-  QUEUE_UPDATES,
-  SESSION_UPDATES,
-  EVENTS_REPLAY,
-} from '@boardsesh/graphql/operations/queue-session';
-import {
-  applySessionRuntimeEvent,
+  createSessionConnectionController,
   hasContiguousReplayCoverage,
   type QueueSyncGate,
-  type RuntimeSessionEvent,
 } from '@boardsesh/queue-runtime';
-import type {
-  SubscriptionQueueEvent,
-  SessionEvent,
-  QueueEvent,
-  EventsReplayResponse,
-  SessionSummary,
-} from '@boardsesh/shared-schema';
+import type { SubscriptionQueueEvent, SessionEvent, SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
-import { computeQueueStateHash } from '@/app/utils/hash';
 import { setPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boardsesh/graphql/operations/sessions';
 import { fetchAutoFinishedSummary } from './use-queue-storage';
-import { coerceSessionUser } from '../event-utils';
-import { TransientJoinError } from '../errors';
 import { getBrowserTimezone } from '@/app/lib/browser-timezone';
+import { createWebSessionConnectionDeps } from './session-connection-ports';
 import {
   type Session,
   type ActiveSessionInfo,
   type PendingInitialQueue,
   type SharedRefs,
-  toClimbQueueItemInput,
   ACTIVE_SESSION_KEY,
   DEFAULT_BACKEND_URL,
   DEBUG,
 } from '../types';
 
-/**
- * Transform QueueEvent (from eventsReplay) to SubscriptionQueueEvent format.
- */
-export function transformToSubscriptionEvent(event: QueueEvent | SubscriptionQueueEvent): SubscriptionQueueEvent {
-  switch (event.__typename) {
-    case 'QueueItemAdded': {
-      const addedItem = 'addedItem' in event ? event.addedItem : event.item;
-      return {
-        __typename: 'QueueItemAdded',
-        sequence: event.sequence,
-        stateHash: event.stateHash,
-        addedItem,
-        position: event.position,
-      };
-    }
-    case 'CurrentClimbChanged': {
-      const currentItem = 'currentItem' in event ? event.currentItem : event.item;
-      return {
-        __typename: 'CurrentClimbChanged',
-        sequence: event.sequence,
-        stateHash: event.stateHash,
-        currentItem,
-        clientId: event.clientId,
-        correlationId: event.correlationId,
-      };
-    }
-    case 'ClimbMirrored': {
-      // Wire shape exposes `uuid`; aliased subscription shape uses `mirroredUuid`. Read both.
-      const climbMirroredCandidate = event as { uuid?: string | null; mirroredUuid?: string | null };
-      const mirroredUuid = climbMirroredCandidate.mirroredUuid ?? climbMirroredCandidate.uuid ?? null;
-      return {
-        __typename: 'ClimbMirrored',
-        sequence: event.sequence,
-        stateHash: event.stateHash,
-        mirroredUuid,
-        mirrored: event.mirrored,
-      };
-    }
-    default:
-      return event as SubscriptionQueueEvent;
-  }
-}
-
-type WebRuntimeSessionUser = Parameters<typeof coerceSessionUser>[0];
-
-function toWebSessionRuntimeEvent(event: SessionEvent): RuntimeSessionEvent<WebRuntimeSessionUser> | null {
-  switch (event.__typename) {
-    case 'UserJoined':
-    case 'UserPresenceChanged':
-      return { __typename: event.__typename, user: event.user as unknown as WebRuntimeSessionUser };
-    case 'UserLeft':
-      return { __typename: 'UserLeft', userId: event.userId };
-    case 'LeaderChanged':
-      return {
-        __typename: 'LeaderChanged',
-        leaderId: event.leaderId,
-        leaderConnectionId: event.leaderConnectionId ?? null,
-      };
-    case 'WallDisconnected':
-      return {
-        __typename: 'WallDisconnected',
-        disconnectedByParticipantId: event.disconnectedByParticipantId ?? null,
-      };
-    case 'SessionBoardSerialChanged':
-      return {
-        __typename: 'SessionBoardSerialChanged',
-        lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null,
-      };
-    case 'SessionBoardPathChanged':
-      return {
-        __typename: 'SessionBoardPathChanged',
-        boardPath: event.boardPath,
-        changedByParticipantId: event.changedByParticipantId ?? null,
-      };
-    case 'SessionEnded':
-      return { __typename: 'SessionEnded', reason: event.reason ?? null, newPath: event.newPath ?? null };
-    default:
-      return null;
-  }
-}
-
-/**
- * Apply a single `SessionEvent` (excluding `SessionStatsUpdated`, which is
- * dispatched through the React Query cache rather than the session reducer)
- * to a `Session`. Pure so the rules can be unit-tested without standing up
- * the WebSocket subscription pipeline.
- *
- * Returns `null` when `prev` is `null` (no session to mutate). For
- * `SessionEnded` we leave the previous state in place — clearing happens via
- * IndexedDB removal and the next lifecycle tick, not the reducer.
- */
-export function applySessionEvent(prev: Session | null, event: SessionEvent): Session | null {
-  const runtimeEvent = toWebSessionRuntimeEvent(event);
-  return runtimeEvent ? applySessionRuntimeEvent(prev, runtimeEvent, { coerceUser: coerceSessionUser }) : prev;
-}
-
-// `hasContiguousReplayCoverage` moved to
-// `@boardsesh/queue-runtime`'s `sync-gate.ts` (Workstream W2) so mobile can
-// share it too. Re-export the imported binding so existing importers of this
-// module (e.g. `session-lifecycle-replay.test.ts`) keep working unchanged.
+// The GraphQL-operation-shaped pieces this hook used to define inline
+// (`transformToSubscriptionEvent`, `applySessionEvent`, and every
+// `SessionConnectionDeps` port implementation) now live in
+// `session-connection-ports.ts` — this hook is a thin React binding around
+// `@boardsesh/queue-runtime`'s `createSessionConnectionController`. Re-export
+// `applySessionEvent`/`transformToSubscriptionEvent` so existing importers
+// (e.g. `session-lifecycle-replay.test.ts`, `session-events.test.tsx`) keep
+// working unchanged.
+export { applySessionEvent, transformToSubscriptionEvent } from './session-connection-ports';
+// `hasContiguousReplayCoverage` moved to `@boardsesh/queue-runtime`'s
+// `sync-gate.ts` (Workstream W2); re-exported here for the same reason.
 export { hasContiguousReplayCoverage };
 
 type UseSessionLifecycleArgs = {
@@ -160,10 +42,9 @@ type UseSessionLifecycleArgs = {
   handleSessionEvent: (event: SessionEvent) => void;
   /**
    * Shared sync gate owned by `PersistentSessionProvider`. This hook asks it
-   * for the reconnect strategy (none / delta-replay / full-sync) and RESETS
-   * it whenever the connection effect tears down (session change, auth
-   * change, unmount) — the next `connect()` re-establishes tracking from a
-   * fresh FullSync.
+   * for the reconnect strategy (via the controller) and RESETS it whenever
+   * the connection effect tears down (session change, auth change, unmount)
+   * — the next connect re-establishes tracking from a fresh FullSync.
    */
   syncGate: QueueSyncGate;
   refs: Pick<
@@ -175,14 +56,8 @@ type UseSessionLifecycleArgs = {
     | 'activeSessionRef'
     | 'queueRef'
     | 'currentClimbQueueItemRef'
-    | 'mountedRef'
-    | 'isConnectingRef'
-    | 'isReconnectingRef'
-    | 'connectionGenerationRef'
     | 'triggerResyncRef'
     | 'lastReceivedSequenceRef'
-    | 'queueUnsubscribeRef'
-    | 'sessionUnsubscribeRef'
   >;
 };
 
@@ -229,14 +104,8 @@ export function useSessionLifecycle({
     activeSessionRef,
     queueRef,
     currentClimbQueueItemRef,
-    mountedRef,
-    isConnectingRef,
-    isReconnectingRef,
-    connectionGenerationRef,
     triggerResyncRef,
     lastReceivedSequenceRef,
-    queueUnsubscribeRef,
-    sessionUnsubscribeRef,
   } = refs;
 
   const [activeSession, setActiveSession] = useState<ActiveSessionInfo | null>(null);
@@ -402,503 +271,72 @@ export function useSessionLifecycle({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, callbacks are useCallback([])-stable
   }, [deactivateSession, setAutoFinishedSummary]);
 
-  // Connect to session when activeSession changes
+  // Connect to session when activeSession changes. Instantiates a fresh
+  // `SessionConnectionController` per (activeSession, isAuthLoading, ...)
+  // effect run — the controller owns connect/join/subscribe/reconnect/retry
+  // (see `@boardsesh/queue-runtime/session-connection.ts` for that state
+  // machine and its ownership-split doc comment); this effect wires the
+  // controller's ports (built by `createWebSessionConnectionDeps`) to React
+  // state and starts/stops it.
   useEffect(() => {
     if (!activeSession) {
       if (DEBUG) console.info('[PersistentSession] No active session, skipping connection');
       return;
     }
-
     if (isAuthLoading) {
       if (DEBUG) console.info('[PersistentSession] Waiting for auth to load...');
       return;
     }
-
-    const { sessionId, boardPath } = activeSession;
     const backendUrl = DEFAULT_BACKEND_URL;
-
     if (!backendUrl) {
       if (DEBUG) console.info('[PersistentSession] No backend URL configured');
       return;
     }
 
-    mountedRef.current = true;
-    const connectionGeneration = ++connectionGenerationRef.current;
-    let graphqlClient: Client | null = null;
-    let retryConnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let subscriptionRestartTimeout: ReturnType<typeof setTimeout> | null = null;
-    let transientRetryCount = 0;
-    let subscriptionRetryCount = 0;
-    let isCleaningUp = false;
+    const controller = createSessionConnectionController(
+      createWebSessionConnectionDeps({
+        activeSession,
+        backendUrl,
+        syncGate,
+        refs: { wsAuthTokenRef, usernameRef, avatarUrlRef, queueRef, currentClimbQueueItemRef },
+        pendingInitialQueueRef,
+        handleQueueEvent,
+        handleSessionEvent,
+        setActiveSession,
+        setClient,
+        setSession,
+        setIsConnecting,
+        setError,
+        setHasConnected,
+      }),
+    );
 
-    async function joinSession(clientToUse: Client): Promise<Session | null> {
-      if (DEBUG) console.info('[PersistentSession] Calling joinSession mutation...');
-      try {
-        const initialQueueData =
-          pendingInitialQueueRef.current?.sessionId === sessionId ? pendingInitialQueueRef.current : null;
-
-        if (DEBUG && initialQueueData) {
-          console.info('[PersistentSession] Sending initial queue with', initialQueueData.queue.length, 'items');
-        }
-
-        const sessionName = activeSession?.sessionName || initialQueueData?.sessionName;
-        const variables = {
-          sessionId,
-          boardPath,
-          username: usernameRef.current,
-          avatarUrl: avatarUrlRef.current,
-          ...(initialQueueData && {
-            initialQueue: initialQueueData.queue.map(toClimbQueueItemInput),
-            initialCurrentClimb: initialQueueData.currentClimb
-              ? toClimbQueueItemInput(initialQueueData.currentClimb)
-              : null,
-          }),
-          ...(sessionName && { sessionName }),
-        };
-
-        const response = await execute<{ joinSession: Session }>(clientToUse, {
-          query: JOIN_SESSION,
-          variables,
-        });
-
-        const joinedSession = response?.joinSession;
-        if (!joinedSession) {
-          console.error('[PersistentSession] JoinSession returned no session payload');
-          return null;
-        }
-
-        if (initialQueueData) {
-          pendingInitialQueueRef.current = null;
-        }
-
-        return joinedSession;
-      } catch (err) {
-        // The server refuses to resurrect an ended session (#2696). Drop the
-        // stored session immediately instead of treating it as a transient
-        // failure and burning several backoff retries on a dead session.
-        if (err instanceof GraphQLOperationError && err.extensions?.code === 'SESSION_ENDED') {
-          if (DEBUG) console.info('[PersistentSession] Session has ended; clearing stored session');
-          removePreference(ACTIVE_SESSION_KEY).catch(() => {});
-          if (mountedRef.current) {
-            setActiveSession(null);
-          }
-          return null;
-        }
-        console.error('[PersistentSession] JoinSession failed:', err);
-        return null;
-      }
-    }
-
-    async function handleReconnect() {
-      const clientForReconnect = graphqlClient;
-      if (!mountedRef.current || !clientForReconnect) return;
-      if (connectionGenerationRef.current !== connectionGeneration) return;
-      if (isReconnectingRef.current) {
-        if (DEBUG) console.info('[PersistentSession] Reconnection already in progress');
-        return;
-      }
-
-      isReconnectingRef.current = true;
-      try {
-        if (DEBUG) console.info('[PersistentSession] Reconnecting...');
-
-        // The gate owns sequence tracking; the ref is just a mirror for
-        // use-offline-reconciliation.
-        const lastSeq = syncGate.getLastSequence();
-        const sessionData = await joinSession(clientForReconnect);
-        if (!sessionData || !mountedRef.current) return;
-        // joinSession (WS member payload) always returns a full queue
-        // snapshot — the schema field is nullable only for the `session`
-        // query's non-member preview and createSession's HTTP path, which
-        // never flow through here. Without a snapshot there is no sequence
-        // or hash to reconcile against, so treat it like a failed rejoin
-        // (the reconnect supervisor will retry) instead of guessing.
-        const rejoinedQueueState = sessionData.queueState;
-        if (!rejoinedQueueState) {
-          console.error('[PersistentSession] JoinSession returned no queue snapshot; skipping reconnect sync');
-          return;
-        }
-
-        // Match the initial `connect()` success path: reset both retry
-        // counters now that we know the rejoin succeeded. Otherwise a
-        // low-traffic session where every reconnect succeeds but no event
-        // arrives before the next disconnect accumulates strikes across
-        // recovery cycles and silently force-clears the session after
-        // MAX_TRANSIENT_RETRIES, even though every individual join was
-        // healthy. The next-handler reset only fires when an event arrives,
-        // which isn't guaranteed during a quiet window.
-        transientRetryCount = 0;
-        subscriptionRetryCount = 0;
-
-        const currentSeq = rejoinedQueueState.sequence;
-        // Strategy selection (gap thresholds, first-connection, gap=0 hash
-        // compare) lives in the shared gate — the old inline gap/hash chain
-        // is gone.
-        const strategy = syncGate.decideReconnectStrategy({
-          lastSequence: lastSeq,
-          serverSequence: currentSeq,
-          serverStateHash: rejoinedQueueState.stateHash,
-          localStateHash: computeQueueStateHash(queueRef.current, currentClimbQueueItemRef.current?.uuid || null),
-        });
-
-        if (DEBUG)
-          console.info(
-            `[PersistentSession] Reconnected. Last seq: ${lastSeq}, Current seq: ${currentSeq}, Strategy: ${strategy}`,
-          );
-
-        // The gate picks 'delta-replay' purely from the sequence gap; the
-        // legacy branch additionally required a truthy sessionId (falsy → no
-        // resync at all), so that guard stays here at the call site. The
-        // lastSeq null-check is for TypeScript — the gate never returns
-        // 'delta-replay' without a tracked sequence.
-        if (strategy === 'delta-replay' && lastSeq !== null && sessionId) {
-          try {
-            if (DEBUG)
-              console.info(`[PersistentSession] Attempting delta sync for ${currentSeq - lastSeq} missed events...`);
-
-            const response = await execute<{ eventsReplay: EventsReplayResponse }>(clientForReconnect, {
-              query: EVENTS_REPLAY,
-              variables: { sessionId, sinceSequence: lastSeq },
-            });
-
-            const replay = response?.eventsReplay;
-            if (!replay) {
-              throw new Error('eventsReplay payload missing');
-            }
-
-            const replayEvents = replay.events.map(transformToSubscriptionEvent);
-            if (replay.currentSequence < currentSeq) {
-              throw new Error(
-                `eventsReplay currentSequence ${replay.currentSequence} is behind joined sequence ${currentSeq}`,
-              );
-            }
-            if (!hasContiguousReplayCoverage(replayEvents, lastSeq, replay.currentSequence)) {
-              throw new Error(
-                `eventsReplay returned non-contiguous coverage from ${lastSeq} to ${replay.currentSequence}`,
-              );
-            }
-
-            if (replayEvents.length > 0) {
-              if (DEBUG) console.info(`[PersistentSession] Replaying ${replayEvents.length} events`);
-              replayEvents.forEach((event) => {
-                handleQueueEvent(event);
-              });
-              if (DEBUG) console.info('[PersistentSession] Delta sync completed successfully');
-            } else {
-              if (DEBUG) console.info('[PersistentSession] No events to replay');
-            }
-          } catch (err) {
-            console.warn('[PersistentSession] Delta sync failed, falling back to full sync:', err);
-            applyFullSync(sessionData);
-          }
-        } else if (strategy === 'full-sync') {
-          if (DEBUG) console.info('[PersistentSession] Applying full sync on reconnect');
-          applyFullSync(sessionData);
-        } else {
-          // 'none': the event processor's hash tracking already matches the
-          // server, so there is no state to update here (the old code's
-          // redundant setLastReceivedStateHash call is gone).
-          if (DEBUG) console.info('[PersistentSession] No missed events, already in sync');
-        }
-
-        setSession(sessionData);
-        startSubscriptions(clientForReconnect);
-        if (DEBUG) console.info('[PersistentSession] Reconnection complete, clientId:', sessionData.clientId);
-      } finally {
-        isReconnectingRef.current = false;
-      }
-    }
-
-    triggerResyncRef.current = handleReconnect;
-
-    function applyFullSync(sessionData: Session) {
-      if (sessionData.queueState) {
-        handleQueueEvent({
-          __typename: 'FullSync',
-          sequence: sessionData.queueState.sequence,
-          state: sessionData.queueState,
-        });
-      }
-    }
-
-    function scheduleSubscriptionRecovery(reason: string) {
-      if (isCleaningUp || !mountedRef.current) return;
-      if (connectionGenerationRef.current !== connectionGeneration) return;
-      if (subscriptionRestartTimeout) return;
-
-      subscriptionRetryCount++;
-      if (subscriptionRetryCount > MAX_TRANSIENT_RETRIES) {
-        console.warn(`[PersistentSession] Exhausted ${MAX_TRANSIENT_RETRIES} subscription retries, clearing session`);
-        subscriptionRetryCount = 0;
-        removePreference(ACTIVE_SESSION_KEY).catch(() => {});
-        if (mountedRef.current) {
-          setActiveSession(null);
-        }
-        return;
-      }
-
-      const delay = Math.min(
-        INITIAL_RETRY_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, subscriptionRetryCount - 1),
-        MAX_RETRY_DELAY_MS,
-      );
-      if (DEBUG)
-        console.info(
-          `[PersistentSession] Scheduling subscription recovery (${subscriptionRetryCount}/${MAX_TRANSIENT_RETRIES}) in ${delay}ms: ${reason}`,
-        );
-      subscriptionRestartTimeout = setTimeout(() => {
-        subscriptionRestartTimeout = null;
-        if (isCleaningUp || !mountedRef.current) return;
-        if (connectionGenerationRef.current !== connectionGeneration) return;
-        void handleReconnect();
-      }, delay);
-    }
-
-    function startSubscriptions(clientToUse: Client) {
-      if (isCleaningUp || !mountedRef.current) return;
-      if (connectionGenerationRef.current !== connectionGeneration) return;
-
-      if (!queueUnsubscribeRef.current) {
-        queueUnsubscribeRef.current = subscribe<{ queueUpdates: SubscriptionQueueEvent }>(
-          clientToUse,
-          { query: QUEUE_UPDATES, variables: { sessionId } },
-          {
-            next: (data) => {
-              if (data.queueUpdates) {
-                subscriptionRetryCount = 0;
-                handleQueueEvent(data.queueUpdates);
-              }
-            },
-            error: (err) => {
-              console.error('[PersistentSession] Queue subscription error:', err);
-              queueUnsubscribeRef.current = null;
-              if (mountedRef.current) {
-                setError(err instanceof Error ? err : new Error(String(err)));
-              }
-              scheduleSubscriptionRecovery('queue subscription error');
-            },
-            complete: () => {
-              if (DEBUG) console.info('[PersistentSession] Queue subscription completed');
-              queueUnsubscribeRef.current = null;
-              scheduleSubscriptionRecovery('queue subscription completed');
-            },
-          },
-        );
-      }
-
-      if (!sessionUnsubscribeRef.current) {
-        sessionUnsubscribeRef.current = subscribe<{ sessionUpdates: SessionEvent }>(
-          clientToUse,
-          { query: SESSION_UPDATES, variables: { sessionId } },
-          {
-            next: (data) => {
-              if (data.sessionUpdates) {
-                subscriptionRetryCount = 0;
-                const event = data.sessionUpdates;
-                // SessionStatsUpdated is dispatched through React Query in
-                // `handleSessionEvent` — it doesn't touch session state, so
-                // the reducer call skips it.
-                if (event.__typename !== 'SessionStatsUpdated') {
-                  // SessionEnded carries the side effect of clearing the
-                  // persisted session id; `applySessionEvent` is pure so the
-                  // IndexedDB removal lives here at the call site.
-                  if (event.__typename === 'SessionEnded') {
-                    if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
-                    removePreference(ACTIVE_SESSION_KEY).catch(() => {});
-                  }
-                  setSession((prev) => applySessionEvent(prev, event));
-                }
-                handleSessionEvent(event);
-              }
-            },
-            error: (err) => {
-              console.error('[PersistentSession] Session subscription error:', err);
-              sessionUnsubscribeRef.current = null;
-              scheduleSubscriptionRecovery('session subscription error');
-            },
-            complete: () => {
-              if (DEBUG) console.info('[PersistentSession] Session subscription completed');
-              sessionUnsubscribeRef.current = null;
-              scheduleSubscriptionRecovery('session subscription completed');
-            },
-          },
-        );
-      }
-    }
-
-    async function connect() {
-      if (connectionGenerationRef.current !== connectionGeneration) return;
-      if (isConnectingRef.current) {
-        if (DEBUG) console.info('[PersistentSession] Connection already in progress, skipping');
-        return;
-      }
-      isConnectingRef.current = true;
-
-      if (DEBUG) console.info('[PersistentSession] Connecting to session:', sessionId);
-      setIsConnecting(true);
-      setError(null);
-
-      try {
-        graphqlClient = createGraphQLClient({
-          url: backendUrl!,
-          authToken: wsAuthTokenRef.current,
-          onReconnect: () => void handleReconnect(),
-          connectionName: 'session',
-        });
-        // Capture a non-null local reference. The outer `graphqlClient` (a
-        // closure `let`) is nulled by the cleanup function below — if this
-        // effect's cleanup runs while `await joinSession()` is in flight,
-        // resuming code that touches `graphqlClient` directly would see
-        // `null` and crash on `.dispose()`. The cleanup already disposes
-        // its captured client, so calling `.dispose()` again on `client`
-        // here is a safe no-op (graphql-ws clients are idempotent).
-        const client = graphqlClient;
-
-        if (!mountedRef.current) {
-          void client.dispose();
-          isConnectingRef.current = false;
-          return;
-        }
-
-        setClient(client);
-
-        const sessionData = await joinSession(client);
-
-        if (connectionGenerationRef.current !== connectionGeneration) {
-          return;
-        }
-
-        if (!mountedRef.current) {
-          void client.dispose();
-          return;
-        }
-
-        if (!sessionData) {
-          throw new TransientJoinError('JoinSession returned no payload');
-        }
-
-        if (DEBUG) console.info('[PersistentSession] Joined session, clientId:', sessionData.clientId);
-
-        transientRetryCount = 0;
-        subscriptionRetryCount = 0;
-        setSession(sessionData);
-        setHasConnected(true);
-        setIsConnecting(false);
-
-        if (sessionData.queueState) {
-          handleQueueEvent({
-            __typename: 'FullSync',
-            sequence: sessionData.queueState.sequence,
-            state: sessionData.queueState,
-          });
-        }
-
-        startSubscriptions(client);
-
-        isConnectingRef.current = false;
-      } catch (err) {
-        console.error('[PersistentSession] Connection failed:', err);
-        isConnectingRef.current = false;
-        const isTransientJoinFailure = err instanceof TransientJoinError;
-
-        if (mountedRef.current) {
-          setError(err instanceof Error ? err : new Error(String(err)));
-          setIsConnecting(false);
-          if (isTransientJoinFailure) {
-            transientRetryCount++;
-            if (transientRetryCount > MAX_TRANSIENT_RETRIES) {
-              console.warn(
-                `[PersistentSession] Exhausted ${MAX_TRANSIENT_RETRIES} transient retries, clearing session`,
-              );
-              transientRetryCount = 0;
-              removePreference(ACTIVE_SESSION_KEY).catch(() => {});
-              setActiveSession(null);
-            } else {
-              const delay = Math.min(
-                INITIAL_RETRY_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, transientRetryCount - 1),
-                MAX_RETRY_DELAY_MS,
-              );
-              if (DEBUG)
-                console.info(
-                  `[PersistentSession] Transient retry ${transientRetryCount}/${MAX_TRANSIENT_RETRIES} in ${delay}ms`,
-                );
-              retryConnectTimeout = setTimeout(() => {
-                if (
-                  connectionGenerationRef.current === connectionGeneration &&
-                  mountedRef.current &&
-                  activeSessionRef.current?.sessionId === sessionId &&
-                  !isConnectingRef.current
-                ) {
-                  void connect();
-                }
-              }, delay);
-            }
-          } else {
-            removePreference(ACTIVE_SESSION_KEY).catch(() => {});
-            setActiveSession(null);
-          }
-        }
-        if (graphqlClient) {
-          void graphqlClient.dispose();
-        }
-      }
-    }
-
-    void connect();
+    triggerResyncRef.current = () => controller.triggerResync();
+    controller.start();
 
     return () => {
       if (DEBUG) console.info('[PersistentSession] Cleaning up connection');
-      isCleaningUp = true;
-      mountedRef.current = false;
-      isConnectingRef.current = false;
       const shouldSendLeave = sendLeaveOnCleanupRef.current;
       sendLeaveOnCleanupRef.current = false;
-
-      const clientToCleanup = graphqlClient;
-      graphqlClient = null;
-
-      queueUnsubscribeRef.current?.();
-      queueUnsubscribeRef.current = null;
-      sessionUnsubscribeRef.current?.();
-      sessionUnsubscribeRef.current = null;
+      controller.stop({ sendLeave: shouldSendLeave });
 
       // Gate tracking is connection-scoped: the next connect() (same or
-      // different session) re-establishes sequence/hash tracking from a fresh
-      // FullSync, and a new session deserves a clean corruption cooldown and
-      // resync-loop counter. Transient socket drops do NOT run this cleanup
-      // (graphql-ws reconnects internally via onReconnect), so delta replay
-      // across a network blip still sees the pre-disconnect sequence. Keep
-      // the legacy ref mirror in sync for use-offline-reconciliation.
+      // different session) re-establishes sequence/hash tracking from a
+      // fresh FullSync, and a new session deserves a clean corruption
+      // cooldown and resync-loop counter. Transient socket drops do NOT run
+      // this cleanup (graphql-ws reconnects internally via onReconnect), so
+      // delta replay across a network blip still sees the pre-disconnect
+      // sequence. The gate is owned by `PersistentSessionProvider` (shared
+      // with the event processor and subscriptions hook), so resetting it
+      // stays here rather than moving into the controller — see the
+      // ownership-split doc comment on `createSessionConnectionController`.
       syncGate.reset();
       lastReceivedSequenceRef.current = null;
-
-      if (clientToCleanup) {
-        void Promise.resolve()
-          .then(async () => {
-            if (shouldSendLeave) {
-              try {
-                await execute(clientToCleanup, { query: LEAVE_SESSION }, 5000);
-              } catch (err) {
-                if (DEBUG) console.info('[PersistentSession] Explicit leave failed during cleanup:', err);
-              }
-            }
-            await clientToCleanup.dispose();
-          })
-          .catch((err) => {
-            // Swallow errors during cleanup — the WebSocket is being torn down
-            if (DEBUG) console.info('[PersistentSession] Cleanup error suppressed:', err);
-          });
-      }
 
       setClient(null);
       setSession(null);
       setHasConnected(false);
       setIsConnecting(false);
-      if (retryConnectTimeout) {
-        clearTimeout(retryConnectTimeout);
-      }
-      if (subscriptionRestartTimeout) {
-        clearTimeout(subscriptionRestartTimeout);
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, only .current changes; intentional dep list
   }, [activeSession, isAuthLoading, handleQueueEvent, handleSessionEvent, syncGate, setSession]);

@@ -275,10 +275,6 @@ export type SharedRefs = {
   activeSessionRef: MutableRefObject<ActiveSessionInfo | null>;
   queueRef: MutableRefObject<LocalClimbQueueItem[]>;
   currentClimbQueueItemRef: MutableRefObject<LocalClimbQueueItem | null>;
-  mountedRef: MutableRefObject<boolean>;
-  isConnectingRef: MutableRefObject<boolean>;
-  isReconnectingRef: MutableRefObject<boolean>;
-  connectionGenerationRef: MutableRefObject<number>;
   triggerResyncRef: MutableRefObject<(() => void) | null>;
   /**
    * Mirror of the sync gate's `getLastSequence()` — the gate (created in
@@ -289,11 +285,19 @@ export type SharedRefs = {
    * subscribing to re-renders.
    */
   lastReceivedSequenceRef: MutableRefObject<number | null>;
-  queueUnsubscribeRef: MutableRefObject<(() => void) | null>;
-  sessionUnsubscribeRef: MutableRefObject<(() => void) | null>;
   queueEventSubscribersRef: MutableRefObject<Set<(event: SubscriptionQueueEvent) => void>>;
   sessionEventSubscribersRef: MutableRefObject<Set<(event: SessionEvent) => void>>;
 };
+
+// `mountedRef`, `isConnectingRef`, `isReconnectingRef`, `connectionGenerationRef`,
+// `queueUnsubscribeRef`, and `sessionUnsubscribeRef` were removed here in
+// Workstream W4 — they existed only to guard the giant inline connection
+// effect in `use-session-lifecycle.ts` against stale-async continuations and
+// double-subscription. That state now lives as closure state inside
+// `@boardsesh/queue-runtime`'s `createSessionConnectionController`, scoped
+// to one controller instance per connection attempt (see that module's
+// "generation guard mapping" doc comment for why a shared ref generation
+// counter is no longer needed).
 
 // Default backend URL resolved at runtime (supports PR preview domains)
 export const DEFAULT_BACKEND_URL = getBackendWsUrl();

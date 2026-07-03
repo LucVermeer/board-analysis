@@ -51,14 +51,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   const activeSessionRef = useRef<ActiveSessionInfo | null>(null);
   const queueRef = useRef<LocalClimbQueueItem[]>([]);
   const currentClimbQueueItemRef = useRef<LocalClimbQueueItem | null>(null);
-  const mountedRef = useRef(false);
-  const isConnectingRef = useRef(false);
-  const isReconnectingRef = useRef(false);
-  const connectionGenerationRef = useRef(0);
   const triggerResyncRef = useRef<(() => void) | null>(null);
   const lastReceivedSequenceRef = useRef<number | null>(null);
-  const queueUnsubscribeRef = useRef<(() => void) | null>(null);
-  const sessionUnsubscribeRef = useRef<(() => void) | null>(null);
   const queueEventSubscribersRef = useRef<Set<(event: SubscriptionQueueEvent) => void>>(new Set());
   const sessionEventSubscribersRef = useRef<Set<(event: SessionEvent) => void>>(new Set());
 
@@ -86,14 +80,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     activeSessionRef,
     queueRef,
     currentClimbQueueItemRef,
-    mountedRef,
-    isConnectingRef,
-    isReconnectingRef,
-    connectionGenerationRef,
     triggerResyncRef,
     lastReceivedSequenceRef,
-    queueUnsubscribeRef,
-    sessionUnsubscribeRef,
     queueEventSubscribersRef,
     sessionEventSubscribersRef,
   };
