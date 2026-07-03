@@ -94,6 +94,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
       snapPoints={snapPoints}
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={sheetStyles.indicator}
     >
       <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom + spacing[4] }]}>

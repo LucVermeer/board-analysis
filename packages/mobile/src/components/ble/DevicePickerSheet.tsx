@@ -90,6 +90,7 @@ export function DevicePickerSheet({
       snapPoints={snapPoints}
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={styles.indicator}
     >
       <BottomSheetView style={styles.header}>

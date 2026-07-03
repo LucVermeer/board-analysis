@@ -20,10 +20,14 @@
  *      auto-sequences dismiss(A) → settle → present(B). This makes sheet-over-
  *      sheet handoffs safe and enforces docs hard-rule 1 at runtime.
  *
- * "Settled" is detected two ways: a fixed per-platform timer (the baseline, works
- * with no native support), upgraded to the real post-animation signal when the
- * `@expo/ui` patch forwards SwiftUI's `onDismiss` (see notifyFullyDismissed). The
- * timer then degrades to a ceiling/fallback.
+ * "Settled" is detected two ways. On iOS the real post-animation signal arrives
+ * via `notifyFullyDismissed`: our `@expo/ui` patch forwards SwiftUI's
+ * `.sheet(onDismiss:)` closure out of the community bottom-sheet wrapper (see
+ * patches/@expo%2Fui@…patch and useManagedSheet's onFullyDismissed handler). A
+ * fixed per-platform timer is the fallback: it's the only settle signal on
+ * Android (Compose has no post-animation event), and on iOS it's the ceiling for
+ * the rare case the native event is late or never arrives (e.g. a Host torn down
+ * mid-animation).
  */
 
 import {
@@ -44,9 +48,10 @@ export type PresenterGroup = 'root' | (string & {});
 
 /** How long after JS asks a native sheet to dismiss we treat it as still
  * animating (the ceiling before we let the next transition run). iOS modal sheet
- * present/dismiss is ~0.4-0.5s; Android material is quicker. Used as a fallback
- * when the accurate native `onDismiss` signal isn't available (pre-patch, or when
- * a Host was torn down mid-animation and the event never arrives). */
+ * present/dismiss is ~0.4-0.5s; Android material is quicker. This is the primary
+ * settle signal on Android and the fallback ceiling on iOS (where the accurate
+ * native `onDismiss` normally resolves the settle first, unless a Host was torn
+ * down mid-animation and the event never arrives). */
 const IOS_SHEET_SETTLE_MS = 550;
 const ANDROID_SHEET_SETTLE_MS = 350;
 const SETTLE_MS = Platform.OS === 'ios' ? IOS_SHEET_SETTLE_MS : ANDROID_SHEET_SETTLE_MS;
@@ -62,6 +67,13 @@ type InFlight = {
   op: 'present' | 'dismiss';
   id: string;
   timer: ReturnType<typeof setTimeout>;
+  /** True when an accurate native `onDismiss` is expected to resolve this settle
+   * (an iOS coordinator- or user-driven dismiss of a still-registered sheet). If
+   * the ceiling timer fires first for one of these, the animation genuinely
+   * outran the ceiling — the one case the __DEV__ warning is meant to catch.
+   * False on Android (no native signal) and for unmount teardowns (the
+   * registration is gone, so notifyFullyDismissed can never match). */
+  expectNative: boolean;
 };
 
 type GroupState = {
@@ -146,10 +158,11 @@ export function SheetPresentationProvider({ children }: { children: ReactNode })
       } else {
         state.presentedId = null;
         registrations.current.get(inFlight.id)?.onFullyDismissed?.();
-        if (__DEV__ && viaCeiling) {
+        if (__DEV__ && viaCeiling && inFlight.expectNative) {
           console.warn(
             `[sheet-presentation] dismiss of "${inFlight.id}" settled via the ${SETTLE_MS}ms ceiling timer ` +
-              `(no native onDismiss). If this is frequent on a device, the dismiss animation outran the ceiling.`,
+              `before the native onDismiss arrived — the dismiss animation outran the ceiling. ` +
+              `If this is frequent on a device, raise SETTLE_MS.`,
           );
         }
       }
@@ -159,7 +172,7 @@ export function SheetPresentationProvider({ children }: { children: ReactNode })
     function startTransition(group: PresenterGroup, op: 'present' | 'dismiss', id: string): void {
       const state = groupState(group);
       const timer = setTimeout(() => onSettle(group, true), SETTLE_MS);
-      state.inFlight = { op, id, timer };
+      state.inFlight = { op, id, timer, expectNative: op === 'dismiss' && Platform.OS === 'ios' };
       const registration = registrations.current.get(id);
       if (op === 'present') registration?.present();
       else registration?.dismiss();
@@ -210,7 +223,9 @@ export function SheetPresentationProvider({ children }: { children: ReactNode })
             // onFullyDismissed is a no-op (the component unmounted).
             state.presentedId = null;
             const timer = setTimeout(() => onSettle(reg.group, true), SETTLE_MS);
-            state.inFlight = { op: 'dismiss', id: reg.id, timer };
+            // The registration is already gone, so no native onDismiss can match
+            // here — the ceiling is the only possible settle; don't warn on it.
+            state.inFlight = { op: 'dismiss', id: reg.id, timer, expectNative: false };
           } else {
             pump(reg.group);
           }
@@ -245,7 +260,9 @@ export function SheetPresentationProvider({ children }: { children: ReactNode })
         // present waits for the animation, then reconcile.
         if (state.presentedId === id && !state.inFlight) {
           const timer = setTimeout(() => onSettle(group, true), SETTLE_MS);
-          state.inFlight = { op: 'dismiss', id, timer };
+          // A user pan-down / backdrop tap still fires SwiftUI's onDismiss on iOS,
+          // so the native settle is expected to early-resolve this window there.
+          state.inFlight = { op: 'dismiss', id, timer, expectNative: Platform.OS === 'ios' };
         } else {
           pump(group);
         }

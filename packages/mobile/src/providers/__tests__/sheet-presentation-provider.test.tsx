@@ -108,6 +108,35 @@ describe('SheetPresentationProvider coordinator', () => {
     expect(a.onFullyDismissed).toHaveBeenCalledTimes(1);
   });
 
+  it('warns (dev) when an iOS coordinator-driven dismiss settles via the ceiling timer', () => {
+    vi.stubGlobal('__DEV__', true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const a = makeSheet();
+    coordinator.register({ id: 'a', group: 'root', ...a });
+    coordinator.setDesiredOpen('a', true);
+    vi.advanceTimersByTime(SETTLE_MS);
+
+    coordinator.setDesiredOpen('a', false); // coordinator drives the dismiss (expectNative on iOS)
+    vi.advanceTimersByTime(SETTLE_MS); // no native onDismiss arrived → ceiling wins
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('outran the ceiling');
+    warn.mockRestore();
+  });
+
+  it('does not warn when an unmounted-while-presented sheet settles via the ceiling (no native signal expected)', () => {
+    vi.stubGlobal('__DEV__', true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const a = makeSheet();
+    const unregister = coordinator.register({ id: 'a', group: 'root', ...a });
+    coordinator.setDesiredOpen('a', true);
+    vi.advanceTimersByTime(SETTLE_MS);
+
+    unregister(); // registration gone → notifyFullyDismissed can never match; ceiling is the only settle
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('opens a settle window on a user-initiated close (notifyClosed) and fires onFullyDismissed at settle', () => {
     const a = makeSheet();
     coordinator.register({ id: 'a', group: 'root', ...a });
@@ -123,6 +152,21 @@ describe('SheetPresentationProvider coordinator', () => {
     vi.advanceTimersByTime(SETTLE_MS);
     expect(a.onFullyDismissed).toHaveBeenCalledTimes(1);
     expect(coordinator.isPresented('a')).toBe(false);
+  });
+
+  it('warns (dev) when an iOS user-initiated close (notifyClosed) settles via the ceiling timer', () => {
+    vi.stubGlobal('__DEV__', true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const a = makeSheet();
+    coordinator.register({ id: 'a', group: 'root', ...a });
+    coordinator.setDesiredOpen('a', true);
+    vi.advanceTimersByTime(SETTLE_MS);
+
+    coordinator.notifyClosed('a'); // pan-down opens a settle window (expectNative on iOS)
+    vi.advanceTimersByTime(SETTLE_MS); // native onDismiss never arrived → ceiling wins
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('outran the ceiling');
+    warn.mockRestore();
   });
 
   it('is a no-op to close a sheet that is not presented', () => {

@@ -792,6 +792,7 @@
     },
   },
   "patchedDependencies": {
+    "@expo/ui@56.0.18": "patches/@expo%2Fui@56.0.18.patch",
     "react-native-screens@4.25.2": "patches/react-native-screens@4.25.2.patch",
     "expo-dev-launcher@56.0.20": "patches/expo-dev-launcher@56.0.20.patch",
   },

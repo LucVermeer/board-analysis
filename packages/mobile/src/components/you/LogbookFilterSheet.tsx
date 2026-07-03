@@ -231,6 +231,7 @@ export function LogbookFilterSheet({
       enableDynamicSizing={false}
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={styles.indicator}
     >
       <View style={styles.header}>

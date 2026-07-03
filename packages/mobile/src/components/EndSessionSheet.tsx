@@ -40,6 +40,7 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
       enableDynamicSizing
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       backgroundStyle={{ backgroundColor: systemColors.secondaryBackground }}
       handleIndicatorStyle={sheetStyles.indicator}
     >

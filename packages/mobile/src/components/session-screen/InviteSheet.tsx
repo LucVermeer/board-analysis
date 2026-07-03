@@ -68,6 +68,7 @@ export function InviteSheet({ visible, onDismiss, sessionId }: InviteSheetProps)
       snapPoints={snapPoints}
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       backgroundStyle={{ backgroundColor: systemColors.secondaryBackground }}
       handleIndicatorStyle={sheetStyles.indicator}
     >
