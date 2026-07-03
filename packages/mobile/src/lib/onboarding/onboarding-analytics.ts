@@ -48,10 +48,12 @@ export function trackTourSkipped(card: OnboardingCard, stepIndex: number): void 
 // Fired when the prompt unmounts without the user choosing either button — an
 // Android hardware-back or a programmatic nav-away. Without this, ~a third of
 // first-run Starts resolved to no terminal outcome at all, deflating Completed.
+// `exitReason: 'unresolved'` stays mechanism-neutral: the guard can't tell a
+// hardware-back from a programmatic unmount, so it claims neither.
 export function trackTourDismissed(card: OnboardingCard, stepIndex: number): void {
   track(SHARED_EVENTS.OnboardingTourDismissed, {
     atStepId: card.id,
     stepIndex,
-    exitReason: 'back',
+    exitReason: 'unresolved',
   });
 }

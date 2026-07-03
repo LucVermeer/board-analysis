@@ -54,7 +54,7 @@ describe('onboarding analytics', () => {
     expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Dismissed', {
       atStepId: ONBOARDING_PROMPT_CARD.id,
       stepIndex: 0,
-      exitReason: 'back',
+      exitReason: 'unresolved',
     });
   });
 });
