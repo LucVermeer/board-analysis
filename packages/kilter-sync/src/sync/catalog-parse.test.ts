@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { gripsClimbConcatToFrames, framesToHolds, fingerprintFrames } from './catalog-parse';
+import { gripsClimbConcatToFrames, framesToHolds, fingerprintFrames, firstUnplaceableHole } from './catalog-parse';
 
 // hole_id → placement_id, the board_placements bridge. Real Kilter values are
 // in the thousands; small numbers here keep the expectations readable.
@@ -27,6 +27,24 @@ void describe('gripsClimbConcatToFrames', () => {
 
   it('preserves comma-separated multi-frame structure', () => {
     expect(gripsClimbConcatToFrames('h10p12,h20p13', REMAP)).toBe('p100r12,p200r13');
+  });
+});
+
+void describe('firstUnplaceableHole', () => {
+  it('returns the first holeId with no placement on the layout', () => {
+    expect(firstUnplaceableHole('h10p12h99p13', REMAP)).toBe(99);
+  });
+
+  it('returns the first unplaceable hole across multiple frames', () => {
+    expect(firstUnplaceableHole('h10p12,h20p13,h77p14', REMAP)).toBe(77);
+  });
+
+  it('returns null when every hole is placeable (malformed-encoding case)', () => {
+    expect(firstUnplaceableHole('h10p12h20p13', REMAP)).toBeNull();
+  });
+
+  it('returns null on a concat with no hold tokens', () => {
+    expect(firstUnplaceableHole('', REMAP)).toBeNull();
   });
 });
 

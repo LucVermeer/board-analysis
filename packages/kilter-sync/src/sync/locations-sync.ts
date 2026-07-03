@@ -63,6 +63,29 @@ function wallSourceKey(gym: KilterRefGym, wall: KilterRefWall): string {
   return `kilter:${gym.gymUuid}:${wall.wallUuid || wall.id}`;
 }
 
+/**
+ * Collapse identical skip entries. A wall is processed once and skipped for a
+ * single reason, so any repeat of the same (sourceKey, reason) is spurious —
+ * historically from a `wall_uuid` streamed multiple times over PowerSync. The
+ * reference pull now dedups at the source; this is defense-in-depth so the run
+ * summary never reports the same wall twice.
+ */
+export function dedupeSkipped(
+  skipped: Array<{ sourceKey: string; reason: string }>,
+): Array<{ sourceKey: string; reason: string }> {
+  const seen = new Set<string>();
+  const deduped: Array<{ sourceKey: string; reason: string }> = [];
+  for (const entry of skipped) {
+    // Newline can't appear in a sourceKey (`kilter:gym:wall`) or a reason string,
+    // so it's an unambiguous composite-key separator.
+    const key = `${entry.sourceKey}\n${entry.reason}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(entry);
+  }
+  return deduped;
+}
+
 export function buildKilterLocationRecords(
   reference: KilterReferencePull,
   resolver: LayoutResolver,
@@ -134,7 +157,7 @@ export function buildKilterLocationRecords(
     }
   }
 
-  return { records, skipped };
+  return { records, skipped: dedupeSkipped(skipped) };
 }
 
 export async function syncKilterLocations(args: {
@@ -145,10 +168,14 @@ export async function syncKilterLocations(args: {
 }): Promise<LocationSyncSummary> {
   const { records, skipped } = buildKilterLocationRecords(args.reference, args.resolver);
   const summary = await upsertPublicBoardLocations(args.db, records);
+  // Merge the upsert-side skips (e.g. invalid coordinates) with the kilter-side
+  // skips (unlisted / unmapped / unsupported) and dedupe — boardsSkipped tracks
+  // the deduped length so the count and the array stay in step.
+  const mergedSkipped = dedupeSkipped([...summary.skipped, ...skipped]);
   const mergedSummary = {
     ...summary,
-    boardsSkipped: summary.boardsSkipped + skipped.length,
-    skipped: [...summary.skipped, ...skipped],
+    boardsSkipped: mergedSkipped.length,
+    skipped: mergedSkipped,
   };
   args.log?.(
     `[kilter-locations] upserted ${mergedSummary.boardsUpserted}/${mergedSummary.boardsSeen} board(s), ${mergedSummary.gymsUpserted} gym(s), skipped ${mergedSummary.boardsSkipped}`,

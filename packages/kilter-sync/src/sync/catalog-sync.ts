@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import {
   boardClimbs,
@@ -22,7 +22,7 @@ import {
 import { KilterApiError } from '../api/errors';
 import { pullKilterReference, type KilterReferencePull } from './reference-pull';
 import { buildLayoutResolver } from './layout-resolver';
-import { gripsClimbConcatToFrames, framesToHolds } from './catalog-parse';
+import { gripsClimbConcatToFrames, framesToHolds, firstUnplaceableHole } from './catalog-parse';
 import { fingerprintFromHolds } from './fingerprint';
 import { createSetterSyncNotifications, type NewClimbInfo } from './notifications';
 import { reconcileDeletions, type DeletionReport } from './deletions';
@@ -45,8 +45,11 @@ export type SyncKilterCatalogArgs = {
   /**
    * Apply /delteduuids reconciliation. Default false = classify + report only.
    * Deleting catalog rows is data deletion (see CLAUDE.md) — opt in explicitly.
+   * Only ever touches Kilter-synced climbs (never user-authored). See deletions.ts.
    */
   applyDeletions?: boolean;
+  /** Max deletion changes to apply per run; the backlog drains over cycles. */
+  deleteBatchLimit?: number;
   /**
    * Skip setter-follow notifications for newly-inserted canonicals. Use for the
    * first bulk ingest — it backfills tens of thousands of *historical* climbs,
@@ -105,6 +108,8 @@ async function loadHoleToPlacement(db: DrizzleDb, layoutId: number): Promise<Map
   return map;
 }
 
+type UnmappedClimbSample = { climbUuid: string; holeId: number | null };
+
 type GroupResult = {
   climbsSeen: number;
   climbsUnmapped: number;
@@ -112,7 +117,12 @@ type GroupResult = {
   aliasesUpserted: number;
   statsUpserted: number;
   newCanonicals: NewClimbInfo[];
+  /** A few unmapped climbs (uuid + offending holeId) for a diagnostic log line. */
+  unmappedSamples: UnmappedClimbSample[];
 };
+
+// Cap the diagnostic sample so a systemic mapping break can't balloon the log.
+const UNMAPPED_SAMPLE_LIMIT = 10;
 
 // Mutable per-(canonical, angle) stat accumulator. kilterCount is summed across
 // every source UUID that resolves to the canonical; the display fields are
@@ -230,6 +240,7 @@ async function syncBoardLayoutGroup(
     aliasesUpserted: 0,
     statsUpserted: 0,
     newCanonicals: [],
+    unmappedSamples: [],
   };
 
   // Existing catalog for this layout: uuid identity + fingerprint → canonical.
@@ -288,6 +299,12 @@ async function syncBoardLayoutGroup(
       const frames = gripsClimbConcatToFrames(climb.climbConcat, holeToPlacement);
       if (frames === null) {
         result.climbsUnmapped += 1;
+        if (result.unmappedSamples.length < UNMAPPED_SAMPLE_LIMIT) {
+          result.unmappedSamples.push({
+            climbUuid: climb.climbUuid,
+            holeId: firstUnplaceableHole(climb.climbConcat, holeToPlacement),
+          });
+        }
         continue;
       }
       const fingerprint = fingerprintFromHolds(framesToHolds(frames));
@@ -360,6 +377,9 @@ async function syncBoardLayoutGroup(
           .values(chunk)
           .onConflictDoUpdate({
             target: [boardClimbs.uuid],
+            // Never overwrite a user-authored climb on a UUID collision — the
+            // catalog sync only owns Kilter-synced rows (user_id IS NULL).
+            setWhere: isNull(boardClimbs.userId),
             set: {
               holdFingerprint: sql`COALESCE(${boardClimbs.holdFingerprint}, excluded.hold_fingerprint)`,
               frames: sql`COALESCE(${boardClimbs.frames}, excluded.frames)`,
@@ -508,12 +528,19 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
       reported: 0,
       aliasDeletes: 0,
       softDeletes: 0,
+      protectedUserAuthored: 0,
+      skippedForeignSource: 0,
       skippedCanonicalWithAliases: 0,
+      alreadyUnlisted: 0,
       unknown: 0,
       applied: false,
+      appliedThisRun: 0,
+      remaining: 0,
+      refused: false,
     },
   };
   const allNewCanonicals: NewClimbInfo[] = [];
+  const unmappedSamples: UnmappedClimbSample[] = [];
 
   for (const [boardLayoutId, gripsLayoutUuids] of byBoardLayout) {
     const groupResult = await syncBoardLayoutGroup(args.db, state, boardLayoutId, gripsLayoutUuids, log);
@@ -524,6 +551,18 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
     summary.aliasesUpserted += groupResult.aliasesUpserted;
     summary.statsUpserted += groupResult.statsUpserted;
     allNewCanonicals.push(...groupResult.newCanonicals);
+    for (const sample of groupResult.unmappedSamples) {
+      if (unmappedSamples.length < UNMAPPED_SAMPLE_LIMIT) unmappedSamples.push(sample);
+    }
+  }
+
+  // Surface a sample of unmapped climbs so climbsUnmapped is diagnosable (holds
+  // that have no placement on the resolved layout — usually a fringe variant).
+  if (summary.climbsUnmapped > 0) {
+    const sample = unmappedSamples
+      .map((entry) => (entry.holeId != null ? `${entry.climbUuid}(hole ${entry.holeId})` : entry.climbUuid))
+      .join(', ');
+    log(`[kilter-catalog] ${summary.climbsUnmapped} climb(s) unmapped; sample: ${sample}`);
   }
 
   // Persist the layout uuid → layout_id mappings discovered this run.
@@ -559,7 +598,9 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
   // Deletion reconciliation runs last (report-only unless applyDeletions).
   try {
     const deletedUuids = await withToken(state, (token) => fetchDeletedClimbUuids(token));
-    summary.deletions = await reconcileDeletions(args.db, deletedUuids, args.applyDeletions ?? false, log);
+    summary.deletions = await reconcileDeletions(args.db, deletedUuids, args.applyDeletions ?? false, log, {
+      batchLimit: args.deleteBatchLimit,
+    });
   } catch (error) {
     log(`[kilter-catalog] deletion reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
   }

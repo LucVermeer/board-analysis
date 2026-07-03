@@ -1,26 +1,135 @@
 import { describe, expect, it } from 'vitest';
 
-import { reconcileDeletions } from './deletions';
+import {
+  classifyKilterDeletions,
+  isAnomalousDeletionBacklog,
+  planDeletionBatch,
+  reconcileDeletions,
+  type AliasClassificationRow,
+} from './deletions';
 
-type Row = Record<string, unknown>;
+const noop = () => {};
 
-// Drizzle shim. reconcileDeletions issues two reads against board_climb_aliases:
-// the 1st is select().from().where() (alias rows), the 2nd adds .groupBy()
-// (alias counts) and only runs when there are canonicals. A select-call counter
-// returns the right shape for each, and delete/update calls are recorded.
-function mockDb(seed: { aliasRows: Row[]; counts: Row[] }) {
+function aliasRow(
+  overrides: Partial<AliasClassificationRow> & Pick<AliasClassificationRow, 'aliasUuid'>,
+): AliasClassificationRow {
+  return {
+    canonicalUuid: overrides.aliasUuid,
+    source: 'kilter',
+    canonicalUserId: null,
+    canonicalIsListed: true,
+    ...overrides,
+  };
+}
+
+describe('classifyKilterDeletions', () => {
+  const noCounts = new Map<string, number>();
+
+  it('drops a pure kilter alias but never a foreign-source one', () => {
+    const result = classifyKilterDeletions({
+      loweredUuids: ['dup', 'foreign'],
+      aliasRows: [
+        aliasRow({ aliasUuid: 'dup', canonicalUuid: 'canon' }),
+        aliasRow({ aliasUuid: 'foreign', canonicalUuid: 'canon2', source: 'backfill' }),
+      ],
+      aliasCounts: noCounts,
+    });
+    expect(result.aliasUuidsToDelete).toEqual(['dup']);
+    expect(result.skippedForeignSource).toBe(1);
+  });
+
+  it('protects a user-authored self-canonical', () => {
+    const result = classifyKilterDeletions({
+      loweredUuids: ['mine'],
+      aliasRows: [aliasRow({ aliasUuid: 'mine', canonicalUserId: 'user-1' })],
+      aliasCounts: noCounts,
+    });
+    expect(result.canonicalsToSoftDelete).toEqual([]);
+    expect(result.protectedUserAuthored).toBe(1);
+  });
+
+  it('soft-deletes a lone synced self-canonical, skips one already unlisted', () => {
+    const result = classifyKilterDeletions({
+      loweredUuids: ['a', 'b'],
+      aliasRows: [aliasRow({ aliasUuid: 'a' }), aliasRow({ aliasUuid: 'b', canonicalIsListed: false })],
+      aliasCounts: new Map([
+        ['a', 1],
+        ['b', 1],
+      ]),
+    });
+    expect(result.canonicalsToSoftDelete).toEqual(['a']);
+    expect(result.alreadyUnlisted).toBe(1);
+  });
+
+  it('skips a canonical that still backs live aliases (no orphaning)', () => {
+    const result = classifyKilterDeletions({
+      loweredUuids: ['a'],
+      aliasRows: [aliasRow({ aliasUuid: 'a' })],
+      aliasCounts: new Map([['a', 3]]),
+    });
+    expect(result.canonicalsToSoftDelete).toEqual([]);
+    expect(result.skippedCanonicalWithAliases).toBe(1);
+  });
+
+  it('counts uuids not present in board_climb_aliases as unknown', () => {
+    const result = classifyKilterDeletions({ loweredUuids: ['ghost'], aliasRows: [], aliasCounts: noCounts });
+    expect(result.unknown).toBe(1);
+  });
+});
+
+describe('planDeletionBatch', () => {
+  it('caps applied changes at the batch limit, alias drops first', () => {
+    const plan = planDeletionBatch({ aliasUuidsToDelete: ['a1', 'a2', 'a3'], canonicalsToSoftDelete: ['s1', 's2'] }, 3);
+    expect(plan.aliasBatch).toEqual(['a1', 'a2', 'a3']);
+    expect(plan.softBatch).toEqual([]);
+    expect(plan.appliedThisRun).toBe(3);
+    expect(plan.remaining).toBe(2);
+  });
+
+  it('spills the remaining budget into soft-deletes', () => {
+    const plan = planDeletionBatch({ aliasUuidsToDelete: ['a1'], canonicalsToSoftDelete: ['s1', 's2', 's3'] }, 3);
+    expect(plan.aliasBatch).toEqual(['a1']);
+    expect(plan.softBatch).toEqual(['s1', 's2']);
+    expect(plan.appliedThisRun).toBe(3);
+    expect(plan.remaining).toBe(1);
+  });
+});
+
+describe('isAnomalousDeletionBacklog', () => {
+  it('trips when the backlog exceeds the fraction of live climbs', () => {
+    expect(isAnomalousDeletionBacklog(30, 100)).toBe(true);
+    expect(isAnomalousDeletionBacklog(20, 100)).toBe(false);
+  });
+
+  it('never trips on an empty catalog', () => {
+    expect(isAnomalousDeletionBacklog(5, 0)).toBe(false);
+  });
+});
+
+// Drizzle shim. Each select() call consumes the next canned result in order:
+// (1) alias rows (leftJoin), (2) alias counts (groupBy) when canonicals exist,
+// (3) the live-catalog count (only when applying with candidates). Each stub is a
+// real resolved Promise with chain methods attached, so `await db.select()...`
+// resolves to the canned rows regardless of which leftJoin/where/groupBy shape
+// the query uses.
+type Rows = Array<Record<string, unknown>>;
+type QueryStub = Promise<Rows> & {
+  leftJoin: () => QueryStub;
+  where: () => QueryStub;
+  groupBy: () => QueryStub;
+};
+function mockDb(selectResults: Rows[]) {
   const deletes: unknown[] = [];
   const updates: Array<{ set: unknown }> = [];
   let selectCall = 0;
-  const db = {
-    select() {
-      const isFirst = selectCall++ === 0;
-      return {
-        from: () => ({
-          where: () => (isFirst ? Promise.resolve(seed.aliasRows) : { groupBy: () => Promise.resolve(seed.counts) }),
-        }),
-      };
-    },
+  const stub = (rows: Rows): QueryStub => {
+    const query = Promise.resolve(rows) as QueryStub;
+    query.leftJoin = () => query;
+    query.where = () => query;
+    query.groupBy = () => query;
+    return query;
+  };
+  const writer = {
     delete: () => ({
       where: (cond: unknown) => {
         deletes.push(cond);
@@ -34,70 +143,110 @@ function mockDb(seed: { aliasRows: Row[]; counts: Row[] }) {
       },
     }),
   };
+  const db = {
+    select: () => ({ from: () => stub(selectResults[selectCall++] ?? []) }),
+    // The apply path runs inside db.transaction(cb); hand the callback a tx that
+    // records deletes/updates the same way.
+    transaction: (cb: (tx: typeof writer) => Promise<unknown>) => cb(writer),
+    ...writer,
+  };
   return { db: db as unknown as Parameters<typeof reconcileDeletions>[0], deletes, updates };
 }
 
-const noop = () => {};
-
-void describe('reconcileDeletions', () => {
-  it('drops a pure alias and leaves the canonical intact', async () => {
-    const { db, deletes, updates } = mockDb({
-      aliasRows: [{ aliasUuid: 'dup', canonicalUuid: 'canon' }],
-      counts: [{ canonicalUuid: 'canon', count: 2 }],
-    });
-    const report = await reconcileDeletions(db, ['dup'], true, noop);
+describe('reconcileDeletions', () => {
+  it('reports only when applyDeletions is false', async () => {
+    const { db, deletes, updates } = mockDb([
+      [{ aliasUuid: 'dup', canonicalUuid: 'canon', source: 'kilter', canonicalUserId: null, canonicalIsListed: true }],
+      [{ canonicalUuid: 'canon', count: 2 }],
+    ]);
+    const report = await reconcileDeletions(db, ['dup'], false, noop);
     expect(report.aliasDeletes).toBe(1);
+    expect(report.applied).toBe(false);
+    expect(report.remaining).toBe(1);
+    expect(deletes).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+  });
+
+  it('applies a pure alias drop and a lone soft-delete', async () => {
+    const { db, deletes, updates } = mockDb([
+      [
+        { aliasUuid: 'dup', canonicalUuid: 'canon', source: 'kilter', canonicalUserId: null, canonicalIsListed: true },
+        { aliasUuid: 'solo', canonicalUuid: 'solo', source: 'kilter', canonicalUserId: null, canonicalIsListed: true },
+      ],
+      [
+        { canonicalUuid: 'canon', count: 2 },
+        { canonicalUuid: 'solo', count: 1 },
+      ],
+      [{ count: 1000 }],
+    ]);
+    const report = await reconcileDeletions(db, ['dup', 'solo'], true, noop);
+    expect(report.aliasDeletes).toBe(1);
+    expect(report.softDeletes).toBe(1);
+    expect(report.applied).toBe(true);
+    expect(report.appliedThisRun).toBe(2);
+    expect(deletes).toHaveLength(1);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].set).toEqual({ isListed: false });
+  });
+
+  it('never soft-deletes a user-authored climb', async () => {
+    const { db, deletes, updates } = mockDb([
+      [
+        {
+          aliasUuid: 'mine',
+          canonicalUuid: 'mine',
+          source: 'kilter',
+          canonicalUserId: 'user-1',
+          canonicalIsListed: true,
+        },
+      ],
+      [{ canonicalUuid: 'mine', count: 1 }],
+    ]);
+    const report = await reconcileDeletions(db, ['mine'], true, noop);
+    expect(report.protectedUserAuthored).toBe(1);
     expect(report.softDeletes).toBe(0);
+    expect(deletes).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+  });
+
+  it('refuses an anomalous backlog and applies nothing', async () => {
+    const { db, deletes, updates } = mockDb([
+      [{ aliasUuid: 'solo', canonicalUuid: 'solo', source: 'kilter', canonicalUserId: null, canonicalIsListed: true }],
+      [{ canonicalUuid: 'solo', count: 1 }],
+      [{ count: 1 }], // 1 candidate vs 1 live climb → over the 25% guard.
+    ]);
+    const report = await reconcileDeletions(db, ['solo'], true, noop);
+    expect(report.refused).toBe(true);
+    expect(report.applied).toBe(false);
+    expect(report.remaining).toBe(1);
+    expect(deletes).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+  });
+
+  it('does not refuse a pure alias-drop backlog (only soft-deletes gate the guard)', async () => {
+    // Two pure kilter aliases → alias drops, zero soft-deletes. No live-count
+    // query is issued (softDeletes === 0 short-circuits the guard).
+    const { db, deletes, updates } = mockDb([
+      [
+        { aliasUuid: 'd1', canonicalUuid: 'c1', source: 'kilter', canonicalUserId: null, canonicalIsListed: true },
+        { aliasUuid: 'd2', canonicalUuid: 'c2', source: 'kilter', canonicalUserId: null, canonicalIsListed: true },
+      ],
+      [
+        { canonicalUuid: 'c1', count: 2 },
+        { canonicalUuid: 'c2', count: 2 },
+      ],
+    ]);
+    const report = await reconcileDeletions(db, ['d1', 'd2'], true, noop);
+    expect(report.softDeletes).toBe(0);
+    expect(report.aliasDeletes).toBe(2);
+    expect(report.refused).toBe(false);
     expect(report.applied).toBe(true);
     expect(deletes).toHaveLength(1);
     expect(updates).toHaveLength(0);
   });
 
-  it('soft-deletes a lone self-canonical (is_listed=false), never hard-deletes', async () => {
-    const { db, deletes, updates } = mockDb({
-      aliasRows: [{ aliasUuid: 'solo', canonicalUuid: 'solo' }],
-      counts: [{ canonicalUuid: 'solo', count: 1 }],
-    });
-    const report = await reconcileDeletions(db, ['solo'], true, noop);
-    expect(report.softDeletes).toBe(1);
-    expect(report.aliasDeletes).toBe(0);
-    expect(updates).toHaveLength(1);
-    expect(updates[0].set).toEqual({ isListed: false });
-    expect(deletes).toHaveLength(0); // canonical climb is never deleted
-  });
-
-  it('skips a canonical that still backs live aliases (no orphaning)', async () => {
-    const { db, deletes, updates } = mockDb({
-      aliasRows: [{ aliasUuid: 'canon', canonicalUuid: 'canon' }],
-      counts: [{ canonicalUuid: 'canon', count: 3 }],
-    });
-    const report = await reconcileDeletions(db, ['canon'], true, noop);
-    expect(report.skippedCanonicalWithAliases).toBe(1);
-    expect(deletes).toHaveLength(0);
-    expect(updates).toHaveLength(0);
-  });
-
-  it('reports only when applyDeletions is false', async () => {
-    const { db, deletes, updates } = mockDb({
-      aliasRows: [{ aliasUuid: 'dup', canonicalUuid: 'canon' }],
-      counts: [{ canonicalUuid: 'canon', count: 2 }],
-    });
-    const report = await reconcileDeletions(db, ['dup'], false, noop);
-    expect(report.aliasDeletes).toBe(1);
-    expect(report.applied).toBe(false);
-    expect(deletes).toHaveLength(0);
-    expect(updates).toHaveLength(0);
-  });
-
-  it('counts unknown uuids not present in board_*', async () => {
-    const { db } = mockDb({ aliasRows: [], counts: [] });
-    const report = await reconcileDeletions(db, ['ghost-1', 'ghost-2'], true, noop);
-    expect(report.unknown).toBe(2);
-    expect(report.aliasDeletes).toBe(0);
-  });
-
   it('is a no-op on an empty delete set', async () => {
-    const { db, deletes } = mockDb({ aliasRows: [], counts: [] });
+    const { db, deletes } = mockDb([]);
     const report = await reconcileDeletions(db, [], true, noop);
     expect(report.reported).toBe(0);
     expect(deletes).toHaveLength(0);

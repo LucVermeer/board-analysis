@@ -11,6 +11,15 @@ export type SyncRunnerConfig = {
    * later cycles skip until the cooldown elapses. Default: 1 hour.
    */
   sharedSyncCooldownMs?: number;
+  /**
+   * Apply Kilter's server-side deletions during the daemon's catalog piggyback.
+   * Default true — reconciliation is batched, reversible (soft-delete), and only
+   * ever touches Kilter-synced climbs (never user-authored). Set false to keep
+   * the daemon report-only.
+   */
+  applyCatalogDeletions?: boolean;
+  /** Max deletion changes applied per catalog run; the backlog drains over cycles. */
+  deleteBatchLimit?: number;
   onLog?: (message: string) => void;
   onError?: (error: Error, context: { userId?: string; board?: string }) => void;
 };
