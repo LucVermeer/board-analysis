@@ -35,8 +35,9 @@
       "save": "Guardar cambios",
       "updateError": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
       "notFound": "No encontramos ese plafón",
+      "noAccess": "No tienes permiso para editar este plafón",
       "back": "Volver",
-      "configLockedHint": "Este plafón tiene ascensos registrados, así que su layout, tamaño y sets están bloqueados."
+      "configLockedHint": "No tienes permiso para cambiar el layout, el tamaño ni los sets de este plafón."
     },
     "gymEdit": {
       "screenTitle": "Editar gimnasio",
@@ -44,6 +45,7 @@
       "updateError": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
       "updateSuccess": "Gimnasio actualizado",
       "notFound": "No encontramos ese gimnasio",
+      "noAccess": "No tienes permiso para editar este gimnasio",
       "back": "Volver",
       "name": "Nombre",
       "namePlaceholder": "Nombre del gimnasio",

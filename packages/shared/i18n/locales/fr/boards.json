@@ -35,8 +35,9 @@
       "save": "Enregistrer",
       "updateError": "Impossible d'enregistrer les modifications. Réessaie.",
       "notFound": "Board introuvable",
+      "noAccess": "Vous n'avez pas la permission de modifier ce board",
       "back": "Retour",
-      "configLockedHint": "Ce board a des voies enregistrées : son layout, sa taille et ses sets sont verrouillés."
+      "configLockedHint": "Vous n'avez pas la permission de modifier le layout, la taille ou les sets de ce board."
     },
     "gymEdit": {
       "screenTitle": "Modifier la salle",
@@ -44,6 +45,7 @@
       "updateError": "Impossible d'enregistrer les modifications. Réessaie.",
       "updateSuccess": "Salle mise à jour",
       "notFound": "Salle introuvable",
+      "noAccess": "Vous n'avez pas la permission de modifier cette salle",
       "back": "Retour",
       "name": "Nom",
       "namePlaceholder": "Nom de la salle",

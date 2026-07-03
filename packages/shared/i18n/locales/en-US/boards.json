@@ -35,8 +35,9 @@
       "save": "Save changes",
       "updateError": "Couldn't save your changes. Try again.",
       "notFound": "We couldn't find that board",
+      "noAccess": "You don't have permission to edit this board",
       "back": "Go back",
-      "configLockedHint": "This board has logged climbs, so its layout, size, and sets are locked."
+      "configLockedHint": "You don't have permission to change this board's layout, size, or hold sets."
     },
     "gymEdit": {
       "screenTitle": "Edit gym",
@@ -44,6 +45,7 @@
       "updateError": "Couldn't save your changes. Try again.",
       "updateSuccess": "Gym updated",
       "notFound": "We couldn't find that gym",
+      "noAccess": "You don't have permission to edit this gym",
       "back": "Go back",
       "name": "Name",
       "namePlaceholder": "Gym name",

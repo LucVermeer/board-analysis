@@ -64,6 +64,27 @@ export default function EditGym() {
     );
   }
 
+  // The edit affordance is only shown when the viewer can edit, but a direct
+  // deep-link can still land here. The server rejects the save regardless, so
+  // show a clear "no access" state instead of a form that can only fail.
+  if (!gym.canEdit) {
+    return (
+      <View style={[styles.centered, { backgroundColor: systemColors.background }]}>
+        {header}
+        <Icon name="lock" size={40} color={iosSystemColors.systemGray} />
+        <Text variant="headline" style={styles.stateTitle}>
+          {t('mobile.gymEdit.noAccess')}
+        </Text>
+        <Button
+          title={t('mobile.gymEdit.back')}
+          variant="outlined"
+          onPress={() => router.back()}
+          style={styles.stateButton}
+        />
+      </View>
+    );
+  }
+
   // Remount the form per gym so its once-only field seeds come from a fully-loaded
   // gym (mirrors the board-edit screen).
   return (
