@@ -75,6 +75,11 @@ export const SHARED_EVENTS = {
   TickButtonClicked: 'Tick Button Clicked',
   QuickTickSaved: 'Quick Tick Saved',
   QuickTickFailed: 'Quick Tick Failed',
+  // Mobile-only for now: fired when the tick sheet is closed (X button,
+  // pan-down, backdrop tap) without a save completing. Props include a
+  // field-completeness snapshot so abandonment can be measured directly
+  // instead of inferred from TickButtonClicked - QuickTickSaved - QuickTickFailed.
+  QuickTickDismissed: 'Quick Tick Dismissed',
   TickLogged: 'Tick Logged',
   // Bluetooth / hardware
   BluetoothConnectionSuccess: 'Bluetooth Connection Success',

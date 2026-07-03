@@ -101,6 +101,13 @@ export const InlineListTickBar: React.FC<InlineListTickBarProps> = ({
     return grades.find((g) => g.difficulty_name === source)?.difficulty_id;
   }, [tickTarget, grades]);
 
+  // Inverse of consensusGradeId: resolve the picked numeric difficulty id
+  // back to its human-readable grade name (e.g. "V5") for analytics.
+  const resolvedGradeName = useMemo(
+    () => grades.find((g) => g.difficulty_id === difficulty)?.difficulty_name,
+    [grades, difficulty],
+  );
+
   const handleStarSelect = useCallback((value: number | null) => {
     setQuality(value);
     setExpandedControl(null);
@@ -122,6 +129,7 @@ export const InlineListTickBar: React.FC<InlineListTickBarProps> = ({
     difficulty,
     attemptCount,
     comment: '',
+    gradeName: resolvedGradeName,
     onSave: onClose,
     onError,
   });

@@ -5,16 +5,18 @@
 //
 // Uses `BottomSheetModal` (not the regular `BottomSheet`) so it presents as
 // a native modal above the play drawer's own modal.
-import { useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheetModal } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useManagedSheet } from '../providers/sheet-presentation-provider';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
+import { track } from '../lib/analytics';
 import { Icon } from './Icon';
-import { QuickTickBar } from './play-drawer/QuickTickBar';
+import { QuickTickBar, type QuickTickDismissSnapshot } from './play-drawer/QuickTickBar';
 
 type LogAscentSheetProps = {
   visible: boolean;
@@ -57,10 +59,39 @@ export function LogAscentSheet({
   const { systemColors } = useTheme();
   const { t } = useTranslation('session');
 
+  // Tracks whether the open tick got saved, so handleClose below can tell a
+  // completed save (QuickTickSaved already covers it) apart from a genuine
+  // abandon via the X-button / pan-down / backdrop tap (none of which call
+  // back into QuickTickBar, so it can't distinguish these itself).
+  const savedRef = useRef(false);
+  const fieldSnapshotRef = useRef<QuickTickDismissSnapshot>({
+    hasQuality: false,
+    hasDifficulty: false,
+    hasComment: false,
+    attemptCountChanged: false,
+  });
+
+  // A fresh present (new climb, or reopening on the same one) must not
+  // inherit a stale `true` left over from a previous save-then-dismiss cycle.
+  useEffect(() => {
+    if (visible) savedRef.current = false;
+  }, [visible]);
+
+  const handleClose = useCallback(() => {
+    if (!savedRef.current) {
+      track(SHARED_EVENTS.QuickTickDismissed, {
+        climbUuid,
+        layoutId: layoutId ?? null,
+        ...fieldSnapshotRef.current,
+      });
+    }
+    onClose();
+  }, [climbUuid, layoutId, onClose]);
+
   // Present/dismiss go through the coordinator (serialized, no overlapping
   // transitions); `onClose` fires on a user pan-down, `onFullyDismissed` after
   // the animation settles.
-  const managed = useManagedSheet({ open: visible, sheetRef, onClose, onFullyDismissed });
+  const managed = useManagedSheet({ open: visible, sheetRef, onClose: handleClose, onFullyDismissed });
 
   // Default to 60% so the climb image stays visible above the sheet (the
   // UX review flagged full-cover + carousel-disabled as the wrong
@@ -82,7 +113,7 @@ export function LogAscentSheet({
       <View style={styles.content}>
         <View style={styles.closeButtonRow}>
           <Pressable
-            onPress={onClose}
+            onPress={handleClose}
             accessibilityRole="button"
             accessibilityLabel={t('playView.tickBar.closeAria')}
             hitSlop={8}
@@ -106,7 +137,9 @@ export function LogAscentSheet({
           setIds={setIds}
           sessionId={sessionId}
           consensusGradeName={consensusGradeName}
-          onDismiss={onClose}
+          onDismiss={handleClose}
+          savedRef={savedRef}
+          fieldSnapshotRef={fieldSnapshotRef}
         />
       </View>
     </BottomSheetModal>

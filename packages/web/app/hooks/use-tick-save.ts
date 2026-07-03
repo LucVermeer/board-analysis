@@ -27,6 +27,9 @@ export type UseTickSaveOptions = {
   comment: string;
   /** Explicit ascent type. When provided, overrides the inferred status logic. */
   ascentType?: TickStatus;
+  /** Human-readable grade label (e.g. "V5") resolved by the caller from its own
+   * loaded grades list, for the Quick Tick Saved analytics event. */
+  gradeName?: string;
   onSave: () => void;
   onError?: () => void;
 };
@@ -70,6 +73,7 @@ export function useTickSave(options: UseTickSaveOptions): {
     attemptCount,
     comment,
     ascentType: explicitAscentType,
+    gradeName,
     onSave,
     onError,
   } = options;
@@ -165,6 +169,7 @@ export function useTickSave(options: UseTickSaveOptions): {
             hasQuality: quality !== null,
             hasDifficulty: difficulty !== undefined,
             difficulty: difficulty ?? null,
+            grade: gradeName ?? null,
             hasComment: comment.length > 0,
           });
           void clearTickDraft(climb.uuid, Number(targetAngle));
@@ -185,6 +190,7 @@ export function useTickSave(options: UseTickSaveOptions): {
       difficulty,
       comment,
       explicitAscentType,
+      gradeName,
       saveTick,
       onSave,
       attemptCount,
