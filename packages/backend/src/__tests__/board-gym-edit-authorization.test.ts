@@ -67,12 +67,23 @@ const insertBoard = async (opts: {
   gymId?: number | null;
   boardType?: string;
   name?: string;
+  isPublic?: boolean;
 }): Promise<number> => {
-  const { uuid, ownerId, layoutId, sizeId, setIds, gymId = null, boardType = 'kilter', name = 'Board' } = opts;
+  const {
+    uuid,
+    ownerId,
+    layoutId,
+    sizeId,
+    setIds,
+    gymId = null,
+    boardType = 'kilter',
+    name = 'Board',
+    isPublic = true,
+  } = opts;
   const result = await db.execute(sql`
     INSERT INTO user_boards
       (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, gym_id, is_public, created_at, updated_at)
-    VALUES (${uuid}, ${uuid}, ${ownerId}, ${boardType}, ${layoutId}, ${sizeId}, ${setIds}, ${name}, ${gymId}, true, now(), now())
+    VALUES (${uuid}, ${uuid}, ${ownerId}, ${boardType}, ${layoutId}, ${sizeId}, ${setIds}, ${name}, ${gymId}, ${isPublic}, now(), now())
     RETURNING id
   `);
   return Number(Array.from(result as Iterable<{ id: number }>)[0].id);
@@ -541,11 +552,16 @@ describe('gym admin member can edit a PRIVATE board linked to their gym', () => 
 
   beforeEach(async () => {
     privateGymBoardUuid = uuidv4();
-    await db.execute(sql`
-      INSERT INTO user_boards
-        (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, gym_id, is_public, created_at, updated_at)
-      VALUES (${privateGymBoardUuid}, ${privateGymBoardUuid}, ${SYS_OWNER}, 'kilter', 7, 7, '7,8', 'Private gym wall', ${kilterGymId}, false, now(), now())
-    `);
+    await insertBoard({
+      uuid: privateGymBoardUuid,
+      ownerId: SYS_OWNER,
+      layoutId: 7,
+      sizeId: 7,
+      setIds: '7,8',
+      gymId: kilterGymId,
+      name: 'Private gym wall',
+      isPublic: false,
+    });
   });
 
   it('lets the gym admin member update the private linked board', async () => {
