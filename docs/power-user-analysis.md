@@ -16,12 +16,12 @@ without naming anyone.
 ## TL;DR
 
 - **The elite signal is almost entirely these 39 people.** They account for **99%** of every
-  V10+ send in the database (7,474 of 7,552). Only 79 accounts have logged *any* V10+ send. If we
-  want "what do strong climbers think," this cohort essentially *is* the answer.
+  V10+ send in the database (7,474 of 7,552). Only 79 accounts have logged _any_ V10+ send. If we
+  want "what do strong climbers think," this cohort essentially _is_ the answer.
 - **They are import-and-sync users, not in-app socialites.** 99% of their 47,579 logged climbs
   arrived by syncing an existing Aurora (Kilter/Tension) logbook. They rate quality and suggest a
   grade on ~97% of climbs, but almost never use Boardsesh's own social features (2 of 39 follow
-  anyone, 1 has commented, 0 have attached a beta video). Most *do* build playlists (31 of 39).
+  anyone, 1 has commented, 0 have attached a beta video). Most _do_ build playlists (31 of 39).
 - **Their grade opinions are trustworthy.** Across 46,083 graded sends, their suggested grade sits
   essentially on top of the displayed grade (mean bias −0.04 of a grade, SD 0.64); 87% land within
   one grade. These are well-calibrated graders, not chest-beaters or downgraders.
@@ -38,16 +38,16 @@ without naming anyone.
 
 ## 1. Who the cohort is (aggregate only)
 
-| Measure | Value |
-| --- | --- |
-| Climbers in cohort | 39 |
-| Total logged climbs (ticks) | 47,579 |
-| Sends (send + flash) | 46,520 |
-| Logged attempts (fails) | 1,059 |
-| Distinct climbs touched | 15,357 |
-| Board mix | Kilter 43,142 · Tension 4,437 |
-| Date range of logs | 2019 → 2026 |
-| Share of **all** V10+ sends in the DB | **99%** (7,474 / 7,552) |
+| Measure                               | Value                         |
+| ------------------------------------- | ----------------------------- |
+| Climbers in cohort                    | 39                            |
+| Total logged climbs (ticks)           | 47,579                        |
+| Sends (send + flash)                  | 46,520                        |
+| Logged attempts (fails)               | 1,059                         |
+| Distinct climbs touched               | 15,357                        |
+| Board mix                             | Kilter 43,142 · Tension 4,437 |
+| Date range of logs                    | 2019 → 2026                   |
+| Share of **all** V10+ sends in the DB | **99%** (7,474 / 7,552)       |
 
 For context, the whole database holds 2,436 users, 1,186 of whom have logged a climb, for
 356,883 ticks total. So this cohort is 3% of active loggers but the near-entirety of the
@@ -66,20 +66,20 @@ a current, engaged group, not a historical import dump.
 not from logging inside Boardsesh. Only ~466 ticks across all 39 people were created natively in
 the app. Layer on the feature-usage counts:
 
-| Boardsesh-native behaviour | Cohort members doing it (of 39) |
-| --- | --- |
-| Own at least one playlist | 31 |
-| Have favourited a climb | 19 |
-| Logged a climb in a party-mode session | 11 |
-| Follow another user | 2 |
-| Are followed by someone | 3 |
-| Wrote a climb comment | 1 |
-| Follow a setter | 0 |
-| Attached a beta video | 0 |
+| Boardsesh-native behaviour             | Cohort members doing it (of 39) |
+| -------------------------------------- | ------------------------------- |
+| Own at least one playlist              | 31                              |
+| Have favourited a climb                | 19                              |
+| Logged a climb in a party-mode session | 11                              |
+| Follow another user                    | 2                               |
+| Are followed by someone                | 3                               |
+| Wrote a climb comment                  | 1                               |
+| Follow a setter                        | 0                               |
+| Attached a beta video                  | 0                               |
 
 The read: **they treat Boardsesh as a better logbook viewer over their Aurora history, plus
 playlists.** The social graph, comments, setter-follows, and beta-sharing are essentially unused
-by this group. That's an engagement opportunity, but it also means their *contribution* to the
+by this group. That's an engagement opportunity, but it also means their _contribution_ to the
 community today is implicit — it lives in their synced ratings, not in anything they posted.
 
 ### They rate almost everything, and rate it well
@@ -91,13 +91,13 @@ community today is implicit — it lives in their synced ratings, not in anythin
 The grade opinions are the standout. Comparing each graded send's suggested grade to the climb's
 displayed difficulty (46,083 matched sends):
 
-| | |
-| --- | --- |
+|                                       |                                         |
+| ------------------------------------- | --------------------------------------- |
 | Mean difference (opinion − displayed) | **−0.04 grades** (essentially unbiased) |
-| Std. dev. of the difference | 0.64 grades |
-| Roughly agree (within 1 grade) | 87% (39,937) |
-| Felt clearly harder (≥1 grade) | 5% (2,408) |
-| Felt clearly softer (≥1 grade) | 8% (3,738) |
+| Std. dev. of the difference           | 0.64 grades                             |
+| Roughly agree (within 1 grade)        | 87% (39,937)                            |
+| Felt clearly harder (≥1 grade)        | 5% (2,408)                              |
+| Felt clearly softer (≥1 grade)        | 8% (3,738)                              |
 
 Strong climbers here are not systematically sandbagging or spraying — their per-ascent grades
 track the consensus grade tightly. That's exactly the property you want if you're going to lean on
@@ -112,11 +112,11 @@ their opinions to sharpen grades for everyone else.
 `boardsesh_ticks.quality` is documented as a 1–5 star rating, but the data is a mix of 1–3 and
 1–5 depending on how the tick entered the system:
 
-| Source of tick | Board | Quality scale in practice |
-| --- | --- | --- |
-| Live Aurora API sync | Kilter/Tension | **Correct** — 1–5 (converted 1→1, 2→3, 3→5) |
-| Native (logged in Boardsesh) | any | **Correct** — 1–5 |
-| **JSON logbook import** | **Kilter** | **Broken — raw 1–3** |
+| Source of tick               | Board          | Quality scale in practice                   |
+| ---------------------------- | -------------- | ------------------------------------------- |
+| Live Aurora API sync         | Kilter/Tension | **Correct** — 1–5 (converted 1→1, 2→3, 3→5) |
+| Native (logged in Boardsesh) | any            | **Correct** — 1–5                           |
+| **JSON logbook import**      | **Kilter**     | **Broken — raw 1–3**                        |
 
 The JSON-import path writes the export's `stars` field straight through
 (`packages/aurora-sync/src/sync/json-import.ts:962`, `quality: ascent.stars`) on the assumption —
@@ -145,9 +145,9 @@ this is the "our migration didn't fix everyone" gap.
 — is stored as `3` and would render as **3 out of 5** if any feature surfaced per-tick quality
 naively. That is worse than showing nothing.
 
-Note the aggregate column `board_climb_stats.quality_average` is *separately* normalised (via
+Note the aggregate column `board_climb_stats.quality_average` is _separately_ normalised (via
 `normalizeQualityTo5`, guarded by `quality_normalized`) and is fine. The bug is specific to the
-per-tick `boardsesh_ticks.quality` column — which is the one you'd read to show *who* rated *what*.
+per-tick `boardsesh_ticks.quality` column — which is the one you'd read to show _who_ rated _what_.
 
 ### What a fix looks like (tracked in [#3390](https://github.com/boardsesh/boardsesh/issues/3390))
 
@@ -184,8 +184,8 @@ Climbs the cohort rated top-quality, scale-aware:
 - **4,725** climbs have **≥2** cohort members agreeing it's top-quality.
 
 That 4,725-climb set is a ready-made "climbers' choice" catalog spanning all grades — a strong
-filter for a beginner staring at thousands of climbs. Framed for the climber: *"boards' best,
-picked by people who've done them."*
+filter for a beginner staring at thousands of climbs. Framed for the climber: _"boards' best,
+picked by people who've done them."_
 
 ### B. Grade confidence / mis-grade flags in the grades people actually climb
 
@@ -209,9 +209,9 @@ data already present.
 
 ### Cross-cutting caveat
 
-The cohort's ratings are *already* baked into the global `board_climb_stats` averages Aurora
+The cohort's ratings are _already_ baked into the global `board_climb_stats` averages Aurora
 computes. So the value here is **not** "more coverage" — it's **attribution and weighting**: the
-ability to say *"strong climbers specifically rate/grade this"* rather than blending them into an
+ability to say _"strong climbers specifically rate/grade this"_ rather than blending them into an
 all-users average where a beginner's and a pro's star carry equal weight. That per-user
 granularity is the thing Boardsesh has that the Aurora aggregate throws away — and it's the thing
 the quality-scale bug currently makes unusable.
