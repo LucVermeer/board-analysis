@@ -241,9 +241,8 @@ the quality-scale bug currently makes unusable.
   V10+ means that number ≥ 10. Some grades are font-only (e.g. `6A`) and yield no V-number — those
   are excluded from V-band stats.
 - **Send:** `boardsesh_ticks.status IN ('send','flash')`. **Attempt:** `status = 'attempt'`.
-- **Cohort definition (name-free):** the 39 user accounts with the most V10+ sends. One person in
-  the group holds two accounts; their ticks are aggregated by person. All 39 emails resolved to
-  real users, so this matches the source list exactly.
+- **Cohort definition (name-free):** the climbers with the most V10+ sends. Where a person holds
+  more than one account, ticks are aggregated by person so the cohort counts people, not logins.
 - **Data-quality flags found while measuring:** two ticks graded "V16" surfaced as obvious
   mis-grades (isolated outliers, consistent with the source analysis's own `V16(!)` notes); a
   small number of ticks carry `quality = 0` (Aurora "unrated" that should be null).
