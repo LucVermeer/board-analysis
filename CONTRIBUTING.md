@@ -92,7 +92,7 @@ The notes are served only by the dev server, and `.boardsesh/` is git-ignored.
 
 ## Contributing to the mobile app (React Native)
 
-The mobile app is `packages/mobile/`, built on Expo SDK 56, React Native 0.85, and Expo Router. The app runs as an Expo dev client: a native shell that loads its JavaScript from a Metro bundler at runtime, so most changes ship as JavaScript without a new native build. The deep-link scheme is `com.boardsesh.app://`.
+The mobile app is `packages/mobile/`, built on Expo SDK 57, React Native 0.86, and Expo Router. The app runs as an Expo dev client: a native shell that loads its JavaScript from a Metro bundler at runtime, so most changes ship as JavaScript without a new native build. The deep-link scheme is `com.boardsesh.app://`.
 
 Start the bundler with `vp run dev:mobile`. Pair it with a device or build using one of the two paths below, depending on how big your change is.
 
