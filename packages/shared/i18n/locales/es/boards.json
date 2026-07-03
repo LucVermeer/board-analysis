@@ -58,6 +58,7 @@
       "latitude": "Latitud",
       "longitude": "Longitud",
       "coordinatePlaceholder": "Grados decimales",
+      "invalidCoordinate": "Introduce una coordenada válida",
       "public": "Gimnasio público",
       "publicHint": "Muéstralo en el mapa para que los escaladores lo encuentren"
     },

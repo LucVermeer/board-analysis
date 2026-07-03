@@ -412,6 +412,7 @@ export function useUpdateBoard() {
  * for one of its board types — the server enforces the access check). Invalidate
  * the single-gym cache plus the nearby-gym search results so the wall finder's
  * list/pins reflect the rename or visibility change without a manual reload.
+ * Also refresh the board lists, whose rows render the gym's name (`gymName`).
  */
 export function useUpdateGym() {
   const queryClient = useQueryClient();
@@ -423,6 +424,8 @@ export function useUpdateGym() {
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: ['gym', updated.uuid] });
       void queryClient.invalidateQueries({ queryKey: ['nearbyGyms'] });
+      void queryClient.invalidateQueries({ queryKey: ['nearbyBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
     },
   });
 }

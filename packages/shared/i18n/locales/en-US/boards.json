@@ -58,6 +58,7 @@
       "latitude": "Latitude",
       "longitude": "Longitude",
       "coordinatePlaceholder": "Decimal degrees",
+      "invalidCoordinate": "Enter a valid coordinate",
       "public": "Public gym",
       "publicHint": "Show it on the map so climbers can find it"
     },

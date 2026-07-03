@@ -58,6 +58,7 @@
       "latitude": "Latitude",
       "longitude": "Longitude",
       "coordinatePlaceholder": "Degrés décimaux",
+      "invalidCoordinate": "Saisissez une coordonnée valide",
       "public": "Salle publique",
       "publicHint": "Affiche-la sur la carte pour que les grimpeurs la trouvent"
     },

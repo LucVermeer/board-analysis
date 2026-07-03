@@ -282,7 +282,7 @@ describe('updateBoard duplicate-config uniqueness keys off the board owner', () 
         { input: { boardUuid: kilterBoardUuid, layoutId: 2, sizeId: 11, setIds: '3,4' } },
         authCtx(GLOBAL_ADMIN),
       ),
-    ).rejects.toThrow(/already have a board with this configuration/);
+    ).rejects.toThrow(/already has a board with this configuration/);
   });
 
   it('does NOT block when only the editing admin owns a board with the target config', async () => {
@@ -503,5 +503,155 @@ describe('gym membership management excludes community moderators (escalation gu
       ),
     ).resolves.toBe(true);
     expect(await gymMemberRole(PLAIN_USER)).toBeNull();
+  });
+});
+
+describe('community roles reach public/catalog boards only, not private ones', () => {
+  let privateBoardUuid: string;
+
+  beforeEach(async () => {
+    // A stranger's PRIVATE kilter board (owner PLAIN_USER, no linked gym).
+    privateBoardUuid = uuidv4();
+    await db.execute(sql`
+      INSERT INTO user_boards
+        (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, is_public, created_at, updated_at)
+      VALUES (${privateBoardUuid}, ${privateBoardUuid}, ${PLAIN_USER}, 'kilter', 5, 5, '5,6', 'Private wall', false, now(), now())
+    `);
+  });
+
+  it("rejects a community leader/admin editing a stranger's private board", async () => {
+    await expect(
+      socialBoardMutations.updateBoard(
+        null,
+        { input: { boardUuid: privateBoardUuid, name: 'nope' } },
+        authCtx(KILTER_LEADER),
+      ),
+    ).rejects.toThrow(/Not authorized to update this board/);
+    await expect(
+      socialBoardMutations.updateBoard(
+        null,
+        { input: { boardUuid: privateBoardUuid, name: 'nope' } },
+        authCtx(GLOBAL_ADMIN),
+      ),
+    ).rejects.toThrow(/Not authorized to update this board/);
+  });
+
+  it('reports canEdit=false for a community role on a private board', async () => {
+    const board = await socialBoardQueries.board(null, { boardUuid: privateBoardUuid }, authCtx(KILTER_LEADER));
+    expect(board?.canEdit).toBe(false);
+  });
+
+  it("still lets the private board's owner edit it", async () => {
+    const result = await socialBoardMutations.updateBoard(
+      null,
+      { input: { boardUuid: privateBoardUuid, name: 'Owner rename' } },
+      authCtx(PLAIN_USER),
+    );
+    expect(result.name).toBe('Owner rename');
+  });
+});
+
+describe('updateBoard on soft-deleted boards', () => {
+  const boardDeletedAt = async (uuid: string): Promise<Date | null> => {
+    const result = await db.execute(sql`SELECT deleted_at FROM user_boards WHERE uuid = ${uuid}`);
+    const row = Array.from(result as Iterable<{ deleted_at: Date | null }>)[0];
+    return row?.deleted_at ?? null;
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql`UPDATE user_boards SET deleted_at = now() WHERE uuid = ${kilterBoardUuid}`);
+  });
+
+  it('rejects moderators/gym admins resurrecting a board the owner removed', async () => {
+    for (const actor of [GLOBAL_ADMIN, KILTER_LEADER, GYM_ADMIN_MEMBER]) {
+      await expect(
+        socialBoardMutations.updateBoard(
+          null,
+          { input: { boardUuid: kilterBoardUuid, name: 'resurrect' } },
+          authCtx(actor),
+        ),
+      ).rejects.toThrow(/Board not found/);
+    }
+    expect(await boardDeletedAt(kilterBoardUuid)).not.toBeNull();
+  });
+
+  it('still lets the owner restore their board by editing it', async () => {
+    const result = await socialBoardMutations.updateBoard(
+      null,
+      { input: { boardUuid: kilterBoardUuid, name: 'Restored' } },
+      authCtx(SYS_OWNER),
+    );
+    expect(result.name).toBe('Restored');
+    expect(await boardDeletedAt(kilterBoardUuid)).toBeNull();
+  });
+});
+
+describe('system catalog boards are exempt from the owner-config uniqueness pre-check', () => {
+  // The DB's partial unique index excludes the zero-UUID system owner (many gyms
+  // legitimately share a config), so the resolver must skip its pre-check there —
+  // otherwise a moderator can't fix a catalog board to a config another catalog
+  // board already uses, which is the whole point of this feature.
+  const SYSTEM_OWNER = '00000000-0000-0000-0000-000000000000';
+  let sysBoardAUuid: string;
+
+  beforeEach(async () => {
+    await insertUser(SYSTEM_OWNER);
+    sysBoardAUuid = uuidv4();
+    const sysBoardBUuid = uuidv4();
+    await db.execute(sql`
+      INSERT INTO user_boards
+        (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, is_public, created_at, updated_at)
+      VALUES
+        (${sysBoardAUuid}, ${sysBoardAUuid}, ${SYSTEM_OWNER}, 'kilter', 1, 10, '1,2', 'Catalog A', true, now(), now()),
+        (${sysBoardBUuid}, ${sysBoardBUuid}, ${SYSTEM_OWNER}, 'kilter', 2, 11, '3,4', 'Catalog B', true, now(), now())
+    `);
+  });
+
+  it('lets a moderator change a system board to a config another system board already has', async () => {
+    const result = await socialBoardMutations.updateBoard(
+      null,
+      { input: { boardUuid: sysBoardAUuid, layoutId: 2, sizeId: 11, setIds: '3,4' } },
+      authCtx(GLOBAL_ADMIN),
+    );
+    expect(result.layoutId).toBe(2);
+    expect(result.sizeId).toBe(11);
+    expect(result.setIds).toBe('3,4');
+  });
+});
+
+describe('community moderators cannot delete boards/gyms or link boards', () => {
+  const boardIsDeleted = async (uuid: string): Promise<boolean> => {
+    const result = await db.execute(sql`SELECT deleted_at FROM user_boards WHERE uuid = ${uuid}`);
+    const row = Array.from(result as Iterable<{ deleted_at: Date | null }>)[0];
+    return row?.deleted_at != null;
+  };
+
+  it('rejects a moderator deleting a board they do not own (delete stays owner-only)', async () => {
+    await expect(
+      socialBoardMutations.deleteBoard(null, { boardUuid: kilterBoardUuid }, authCtx(GLOBAL_ADMIN)),
+    ).rejects.toThrow();
+    expect(await boardIsDeleted(kilterBoardUuid)).toBe(false);
+  });
+
+  it('rejects a moderator deleting a gym they do not own', async () => {
+    await expect(
+      socialGymMutations.deleteGym(null, { gymUuid: kilterGymUuid }, authCtx(GLOBAL_ADMIN)),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a moderator linking their own board into a gym they do not own/admin', async () => {
+    const adminBoardUuid = uuidv4();
+    await db.execute(sql`
+      INSERT INTO user_boards
+        (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, is_public, created_at, updated_at)
+      VALUES (${adminBoardUuid}, ${adminBoardUuid}, ${GLOBAL_ADMIN}, 'kilter', 3, 3, '7,8', 'Admin board', true, now(), now())
+    `);
+    await expect(
+      socialGymMutations.linkBoardToGym(
+        null,
+        { input: { boardUuid: adminBoardUuid, gymUuid: kilterGymUuid } },
+        authCtx(GLOBAL_ADMIN),
+      ),
+    ).rejects.toThrow(/Not authorized: must be gym owner or admin/);
   });
 });

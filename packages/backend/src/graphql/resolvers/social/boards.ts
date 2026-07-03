@@ -22,6 +22,7 @@ import {
 } from '../../../validation/schemas';
 import { generateUniqueGymSlug } from './gyms';
 import { getUserCommunityRoles, hasAdminOrLeader, rolesGrantAdminOrLeader } from './roles';
+import { SYSTEM_BOARD_OWNER_ID } from '../board-presence/shared';
 import { logger } from '../../../utils/logger';
 import { redisClientManager } from '../../../redis/client';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
@@ -142,9 +143,19 @@ async function viewerCanAdminGym(gymId: number, userId: string): Promise<boolean
 }
 
 /**
+ * A community admin/leader's edit reach covers public listings and the seeded
+ * system catalog — the boards this moderation exists to fix. A stranger's
+ * PRIVATE board stays owner-only (and gym-admin-only), so a role can't rewrite
+ * someone's private location/serial or flip their privacy flags.
+ */
+function boardIsRoleEditable(board: { isPublic: boolean; ownerId: string }): boolean {
+  return board.isPublic || board.ownerId === SYSTEM_BOARD_OWNER_ID;
+}
+
+/**
  * Authorize editing a board: the caller must be the board owner, a community
- * admin/leader for the board's type, or the owner/admin of the board's linked
- * gym. Throws when none apply.
+ * admin/leader for the board's type (public/catalog boards only), or the
+ * owner/admin of the board's linked gym. Throws when none apply.
  */
 async function requireBoardEditAccess(
   ctx: ConnectionContext,
@@ -153,7 +164,7 @@ async function requireBoardEditAccess(
   const userId = ctx.userId!;
 
   if (board.ownerId === userId) return;
-  if (await hasAdminOrLeader(userId, board.boardType)) return;
+  if (boardIsRoleEditable(board) && (await hasAdminOrLeader(userId, board.boardType))) return;
   if (board.gymId != null && (await viewerCanAdminGym(board.gymId, userId))) return;
 
   throw new Error('Not authorized to update this board');
@@ -254,7 +265,9 @@ async function enrichBoard(
   const commentStats = commentStatsResult[0];
   const isFollowedByMe = Number(followCheckResult[0]?.count || 0) > 0;
   const gymInfo = (gymInfoResult as Array<{ uuid: string; name: string }>)[0];
-  const canEdit = authenticatedUserId ? board.ownerId === authenticatedUserId || canEditByRole || canEditByGym : false;
+  const canEdit = authenticatedUserId
+    ? board.ownerId === authenticatedUserId || (canEditByRole && boardIsRoleEditable(board)) || canEditByGym
+    : false;
 
   return {
     uuid: board.uuid,
@@ -441,7 +454,7 @@ async function enrichBoards(
     const gym = board.gymId ? gymMap.get(board.gymId) : undefined;
     const canEdit = authenticatedUserId
       ? board.ownerId === authenticatedUserId ||
-        rolesGrantAdminOrLeader(viewerRoles, board.boardType) ||
+        (rolesGrantAdminOrLeader(viewerRoles, board.boardType) && boardIsRoleEditable(board)) ||
         (board.gymId != null && editableGymIds.has(board.gymId))
       : false;
 
@@ -1652,6 +1665,13 @@ export const socialBoardMutations = {
       throw new Error('Board not found');
     }
 
+    // A soft-deleted board is visible only to its owner (who can restore it by
+    // editing). Moderators/gym admins must not resurrect a board the owner
+    // deliberately removed — republishing its name, location, and serial.
+    if (board.deletedAt && board.ownerId !== userId) {
+      throw new Error('Board not found');
+    }
+
     // Owner, community admin/leader (for this board type), or the linked gym's
     // owner/admin may edit. Community moderators can fix outdated catalog boards.
     await requireBoardEditAccess(ctx, board);
@@ -1686,31 +1706,36 @@ export const socialBoardMutations = {
       validatedInput.setIds !== undefined;
 
     if (hasConfigChange) {
-      // Check unique constraint: no other active board with the same config for
-      // the board's OWNER (not the caller — an admin may be editing a board
-      // owned by a system/import user).
-      const newLayoutId = validatedInput.layoutId ?? board.layoutId;
-      const newSizeId = validatedInput.sizeId ?? board.sizeId;
-      const newSetIds = validatedInput.setIds ?? board.setIds;
+      // Check the unique constraint: no other active board with the same config
+      // for the board's OWNER (not the caller — a moderator may be editing a
+      // board owned by a system/import user). The DB's partial unique index
+      // exempts the system catalog owner (many gyms legitimately share a
+      // config), so skip the pre-check there or we'd block the very catalog
+      // fixes this feature exists for.
+      if (board.ownerId !== SYSTEM_BOARD_OWNER_ID) {
+        const newLayoutId = validatedInput.layoutId ?? board.layoutId;
+        const newSizeId = validatedInput.sizeId ?? board.sizeId;
+        const newSetIds = validatedInput.setIds ?? board.setIds;
 
-      const [configConflict] = await db
-        .select({ id: dbSchema.userBoards.id })
-        .from(dbSchema.userBoards)
-        .where(
-          and(
-            eq(dbSchema.userBoards.ownerId, board.ownerId),
-            eq(dbSchema.userBoards.boardType, board.boardType),
-            eq(dbSchema.userBoards.layoutId, newLayoutId),
-            eq(dbSchema.userBoards.sizeId, newSizeId),
-            eq(dbSchema.userBoards.setIds, newSetIds),
-            isNull(dbSchema.userBoards.deletedAt),
-            sql`${dbSchema.userBoards.id} != ${board.id}`,
-          ),
-        )
-        .limit(1);
+        const [configConflict] = await db
+          .select({ id: dbSchema.userBoards.id })
+          .from(dbSchema.userBoards)
+          .where(
+            and(
+              eq(dbSchema.userBoards.ownerId, board.ownerId),
+              eq(dbSchema.userBoards.boardType, board.boardType),
+              eq(dbSchema.userBoards.layoutId, newLayoutId),
+              eq(dbSchema.userBoards.sizeId, newSizeId),
+              eq(dbSchema.userBoards.setIds, newSetIds),
+              isNull(dbSchema.userBoards.deletedAt),
+              sql`${dbSchema.userBoards.id} != ${board.id}`,
+            ),
+          )
+          .limit(1);
 
-      if (configConflict) {
-        throw new Error('You already have a board with this configuration');
+        if (configConflict) {
+          throw new Error("The board's owner already has a board with this configuration");
+        }
       }
 
       if (validatedInput.layoutId !== undefined) updateValues.layoutId = validatedInput.layoutId;

@@ -8,6 +8,8 @@ import { SwitchRow } from '../SwitchRow';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
+import { parseCoordinate, LATITUDE_RANGE, LONGITUDE_RANGE } from './gym-coordinate';
 
 /** The gym's current values, used to seed the form once on mount. */
 export type GymFormSeed = {
@@ -45,13 +47,6 @@ function coordToText(value: number | null): string {
   return value == null ? '' : String(value);
 }
 
-function parseCoord(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 /**
  * The gym editor form — name, description, address, contact email/phone,
  * coordinates, and a public toggle, with a pinned primary action. The native
@@ -76,18 +71,22 @@ export function GymForm({ seed, submitting, onSubmit, submitLabel }: GymFormProp
   const [isPublic, setIsPublic] = useState(seed.isPublic);
 
   const trimmedName = name.trim();
-  const canSubmit = trimmedName.length > 0 && !submitting;
+  const latitude = parseCoordinate(latitudeText, LATITUDE_RANGE.min, LATITUDE_RANGE.max);
+  const longitude = parseCoordinate(longitudeText, LONGITUDE_RANGE.min, LONGITUDE_RANGE.max);
+  const canSubmit = trimmedName.length > 0 && !submitting && !latitude.error && !longitude.error;
 
   const handleSubmit = useCallback(() => {
-    if (trimmedName.length === 0 || submitting) return;
+    const lat = parseCoordinate(latitudeText, LATITUDE_RANGE.min, LATITUDE_RANGE.max);
+    const lon = parseCoordinate(longitudeText, LONGITUDE_RANGE.min, LONGITUDE_RANGE.max);
+    if (trimmedName.length === 0 || submitting || lat.error || lon.error) return;
     onSubmit({
       name: trimmedName,
       description: description.trim() || null,
       address: address.trim() || null,
       contactEmail: contactEmail.trim() || null,
       contactPhone: contactPhone.trim() || null,
-      latitude: parseCoord(latitudeText),
-      longitude: parseCoord(longitudeText),
+      latitude: lat.value,
+      longitude: lon.value,
       isPublic,
     });
   }, [
@@ -117,7 +116,7 @@ export function GymForm({ seed, submitting, onSubmit, submitLabel }: GymFormProp
           onChangeText={setName}
           placeholder={t('mobile.gymEdit.namePlaceholder')}
           accessibilityLabel={t('mobile.gymEdit.name')}
-          maxLength={120}
+          maxLength={100}
           returnKeyType="next"
         />
 
@@ -160,7 +159,7 @@ export function GymForm({ seed, submitting, onSubmit, submitLabel }: GymFormProp
           placeholder={t('mobile.gymEdit.contactPhonePlaceholder')}
           accessibilityLabel={t('mobile.gymEdit.contactPhone')}
           keyboardType="phone-pad"
-          maxLength={40}
+          maxLength={30}
         />
 
         <View style={styles.coordRow}>
@@ -175,6 +174,11 @@ export function GymForm({ seed, submitting, onSubmit, submitLabel }: GymFormProp
               autoCorrect={false}
               maxLength={20}
             />
+            {latitude.error && (
+              <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.coordError}>
+                {t('mobile.gymEdit.invalidCoordinate')}
+              </Text>
+            )}
           </View>
           <View style={styles.coordField}>
             <SectionLabel>{t('mobile.gymEdit.longitude')}</SectionLabel>
@@ -187,6 +191,11 @@ export function GymForm({ seed, submitting, onSubmit, submitLabel }: GymFormProp
               autoCorrect={false}
               maxLength={20}
             />
+            {longitude.error && (
+              <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.coordError}>
+                {t('mobile.gymEdit.invalidCoordinate')}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -283,6 +292,9 @@ const styles = StyleSheet.create({
   },
   coordField: {
     flex: 1,
+  },
+  coordError: {
+    marginTop: spacing[1],
   },
   switchBlock: {
     marginTop: spacing[4],
