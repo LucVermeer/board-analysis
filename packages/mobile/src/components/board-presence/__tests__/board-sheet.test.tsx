@@ -400,7 +400,7 @@ describe('BoardSheet', () => {
     expect(sheetModal.dismiss).toHaveBeenCalled();
   });
 
-  it('renders no presence content while dismissed — zero list/hero work', () => {
+  it('renders no presence content while dismissed — zero list/hero/chrome work', () => {
     presence.currentClimb = makeClimb('c1', 3);
     presence.history = [makeClimb('c1', 3)];
     presence.stats = {
@@ -411,7 +411,7 @@ describe('BoardSheet', () => {
       lastSentAt: null,
     };
 
-    const { container, queryByLabelText, getAllByText } = render(
+    const { container, queryByLabelText, queryByText } = render(
       createElement(BoardSheet, {
         boardLabel: 'Garage Wall',
         onClose: noop,
@@ -420,10 +420,11 @@ describe('BoardSheet', () => {
       }),
     );
 
-    // The header/footer chrome (cheap, presence-free) still renders — both the
-    // header title and the footer subtitle show the board label.
-    expect(getAllByText('Garage Wall')).toHaveLength(2);
-    // ...but nothing that reads the wall's presence state does.
+    // The sheet container mounts, but the whole NowOnTheWallPanel (chrome + hero
+    // + stats + list) is gated behind isPresented — a dismissed sheet renders
+    // none of it and subscribes to none of the presence state.
+    expect(container.querySelector('[data-sheet="true"]')).not.toBeNull();
+    expect(queryByText('Garage Wall')).toBeNull();
     expect(container.querySelector('[data-list="true"]')).toBeNull();
     expect(queryByLabelText('refresh')).toBeNull();
     expect(container.textContent).not.toContain('Climb c1');
@@ -996,6 +997,49 @@ describe('BoardSheet', () => {
     expect(toast.showToast).not.toHaveBeenCalled();
   });
 
+  it('drops stale action results after an imperative dismiss', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3, {
+      frames: 'hero-frames',
+      grade: 'V7',
+      queueItemUuid: 'queue-hero',
+    });
+    const ref = createRef<BoardSheetHandle>();
+    const onClimbPress = vi.fn();
+    const heroDetail = makeFullClimb('hero-climb', { name: 'Hydrated Hero' });
+    const climbRequest = createDeferred<{ climb: Climb | null }>();
+    graphql.request.mockReturnValueOnce(climbRequest.promise);
+
+    const { getByLabelText, queryByLabelText } = render(
+      createElement(BoardSheet, {
+        ref,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+    act(() => ref.current?.present());
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
+
+    act(() => {
+      ref.current?.dismiss();
+    });
+    expect(sheetModal.dismiss).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull());
+
+    await act(async () => {
+      climbRequest.resolve({ climb: heroDetail });
+      await climbRequest.promise;
+    });
+
+    expect(onClimbPress).not.toHaveBeenCalled();
+    expect(toast.showToast).not.toHaveBeenCalled();
+  });
+
   it('shows a toast instead of leaking errors thrown by action callbacks', async () => {
     presence.currentClimb = makeClimb('hero-climb', 3);
     const callbackError = new Error('callback failed');
@@ -1162,8 +1206,10 @@ describe('BoardSheet', () => {
 
   it('fires onSwitchBoard from the footer switch control', () => {
     const onSwitchBoard = vi.fn();
+    const ref = createRef<BoardSheetHandle>();
     const { container, getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
@@ -1171,6 +1217,7 @@ describe('BoardSheet', () => {
         onSwitchBoard,
       }),
     );
+    act(() => ref.current?.present());
     expect(container.querySelector('[data-icon="transfer"]')).not.toBeNull();
     expect(container.textContent).toContain('mobile.boardPresence.switchBoard');
     fireEvent.click(getByLabelText('mobile.boardPresence.switchBoardAria'));
@@ -1179,8 +1226,10 @@ describe('BoardSheet', () => {
 
   it('fires onClose from the header chevron', () => {
     const onClose = vi.fn();
+    const ref = createRef<BoardSheetHandle>();
     const { container, getByLabelText } = render(
       createElement(BoardSheet, {
+        ref,
         boardLabel: 'Garage Wall',
         onClose,
         onDismissed: noop,
@@ -1188,6 +1237,7 @@ describe('BoardSheet', () => {
         onSwitchBoard: noop,
       }),
     );
+    act(() => ref.current?.present());
     expect(container.querySelector('[data-icon="chevron.down"]')).not.toBeNull();
     expect(container.querySelector('[data-icon="close"]')).toBeNull();
     fireEvent.click(getByLabelText('mobile.boardPresence.close'));
@@ -1330,12 +1380,16 @@ describe('BoardSheet', () => {
       expect(queryByLabelText('mobile.boardPresence.loadingMore')).not.toBeNull();
 
       historyPagination.isLoadingOlder = false;
+      // The real `useBoardHistoryPagination` re-renders the panel from its own
+      // state when loading resolves (memo doesn't gate internal state updates).
+      // The mock reads a plain flag, so pass a fresh boardConfig (same values,
+      // new identity) to bust NowOnTheWallPanel's memo and re-read the flag.
       rerender(
         createElement(BoardSheet, {
           ref,
           boardLabel: 'Garage Wall',
           onClose: noop,
-          boardConfig,
+          boardConfig: { ...boardConfig },
           onSwitchBoard: noop,
         }),
       );

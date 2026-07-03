@@ -144,6 +144,16 @@ type PlayDrawerProps = {
   onOpenClimbActions?: (climb: Climb) => void;
   /** The climb to show; applied on mount and whenever `nonce` changes. */
   openTarget: PlayDrawerOpenTarget | null;
+  /** Rendering context. `'route'` (default) is the full-screen `/play` modal — a
+   *  pull-down gesture + the close chevron dismiss it. `'pane'` is the persistent
+   *  iPad right-column pane: it's always on screen, so the dismiss gesture, the
+   *  close chevron, and the grabber are all suppressed and `router.dismiss()` is
+   *  never called. */
+  presentation?: 'route' | 'pane';
+  /** Pane mode only: include the top safe-area inset above the first screen. False
+   *  when a WallStrip is docked above the pane and already owns that inset. Ignored
+   *  in route mode (the modal always owns the top inset). */
+  paneTopInset?: boolean;
 };
 
 // Fallback used for the first-screen reserve before the Beta Videos header has
@@ -168,7 +178,12 @@ export function PlayDrawer({
   onSwitchBoard,
   onOpenClimbActions,
   openTarget,
+  presentation = 'route',
+  paneTopInset = true,
 }: PlayDrawerProps) {
+  // The iPad right-column pane is persistent — it has no dismiss. Suppresses the
+  // pull-down dismiss gesture, the close chevron, the grabber, and router.dismiss.
+  const isPane = presentation === 'pane';
   const { t } = useTranslation('session');
   // The copy/share affordance strings live in the `climbs` namespace alongside
   // the climb-actions sheet's "Link copied" toast.
@@ -226,8 +241,10 @@ export function PlayDrawer({
     [scrollYSV],
   );
   const handleDismiss = useCallback(() => {
+    // The pane is persistent — nothing to dismiss (and no modal to pop).
+    if (isPane) return;
     router.dismiss();
-  }, []);
+  }, [isPane]);
 
   // The header (title + grade) rides this exact value as the board so they swipe
   // in lockstep; the carousel's gesture writes into it (externalTranslateX). The
@@ -690,7 +707,7 @@ export function PlayDrawer({
     // behind this on its cheap first frame (so the native present can start
     // before this heavier content mounts). See app/play.tsx.
     <View style={styles.root}>
-      <GestureDetector gesture={dismissGesture}>
+      <GestureDetector gesture={dismissGesture.enabled(!isPane)}>
         <Animated.View style={[styles.content, dismissAnimatedStyle]}>
           <ScrollView
             ref={scrollRef}
@@ -710,19 +727,34 @@ export function PlayDrawer({
             {displayedClimb && (
               <>
                 {/* The firstScreen container owns the top safe area, so the grabber +
-                close + climb name sit at the very top. */}
-                <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: insets.top + spacing[2] }]}>
+                close + climb name sit at the very top. In the pane a docked WallStrip
+                can already own the top inset (paneTopInset=false). */}
+                <View
+                  style={[
+                    styles.firstScreen,
+                    {
+                      height: firstScreenHeight,
+                      paddingTop: isPane && !paneTopInset ? spacing[2] : insets.top + spacing[2],
+                    },
+                  ]}
+                >
                   <View style={styles.topRow}>
-                    <View style={sheetStyles.indicator} />
-                    <Pressable
-                      onPress={handleDismiss}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('playView.closeAria')}
-                      style={styles.closeButton}
-                      hitSlop={8}
-                    >
-                      <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
-                    </Pressable>
+                    {/* The persistent pane has no dismiss, so it shows no grabber or
+                        close chevron; the route keeps both. */}
+                    {!isPane ? (
+                      <>
+                        <View style={sheetStyles.indicator} />
+                        <Pressable
+                          onPress={handleDismiss}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('playView.closeAria')}
+                          style={styles.closeButton}
+                          hitSlop={8}
+                        >
+                          <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
+                        </Pressable>
+                      </>
+                    ) : null}
                   </View>
 
                   {/* Title + grade swipe with the board: same translateX, same

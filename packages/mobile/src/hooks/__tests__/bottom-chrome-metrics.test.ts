@@ -286,4 +286,101 @@ describe('computeBottomChromeMetrics', () => {
       expect(metrics.preSessionFooterBottom).toBe(34);
     });
   });
+
+  describe('regular-width iPad sidebar (usesSidebar)', () => {
+    it('collapses every bottom offset to the safe-area inset', () => {
+      // The left sidebar owns navigation and hosts the queue "now playing" in its
+      // footer, so nothing floats at the bottom — every offset is the raw inset.
+      const metrics = computeBottomChromeMetrics({
+        uiVariant: 'liquidGlass',
+        usesNativeTabBar: true,
+        insetsBottom: 20,
+        insideTabs: true,
+        onAccessorySurface: true,
+        hasCurrentClimb: true,
+        nativeAccessoryMounted: true,
+        usesSidebar: true,
+      });
+      expect(metrics.tabBarHeight).toBe(0);
+      expect(metrics.tabBarBottom).toBe(20);
+      expect(metrics.jsQueueToolbarVisible).toBe(false);
+      expect(metrics.nativeAccessoryVisible).toBe(false);
+      expect(metrics.jsQueueReserve).toBe(0);
+      expect(metrics.nativeAccessoryReserve).toBe(0);
+      expect(metrics.scrollBottomPadding).toBe(20);
+      expect(metrics.floatingControlBottom).toBe(20);
+      expect(metrics.fixedFooterBottom).toBe(20);
+      expect(metrics.inSessionListBottom).toBe(20);
+      expect(metrics.preSessionFooterBottom).toBe(20);
+    });
+
+    it('short-circuits the tab-bar / accessory inputs entirely in sidebar mode', () => {
+      // Even with a climb + the native accessory mounted, sidebar mode reserves
+      // nothing — it returns before the phone arithmetic runs.
+      const metrics = computeBottomChromeMetrics({
+        uiVariant: 'material',
+        usesNativeTabBar: false,
+        insetsBottom: 0,
+        insideTabs: true,
+        onAccessorySurface: true,
+        hasCurrentClimb: true,
+        nativeAccessoryMounted: true,
+        usesSidebar: true,
+      });
+      expect(metrics.scrollBottomPadding).toBe(0);
+      expect(metrics.floatingControlBottom).toBe(0);
+      expect(metrics.nativeAccessoryMounted).toBe(false);
+    });
+
+    it('keeps the JS queue toolbar when the sidebar is visible but the detail pane is suppressed', () => {
+      const metrics = computeBottomChromeMetrics({
+        uiVariant: 'liquidGlass',
+        usesNativeTabBar: false,
+        insetsBottom: 20,
+        insideTabs: true,
+        onAccessorySurface: true,
+        hasCurrentClimb: true,
+        nativeAccessoryMounted: true,
+        usesSidebar: true,
+        detailPaneOwnsQueue: false,
+      });
+
+      expect(metrics.tabBarHeight).toBe(0);
+      expect(metrics.tabBarBottom).toBe(20);
+      expect(metrics.nativeAccessoryMounted).toBe(false);
+      expect(metrics.nativeAccessoryVisible).toBe(false);
+      expect(metrics.jsQueueToolbarVisible).toBe(true);
+      expect(metrics.jsQueueReserve).toBe(TOOLBAR_RESERVE);
+      expect(metrics.nativeAccessoryReserve).toBe(0);
+      expect(metrics.scrollBottomPadding).toBe(20 + TOOLBAR_RESERVE);
+      expect(metrics.floatingControlBottom).toBe(20 + TOOLBAR_RESERVE);
+      expect(metrics.fixedFooterBottom).toBe(TOOLBAR_RESERVE);
+      expect(metrics.inSessionListBottom).toBe(20 + TOOLBAR_RESERVE);
+      expect(metrics.preSessionFooterBottom).toBe(20);
+    });
+
+    it('defaults usesSidebar to false so existing compact call sites are unchanged', () => {
+      const withFlag = computeBottomChromeMetrics({
+        uiVariant: 'liquidGlass',
+        usesNativeTabBar: true,
+        insetsBottom: 34,
+        insideTabs: true,
+        onAccessorySurface: true,
+        hasCurrentClimb: false,
+        nativeAccessoryMounted: false,
+        usesSidebar: false,
+      });
+      const withoutFlag = computeBottomChromeMetrics({
+        uiVariant: 'liquidGlass',
+        usesNativeTabBar: true,
+        insetsBottom: 34,
+        insideTabs: true,
+        onAccessorySurface: true,
+        hasCurrentClimb: false,
+        nativeAccessoryMounted: false,
+      });
+      expect(withFlag).toEqual(withoutFlag);
+      expect(withoutFlag.scrollBottomPadding).toBe(34 + TAB_BAR_HEIGHT);
+    });
+  });
 });

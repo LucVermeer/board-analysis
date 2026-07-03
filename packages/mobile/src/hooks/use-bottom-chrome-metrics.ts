@@ -1,11 +1,15 @@
 import { useMemo } from 'react';
 import { useSegments } from 'expo-router';
+import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../providers/theme-provider';
 import { isAccessorySurfaceRoute, isTabsChromeRoute } from '../lib/route-segments';
 import { useStickyAccessoryPresence } from './use-sticky-accessory-presence';
 import { useNativeAccessoryActive, useNativeTabBar } from './use-bottom-accessory';
+import { useDeviceLayout } from './use-device-layout';
 import { computeBottomChromeMetrics } from './bottom-chrome-metrics';
+import { resolveDetailPaneSurface } from '../theme/size-class';
+import { SIDEBAR_WIDTH } from '../theme/layout';
 
 /**
  * Reserves and offsets for chrome that floats over scrollable content (the
@@ -36,6 +40,15 @@ export function useBottomChromeMetrics() {
   const nativeAccessoryMounted = onAccessorySurface && nativeAccessoryActive;
   const nativeTabBar = useNativeTabBar();
   const usesNativeTabBar = insideTabs && nativeTabBar;
+  // Regular-width iPad replaces the bottom tab bar with the left sidebar. Only
+  // widths that also mount the selected-climb detail pane suppress the floating
+  // queue toolbar; tight regular windows keep that toolbar because the pane is
+  // intentionally absent there.
+  const { width: windowWidth } = useWindowDimensions();
+  const { widthClass } = useDeviceLayout();
+  const usesSidebar = insideTabs && widthClass === 'regular';
+  const detailPaneOwnsQueue =
+    usesSidebar && resolveDetailPaneSurface({ width: windowWidth, widthClass, sidebarWidth: SIDEBAR_WIDTH }) === 'pane';
 
   return useMemo(
     () =>
@@ -47,7 +60,19 @@ export function useBottomChromeMetrics() {
         onAccessorySurface,
         hasCurrentClimb,
         nativeAccessoryMounted,
+        usesSidebar,
+        detailPaneOwnsQueue,
       }),
-    [variant, usesNativeTabBar, insets.bottom, insideTabs, onAccessorySurface, hasCurrentClimb, nativeAccessoryMounted],
+    [
+      variant,
+      usesNativeTabBar,
+      insets.bottom,
+      insideTabs,
+      onAccessorySurface,
+      hasCurrentClimb,
+      nativeAccessoryMounted,
+      usesSidebar,
+      detailPaneOwnsQueue,
+    ],
   );
 }

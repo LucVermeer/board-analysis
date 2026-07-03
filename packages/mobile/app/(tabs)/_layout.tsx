@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { Platform, type ColorValue } from 'react-native';
+import { Platform, StyleSheet, View, useWindowDimensions, type ColorValue } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { Tabs } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -13,6 +13,19 @@ import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
 import { useNativeAccessoryActive, useNativeTabBar } from '../../src/hooks/use-bottom-accessory';
 import { useOnAccessorySurface } from '../../src/hooks/use-on-accessory-surface';
+import { useDeviceLayout } from '../../src/hooks/use-device-layout';
+import { IpadSidebar } from '../../src/components/navigation/IpadSidebar';
+import { IpadPlayPane } from '../../src/components/play-drawer/IpadPlayPane';
+import { IpadWallColumn } from '../../src/components/board-presence/IpadWallColumn';
+import { useBoardPresenceControls } from '../../src/providers/board-presence-provider';
+import { useActiveBoard } from '../../src/lib/graphql/use-active-board';
+import {
+  resolveWallSurface,
+  resolveDetailPaneSurface,
+  resolveDetailPaneWidth,
+  WALL_COLUMN_WIDTH,
+} from '../../src/theme/size-class';
+import { SIDEBAR_WIDTH } from '../../src/theme/layout';
 
 // Cold-start on Home: the leftmost tab carries the beta shelf and followed
 // activity feed, while Climbs remains the search surface one tab over. Drives
@@ -30,6 +43,10 @@ const materialTabIcon =
   ({ focused, color, size }: TabIconProps) => (
     <MaterialCommunityIcons name={focused ? active : inactive} color={color} size={size} />
   );
+
+// The iPad shell hides the Tabs navigator's own bar (the glass sidebar carries
+// navigation), while the navigator still owns routing + per-tab state.
+const renderHiddenTabBar = () => null;
 
 /**
  * Bottom tabs. The system Liquid Glass tab bar (`expo-router/unstable-native-tabs`)
@@ -73,43 +90,159 @@ export default function TabLayout() {
   const onAccessorySurface = useOnAccessorySurface();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = Platform.OS === 'android';
+  // Regular-width iPad opts into the sidebar shell; compact width (every iPhone,
+  // a narrow iPad split) keeps the native / Material tab bars below verbatim.
+  // (deviceLayout.expanded is computed but intentionally unconsumed here — it's
+  // reserved for the Phase-3 master+detail Climbs browser; see size-class.ts.)
+  const deviceLayout = useDeviceLayout();
+  const { width: windowWidth } = useWindowDimensions();
+  // The live wall gets a dedicated column in landscape (room for sidebar + browse
+  // list + detail pane + wall) and falls back to a strip atop the pane in portrait
+  // (see resolveWallSurface). Gated on a bound board so an empty column never sits
+  // as dead space. The presence controls context only changes on bind/unbind, not
+  // on wall climb updates, so this doesn't re-render the shell per wall event.
+  const { enabled: boardPresenceEnabled, boardId: boardPresenceBoardId } = useBoardPresenceControls();
+  // The column only renders content when a board config is resolved (the wall
+  // panel reads it via the host). `boardPresenceBoardId` can be set from the BLE
+  // serial before/without an active board, so gate on the active board too — else
+  // the column View reserves 300pt while `IpadWallColumn` renders null (dead space).
+  const { data: activeBoard } = useActiveBoard();
+  const wallSurface = resolveWallSurface({
+    width: windowWidth,
+    widthClass: deviceLayout.widthClass,
+    sidebarWidth: SIDEBAR_WIDTH,
+  });
+  const showWallColumn =
+    wallSurface === 'column' && boardPresenceEnabled && boardPresenceBoardId !== null && activeBoard != null;
+  // The detail (play) pane scales with the window (clamped 320–400pt) when it is
+  // the only trailing pane. When the wall column is visible, the wall keeps its
+  // fixed width and the content + detail columns split the remaining space evenly.
+  const playPaneWidth = resolveDetailPaneWidth({
+    width: windowWidth,
+    sidebarWidth: SIDEBAR_WIDTH,
+    wallColumnVisible: showWallColumn,
+  });
+  // The detail (play) pane is width-budgeted exactly like the wall column: it only
+  // mounts when the browse list still clears the readable floor after the sidebar
+  // and a minimum pane width. On the tightest regular portraits (iPad mini /
+  // 9.7–10.2", 744–810pt) it's suppressed and the compact bottom-sheet PlayDrawer
+  // hosts the drawer instead (see drawer-host-provider), so the list keeps room.
+  const showDetailPane =
+    resolveDetailPaneSurface({
+      width: windowWidth,
+      widthClass: deviceLayout.widthClass,
+      sidebarWidth: SIDEBAR_WIDTH,
+    }) === 'pane';
+  const showWallStrip =
+    showDetailPane &&
+    wallSurface === 'strip' &&
+    boardPresenceEnabled &&
+    boardPresenceBoardId !== null &&
+    activeBoard != null;
+  const showRichWallSurface = showWallColumn || showWallStrip;
+
+  // The five tab screens are identical across the JS `Tabs` variants (Material
+  // bar vs. the hidden-bar iPad shell), so share one definition. A flat keyed
+  // ARRAY (not a Fragment) — Expo Router walks the navigator's direct children
+  // for `Tabs.Screen`, and a Fragment wrapper makes it ignore their `options`
+  // (titles/icons/badge/lazy). The NativeTabs path uses its own Trigger API below
+  // and does not consume this.
+  const tabScreens = [
+    <Tabs.Screen
+      key="home"
+      name="home"
+      options={{ title: t('mobile.nav.home'), tabBarIcon: materialTabIcon('home', 'home-outline') }}
+    />,
+    <Tabs.Screen
+      key="climbs"
+      name="climbs"
+      options={{ title: t('mobile.nav.climbs'), tabBarIcon: materialTabIcon('magnify', 'magnify') }}
+    />,
+    <Tabs.Screen
+      key="record"
+      name="record"
+      options={{
+        title: tSession('mobile.session.recordTab'),
+        tabBarIcon: materialTabIcon('record-circle', 'record-circle-outline'),
+        tabBarBadge: showRecordBadge ? '' : undefined,
+        // Android can stall the first lazy mount of this nested stack,
+        // leaving the Record tab blank until another tab forces a remount.
+        lazy: eagerMountRecord ? false : undefined,
+      }}
+    />,
+    <Tabs.Screen
+      key="discover"
+      name="discover"
+      options={{
+        title: tPlaylists('bottomTabBar.discover'),
+        tabBarIcon: materialTabIcon('bookmark-multiple', 'bookmark-multiple-outline'),
+      }}
+    />,
+    <Tabs.Screen
+      key="profile"
+      name="profile"
+      options={{
+        title: t('mobile.nav.profile'),
+        tabBarIcon: materialTabIcon('account-circle', 'account-circle-outline'),
+      }}
+    />,
+  ];
+
+  // iPad adaptive shell. ONE JS `Tabs` navigator is mounted across the
+  // regular↔compact boundary, so resizing an iPad window across the breakpoint (a
+  // Split View drag, a Stage Manager resize) swaps only the CHROME — the glass
+  // sidebar + content panes at regular width, the Material tab bar in a narrow
+  // split — and keeps each tab's scroll offset and nested-stack depth instead of
+  // remounting the navigator. The navigator still owns routing; at regular width
+  // its bar is hidden and the sidebar drives it through the global router. iPad
+  // never uses NativeTabs (that would swap navigator *types* on the boundary cross
+  // and remount); NativeTabs stays the iPhone-only glass path below. The `content`
+  // View carries a stable key so the navigator survives the chrome swap.
+  if (deviceLayout.isPad) {
+    const isRegular = deviceLayout.widthClass === 'regular';
+    const tabsNavigator = (
+      <Tabs
+        tabBar={isRegular ? renderHiddenTabBar : (props) => <MaterialTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        {tabScreens}
+      </Tabs>
+    );
+    return (
+      <View style={isRegular ? styles.shell : styles.shellCompact}>
+        {isRegular ? <IpadSidebar key="sidebar" showWallCell={!showRichWallSurface} /> : null}
+        <View key="content" style={styles.shellContent}>
+          {tabsNavigator}
+        </View>
+        {/* Persistent right column: the PlayDrawer for the SELECTED climb (iPad
+            master-detail). Width-budgeted like the wall column (resolveDetailPaneSurface):
+            the tightest regular portraits — iPad mini and 9.7–10.2" (744–810pt) — suppress
+            it rather than squeeze the browse list below the readable floor; there the
+            compact bottom-sheet PlayDrawer takes over (see drawer-host-provider). */}
+        {isRegular && showDetailPane ? (
+          <View key="pane" style={[styles.playPane, { width: playPaneWidth, borderLeftColor: systemColors.separator }]}>
+            <IpadPlayPane />
+          </View>
+        ) : null}
+        {/* Dedicated "Now on the wall" column — landscape only, where the width
+            budget leaves room for it (see resolveWallSurface). In portrait the wall
+            rides a strip atop the pane (IpadPlayPane) instead. */}
+        {isRegular && showWallColumn ? (
+          <View
+            key="wall"
+            style={[styles.wallColumn, { width: WALL_COLUMN_WIDTH, borderLeftColor: systemColors.separator }]}
+          >
+            <IpadWallColumn />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
 
   if (!nativeTabBar) {
     return (
       <Tabs tabBar={(props) => <MaterialTabBar {...props} />} screenOptions={{ headerShown: false }}>
-        <Tabs.Screen
-          name="home"
-          options={{ title: t('mobile.nav.home'), tabBarIcon: materialTabIcon('home', 'home-outline') }}
-        />
-        <Tabs.Screen
-          name="climbs"
-          options={{ title: t('mobile.nav.climbs'), tabBarIcon: materialTabIcon('magnify', 'magnify') }}
-        />
-        <Tabs.Screen
-          name="record"
-          options={{
-            title: tSession('mobile.session.recordTab'),
-            tabBarIcon: materialTabIcon('record-circle', 'record-circle-outline'),
-            tabBarBadge: showRecordBadge ? '' : undefined,
-            // Android can stall the first lazy mount of this nested stack,
-            // leaving the Record tab blank until another tab forces a remount.
-            lazy: eagerMountRecord ? false : undefined,
-          }}
-        />
-        <Tabs.Screen
-          name="discover"
-          options={{
-            title: tPlaylists('bottomTabBar.discover'),
-            tabBarIcon: materialTabIcon('bookmark-multiple', 'bookmark-multiple-outline'),
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: t('mobile.nav.profile'),
-            tabBarIcon: materialTabIcon('account-circle', 'account-circle-outline'),
-          }}
-        />
+        {tabScreens}
       </Tabs>
     );
   }
@@ -161,3 +294,15 @@ export default function TabLayout() {
     </NativeTabs>
   );
 }
+
+const styles = StyleSheet.create({
+  // Sidebar + content laid out as a row; the sidebar owns a fixed width and the
+  // content pane flexes to fill the rest.
+  shell: { flex: 1, flexDirection: 'row' },
+  // iPad in a narrow split (compact): the same single `Tabs` navigator, no rail,
+  // just filling the window — so the navigator stays mounted across the boundary.
+  shellCompact: { flex: 1 },
+  shellContent: { flex: 1 },
+  playPane: { borderLeftWidth: StyleSheet.hairlineWidth },
+  wallColumn: { borderLeftWidth: StyleSheet.hairlineWidth },
+});

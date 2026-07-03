@@ -39,6 +39,11 @@ export interface Dimensions {
 }
 
 export const EXPECTED_APP_STORE_LOCALES = ['en-US', 'es-ES', 'es-MX', 'fr-FR'] as const;
+export const EXPECTED_APP_STORE_DEVICE_SLUGS = [
+  'iphone-16-pro-max',
+  'ipad-pro-13-inch-m5',
+  'ipad-pro-11-inch-m5',
+] as const;
 
 /**
  * Portrait sizes App Store Connect accepts, keyed by the capture device slug
@@ -54,6 +59,20 @@ export const ACCEPTED_SIZES: Record<string, readonly Dimensions[]> = {
   'iphone-16-pro-max': [
     { width: 1320, height: 2868 },
     { width: 1290, height: 2796 },
+  ],
+  // 13" iPad slot, captured in landscape. Apple accepts the current 13" native
+  // size and the earlier 12.9"/13" 2048x2732 family in the same slot.
+  'ipad-pro-13-inch-m5': [
+    { width: 2752, height: 2064 },
+    { width: 2732, height: 2048 },
+  ],
+  // 11" iPad slot, captured in landscape. Keep the allow-list aligned with
+  // App Store Connect's accepted 11" iPad screenshot sizes.
+  'ipad-pro-11-inch-m5': [
+    { width: 2266, height: 1488 },
+    { width: 2420, height: 1668 },
+    { width: 2388, height: 1668 },
+    { width: 2360, height: 1640 },
   ],
 };
 
@@ -200,7 +219,11 @@ export function findScreenshotTreeOffenders(tree: ScreenshotTree): Offender[] {
   }
 
   const firstExpectedLocale = EXPECTED_APP_STORE_LOCALES.find((locale) => tree[locale]);
-  const referenceDevices = firstExpectedLocale ? sortedKeys(tree[firstExpectedLocale]) : [];
+  const referenceDevices = firstExpectedLocale
+    ? sortedKeys(tree[firstExpectedLocale]).filter((deviceSlug) =>
+        (EXPECTED_APP_STORE_DEVICE_SLUGS as readonly string[]).includes(deviceSlug),
+      )
+    : [];
   if (referenceDevices.length === 0 && firstExpectedLocale) {
     offenders.push({ file: firstExpectedLocale, reason: 'contains no device screenshot folders' });
   }
@@ -213,10 +236,26 @@ export function findScreenshotTreeOffenders(tree: ScreenshotTree): Offender[] {
       offenders.push({ file: expectedLocale, reason: 'contains no device screenshot folders' });
       continue;
     }
-    if (referenceDevices.length > 0 && !listsMatch(deviceNames, referenceDevices)) {
+
+    for (const deviceName of deviceNames) {
+      if (!(EXPECTED_APP_STORE_DEVICE_SLUGS as readonly string[]).includes(deviceName)) {
+        offenders.push({ file: `${expectedLocale}/${deviceName}`, reason: 'unknown App Store device folder' });
+      }
+    }
+
+    for (const expectedDeviceSlug of EXPECTED_APP_STORE_DEVICE_SLUGS) {
+      if (!devices[expectedDeviceSlug]) {
+        offenders.push({ file: `${expectedLocale}/${expectedDeviceSlug}`, reason: 'missing device screenshot folder' });
+      }
+    }
+
+    const knownDeviceNames = deviceNames.filter((deviceName) =>
+      (EXPECTED_APP_STORE_DEVICE_SLUGS as readonly string[]).includes(deviceName),
+    );
+    if (referenceDevices.length > 0 && !listsMatch(knownDeviceNames, referenceDevices)) {
       offenders.push({
         file: expectedLocale,
-        reason: `device folders are ${deviceNames.join(', ')}, expected ${referenceDevices.join(', ')}`,
+        reason: `device folders are ${knownDeviceNames.join(', ')}, expected ${referenceDevices.join(', ')}`,
       });
     }
 

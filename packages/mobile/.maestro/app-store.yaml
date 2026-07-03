@@ -19,8 +19,9 @@ name: app-store screenshots
 # board-pick / board-view / board-sheet coordinate taps are all gone — a missed pick used
 # to leave Climbs/Board View stuck on the "No board selected" empty state.
 #
-# This flow is captured once per (device, locale) pair: the orchestrator bakes
-# EXPO_PUBLIC_SCREENSHOT_LOCALE into the Metro bundle per locale and reruns it on each
+# This flow is captured once per (device, locale) pair: the orchestrator renders
+# MAESTRO_DEVICE_ORIENTATION below to the target device's concrete orientation, bakes
+# EXPO_PUBLIC_SCREENSHOT_LOCALE into the Metro bundle per locale, and reruns it on each
 # device in --devices, writing app-stores/apple/screenshots/<app-store-locale>/<device>/.
 #
 # Notes:
@@ -45,6 +46,8 @@ name: app-store screenshots
 # The screenshot build auto-signs-in on boot and lands straight on home (no login screen);
 # the orchestrator waits for home (the `$screen /home` log) before running Maestro, so the
 # flow opens right into the shots.
+
+- setOrientation: ${MAESTRO_DEVICE_ORIENTATION}
 
 # Prime the "Open in 'Boardsesh'?" dialog. simctl openurl of the custom scheme makes iOS
 # re-pop that confirmation on the first one or two in-session deep links (inconsistently —

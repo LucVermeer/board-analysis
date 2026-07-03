@@ -12,6 +12,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath, formatBoardDisplayName } from '@boardsesh/board-config';
@@ -36,6 +37,9 @@ import { useAuth } from './auth-provider';
 import { useReduceMotion } from '../hooks/use-reduce-motion';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useQueueActions, useQueueSessionControls } from './queue-provider';
+import { useDeviceLayout } from '../hooks/use-device-layout';
+import { resolveDetailPaneSurface } from '../theme/size-class';
+import { SIDEBAR_WIDTH } from '../theme/layout';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 import { useBoardPresenceControls, type ResolveBoardUuidArgs } from './board-presence-provider';
 import { useOptionalBluetoothContext } from './bluetooth-provider';
@@ -97,6 +101,40 @@ export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
   source?: 'climb_view' | 'current_queue_item' | 'mobile' | 'board_presence';
 };
 
+/** Props the iPad right-column PlayDrawer pane consumes (regular width). Mirrors
+ *  the `/play` route's PlayDrawer props (see app/play.tsx) so the pane and the
+ *  full-screen route render the same drawer; the pane just drives it via
+ *  `openTarget` instead of navigating. Null in the context while no board is
+ *  resolved. Consumed by `IpadPlayPane`. */
+export type PlayDrawerPaneProps = {
+  boardConfig: BoardConfig;
+  onAngleChange: (angle: number) => void;
+  isAngleAdjustable: boolean;
+  onOpenQueue: () => void;
+  boardMismatch: boolean;
+  mismatchBoardLabel: string | undefined;
+  onSwitchBoard: () => void;
+  onOpenClimbActions: (climb: Climb) => void;
+  /** The climb to show in the pane, with a bumped nonce per selection so the pane
+   *  re-applies even when the same climb is re-tapped. Set by `openPlayDrawer` on
+   *  iPad regular width (where it drives the pane instead of the `/play` route). */
+  openTarget: PlayDrawerOpenTarget | null;
+};
+
+/** Props for the iPad "Now on the wall" column (regular landscape) — the same
+ *  wall feed / history / stats / switch-board content the BoardSheet modal shows,
+ *  rendered inline. Mirrors the BoardSheet props passed below; null while no board
+ *  is resolved. Consumed by `IpadWallColumn`. */
+export type NowOnTheWallColumnProps = {
+  boardLabel: string | null;
+  boardConfig: BoardConfig | null;
+  onSwitchBoard: () => void;
+  onClimbPress: (action: BoardSheetClimbAction) => void;
+  onAddToQueue: (action: BoardSheetClimbAction) => void;
+  onOpenPlaylist: (action: BoardSheetClimbAction) => void;
+  onOpenActions: (action: BoardSheetClimbAction) => void;
+};
+
 type DrawerHostValue = {
   /** User's stored active board config. Temporary PlayDrawer overrides are not
    *  reflected here, so persistent queue/log-ascent surfaces stay bound to the
@@ -123,6 +161,13 @@ type DrawerHostValue = {
    *  separate Switch-board control). Wired to the board glyph when the
    *  `board-presence` flag is on. */
   openBoardSheet: () => void;
+  /** Props for the iPad right-column PlayDrawer pane (regular width); null while
+   *  no board is resolved. Consumed by `IpadPlayPane` in the shell. On iPad regular
+   *  width `openPlayDrawer` drives this pane instead of the `/play` route. */
+  playDrawerPaneProps: PlayDrawerPaneProps | null;
+  /** Props for the iPad "Now on the wall" column (regular landscape); null while
+   *  no board is resolved. Consumed by `IpadWallColumn` in the shell. */
+  boardPanelProps: NowOnTheWallColumnProps | null;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -202,6 +247,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // route consumes this via usePlayDrawerRoute and runs PlayDrawer's openDrawer.
   const [playTarget, setPlayTarget] = useState<PlayDrawerOpenTarget | null>(null);
   const playTargetNonceRef = useRef(0);
+  // iPad regular width shows the PlayDrawer inline in the right-column pane
+  // (IpadPlayPane) instead of the full-screen `/play` route. `paneTarget` is the
+  // pane's equivalent of `playTarget`: the selected climb with a per-selection
+  // nonce so re-tapping the same climb still re-applies it in the pane.
+  const [paneTarget, setPaneTarget] = useState<PlayDrawerOpenTarget | null>(null);
+  const paneTargetNonceRef = useRef(0);
   // QueueSheet stays mounted (whenever a board is resolved) and is opened via its
   // imperative handle. gorhom `present()` driven from a `visible`-prop effect is
   // a silent no-op in this app, so we present/dismiss synchronously from the
@@ -209,6 +260,17 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const queueSheetRef = useRef<QueueSheetHandle>(null);
   const boardSheetRef = useRef<BoardSheetHandle>(null);
   const { data: activeBoard } = useActiveBoard();
+  // iPad regular width hosts the PlayDrawer as a persistent right-column pane
+  // rather than the `/play` route. `usesDetailPane` mirrors the shell's pane
+  // budget (resolveDetailPaneSurface — the tightest regular portraits fall back
+  // to the route + compact sheets). A ref lets the empty-dep `openPlayDrawer`
+  // read it without churning its identity.
+  const { width: windowWidth } = useWindowDimensions();
+  const { widthClass } = useDeviceLayout();
+  const usesDetailPane =
+    resolveDetailPaneSurface({ width: windowWidth, widthClass, sidebarWidth: SIDEBAR_WIDTH }) === 'pane';
+  const usesDetailPaneRef = useRef(usesDetailPane);
+  usesDetailPaneRef.current = usesDetailPane;
   // Auth gates two things here. (1) myBoards requires authentication: running it
   // while logged out throws "Authentication required to perform this operation"
   // (pure noise in error tracking) and returns nothing useful — every other call
@@ -345,12 +407,28 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     } else {
       setBoardConfigOverride(null);
     }
+    // iPad regular width hosts the drawer as a persistent right-column pane, so
+    // drive it in place instead of navigating to `/play`. The pane reads
+    // `paneTarget` via playDrawerPaneProps and re-applies on the bumped nonce (a
+    // re-tap of the same climb still re-applies). No router.navigate → no modal.
+    if (usesDetailPaneRef.current) {
+      paneTargetNonceRef.current += 1;
+      setPaneTarget({ climb, options: openOptions, nonce: paneTargetNonceRef.current });
+      return;
+    }
     // Stash the target (bumped nonce) and navigate. When `/play` is already up the
     // navigate is a no-op, but the new nonce re-applies the target in place.
     playTargetNonceRef.current += 1;
     setPlayTarget({ climb, options: openOptions, nonce: playTargetNonceRef.current });
     router.navigate('/play');
   }, []);
+
+  // Drop the pane's selected climb when the pane goes away (a resize into compact,
+  // or a narrow-regular split where the /play route takes over), so a later return
+  // to the pane starts from the current climb rather than a stale selection.
+  useEffect(() => {
+    if (!usesDetailPane) setPaneTarget(null);
+  }, [usesDetailPane]);
 
   // Reset on route unmount (close): drop the board override so non-drawer surfaces
   // snap back to the stored board, and clear the open target so a stray remount
@@ -608,6 +686,67 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const boardSheetLabel = useMemo(() => formatActiveBoardLabel(activeBoard), [activeBoard]);
 
+  const isAngleAdjustable = activeBoard?.isAngleAdjustable ?? true;
+
+  // One source of truth for the iPad pane's PlayDrawer props, mirroring the `/play`
+  // route's props (see app/play.tsx). `boardConfig` is the override-inclusive
+  // active board so a foreign-board climb renders on its own board; `openTarget`
+  // is the pane's selected climb. Null while no board is resolved.
+  const playDrawerPaneProps = useMemo<PlayDrawerPaneProps | null>(
+    () =>
+      activeBoardConfig
+        ? {
+            boardConfig: activeBoardConfig,
+            onAngleChange: handleAngleChange,
+            isAngleAdjustable,
+            onOpenQueue: openQueueSheet,
+            boardMismatch,
+            mismatchBoardLabel,
+            onSwitchBoard: handleSwitchBoardFromDrawer,
+            onOpenClimbActions: openClimbActions,
+            openTarget: paneTarget,
+          }
+        : null,
+    [
+      activeBoardConfig,
+      handleAngleChange,
+      isAngleAdjustable,
+      openQueueSheet,
+      boardMismatch,
+      mismatchBoardLabel,
+      handleSwitchBoardFromDrawer,
+      openClimbActions,
+      paneTarget,
+    ],
+  );
+
+  // Props for the iPad "Now on the wall" column — the same handlers passed to the
+  // BoardSheet modal below, surfaced via context so the inline column renders the
+  // identical wall feed. Mirrors playDrawerPaneProps; null while no board resolved.
+  const boardPanelProps = useMemo<NowOnTheWallColumnProps | null>(
+    () =>
+      storedActiveBoardConfig
+        ? {
+            boardLabel: boardSheetLabel,
+            boardConfig: storedActiveBoardConfig,
+            onSwitchBoard: handleSwitchBoardFromSheet,
+            onClimbPress: handleBoardSheetClimbPress,
+            onAddToQueue: handleBoardSheetAddToQueue,
+            onOpenPlaylist: handleBoardSheetOpenPlaylist,
+            onOpenActions: handleBoardSheetOpenActions,
+          }
+        : null,
+    [
+      storedActiveBoardConfig,
+      boardSheetLabel,
+      handleSwitchBoardFromSheet,
+      handleBoardSheetClimbPress,
+      handleBoardSheetAddToQueue,
+      handleBoardSheetOpenPlaylist,
+      handleBoardSheetOpenActions,
+    ],
+  );
+
   const value = useMemo<DrawerHostValue>(
     () => ({
       boardConfig: storedActiveBoardConfig,
@@ -619,6 +758,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openAddBetaVideo,
       openQueueSheet,
       openBoardSheet,
+      playDrawerPaneProps,
+      boardPanelProps,
     }),
     [
       storedActiveBoardConfig,
@@ -630,10 +771,10 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openAddBetaVideo,
       openQueueSheet,
       openBoardSheet,
+      playDrawerPaneProps,
+      boardPanelProps,
     ],
   );
-
-  const isAngleAdjustable = activeBoard?.isAngleAdjustable ?? true;
 
   // Volatile player state for the `app/play.tsx` route (separate context — see
   // PlayDrawerRouteValue — so the wide useDrawerHost consumers don't re-render

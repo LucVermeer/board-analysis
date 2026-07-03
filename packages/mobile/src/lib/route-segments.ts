@@ -77,3 +77,13 @@ export function isPlayerRoute(segments: Segments): boolean {
 export function isAccessorySurfaceRoute(segments: Segments): boolean {
   return isTopLevelTabRoute(segments) || isPlayerRoute(segments);
 }
+
+/**
+ * The focused tab's route segment (e.g. `'climbs'`), or `null` when the focused
+ * route is not inside the tab navigator. Segment 0 is the `(tabs)` group, so the
+ * tab name is segment 1. Used by the iPad sidebar to highlight the active row
+ * without indexing the route-typed tuple directly.
+ */
+export function tabsActiveSegment(segments: Segments): string | null {
+  return isTabsRoute(segments) ? (segments[1] ?? null) : null;
+}

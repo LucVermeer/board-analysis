@@ -27,6 +27,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -35,6 +36,7 @@ const MOBILE_DIR = resolve(ROOT_DIR, 'packages', 'mobile');
 const IOS_DIR = resolve(MOBILE_DIR, 'ios');
 const DERIVED_DATA_DIR = resolve(IOS_DIR, 'build');
 const WORKSPACE_PATH = resolve(IOS_DIR, 'Boardsesh.xcworkspace');
+const INFO_PLIST_PATH = resolve(IOS_DIR, 'Boardsesh', 'Info.plist');
 const SCHEME = 'Boardsesh';
 // Literal entitlements for the sim build — see the file's comment for why the
 // generated ones can't be used (profile-dependent $(AppIdentifierPrefix)).
@@ -42,6 +44,10 @@ const SIM_ENTITLEMENTS = resolve(ROOT_DIR, 'scripts', 'screenshot-sim.entitlemen
 const APP_NAME = 'Boardsesh.app';
 const DEFAULT_APP_OUT = resolve(MOBILE_DIR, '.app-cache');
 const LOG = '[mobile:build-sim-app]';
+const require = createRequire(import.meta.url);
+const screenshotDevMenuPlugin = require('../packages/mobile/plugins/with-screenshot-dev-menu.js') as {
+  resolveScreenshotMetroUrl: (env?: NodeJS.ProcessEnv) => string;
+};
 
 export interface BuildSimAppOptions {
   appOut: string;
@@ -109,6 +115,57 @@ function expoPrebuild(clean: boolean): void {
   }
 }
 
+function readPlistString(plistPath: string, key: string): string | null {
+  const result = spawnSync('plutil', ['-extract', key, 'raw', '-o', '-', plistPath], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0) return null;
+  return result.stdout.trim();
+}
+
+function readPlistJson(plistPath: string, key: string): unknown {
+  const result = spawnSync('plutil', ['-extract', key, 'json', '-o', '-', plistPath], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0) return null;
+  try {
+    return JSON.parse(result.stdout) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function plistArrayIncludes(plistPath: string, key: string, expectedValue: string | number): boolean {
+  const value = readPlistJson(plistPath, key);
+  return Array.isArray(value) && value.includes(expectedValue);
+}
+
+function screenshotNativeProjectNeedsRefresh(): boolean {
+  const expectedLauncherUrl = screenshotDevMenuPlugin.resolveScreenshotMetroUrl(process.env);
+  const actualLauncherUrl = readPlistString(INFO_PLIST_PATH, 'DEV_CLIENT_DEFAULT_LAUNCHER_URL');
+  if (actualLauncherUrl !== expectedLauncherUrl) {
+    console.log(
+      `${LOG} Existing ios/ screenshot launcher URL is ${actualLauncherUrl ?? '(missing)'}, expected ${expectedLauncherUrl}; regenerating.`,
+    );
+    return true;
+  }
+  if (!plistArrayIncludes(INFO_PLIST_PATH, 'UIDeviceFamily', 2)) {
+    console.log(`${LOG} Existing ios/ project does not support iPad; regenerating.`);
+    return true;
+  }
+  const iPadOrientationKey = 'UISupportedInterfaceOrientations~ipad';
+  if (
+    !plistArrayIncludes(INFO_PLIST_PATH, iPadOrientationKey, 'UIInterfaceOrientationLandscapeLeft') ||
+    !plistArrayIncludes(INFO_PLIST_PATH, iPadOrientationKey, 'UIInterfaceOrientationLandscapeRight')
+  ) {
+    console.log(`${LOG} Existing ios/ project is missing iPad landscape orientations; regenerating.`);
+    return true;
+  }
+  return false;
+}
+
 function ensureNativeProject(clean: boolean): void {
   if (clean) {
     // CI / deterministic: wipe ios/ and regenerate from scratch. --clean is
@@ -121,6 +178,10 @@ function ensureNativeProject(clean: boolean): void {
     return;
   }
   if (existsSync(WORKSPACE_PATH)) {
+    if (screenshotNativeProjectNeedsRefresh()) {
+      expoPrebuild(true);
+      return;
+    }
     // ios/ already generated (e.g. by `vp run mobile:ios`). Skip prebuild — see
     // the incremental-crash note above — and trust the existing project. The dev
     // owns ios/ freshness locally; CI always passes --clean. Pass --clean here to

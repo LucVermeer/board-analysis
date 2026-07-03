@@ -17,6 +17,8 @@ const cfg = vi.hoisted(() => ({
   measuredTabBarHeight: null as number | null,
   nativeAccessoryActive: false,
   nativeTabBar: false,
+  widthClass: 'compact' as 'compact' | 'regular',
+  windowWidth: 430,
 }));
 
 // useAccessoryClimbTap builds a preview queue item via climbToQueueItem, which
@@ -30,6 +32,7 @@ vi.mock('react-native', () => ({
   View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
     createElement('div', { 'data-style': JSON.stringify(style) }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
+  useWindowDimensions: () => ({ width: cfg.windowWidth, height: 932 }),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -57,6 +60,11 @@ vi.mock('../../../lib/route-segments', () => ({
   isTopLevelTabRoute: () => cfg.onTopLevelTab,
   isAccessorySurfaceRoute: () => cfg.onAccessorySurface,
 }));
+// useBottomChromeMetrics now reads the device layout; in jsdom this test runs as
+// a compact phone (no sidebar), so the bottom-chrome arithmetic is unchanged.
+vi.mock('../../../hooks/use-device-layout', () => ({
+  useDeviceLayout: () => ({ widthClass: cfg.widthClass, expanded: cfg.windowWidth >= 1024 }),
+}));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
   useHasActiveClimb: () => cfg.currentClimbQueueItem?.climb != null,
@@ -73,6 +81,7 @@ vi.mock('../../../theme/layout', () => ({
   TOOLBAR_FAB_SIZE: 56,
   TOOLBAR_GAP_ABOVE_TABBAR: 10,
   TABBAR_SEAM_OVERLAP: 1,
+  SIDEBAR_WIDTH: 96,
   glassSize: { hero: 64, inline: 44 },
 }));
 // The docked Material bar reads the tab bar's measured height to position itself.
@@ -140,6 +149,8 @@ describe('PersistentQueueBar', () => {
     cfg.measuredTabBarHeight = null;
     cfg.nativeAccessoryActive = false;
     cfg.nativeTabBar = false;
+    cfg.widthClass = 'compact';
+    cfg.windowWidth = 430;
   });
 
   it('renders nothing when no climb is current', () => {
@@ -266,5 +277,25 @@ describe('PersistentQueueBar', () => {
     expect(container.querySelector('[data-animated]')?.parentElement?.getAttribute('data-style')).toContain(
       '"bottom":79',
     );
+  });
+
+  it('renders in tight regular iPad widths where the detail pane is suppressed', () => {
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 744;
+
+    const { container } = render(<PersistentQueueBar />);
+
+    expect(container.querySelector('[data-capsule]')).not.toBeNull();
+    expect(container.querySelector('[data-tick]')).not.toBeNull();
+  });
+
+  it('stays hidden in regular iPad widths where the detail pane owns the current climb', () => {
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1024;
+
+    const { container } = render(<PersistentQueueBar />);
+
+    expect(container.querySelector('[data-capsule]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
   });
 });

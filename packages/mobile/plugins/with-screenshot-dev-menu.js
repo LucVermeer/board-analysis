@@ -13,10 +13,20 @@ const { createRunOncePlugin, withInfoPlist } = require('expo/config-plugins');
 // the registered defaults (Bundle.main Info dictionary), so baking them in keeps
 // the chrome suppressed no matter how the app is (re)launched.
 //
+const DEFAULT_SCREENSHOT_METRO_PORT = 8081;
+
+function resolveScreenshotMetroPort(env = process.env) {
+  return Number.parseInt(env.BOARDSESH_METRO_PORT ?? '', 10) || DEFAULT_SCREENSHOT_METRO_PORT;
+}
+
+function resolveScreenshotMetroUrl(env = process.env) {
+  return `http://localhost:${resolveScreenshotMetroPort(env)}`;
+}
+
 // Only applied to the dedicated screenshots build (gated in app.config.ts on
 // BOARDSESH_SCREENSHOT_BUILD, set by scripts/mobile-build-sim-app.ts), so normal
 // `vp run mobile:ios` dev builds keep the full dev menu + floating button.
-function applyScreenshotDevMenuInfoPlist(infoPlist) {
+function applyScreenshotDevMenuInfoPlist(infoPlist, env = process.env) {
   infoPlist.EXDevMenuIsOnboardingFinished = true;
   infoPlist.EXDevMenuShowFloatingActionButton = false;
   infoPlist.EXDevMenuShowsAtLaunch = false;
@@ -26,9 +36,10 @@ function applyScreenshotDevMenuInfoPlist(infoPlist) {
   // point: a fresh CI sim raises an "Open in Boardsesh?" confirmation for any
   // openurl of the custom scheme, and Maestro can't dismiss it reliably. With this
   // the orchestrator just `simctl launch`es the app and it connects to Metro —
-  // no openurl, no dialog. Fixed to 8081 (the screenshots Metro port); a
-  // BOARDSESH_METRO_PORT override would need this rebuilt to match.
-  infoPlist.DEV_CLIENT_DEFAULT_LAUNCHER_URL = 'http://localhost:8081';
+  // no openurl, no dialog. The port is baked into the app during prebuild; if the
+  // screenshot runner uses BOARDSESH_METRO_PORT, this value must be rebuilt with
+  // the same override.
+  infoPlist.DEV_CLIENT_DEFAULT_LAUNCHER_URL = resolveScreenshotMetroUrl(env);
   return infoPlist;
 }
 
@@ -41,3 +52,5 @@ function withScreenshotDevMenu(config) {
 
 module.exports = createRunOncePlugin(withScreenshotDevMenu, 'with-screenshot-dev-menu', '1.0.0');
 module.exports.applyScreenshotDevMenuInfoPlist = applyScreenshotDevMenuInfoPlist;
+module.exports.resolveScreenshotMetroPort = resolveScreenshotMetroPort;
+module.exports.resolveScreenshotMetroUrl = resolveScreenshotMetroUrl;

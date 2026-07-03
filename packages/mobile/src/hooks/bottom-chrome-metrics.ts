@@ -46,6 +46,19 @@ export type BottomChromeInputs = {
   hasCurrentClimb: boolean;
   /** Whether the iOS 26 native bottom accessory is mounted (it replaces the JS toolbar). */
   nativeAccessoryMounted: boolean;
+  /**
+   * Whether the regular-width iPad shell is on screen: a left sidebar replaces
+   * the bottom tab bar. Optional and defaults to `false` — every existing
+   * (phone / compact-iPad) call site keeps its current behavior unchanged.
+   */
+  usesSidebar?: boolean;
+  /**
+   * Whether the selected-climb detail pane is mounted and owns the queue toolbar.
+   * Defaults to `usesSidebar` for backward-compatible pure calls: full iPad
+   * pane mode has no bottom chrome, but narrow regular iPad windows still need
+   * the JS queue toolbar because the pane is suppressed there.
+   */
+  detailPaneOwnsQueue?: boolean;
 };
 
 export type BottomChromeMetrics = {
@@ -109,18 +122,48 @@ export function computeBottomChromeMetrics({
   onAccessorySurface,
   hasCurrentClimb,
   nativeAccessoryMounted,
+  usesSidebar = false,
+  detailPaneOwnsQueue = usesSidebar,
 }: BottomChromeInputs): BottomChromeMetrics {
-  const nativeAccessoryVisible = nativeAccessoryMounted && hasCurrentClimb;
+  // Regular-width iPad with the detail pane mounted: the left sidebar replaces
+  // the bottom tab bar and the selected-climb pane replaces the floating queue
+  // toolbar, so nothing floats at the bottom. Every offset collapses to the raw
+  // safe-area inset. Narrow regular iPad windows still pass `usesSidebar=true`,
+  // but `detailPaneOwnsQueue=false`, so they skip this branch and keep the JS
+  // queue toolbar while still removing the bottom tab bar height below.
+  if (usesSidebar && detailPaneOwnsQueue) {
+    return {
+      hasCurrentClimb,
+      insideTabs,
+      nativeAccessoryMounted: false,
+      nativeAccessoryVisible: false,
+      jsQueueToolbarVisible: false,
+      tabBarHeight: 0,
+      tabBarBottom: insetsBottom,
+      jsQueueReserve: 0,
+      nativeAccessoryReserve: 0,
+      scrollBottomPadding: insetsBottom,
+      floatingControlBottom: insetsBottom,
+      fixedFooterBottom: insetsBottom,
+      inSessionListBottom: insetsBottom,
+      preSessionFooterBottom: insetsBottom,
+    };
+  }
+
+  // On the regular-width sidebar shell the native accessory never mounts (the
+  // sidebar owns the chrome), so fold that into `effectiveNativeAccessoryMounted`.
+  const effectiveNativeAccessoryMounted = usesSidebar ? false : nativeAccessoryMounted;
+  const nativeAccessoryVisible = effectiveNativeAccessoryMounted && hasCurrentClimb;
   // The JS toolbar only mounts on an accessory surface (a top-level tab) when the
   // native accessory isn't owning the climb. On a pushed sub-route `onAccessorySurface`
   // is false, so no JS bar — and no `jsQueueReserve` for a bar that isn't there.
-  const jsQueueToolbarVisible = onAccessorySurface && hasCurrentClimb && !nativeAccessoryMounted;
+  const jsQueueToolbarVisible = onAccessorySurface && hasCurrentClimb && !effectiveNativeAccessoryMounted;
   // The native iOS tab bar is 49pt; the JS M3 `MaterialTabBar` is taller. Key this
   // on the *rendered* bar, not the variant — Liquid Glass on iOS < 26 / Android
   // falls back to the JS bar. Floating overlays (FAB, snackbar) and scroll padding
   // clear this height, so it has to track the real bar on screen.
   const tabBarConstant = usesNativeTabBar ? TAB_BAR_HEIGHT : MATERIAL_TAB_BAR_HEIGHT;
-  const tabBarHeight = insideTabs ? tabBarConstant : 0;
+  const tabBarHeight = insideTabs && !usesSidebar ? tabBarConstant : 0;
   // Only the native tab bar overlays content (UIKit draws it over the scroll view);
   // the JS `MaterialTabBar` sits in flow.
   const tabBarOverlaysContent = insideTabs && usesNativeTabBar;
@@ -140,7 +183,7 @@ export function computeBottomChromeMetrics({
   return {
     hasCurrentClimb,
     insideTabs,
-    nativeAccessoryMounted,
+    nativeAccessoryMounted: effectiveNativeAccessoryMounted,
     nativeAccessoryVisible,
     jsQueueToolbarVisible,
     tabBarHeight,

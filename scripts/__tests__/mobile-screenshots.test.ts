@@ -1,14 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   buildScreenshotEnv,
   deviceSlug,
+  metroDevClientUrl,
   parseArgs,
+  renderMaestroFlowForIosDevice,
   resolveAppStoreLocaleTargets,
+  rotationDegreesForIosOrientation,
+  validateIosAppLauncherUrl,
+  type IosScreenshotDevice,
   type ScreenshotOptions,
 } from '../mobile-screenshots';
 
-const commonDevices = ['iPhone 16 Pro Max'];
+const phoneDevices = ['iPhone 16 Pro Max'];
+const ipadDevices = ['iPad Pro 13-inch (M5)', 'iPad Pro 11-inch (M5)'];
+const commonDevices = [...phoneDevices, ...ipadDevices];
 const allAppLocales: ScreenshotOptions['appLocales'] = ['en-US', 'es', 'fr'];
 
 function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOptions {
@@ -44,6 +55,7 @@ describe('deviceSlug', () => {
   it('collapses runs of non-alphanumerics and trims edges', () => {
     expect(deviceSlug('  Pixel 8 (Pro) ')).toBe('pixel-8-pro');
     expect(deviceSlug('iPad Pro 13"')).toBe('ipad-pro-13');
+    expect(deviceSlug('iPad Pro 13-inch (M5)')).toBe('ipad-pro-13-inch-m5');
   });
 });
 
@@ -117,6 +129,11 @@ describe('parseArgs', () => {
     expect(parseArgs(['--devices', 'common', '--locales', 'all'])).toEqual(makeOptions());
   });
 
+  it('maps --devices phones and --devices ipads to their platform groups', () => {
+    expect(parseArgs(['--devices', 'phones']).devices).toEqual(phoneDevices);
+    expect(parseArgs(['--devices', 'ipads']).devices).toEqual(ipadDevices);
+  });
+
   it('rejects invalid locales and empty comma lists', () => {
     expect(() => parseArgs(['--locales', 'de'])).toThrow(/supported app locales/);
     expect(() => parseArgs(['--devices', ','])).toThrow(/at least one device/);
@@ -188,6 +205,98 @@ describe('buildScreenshotEnv', () => {
     );
     expect(overridden.EXPO_PUBLIC_SCREENSHOT_USER_EMAIL).toBe('shots@boardsesh.com');
     expect(overridden.EXPO_PUBLIC_SCREENSHOT_USER_PASSWORD).toBe('secret');
+  });
+});
+
+describe('metroDevClientUrl', () => {
+  it('uses the Expo app scheme that iOS dev launcher accepts', () => {
+    expect(metroDevClientUrl(8091)).toBe('exp+boardsesh://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8091');
+  });
+});
+
+describe('validateIosAppLauncherUrl', () => {
+  function hasPlutil() {
+    return spawnSync('command', ['-v', 'plutil'], { shell: true, stdio: 'ignore' }).status === 0;
+  }
+
+  function writeInfoPlist(appPath: string, launcherUrl: string) {
+    writeFileSync(
+      join(appPath, 'Info.plist'),
+      `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>DEV_CLIENT_DEFAULT_LAUNCHER_URL</key>
+  <string>${launcherUrl}</string>
+</dict>
+</plist>
+`,
+    );
+  }
+
+  it('accepts an iOS app path baked for the active Metro port', () => {
+    if (!hasPlutil()) return;
+    const tempDir = mkdtempSync(join(tmpdir(), 'boardsesh-test-app-'));
+    const appPath = join(tempDir, 'Boardsesh.app');
+    mkdirSync(appPath);
+    try {
+      writeInfoPlist(appPath, 'http://localhost:8091');
+      expect(() => validateIosAppLauncherUrl(appPath, 8091)).not.toThrow();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an iOS app path baked for a different Metro port', () => {
+    if (!hasPlutil()) return;
+    const tempDir = mkdtempSync(join(tmpdir(), 'boardsesh-test-app-'));
+    const appPath = join(tempDir, 'Boardsesh.app');
+    mkdirSync(appPath);
+    try {
+      writeInfoPlist(appPath, 'http://localhost:8081');
+      expect(() => validateIosAppLauncherUrl(appPath, 8091)).toThrow(/expected http:\/\/localhost:8091/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('renderMaestroFlowForIosDevice', () => {
+  it('renders the setOrientation placeholder to the target iOS device orientation', () => {
+    const ipadDevice: IosScreenshotDevice = {
+      name: 'iPad Pro 13-inch (M5)',
+      typeId: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB',
+      orientation: 'LANDSCAPE_LEFT',
+    };
+
+    const rendered = renderMaestroFlowForIosDevice(
+      '- setOrientation: ${MAESTRO_DEVICE_ORIENTATION}\n- takeScreenshot: 00-home\n',
+      ipadDevice,
+    );
+
+    expect(rendered).toContain('- setOrientation: LANDSCAPE_LEFT');
+    expect(rendered).not.toContain('${MAESTRO_DEVICE_ORIENTATION}');
+  });
+
+  it('keeps real iOS flows orientable for iPad screenshot captures', () => {
+    const ipadDevice: IosScreenshotDevice = {
+      name: 'iPad Pro 13-inch (M5)',
+      typeId: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB',
+      orientation: 'LANDSCAPE_LEFT',
+    };
+
+    for (const flowPath of ['packages/mobile/.maestro/app-store.yaml', 'packages/mobile/.maestro/onboarding.yaml']) {
+      const flowSource = readFileSync(flowPath, 'utf8');
+      expect(flowSource).toContain('${MAESTRO_DEVICE_ORIENTATION}');
+      expect(renderMaestroFlowForIosDevice(flowSource, ipadDevice)).toContain('- setOrientation: LANDSCAPE_LEFT');
+    }
+  });
+});
+
+describe('rotationDegreesForIosOrientation', () => {
+  it('normalizes raw iPad landscape-left captures into upright landscape PNGs', () => {
+    expect(rotationDegreesForIosOrientation('LANDSCAPE_LEFT')).toBe(-90);
+    expect(rotationDegreesForIosOrientation('PORTRAIT')).toBeNull();
   });
 });
 

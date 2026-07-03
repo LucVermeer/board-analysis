@@ -24,6 +24,8 @@ name: onboarding illustrations
 # (boots straight to home); the orchestrator gates on `$screen /home` before
 # running Maestro, so this flow opens right into the deep links below.
 
+- setOrientation: ${MAESTRO_DEVICE_ORIENTATION}
+
 # Prime the "Open in 'Boardsesh'?" confirmation away on throwaway /home
 # navigations before any capture (see app-store.yaml for the full rationale).
 - openLink: com.boardsesh.app://home

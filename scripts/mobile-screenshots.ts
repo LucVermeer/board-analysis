@@ -21,7 +21,7 @@
  *
  * Usage:
  *   vp run mobile:screenshots -- [--platform ios] [--flow app-store|onboarding]
- *                                 [--backend local|prod] [--devices common|<comma-list>]
+ *                                 [--backend local|prod] [--devices common|phones|ipads|<comma-list>]
  *                                 [--locales all|<comma-list>] [--device "iPhone 16 Pro Max"]
  *                                 [--variant material|liquidGlass] [--shutdown]
  *                                 [--app-path <path/to/Boardsesh.app|app.apk>]
@@ -35,7 +35,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -61,6 +61,8 @@ const STORE_BY_PLATFORM: Record<'ios' | 'android', string> = { ios: 'apple', and
 const LOG = '[mobile:screenshots]';
 
 const APP_ID = 'com.boardsesh.app';
+const DEV_CLIENT_URL_SCHEME = 'exp+boardsesh';
+const MAESTRO_DEVICE_ORIENTATION_PLACEHOLDER = '${MAESTRO_DEVICE_ORIENTATION}';
 const DEFAULT_ANDROID_DEVICE = 'Pixel 2';
 const DEFAULT_ANDROID_APK = resolve(
   MOBILE_DIR,
@@ -85,26 +87,53 @@ export type ScreenshotFlow = 'app-store' | 'onboarding';
 export type ScreenshotBackend = 'local' | 'prod';
 
 export type ScreenshotTheme = 'light' | 'dark';
+export type IosDeviceOrientation = 'PORTRAIT' | 'LANDSCAPE_LEFT';
 
 export interface IosScreenshotDevice {
   name: string;
   typeId: string;
+  orientation: IosDeviceOrientation;
 }
 
-// Just the 6.9" iPhone 16 Pro Max. App Store Connect auto-scales the largest size
-// down to every smaller iPhone, so a single 6.9" set covers the whole range — extra
-// device sizes are invisible to users and add no ranking value, only CI time (see
-// app-stores/apple/app-store-submission-guide.md). Locale, not device size, is the
-// axis that helps the listing, so the orchestrator still captures every app locale.
-export const IOS_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
+// iPhones: just the 6.9" iPhone 16 Pro Max. App Store Connect auto-scales the
+// largest iPhone size down to every smaller iPhone, so a single 6.9" set covers the
+// whole iPhone range — extra iPhone sizes are invisible to users and add no ranking
+// value, only CI time (see app-stores/apple/app-store-submission-guide.md). iPad is
+// a separate App Store slot that does NOT auto-scale from the iPhone screenshots, so
+// it gets its own captures below. Locale, not iPhone size, is the axis that helps the
+// listing, so the orchestrator still captures every app locale.
+export const IOS_PHONE_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
   {
     name: 'iPhone 16 Pro Max',
     typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max',
+    orientation: 'PORTRAIT',
   },
 ];
 
+export const IOS_IPAD_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
+  {
+    name: 'iPad Pro 13-inch (M5)',
+    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB',
+    orientation: 'LANDSCAPE_LEFT',
+  },
+  {
+    name: 'iPad Pro 11-inch (M5)',
+    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB',
+    orientation: 'LANDSCAPE_LEFT',
+  },
+];
+
+export const IOS_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
+  ...IOS_PHONE_SCREENSHOT_DEVICES,
+  ...IOS_IPAD_SCREENSHOT_DEVICES,
+];
+
 const COMMON_IOS_DEVICE_NAMES = IOS_SCREENSHOT_DEVICES.map((device) => device.name);
+const PHONE_IOS_DEVICE_NAMES = IOS_PHONE_SCREENSHOT_DEVICES.map((device) => device.name);
+const IPAD_IOS_DEVICE_NAMES = IOS_IPAD_SCREENSHOT_DEVICES.map((device) => device.name);
 const DEFAULT_IOS_DEVICES_ARGUMENT = 'common';
+const PHONE_IOS_DEVICES_ARGUMENT = 'phones';
+const IPAD_IOS_DEVICES_ARGUMENT = 'ipads';
 const DEFAULT_LOCALES_ARGUMENT = 'all';
 
 export interface AppStoreLocaleTarget {
@@ -218,6 +247,12 @@ function parseDevicesArgument(value: string): string[] {
   if (value === DEFAULT_IOS_DEVICES_ARGUMENT) {
     return [...COMMON_IOS_DEVICE_NAMES];
   }
+  if (value === PHONE_IOS_DEVICES_ARGUMENT) {
+    return [...PHONE_IOS_DEVICE_NAMES];
+  }
+  if (value === IPAD_IOS_DEVICES_ARGUMENT) {
+    return [...IPAD_IOS_DEVICE_NAMES];
+  }
   const devices = value
     .split(',')
     .map((deviceName) => deviceName.trim())
@@ -326,6 +361,28 @@ function runCapture(command: string, args: string[]): { status: number; stdout: 
   return { status: result.status ?? 1, stdout: result.stdout ?? '' };
 }
 
+function readPlistString(plistPath: string, key: string): string | null {
+  const result = spawnSync('plutil', ['-extract', key, 'raw', '-o', '-', plistPath], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0) return null;
+  return result.stdout.trim();
+}
+
+export function validateIosAppLauncherUrl(appPath: string, metroPort = METRO_PORT): void {
+  if (!appPath.endsWith('.app')) return;
+  const infoPlist = join(appPath, 'Info.plist');
+  const expectedLauncherUrl = `http://localhost:${metroPort}`;
+  const actualLauncherUrl = readPlistString(infoPlist, 'DEV_CLIENT_DEFAULT_LAUNCHER_URL');
+  if (actualLauncherUrl !== expectedLauncherUrl) {
+    throw new Error(
+      `${appPath} was built for DEV_CLIENT_DEFAULT_LAUNCHER_URL=${actualLauncherUrl ?? '(missing)'}, ` +
+        `expected ${expectedLauncherUrl}. Rebuild it with BOARDSESH_METRO_PORT=${metroPort} or omit --app-path.`,
+    );
+  }
+}
+
 function commandExists(command: string): boolean {
   return spawnSync('command', ['-v', command], { shell: true, stdio: 'ignore' }).status === 0;
 }
@@ -385,6 +442,7 @@ export function resolveIosScreenshotDevices(deviceNames: readonly string[]): Ios
     return {
       name: deviceName,
       typeId: '',
+      orientation: 'PORTRAIT',
     };
   });
 }
@@ -527,6 +585,54 @@ function flowFileForPlatform(options: ScreenshotOptions, platform: 'ios' | 'andr
   return join(MAESTRO_DIR, `${options.flow}.yaml`);
 }
 
+export function renderMaestroFlowForIosDevice(flowSource: string, screenshotDevice: IosScreenshotDevice): string {
+  return flowSource.replaceAll(MAESTRO_DEVICE_ORIENTATION_PLACEHOLDER, screenshotDevice.orientation);
+}
+
+export function rotationDegreesForIosOrientation(orientation: IosDeviceOrientation): number | null {
+  return orientation === 'LANDSCAPE_LEFT' ? -90 : null;
+}
+
+function renderedFlowFileForIosDevice(
+  options: ScreenshotOptions,
+  screenshotDevice: IosScreenshotDevice,
+  captureDir: string,
+): string {
+  const flowFile = flowFileForPlatform(options, 'ios');
+  if (!existsSync(flowFile)) return flowFile;
+  const renderedFlowFile = join(captureDir, `${options.flow}-${deviceSlug(screenshotDevice.name)}.yaml`);
+  writeFileSync(renderedFlowFile, renderMaestroFlowForIosDevice(readFileSync(flowFile, 'utf8'), screenshotDevice));
+  return renderedFlowFile;
+}
+
+function readPngDimensions(filePath: string): { width: number; height: number } | null {
+  const { status, stdout } = runCapture('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', filePath]);
+  if (status !== 0) return null;
+  const widthMatch = stdout.match(/pixelWidth:\s*(\d+)/);
+  const heightMatch = stdout.match(/pixelHeight:\s*(\d+)/);
+  const width = widthMatch ? Number.parseInt(widthMatch[1], 10) : Number.NaN;
+  const height = heightMatch ? Number.parseInt(heightMatch[1], 10) : Number.NaN;
+  return Number.isFinite(width) && Number.isFinite(height) ? { width, height } : null;
+}
+
+function normalizeCapturedIosScreenshots(captureDir: string, screenshotDevice: IosScreenshotDevice): number {
+  const rotationDegrees = rotationDegreesForIosOrientation(screenshotDevice.orientation);
+  if (rotationDegrees === null) return 0;
+
+  const pngs = readdirSync(captureDir).filter((file) => file.toLowerCase().endsWith('.png'));
+  for (const png of pngs) {
+    const screenshotPath = join(captureDir, png);
+    const dimensions = readPngDimensions(screenshotPath);
+    if (dimensions && dimensions.width > dimensions.height) continue;
+    const { status } = runCapture('sips', ['-r', String(rotationDegrees), screenshotPath]);
+    if (status !== 0) {
+      console.error(`${LOG} FAILED: could not rotate landscape iOS screenshot ${png}.`);
+      return status;
+    }
+  }
+  return 0;
+}
+
 function captureIosDevice(
   options: ScreenshotOptions,
   screenshotDevice: IosScreenshotDevice,
@@ -570,10 +676,10 @@ function captureIosDevice(
     // on a stale marker and capture a blank/loading frame.
     const homeReadyBaseline = homeReadyMarkerCount();
 
-    // Just launch the app — no `simctl openurl`. The screenshots build bakes
-    // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:8081 into Info.plist (see
-    // ./plugins/with-screenshot-dev-menu), so the dev-client auto-connects to
-    // Metro on a plain launch and — auto-signed-in (see auth-provider's
+    // First try a plain launch — no `simctl openurl`. The screenshots build bakes
+    // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:${METRO_PORT} into
+    // Info.plist (see ./plugins/with-screenshot-dev-menu), so the dev-client
+    // auto-connects to Metro on a plain launch and — auto-signed-in (see auth-provider's
     // SCREENSHOT_MODE branch) — lands straight on home, without ever opening the
     // custom-scheme URL or showing a login screen. That matters because a fresh CI
     // sim raises an "Open in Boardsesh?" confirmation for ANY openurl of the
@@ -586,19 +692,24 @@ function captureIosDevice(
     // there before Maestro runs — this is what login.yaml's readiness wait used to
     // do (now deleted; there's no login screen to gate on).
     console.log(`${LOG} Waiting for the app to auto-sign-in and reach home...`);
+    if (!waitForHomeReady(homeReadyBaseline, 45)) {
+      console.log(`${LOG} Plain launch did not reach home; retrying with the explicit dev-client URL...`);
+      runCapture('xcrun', ['simctl', 'openurl', device.udid, metroDevClientUrl()]);
+    }
     if (!waitForHomeReady(homeReadyBaseline)) {
       console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
       return 1;
     }
 
-    const flowFile = flowFileForPlatform(options, 'ios');
-    if (!existsSync(flowFile)) {
-      console.error(`${LOG} FAILED: flow not found: ${flowFile}`);
+    const sourceFlowFile = flowFileForPlatform(options, 'ios');
+    if (!existsSync(sourceFlowFile)) {
+      console.error(`${LOG} FAILED: flow not found: ${sourceFlowFile}`);
       return 1;
     }
+    const flowFile = renderedFlowFileForIosDevice(options, screenshotDevice, captureDir);
     const email = process.env.SCREENSHOT_USER_EMAIL ?? DEFAULT_USER_EMAIL;
     const password = process.env.SCREENSHOT_USER_PASSWORD ?? DEFAULT_USER_PASSWORD;
-    console.log(`${LOG} Running Maestro flow ${options.flow} on ${device.udid}...`);
+    console.log(`${LOG} Running Maestro flow ${options.flow} on ${device.udid} (${screenshotDevice.orientation})...`);
     // Credentials are passed via `-e`, which is the ONLY mechanism Maestro 2.6.1
     // offers: `maestro test` has no `--env-file` and does not read `${VAR}` from
     // the shell environment (verified — env-only resolves to empty and login
@@ -628,6 +739,9 @@ function captureIosDevice(
       console.error(`${LOG} FAILED: Maestro exited with ${maestroStatus}.`);
       return maestroStatus;
     }
+
+    const normalizeStatus = normalizeCapturedIosScreenshots(captureDir, screenshotDevice);
+    if (normalizeStatus !== 0) return normalizeStatus;
 
     const saved = collectScreenshots(captureDir, 'ios', device.name, localeTarget.appStoreLocales);
     if (saved.length === 0) {
@@ -761,6 +875,7 @@ function resolveAndroidAppPath(options: ScreenshotOptions): string {
     if (!existsSync(options.appPath)) {
       throw new Error(`--app-path not found: ${options.appPath}`);
     }
+    validateIosAppLauncherUrl(options.appPath);
     return options.appPath;
   }
   if (existsSync(DEFAULT_ANDROID_APK)) {
@@ -944,8 +1059,8 @@ export function resolveAppPath(options: ScreenshotOptions): string {
 }
 
 /** expo-development-client deep link that loads the JS bundle from our Metro. */
-export function metroDevClientUrl(): string {
-  return `${APP_ID}://expo-development-client/?url=${encodeURIComponent(`http://localhost:${METRO_PORT}`)}`;
+export function metroDevClientUrl(metroPort = METRO_PORT): string {
+  return `${DEV_CLIENT_URL_SCHEME}://expo-development-client/?url=${encodeURIComponent(`http://localhost:${metroPort}`)}`;
 }
 
 /** True if anything is already listening on the port (a foreign Metro). */
