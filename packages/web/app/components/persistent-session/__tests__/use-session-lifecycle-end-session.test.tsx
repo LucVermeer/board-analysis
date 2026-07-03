@@ -42,6 +42,7 @@ function buildArgs() {
   };
   const args = {
     isAuthLoading: false,
+    hasWsAuthToken: true,
     handleQueueEvent: vi.fn(),
     handleSessionEvent: vi.fn(),
     syncGate: createQueueSyncGate(),
