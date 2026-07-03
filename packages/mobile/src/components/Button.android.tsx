@@ -110,12 +110,12 @@ export function Button({
   // button's content colour). The leading Icon omits `color` so it inherits the
   // button's LocalContentColor for free.
   let spinnerColor: string;
-  if (variant === 'filled' || variant === 'tonal') {
-    spinnerColor = isDestructive
-      ? brandColors.onPrimary
-      : variant === 'filled'
-        ? brandColors.onPrimary
-        : brandColors.primary;
+  if (variant === 'filled') {
+    // On-fill white (destructive fills with error + white content too).
+    spinnerColor = brandColors.onPrimary;
+  } else if (variant === 'tonal') {
+    // MD3 tonal content ≈ brand primary; destructive fills with error + white.
+    spinnerColor = isDestructive ? brandColors.onPrimary : brandColors.primary;
   } else {
     spinnerColor = isDestructive ? brandColors.error : accentColor;
   }
@@ -129,7 +129,10 @@ export function Button({
           ? TextButton
           : ComposeButton;
 
-  const isFullWidth = style?.width === '100%' || style?.flex != null || style?.alignSelf === 'stretch';
+  // Only a positive `flex` grows — `flex: 0` means "don't grow", so it must not
+  // count as full-width (`flex != null` would wrongly catch 0).
+  const isFullWidth =
+    style?.width === '100%' || (typeof style?.flex === 'number' && style.flex > 0) || style?.alignSelf === 'stretch';
   const iconSource = icon ? BUTTON_ICON_SOURCE[icon] : undefined;
 
   return (

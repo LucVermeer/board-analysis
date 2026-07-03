@@ -17,7 +17,15 @@ import { Pressable, Text } from 'react-native';
 // drifting from the real component.
 import type { ButtonProps } from '../src/components/Button.types';
 
-export function Button({ title, onPress, accessibilityLabel, disabled = false, loading = false, testID }: ButtonProps) {
+export function Button({
+  title,
+  onPress,
+  accessibilityLabel,
+  disabled = false,
+  loading = false,
+  role = 'default',
+  testID,
+}: ButtonProps) {
   const handlePress = () => {
     if (disabled || loading) return;
     onPress();
@@ -30,6 +38,11 @@ export function Button({ title, onPress, accessibilityLabel, disabled = false, l
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
       accessibilityLabel={accessibilityLabel ?? title}
+      // Forward the native `role` so indirect screen tests can assert it was
+      // threaded (the destructive/cancel semantics live in the native tree, which
+      // can't mount under vitest). Only when non-default, to leave ordinary
+      // buttons' accessibility tree untouched.
+      accessibilityValue={role !== 'default' ? { text: role } : undefined}
       testID={testID}
     >
       <Text>{title}</Text>

@@ -118,7 +118,10 @@ export function Button({
 
   // A footer button styled to fill its row needs the native Button to stretch
   // (it content-hugs otherwise); an inline button hugs its content in BOTH axes.
-  const isFullWidth = style?.width === '100%' || style?.flex != null || style?.alignSelf === 'stretch';
+  // Only a positive `flex` grows — `flex: 0` means "don't grow", so it must not
+  // count as full-width (`flex != null` would wrongly catch 0).
+  const isFullWidth =
+    style?.width === '100%' || (typeof style?.flex === 'number' && style.flex > 0) || style?.alignSelf === 'stretch';
 
   const modifiers: ModifierConfig[] = [
     styleModifier,

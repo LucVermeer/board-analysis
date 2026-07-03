@@ -49,7 +49,7 @@ function EmphasizedText({
 
 export function DeleteAccountScreen() {
   const { t } = useTranslation('settings');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors } = useTheme();
   const { showToast } = useToast();
   const { signOut } = useAuth();
   const router = useRouter();
@@ -167,7 +167,6 @@ export function DeleteAccountScreen() {
         <Button
           title={t('deleteAccount.dialog.confirm')}
           variant="filled"
-          tintColor={brandColors.error}
           role="destructive"
           onPress={() => {
             void handleDelete();
