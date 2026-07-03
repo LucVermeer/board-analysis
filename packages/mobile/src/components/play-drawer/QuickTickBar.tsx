@@ -212,6 +212,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
             setComment('');
             setLastError(null);
             setClimbedAt(new Date());
+            setMaximumClimbedAtDate(new Date());
             showToast(tClimbs('mobile.logAscent.savedToast'), 'success');
             onDismiss();
           },
