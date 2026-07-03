@@ -39,11 +39,32 @@ type AppStoreVersionResource = {
     versionString?: string;
     appStoreState?: string;
   };
+  relationships?: {
+    build?: { data?: { type: 'builds'; id: string } | null };
+  };
+};
+
+// A side-loaded resource in the JSON:API `included` array. Typed loosely on
+// `type` so the runtime `type === 'builds'` filter below is meaningful — ASC could
+// include other resource types, whose ids must not shadow build ids.
+type IncludedResource = {
+  type: string;
+  id: string;
+  attributes?: { version?: string };
 };
 
 type JsonApiCollectionResponse<T> = {
   data: T[];
+  included?: IncludedResource[];
 };
+
+// A version App Store Connect has accepted, plus the build number of the build
+// attached to it (CFBundleVersion). The build number is what the approval
+// workflow matches against the build-ios-v<version>-<buildNumber>-<shortfp> tag
+// to find the exact commit + fingerprint to anchor. null when ASC returned no
+// attached build (the approval step then falls back to the latest build tag for
+// the version).
+type AcceptedVersion = { versionString: string; buildNumber: number | null };
 
 function base64UrlEncode(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url');
@@ -104,19 +125,45 @@ async function resolveAppId(token: string): Promise<string> {
   return app.id;
 }
 
-async function getAcceptedVersionStrings(token: string, appId: string): Promise<string[]> {
+// Pure mapping from the ASC appStoreVersions response (with `include=build`) to
+// the accepted (version, build number) pairs. Exported so it can be unit-tested
+// without the network; getAcceptedVersions is the thin fetch wrapper.
+export function mapAcceptedVersions(data: JsonApiCollectionResponse<AppStoreVersionResource>): AcceptedVersion[] {
+  const buildNumberById = new Map<string, number>();
+  for (const included of data.included ?? []) {
+    if (included.type !== 'builds') continue;
+    const rawVersion = included.attributes?.version;
+    const parsed = typeof rawVersion === 'string' ? Number.parseInt(rawVersion, 10) : Number.NaN;
+    if (Number.isFinite(parsed)) buildNumberById.set(included.id, parsed);
+  }
+
+  return data.data
+    .map((version): AcceptedVersion | null => {
+      const versionString = version.attributes?.versionString;
+      if (typeof versionString !== 'string' || versionString.length === 0) return null;
+      const buildId = version.relationships?.build?.data?.id;
+      const buildNumber = buildId ? (buildNumberById.get(buildId) ?? null) : null;
+      return { versionString, buildNumber };
+    })
+    .filter((version): version is AcceptedVersion => version !== null);
+}
+
+async function getAcceptedVersions(token: string, appId: string): Promise<AcceptedVersion[]> {
   const data = await ascFetch<JsonApiCollectionResponse<AppStoreVersionResource>>(
     `/v1/apps/${appId}/appStoreVersions`,
     token,
     {
       'filter[appStoreState]': ACCEPTED_APP_STORE_STATES,
-      'fields[appStoreVersions]': 'versionString,appStoreState',
+      'fields[appStoreVersions]': 'versionString,appStoreState,build',
+      // Pull the attached build inline so we learn its build number without a
+      // second round-trip per version.
+      include: 'build',
+      'fields[builds]': 'version',
       limit: '10',
     },
   );
-  return data.data
-    .map((v) => v.attributes?.versionString)
-    .filter((v): v is string => typeof v === 'string' && v.length > 0);
+
+  return mapAcceptedVersions(data);
 }
 
 function emitOutput(name: string, value: string): void {
@@ -150,10 +197,23 @@ async function main(): Promise<number> {
     console.log(`Current marketing version: ${currentVersion}`);
 
     const appId = await resolveAppId(token);
-    const accepted = await getAcceptedVersionStrings(token, appId);
-    console.log(`Accepted App Store versions: ${accepted.length > 0 ? accepted.join(', ') : 'none'}`);
+    const accepted = await getAcceptedVersions(token, appId);
+    console.log(
+      `Accepted App Store versions: ${
+        accepted.length > 0
+          ? accepted.map((version) => `${version.versionString} (build ${version.buildNumber ?? '?'})`).join(', ')
+          : 'none'
+      }`,
+    );
 
-    if (!accepted.includes(currentVersion)) {
+    // Emit the accepted (version, build number) pairs so the workflow can cut the
+    // release/<platform>-v<version>-<shortfp> anchor tags — independent of whether
+    // the CURRENT app.config version is among them (an older accepted version may
+    // still need anchoring). One-line JSON so it fits a single GITHUB_OUTPUT value.
+    emitOutput('accepted_builds', JSON.stringify(accepted));
+
+    const acceptedStrings = accepted.map((version) => version.versionString);
+    if (!acceptedStrings.includes(currentVersion)) {
       console.log(`${currentVersion} is not yet in an accepted state — nothing to bump.`);
       emitOutput('bumped', 'false');
       return 0;
