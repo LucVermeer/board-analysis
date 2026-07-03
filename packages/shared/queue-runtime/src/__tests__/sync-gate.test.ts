@@ -445,7 +445,12 @@ describe('createQueueSyncGate', () => {
     // DIVERGE but the ordered (v2) hashes AGREE. If the gate OR-ed the two
     // comparisons (v1-mismatch → full-sync) this would wrongly resync. Because the
     // ordered pair is preferred outright, the v1 divergence is ignored → 'none'.
-    it('does nothing at gap 0 when the ordered (v2) hashes match even though v1 diverges', () => {
+    // Synthetic adversarial case: with a real queue, equal ordered (v2) hashes
+    // imply equal sorted (v1) hashes, so "v2 agree + v1 diverge" cannot occur.
+    // The hardcoded hash values force that impossible pairing to prove the code
+    // path — that when preferOrdered is true, the v1 comparison is discarded
+    // entirely (an OR of the two would wrongly full-sync on the v1 divergence).
+    it('discards the v1 comparison at gap 0 when preferOrdered (ordered agree, v1 forced to diverge)', () => {
       const gate = createQueueSyncGate();
       expect(
         gate.decideReconnectStrategy({
