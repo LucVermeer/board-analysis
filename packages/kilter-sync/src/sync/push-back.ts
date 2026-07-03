@@ -10,6 +10,8 @@ import {
   boardClimbAliases,
 } from '@boardsesh/db/schema';
 
+import { convertQualityToAurora } from '@boardsesh/shared-schema';
+
 import { KILTER_BOARD_TYPE } from '../api/types';
 import type {
   LogPushItem,
@@ -153,7 +155,8 @@ async function pushPendingTicks(db: DrizzleDb, userId: string, _accessToken: str
     angle: tick.angle,
     topped: tick.status === 'flash' || tick.status === 'send',
     attemptCount: tick.attemptCount,
-    quality: tick.quality ?? undefined,
+    // boardsesh_ticks.quality is 1-5; Kilter expects Aurora's 1-3.
+    quality: convertQualityToAurora(tick.quality) ?? undefined,
     difficulty: tick.difficulty ?? undefined,
     isMirror: tick.isMirror ?? false,
     comment: tick.comment ?? undefined,

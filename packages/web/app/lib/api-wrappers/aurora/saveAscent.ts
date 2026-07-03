@@ -1,5 +1,6 @@
 import type { BoardName } from '../../types';
 import type { SaveAscentOptions, SaveAscentResponse, Ascent } from './types';
+import { convertQuality } from '@boardsesh/shared-schema';
 import dayjs from 'dayjs';
 import { dbz } from '@/app/lib/db/db';
 import { boardseshTicks } from '@/app/lib/db/schema';
@@ -32,6 +33,11 @@ export async function saveAscent(
   // Generate a new UUID for the tick (different from the ascent uuid which is Aurora's)
   const tickUuid = randomUUID();
 
+  // The proxy speaks Aurora's convention (quality 0-3, 0 = unrated) but
+  // boardsesh_ticks stores the 1-5 scale, so convert before storage. The
+  // Aurora-shaped response below keeps the caller's raw value.
+  const boardseshQuality = convertQuality(options.quality);
+
   await dbz
     .insert(boardseshTicks)
     .values({
@@ -43,7 +49,7 @@ export async function saveAscent(
       isMirror: options.is_mirror,
       status: status,
       attemptCount: options.bid_count,
-      quality: options.quality,
+      quality: boardseshQuality,
       difficulty: options.difficulty,
       isBenchmark: options.is_benchmark,
       comment: options.comment || '',
@@ -61,7 +67,7 @@ export async function saveAscent(
         isMirror: options.is_mirror,
         status: status,
         attemptCount: options.bid_count,
-        quality: options.quality,
+        quality: boardseshQuality,
         difficulty: options.difficulty,
         isBenchmark: options.is_benchmark,
         comment: options.comment || '',
