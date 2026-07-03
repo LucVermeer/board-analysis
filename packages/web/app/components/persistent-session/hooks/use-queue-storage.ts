@@ -3,6 +3,7 @@ import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { QueueAction, QueueSearchParams } from '@boardsesh/queue';
 import type { BoardDetails } from '@/app/lib/types';
 import { getPreference, removePreference } from '@/app/lib/user-preferences-db';
+import { getBaseBoardPath } from '@/app/lib/url-utils';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_SESSION_SUMMARY, type GetSessionSummaryResponse } from '@boardsesh/graphql/operations/sessions';
 import { getClimbSessionCookie } from '@/app/lib/climb-session-cookie';
@@ -26,6 +27,13 @@ type UseQueueStorageArgs = {
 export type QueueStorageState = {
   soloBoardPath: string | null;
   soloBoardDetails: BoardDetails | null;
+  /**
+   * True once the mount-time auth pre-flight has finished (a real token ran the
+   * auto-finished check, or there was no persisted session / no token to try).
+   * Despite the name it does NOT mean a board context is loaded — a solo user
+   * with no board still flips this true; it just gates the UI on "session
+   * restore has been decided" so the queue isn't blocked waiting on it.
+   */
   isBoardContextLoaded: boolean;
 };
 
@@ -58,11 +66,6 @@ export function useQueueStorage({
   const activeSessionRef = useRef(activeSession);
   activeSessionRef.current = activeSession;
 
-  // Ref for the board-context fields + dispatch so `setBoardContext` stays a
-  // stable `[]`-deps callback while reading fresh values.
-  const boardContextRef = useRef({ soloBoardPath, dispatch });
-  boardContextRef.current = { soloBoardPath, dispatch };
-
   // Adopt the ended session's board as the solo board context when a party
   // ends. `setBoardContext` no-ops for the duration of a party, so without this
   // `soloBoardPath` still points at whatever board preceded the party. After
@@ -73,12 +76,43 @@ export function useQueueStorage({
   // carried queue (board-route parity) and keeps solo board details coherent
   // with it off-board.
   const previousActiveSessionRef = useRef<ActiveSessionInfo | null>(null);
+
+  // Detect the party-end transition during RENDER, not only in the effect
+  // below. The effect's `setSoloBoardPath` lands asynchronously, but a board
+  // route's injector can call `setBoardContext(base path)` in the SAME commit
+  // that `activeSession` flips to null — and its layout effect runs BEFORE this
+  // provider's passive adoption effect. If that concurrent `setBoardContext`
+  // read the stale pre-party `soloBoardPath` it would see previous ≠ new-board
+  // and CLEAR_QUEUE the just-carried queue. Computing the adoption here and
+  // stamping the adopted board into `boardContextRef.current` below closes that
+  // window: a same-board inject during the transition is seen as a no-op change.
+  //
+  // Normalize to the BASE path: a session's `boardPath` is the full pathname
+  // (angle + /view|/list), but every `setBoardContext` caller (the injector,
+  // cold-start) passes a base path and the board-change guard compares base
+  // paths. Stamping the raw full path would never match the injector's base
+  // path, so the guard would clear anyway. `previousActiveSessionRef.current`
+  // still holds the pre-transition session here (the effect overwrites it only
+  // after this render commits), so this reads the same transition the effect does.
+  const pendingAdoption = resolveEndedSessionBoardAdoption(previousActiveSessionRef.current, activeSession);
+  const adoptedBoardPath = pendingAdoption ? getBaseBoardPath(pendingAdoption.boardPath) : null;
+
+  // Ref for the board-context fields + dispatch so `setBoardContext` stays a
+  // stable `[]`-deps callback while reading fresh values. When a party is
+  // ending this render, prefer the adopted (base) board so a same-commit
+  // injector's `setBoardContext` sees it instead of the stale pre-party path.
+  const boardContextRef = useRef({ soloBoardPath, dispatch });
+  boardContextRef.current = { soloBoardPath: adoptedBoardPath ?? soloBoardPath, dispatch };
+
+  // Commit the adopted board to state so it survives future renders and other
+  // consumers (soloBoardDetails, the bridge adapter's base board path) stay
+  // coherent. Base-normalized to match the render-time stamp above.
   useEffect(() => {
     const previous = previousActiveSessionRef.current;
     previousActiveSessionRef.current = activeSession;
     const adoption = resolveEndedSessionBoardAdoption(previous, activeSession);
     if (adoption) {
-      setSoloBoardPath(adoption.boardPath);
+      setSoloBoardPath(getBaseBoardPath(adoption.boardPath));
       setSoloBoardDetails(adoption.boardDetails);
     }
   }, [activeSession]);
@@ -213,6 +247,8 @@ export function useQueueStorage({
 // present, current gone, and the ended session carried a board), or null for
 // every other transition (activation, session→session swap, no-op). Extracted
 // so the transition is unit-testable without the hook's IndexedDB/GraphQL deps.
+// Returns the session's RAW `boardPath` (full pathname); the hook base-normalizes
+// it via `getBaseBoardPath` before stamping, since `soloBoardPath` is a base path.
 export function resolveEndedSessionBoardAdoption(
   previous: ActiveSessionInfo | null,
   current: ActiveSessionInfo | null,

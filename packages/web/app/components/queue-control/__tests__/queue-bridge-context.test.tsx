@@ -545,6 +545,29 @@ describe('queue-bridge-context', () => {
         expect(result.current!.currentClimbQueueItem?.climb.uuid).toBe('c1');
       });
 
+      it('addToQueue of a duplicate item uuid with no current climb does not spuriously activate a current', () => {
+        // Solo no-op guard regression (W6): DELTA_ADD_QUEUE_ITEM is idempotent by
+        // the queue-item uuid — a duplicate-uuid add is a reducer no-op (returns
+        // the SAME state reference, see insertQueueItemIdempotent). The solo
+        // auto-activate follow-up must NOT fire on a no-op add, or a duplicate add
+        // fabricates a current climb the user never chose. The mocked uuidv4 mints
+        // 'test-uuid-1' for the first build, so seeding the queue with that exact
+        // item uuid forces buildItem's fresh uuid to collide with the existing entry.
+        const existingItem = createTestQueueItem(createTestClimb({ uuid: 'c-existing' }), 'test-uuid-1');
+        const { result } = renderWithLocalQueue([existingItem], null); // no current climb
+
+        act(() => {
+          result.current!.addToQueue(createTestClimb({ uuid: 'c-dup' }));
+        });
+
+        // The add was a no-op: the queue is unchanged (still the one existing item)...
+        expect(result.current!.queue).toHaveLength(1);
+        expect(result.current!.queue[0].uuid).toBe('test-uuid-1');
+        expect(result.current!.queue[0].climb.uuid).toBe('c-existing');
+        // ...and, crucially, no spurious current-climb activation fired.
+        expect(result.current!.currentClimbQueueItem).toBeNull();
+      });
+
       it('removeFromQueue filters item and updates state', () => {
         const item1 = createTestQueueItem(climb1, 'u1');
         const item2 = createTestQueueItem(climb2, 'u2');
@@ -1439,6 +1462,60 @@ describe('queue-bridge-context', () => {
             expect.any(Error),
           );
           expect(mockPersistentSession.setCurrentClimb).not.toHaveBeenCalled();
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
+      });
+
+      it('keeps the optimistic add locally when the party mutation rejects (board-route parity; resync is the safety net)', async () => {
+        // FIX 4 / parity: setCurrentClimb's finishError rolls back only
+        // playlistSuggestionSource, NOT the optimistic queue add/current — the
+        // exact same semantics as the board-route provider, which has been
+        // optimistic since before W6 and also does not roll the queue back on a
+        // failed mutation. The 60s hash watchdog resync is the safety net that
+        // reconciles a rejected mutation; diverging here would desync the two
+        // surfaces. This test pins the current behavior: the item STAYS queued and
+        // current, and only the playlist source rolls back.
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          const previousSource = createPlaylistSuggestionSource({
+            playlistUuid: 'playlist-1',
+            activatedClimb: climb1,
+            climbs: [climb1, climb2],
+            boardDetails: bd,
+          });
+          mockPersistentSession = createDefaultPersistentSession({
+            activeSession,
+            isBoardContextLoaded: true,
+            clientId: 'client-abc',
+            addQueueItem: vi.fn(() => Promise.reject(new Error('ws send failed'))),
+          });
+          const wrapper = ({ children }: { children: React.ReactNode }) => (
+            <MockRootQueueProvider
+              seed={{ queue: [], currentClimbQueueItem: null, playlistSuggestionSource: previousSource }}
+            >
+              <QueueBridgeProvider>{children}</QueueBridgeProvider>
+            </MockRootQueueProvider>
+          );
+          const { result } = renderHook(() => useTestQueueContext(), { wrapper });
+
+          let returnValue: ClimbQueueItem | null | undefined;
+          await act(async () => {
+            // Activate a brand-new climb, clearing the playlist source. The party
+            // addQueueItem mutation rejects.
+            returnValue = await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: null });
+          });
+
+          // The caller gets null (the bridge skips downstream navigation on a
+          // failed activation)...
+          expect(returnValue).toBeNull();
+          // ...but the optimistic item is NOT rolled back — it stays queued and
+          // current, matching board-route optimism; only a resync reconciles it.
+          expect(result.current!.queue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c2']);
+          expect(result.current!.currentClimbQueueItem?.climb.uuid).toBe('c2');
+          // Only the playlist suggestion source rolls back — restored to its
+          // pre-activation value.
+          expect(result.current!.playlistSuggestionSource).toEqual(previousSource);
         } finally {
           consoleErrorSpy.mockRestore();
         }

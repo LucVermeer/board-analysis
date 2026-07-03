@@ -312,13 +312,28 @@ function usePersistentSessionQueueAdapter(): {
     // requested and the server would never confirm.
     //
     // Implemented as a follow-up dispatch (not a locally-computed compound
-    // action) because React composes multiple dispatches to the same
-    // `useReducer` within one synchronous handler in order — the second
-    // dispatch below sees the first's effect even though neither has
-    // committed a re-render yet — so this reads exactly like the old
-    // reduce-then-override, just against the root store instead of a local one.
+    // action). The guard conditions below read `currentClimbQueueItem` / `queue`
+    // from the pre-dispatch `latestRef` snapshot taken at the top of this
+    // handler — intentionally pre-dispatch: the reducer hasn't committed a
+    // re-render yet, so the ref still holds the state as it was BEFORE
+    // `dispatchToRoot(action)` above, which is exactly what these checks need
+    // (auto-activate only when there was no current climb before the add;
+    // promote the head computed from the pre-remove queue). This mirrors the old
+    // solo reduce-then-override, just against the root store instead of a local one.
+    //
+    // The add branch also re-checks idempotency: `DELTA_ADD_QUEUE_ITEM` is a
+    // no-op when an item with the same uuid is already queued — the reducer
+    // returns the SAME state reference (see reducer.ts / insertQueueItemIdempotent).
+    // A duplicate-uuid add must NOT fabricate a spurious current-climb
+    // activation, so fire the auto-activate follow-up only when the item is
+    // genuinely new. This restores the pre-W6 `if (nextState === pseudoState) return;`
+    // guard the unified dispatch path dropped.
     if (!ps.activeSession) {
-      if (action.type === 'DELTA_ADD_QUEUE_ITEM' && !currentClimbQueueItem) {
+      if (
+        action.type === 'DELTA_ADD_QUEUE_ITEM' &&
+        !currentClimbQueueItem &&
+        !queue.some((item) => item.uuid === action.payload.item.uuid)
+      ) {
         dispatchToRoot({
           type: 'DELTA_UPDATE_CURRENT_CLIMB',
           payload: { item: action.payload.item, shouldAddToQueue: false },
