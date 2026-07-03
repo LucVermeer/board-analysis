@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-03T03:27:37.816Z",
+  "generatedAt": "2026-07-03T03:34:11.639Z",
   "entries": [
+    {
+      "prNumber": 3371,
+      "category": "improved",
+      "title": "The hold, area, and setter filter pickers get proper navigation headers with a back button.",
+      "mergedAt": "2026-07-03T03:27:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3371",
+      "body": "Pasting a beta-video link no longer hides the text field behind the keyboard.\nThe invite sheet opens at its intended height on Android."
+    },
     {
       "prNumber": 3350,
       "category": "new",

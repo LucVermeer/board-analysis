@@ -15,6 +15,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Improved
 
+- The hold, area, and setter filter pickers get proper navigation headers with a back button. ([#3371](https://github.com/boardsesh/boardsesh/pull/3371))
+  Pasting a beta-video link no longer hides the text field behind the keyboard.
+  The invite sheet opens at its intended height on Android.
 - Co-Authored-By: Claude Fable 5 <noreply@anthropic.com> ([#3367](https://github.com/boardsesh/boardsesh/pull/3367))
   https://claude.ai/code/session_01M9eAY2yZDGSqossL5UtUQo
 
