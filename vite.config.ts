@@ -531,6 +531,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-native-deps-check.ts',
         cache: false,
       },
+      'check:mobile-expo-deps-pinned': {
+        command: 'tsx scripts/mobile-expo-deps-pinned-check.ts',
+        cache: false,
+      },
       'check:mobile-deps': {
         command: 'tsx scripts/mobile-deps-check.ts',
         cache: false,
