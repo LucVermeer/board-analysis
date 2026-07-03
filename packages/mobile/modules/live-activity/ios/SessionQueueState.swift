@@ -320,14 +320,14 @@ enum QueueMessageParser {
 
     // MARK: - Private Helpers
 
-    static func parseDifficulty(_ value: Any?) -> String {
+    private static func parseDifficulty(_ value: Any?) -> String {
         if let str = value as? String { return str }
         if let num = value as? Double { return String(format: "%.1f", num) }
         if let num = value as? Int { return String(num) }
         return ""
     }
 
-    static func parseIntValue(_ value: Any?) -> Int? {
+    private static func parseIntValue(_ value: Any?) -> Int? {
         if let i = value as? Int { return i }
         if let d = value as? Double { return Int(d) }
         if let s = value as? String { return Int(s) }

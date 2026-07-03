@@ -238,6 +238,11 @@ final class LiveActivityWidgetTests: XCTestCase {
         state = QueueStateReducer.apply(.reordered(uuid: "D", oldIndex: 3, newIndex: 0, sequence: 3), to: state)
         XCTAssertEqual(state.items.map(\.uuid), ["D", "X", "B", "C"])
         XCTAssertEqual(state.currentIndex, 3)
+
+        // Reordering the CURRENT item itself follows it to its new position.
+        state = QueueStateReducer.apply(.reordered(uuid: "C", oldIndex: 3, newIndex: 0, sequence: 4), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["C", "D", "X", "B"])
+        XCTAssertEqual(state.currentIndex, 0)
     }
 
     func testRemovingTheCurrentItemFallsToItsSuccessor() {
