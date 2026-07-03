@@ -130,11 +130,13 @@ async function viewerCanAdminGym(gymId: number, userId: string): Promise<boolean
   const [adminMembership] = await db
     .select({ role: dbSchema.gymMembers.role })
     .from(dbSchema.gymMembers)
+    .innerJoin(dbSchema.gyms, eq(dbSchema.gyms.id, dbSchema.gymMembers.gymId))
     .where(
       and(
         eq(dbSchema.gymMembers.gymId, gymId),
         eq(dbSchema.gymMembers.userId, userId),
         eq(dbSchema.gymMembers.role, 'admin'),
+        isNull(dbSchema.gyms.deletedAt),
       ),
     )
     .limit(1);
@@ -425,11 +427,13 @@ async function enrichBoards(
         ? db
             .select({ gymId: dbSchema.gymMembers.gymId })
             .from(dbSchema.gymMembers)
+            .innerJoin(dbSchema.gyms, eq(dbSchema.gyms.id, dbSchema.gymMembers.gymId))
             .where(
               and(
                 inArray(dbSchema.gymMembers.gymId, gymIds),
                 eq(dbSchema.gymMembers.userId, authenticatedUserId),
                 eq(dbSchema.gymMembers.role, 'admin'),
+                isNull(dbSchema.gyms.deletedAt),
               ),
             )
         : Promise.resolve([]),

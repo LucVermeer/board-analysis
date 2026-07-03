@@ -67,12 +67,23 @@ const insertBoard = async (opts: {
   gymId?: number | null;
   boardType?: string;
   name?: string;
+  isPublic?: boolean;
 }): Promise<number> => {
-  const { uuid, ownerId, layoutId, sizeId, setIds, gymId = null, boardType = 'kilter', name = 'Board' } = opts;
+  const {
+    uuid,
+    ownerId,
+    layoutId,
+    sizeId,
+    setIds,
+    gymId = null,
+    boardType = 'kilter',
+    name = 'Board',
+    isPublic = true,
+  } = opts;
   const result = await db.execute(sql`
     INSERT INTO user_boards
       (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, gym_id, is_public, created_at, updated_at)
-    VALUES (${uuid}, ${uuid}, ${ownerId}, ${boardType}, ${layoutId}, ${sizeId}, ${setIds}, ${name}, ${gymId}, true, now(), now())
+    VALUES (${uuid}, ${uuid}, ${ownerId}, ${boardType}, ${layoutId}, ${sizeId}, ${setIds}, ${name}, ${gymId}, ${isPublic}, now(), now())
     RETURNING id
   `);
   return Number(Array.from(result as Iterable<{ id: number }>)[0].id);
@@ -503,6 +514,70 @@ describe('gym membership management excludes community moderators (escalation gu
       ),
     ).resolves.toBe(true);
     expect(await gymMemberRole(PLAIN_USER)).toBeNull();
+  });
+});
+
+describe('gym admin edit access is revoked when the linked gym is soft-deleted', () => {
+  // The board keeps its gym_id, but the gym is soft-deleted. A gym admin member
+  // should lose the linked-gym edit path — a removed gym must not keep granting
+  // edit rights on the boards that still point at it.
+  beforeEach(async () => {
+    await db.execute(sql`UPDATE gyms SET deleted_at = now() WHERE id = ${kilterGymId}`);
+  });
+
+  it('rejects a gym admin member updating a board linked to the deleted gym', async () => {
+    await expect(
+      socialBoardMutations.updateBoard(
+        null,
+        { input: { boardUuid: kilterBoardUuid, name: 'deleted-gym edit' } },
+        authCtx(GYM_ADMIN_MEMBER),
+      ),
+    ).rejects.toThrow(/Not authorized to update this board/);
+
+    expect((await boardConfig(kilterBoardUuid)).name).toBe('Bonsist Wall');
+  });
+
+  it('reports canEdit=false for a gym admin member of the deleted gym', async () => {
+    const board = await socialBoardQueries.board(null, { boardUuid: kilterBoardUuid }, authCtx(GYM_ADMIN_MEMBER));
+    expect(board?.canEdit).toBe(false);
+  });
+});
+
+describe('gym admin member can edit a PRIVATE board linked to their gym', () => {
+  // Linking a board to a gym requires the board's own owner (linkBoardToGym),
+  // so this is opt-in: the owner deliberately connected their private board to
+  // the gym, and gym admins manage the gym's physical boards. Unlike a community
+  // role, the linked-gym path intentionally reaches private boards.
+  let privateGymBoardUuid: string;
+
+  beforeEach(async () => {
+    privateGymBoardUuid = uuidv4();
+    await insertBoard({
+      uuid: privateGymBoardUuid,
+      ownerId: SYS_OWNER,
+      layoutId: 7,
+      sizeId: 7,
+      setIds: '7,8',
+      gymId: kilterGymId,
+      name: 'Private gym wall',
+      isPublic: false,
+    });
+  });
+
+  it('lets the gym admin member update the private linked board', async () => {
+    const result = await socialBoardMutations.updateBoard(
+      null,
+      { input: { boardUuid: privateGymBoardUuid, name: 'Gym-admin private edit' } },
+      authCtx(GYM_ADMIN_MEMBER),
+    );
+
+    expect(result.name).toBe('Gym-admin private edit');
+    expect((await boardConfig(privateGymBoardUuid)).name).toBe('Gym-admin private edit');
+  });
+
+  it('reports canEdit=true for the gym admin member on the private linked board', async () => {
+    const board = await socialBoardQueries.board(null, { boardUuid: privateGymBoardUuid }, authCtx(GYM_ADMIN_MEMBER));
+    expect(board?.canEdit).toBe(true);
   });
 });
 
