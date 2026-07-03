@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 // tests inject their own haptic fn, so this just keeps the default import safe.
 vi.mock('../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 
-import { makeButtonPressHandler } from '../Button.logic';
+import { isFullWidthStyle, makeButtonPressHandler } from '../Button.logic';
 
 // The Button is a native @expo/ui control split across Button.ios.tsx /
 // Button.android.tsx, which can't mount under vitest. The press/haptic guard that
@@ -43,5 +43,34 @@ describe('makeButtonPressHandler', () => {
     makeButtonPressHandler({ onPress, haptic: false }, haptic)();
     expect(haptic).not.toHaveBeenCalled();
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isFullWidthStyle', () => {
+  it('is false for no style (inline, content-hugging)', () => {
+    expect(isFullWidthStyle(undefined)).toBe(false);
+  });
+
+  // The regression this guards: `flex: 0` means "don't grow", so it must NOT
+  // stretch the button — the old `style.flex != null` check wrongly caught 0.
+  it('is false for flex: 0', () => {
+    expect(isFullWidthStyle({ flex: 0 })).toBe(false);
+  });
+
+  it('is true for a positive flex (fills the flex row)', () => {
+    expect(isFullWidthStyle({ flex: 1 })).toBe(true);
+  });
+
+  it("is true for width: '100%'", () => {
+    expect(isFullWidthStyle({ width: '100%' })).toBe(true);
+  });
+
+  it("is true for alignSelf: 'stretch'", () => {
+    expect(isFullWidthStyle({ alignSelf: 'stretch' })).toBe(true);
+  });
+
+  it('is false for a fixed pixel width or a non-stretch alignSelf', () => {
+    expect(isFullWidthStyle({ width: 120 })).toBe(false);
+    expect(isFullWidthStyle({ alignSelf: 'flex-start' })).toBe(false);
   });
 });

@@ -27,7 +27,7 @@ import { fillMaxWidth, padding, size } from '@expo/ui/jetpack-compose/modifiers'
 import type { ImageSourcePropType } from 'react-native';
 import { useTheme } from '../providers/theme-provider';
 import { brandAccentColor } from '../theme/expo-ui-modifiers';
-import { makeButtonPressHandler } from './Button.logic';
+import { isFullWidthStyle, makeButtonPressHandler } from './Button.logic';
 import { sizeConfig, type ButtonProps } from './Button.types';
 import type { IconName } from './icon-map';
 
@@ -111,10 +111,11 @@ export function Button({
   // button's LocalContentColor for free.
   let spinnerColor: string;
   if (variant === 'filled') {
-    // On-fill white (destructive fills with error + white content too).
+    // White on the brand fill (destructive fills with the error container, still white content).
     spinnerColor = brandColors.onPrimary;
   } else if (variant === 'tonal') {
-    // MD3 tonal content ≈ brand primary; destructive fills with error + white.
+    // Non-destructive tonal content ≈ brand primary; destructive fills the error
+    // container, so its content (and the spinner) is white (onPrimary), not error.
     spinnerColor = isDestructive ? brandColors.onPrimary : brandColors.primary;
   } else {
     spinnerColor = isDestructive ? brandColors.error : accentColor;
@@ -129,10 +130,7 @@ export function Button({
           ? TextButton
           : ComposeButton;
 
-  // Only a positive `flex` grows — `flex: 0` means "don't grow", so it must not
-  // count as full-width (`flex != null` would wrongly catch 0).
-  const isFullWidth =
-    style?.width === '100%' || (typeof style?.flex === 'number' && style.flex > 0) || style?.alignSelf === 'stretch';
+  const isFullWidth = isFullWidthStyle(style);
   const iconSource = icon ? BUTTON_ICON_SOURCE[icon] : undefined;
 
   return (
