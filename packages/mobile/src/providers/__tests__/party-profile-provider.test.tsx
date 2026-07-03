@@ -242,6 +242,61 @@ describe('PartyProfileProvider', () => {
     );
   });
 
+  it('fires again with the complete payload once integrations resolve after the initial partial fire', async () => {
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      signInWithApple: vi.fn(),
+      signInWithGoogle: vi.fn(),
+      signInWithGoogleWeb: vi.fn(),
+      signInWithAppleWeb: vi.fn(),
+      signInWithCredentials: vi.fn(),
+      register: vi.fn(),
+      signOut: vi.fn(),
+      refreshAuthState: vi.fn(),
+    });
+    useProfileMock.mockReturnValue({
+      data: {
+        id: 'user-1',
+        email: 'climber@example.com',
+        isTester: false,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        favoriteCount: 2,
+      },
+    });
+    useHomeBoardMock.mockReturnValue({
+      board: { boardType: 'kilter' } as never,
+      boards: [],
+      isResolving: false,
+    });
+    // Integrations haven't loaded yet on the first render.
+    useIntegrationStatusesMock.mockReturnValue({ data: undefined });
+
+    const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
+    const { result, rerender } = renderHook(() => usePartyProfile(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await waitFor(() => expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1));
+    expect(setPersonPropertiesMock.mock.calls[0][0]).toEqual({
+      role: 'user',
+      primary_board: 'kilter',
+      favorite_count: 2,
+      integrations_connected_count: undefined,
+    });
+
+    // Integrations resolve — the effect must fire again with the complete payload.
+    useIntegrationStatusesMock.mockReturnValue({ data: [{ provider: 'STRAVA', connected: true }] });
+    rerender();
+
+    await waitFor(() => expect(setPersonPropertiesMock).toHaveBeenCalledTimes(2));
+    expect(setPersonPropertiesMock.mock.calls[1][0]).toEqual({
+      role: 'user',
+      primary_board: 'kilter',
+      favorite_count: 2,
+      integrations_connected_count: 1,
+    });
+  });
+
   it('never sets cohort person properties while signed out', async () => {
     const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
     const { result } = renderHook(() => usePartyProfile(), { wrapper });
