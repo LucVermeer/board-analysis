@@ -9,12 +9,26 @@ const mocks = vi.hoisted(() => ({
     uuid: 'climb-1',
     name: 'Moonage',
   } as unknown as Climb,
+  secondClimb: {
+    uuid: 'climb-2',
+    name: 'Zenith',
+  } as unknown as Climb,
+  // Mutable per-test fixtures for useInfiniteSearchClimbs / useClimbSearch — read
+  // at call time (render), so a test can set these before rendering to exercise
+  // a different search/filter state without a separate mock scaffold file.
+  searchClimbs: [] as unknown as Climb[],
+  searchState: {
+    filters: {} as Record<string, unknown>,
+    boardFilters: {} as Record<string, unknown>,
+    name: '',
+  },
   activateClimb: vi.fn(),
   dismissKeyboard: vi.fn(),
   getLastSearch: vi.fn(),
   saveLastSearch: vi.fn(),
   getRecentFilters: vi.fn(),
   getLogbook: vi.fn(),
+  track: vi.fn(),
 }));
 
 type FlashListProps<Item> = {
@@ -95,7 +109,7 @@ vi.mock('expo-crypto', () => ({ randomUUID: () => 'queue-item-1' }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 vi.mock('@boardsesh/analytics', () => ({
-  SHARED_EVENTS: { ClimbSearchPerformed: 'Climb Search Performed' },
+  SHARED_EVENTS: { ClimbSearchPerformed: 'Climb Search Performed', SearchResultSelected: 'Search Result Selected' },
 }));
 
 vi.mock('@boardsesh/climb-filters', () => ({
@@ -111,6 +125,22 @@ vi.mock('@boardsesh/climb-filters', () => ({
 
 vi.mock('@boardsesh/board-react', () => ({
   useBoardActions: () => ({ getLogbook: mocks.getLogbook }),
+}));
+
+// Reads mocks.searchState (mutated per-test) instead of the real reducer, so a
+// test can force a specific filter/name without driving the UI through it.
+vi.mock('../../../../src/providers/climb-search-provider', () => ({
+  ClimbSearchProvider: ({ children }: { children?: ReactNode }) => children,
+  useClimbSearch: () => ({
+    ...mocks.searchState,
+    setFilters: vi.fn(),
+    setBoardFilters: vi.fn(),
+    setGrade: vi.fn(),
+    setName: vi.fn(),
+    replaceSearch: vi.fn(),
+    patchFilters: vi.fn(),
+    patchBoardFilters: vi.fn(),
+  }),
 }));
 
 vi.mock('../../../../src/components/ClimbListRow', () => ({
@@ -212,7 +242,7 @@ vi.mock('../../../../src/hooks/use-last-used-grade', () => ({
 
 vi.mock('../../../../src/lib/graphql/hooks/use-infinite-search-climbs', () => ({
   useInfiniteSearchClimbs: () => ({
-    data: { pages: [{ climbs: [mocks.climb], hasMore: false }] },
+    data: { pages: [{ climbs: mocks.searchClimbs, hasMore: false }] },
     isLoading: false,
     isFetchingNextPage: false,
     isRefetching: false,
@@ -281,7 +311,7 @@ vi.mock('../../../../src/lib/search-name', () => ({
   normalizeSearchName: (text: string) => text.trim(),
   visibleSearchTextNeedsSync: () => false,
 }));
-vi.mock('../../../../src/lib/analytics', () => ({ track: vi.fn() }));
+vi.mock('../../../../src/lib/analytics', () => ({ track: mocks.track }));
 vi.mock('../../../../src/theme/ios-colors', () => ({
   iosSystemColors: { systemGray4: '#C7C7CC' },
 }));
@@ -301,6 +331,9 @@ beforeEach(() => {
   mocks.getLastSearch.mockResolvedValue(null);
   mocks.saveLastSearch.mockResolvedValue(undefined);
   mocks.getRecentFilters.mockResolvedValue([]);
+  mocks.track.mockClear();
+  mocks.searchClimbs = [mocks.climb, mocks.secondClimb];
+  mocks.searchState = { filters: {}, boardFilters: {}, name: '' };
 });
 
 describe('ClimbList keyboard handling', () => {
@@ -311,6 +344,74 @@ describe('ClimbList keyboard handling', () => {
 
     expect(mocks.dismissKeyboard).toHaveBeenCalledTimes(1);
     expect(mocks.activateClimb).toHaveBeenCalledWith({ uuid: 'climb-1' });
-    await waitFor(() => expect(mocks.getLogbook).toHaveBeenCalledWith(['climb-1']));
+    // Logbook is fetched for every visible row, not just the pressed one — the
+    // default fixture now has two climbs (added for the rank-tracking tests).
+    await waitFor(() => expect(mocks.getLogbook).toHaveBeenCalledWith(['climb-1', 'climb-2']));
+  });
+});
+
+describe('ClimbList search result selection tracking', () => {
+  it('tracks the rank of the first result when it is pressed', async () => {
+    const { findByText } = render(<ClimbList />);
+
+    fireEvent.click(await findByText('Moonage'));
+
+    expect(mocks.track).toHaveBeenCalledWith(
+      'Search Result Selected',
+      expect.objectContaining({ rank: 0, loadedResultCount: 2, boardName: 'kilter', angle: 40 }),
+    );
+  });
+
+  it('tracks the rank of a later result when it is pressed', async () => {
+    const { findByText } = render(<ClimbList />);
+
+    fireEvent.click(await findByText('Zenith'));
+
+    expect(mocks.track).toHaveBeenCalledWith(
+      'Search Result Selected',
+      expect.objectContaining({ rank: 1, loadedResultCount: 2, boardName: 'kilter', angle: 40 }),
+    );
+  });
+});
+
+const ACTIVE_TALL_FILTER_STATE = {
+  filters: { status: 'any', boulders: true, routes: false, onlyTallClimbs: true },
+  boardFilters: {},
+  name: 'no such climb',
+};
+
+describe('ClimbList zero-result filter snapshot', () => {
+  it('attaches the zero-result filter snapshot when the search comes up empty', async () => {
+    mocks.searchClimbs = [];
+    mocks.searchState = ACTIVE_TALL_FILTER_STATE;
+
+    render(<ClimbList />);
+
+    await waitFor(() =>
+      expect(mocks.track).toHaveBeenCalledWith(
+        'Climb Search Performed',
+        expect.objectContaining({
+          resultCount: 0,
+          zeroResultOnlyTallClimbs: true,
+          zeroResultStatus: 'any',
+          zeroResultBoulders: true,
+          zeroResultRoutes: false,
+        }),
+      ),
+    );
+  });
+
+  it('omits the zero-result snapshot fields when results are found', async () => {
+    mocks.searchClimbs = [mocks.climb];
+    mocks.searchState = ACTIVE_TALL_FILTER_STATE;
+
+    render(<ClimbList />);
+
+    await waitFor(() => expect(mocks.track).toHaveBeenCalledWith('Climb Search Performed', expect.anything()));
+
+    const [, properties] = mocks.track.mock.calls.find(([eventName]) => eventName === 'Climb Search Performed') ?? [];
+    expect(properties).toMatchObject({ resultCount: 1 });
+    expect(properties).not.toHaveProperty('zeroResultOnlyTallClimbs');
+    expect(properties).not.toHaveProperty('zeroResultStatus');
   });
 });
