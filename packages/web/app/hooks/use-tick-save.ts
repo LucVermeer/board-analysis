@@ -164,6 +164,7 @@ export function useTickSave(options: UseTickSaveOptions): {
             attemptCount,
             hasQuality: quality !== null,
             hasDifficulty: difficulty !== undefined,
+            difficulty: difficulty ?? null,
             hasComment: comment.length > 0,
           });
           void clearTickDraft(climb.uuid, Number(targetAngle));
