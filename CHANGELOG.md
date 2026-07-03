@@ -26,11 +26,11 @@ manual changes). See docs/mobile-ota-updates.md.
 - The hold, area, and setter filter pickers get proper navigation headers with a back button. ([#3371](https://github.com/boardsesh/boardsesh/pull/3371))
   Pasting a beta-video link no longer hides the text field behind the keyboard.
   The invite sheet opens at its intended height on Android.
-- Co-Authored-By: Claude Fable 5 <noreply@anthropic.com> ([#3367](https://github.com/boardsesh/boardsesh/pull/3367))
-  https://claude.ai/code/session_01M9eAY2yZDGSqossL5UtUQo
 
 ### Fixed
 
+- What's New now only shows real update notes. Robot commit signatures and stray code links can't sneak into the feed anymore. ([#3424](https://github.com/boardsesh/boardsesh/pull/3424))
+  The What's New screen also gets its proper background back, so the "you're on this build" chip is readable again instead of gray-on-black.
 - The benchmark badge on a grouped ascents header now matches its climbs — a consensus benchmark no longer shows up on the rows but goes missing on the header. ([#3411](https://github.com/boardsesh/boardsesh/pull/3411))
 - Star ratings from imported Kilter and Tension logbooks now show what you actually rated them — a climb you called a 3-star classic is 5 stars again, not "mediocre". ([#3397](https://github.com/boardsesh/boardsesh/pull/3397))
 - See exactly who's in your session — the crew count no longer balloons with phantom climbers after a shaky connection, so a solo send stops reading as a party. ([#3338](https://github.com/boardsesh/boardsesh/pull/3338))
@@ -220,10 +220,6 @@ A new version shipped to the Play Store.
 
 - Find a gym by board type ([#3178](https://github.com/boardsesh/boardsesh/pull/3178))
   Filter the map to gyms that have a Kilter, Tension, or MoonBoard.
-
-### Improved
-
-- https://claude.ai/code/session_0169kjQT2BwqYRfTXGwZ4srZ ([#3180](https://github.com/boardsesh/boardsesh/pull/3180))
 
 ## 2026-06-23
 

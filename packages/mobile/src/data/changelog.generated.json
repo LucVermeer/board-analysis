@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-03T20:52:57.794Z",
+  "generatedAt": "2026-07-03T20:59:08.705Z",
   "entries": [
+    {
+      "prNumber": 3424,
+      "category": "fixed",
+      "title": "What's New now only shows real update notes. Robot commit signatures and stray code links can't sneak into the feed anymore.",
+      "mergedAt": "2026-07-03T20:52:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3424",
+      "body": "The What's New screen also gets its proper background back, so the \"you're on this build\" chip is readable again instead of gray-on-black."
+    },
     {
       "prNumber": 3384,
       "category": "new",
@@ -80,14 +88,6 @@
       "mergedAt": "2026-07-03T03:26:45Z",
       "prUrl": "https://github.com/boardsesh/boardsesh/pull/3350",
       "body": "Rows lead with how it went: flash, send, or project, with your tries, your stars, and your grade next to the community's call.\nSpot beta at a glance — a violet camera marks every climb you have a video for, and a pencil marks your written notes.\nSwipe a logbook entry right to edit, left to delete (with a confirmation)."
-    },
-    {
-      "prNumber": 3367,
-      "category": "improved",
-      "title": "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>",
-      "mergedAt": "2026-07-03T01:04:50Z",
-      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3367",
-      "body": "https://claude.ai/code/session_01M9eAY2yZDGSqossL5UtUQo"
     },
     {
       "prNumber": 3352,
@@ -596,13 +596,6 @@
       "title": "Tap a climb on a flaky Bluetooth link and the wall now re-lights itself instead of staying dark — no more re-tapping a climb that didn't show up.",
       "mergedAt": "2026-06-25T00:17:19Z",
       "prUrl": "https://github.com/boardsesh/boardsesh/pull/3186"
-    },
-    {
-      "prNumber": 3180,
-      "category": "improved",
-      "title": "https://claude.ai/code/session_0169kjQT2BwqYRfTXGwZ4srZ",
-      "mergedAt": "2026-06-24T21:39:04Z",
-      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3180"
     },
     {
       "prNumber": 3178,
