@@ -678,7 +678,7 @@ export function ClimbFilterSheet({
       enableDynamicSizing={false}
       enablePanDownToClose
       onChange={managed.onChange}
-      handleIndicatorStyle={styles.indicator}
+      handleIndicatorStyle={[styles.indicator, { backgroundColor: systemColors.separator }]}
     >
       {/* One column child bounded to the detent height (JS-computed on iOS, see
           sheetColumnStyle) — the scroll body then actually scrolls and the
@@ -983,7 +983,8 @@ export function ClimbFilterSheet({
 
 const styles = StyleSheet.create({
   indicator: {
-    backgroundColor: iosSystemColors.separator,
+    // Colour is themed at the call site (systemColors.separator adapts light/dark);
+    // only the static dimensions live here.
     width: 36,
     height: 5,
     borderRadius: 3,
@@ -1078,7 +1079,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing[3],
     paddingBottom: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
+    // borderTopColor is themed at the call site (systemColors.separator).
   },
   applyButton: {
     width: '100%',
