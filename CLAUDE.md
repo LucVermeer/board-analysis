@@ -157,7 +157,7 @@ Vitest via `vp test`. Backend tests auto-start postgres+redis via `packages/back
 
 ### Internationalisation
 
-Supported locales: `en-US` (root), `es` (`/es/*`), `fr`. Path-based detection via middleware (`packages/web/middleware.ts`). Catalogs in `packages/web/i18n/locales/<locale>/<namespace>.json`. Namespaces: `common`, `marketing` (add new ones in `SEED_NAMESPACES` in `app/lib/i18n/config.ts`).
+Supported locales: `en-US` (root), `es` (`/es/*`), `fr`. Path-based detection via middleware (`packages/web/middleware.ts`). Catalogs in `packages/shared/i18n/locales/<locale>/<namespace>.json` (`@boardsesh/i18n`, shared by web and mobile). Namespaces: `common`, `marketing` (add new ones in `SEED_NAMESPACES` in `app/lib/i18n/config.ts`).
 
 - **Add every new key to every locale.** `i18n-catalog-completeness.test.ts` enforces parity per namespace.
 - Server: `const { t } = await getServerTranslation('marketing')`.
@@ -172,6 +172,8 @@ Supported locales: `en-US` (root), `es` (`/es/*`), `fr`. Path-based detection vi
 Adding a new locale: update `SUPPORTED_LOCALES` and friends in `app/lib/i18n/config.ts`, add catalog dir, language switcher, sitemap.
 
 **Spanish terminology:** Spanish translations follow a fixed glossary. Most importantly, a climbing board is **"plafón"** (masculine — _el plafón_, plural _plafones_), never "tabla"/"tablero"/"tabla de escalada" or raw English "board"; fix article/adjective agreement when you swap the word. Brand product names ("Kilter Board", "Tension Board", "MoonBoard") stay as-is. Full terminology, grammar rules, and exceptions: **`docs/i18n-spanish-glossary.md`** — follow it for every Spanish string you add.
+
+**French terminology:** French translations follow a fixed glossary too. Most importantly, a climbing send is never **« envoyer »** — French climbers don't "send" a climb. The send status/verb is **« Enchaîné » / enchaîner**, the noun send is **« la croix »** (invariable: _dix croix_; « faire la croix » = tick it in the logbook), and lighting a climb on the wall is **« allumer »**, not « envoyer ». Attempts on a climb are « essais », never « tentatives ». Full terminology and exceptions: **`docs/i18n-french-glossary.md`** — follow it for every French string you add.
 
 ### Copy & microcopy
 

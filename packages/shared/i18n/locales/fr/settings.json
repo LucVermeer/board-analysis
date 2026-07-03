@@ -173,7 +173,7 @@
       "kilterAuroraTitle": "Kilter (Aurora)",
       "kilterAuroraCopy": "Vous utilisiez l'ancienne app Kilter conçue par Aurora ? Importez un export JSON, ou écrivez à Aurora Climbing pour demander vos données.",
       "kilterNewTitle": "Kilter (nouveau)",
-      "kilterNewCopy": "Connectez-vous avec votre identifiant et mot de passe Kilter pour rapatrier vos enchaînements, essais, notes et circuits dans Boardsesh.",
+      "kilterNewCopy": "Connectez-vous avec votre identifiant et mot de passe Kilter pour rapatrier vos croix, essais, notes et circuits dans Boardsesh.",
       "kilterSignIn": "Se connecter à Kilter",
       "reconnect": "Reconnecter",
       "notConnected": "Non lié. Liez votre compte {{boardName}} pour importer vos données Aurora, ou importez depuis un fichier d'export JSON.",
@@ -215,7 +215,7 @@
     },
     "kilterLinkDialog": {
       "title": "Se connecter à Kilter",
-      "description": "Saisissez votre identifiant et mot de passe Kilter. Votre mot de passe est échangé contre un jeton sécurisé et n'est jamais stocké. Vos enchaînements se synchronisent sous quelques heures.",
+      "description": "Saisissez votre identifiant et mot de passe Kilter. Votre mot de passe est échangé contre un jeton sécurisé et n'est jamais stocké. Vos croix se synchronisent sous quelques heures.",
       "passwordHelp": "Fonctionne avec votre connexion Kilter habituelle. Les comptes avec double authentification ou connexion sociale uniquement ne peuvent pas se connecter ainsi — utilisez Importer."
     },
     "unlinkSuccess": "Compte délié",

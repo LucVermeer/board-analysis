@@ -1,6 +1,6 @@
 {
-  "sends_one": "{{formattedCount}} enchaînement",
-  "sends_other": "{{formattedCount}} enchaînements",
+  "sends_one": "{{formattedCount}} croix",
+  "sends_other": "{{formattedCount}} croix",
   "metadata": {
     "list": {
       "title": "Blocs {{boardName}} à {{angle}}°",
@@ -70,8 +70,8 @@
     "selectAngle": "Choisir l'inclinaison",
     "loadingStats": "Chargement des stats...",
     "noData": "Aucune donnée",
-    "sends_one": "{{count}} enchaînement",
-    "sends_other": "{{count}} enchaînements"
+    "sends_one": "{{count}} croix",
+    "sends_other": "{{count}} croix"
   },
   "search": {
     "categories": {
@@ -118,7 +118,7 @@
     },
     "panels": {
       "quality": "Qualité",
-      "status": "Statut d'enchaînement",
+      "status": "Statut",
       "progress": "Progression",
       "allClimbs": "Tous les blocs",
       "zone": "Zone",
@@ -166,7 +166,7 @@
     },
     "progress": {
       "signInTitle": "Connectez-vous pour filtrer par vos données",
-      "signInBody": "Connectez-vous pour filtrer les blocs selon vos essais et vos enchaînements.",
+      "signInBody": "Connectez-vous pour filtrer les blocs selon vos essais et vos croix.",
       "signInModalTitle": "Connectez-vous à Boardsesh",
       "signInModalDescription": "Créez un compte pour filtrer par votre progression et garder vos favoris.",
       "hideAttempted": "Masquer les essayés",
@@ -256,9 +256,9 @@
       }
     },
     "sendToBoard": {
-      "label": "Envoyer au board",
+      "label": "Allumer sur le board",
       "active": "Sur le mur",
-      "tooltip": "Envoyer au board",
+      "tooltip": "Allumer sur le board",
       "activeTooltip": "Actuellement sur le mur"
     },
     "tick": {
@@ -590,8 +590,8 @@
         "refine": "Affiner",
         "advanced": "Avancé"
       },
-      "hideSent": "Masquer mes voies réussies",
-      "hideSentDescription": "N'afficher que les voies que vous n'avez pas réussies",
+      "hideSent": "Masquer mes voies enchaînées",
+      "hideSentDescription": "N'afficher que les voies que vous n'avez pas enchaînées",
       "popularity": "Popularité",
       "established2plus": "Établies 2+",
       "benchmark": "Benchmarks uniquement",
@@ -626,9 +626,9 @@
       },
       "progress": {
         "hideAttempted": "Masquer essayées",
-        "hideCompleted": "Masquer réussies",
+        "hideCompleted": "Masquer enchaînées",
         "onlyAttempted": "Uniquement essayées",
-        "onlyCompleted": "Uniquement réussies"
+        "onlyCompleted": "Uniquement enchaînées"
       },
       "signInForDrafts": "Connecte-toi pour filtrer tes brouillons",
       "setters": "Ouvreurs",

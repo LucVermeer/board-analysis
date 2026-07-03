@@ -12,7 +12,7 @@
   "library": {
     "signInBanner": {
       "title": "Connectez-vous pour utiliser votre bibliothèque",
-      "description": "Suivez vos enchaînements et gérez vos playlists.",
+      "description": "Suivez vos croix et gérez vos playlists.",
       "cta": "Se connecter",
       "modalTitle": "Se connecter à Boardsesh",
       "modalDescription": "Connectez-vous pour suivre vos blocs et gérer vos playlists."

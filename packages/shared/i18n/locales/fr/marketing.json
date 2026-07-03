@@ -2,7 +2,7 @@
   "metadata": {
     "home": {
       "title": "Boardsesh - Entraînez-vous mieux sur votre board d'escalade",
-      "description": "Notez vos enchaînements sur Kilter, Tension et MoonBoard. Une seule app pour vos boards.",
+      "description": "Notez vos croix sur Kilter, Tension et MoonBoard. Une seule app pour vos boards.",
       "ogDescription": "Compatible avec Kilter, Tension et MoonBoard. Suivez vos sessions, pilotez les LEDs, grimpez ensemble."
     },
     "about": {
@@ -29,7 +29,7 @@
   "home": {
     "hero": {
       "title": "Au mur !",
-      "subtitle": "Notez vos enchaînements sur Kilter, Tension et MoonBoard.",
+      "subtitle": "Notez vos croix sur Kilter, Tension et MoonBoard.",
       "ctaStart": "Commencer à grimper",
       "ctaContinue": "Reprendre la grimpe"
     },
@@ -385,20 +385,20 @@
       "link4": "Cliquez sur « Lier le compte »",
       "syncsLabel": "Ce qui est synchronisé :",
       "syncs1": "Historique des enchaînements (blocs réussis)",
-      "syncs2": "Tentatives",
+      "syncs2": "Essais",
       "syncs3": "Circuits et playlists",
       "outro": "Les modifications se synchronisent dans les deux sens : les enchaînements enregistrés dans Boardsesh apparaissent dans les apps officielles."
     },
     "logbook": {
       "q": "Comment suivre mes blocs ?",
       "imgAlt": "Détail du bloc avec actions",
-      "intro": "Suivez votre progression en enregistrant vos enchaînements et vos tentatives.",
+      "intro": "Suivez votre progression en enregistrant vos croix et vos essais.",
       "fromLabel": "Depuis n'importe quel bloc :",
       "actions": {
-        "tickLabel": "Tentative :",
-        "tickBody": "Enregistre une tentative sur le bloc",
-        "logLabel": "Enregistrer un enchaînement :",
-        "logBody": "Marque le bloc comme enchaîné (send)",
+        "tickLabel": "Essai :",
+        "tickBody": "Enregistre un essai sur le bloc",
+        "logLabel": "Faire la croix :",
+        "logBody": "Marque le bloc comme enchaîné (une croix dans ton carnet)",
         "favoriteLabel": "Favori :",
         "favoriteBody": "Sauvegardez des blocs pour y accéder rapidement"
       },
@@ -492,7 +492,7 @@
       "accountLabel": "Informations de compte.",
       "accountBody": "Quand vous créez un compte, nous stockons votre adresse e-mail et votre nom d'utilisateur. Votre e-mail sert à l'authentification. Votre nom d'utilisateur est affiché sur votre profil et visible par les autres utilisateurs dans les sessions Mode Party et les fonctionnalités sociales.",
       "activityLabel": "Activité de grimpe.",
-      "activityBody": "Quand vous enregistrez un send ou une tentative, nous stockons les détails du bloc, la cotation, la date et les notes que vous ajoutez. Cela alimente votre carnet et le suivi de progression.",
+      "activityBody": "Quand vous enregistrez une croix ou un essai, nous stockons les détails du bloc, la cotation, la date et les notes que vous ajoutez. Cela alimente votre carnet et le suivi de progression.",
       "locationLabel": "Localisation.",
       "locationBody": "Si vous accordez la permission de localisation, nous utilisons votre position approximative pour vous aider à découvrir des sessions Mode Party à proximité. Nous ne suivons pas votre position en arrière-plan et ne stockons pas d'historique de localisation.",
       "productAnalyticsLabel": "Analytique produit.",

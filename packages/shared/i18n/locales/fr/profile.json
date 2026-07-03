@@ -49,7 +49,7 @@
   },
   "stats": {
     "problems": "blocs",
-    "send": "enchaînement",
+    "send": "croix",
     "flash": "flash",
     "calendar": "Calendrier",
     "calendarAria": "Calendrier d'escalade : {{days}} jours actifs, {{count}} blocs",
@@ -124,7 +124,7 @@
       "videoPlaceholder": "Lien Instagram ou TikTok",
       "videoHelper": "Colle un lien Instagram ou TikTok pour partager ta beta. (Facultatif)",
       "mirrored": "Inversé",
-      "submit": "Envoyer",
+      "submit": "Enregistrer",
       "submitAtAngle": "Logger à {{angle}}°",
       "cancel": "Annuler",
       "wallMoved": "Le mur est passé à {{wallClimb}}. Tu logges toujours {{loggingClimb}} ?",
@@ -169,7 +169,7 @@
       "filterCount_one": "filtre actif",
       "filterCount_other": "filtres actifs",
       "resultType": {
-        "includeSends": "Inclure les enchaînements",
+        "includeSends": "Inclure les croix",
         "includeAttempts": "Inclure les essais",
         "flashOnly": "Flash uniquement",
         "benchmarkOnly": "Références uniquement"
