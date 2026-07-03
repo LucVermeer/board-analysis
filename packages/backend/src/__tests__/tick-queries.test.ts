@@ -1046,6 +1046,113 @@ describe('tickQueries — behavior fixes', () => {
     });
   });
 
+  describe('userGroupedAscentsFeed — filters & enrichment', () => {
+    const seedProjectDay = async () => {
+      const sentUuid = `${CLIMB_PREFIX}grouped-sent`;
+      const projectUuid = `${CLIMB_PREFIX}grouped-project`;
+      await insertClimb(sentUuid, 'Grouped Sent Climb');
+      await insertClimb(projectUuid, 'Grouped Project Climb');
+      // Same climb, same day: two burns then the send — one group of three.
+      await insertTick({
+        uuid: 'grp-a1',
+        climbUuid: sentUuid,
+        climbedAt: '2026-06-20T10:00:00',
+        status: 'attempt',
+        attemptCount: 3,
+      });
+      await insertTick({
+        uuid: 'grp-a2',
+        climbUuid: sentUuid,
+        climbedAt: '2026-06-20T11:00:00',
+        status: 'attempt',
+        attemptCount: 2,
+      });
+      await insertTick({
+        uuid: 'grp-s1',
+        climbUuid: sentUuid,
+        climbedAt: '2026-06-20T12:00:00',
+        status: 'send',
+        attemptCount: 1,
+      });
+      // A different climb still projecting that day.
+      await insertTick({
+        uuid: 'grp-p1',
+        climbUuid: projectUuid,
+        climbedAt: '2026-06-20T13:00:00',
+        status: 'attempt',
+        attemptCount: 4,
+      });
+      return { sentUuid, projectUuid };
+    };
+
+    type EnrichedGroup = {
+      key: string;
+      climbUuid: string;
+      items: Array<{ uuid: string; status: string; hasBetaVideo: boolean; consensusDifficulty: number | null }>;
+      flashCount: number;
+      sendCount: number;
+      attemptCount: number;
+    };
+    const callGrouped = (input: Record<string, unknown>) =>
+      tickQueries.userGroupedAscentsFeed(undefined, { userId: TEST_USER_ID, input }) as Promise<{
+        groups: EnrichedGroup[];
+        totalCount: number;
+        hasMore: boolean;
+      }>;
+
+    it('applies statusMode to groups AND their aggregates (sends-only hides project groups)', async () => {
+      const { sentUuid, projectUuid } = await seedProjectDay();
+
+      const sendsOnly = await callGrouped({ statusMode: 'send' });
+      const groupClimbs = sendsOnly.groups.map((group) => group.climbUuid);
+      expect(groupClimbs).toContain(sentUuid);
+      // The still-projecting climb has no sends — its group must not appear,
+      // and totalCount must agree with the filtered group list.
+      expect(groupClimbs).not.toContain(projectUuid);
+      expect(sendsOnly.totalCount).toBe(1);
+
+      // The surviving group's aggregates reflect only the visible entries.
+      const sentGroup = sendsOnly.groups.find((group) => group.climbUuid === sentUuid);
+      expect(sentGroup?.items.map((item) => item.uuid)).toEqual(['grp-s1']);
+      expect(sentGroup?.sendCount).toBe(1);
+      expect(sentGroup?.attemptCount).toBe(0);
+    });
+
+    it('keeps burns and the send in ONE group with both statuses visible', async () => {
+      const { sentUuid } = await seedProjectDay();
+
+      const both = await callGrouped({ statusMode: 'both' });
+      const sentGroup = both.groups.find((group) => group.climbUuid === sentUuid);
+      expect(sentGroup?.items).toHaveLength(3);
+      expect(sentGroup?.sendCount).toBe(1);
+      expect(sentGroup?.attemptCount).toBe(2);
+      expect(both.totalCount).toBe(2);
+    });
+
+    it('filters by climbName without breaking group pagination counts', async () => {
+      await seedProjectDay();
+
+      const named = await callGrouped({ climbName: 'Grouped Project', statusMode: 'both' });
+      expect(named.groups).toHaveLength(1);
+      expect(named.totalCount).toBe(1);
+      expect(named.hasMore).toBe(false);
+    });
+
+    it('enriches group items with hasBetaVideo under ownership semantics', async () => {
+      const { sentUuid, projectUuid } = await seedProjectDay();
+      await db.execute(sql`
+        INSERT INTO board_beta_links (board_type, climb_uuid, link, created_by_user_id)
+        VALUES ('kilter', ${sentUuid}, 'https://instagram.com/p/grouped-beta', ${TEST_USER_ID})
+      `);
+
+      const both = await callGrouped({ statusMode: 'both' });
+      const sentGroup = both.groups.find((group) => group.climbUuid === sentUuid);
+      const projectGroup = both.groups.find((group) => group.climbUuid === projectUuid);
+      expect(sentGroup?.items.every((item) => item.hasBetaVideo)).toBe(true);
+      expect(projectGroup?.items.every((item) => !item.hasBetaVideo)).toBe(true);
+    });
+  });
+
   describe('userAscentCaptionMatches — quoted-name caption suggestions', () => {
     it('matches the quoted climb name anywhere in the logbook and returns board art', async () => {
       const climbUuid = CLIMB_PREFIX + 'caption-purple';
