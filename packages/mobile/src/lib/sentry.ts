@@ -22,10 +22,50 @@ const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
  */
 export const isSentryEnabled = !!sentryDsn && !__DEV__;
 
+// @expo/ui's Android bottom sheet fires `sheetRef.partialExpand()` / `expand()`
+// fire-and-forget inside `snapToIndex` (community/bottom-sheet/BottomSheet.android.tsx).
+// A store binary built against an older @expo/ui native layer never registered that
+// AsyncFunction on the `ModalBottomSheetView` native view, so the call rejects
+// ("No handler registered for AsyncFunction '<method>' on view 'ModalBottomSheetView'")
+// and, being unawaited, surfaces as an onunhandledrejection. The op is a no-op on those
+// binaries (the sheet is already at that detent), so only the Sentry noise is worth
+// dropping. Match the view name + method (never a bare `partialExpand` substring) so no
+// unrelated error is ever dropped; cover `expand` too — same mechanism, even though only
+// `partialExpand` rejects on today's fleet. See docs/mobile-ota-updates.md: this is a
+// JS-only change, so it keeps the same fingerprint and rides the OTA to shipped binaries.
+const EXPO_UI_SHEET_NO_HANDLER =
+  /Call to function 'ModalBottomSheetView\.(?:partialExpand|expand)' has been rejected|No handler registered for AsyncFunction '(?:partialExpand|expand)' on view 'ModalBottomSheetView'/;
+
+type SentryEventLike = { exception?: { values?: Array<{ value?: string | undefined }> } };
+
+/**
+ * Pure predicate: does this Sentry event / hint carry the benign @expo/ui Android sheet
+ * "No handler registered" rejection? Exported (no enablement gate, no SDK) so it's
+ * directly unit-testable, matching applyErrorContextToScope et al. Both the event's
+ * `exception.values[].value` and `hint.originalException` are checked because Sentry can
+ * split the JS `Error.cause` chain (the outer "has been rejected" vs the native
+ * IllegalStateException cause) across those two places.
+ */
+export function isExpoUiSheetNoHandlerRejection(event: SentryEventLike, originalException?: unknown): boolean {
+  const values = event.exception?.values ?? [];
+  const fromEvent = values.map((entry) => entry.value ?? '').join('\n');
+  const fromHint =
+    originalException instanceof Error ? `${originalException.message}\n${originalException.stack ?? ''}` : '';
+  return EXPO_UI_SHEET_NO_HANDLER.test(fromEvent) || EXPO_UI_SHEET_NO_HANDLER.test(fromHint);
+}
+
 if (isSentryEnabled) {
   Sentry.init({
     dsn: sentryDsn,
     tracesSampleRate: 0.1,
+    // Drop the benign @expo/ui Android sheet "No handler registered" unhandled rejection
+    // (partialExpand/expand on a binary whose native layer predates the method). Scoped
+    // to that exact signature so every other rejection still reports. See
+    // isExpoUiSheetNoHandlerRejection above.
+    beforeSend(event, hint) {
+      if (isExpoUiSheetNoHandlerRejection(event, hint?.originalException)) return null;
+      return event;
+    },
     // Explicit so a future option change can't silently turn either off. Native
     // crash handling persists SIGABRT / native exceptions across the crash and
     // uploads them on the next launch — the coverage gap PostHog (JS-only)

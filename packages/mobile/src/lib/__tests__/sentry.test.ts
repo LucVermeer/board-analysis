@@ -22,6 +22,7 @@ import {
   applyOtaTagsToScope,
   captureToSentry,
   flushSentry,
+  isExpoUiSheetNoHandlerRejection,
   setOtaChannelTag,
   setOtaSentryTags,
   wrapWithSentry,
@@ -220,5 +221,63 @@ describe('applyOtaTagsToScope', () => {
     const explicit = makeScope();
     applyOtaTagsToScope(explicit, { isEmbeddedLaunch: false });
     expect(explicit.setTag).toHaveBeenCalledWith('ota_is_embedded', 'false');
+  });
+});
+
+// The beforeSend drop only runs on real builds (isSentryEnabled), so the match logic
+// lives in this pure predicate and is exercised here against the real captured event
+// shape — that's where a too-broad or too-narrow filter would otherwise hide behind the
+// enablement gate.
+describe('isExpoUiSheetNoHandlerRejection', () => {
+  it('drops the real two-value event (outer "has been rejected" + native cause)', () => {
+    const event = {
+      exception: {
+        values: [
+          { value: "Call to function 'ModalBottomSheetView.partialExpand' has been rejected." },
+          { value: "No handler registered for AsyncFunction 'partialExpand' on view 'ModalBottomSheetView'" },
+        ],
+      },
+    };
+    expect(isExpoUiSheetNoHandlerRejection(event)).toBe(true);
+  });
+
+  it('drops when only the hint.originalException carries the signature', () => {
+    const event = { exception: { values: [{ value: 'Unhandled promise rejection' }] } };
+    const originalException = new Error("Call to function 'ModalBottomSheetView.partialExpand' has been rejected.");
+    expect(isExpoUiSheetNoHandlerRejection(event, originalException)).toBe(true);
+  });
+
+  it('also drops the expand() variant (same mechanism)', () => {
+    const event = {
+      exception: {
+        values: [{ value: "No handler registered for AsyncFunction 'expand' on view 'ModalBottomSheetView'" }],
+      },
+    };
+    expect(isExpoUiSheetNoHandlerRejection(event)).toBe(true);
+  });
+
+  it('keeps an unrelated rejection', () => {
+    const event = { exception: { values: [{ value: 'TypeError: undefined is not a function' }] } };
+    expect(isExpoUiSheetNoHandlerRejection(event)).toBe(false);
+  });
+
+  it('keeps a no-handler error on a different native view', () => {
+    const event = {
+      exception: {
+        values: [{ value: "No handler registered for AsyncFunction 'partialExpand' on view 'SomeOtherView'" }],
+      },
+    };
+    expect(isExpoUiSheetNoHandlerRejection(event)).toBe(false);
+  });
+
+  it('keeps a message that merely mentions the word partialExpand (not the view + handler phrasing)', () => {
+    const event = { exception: { values: [{ value: 'partialExpand is not a great API name' }] } };
+    expect(isExpoUiSheetNoHandlerRejection(event)).toBe(false);
+  });
+
+  it('keeps events with no exception payload', () => {
+    expect(isExpoUiSheetNoHandlerRejection({})).toBe(false);
+    expect(isExpoUiSheetNoHandlerRejection({ exception: { values: [] } })).toBe(false);
+    expect(isExpoUiSheetNoHandlerRejection({}, 'not an Error instance')).toBe(false);
   });
 });
