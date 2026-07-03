@@ -140,7 +140,7 @@ jobs:
     permissions:
       contents: write # push the fingerprint-ios-<hash> tag on a successful upload
     # macos-26 = Xcode 26 + iOS 26 SDK, which App Store Connect now requires
-    # for all uploads. Expo SDK 56 / RN 0.85 ships a fmt that compiles cleanly
+    # for all uploads. Expo SDK 57 / RN 0.86 ships a fmt that compiles cleanly
     # under Xcode 26's strict C++20 constexpr evaluator.
     runs-on: macos-26
     timeout-minutes: 60
