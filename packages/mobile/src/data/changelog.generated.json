@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-03T21:13:06.298Z",
+  "generatedAt": "2026-07-03T21:18:57.864Z",
   "entries": [
+    {
+      "prNumber": 3425,
+      "category": "fixed",
+      "title": "On iPhone, opening one sheet right after another no longer stalls — the second one comes up as soon as the first finishes sliding away, instead of waiting out a fixed half-second.",
+      "mergedAt": "2026-07-03T21:15:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3425"
+    },
+    {
+      "prNumber": 3413,
+      "category": "fixed",
+      "title": "Mini MoonBoard now lights the right holds when you drive the wall from the lock screen or Dynamic Island",
+      "mergedAt": "2026-07-03T21:14:14Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3413"
+    },
     {
       "prNumber": 3365,
       "category": "fixed",

@@ -29,6 +29,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- On iPhone, opening one sheet right after another no longer stalls — the second one comes up as soon as the first finishes sliding away, instead of waiting out a fixed half-second. ([#3425](https://github.com/boardsesh/boardsesh/pull/3425))
+- Mini MoonBoard now lights the right holds when you drive the wall from the lock screen or Dynamic Island ([#3413](https://github.com/boardsesh/boardsesh/pull/3413))
 - Fixed climbs not lighting up on Kilter and Tension boards for iPhones on iOS 26.5 — no more blank board mid-session or connect–disconnect churn while your partner queues the next problem. ([#3365](https://github.com/boardsesh/boardsesh/pull/3365))
   Sending climbs over Bluetooth is faster: LED data now rides bigger Bluetooth packets when your phone and board support them.
 - Lock-screen and Dynamic Island controls are more reliable: the session card no longer freezes on the wrong climb after quick navigation, dies after a hiccup starting up, or flips to "Session ended" minutes after you use it ([#3419](https://github.com/boardsesh/boardsesh/pull/3419))
