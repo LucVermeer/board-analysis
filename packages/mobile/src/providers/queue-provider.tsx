@@ -1,14 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useReducer,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  useMemo,
-  type ReactNode,
-} from 'react';
+import { useReducer, useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   queueReducer,
@@ -17,76 +7,77 @@ import {
   generateClientId,
   isPlaylistPeekQueueItemUuid,
   playlistSuggestionSourceMatches,
-  computeQueueStateHash,
 } from '@boardsesh/queue';
 import type {
-  QueueState,
-  QueueAction,
   QueueSearchParams,
   ClimbQueueItem,
-  ClimbRegradePatch,
   PlaylistSuggestionSource,
   SetCurrentClimbOptions,
 } from '@boardsesh/queue';
-import {
-  applySessionRuntimeEvent,
-  createJoinSessionTracker,
-  createQueueSyncGate,
-  mapSubscriptionEnvelopeToAction,
-  RESYNC_LOOP_THRESHOLD,
-  type QueueSyncGate,
-  type QueueSyncGateEvent,
-  type RuntimeSessionState,
-  type SubscriptionWireEnvelope,
-} from '@boardsesh/queue-runtime';
+import { createJoinSessionTracker, type QueueSyncGate } from '@boardsesh/queue-runtime';
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
-import type { SessionSummary, SubscriptionQueueEvent, SessionUser, UserBoard } from '@boardsesh/shared-schema';
+import type { SubscriptionQueueEvent, SessionUser } from '@boardsesh/shared-schema';
 import { execute, GraphQLOperationError, isRateLimitedExtension } from '@boardsesh/graphql-client';
-import { buildBoardPath, parseBoardPath, parseNamedBoardPath } from '@boardsesh/board-config';
+import { buildBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { JOIN_SESSION, LEAVE_SESSION } from '@boardsesh/graphql/operations/queue-session';
+import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
 import {
-  QUEUE_UPDATES_SUBSCRIPTION,
-  SESSION_UPDATES_SUBSCRIPTION,
-  CREATE_SESSION,
-  END_SESSION,
-  GET_CLIMB,
-  SESSION_STATUS,
   GET_SESSION_QUEUE_STATE,
-  type CreateSessionMutationResponse,
-  type EndSessionMutationResponse,
-  type SessionUpdateEvent,
   type SessionLiveStatsEvent,
-  type GetClimbQueryResponse,
-  type SessionStatusQueryResponse,
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
-import { getDeviceTimezone } from '../lib/device-timezone';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
-import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { getStoredQueueSnapshot, setStoredQueueSnapshot, clearStoredQueueSnapshot } from '../lib/queue-snapshot-store';
-import { emitWallConfirm, findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
-import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
-import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
+import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
+import { toClimbQueueItem } from '../lib/queue-conversion';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
-import { reportError, reportHandledError } from '../lib/error-reporting';
-import { extractGraphqlMessage, isGraphqlRateLimitedError } from '../lib/graphql/extract-error-message';
+import { reportHandledError } from '../lib/error-reporting';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
+import {
+  QueueContext,
+  QueueSessionControlContext,
+  QueueSessionIdContext,
+  QueueLiveStatsContext,
+  QueueActiveClimbContext,
+  QueueHasActiveClimbContext,
+  QueueActionsContext,
+  QueuePlaylistSuggestionContext,
+  type StartSessionConfig,
+  type QueueContextValue,
+  type QueueSessionControlContextValue,
+  type QueueSessionIdContextValue,
+  type QueueLiveStatsContextValue,
+  type QueueActiveClimbContextValue,
+  type QueueHasActiveClimbContextValue,
+  type QueueActionsContextValue,
+  type QueuePlaylistSuggestionContextValue,
+} from './queue/queue-contexts';
+import { useQueueRegrade } from './queue/use-queue-regrade';
+import { useQueuePersistence } from './queue/use-queue-persistence';
+import { useSessionCommands } from './queue/use-session-commands';
+import {
+  useSessionRealtime,
+  createEmptySessionRuntimeState,
+  type MobileSessionRuntimeState,
+} from './queue/use-session-realtime';
 
-export type StartSessionConfig = {
-  name?: string;
-  goal?: string;
-  color?: string;
-  discoverable?: boolean;
-  isPermanent?: boolean;
-};
-
-const JOIN_SESSION_RETRY_BACKOFF_MS = [1_000, 2_500, 5_000] as const;
+// Narrow subscription hooks moved to ./queue/queue-contexts; re-exported here so
+// the `providers/queue-provider` import path (18 call sites) stays unchanged.
+export {
+  useQueue,
+  useQueueSessionControls,
+  useQueueSessionId,
+  useQueueLiveStats,
+  useActiveClimbUuid,
+  useHasActiveClimb,
+  useQueueActions,
+  usePlaylistSuggestionSource,
+} from './queue/queue-contexts';
+export type { StartSessionConfig } from './queue/queue-contexts';
 
 // A party-session queue/wall mutation that fails because the backend throttled
 // it (RATE_LIMITED) is transient — the optimistic state already applied and a
@@ -110,324 +101,7 @@ function showQueueMutationErrorToast(
   }
 }
 
-type QueueContextValue = {
-  state: QueueState;
-  dispatch: React.Dispatch<QueueAction>;
-  sessionId: string | null;
-  setSessionId: (id: string | null) => void;
-  /** Most recently published physical board serial for this session, if any. */
-  lastConnectedBoardSerial: string | null;
-  /** Our own participant id for the active session (marks "you" in rosters). */
-  participantId: string | null;
-  /**
-   * Whether the session's current climb is confirmed lit on a physical wall by
-   * any member. Flipped on by `WallConfirmedClimb` (a member relayed the climb
-   * over BLE) and off by `WallDisconnected` (a member's BLE link dropped). Drives
-   * the lightbulb's lit indicator; the current climb is never cleared by either.
-   */
-  isSessionWallLit: boolean;
-  addToQueue: (item: ClimbQueueItem) => void;
-  removeFromQueue: (uuid: string) => void;
-  reorderQueue: (uuid: string, oldIndex: number, newIndex: number) => void;
-  clearQueue: () => void;
-  /** Replace the entire queue (optimistic local UPDATE_QUEUE + best-effort party sync). */
-  setQueue: (queue: ClimbQueueItem[], currentClimbQueueItem?: ClimbQueueItem | null) => void;
-  /**
-   * Read the live queue + current climb without subscribing to state. Stable
-   * identity (backed by the internal stateRef), so action-only consumers — e.g.
-   * playlist activation deciding whether replacing the queue would clear future
-   * items — can read the latest queue at tap time without re-rendering on every
-   * queue change.
-   */
-  getQueueSnapshot: () => { queue: ClimbQueueItem[]; currentClimbQueueItem: ClimbQueueItem | null };
-  setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
-  nextClimb: () => void;
-  previousClimb: () => void;
-  /**
-   * Apply a widget Next/Previous navigation by absolute index. Dispatches the
-   * current-climb change with the provided correlationId (so the racing
-   * `CurrentClimbChanged` server echo is suppressed) WITHOUT sending a fresh JS
-   * mutation — the native widget intent already sent the server mutation. Using
-   * the absolute item (not a relative `nextClimb`) keeps this idempotent, so it
-   * can't double-advance when the WebSocket echo lands before the Darwin event.
-   * Mirrors web's `dispatchWidgetNavigation`.
-   */
-  dispatchWidgetNavigation: (item: ClimbQueueItem, correlationId: string) => void;
-  /** Replace the playlist suggestion source that drives swipe-through climbs. */
-  setPlaylistSuggestionSource: (source: PlaylistSuggestionSource | null) => void;
-  /** Refresh the suggestion source in place (no-op unless it matches the active one). */
-  refreshPlaylistSuggestionSource: (source: PlaylistSuggestionSource) => void;
-  /**
-   * Reset the active session locally. Pass `{ notifyServer: true }` on an
-   * intentional leave (e.g. switching sessions) to emit LEAVE_SESSION so peers
-   * see the departure immediately instead of after the disconnect grace timer.
-   */
-  clearSession: (options?: { notifyServer?: boolean }) => Promise<void>;
-  endSession: () => Promise<SessionSummary | null>;
-  /**
-   * Explicitly create a session with optional config (name, goal, etc.).
-   * Returns the new sessionId, or null if there is no active board or the
-   * mutation failed. No-op (returns existing id) when a session is live.
-   */
-  startSession: (config?: StartSessionConfig) => Promise<string | null>;
-  /**
-   * Join an existing session created by someone else (party mode). Switches the
-   * active board to the session's board, sets + persists the sessionId, and
-   * relies on the session effect to run JOIN_SESSION + open the realtime
-   * subscriptions. No-ops if already in this session. Differs from
-   * `startSession`, which *reads* the active board to create a new session;
-   * `joinSession` *writes* the active board from the session's boardPath.
-   */
-  joinSession: (sessionId: string, opts: { boardPath: string; userBoard: UserBoard }) => Promise<void>;
-  /**
-   * Broadcast the session's boardPath so every party member follows the same
-   * angle/board. Best-effort; a true no-op in solo (never creates a session).
-   */
-  setSessionBoardPath: (boardPath: string) => Promise<void>;
-  /**
-   * Broadcast that this phone successfully wrote a climb to the physical wall.
-   * The local wall-confirm bus is handled by the Bluetooth provider; this
-   * mutation notifies party peers through the session subscription.
-   */
-  confirmClimbOnWall: (climbUuid: string) => Promise<void>;
-  /**
-   * Broadcast that this phone's BLE link to the wall dropped so every member
-   * turns the lightbulb off (the current climb is preserved). Best-effort;
-   * a true no-op in solo (never creates a session).
-   */
-  reportWallDisconnect: () => Promise<void>;
-  /**
-   * Store the connected board serial on the active session so native peers can
-   * reconnect to the same physical wall without showing the picker.
-   */
-  setSessionBoardSerial: (serial: string) => Promise<void>;
-  /**
-   * Subscribe to raw queue subscription events, including transient ones that
-   * never reach the reducer (PlaybackStateChanged drives route playback
-   * party-sync). Returns an unsubscribe function.
-   */
-  subscribeToQueueEvents: (listener: (event: SubscriptionQueueEvent) => void) => () => void;
-  /** Broadcast local route-playback state to party peers. Best-effort; no-op solo. */
-  publishPlaybackState: (input: PublishPlaybackStateInput) => Promise<void>;
-};
-
-const QueueContext = createContext<QueueContextValue | null>(null);
-
-/**
- * QueueProvider intentionally exposes several narrow hooks. Pick the smallest
- * subscription that matches the read:
- * - useQueue(): legacy/full reducer state plus actions; use only when state shape is required.
- * - useQueueActions(): stable command surface for enqueue/session/playback writes.
- * - useQueueSessionId(): rare session-id changes for structural chrome.
- * - useQueueSessionControls(): session id, serial/wall controls, and the member-userId set for party surfaces.
- * - useQueueLiveStats(): high-frequency live stats and roster updates.
- * - useActiveClimbUuid(): row-level active-climb highlighting.
- * - useHasActiveClimb(): presence-only bottom chrome metrics.
- * - usePlaylistSuggestionSource(): playlist peek/suggestion navigation.
- */
-type QueueSessionControlContextValue = Pick<
-  QueueContextValue,
-  | 'sessionId'
-  | 'participantId'
-  | 'lastConnectedBoardSerial'
-  | 'isSessionWallLit'
-  | 'confirmClimbOnWall'
-  | 'reportWallDisconnect'
-  | 'setSessionBoardSerial'
-> & {
-  /**
-   * Stable DB user UUIDs of the current session's members (including me). Used to
-   * id-match the board-presence holder against "someone in my session" so the
-   * lightbulb lights only for a session member's BLE link, not any board holder.
-   * Empty when solo. Memoized by the sorted-id set so the ≤1/2s party push doesn't
-   * churn its identity.
-   */
-  sessionMemberUserIds: ReadonlySet<string>;
-};
-
-const QueueSessionControlContext = createContext<QueueSessionControlContextValue | null>(null);
-
-/**
- * SessionId-only selector context. Its identity changes ONLY when the active
- * session id changes (session start / end / join — rare), never on queue
- * mutations or the ≤1/2s party pushes. Consumed by high-fanout *structural*
- * readers — the tab layout (which renders every tab inline), the board adapter,
- * and the session screen — so a queue change can't cascade a re-render through
- * the whole navigation tree. Narrower than QueueSessionControlContext, which
- * also churns on board-serial / wall-lit changes.
- */
-type QueueSessionIdContextValue = {
-  sessionId: string | null;
-};
-
-const QueueSessionIdContext = createContext<QueueSessionIdContextValue | null>(null);
-
-/**
- * Live session analytics + presence, split out of the main QueueContext so the
- * ≤1/2s `SessionStatsUpdated` party push (and roster deltas) re-renders only the
- * session screen — not every `useQueue()` consumer (climb list, persistent bar,
- * tab layout, board adapter, bluetooth provider, drawer host, live-activity
- * bridge). Consumed solely by SessionScreen + InSessionView.
- */
-type QueueLiveStatsContextValue = {
-  /**
-   * Live aggregate stats for the active session, pushed over `sessionUpdates`
-   * (the `SessionStatsUpdated` event) as ticks are logged. Null until the first
-   * push arrives (or when there's no session).
-   */
-  liveStats: SessionLiveStatsEvent | null;
-  /**
-   * Connected participants in the active session. Seeded from the JOIN_SESSION
-   * response and kept current via UserJoined/UserLeft/UserPresenceChanged.
-   */
-  sessionUsers: SessionUser[];
-};
-
-const QueueLiveStatsContext = createContext<QueueLiveStatsContextValue | null>(null);
-
-/**
- * Active-climb selector context. Changes identity ONLY when the active climb's
- * uuid changes, so the climb list (which highlights the active row) stops
- * re-rendering on every unrelated queue mutation or party push.
- */
-type QueueActiveClimbContextValue = {
-  activeClimbUuid: string | null;
-};
-
-const QueueActiveClimbContext = createContext<QueueActiveClimbContextValue | null>(null);
-
-/**
- * Boolean "is any climb currently active" selector. Identity changes ONLY when a
- * climb appears/disappears (none↔some) — NOT when navigating *between* climbs.
- * Consumed by bottom-chrome metrics (climbs, discover, You screens) so navigating
- * climbs in the play drawer no longer re-renders those whole tab screens.
- */
-type QueueHasActiveClimbContextValue = {
-  hasActiveClimb: boolean;
-};
-
-const QueueHasActiveClimbContext = createContext<QueueHasActiveClimbContextValue | null>(null);
-
-/**
- * Stable queue actions, split out so consumers that only dispatch actions (e.g.
- * the climb list's add-to-queue) don't subscribe to the whole reducer `state`.
- * Holds everything in QueueContextValue except volatile state and selector-only
- * values. Playlist suggestion state lives in QueuePlaylistSuggestionContext so
- * playlist activation does not wake every action-only consumer in the tab tree.
- */
-type QueueActionsContextValue = Omit<
-  QueueContextValue,
-  | 'state'
-  | 'dispatch'
-  | 'sessionId'
-  | 'setSessionId'
-  | 'lastConnectedBoardSerial'
-  | 'participantId'
-  | 'isSessionWallLit'
->;
-
-const QueueActionsContext = createContext<QueueActionsContextValue | null>(null);
-
-type QueuePlaylistSuggestionContextValue = {
-  playlistSuggestionSource: PlaylistSuggestionSource | null;
-};
-
-const QueuePlaylistSuggestionContext = createContext<QueuePlaylistSuggestionContextValue | null>(null);
-
-export function useQueue(): QueueContextValue {
-  const context = useContext(QueueContext);
-  if (!context) throw new Error('useQueue must be used within QueueProvider');
-  return context;
-}
-
-export function useQueueSessionControls(): QueueSessionControlContextValue {
-  const context = useContext(QueueSessionControlContext);
-  if (!context) throw new Error('useQueueSessionControls must be used within QueueProvider');
-  return context;
-}
-
-export function useQueueSessionId(): QueueSessionIdContextValue {
-  const context = useContext(QueueSessionIdContext);
-  if (!context) throw new Error('useQueueSessionId must be used within QueueProvider');
-  return context;
-}
-
-export function useQueueLiveStats(): QueueLiveStatsContextValue {
-  const context = useContext(QueueLiveStatsContext);
-  if (!context) throw new Error('useQueueLiveStats must be used within QueueProvider');
-  return context;
-}
-
-export function useActiveClimbUuid(): string | null {
-  const context = useContext(QueueActiveClimbContext);
-  if (!context) throw new Error('useActiveClimbUuid must be used within QueueProvider');
-  return context.activeClimbUuid;
-}
-
-export function useHasActiveClimb(): boolean {
-  const context = useContext(QueueHasActiveClimbContext);
-  if (!context) throw new Error('useHasActiveClimb must be used within QueueProvider');
-  return context.hasActiveClimb;
-}
-
-export function useQueueActions(): QueueActionsContextValue {
-  const context = useContext(QueueActionsContext);
-  if (!context) throw new Error('useQueueActions must be used within QueueProvider');
-  return context;
-}
-
-/**
- * Returns the active playlist suggestion source, or null when no playlist
- * continuation is active. A missing context still throws: in-tree "no source"
- * is represented by `null`, while no provider means the hook was misused.
- */
-export function usePlaylistSuggestionSource(): PlaylistSuggestionSource | null {
-  const context = useContext(QueuePlaylistSuggestionContext);
-  if (!context) throw new Error('usePlaylistSuggestionSource must be used within QueueProvider');
-  return context.playlistSuggestionSource;
-}
-
 const defaultSearchParams: QueueSearchParams = {};
-
-// The wire envelope shape matches what QUEUE_UPDATES_SUBSCRIPTION returns —
-// the subscription aliases `item`→`addedItem` (disambiguates from the
-// overlapping `item` selection on CurrentClimbChanged) and `uuid`→`mirroredUuid`
-// (disambiguates from QueueItemRemoved.uuid). Both aliases are first-class on
-// `SubscriptionWireEnvelope` so we can use the wire type directly.
-type QueueUpdateEvent = SubscriptionWireEnvelope<SubscriptionQueueItem>;
-type MobileSessionRuntimeState = RuntimeSessionState<SessionUser>;
-
-/**
- * Flatten a raw queueUpdates wire event into the shape createQueueSyncGate's
- * `evaluateIncoming`/`noteApplied` expect. Every variant except FullSync
- * already carries a top-level `stateHash` matching
- * QUEUE_UPDATES_SUBSCRIPTION's selection (`... on QueueItemAdded { sequence
- * stateHash ... }`, etc.) — FullSync's `stateHash` is nested one level
- * deeper instead (the subscription selects `state { stateHash ... }`, with
- * no top-level `stateHash` for that variant), so pull it out here. Mirrors
- * `sync-gate.ts`'s own doc: "for FullSync, pass `stateHash:
- * event.state.stateHash` since the real wire event nests it under `state`."
- * Widening `SubscriptionWireEnvelope`'s FullSync member instead would ripple
- * into every other consumer of that shared type, so the flatten stays local.
- */
-function toSyncQueueEvent(event: QueueUpdateEvent): QueueSyncGateEvent {
-  if (event.__typename === 'FullSync') {
-    return {
-      __typename: 'FullSync',
-      sequence: event.sequence,
-      stateHash: (event.state as { stateHash?: string | null }).stateHash ?? null,
-    };
-  }
-  return event;
-}
-
-const createEmptySessionRuntimeState = (): MobileSessionRuntimeState => ({
-  users: [],
-  isLeader: false,
-  clientId: '',
-  lastConnectedBoardSerial: null,
-  boardPath: '',
-});
 
 // Stable empty Set so the no-session case never publishes a fresh identity.
 const EMPTY_USER_ID_SET: ReadonlySet<string> = new Set<string>();
@@ -496,7 +170,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   setActiveBoardRef.current = setActiveBoard;
   const stateRef = useRef(state);
   stateRef.current = state;
-  const sessionCreationRef = useRef<Promise<string | null> | null>(null);
   // Playlist suggestion source lives in provider state, NOT the reducer: the
   // reducer clears its suggestion field on full server syncs (INITIAL_QUEUE_DATA
   // / UPDATE_QUEUE), which would wipe the source the moment activation
@@ -597,9 +270,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
-  // Cold-start restore lives below, after restoreQueueSnapshot is defined —
-  // it needs the snapshot helper for the solo-queue branch.
-
   // showToast and t aren't stable callbacks — capture via refs so the WS
   // subscription effect doesn't tear down & re-subscribe on locale change
   // (which would briefly miss in-flight peer events). coordinator and dispatch
@@ -624,383 +294,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       queueEventListenersRef.current.delete(listener);
     };
   }, []);
-
-  useEffect(() => {
-    if (!sessionId) {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-      participantIdRef.current = null;
-      setParticipantId(null);
-      setLiveStats(null);
-      setSessionRuntimeState(createEmptySessionRuntimeState());
-      setIsSessionWallLit(false);
-      joinTracker.reset();
-      queueSyncGateRef.current = null;
-      restartJoinedSubscriptionsRef.current = null;
-      return;
-    }
-
-    const wsClient = getWsClient();
-    // One sync gate per session — this effect re-runs (and creates a fresh
-    // gate) on every session change; `unsubClosed` below calls `gate.reset()`
-    // mid-session on a socket drop (same session, but the connection's
-    // ConnectionContext and in-flight sequence tracking are no longer valid).
-    const gate = createQueueSyncGate();
-    queueSyncGateRef.current = gate;
-    let disposed = false;
-    let subscriptionStartToken = 0;
-    let queueUpdatesCleanup: (() => void) | null = null;
-    let sessionUpdatesCleanup: (() => void) | null = null;
-    let joinRetryTimer: ReturnType<typeof setTimeout> | null = null;
-    let joinRetryCount = 0;
-
-    const clearJoinRetryTimer = () => {
-      if (!joinRetryTimer) return;
-      clearTimeout(joinRetryTimer);
-      joinRetryTimer = null;
-    };
-
-    const cleanupSubscriptions = () => {
-      clearJoinRetryTimer();
-      queueUpdatesCleanup?.();
-      sessionUpdatesCleanup?.();
-      queueUpdatesCleanup = null;
-      sessionUpdatesCleanup = null;
-      unsubscribeRef.current = null;
-    };
-
-    const logJoinFailure = (err: unknown) => {
-      if (__DEV__) console.warn('[queue] joinSession failed', err);
-    };
-
-    const scheduleJoinRetry = (failedStartToken: number) => {
-      const retryDelayMs =
-        JOIN_SESSION_RETRY_BACKOFF_MS[Math.min(joinRetryCount, JOIN_SESSION_RETRY_BACKOFF_MS.length - 1)];
-      joinRetryCount++;
-      joinRetryTimer = setTimeout(() => {
-        joinRetryTimer = null;
-        if (disposed || failedStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
-        void startJoinedSubscriptions();
-      }, retryDelayMs);
-    };
-
-    const startJoinedSubscriptions = async () => {
-      const currentStartToken = ++subscriptionStartToken;
-      cleanupSubscriptions();
-
-      try {
-        await ensureJoined(sessionId);
-      } catch (joinError) {
-        if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
-        logJoinFailure(joinError);
-        if (joinRetryCount === 0) {
-          showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
-          reportHandledError(joinError, { tags: { source: 'queue-sync', op: 'join' } });
-        }
-        scheduleJoinRetry(currentStartToken);
-        return;
-      }
-
-      if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
-      joinRetryCount = 0;
-
-      queueUpdatesCleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
-        {
-          query: QUEUE_UPDATES_SUBSCRIPTION,
-          variables: { sessionId },
-        },
-        {
-          next: ({ data }) => {
-            if (!data?.queueUpdates) return;
-            const event = data.queueUpdates;
-            // Forward every event to transient-event listeners (route playback
-            // party-sync) before the reducer path. The wire-envelope type doesn't
-            // model PlaybackStateChanged, but the subscription selects it and the
-            // server emits it — SubscriptionQueueEvent is the canonical client
-            // union that includes it.
-            // TODO(#2507): add PlaybackStateChanged to SubscriptionWireEnvelope so
-            // this `as unknown as` cast can be removed (don't strip it before then).
-            const queueEvent = event as unknown as SubscriptionQueueEvent;
-            if (queueEventListenersRef.current.size > 0) {
-              for (const listener of queueEventListenersRef.current) {
-                try {
-                  listener(queueEvent);
-                } catch (listenerError) {
-                  if (__DEV__) console.warn('[queue] queue-event listener threw', listenerError);
-                }
-              }
-            }
-            // PlaybackStateChanged is transient — it carries no queue state and
-            // reuses the room's current sequence, so it bypasses the reducer AND
-            // the sync gate below (the gate special-cases this typename too, but
-            // returning here keeps this path a true no-op, matching pre-gate
-            // behaviour exactly).
-            if (queueEvent.__typename === 'PlaybackStateChanged') return;
-
-            // Sequence-gate every other event before touching the reducer. A
-            // stale duplicate (already-applied or older sequence — e.g. a
-            // redelivered frame after a brief reconnect) is dropped; a
-            // sequence gap (missed events) triggers the existing single-flight
-            // HTTP resync instead of applying a delta on top of state we know
-            // is incomplete.
-            const gateEvent = toSyncQueueEvent(event);
-            const decision = gate.evaluateIncoming(gateEvent);
-            if (decision === 'ignore-stale') {
-              if (__DEV__) console.info('[queue] ignoring stale queue event', event.__typename, gateEvent.sequence);
-              track(SHARED_EVENTS.QueueSyncStaleEventIgnored, {
-                eventType: event.__typename,
-                sequence: gateEvent.sequence ?? null,
-                boardName: activeBoardRef.current?.boardType,
-                layoutId: activeBoardRef.current?.layoutId,
-              });
-              return;
-            }
-            if (decision === 'resync-gap') {
-              if (__DEV__)
-                console.warn('[queue] sequence gap on queue event; resyncing', event.__typename, gateEvent.sequence);
-              track(SHARED_EVENTS.QueueSyncGapResync, {
-                eventType: event.__typename,
-                sequence: gateEvent.sequence ?? null,
-                boardName: activeBoardRef.current?.boardType,
-                layoutId: activeBoardRef.current?.layoutId,
-              });
-              void resyncQueueFromServerRef.current();
-              return;
-            }
-
-            const result = mapSubscriptionEnvelopeToAction(event, {
-              mapItem: toClimbQueueItem,
-              context: { myClientId: coordinator.clientId },
-            });
-            // Advance the gate's sequence/hash tracking for every applied
-            // event, whether or not it produced a dispatchable action — mirrors
-            // web's use-event-processor.ts, which updates tracking
-            // unconditionally after the switch that processes the delta (e.g.
-            // a QueueItemAdded with a null item payload still consumes its
-            // sequence slot).
-            gate.noteApplied(gateEvent);
-            if (result.kind !== 'dispatch') return;
-            dispatch(result.action);
-            switch (result.eventType) {
-              case 'QueueItemAdded':
-                track(SHARED_EVENTS.ClimbAddedToQueue, {
-                  boardName: activeBoardRef.current?.boardType,
-                  layoutId: activeBoardRef.current?.layoutId,
-                  addedFromTab: 'peer_broadcast',
-                  currentQueueLength: stateRef.current.queue.length + 1,
-                  partyMode: true,
-                });
-                break;
-              case 'QueueItemRemoved':
-                track(SHARED_EVENTS.ClimbRemovedFromQueue, {
-                  boardName: activeBoardRef.current?.boardType,
-                  layoutId: activeBoardRef.current?.layoutId,
-                  partyMode: true,
-                  removedBy: 'peer',
-                });
-                break;
-              case 'QueueReordered':
-                if (event.__typename === 'QueueReordered') {
-                  track(SHARED_EVENTS.QueueReordered, {
-                    boardName: activeBoardRef.current?.boardType,
-                    layoutId: activeBoardRef.current?.layoutId,
-                    oldIndex: event.oldIndex,
-                    newIndex: event.newIndex,
-                    partyMode: true,
-                    reorderedBy: 'peer',
-                  });
-                }
-                break;
-            }
-          },
-          error: () => {
-            // i18n-keep session:mobile.queue.syncError — called through `tRef.current`,
-            // which the orphan checker can't trace back to the session-bound `t`.
-            showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
-          },
-          complete: () => {},
-        },
-      );
-
-      // Follow board-path (angle) changes broadcast by other party members. The
-      // angle is session-shared: when a peer changes it we update our own active
-      // board's angle (which cascades to the climb list, play drawer, and the
-      // re-grade effect). We don't switch the whole board — only the angle.
-      sessionUpdatesCleanup = wsClient.subscribe<{ sessionUpdates: SessionUpdateEvent }>(
-        {
-          query: SESSION_UPDATES_SUBSCRIPTION,
-          variables: { sessionId },
-        },
-        {
-          next: ({ data }) => {
-            const event = data?.sessionUpdates;
-            if (!event) return;
-            if (sessionIdRef.current !== sessionId) return;
-
-            // Live analytics push: flashes + flash/send/attempt grade split +
-            // per-participant breakdown. Drives the in-session analytics view and
-            // leaderboard without polling.
-            if (event.__typename === 'SessionStatsUpdated') {
-              setLiveStats({
-                sessionId: event.sessionId ?? sessionId,
-                totalSends: event.totalSends ?? 0,
-                totalFlashes: event.totalFlashes ?? 0,
-                totalAttempts: event.totalAttempts ?? 0,
-                tickCount: event.tickCount ?? 0,
-                participants: event.participants ?? [],
-                gradeDistribution: event.gradeDistribution ?? [],
-                boardTypes: event.boardTypes ?? [],
-                hardestGrade: event.hardestGrade ?? null,
-                durationMinutes: event.durationMinutes ?? null,
-                goal: event.goal ?? null,
-              });
-              return;
-            }
-
-            if (event.__typename === 'SessionEnded') {
-              if (locallyEndingSessionIdRef.current === sessionId) {
-                suppressedRemoteEndSessionIdRef.current = sessionId;
-                return;
-              }
-              void clearSessionRef.current();
-              showToastRef.current(tRef.current('mobile.toast.sessionEnded'), 'success');
-              return;
-            }
-
-            if (event.__typename === 'WallConfirmedClimb') {
-              // A member relayed the current climb to a physical wall — light the
-              // session lightbulb for everyone and replay the local wall-confirm
-              // bus (drives the BLE provider's dedup + confirmation animations).
-              setIsSessionWallLit(true);
-              if (event.climbUuid) emitWallConfirm(event.climbUuid);
-              return;
-            }
-
-            if (event.__typename === 'WallDisconnected') {
-              // A member's BLE link to the wall dropped — turn the lightbulb off
-              // for everyone. The current climb is intentionally preserved;
-              // pressing the lightbulb re-asserts it. applySessionRuntimeEvent
-              // treats this as a no-op on the durable roster (the lit state is a
-              // UI concern owned here), so the runtime-event branch below skips it.
-              setIsSessionWallLit(false);
-              return;
-            }
-
-            const runtimeEvent = toMobileSessionRuntimeEvent(event);
-            if (runtimeEvent) {
-              setSessionRuntimeState(
-                (prev) => applySessionRuntimeEvent(prev, runtimeEvent) ?? createEmptySessionRuntimeState(),
-              );
-            }
-
-            if (event.__typename !== 'SessionBoardPathChanged' || !event.boardPath) return;
-            // Echo of our own change — we already applied it locally before
-            // broadcasting. A null local participant id (peer event before our
-            // JOIN_SESSION resolved) can't be the originator, so we apply it.
-            if (event.changedByParticipantId && event.changedByParticipantId === participantIdRef.current) return;
-            // Named-board hosts (`/b/{slug}`) broadcast a slug path the tuple
-            // parser rejects. Follow the angle when we're on the SAME named board
-            // (slug match) — the angle table differs per board, so never cross
-            // boards (mirrors the tuple-identity guard below).
-            const named = parseNamedBoardPath(event.boardPath);
-            if (named) {
-              if (named.angle == null) return;
-              const nextNamedAngle = named.angle;
-              void (async () => {
-                const stored = await getStoredActiveBoard();
-                if (sessionIdRef.current !== sessionId) return;
-                if (!stored || stored.angle === nextNamedAngle) return;
-                if (stored.isAngleAdjustable === false) return;
-                if (!stored.slug || stored.slug !== named.slug) return;
-                await setActiveBoardRef.current({ ...stored, angle: nextNamedAngle });
-              })();
-              return;
-            }
-            const parsed = parseBoardPath(event.boardPath);
-            if (!parsed || parsed.angle == null) return;
-            const nextAngle = parsed.angle;
-            void (async () => {
-              const stored = await getStoredActiveBoard();
-              if (sessionIdRef.current !== sessionId) return;
-              if (!stored || stored.angle === nextAngle) return;
-              // Never override a fixed-angle board (mirrors handleAngleChange's
-              // local guard) — a peer can't change an angle the board can't be
-              // set to.
-              if (stored.isAngleAdjustable === false) return;
-              // Follow ONLY the angle, and only when the peer is on the SAME
-              // board. A mixed-board session must not push a foreign angle (board
-              // angle tables differ, e.g. MoonBoard only allows 25°/40°). Compare
-              // the parsed board identity to our stored board before applying.
-              if (
-                parsed.boardName !== stored.boardType ||
-                parsed.layoutId !== stored.layoutId ||
-                parsed.sizeId !== stored.sizeId ||
-                parsed.setIds !== stored.setIds
-              ) {
-                return;
-              }
-              await setActiveBoardRef.current({ ...stored, angle: nextAngle });
-            })();
-          },
-          error: () => {},
-          complete: () => {},
-        },
-      );
-
-      unsubscribeRef.current = cleanupSubscriptions;
-    };
-
-    // graphql-ws auto-reconnects, and every reconnect gives us a fresh
-    // per-connection ConnectionContext on the backend. Tear down subscriptions
-    // when the socket closes so they cannot auto-resubscribe before JOIN_SESSION
-    // has updated that fresh context.
-    const unsubClosed = wsClient.on('closed', () => {
-      joinTracker.bumpEpoch();
-      subscriptionStartToken++;
-      joinRetryCount = 0;
-      cleanupSubscriptions();
-      // The reconnect's FullSync re-baselines tracking on its own
-      // (evaluateIncoming always applies + resets a FullSync), but reset here
-      // too so a stray in-flight event from the dead connection can't be
-      // sequence-checked against the old connection's tracking in the gap
-      // before that FullSync arrives.
-      gate.reset();
-    });
-    const unsubConnected = wsClient.on('connected', () => {
-      void startJoinedSubscriptions();
-    });
-
-    // Expose the restart path for resyncQueueFromServer's membership
-    // fallback (see there): startJoinedSubscriptions bumps the start token
-    // and tears down first, so an external call is exactly as safe as the
-    // reconnect path calling it. Nulled on teardown so a stale closure from
-    // a previous session can never be invoked.
-    restartJoinedSubscriptionsRef.current = () => {
-      void startJoinedSubscriptions();
-    };
-
-    void startJoinedSubscriptions();
-
-    return () => {
-      disposed = true;
-      subscriptionStartToken++;
-      restartJoinedSubscriptionsRef.current = null;
-      cleanupSubscriptions();
-      unsubConnected();
-      unsubClosed();
-      // Reset live analytics/presence on EVERY session change (not only on
-      // teardown to null). A direct A→B switch (joinSession) flips sessionId
-      // without an intermediate null, so without this the previous session's
-      // liveStats/roster would leak into the joined session until B's first
-      // push. The new session re-seeds the roster from its JOIN_SESSION response.
-      setLiveStats(null);
-      setSessionRuntimeState(createEmptySessionRuntimeState());
-      setIsSessionWallLit(false);
-      setParticipantId(null);
-      participantIdRef.current = null;
-      joinTracker.reset();
-    };
-  }, [sessionId, coordinator, ensureJoined, joinTracker]);
 
   // Server-side queue mutations live in @boardsesh/queue-react (shared with
   // web). The `ensureReady` seam resolves + joins the session before each
@@ -1035,221 +328,40 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // shared mutation already swallows transport errors and is a true no-op in
   // solo (never lazily creates a session), so callers can fire it freely.
   const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
-  const restoreQueueSnapshot = useCallback(
-    (snapshot: {
-      queue: ClimbQueueItem[];
-      currentClimbQueueItem: ClimbQueueItem | null;
-      playlistSuggestionSource: PlaylistSuggestionSource | null;
-    }) => {
-      dispatch({
-        type: 'UPDATE_QUEUE',
-        payload: { queue: snapshot.queue, currentClimbQueueItem: snapshot.currentClimbQueueItem },
-      });
-      dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: snapshot.playlistSuggestionSource });
-      setPlaylistSuggestionSourceState(snapshot.playlistSuggestionSource);
-    },
-    [],
-  );
+  // Solo-queue persistence: cold-start restore (explicit session first, then the
+  // local snapshot) + the debounced solo snapshot save. See useQueuePersistence.
+  useQueuePersistence({
+    dispatch,
+    sessionIdRef,
+    setSessionId,
+    stateRef,
+    sessionId,
+    queue: state.queue,
+    currentClimbQueueItem: state.currentClimbQueueItem,
+    playlistSuggestionSource,
+    setPlaylistSuggestionSourceState,
+  });
 
-  // Explicit session creation — the Start button (PreSessionView) and nothing
-  // else. Sessions are never created lazily: the solo queue lives locally
-  // (queue-snapshot-store) until the user starts or joins one, matching web.
-  const createSessionWithConfig = useCallback(
-    async (config?: StartSessionConfig): Promise<string | null> => {
-      if (sessionIdRef.current) return sessionIdRef.current;
-      if (sessionCreationRef.current) return sessionCreationRef.current;
-
-      const createPromise = (async () => {
-        const activeBoard = await getStoredActiveBoard();
-        if (!activeBoard) {
-          // The Start button is gated on the React Query copy of the active board;
-          // if the stored board is somehow missing, fail loudly so the user knows
-          // to pick a board instead of tapping into a silent no-op.
-          showToast(t('mobile.queue.noBoardSelected'), 'error');
-          return null;
-        }
-
-        const boardPath = buildBoardPath(
-          activeBoard.boardType,
-          activeBoard.layoutId,
-          activeBoard.sizeId,
-          activeBoard.setIds,
-          activeBoard.angle,
-        );
-
-        try {
-          const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
-            input: {
-              boardPath,
-              latitude: 0,
-              longitude: 0,
-              discoverable: config?.discoverable ?? false,
-              ...(config?.name ? { name: config.name } : {}),
-              ...(config?.goal ? { goal: config.goal } : {}),
-              ...(config?.color ? { color: config.color } : {}),
-              ...(config?.isPermanent ? { isPermanent: config.isPermanent } : {}),
-            },
-          });
-          const newId = response.createSession.id;
-          sessionIdRef.current = newId;
-          await setStoredSessionId(newId);
-          // Seed the session with the locally-built queue BEFORE setSessionId
-          // mounts the queueUpdates subscription — the subscription's FullSync
-          // for an empty room would wipe the local queue via INITIAL_QUEUE_DATA.
-          // SET_QUEUE is connection-scoped, so JOIN first (the subscription
-          // effect's later eager ensureJoined hits the tracker cache).
-          const { queue, currentClimbQueueItem } = stateRef.current;
-          if (queue.length > 0 || currentClimbQueueItem) {
-            try {
-              await ensureJoined(newId);
-              await mutations.setQueue(queue, currentClimbQueueItem ?? undefined);
-              // Queue ownership moved to the session — drop the local snapshot
-              // so a stale copy can't resurrect after the session ends. Only on
-              // a successful seed: if seeding failed, the snapshot is the sole
-              // surviving copy and a relaunch can still recover the queue.
-              await clearStoredQueueSnapshot();
-            } catch (seedError) {
-              if (__DEV__) console.warn('[queue] session queue seed failed', seedError);
-              reportHandledError(seedError, { tags: { source: 'startSessionSeed' } });
-            }
-          }
-          setSessionId(newId);
-          track(SHARED_EVENTS.SessionStarted, {
-            boardName: activeBoard.boardType,
-            hasGoal: !!config?.goal,
-            isDiscoverable: config?.discoverable ?? false,
-          });
-          return newId;
-        } catch (error) {
-          if (isGraphqlRateLimitedError(error)) {
-            showToast(t('mobile.queue.rateLimited'), 'error');
-            return null;
-          }
-          // Production masks the GraphQL message to "Unexpected error", but the
-          // graphql-request ClientError still carries the HTTP status — so error
-          // reporting can distinguish network-down from a 4xx/5xx from a masked
-          // server throw. Capture it with boardPath context; the backend captures
-          // the unmasked cause for the same request (see createSession resolver).
-          const httpStatus =
-            error && typeof error === 'object' && 'response' in error
-              ? ((error as { response?: { status?: number } }).response?.status ?? null)
-              : null;
-          reportError(error, {
-            tags: { source: 'createSession' },
-            extra: { boardPath, httpStatus, discoverable: config?.discoverable ?? false },
-          });
-          // Against a local backend (dev) errors aren't masked, so surface the
-          // real server message to speed up diagnosis; shipped builds keep the
-          // friendly fallback.
-          const devMessage = __DEV__ ? extractGraphqlMessage(error) : null;
-          showToast(devMessage ?? t('mobile.queue.sessionCreateError'), 'error');
-          return null;
-        } finally {
-          sessionCreationRef.current = null;
-        }
-      })();
-
-      sessionCreationRef.current = createPromise;
-      return createPromise;
-    },
-    [ensureJoined, mutations, showToast, t],
-  );
-
-  // Cold-start restore, explicit-session first: a stored session id (persisted
-  // only on explicit start/join) is verified and rejoined; otherwise the local
-  // solo queue snapshot hydrates the reducer. The gate flag below keeps the
-  // save effect from clobbering a stored snapshot with the initial empty state.
-  const snapshotHydratedRef = useRef(false);
-  useEffect(() => {
-    let cancelled = false;
-    const hydrateLocalSnapshot = async () => {
-      const snapshot = await getStoredQueueSnapshot();
-      if (cancelled || !snapshot) return;
-      // The user may have started acting — or a session may have appeared —
-      // before the async load resolved; never clobber newer state.
-      if (sessionIdRef.current !== null) return;
-      if (stateRef.current.queue.length > 0 || stateRef.current.currentClimbQueueItem) return;
-      restoreQueueSnapshot(snapshot);
-    };
-    void getStoredSessionId()
-      .then(async (storedId) => {
-        if (__DEV__) {
-          console.info(`[session] restored from store: ${storedId ?? '(none)'}`);
-        }
-        if (!storedId) {
-          await hydrateLocalSnapshot();
-          return;
-        }
-        try {
-          // Verify the stored session is still alive before rejoining. Without
-          // this, JOIN_SESSION recreates a server-ended room as an empty zombie
-          // and we land in InSessionView with no peers (#2683). sessionStatus
-          // reads the durable session row, NOT the presence-gated `session`
-          // query — that one returns null for any empty session, so it can't
-          // tell an ended session apart from a dormant-but-active solo session.
-          // null means the session row no longer exists; anything but 'active'
-          // means drop the stored id.
-          const { sessionStatus } = await getHttpClient().request<SessionStatusQueryResponse>(SESSION_STATUS, {
-            sessionId: storedId,
-          });
-          if (cancelled) return;
-          if (sessionStatus !== 'active') {
-            if (__DEV__) {
-              console.info(`[session] stored session ${storedId} ended/missing; clearing`);
-            }
-            await clearStoredSessionId();
-            await hydrateLocalSnapshot();
-            return;
-          }
-          setSessionId(storedId);
-        } catch (err) {
-          // graphql-request's ClientError always carries `response`; a genuine
-          // network failure (fetch reject) doesn't — same structural check as
-          // createSessionWithConfig's error handling above.
-          const isServerResponse = !!err && typeof err === 'object' && 'response' in err;
-          if (isServerResponse) {
-            // The backend answered but the query failed (version skew — an
-            // older backend without sessionStatus — or a masked 500). Don't
-            // restore: a zombie session would put the whole app "in session".
-            // Don't clear either: the id may verify fine once backend/app
-            // versions align, so the next launch retries.
-            reportError(err, { tags: { source: 'sessionRestore' } });
-            await hydrateLocalSnapshot();
-            return;
-          }
-          // Offline cold start: can't verify the session status, so restore
-          // optimistically so the queue still comes back. A genuinely-dead
-          // session stays escapable via End Session.
-          if (__DEV__) {
-            console.warn('[session] status check failed; restoring optimistically', err);
-          }
-          if (!cancelled) setSessionId(storedId);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) snapshotHydratedRef.current = true;
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [restoreQueueSnapshot]);
-
-  // Persist the SOLO queue across launches. Only while no session is active —
-  // a session's queue is server-owned (the rejoin FullSync restores it) — and
-  // only after the cold-start hydrate settles. Writing the empty state doubles
-  // as the clear when the user empties the queue or a session teardown resets
-  // it; the debounce coalesces mutation bursts (swipes, clear-queue removals).
-  useEffect(() => {
-    if (!snapshotHydratedRef.current || sessionId !== null) return undefined;
-    const persistTimeout = setTimeout(() => {
-      void setStoredQueueSnapshot({
-        queue: state.queue,
-        currentClimbQueueItem: state.currentClimbQueueItem,
-        playlistSuggestionSource,
-      });
-    }, 500);
-    return () => clearTimeout(persistTimeout);
-  }, [state.queue, state.currentClimbQueueItem, playlistSuggestionSource, sessionId]);
+  // Explicit session lifecycle commands: create (Start button), join, end, clear.
+  // See useSessionCommands. clearSessionRef is read by the session-realtime
+  // SessionEnded handler, so keep it pointed at the latest clearSession.
+  const { createSessionWithConfig, joinSession, endSession, clearSession } = useSessionCommands({
+    showToast,
+    t,
+    stateRef,
+    ensureJoined,
+    setQueueMutation: mutations.setQueue,
+    setSessionId,
+    sessionIdRef,
+    dispatch,
+    setPlaylistSuggestionSourceState,
+    resyncInFlightRef,
+    resyncPendingRef,
+    setActiveBoard,
+    locallyEndingSessionIdRef,
+    suppressedRemoteEndSessionIdRef,
+  });
+  clearSessionRef.current = clearSession;
 
   // Reconcile the local queue against the server's authoritative snapshot after
   // a party-session mutation fails. The optimistic reducer delta already applied
@@ -1370,68 +482,35 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const resyncQueueFromServerRef = useRef(resyncQueueFromServer);
   resyncQueueFromServerRef.current = resyncQueueFromServer;
 
-  // Periodic local-vs-server hash watchdog (mirrors web's 60s interval in
-  // use-session-subscriptions.ts, ported into the shared gate's
-  // verifyLocalHash). Active only while a session is live; reads current
-  // state through refs (stateRef, queueSyncGateRef, resyncQueueFromServerRef)
-  // so the closure never goes stale between renders — `sessionId` is the only
-  // dependency, matching this file's existing ref-driven interval pattern.
-  useEffect(() => {
-    if (!sessionId) return undefined;
-    const verifyIntervalId = setInterval(() => {
-      const gate = queueSyncGateRef.current;
-      if (!gate) return;
-      const { queue, currentClimbQueueItem } = stateRef.current;
-      const localHash = computeQueueStateHash(queue, currentClimbQueueItem?.uuid ?? null);
-      const result = gate.verifyLocalHash(localHash);
-      if (result.verdict === 'ok') return;
-
-      if (result.verdict === 'resync-drift') {
-        if (__DEV__) {
-          console.warn(
-            '[queue] hash drift detected; resyncing',
-            `local=${localHash} server=${result.serverHash} strikes=${result.consecutiveResyncs}`,
-          );
-        }
-        track(SHARED_EVENTS.QueueSyncHashDrift, {
-          verdict: result.verdict,
-          consecutiveResyncs: result.consecutiveResyncs,
-          boardName: activeBoardRef.current?.boardType,
-          layoutId: activeBoardRef.current?.layoutId,
-        });
-        void resyncQueueFromServerRef.current();
-        return;
-      }
-
-      // 'backoff' — the same server hash has triggered RESYNC_LOOP_THRESHOLD
-      // consecutive resyncs without the drift resolving. Report it so we can
-      // investigate, but STOP resyncing: once this happens the resync is a
-      // server-side no-op (the client and server already agree — the local
-      // computation keeps disagreeing with itself), so retrying every minute
-      // is just noise.
-      if (__DEV__) {
-        console.warn(
-          '[queue] hash drift backoff — resync loop threshold hit',
-          `local=${localHash} server=${result.serverHash} strikes=${result.consecutiveResyncs}`,
-        );
-      }
-      // Report to analytics ONCE per drift streak — the first backoff tick
-      // (strike THRESHOLD+1). A session stuck in drift would otherwise emit
-      // an event every 60s for hours. The gate resets the counter when the
-      // hashes agree or the server hash changes, so a genuinely new streak
-      // reports again. Web one-shots its Sentry report at the same point
-      // (use-session-subscriptions.ts's sentryReportedHashRef).
-      if (result.consecutiveResyncs === RESYNC_LOOP_THRESHOLD + 1) {
-        track(SHARED_EVENTS.QueueSyncHashDrift, {
-          verdict: result.verdict,
-          consecutiveResyncs: result.consecutiveResyncs,
-          boardName: activeBoardRef.current?.boardType,
-          layoutId: activeBoardRef.current?.layoutId,
-        });
-      }
-    }, 60_000);
-    return () => clearInterval(verifyIntervalId);
-  }, [sessionId]);
+  // Active-session realtime engine: join retry/backoff, queue + session
+  // subscriptions, sync-gate wiring, roster/liveStats/wall-lit updates, peer
+  // angle-follow, and the 60s hash watchdog. See useSessionRealtime.
+  useSessionRealtime({
+    sessionId,
+    dispatch,
+    coordinator,
+    ensureJoined,
+    joinTracker,
+    sessionIdRef,
+    participantIdRef,
+    stateRef,
+    activeBoardRef,
+    setActiveBoardRef,
+    showToastRef,
+    tRef,
+    clearSessionRef,
+    queueEventListenersRef,
+    unsubscribeRef,
+    queueSyncGateRef,
+    restartJoinedSubscriptionsRef,
+    resyncQueueFromServerRef,
+    setLiveStats,
+    setSessionRuntimeState,
+    setIsSessionWallLit,
+    setParticipantId,
+    locallyEndingSessionIdRef,
+    suppressedRemoteEndSessionIdRef,
+  });
 
   // After a queue mutation fails in a party session, reconcile against the
   // server and tell the user their queue was refreshed. In solo (no session)
@@ -1452,117 +531,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // handler — no need to set isSessionWallLit here.
   const reportWallDisconnect = useCallback(() => mutations.reportWallDisconnect(), [mutations]);
 
-  // Self-healing re-grade: a climb's difficulty/quality/sends are angle-specific
-  // (stored per-angle server-side), but queue items carry the grade baked in for
-  // the angle they were fetched at. Whenever the active angle differs from a
-  // queued climb's display angle — the user changed the angle, or a server
-  // FullSync re-staled the queue at the old angle — refetch that climb at the
-  // live angle and patch it in. Local only: each client follows the angle and
-  // re-grades its own queue, so nothing is sent to peers. Idempotent — after
-  // patching, climb.angle === angle, so the effect no-ops on its own re-run.
-  // Maps a climb uuid → the angle a re-grade fetch is currently in flight for.
-  // Keyed by angle (not a plain Set) so a fetch already running for a STALE
-  // angle doesn't block a fresh fetch when the angle changes again mid-flight —
-  // otherwise that climb could strand at the old grade.
-  const regradeInFlightRef = useRef<Map<string, number>>(new Map());
-  useEffect(() => {
-    if (!activeBoard) return undefined;
-    const { boardType, layoutId, sizeId, setIds, angle } = activeBoard;
-    const uuids = new Set<string>();
-    const consider = (item: ClimbQueueItem | null | undefined) => {
-      if (!item?.climb) return;
-      // Re-grade when the display angle differs AND we aren't already fetching
-      // this climb for the CURRENT angle (a fetch for a prior angle re-enqueues).
-      if (item.climb.angle !== angle && regradeInFlightRef.current.get(item.climb.uuid) !== angle) {
-        uuids.add(item.climb.uuid);
-      }
-    };
-    state.queue.forEach(consider);
-    consider(state.currentClimbQueueItem);
-    // Also re-grade the single displayed playlist peek (the next-up suggestion
-    // shown at the queue tail). It lives in playlistSuggestionSource.climbs —
-    // NOT in state.queue — so the queue-only pass above never touches it, and
-    // the bar/drawer would keep showing the activation-angle grade until the
-    // peek is committed. Only the next-up climb is ever displayed, so re-grade
-    // that one alone; re-grading the whole source could be hundreds of climbs.
-    const peekItem = findNextQueueItemWithSuggestions(
-      state.queue,
-      state.currentClimbQueueItem,
-      playlistSuggestionSourceRef.current,
-    );
-    if (peekItem && isPlaylistPeekQueueItemUuid(peekItem.uuid)) consider(peekItem);
-    if (uuids.size === 0) return undefined;
-
-    const targetUuids = [...uuids];
-    targetUuids.forEach((uuid) => regradeInFlightRef.current.set(uuid, angle));
-
-    let cancelled = false;
-    void (async () => {
-      const client = getHttpClient();
-      const patches = await Promise.all(
-        targetUuids.map(async (climbUuid) => {
-          try {
-            const response = await client.request<GetClimbQueryResponse>(GET_CLIMB, {
-              boardName: boardType,
-              layoutId,
-              sizeId,
-              setIds,
-              angle,
-              climbUuid,
-            });
-            const climb = response.climb;
-            if (!climb) return null;
-            const patch: ClimbRegradePatch = {
-              angle,
-              difficulty: climb.difficulty,
-              quality_average: climb.quality_average,
-              ascensionist_count: climb.ascensionist_count,
-              benchmark_difficulty: climb.benchmark_difficulty ?? null,
-              difficulty_error: climb.difficulty_error,
-            };
-            return [climbUuid, patch] as const;
-          } catch {
-            return null;
-          } finally {
-            // Only clear our own marker — a newer run may have re-targeted this
-            // uuid to a different angle, and must keep its in-flight claim.
-            if (regradeInFlightRef.current.get(climbUuid) === angle) {
-              regradeInFlightRef.current.delete(climbUuid);
-            }
-          }
-        }),
-      );
-      if (cancelled) return;
-      const grades: Record<string, ClimbRegradePatch> = {};
-      for (const entry of patches) {
-        if (entry) grades[entry[0]] = entry[1];
-      }
-      if (Object.keys(grades).length > 0) {
-        dispatch({ type: 'REGRADE_CLIMBS', payload: { grades } });
-        // REGRADE_CLIMBS only patches the reducer's queue + current item. The
-        // displayed peek lives in the provider-state suggestion source, so patch
-        // its climbs here too (same patch map) — otherwise the next-up grade pill
-        // keeps the old angle until the peek is committed. Idempotent: skips
-        // climbs already at the live angle, and preserves the prev reference when
-        // nothing changes so this never churns the source state.
-        setPlaylistSuggestionSourceState((prev) => {
-          if (!prev) return prev;
-          let changed = false;
-          const climbs = prev.climbs.map((climb) => {
-            const patch = grades[climb.uuid];
-            if (!patch || climb.angle === patch.angle) return climb;
-            changed = true;
-            return { ...climb, ...patch };
-          });
-          return changed ? { ...prev, climbs } : prev;
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [state.queue, state.currentClimbQueueItem, activeBoard, playlistSuggestionSource]);
+  // Self-healing re-grade: refetch angle-specific grades for queued climbs and
+  // the displayed playlist peek whenever the active angle drifts. See useQueueRegrade.
+  useQueueRegrade({
+    activeBoard,
+    queue: state.queue,
+    currentClimbQueueItem: state.currentClimbQueueItem,
+    playlistSuggestionSourceRef,
+    playlistSuggestionSource,
+    dispatch,
+    setPlaylistSuggestionSourceState,
+  });
 
   // The reducer raises `needsResync` when it filters corrupted (null) items out
   // of a server FullSync/UPDATE_QUEUE — the local queue is now known-stale.
@@ -1801,93 +780,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       playlistSuggestionSourceMatches(current, source) ? source : current,
     );
   }, []);
-
-  const clearSession = useCallback(async (options?: { notifyServer?: boolean }) => {
-    // When the user intentionally leaves a session (switching into another via
-    // the join-confirm dialog), tell the backend so peers see them leave NOW —
-    // the driver/presence release shouldn't wait on the 60s disconnect grace
-    // timer. Best-effort and BEFORE we reset local state, so the WS registration
-    // for the old session is still alive: a failed/timed-out leave degrades to
-    // the prior disconnect-grace behavior. Default false keeps every other
-    // caller (remote SessionEnded, endSession) unchanged. Mirrors web's
-    // sendLeaveOnCleanup in use-session-lifecycle.ts.
-    if (options?.notifyServer && sessionIdRef.current) {
-      try {
-        await execute(getWsClient(), { query: LEAVE_SESSION }, 5000);
-      } catch (error) {
-        if (__DEV__) console.warn('[queue] leaveSession on switch failed', error);
-      }
-    }
-    // A resync fetch that never settles (hung connection) would leave the
-    // single-flight guard stuck true; a mounted provider carries that across a
-    // session switch and would block every future resync. Reset at the teardown
-    // boundary so the next session always starts clean.
-    resyncInFlightRef.current = false;
-    // Same for the coalesced-rerun flag: a pending rerun belongs to the old
-    // session and must not fire a fetch into the next one.
-    resyncPendingRef.current = false;
-    sessionIdRef.current = null;
-    setSessionId(null);
-    dispatch({
-      type: 'INITIAL_QUEUE_DATA',
-      payload: { queue: [], currentClimbQueueItem: null },
-    });
-    setPlaylistSuggestionSourceState(null);
-    await clearStoredSessionId();
-  }, []);
-  clearSessionRef.current = clearSession;
-
-  const endSession = useCallback(async (): Promise<SessionSummary | null> => {
-    const currentSessionId = sessionIdRef.current;
-    if (!currentSessionId) return null;
-
-    try {
-      locallyEndingSessionIdRef.current = currentSessionId;
-      const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, {
-        sessionId: currentSessionId,
-        // Device IANA zone so the backend can export wall-clock local times
-        // to platforms like Strava.
-        timezone: getDeviceTimezone(),
-      });
-      await clearSession();
-      locallyEndingSessionIdRef.current = null;
-      suppressedRemoteEndSessionIdRef.current = null;
-      track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
-      showToast(t('mobile.toast.sessionEnded'), 'success');
-      return response.endSession;
-    } catch {
-      const remoteEndAlreadyApplied = suppressedRemoteEndSessionIdRef.current === currentSessionId;
-      locallyEndingSessionIdRef.current = null;
-      suppressedRemoteEndSessionIdRef.current = null;
-      await clearSession();
-      if (remoteEndAlreadyApplied) {
-        showToast(t('mobile.toast.sessionEnded'), 'success');
-      } else {
-        showToast(t('mobile.queue.actionFailed'), 'error');
-      }
-      return null;
-    }
-  }, [clearSession, showToast, t]);
-
-  const joinSession = useCallback(
-    async (sessionToJoin: string, opts: { boardPath: string; userBoard: UserBoard }) => {
-      // Idempotent against double-tap / re-entrant deep links.
-      if (sessionIdRef.current === sessionToJoin) return;
-      // Switch the active board to the session's board FIRST (and persist it) so
-      // the session effect's JOIN_SESSION reads the correct boardPath and the
-      // whole tree (BLE wrapper, BoardProvider, climb list, play drawer) renders
-      // on the joined board. Unlike startSession (which reads the active board to
-      // build the new session's path), joinSession writes it from the session.
-      await setActiveBoard(opts.userBoard);
-      sessionIdRef.current = sessionToJoin;
-      setSessionId(sessionToJoin);
-      await setStoredSessionId(sessionToJoin);
-      // The session's FullSync replaces the local queue — drop the solo
-      // snapshot so a stale copy can't resurrect on a later cold start.
-      await clearStoredQueueSnapshot();
-    },
-    [setActiveBoard],
-  );
 
   const publishPlaybackState = useCallback(
     (input: PublishPlaybackStateInput) => mutations.publishPlaybackState(input),
