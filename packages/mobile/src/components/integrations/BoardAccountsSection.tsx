@@ -539,7 +539,7 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
       // Surface the paste instruction in a dialog *before* opening the mail app.
       // A toast would be hidden by the app switch, leaving the user staring at a
       // blank draft (the mailto: has no body) with no prompt to paste.
-      const openEmail = await confirm({
+      const shouldOpenEmail = await confirm({
         title: t('aurora.moonboard.requestDataDialog.title'),
         message: t('aurora.moonboard.requestDataDialog.message'),
         confirmLabel: t('aurora.moonboard.requestDataDialog.confirm'),
@@ -547,7 +547,7 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
       });
       // The letter is on the clipboard either way (the dialog said so), but if
       // the user asked to open their email and no client is installed, say so.
-      if (openEmail) {
+      if (shouldOpenEmail) {
         void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {
           showToast(t('aurora.mobile.requestDataFailed'), 'error');
         });
