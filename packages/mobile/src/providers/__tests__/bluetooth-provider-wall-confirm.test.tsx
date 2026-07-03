@@ -692,6 +692,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
     it('attaches the captured disconnect reason to the unexpected-drop analytics event', async () => {
       // Start connected so the next transition reads as a real drop, not the
       // initial mount.
+      presence.boardId = 99;
       bluetooth.state.isConnected = true;
       bluetooth.state.lastDisconnectInfoRef.current = null;
 
@@ -722,10 +723,12 @@ describe('BluetoothProvider wall-confirm integration', () => {
           'Bluetooth Disconnected',
           expect.objectContaining({
             reason: 'unexpected',
+            boardId: 99,
             disconnectSource: 'native-ios',
             disconnectIosCode: 7,
             disconnectErrorDomain: 'CBErrorDomain',
             disconnectReason: 'The specified device has disconnected from us.',
+            disconnectCategory: 'peer_terminated',
           }),
         );
       });
@@ -755,7 +758,11 @@ describe('BluetoothProvider wall-confirm integration', () => {
       await waitFor(() => {
         expect(analytics.track).toHaveBeenCalledWith(
           'Bluetooth Disconnected',
-          expect.objectContaining({ reason: 'unexpected', disconnectSource: 'write-failure' }),
+          expect.objectContaining({
+            reason: 'unexpected',
+            disconnectSource: 'write-failure',
+            disconnectCategory: 'write_failure',
+          }),
         );
       });
     });
@@ -789,6 +796,9 @@ describe('BluetoothProvider wall-confirm integration', () => {
       const disconnectCall = analytics.track.mock.calls.find(([event]) => event === 'Bluetooth Disconnected');
       expect(disconnectCall?.[1].disconnectSource).toBeUndefined();
       expect(disconnectCall?.[1].disconnectIosCode).toBeUndefined();
+      // The category is always present on unexpected drops — an unclassifiable
+      // one reads 'unknown' so its share stays measurable in PostHog.
+      expect(disconnectCall?.[1].disconnectCategory).toBe('unknown');
     });
 
     it('shows the Undo snackbar once after an armed control gain reports a wall change', async () => {
