@@ -129,8 +129,7 @@ function mockDb(selectResults: Rows[]) {
     query.groupBy = () => query;
     return query;
   };
-  const db = {
-    select: () => ({ from: () => stub(selectResults[selectCall++] ?? []) }),
+  const writer = {
     delete: () => ({
       where: (cond: unknown) => {
         deletes.push(cond);
@@ -143,6 +142,13 @@ function mockDb(selectResults: Rows[]) {
         return { where: () => Promise.resolve() };
       },
     }),
+  };
+  const db = {
+    select: () => ({ from: () => stub(selectResults[selectCall++] ?? []) }),
+    // The apply path runs inside db.transaction(cb); hand the callback a tx that
+    // records deletes/updates the same way.
+    transaction: (cb: (tx: typeof writer) => Promise<unknown>) => cb(writer),
+    ...writer,
   };
   return { db: db as unknown as Parameters<typeof reconcileDeletions>[0], deletes, updates };
 }

@@ -294,7 +294,12 @@ export class SyncRunner {
    */
   async runCatalogSync(
     tokenProvider: KilterTokenProvider,
-    opts: { applyDeletions?: boolean; layoutUuids?: string[]; suppressNotifications?: boolean } = {},
+    opts: {
+      applyDeletions?: boolean;
+      deleteBatchLimit?: number;
+      layoutUuids?: string[];
+      suppressNotifications?: boolean;
+    } = {},
   ): Promise<KilterCatalogSummary> {
     const { db } = this.getClient();
     return syncKilterCatalog({
@@ -302,6 +307,7 @@ export class SyncRunner {
       tokenProvider,
       log: (message) => this.log(message),
       applyDeletions: opts.applyDeletions,
+      deleteBatchLimit: opts.deleteBatchLimit,
       layoutUuids: opts.layoutUuids,
       suppressNotifications: opts.suppressNotifications,
     });

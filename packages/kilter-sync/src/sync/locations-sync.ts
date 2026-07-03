@@ -76,7 +76,9 @@ export function dedupeSkipped(
   const seen = new Set<string>();
   const deduped: Array<{ sourceKey: string; reason: string }> = [];
   for (const entry of skipped) {
-    const key = `${entry.sourceKey} ${entry.reason}`;
+    // Newline can't appear in a sourceKey (`kilter:gym:wall`) or a reason string,
+    // so it's an unambiguous composite-key separator.
+    const key = `${entry.sourceKey}\n${entry.reason}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(entry);

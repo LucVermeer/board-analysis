@@ -94,6 +94,7 @@ program
   .option('--user <userId>', 'use this linked user’s stored Kilter credential (refresh grant)')
   .option('--layouts <uuids>', 'comma-separated product_layout_uuids to sync (default: all listed)')
   .option('--apply-deletions', 'apply /delteduuids reconciliation (default: report only)')
+  .option('--delete-batch-limit <n>', 'max deletion changes to apply per run (default: 500)')
   .option('--suppress-notifications', 'skip setter-follow notifications (use for the first bulk ingest)')
   .option('-v, --verbose', 'verbose per-layout logging')
   .action(
@@ -101,6 +102,7 @@ program
       user?: string;
       layouts?: string;
       applyDeletions?: boolean;
+      deleteBatchLimit?: string;
       suppressNotifications?: boolean;
       verbose?: boolean;
     }) => {
@@ -123,8 +125,15 @@ program
           return;
         }
         const layoutUuids = parseLayoutUuids(opts.layouts);
+        const deleteBatchLimit = opts.deleteBatchLimit != null ? Number(opts.deleteBatchLimit) : undefined;
+        if (deleteBatchLimit != null && (!Number.isInteger(deleteBatchLimit) || deleteBatchLimit <= 0)) {
+          console.error('--delete-batch-limit must be a positive integer');
+          process.exitCode = 1;
+          return;
+        }
         const summary = await runner.runCatalogSync(tokenProvider, {
           applyDeletions: opts.applyDeletions,
+          deleteBatchLimit,
           layoutUuids,
           suppressNotifications: opts.suppressNotifications,
         });

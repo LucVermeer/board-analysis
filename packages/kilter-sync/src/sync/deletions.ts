@@ -88,7 +88,10 @@ export function classifyKilterDeletions(input: {
 
   for (const row of aliasRows) {
     knownLower.add(row.aliasUuid.toLowerCase());
-    const isSelfCanonical = row.aliasUuid === row.canonicalUuid;
+    // Case-insensitive: the lookup matches on lower(alias_uuid), and a self-alias
+    // is the same climb regardless of casing — comparing raw could misclassify a
+    // case-variant self-canonical as a pure alias.
+    const isSelfCanonical = row.aliasUuid.toLowerCase() === row.canonicalUuid.toLowerCase();
 
     if (!isSelfCanonical) {
       // Pure alias → drop the alias row only if the catalog sync created it.
@@ -267,6 +270,10 @@ export async function reconcileDeletions(
   // Anomaly guard against a malformed /delteduuids or a mass upstream unpublish.
   // Only soft-deletes remove climbs from view, so gate on them — a backlog of pure
   // alias drops is safe duplicate-row cleanup and applies (batch-capped) unguarded.
+  // NB: gate on the TOTAL soft-delete backlog, not the per-run batch — a genuine
+  // mass-delete would otherwise drain a batch at a time and silently unlist a big
+  // slice of the catalog without ever tripping. If a large drop is legitimate, the
+  // operator reviews it and raises ANOMALY_FRACTION for a one-off manual apply.
   if (report.softDeletes > 0) {
     const [liveRow] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -284,26 +291,31 @@ export async function reconcileDeletions(
   }
 
   const { aliasBatch, softBatch, appliedThisRun, remaining } = planDeletionBatch(classification, batchLimit);
-  if (aliasBatch.length > 0) {
-    // source='kilter' + board_type guards belt-and-suspenders the classifier.
-    await db
-      .delete(boardClimbAliases)
-      .where(
-        and(
-          eq(boardClimbAliases.boardType, KILTER),
-          eq(boardClimbAliases.source, KILTER),
-          inArray(boardClimbAliases.aliasUuid, aliasBatch),
-        ),
-      );
-  }
-  if (softBatch.length > 0) {
-    // isNull(userId) guard ensures we never flip a user-authored climb, even if
-    // classification and apply somehow raced against a concurrent write.
-    await db
-      .update(boardClimbs)
-      .set({ isListed: false })
-      .where(and(eq(boardClimbs.boardType, KILTER), isNull(boardClimbs.userId), inArray(boardClimbs.uuid, softBatch)));
-  }
+  // Apply both writes atomically so a crash can't leave the batch half-applied.
+  await db.transaction(async (tx) => {
+    if (aliasBatch.length > 0) {
+      // source='kilter' + board_type guards belt-and-suspenders the classifier.
+      await tx
+        .delete(boardClimbAliases)
+        .where(
+          and(
+            eq(boardClimbAliases.boardType, KILTER),
+            eq(boardClimbAliases.source, KILTER),
+            inArray(boardClimbAliases.aliasUuid, aliasBatch),
+          ),
+        );
+    }
+    if (softBatch.length > 0) {
+      // isNull(userId) guard ensures we never flip a user-authored climb, even if
+      // classification and apply somehow raced against a concurrent write.
+      await tx
+        .update(boardClimbs)
+        .set({ isListed: false })
+        .where(
+          and(eq(boardClimbs.boardType, KILTER), isNull(boardClimbs.userId), inArray(boardClimbs.uuid, softBatch)),
+        );
+    }
+  });
   report.applied = true;
   report.appliedThisRun = appliedThisRun;
   report.remaining = remaining;
