@@ -242,6 +242,14 @@ describe('PartyProfileProvider', () => {
     );
   });
 
+  it('never sets cohort person properties while signed out', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
+    const { result } = renderHook(() => usePartyProfile(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(setPersonPropertiesMock).not.toHaveBeenCalled();
+  });
+
   it('usePartyProfile throws when called outside a provider', () => {
     expect(() => renderHook(() => usePartyProfile())).toThrow(/must be used within a PartyProfileProvider/);
   });

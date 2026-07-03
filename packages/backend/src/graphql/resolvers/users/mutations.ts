@@ -79,7 +79,7 @@ export const userMutations = {
         name: dbSchema.users.name,
         image: dbSchema.users.image,
         createdAt: dbSchema.users.createdAt,
-        // Correlated subquery rather than a second round trip.
+        // Correlated subquery rather than a separate round trip.
         favoriteCount: sql<number>`(select count(*)::int from ${dbSchema.userFavorites} where ${dbSchema.userFavorites.userId} = ${dbSchema.users.id})`,
       })
       .from(dbSchema.users)
