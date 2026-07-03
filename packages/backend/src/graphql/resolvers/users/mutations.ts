@@ -9,6 +9,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { userIsTester } from './tester';
+import { FAVORITE_COUNT_SUBQUERY } from './favorite-count';
 import {
   UpdateProfileInputSchema,
   SaveAuroraCredentialInputSchema,
@@ -72,7 +73,18 @@ export const userMutations = {
     }
 
     // Fetch and return updated profile
-    const users = await db.select().from(dbSchema.users).where(eq(dbSchema.users.id, userId)).limit(1);
+    const users = await db
+      .select({
+        id: dbSchema.users.id,
+        email: dbSchema.users.email,
+        name: dbSchema.users.name,
+        image: dbSchema.users.image,
+        createdAt: dbSchema.users.createdAt,
+        favoriteCount: FAVORITE_COUNT_SUBQUERY,
+      })
+      .from(dbSchema.users)
+      .where(eq(dbSchema.users.id, userId))
+      .limit(1);
 
     const profiles = await db
       .select()
@@ -89,6 +101,8 @@ export const userMutations = {
       displayName: profile?.displayName || user.name || undefined,
       avatarUrl: profile?.avatarUrl || user.image || undefined,
       isTester: await userIsTester(user.id),
+      createdAt: user.createdAt.toISOString(),
+      favoriteCount: user.favoriteCount,
     };
   },
 

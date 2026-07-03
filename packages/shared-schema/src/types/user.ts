@@ -8,6 +8,8 @@ export type UserProfile = {
   displayName?: string;
   avatarUrl?: string;
   isTester: boolean;
+  createdAt: string;
+  favoriteCount: number;
 };
 
 export type UpdateProfileInput = {

@@ -42,7 +42,19 @@ vi.mock('../auth-provider', () => ({
 // node/jsdom env without a QueryClient or native AsyncStorage.
 const { useProfileMock } = vi.hoisted(() => ({
   useProfileMock: vi.fn<
-    () => { data: { displayName?: string; avatarUrl?: string; id?: string; email?: string } | undefined }
+    () => {
+      data:
+        | {
+            displayName?: string;
+            avatarUrl?: string;
+            id?: string;
+            email?: string;
+            isTester?: boolean;
+            createdAt?: string;
+            favoriteCount?: number;
+          }
+        | undefined;
+    }
   >(() => ({ data: undefined })),
 }));
 vi.mock('../../lib/graphql/hooks', () => ({ useProfile: useProfileMock }));
@@ -50,29 +62,58 @@ vi.mock('../../lib/analytics-alias-store', () => ({
   aliasDedupeStore: { hasRecordedAlias: () => false, recordAlias: () => {} },
 }));
 
+// The cohort-person-properties effect also reads the home board and connected
+// integrations — both pull in real GraphQL hooks / AsyncStorage transitively.
+// Stub them the same way as useProfile so this suite stays isolated.
+const { useHomeBoardMock, useIntegrationStatusesMock } = vi.hoisted(() => ({
+  useHomeBoardMock: vi.fn(() => ({ board: null, boards: [], isResolving: false })),
+  useIntegrationStatusesMock: vi.fn<() => { data: unknown }>(() => ({ data: undefined })),
+}));
+vi.mock('../../lib/graphql/hooks/use-home-board', () => ({ useHomeBoard: useHomeBoardMock }));
+vi.mock('../../lib/graphql/hooks/use-integrations', () => ({ useIntegrationStatuses: useIntegrationStatusesMock }));
+
+// identify/alias/reset are exercised for real elsewhere in this suite (they're
+// no-ops with no PostHog key in the test env); setPersonProperties is mocked
+// here so the cohort-person-properties effect's call is directly assertable.
+const { setPersonPropertiesMock } = vi.hoisted(() => ({ setPersonPropertiesMock: vi.fn() }));
+vi.mock('../../lib/analytics', () => ({
+  identify: vi.fn(),
+  alias: vi.fn(),
+  reset: vi.fn(),
+  setPersonProperties: setPersonPropertiesMock,
+}));
+
 import { PartyProfileProvider, usePartyProfile } from '../party-profile-provider';
 import { useAuth } from '../auth-provider';
 
 const useAuthMock = vi.mocked(useAuth);
+
+function makeAuthMock(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnType<typeof useAuth> {
+  return {
+    isAuthenticated: false,
+    isLoading: false,
+    signInWithApple: vi.fn(),
+    signInWithGoogle: vi.fn(),
+    signInWithGoogleWeb: vi.fn(),
+    signInWithAppleWeb: vi.fn(),
+    signInWithCredentials: vi.fn(),
+    register: vi.fn(),
+    signOut: vi.fn(),
+    refreshAuthState: vi.fn(),
+    ...overrides,
+  };
+}
 
 describe('PartyProfileProvider', () => {
   beforeEach(async () => {
     const secureStore = (await import('expo-secure-store')) as unknown as { __reset: () => void };
     secureStore.__reset();
     useProfileMock.mockReturnValue({ data: undefined });
+    useHomeBoardMock.mockReturnValue({ board: null, boards: [], isResolving: false });
+    useIntegrationStatusesMock.mockReturnValue({ data: undefined });
+    setPersonPropertiesMock.mockClear();
     useAuthMock.mockReset();
-    useAuthMock.mockReturnValue({
-      isAuthenticated: false,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock());
   });
 
   it('loads or creates a party profile on mount', async () => {
@@ -107,18 +148,7 @@ describe('PartyProfileProvider', () => {
   });
 
   it('mirrors `isAuthenticated` from the AuthProvider', async () => {
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
 
     const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
     const { result } = renderHook(() => usePartyProfile(), { wrapper });
@@ -137,18 +167,7 @@ describe('PartyProfileProvider', () => {
   });
 
   it('surfaces displayName and avatarUrl from the authenticated profile once it loads', async () => {
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
     useProfileMock.mockReturnValue({
       data: { id: 'user-1', email: 'climber@example.com', displayName: 'Crux Crusher', avatarUrl: 'https://img/a.png' },
     });
@@ -159,6 +178,92 @@ describe('PartyProfileProvider', () => {
 
     expect(result.current.username).toBe('Crux Crusher');
     expect(result.current.avatarUrl).toBe('https://img/a.png');
+  });
+
+  it('sets durable cohort person properties once the authenticated profile and home board resolve', async () => {
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
+    useProfileMock.mockReturnValue({
+      data: {
+        id: 'user-1',
+        email: 'climber@example.com',
+        isTester: true,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        favoriteCount: 5,
+      },
+    });
+    useHomeBoardMock.mockReturnValue({
+      board: { boardType: 'kilter' } as never,
+      boards: [],
+      isResolving: false,
+    });
+    useIntegrationStatusesMock.mockReturnValue({ data: [{ provider: 'STRAVA', connected: true }] });
+
+    const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
+    const { result } = renderHook(() => usePartyProfile(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await waitFor(() => expect(setPersonPropertiesMock).toHaveBeenCalled());
+    expect(setPersonPropertiesMock).toHaveBeenLastCalledWith(
+      {
+        role: 'tester',
+        primary_board: 'kilter',
+        favorite_count: 5,
+        integrations_connected_count: 1,
+      },
+      { first_seen_at: '2024-01-01T00:00:00.000Z' },
+    );
+  });
+
+  it('fires again with the complete payload once integrations resolve after the initial partial fire', async () => {
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
+    useProfileMock.mockReturnValue({
+      data: {
+        id: 'user-1',
+        email: 'climber@example.com',
+        isTester: false,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        favoriteCount: 2,
+      },
+    });
+    useHomeBoardMock.mockReturnValue({
+      board: { boardType: 'kilter' } as never,
+      boards: [],
+      isResolving: false,
+    });
+    // Integrations haven't loaded yet on the first render.
+    useIntegrationStatusesMock.mockReturnValue({ data: undefined });
+
+    const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
+    const { result, rerender } = renderHook(() => usePartyProfile(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await waitFor(() => expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1));
+    expect(setPersonPropertiesMock.mock.calls[0][0]).toEqual({
+      role: 'user',
+      primary_board: 'kilter',
+      favorite_count: 2,
+      integrations_connected_count: undefined,
+    });
+
+    // Integrations resolve — the effect must fire again with the complete payload.
+    useIntegrationStatusesMock.mockReturnValue({ data: [{ provider: 'STRAVA', connected: true }] });
+    rerender();
+
+    await waitFor(() => expect(setPersonPropertiesMock).toHaveBeenCalledTimes(2));
+    expect(setPersonPropertiesMock.mock.calls[1][0]).toEqual({
+      role: 'user',
+      primary_board: 'kilter',
+      favorite_count: 2,
+      integrations_connected_count: 1,
+    });
+  });
+
+  it('never sets cohort person properties while signed out', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
+    const { result } = renderHook(() => usePartyProfile(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(setPersonPropertiesMock).not.toHaveBeenCalled();
   });
 
   it('usePartyProfile throws when called outside a provider', () => {

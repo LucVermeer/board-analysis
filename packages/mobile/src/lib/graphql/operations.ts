@@ -138,6 +138,8 @@ export const GET_PROFILE = gql`
       displayName
       avatarUrl
       isTester
+      createdAt
+      favoriteCount
     }
   }
 `;

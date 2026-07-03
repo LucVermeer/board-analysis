@@ -19,3 +19,8 @@ export {
   type ReconcileAnalyticsIdentityInput,
 } from './reconcile-identity';
 export { SHARED_EVENTS, type SharedEventKey, type SharedEventName } from './events';
+export {
+  buildCohortPersonProperties,
+  type CohortProfileInput,
+  type CohortPersonProperties,
+} from './cohort-person-properties';

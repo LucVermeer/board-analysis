@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const setPersonPropertiesMock = vi.fn();
+vi.mock('../../analytics', () => ({ setPersonProperties: setPersonPropertiesMock }));
+
 // Each test needs a fresh module to avoid leaked state between tests.
 // We use dynamic import with cache-busting via vi.resetModules().
 
@@ -8,6 +11,7 @@ let disconnectAllBluetooth: typeof import('../bluetooth-status-store').disconnec
 
 beforeEach(async () => {
   vi.resetModules();
+  setPersonPropertiesMock.mockClear();
   const mod = await import('../bluetooth-status-store');
   registerBluetoothConnection = mod.registerBluetoothConnection;
   disconnectAllBluetooth = mod.disconnectAllBluetooth;
@@ -86,6 +90,39 @@ describe('registerBluetoothConnection', () => {
 
     expect(disconnectA).not.toHaveBeenCalled();
     expect(disconnectB).not.toHaveBeenCalled();
+  });
+
+  it('marks has_connected_board as a durable person property on connect', () => {
+    const disconnectFn = vi.fn();
+    registerBluetoothConnection(disconnectFn);
+
+    expect(setPersonPropertiesMock).toHaveBeenCalledWith(undefined, { has_connected_board: true });
+  });
+
+  it('only marks has_connected_board once per app session across a disconnect and reconnects', () => {
+    // Disconnect after the first connect, then reconnect twice more — the flag
+    // must fire only on the very first connect above, never on these.
+    const cleanupA = registerBluetoothConnection(vi.fn());
+    cleanupA();
+    registerBluetoothConnection(vi.fn());
+    registerBluetoothConnection(vi.fn());
+
+    expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets the dedup flag on a fresh module instance (e.g. app restart)', async () => {
+    registerBluetoothConnection(vi.fn());
+    expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
+
+    // Simulate an app restart: a fresh module instance must not remember the
+    // previous session's flag, so the first connect there fires it again.
+    vi.resetModules();
+    setPersonPropertiesMock.mockClear();
+    const freshModule = await import('../bluetooth-status-store');
+
+    freshModule.registerBluetoothConnection(vi.fn());
+
+    expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
   });
 
   it('notifies listeners when a connection is registered', () => {

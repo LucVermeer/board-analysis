@@ -11,6 +11,7 @@ import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { BoardNameSchema } from '../../../validation/schemas';
 import { getAuroraCredentialStatuses } from '../../../services/aurora-credentials';
 import { userIsTester } from './tester';
+import { FAVORITE_COUNT_SUBQUERY } from './favorite-count';
 
 export const userQueries = {
   /**
@@ -27,8 +28,10 @@ export const userQueries = {
         email: dbSchema.users.email,
         name: dbSchema.users.name,
         image: dbSchema.users.image,
+        createdAt: dbSchema.users.createdAt,
         displayName: dbSchema.userProfiles.displayName,
         avatarUrl: dbSchema.userProfiles.avatarUrl,
+        favoriteCount: FAVORITE_COUNT_SUBQUERY,
       })
       .from(dbSchema.users)
       .leftJoin(dbSchema.userProfiles, eq(dbSchema.userProfiles.userId, dbSchema.users.id))
@@ -45,6 +48,8 @@ export const userQueries = {
       displayName: row.displayName || row.name || undefined,
       avatarUrl: row.avatarUrl || row.image || undefined,
       isTester: await userIsTester(row.id),
+      createdAt: row.createdAt.toISOString(),
+      favoriteCount: row.favoriteCount,
     };
   },
 
