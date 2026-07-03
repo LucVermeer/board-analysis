@@ -232,6 +232,42 @@ final class LiveActivityWidgetTests: XCTestCase {
         // Removing the last item while it is current clamps to the new tail.
         state = QueueStateReducer.apply(.itemRemoved(uuid: "C", sequence: 2), to: state)
         XCTAssertEqual(state.currentIndex, 0)
+
+        // Emptying the queue leaves index 0 into an empty array — every
+        // consumer bounds-checks (SharedQueueState.currentItem returns nil,
+        // displayCurrentItemOnBleQueue clears the board), so this must stay a
+        // representable, non-crashing state.
+        state = QueueStateReducer.apply(.itemRemoved(uuid: "A", sequence: 3), to: state)
+        XCTAssertTrue(state.items.isEmpty)
+        XCTAssertEqual(state.currentIndex, 0)
+        SharedQueueState.save(items: state.items, currentIndex: state.currentIndex, to: defaults)
+        XCTAssertNil(SharedQueueState.currentItem(from: defaults))
+    }
+
+    func testGraphQLErrorRoutingCoversSubscriptionAndMutationIds() {
+        // A subscription-level error must reconnect — it used to fall through
+        // the mutation-only handling and was silently dropped while server
+        // pings kept the connection looking healthy.
+        XCTAssertEqual(
+            QueueGraphQLErrorRouting.action(forOperationId: "1", subscriptionId: "1"),
+            .reconnect
+        )
+        XCTAssertEqual(
+            QueueGraphQLErrorRouting.action(forOperationId: "join-session", subscriptionId: "1"),
+            .reconnect
+        )
+        XCTAssertEqual(
+            QueueGraphQLErrorRouting.action(forOperationId: "mutation-abc123", subscriptionId: "1"),
+            .revertOptimisticNavigation(correlationId: "abc123")
+        )
+        XCTAssertEqual(
+            QueueGraphQLErrorRouting.action(forOperationId: "something-else", subscriptionId: "1"),
+            .ignore
+        )
+        XCTAssertEqual(
+            QueueGraphQLErrorRouting.action(forOperationId: nil, subscriptionId: "1"),
+            .ignore
+        )
     }
 
     func testOffQueueCurrentClimbIsAppendedNotIgnored() {

@@ -606,40 +606,32 @@ final class SessionWebSocketManager {
     // MARK: - Mutation Response Handling
 
     private func handleMutationError(_ msg: GQLMessage) {
-        guard let id = msg.id else { return }
-
-        if id == "join-session" {
-            // joinSession failed — the connection can't send mutations without a session.
-            // Reconnect to retry.
-            print("[SessionWS] joinSession failed — reconnecting")
+        switch QueueGraphQLErrorRouting.action(forOperationId: msg.id, subscriptionId: subscriptionId) {
+        case .reconnect:
+            // joinSession failed (no session → mutations rejected) or the
+            // queueUpdates subscription itself errored. For the latter, server
+            // pings keep the ping-timeout watchdog quiet, so without this the
+            // connection would look healthy while delivering zero queue
+            // updates for the rest of the session. Reconnect to re-establish —
+            // bounded, because reconnectAttempt only resets once queue data
+            // actually flows.
+            print("[SessionWS] operation \(msg.id ?? "?") errored: \(msg.payload ?? [:]) — reconnecting")
             stateQueue.async { [weak self] in
                 self?.webSocketTask?.cancel(with: .goingAway, reason: nil)
             }
-            return
-        }
 
-        if id == subscriptionId {
-            // The queueUpdates subscription itself errored. Server pings keep
-            // the ping-timeout watchdog quiet, so without this the connection
-            // would look healthy while delivering zero queue updates for the
-            // rest of the session. Reconnect to resubscribe — bounded, because
-            // reconnectAttempt only resets once queue data actually flows.
-            print("[SessionWS] queueUpdates subscription errored: \(msg.payload ?? [:]) — reconnecting")
+        case .revertOptimisticNavigation(let correlationId):
+            // Server rejected the navigation — revert to the index before the optimistic update
             stateQueue.async { [weak self] in
-                self?.webSocketTask?.cancel(with: .goingAway, reason: nil)
+                guard let self = self else { return }
+                if let previousIndex = self.pendingMutations.removeValue(forKey: correlationId) {
+                    self.currentIndex = previousIndex
+                    self.persistAndNotify(repaintBoard: true)
+                }
             }
-            return
-        }
 
-        guard id.hasPrefix("mutation-") else { return }
-        let correlationId = String(id.dropFirst("mutation-".count))
-        // Server rejected the navigation — revert to the index before the optimistic update
-        stateQueue.async { [weak self] in
-            guard let self = self else { return }
-            if let previousIndex = self.pendingMutations.removeValue(forKey: correlationId) {
-                self.currentIndex = previousIndex
-                self.persistAndNotify(repaintBoard: true)
-            }
+        case .ignore:
+            break
         }
     }
 

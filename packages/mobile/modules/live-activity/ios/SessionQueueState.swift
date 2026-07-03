@@ -55,6 +55,35 @@ enum QueueSequencePolicy {
     }
 }
 
+// MARK: - graphql-ws Error Routing
+
+/// Routes a graphql-ws `error` message by its operation id. Pure so the
+/// routing is testable: a subscription-level error used to fall through the
+/// mutation-only handling and was silently dropped — server pings kept the
+/// connection looking healthy while it delivered zero queue updates.
+enum QueueGraphQLErrorRouting {
+    enum Action: Equatable {
+        /// join-session or the queueUpdates subscription failed — reconnect so
+        /// the session/subscription is re-established.
+        case reconnect
+        /// An optimistic widget navigation was rejected — revert to the index
+        /// recorded before it.
+        case revertOptimisticNavigation(correlationId: String)
+        case ignore
+    }
+
+    static func action(forOperationId id: String?, subscriptionId: String) -> Action {
+        guard let id else { return .ignore }
+        if id == "join-session" || id == subscriptionId {
+            return .reconnect
+        }
+        if id.hasPrefix("mutation-") {
+            return .revertOptimisticNavigation(correlationId: String(id.dropFirst("mutation-".count)))
+        }
+        return .ignore
+    }
+}
+
 // MARK: - State Reducer
 
 /// Applies queue events to (items, currentIndex), keeping the *current item*
