@@ -39,6 +39,10 @@ import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
+// Read once at module load rather than allocating a fresh createInitialTickState()
+// on every field-snapshot sync (see below) just to read this one default.
+const DEFAULT_ATTEMPT_COUNT = createInitialTickState().attemptCount;
+
 // Field-completeness snapshot for the "abandoned the form" analytics event.
 // Owned by QuickTickBar (only place with the tick-state fields) but read by
 // LogAscentSheet, which is the only place able to see the X-button and
@@ -171,7 +175,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       hasQuality: tickState.quality != null && tickState.quality > 0,
       hasDifficulty: tickState.difficulty != null,
       hasComment: comment.length > 0,
-      attemptCountChanged: tickState.attemptCount !== createInitialTickState().attemptCount,
+      attemptCountChanged: tickState.attemptCount !== DEFAULT_ATTEMPT_COUNT,
     };
   }, [fieldSnapshotRef, tickState.quality, tickState.difficulty, tickState.attemptCount, comment]);
 
