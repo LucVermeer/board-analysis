@@ -10,10 +10,7 @@
 
 import { memo, useCallback, useState } from 'react';
 import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LOGBOOK_ANGLE_RANGE } from '@boardsesh/logbook';
@@ -24,6 +21,7 @@ import { hapticSelection } from '../../lib/haptics';
 import { springs } from '../../theme/animations';
 import { spacing } from '../../theme/tokens';
 import { readableTextColor } from '../grade';
+import { openAndroidDatePicker } from '../logbook/native-date-picker';
 
 // Angle filter granularity — mirrors the web slider (0–70°, step 5).
 const ANGLE_STEP = 5;
@@ -198,15 +196,11 @@ export const DateRangeRow = memo(function DateRangeRow({
   );
 
   const openAndroid = useCallback(() => {
-    DateTimePickerAndroid.open({
+    openAndroidDatePicker({
       value: selectedDate ?? new Date(),
       mode: 'date',
-      display: 'default',
       maximumDate,
-      onChange: (event, picked) => {
-        if (event.type !== 'set' || !picked) return;
-        onChange(formatIsoDate(picked));
-      },
+      onPicked: (picked) => onChange(formatIsoDate(picked)),
     });
   }, [selectedDate, maximumDate, onChange]);
 

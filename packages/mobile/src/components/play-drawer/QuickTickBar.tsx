@@ -19,6 +19,8 @@ import { Icon } from '../Icon';
 import { InlineStarPicker } from './InlineStarPicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
 import { GradeSingleSelectRail } from '../grade';
+import { ClimbedAtField } from '../logbook/ClimbedAtField';
+import { clampToNow } from '../logbook/climbed-at';
 import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import {
@@ -36,6 +38,8 @@ import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
+
+const MAXIMUM_CLIMBED_AT_REFRESH_MS = 60_000;
 
 type QuickTickBarProps = {
   climbUuid: string;
@@ -112,6 +116,10 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 
   const [tickState, setTickState] = useState(createInitialTickState);
   const [comment, setComment] = useState('');
+  // The climb date/time to log. Defaults to now; the Date/Time rows let the
+  // user backdate a send they forgot to log (issue #3303).
+  const [climbedAt, setClimbedAt] = useState(() => new Date());
+  const [maximumClimbedAtDate, setMaximumClimbedAtDate] = useState(() => new Date());
   // Renders an inline error row above the save buttons when the last
   // save attempt failed. Cleared on the next attempt or on success.
   const [lastError, setLastError] = useState<string | null>(null);
@@ -133,11 +141,24 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     setTickState(createInitialTickState());
     setComment('');
     setLastError(null);
+    setClimbedAt(new Date());
+    setMaximumClimbedAtDate(new Date());
   }, [climbUuid]);
+
+  // Keep the picker's upper bound close to "now" so a long-open sheet can't let
+  // the user select a future minute. Mirrors LogbookEditSheet.
+  useEffect(() => {
+    const intervalId = setInterval(() => setMaximumClimbedAtDate(new Date()), MAXIMUM_CLIMBED_AT_REFRESH_MS);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleQualitySelect = useCallback((value: number | null) => {
     setTickState((prev) => ({ ...prev, quality: value }));
   }, []);
+
+  const handleFutureAdjusted = useCallback(() => {
+    showToast(t('playView.tickBar.futureTimeAdjusted'), 'warning');
+  }, [showToast, t]);
 
   const handleGradeSelect = useCallback((difficultyId: number | undefined) => {
     setTickState((prev) => ({ ...prev, difficulty: difficultyId }));
@@ -166,7 +187,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           difficulty: tickState.difficulty ?? null,
           isBenchmark,
           comment,
-          climbedAt: new Date().toISOString(),
+          climbedAt: clampToNow(climbedAt).toISOString(),
           ...(sessionId ? { sessionId } : {}),
           ...(layoutId != null ? { layoutId } : {}),
           ...(sizeId != null ? { sizeId } : {}),
@@ -190,6 +211,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
             setTickState(createInitialTickState());
             setComment('');
             setLastError(null);
+            setClimbedAt(new Date());
             showToast(tClimbs('mobile.logAscent.savedToast'), 'success');
             onDismiss();
           },
@@ -217,6 +239,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       boardPresenceBoardId,
       tickState,
       comment,
+      climbedAt,
       onDismiss,
       showToast,
       tClimbs,
@@ -268,6 +291,38 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         </Text>
         <View style={styles.rowPicker}>
           <InlineStarPicker quality={tickState.quality} onSelect={handleQualitySelect} />
+        </View>
+      </View>
+
+      <View style={styles.row}>
+        <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
+          {t('playView.tickBar.dateLabel')}
+        </Text>
+        <View style={styles.rowPicker}>
+          <ClimbedAtField
+            value={climbedAt}
+            mode="date"
+            maximumDate={maximumClimbedAtDate}
+            onChange={setClimbedAt}
+            onFutureAdjusted={handleFutureAdjusted}
+            accessibilityLabel={t('playView.tickBar.dateLabel')}
+          />
+        </View>
+      </View>
+
+      <View style={styles.row}>
+        <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
+          {t('playView.tickBar.timeLabel')}
+        </Text>
+        <View style={styles.rowPicker}>
+          <ClimbedAtField
+            value={climbedAt}
+            mode="time"
+            maximumDate={maximumClimbedAtDate}
+            onChange={setClimbedAt}
+            onFutureAdjusted={handleFutureAdjusted}
+            accessibilityLabel={t('playView.tickBar.timeLabel')}
+          />
         </View>
       </View>
 

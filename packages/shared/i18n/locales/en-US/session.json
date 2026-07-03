@@ -575,7 +575,10 @@
       "decreaseTriesAria": "Decrease attempts",
       "increaseTriesAria": "Increase attempts",
       "starRating_one": "{{count}} star",
-      "starRating_other": "{{count}} stars"
+      "starRating_other": "{{count}} stars",
+      "dateLabel": "Date",
+      "timeLabel": "Time",
+      "futureTimeAdjusted": "Future time adjusted to now."
     }
   },
   "mobileDetail": {
