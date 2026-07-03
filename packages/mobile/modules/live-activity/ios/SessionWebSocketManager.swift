@@ -34,169 +34,9 @@ struct GQLMessage {
     }
 }
 
-// MARK: - Queue Update Events
-
-enum QueueUpdateEvent {
-    case fullSync(items: [SharedQueueItem], currentItem: SharedQueueItem?, sequence: Int)
-    case currentClimbChanged(item: SharedQueueItem?, sequence: Int)
-    case itemAdded(item: SharedQueueItem, position: Int, sequence: Int)
-    case itemRemoved(uuid: String, sequence: Int)
-    case reordered(uuid: String, oldIndex: Int, newIndex: Int, sequence: Int)
-    case climbMirrored(uuid: String?, mirrored: Bool, sequence: Int)
-}
-
-enum QueueEventRepaintPolicy {
-    static func shouldRepaintBoard(for event: QueueUpdateEvent) -> Bool {
-        switch event {
-        case .currentClimbChanged(_, _), .climbMirrored(_, _, _):
-            return true
-        case .fullSync(_, _, _), .itemAdded(_, _, _), .itemRemoved(_, _), .reordered(_, _, _, _):
-            return false
-        }
-    }
-}
-
-// MARK: - Message Parsing Helpers
-
-enum QueueMessageParser {
-
-    /// Extract the `queueUpdates` dictionary from a graphql-ws `next` payload.
-    static func extractQueueUpdates(from payload: [String: Any]?) -> [String: Any]? {
-        guard let data = payload?["data"] as? [String: Any],
-              let updates = data["queueUpdates"] as? [String: Any]
-        else {
-            return nil
-        }
-        return updates
-    }
-
-    /// Convert a raw climb+queue-item dictionary into a `SharedQueueItem`.
-    static func parseQueueItem(_ dict: [String: Any]?) -> SharedQueueItem? {
-        guard let dict = dict,
-              let uuid = dict["uuid"] as? String,
-              let climb = dict["climb"] as? [String: Any],
-              let climbUuid = climb["uuid"] as? String
-        else {
-            return nil
-        }
-
-        let name = climb["name"] as? String ?? ""
-        let difficulty = Self.parseDifficulty(climb["difficulty"])
-        let angle = Self.parseIntValue(climb["angle"]) ?? 0
-        let frames = climb["frames"] as? String ?? ""
-        let setter = climb["setter_username"] as? String ?? ""
-        let mirrored = climb["mirrored"] as? Bool ?? false
-
-        return SharedQueueItem(
-            uuid: uuid,
-            climbUuid: climbUuid,
-            climbName: name,
-            difficulty: difficulty,
-            angle: angle,
-            frames: frames,
-            setterUsername: setter,
-            mirrored: mirrored
-        )
-    }
-
-    /// Parse a FullSync event from the queueUpdates dictionary.
-    static func parseFullSync(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        guard let state = updates["state"] as? [String: Any] else { return nil }
-        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-
-        let queueArray = state["queue"] as? [[String: Any]] ?? []
-        let items = queueArray.compactMap { parseQueueItem($0) }
-
-        let currentItem = parseQueueItem(state["currentClimbQueueItem"] as? [String: Any])
-
-        return .fullSync(items: items, currentItem: currentItem, sequence: sequence)
-    }
-
-    /// Parse a CurrentClimbChanged event.
-    static func parseCurrentClimbChanged(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-        let item = parseQueueItem(updates["currentItem"] as? [String: Any])
-        return .currentClimbChanged(item: item, sequence: sequence)
-    }
-
-    /// Parse a QueueItemAdded event.
-    static func parseQueueItemAdded(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-        let position = Self.parseIntValue(updates["position"]) ?? 0
-        let item = parseQueueItem(updates["addedItem"] as? [String: Any])
-        guard let item = item else { return nil }
-        return .itemAdded(item: item, position: position, sequence: sequence)
-    }
-
-    /// Parse a QueueItemRemoved event.
-    static func parseQueueItemRemoved(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        guard let uuid = updates["uuid"] as? String else { return nil }
-        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-        return .itemRemoved(uuid: uuid, sequence: sequence)
-    }
-
-    /// Parse a QueueReordered event.
-    static func parseQueueReordered(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        guard let uuid = updates["uuid"] as? String else { return nil }
-        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-        let oldIndex = Self.parseIntValue(updates["oldIndex"]) ?? 0
-        let newIndex = Self.parseIntValue(updates["newIndex"]) ?? 0
-        return .reordered(uuid: uuid, oldIndex: oldIndex, newIndex: newIndex, sequence: sequence)
-    }
-
-    /// Parse a ClimbMirrored event.
-    static func parseClimbMirrored(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-        let uuid = updates["mirroredUuid"] as? String ?? updates["uuid"] as? String
-        let mirrored = updates["mirrored"] as? Bool ?? false
-        return .climbMirrored(uuid: uuid, mirrored: mirrored, sequence: sequence)
-    }
-
-    /// Route the queueUpdates dictionary to the correct parser based on __typename.
-    static func parseQueueUpdate(_ updates: [String: Any]) -> QueueUpdateEvent? {
-        guard let typename = updates["__typename"] as? String else { return nil }
-        switch typename {
-        case "FullSync":
-            return parseFullSync(updates)
-        case "CurrentClimbChanged":
-            return parseCurrentClimbChanged(updates)
-        case "QueueItemAdded":
-            return parseQueueItemAdded(updates)
-        case "QueueItemRemoved":
-            return parseQueueItemRemoved(updates)
-        case "QueueReordered":
-            return parseQueueReordered(updates)
-        case "ClimbMirrored":
-            return parseClimbMirrored(updates)
-        default:
-            return nil
-        }
-    }
-
-    /// Detect a sequence gap: returns true when `received` is more than one
-    /// step ahead of `lastKnown`. A value of -1 for `lastKnown` means no
-    /// previous sequence has been recorded (first message).
-    static func hasSequenceGap(lastKnown: Int, received: Int) -> Bool {
-        guard lastKnown >= 0 else { return false }
-        return received > lastKnown + 1
-    }
-
-    // MARK: - Private Helpers
-
-    static func parseDifficulty(_ value: Any?) -> String {
-        if let str = value as? String { return str }
-        if let num = value as? Double { return String(format: "%.1f", num) }
-        if let num = value as? Int { return String(num) }
-        return ""
-    }
-
-    static func parseIntValue(_ value: Any?) -> Int? {
-        if let i = value as? Int { return i }
-        if let d = value as? Double { return Int(d) }
-        if let s = value as? String { return Int(s) }
-        return nil
-    }
-}
+// Queue event types, payload parsing, sequence acceptance, and the state
+// reducer live in SessionQueueState.swift so they compile into the test
+// target; this file owns the socket, timers, and side effects.
 
 // MARK: - Session WebSocket Manager
 
@@ -322,6 +162,12 @@ final class SessionWebSocketManager {
         // Cancel any existing connection before opening a new one to prevent
         // leaked tasks (e.g. multiple reconnects firing after backgrounding).
         self.webSocketTask?.cancel(with: .goingAway, reason: nil)
+
+        // A fresh subscription starts a fresh sequence stream (the server's
+        // FullSync carries the room's *current* sequence, not a continuation
+        // of the old one), so a sequence carried over from the previous
+        // connection must not gap-check the new stream.
+        self.lastSequence = -1
 
         let urlString: String
         if let wsUrl = self.wsUrl, !wsUrl.isEmpty {
@@ -574,7 +420,12 @@ final class SessionWebSocketManager {
             stateQueue.async { [weak self] in
                 guard let self = self else { return }
                 self.isConnected = true
-                self.reconnectAttempt = 0
+                // reconnectAttempt is deliberately NOT reset here. An ack only
+                // proves the transport; resetting on it let deterministic
+                // post-ack failures (subscription error, joinSession error)
+                // reconnect forever because the max-attempts guard never
+                // tripped. It resets in handleNextMessage once queue data
+                // actually flows.
                 self.sendJoinSession()
                 self.sendSubscription()
                 // Fire after join/subscribe so observers can rely on the
@@ -608,21 +459,25 @@ final class SessionWebSocketManager {
         guard let updates = QueueMessageParser.extractQueueUpdates(from: msg.payload) else { return }
         guard let event = QueueMessageParser.parseQueueUpdate(updates) else { return }
 
-        let receivedSeq = sequenceFromEvent(event)
-
-        // Sequence gap check and lastSequence update must be atomic
+        // Sequence acceptance and lastSequence update must be atomic
         stateQueue.async { [weak self] in
             guard let self = self else { return }
 
-            if QueueMessageParser.hasSequenceGap(lastKnown: self.lastSequence, received: receivedSeq) {
-                // Gap detected — cancel the current task so listenForMessages' failure
-                // path calls handleDisconnect(), which schedules a reconnect and will
-                // receive a FullSync restoring consistent state.
-                print("[SessionWS] Sequence gap: expected \(self.lastSequence + 1), got \(receivedSeq) — reconnecting")
+            switch QueueSequencePolicy.decision(for: event, lastKnown: self.lastSequence) {
+            case .resync:
+                // Mid-stream gap — cancel the current task so listenForMessages'
+                // failure path calls handleDisconnect(), which schedules a
+                // reconnect whose FullSync restores consistent state.
+                print("[SessionWS] Sequence gap: expected \(self.lastSequence + 1), got \(event.sequence) — reconnecting")
                 self.webSocketTask?.cancel(with: .goingAway, reason: nil)
                 return
+            case .apply(let newLastSequence):
+                self.lastSequence = newLastSequence
             }
-            self.lastSequence = receivedSeq
+
+            // Queue data is flowing — the connection is genuinely healthy, so
+            // the backoff ladder restarts from the bottom on the next drop.
+            self.reconnectAttempt = 0
 
             // Apply event inline (already on stateQueue) rather than calling
             // applyEvent which would double-dispatch
@@ -630,97 +485,15 @@ final class SessionWebSocketManager {
         }
     }
 
-    private func sequenceFromEvent(_ event: QueueUpdateEvent) -> Int {
-        switch event {
-        case .fullSync(_, _, let seq): return seq
-        case .currentClimbChanged(_, let seq): return seq
-        case .itemAdded(_, _, let seq): return seq
-        case .itemRemoved(_, let seq): return seq
-        case .reordered(_, _, _, let seq): return seq
-        case .climbMirrored(_, _, let seq): return seq
-        }
-    }
-
-    private func applyEvent(_ event: QueueUpdateEvent) {
-        stateQueue.async { [weak self] in
-            guard let self = self else { return }
-            self.applyEventOnQueue(event)
-        }
-    }
-
     /// Applies a queue update event. MUST be called on `stateQueue`.
     private func applyEventOnQueue(_ event: QueueUpdateEvent) {
-        let shouldRepaintBoard = QueueEventRepaintPolicy.shouldRepaintBoard(for: event)
-
-        switch event {
-        case .fullSync(let items, let currentItem, _):
-            queueItems = items
-            if let currentItem = currentItem {
-                currentIndex = items.firstIndex(where: { $0.uuid == currentItem.uuid }) ?? 0
-            } else {
-                currentIndex = 0
-            }
-
-        case .currentClimbChanged(let item, _):
-            if let item = item {
-                currentIndex = queueItems.firstIndex(where: { $0.uuid == item.uuid }) ?? currentIndex
-            }
-
-        case .itemAdded(let item, let position, _):
-            let insertIndex = min(max(position, 0), queueItems.count)
-            queueItems.insert(item, at: insertIndex)
-
-        case .itemRemoved(let uuid, _):
-            if let removeIndex = queueItems.firstIndex(where: { $0.uuid == uuid }) {
-                queueItems.remove(at: removeIndex)
-                if currentIndex >= queueItems.count {
-                    currentIndex = max(0, queueItems.count - 1)
-                }
-            }
-
-        case .reordered(let uuid, let oldIndex, let newIndex, _):
-            guard oldIndex >= 0, oldIndex < queueItems.count else { return }
-            let validOldItem = queueItems[oldIndex]
-            // Prefer using the oldIndex if the uuid matches, otherwise search
-            let item: SharedQueueItem
-            if validOldItem.uuid == uuid {
-                item = validOldItem
-            } else if let found = queueItems.firstIndex(where: { $0.uuid == uuid }) {
-                item = queueItems[found]
-                queueItems.remove(at: found)
-                let dest = min(max(newIndex, 0), queueItems.count)
-                queueItems.insert(item, at: dest)
-                persistAndNotify(repaintBoard: shouldRepaintBoard)
-                return
-            } else {
-                return
-            }
-            queueItems.remove(at: oldIndex)
-            let dest = min(max(newIndex, 0), queueItems.count)
-            queueItems.insert(item, at: dest)
-
-        case .climbMirrored(let uuid, let mirrored, _):
-            guard let uuid,
-                  let itemIndex = queueItems.firstIndex(where: { $0.uuid == uuid })
-            else {
-                persistAndNotify(repaintBoard: shouldRepaintBoard)
-                return
-            }
-            let item = queueItems[itemIndex]
-            let updatedItem = SharedQueueItem(
-                uuid: item.uuid,
-                climbUuid: item.climbUuid,
-                climbName: item.climbName,
-                difficulty: item.difficulty,
-                angle: item.angle,
-                frames: item.frames,
-                setterUsername: item.setterUsername,
-                mirrored: mirrored
-            )
-            queueItems[itemIndex] = updatedItem
-        }
-
-        persistAndNotify(repaintBoard: shouldRepaintBoard)
+        let newState = QueueStateReducer.apply(
+            event,
+            to: QueueStateReducer.QueueState(items: queueItems, currentIndex: currentIndex)
+        )
+        queueItems = newState.items
+        currentIndex = newState.currentIndex
+        persistAndNotify(repaintBoard: QueueEventRepaintPolicy.shouldRepaintBoard(for: event))
     }
 
     private func persistAndNotify(repaintBoard: Bool = false) {
@@ -820,27 +593,32 @@ final class SessionWebSocketManager {
     // MARK: - Mutation Response Handling
 
     private func handleMutationError(_ msg: GQLMessage) {
-        guard let id = msg.id else { return }
-
-        if id == "join-session" {
-            // joinSession failed — the connection can't send mutations without a session.
-            // Reconnect to retry.
-            print("[SessionWS] joinSession failed — reconnecting")
+        switch QueueGraphQLErrorRouting.action(forOperationId: msg.id, subscriptionId: subscriptionId) {
+        case .reconnect:
+            // joinSession failed (no session → mutations rejected) or the
+            // queueUpdates subscription itself errored. For the latter, server
+            // pings keep the ping-timeout watchdog quiet, so without this the
+            // connection would look healthy while delivering zero queue
+            // updates for the rest of the session. Reconnect to re-establish —
+            // bounded, because reconnectAttempt only resets once queue data
+            // actually flows.
+            print("[SessionWS] operation \(msg.id ?? "?") errored: \(msg.payload ?? [:]) — reconnecting")
             stateQueue.async { [weak self] in
                 self?.webSocketTask?.cancel(with: .goingAway, reason: nil)
             }
-            return
-        }
 
-        guard id.hasPrefix("mutation-") else { return }
-        let correlationId = String(id.dropFirst("mutation-".count))
-        // Server rejected the navigation — revert to the index before the optimistic update
-        stateQueue.async { [weak self] in
-            guard let self = self else { return }
-            if let previousIndex = self.pendingMutations.removeValue(forKey: correlationId) {
-                self.currentIndex = previousIndex
-                self.persistAndNotify(repaintBoard: true)
+        case .revertOptimisticNavigation(let correlationId):
+            // Server rejected the navigation — revert to the index before the optimistic update
+            stateQueue.async { [weak self] in
+                guard let self = self else { return }
+                if let previousIndex = self.pendingMutations.removeValue(forKey: correlationId) {
+                    self.currentIndex = previousIndex
+                    self.persistAndNotify(repaintBoard: true)
+                }
             }
+
+        case .ignore:
+            break
         }
     }
 
