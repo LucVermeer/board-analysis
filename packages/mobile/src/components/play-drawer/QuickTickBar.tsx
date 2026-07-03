@@ -219,6 +219,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
               attemptCount: finalAttempts,
               hasQuality: tickState.quality != null && tickState.quality > 0,
               hasDifficulty: tickState.difficulty != null,
+              difficulty: tickState.difficulty ?? null,
               hasComment: comment.length > 0,
             });
             hapticSuccess();

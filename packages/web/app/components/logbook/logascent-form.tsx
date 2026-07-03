@@ -211,6 +211,8 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
       track('Tick Logged', {
         boardLayout: boardDetails.layout_name || '',
         status,
+        hasDifficulty: logType === 'ascent' && values.difficulty !== undefined,
+        difficulty: logType === 'ascent' ? (values.difficulty ?? null) : null,
       });
 
       setFormValues(getInitialValues());
