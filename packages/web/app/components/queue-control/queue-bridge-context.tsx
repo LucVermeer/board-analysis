@@ -532,6 +532,10 @@ function usePersistentSessionQueueAdapter(): {
   const stableEndSession = useCallback(() => {
     const { ps } = latestRef.current;
     const endingSessionId = ps.activeSession?.sessionId ?? null;
+    // Intentional asymmetry: clearing the cookie is unconditional (ending always
+    // clears the climb-session cookie, which can hold a session id `ps.activeSession`
+    // never reflected — the board-route cookie edge case), while emitSessionEnded is
+    // guarded because its lifecycle event needs a session id to key off.
     if (endingSessionId) emitSessionEnded(endingSessionId, 'user_left');
     clearClimbSessionCookie();
     ps.endSessionWithSummary({
