@@ -191,12 +191,12 @@ exactly — see the parity check above).
 The gating above delivers a JS fix to binaries whose fingerprint still matches `main`. Once native
 churn has moved `main`'s fingerprint, an **already-released** (approved) store binary is
 OTA-orphaned: a fix published from `main` goes out under the new fingerprint that old install never
-requests (issue #3098). The remedy is to publish an OTA under the *old* release's fingerprint. We
+requests (issue #3098). The remedy is to publish an OTA under the _old_ release's fingerprint. We
 make that reproducible by anchoring each approved release with a tag.
 
 **Anchoring is tied to App Store approval, not to merge.** `main` iterates through many fingerprints
 between releases; we only care about the ones that actually shipped and were approved (an approved
-binary is frozen forever). The marketing `version` *is* part of the fingerprint, so bumping it moves
+binary is frozen forever). The marketing `version` _is_ part of the fingerprint, so bumping it moves
 the fingerprint — which is fine, because we never rely on an intermediate fingerprint staying
 OTA-compatible; we only anchor approved ones.
 
@@ -222,7 +222,7 @@ are safe.
 build's commit + fingerprint) and retries on the next run once the tag exists.
 
 **Android caveat:** approval is detected from App Store Connect only — there is no Google Play query.
-The Android anchor is cut alongside the iOS approval, pointing at the *latest* Android build of the
+The Android anchor is cut alongside the iOS approval, pointing at the _latest_ Android build of the
 same marketing version. If Android hasn't actually shipped that version to the store, the anchor is
 premature; a backport under it would just reach whatever installs hold that fingerprint (and the
 backport re-verifies the fingerprint before publishing), so it is ineffective rather than incorrect.
