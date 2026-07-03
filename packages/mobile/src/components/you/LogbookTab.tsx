@@ -25,7 +25,7 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { LogbookRow } from './LogbookRow';
-import { LogbookDayDivider } from './LogbookDayDivider';
+import { LogbookDayDivider, LogbookWallSubDivider } from './LogbookDayDivider';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { LogbookFilterSheet } from './LogbookFilterSheet';
 import { LogbookChipRow } from './LogbookChipRow';
@@ -37,6 +37,7 @@ import type { Grade } from '@boardsesh/shared-schema';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { tickToClimb } from '../../lib/tick-to-climb';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
+import { getLayoutDisplayName } from '@boardsesh/profile-stats';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useFeatureFlag } from '../../providers/feature-flags-provider';
@@ -213,9 +214,16 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const showDividers = shouldShowLogbookDividers(feedInput);
   const { listRows, entryIndexByUuid } = useMemo(() => {
     const items = feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [];
+    // The wall label ("Alex's board 35°") feeds the divider/subdivider context;
+    // derivation needs the app's board metadata so it happens here, not in the
+    // shared builder.
+    const withWalls = items.map((item) => ({
+      ...item,
+      wall: `${item.boardDisplayName ?? getLayoutDisplayName(item.boardType, item.layoutId)} ${item.angle}°`,
+    }));
     const rows: LogbookListRow<AscentFeedItem>[] = showDividers
-      ? buildLogbookListRows(items, { hasMore: feed.hasNextPage ?? false })
-      : dedupeLogbookItems(items).map((item) => ({ type: 'entry', key: item.uuid, item }));
+      ? buildLogbookListRows(withWalls, { hasMore: feed.hasNextPage ?? false })
+      : dedupeLogbookItems(items).map((item) => ({ type: 'entry', key: item.uuid, item, wallCovered: false }));
     // Entry ordinal (dividers excluded) for the analytics `rowIndex` — the raw
     // FlashList index counts divider rows, which would skew position funnels.
     const ordinals = new Map<string, number>();
@@ -357,11 +365,15 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
         // The divider owns its "now" clock (focus-refreshed) so this callback's
         // identity survives tab focus — a `now` dep here would re-render every
         // climb row for a value only dividers read.
-        return <LogbookDayDivider dayStartMs={row.dayStartMs} stats={row.stats} />;
+        return <LogbookDayDivider dayStartMs={row.dayStartMs} stats={row.stats} wallLabel={row.wallLabel} />;
+      }
+      if (row.type === 'subdivider') {
+        return <LogbookWallSubDivider wallLabel={row.wallLabel} />;
       }
       return (
         <LogbookRow
           ascent={row.item}
+          showWallInMeta={!row.wallCovered}
           fontScale={fontScale}
           onActivate={handleActivate}
           onOpenActions={handleOpenActions}

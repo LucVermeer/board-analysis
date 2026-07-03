@@ -161,6 +161,7 @@ function ascent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
 
 type RowHandlers = {
   onActivate?: (item: AscentFeedItem) => void;
+  showWallInMeta?: boolean;
   onOpenActions?: (item: AscentFeedItem) => void;
   onEdit?: (item: AscentFeedItem) => void;
   onDeleteRequest?: (item: AscentFeedItem, method: 'swipe' | 'a11y') => void;
@@ -260,6 +261,15 @@ describe('LogbookRow — meta line', () => {
 
     const { container: unnamed } = renderRow(ascent({ boardDisplayName: null }));
     expect(unnamed.textContent).toContain('Kilter Original 40°');
+  });
+
+  it('drops the wall from the meta line when a divider above covers it', () => {
+    // Fixture's named board wins the label ('Kilter 40°', not the layout name).
+    const { container: covered } = renderRow(ascent({}), { showWallInMeta: false });
+    expect(covered.textContent).not.toContain('Kilter 40°');
+
+    const { container: uncovered } = renderRow(ascent({}));
+    expect(uncovered.textContent).toContain('Kilter 40°');
   });
 
   it('clamps an imported 0-attempt send to 1 try', () => {

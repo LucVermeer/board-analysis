@@ -18,6 +18,12 @@ type LogbookDayDividerProps = {
   /** Local start-of-day timestamp of the run (from buildLogbookListRows). */
   dayStartMs: number;
   /**
+   * The day's wall ("Alex's board 35°") when the complete day is wall-uniform;
+   * null on mixed days (which get LogbookWallSubDivider anchors instead) and
+   * while the day may still straddle an unloaded page.
+   */
+  wallLabel?: string | null;
+  /**
    * Rollup stats, or null while the day may still straddle an unloaded page —
    * a partial count would lie (including to VoiceOver), so an incomplete day
    * shows its date alone until its boundary loads.
@@ -32,7 +38,11 @@ type LogbookDayDividerProps = {
  * gets an M3-style list subheader (no chip). `accessibilityRole="header"` puts
  * each day in the VoiceOver/TalkBack rotor for day-jumping.
  */
-export const LogbookDayDivider = memo(function LogbookDayDivider({ dayStartMs, stats }: LogbookDayDividerProps) {
+export const LogbookDayDivider = memo(function LogbookDayDivider({
+  dayStartMs,
+  stats,
+  wallLabel,
+}: LogbookDayDividerProps) {
   const { t, i18n } = useTranslation('you');
   const { brandColors: brand, systemColors, variant } = useTheme();
   const { formatGrade } = useGradeFormat();
@@ -73,8 +83,10 @@ export const LogbookDayDivider = memo(function LogbookDayDivider({ dayStartMs, s
         .join(' · ')
     : null;
 
+  const labelWithWall = wallLabel ? `${label} · ${wallLabel}` : label;
+
   // One combined announcement; `header` surfaces it in the screen-reader rotor.
-  const accessibilityLabel = rollup ? `${label}, ${rollup}` : label;
+  const accessibilityLabel = rollup ? `${labelWithWall}, ${rollup}` : labelWithWall;
 
   const chipStyle = selectByVariant(variant, {
     liquidGlass: { backgroundColor: withAlpha(brand.primary, 0.08), borderRadius: borderRadius.md },
@@ -93,13 +105,30 @@ export const LogbookDayDivider = memo(function LogbookDayDivider({ dayStartMs, s
       style={[styles.container, chipStyle]}
     >
       <Text variant="caption1" color={labelColor} style={styles.label}>
-        {label}
+        {labelWithWall}
       </Text>
       {rollup ? (
         <Text variant="caption1" color={labelColor} style={styles.rollup} numberOfLines={1}>
           {rollup}
         </Text>
       ) : null}
+    </View>
+  );
+});
+
+/**
+ * Wall anchor inside a MIXED day — one per consecutive same-wall run, so the
+ * rows below it can drop board+angle from their own meta line. Quieter than
+ * the day divider on purpose: plain caption, no wash, not a rotor header (the
+ * day keeps rotor jumping clean).
+ */
+export const LogbookWallSubDivider = memo(function LogbookWallSubDivider({ wallLabel }: { wallLabel: string }) {
+  const { systemColors } = useTheme();
+  return (
+    <View accessible accessibilityLabel={wallLabel} style={styles.subDivider}>
+      <Text variant="caption1" color={systemColors.secondaryLabel} style={styles.subDividerLabel}>
+        {wallLabel}
+      </Text>
     </View>
   );
 });
@@ -124,5 +153,14 @@ const styles = StyleSheet.create({
   },
   rollup: {
     flexShrink: 1,
+  },
+  subDivider: {
+    marginHorizontal: spacing[4],
+    marginTop: spacing[2],
+    marginBottom: spacing[1],
+    paddingHorizontal: spacing[3],
+  },
+  subDividerLabel: {
+    fontWeight: '600',
   },
 });

@@ -169,6 +169,54 @@ describe('buildLogbookListRows', () => {
   });
 });
 
+describe('buildLogbookListRows — wall context', () => {
+  const at = (uuid: string, wall?: string) => tick({ uuid, climbedAt: `2026-06-30${NOON}`, wall });
+
+  it("puts a uniform COMPLETE day's wall on the divider and covers its rows", () => {
+    const rows = buildLogbookListRows([at('a', 'Kilter 40°'), at('b', 'Kilter 40°')], { hasMore: false });
+    const [divider, ...entries] = rows;
+    if (divider.type !== 'divider') throw new Error('expected divider');
+    expect(divider.wallLabel).toBe('Kilter 40°');
+    expect(entries.every((row) => row.type === 'entry' && row.wallCovered)).toBe(true);
+  });
+
+  it('withholds the wall from an incomplete uniform day and leaves rows uncovered', () => {
+    const rows = buildLogbookListRows([at('a', 'Kilter 40°')], { hasMore: true });
+    const [divider, entry] = rows;
+    if (divider.type !== 'divider' || entry.type !== 'entry') throw new Error('unexpected shape');
+    expect(divider.wallLabel).toBeNull();
+    expect(entry.wallCovered).toBe(false);
+  });
+
+  it('splits a mixed day with subdividers at wall changes, covering labelled rows', () => {
+    const rows = buildLogbookListRows([at('a', 'Kilter 40°'), at('b', 'Kilter 40°'), at('c', 'Tension 45°')], {
+      hasMore: false,
+    });
+    expect(rows.map((row) => row.type)).toEqual(['divider', 'subdivider', 'entry', 'entry', 'subdivider', 'entry']);
+    const divider = rows[0];
+    if (divider.type !== 'divider') throw new Error('expected divider');
+    expect(divider.wallLabel).toBeNull();
+    const subLabels = rows.filter((row) => row.type === 'subdivider').map((row) => row.wallLabel);
+    expect(subLabels).toEqual(['Kilter 40°', 'Tension 45°']);
+  });
+
+  it('gives unlabelled segments in a mixed day no anchor and no coverage', () => {
+    const rows = buildLogbookListRows([at('a', 'Kilter 40°'), at('b')], { hasMore: false });
+    expect(rows.map((row) => row.type)).toEqual(['divider', 'subdivider', 'entry', 'entry']);
+    const uncovered = rows.find((row) => row.type === 'entry' && row.item.uuid === 'b');
+    if (uncovered?.type !== 'entry') throw new Error('expected entry');
+    expect(uncovered.wallCovered).toBe(false);
+  });
+
+  it('keeps wall-less days exactly as before (no subdividers, no coverage)', () => {
+    const rows = buildLogbookListRows([at('a'), at('b')], { hasMore: false });
+    expect(rows.map((row) => row.type)).toEqual(['divider', 'entry', 'entry']);
+    const [divider] = rows;
+    if (divider.type !== 'divider') throw new Error('expected divider');
+    expect(divider.wallLabel).toBeNull();
+  });
+});
+
 describe('describeLogbookDay', () => {
   const now = new Date(2026, 5, 30, 15, 0, 0).getTime(); // local Jun 30 2026, 3pm
 

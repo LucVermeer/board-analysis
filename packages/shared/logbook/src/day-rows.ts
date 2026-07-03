@@ -32,6 +32,14 @@ export type LogbookDayItem = {
   uuid: string;
   status: 'flash' | 'send' | 'attempt';
   climbedAt: string;
+  /**
+   * Display label of the wall this ascent happened on ("Alex's board 35°",
+   * "Kilter Homewall 40°"), provided by the caller (label derivation needs the
+   * platform's board metadata). Drives the divider wall context: a uniform
+   * complete day carries it on the day divider, a mixed day gets sub-dividers,
+   * and covered rows can drop it from their own meta line.
+   */
+  wall?: string;
   difficulty?: number | null;
   consensusDifficulty?: number | null;
   difficultyName?: string | null;
@@ -58,6 +66,12 @@ export type LogbookListRow<T extends LogbookDayItem = LogbookDayItem> =
       /** Local start-of-day timestamp (ms), for label formatting. */
       dayStartMs: number;
       /**
+       * The day's wall, when the COMPLETE day is wall-uniform (an incomplete
+       * day could still gain a second wall from the next page). Mixed days
+       * carry null here and get subdivider rows instead.
+       */
+      wallLabel: string | null;
+      /**
        * Rollup stats, or null while the day is still loading. A day is complete
        * once an item from ANOTHER day follows it, or the feed has no more pages
        * — 20-item pages mean a day can straddle a page boundary, and a partial
@@ -66,7 +80,24 @@ export type LogbookListRow<T extends LogbookDayItem = LogbookDayItem> =
        */
       stats: LogbookDayStats | null;
     }
-  | { type: 'entry'; key: string; item: T };
+  | {
+      /** Wall-context anchor inside a mixed day — one per consecutive wall run. */
+      type: 'subdivider';
+      key: string;
+      wallLabel: string;
+    }
+  | {
+      type: 'entry';
+      key: string;
+      item: T;
+      /**
+       * True when a divider or subdivider above already names this row's wall,
+       * so the row can drop board+angle from its own meta line. False on
+       * incomplete uniform days and whenever dividers are off — the row then
+       * carries its own label (row content must never silently lose the wall).
+       */
+      wallCovered: boolean;
+    };
 
 /**
  * Dividers only make sense on a date-ordered feed: the `recent` preset, or a
@@ -175,14 +206,51 @@ export function buildLogbookListRows<T extends LogbookDayItem>(
     const occurrence = dayOccurrences.get(dayKey) ?? 0;
     dayOccurrences.set(dayKey, occurrence + 1);
     const complete = !isLastRun || !options.hasMore;
+    const keySuffix = occurrence === 0 ? dayKey : `${dayKey}-${occurrence}`;
+
+    // Wall context. Items without a wall label count as their own "wall" so a
+    // labelled/unlabelled mix still splits truthfully.
+    const walls = new Set(run.map((item) => item.wall ?? ''));
+    const uniformWall = walls.size === 1 ? (run[0].wall ?? null) : null;
+    // A uniform-so-far but INCOMPLETE day may still gain a second wall from the
+    // next page, so the divider only claims the wall once the day is complete.
+    const dividerWall = complete && uniformWall != null ? uniformWall : null;
+    // Mixed days split into subdividers — those boundaries are definite even on
+    // an incomplete day (loaded runs can only be subdivided further, not merged).
+    const mixed = walls.size > 1;
+
     rows.push({
       type: 'divider',
-      key: occurrence === 0 ? `day-${dayKey}` : `day-${dayKey}-${occurrence}`,
+      key: `day-${keySuffix}`,
       dayKey,
       dayStartMs: parseTickTimeLocal(run[0].climbedAt).startOf('day').valueOf(),
+      wallLabel: dividerWall,
       stats: complete ? statsForRun(run) : null,
     });
-    for (const item of run) rows.push({ type: 'entry', key: item.uuid, item });
+
+    let segmentWall: string | null = null;
+    let segmentIndex = 0;
+    for (const item of run) {
+      const itemWall = item.wall ?? '';
+      if (mixed && itemWall !== segmentWall) {
+        segmentWall = itemWall;
+        // An unlabelled segment gets no (empty) anchor; its entries stay
+        // uncovered below instead.
+        if (itemWall !== '') {
+          rows.push({
+            type: 'subdivider',
+            key: `sub-${keySuffix}-${segmentIndex}`,
+            wallLabel: itemWall,
+          });
+        }
+        segmentIndex += 1;
+      }
+      // Covered = a subdivider names this row's wall, or the complete-day
+      // divider does. Unlabelled items under a mixed day sit beneath an empty
+      // subdivider and stay uncovered so their (absent) label can't be implied.
+      const wallCovered = mixed ? item.wall != null : dividerWall != null;
+      rows.push({ type: 'entry', key: item.uuid, item, wallCovered });
+    }
   };
 
   let run: T[] = [];
