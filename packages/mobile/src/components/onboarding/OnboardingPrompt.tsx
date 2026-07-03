@@ -9,6 +9,7 @@ import { useOnboardingCopy } from '../../lib/onboarding/use-onboarding-copy';
 import {
   trackStepViewed,
   trackTourCompleted,
+  trackTourDismissed,
   trackTourSkipped,
   trackTourStarted,
 } from '../../lib/onboarding/onboarding-analytics';
@@ -54,15 +55,26 @@ export function OnboardingPrompt({
   const insets = useSafeAreaInsets();
   const { variant } = useTheme();
   const startedAtRef = useRef<number>(Date.now());
+  // Tracks whether the user chose a button. If they leave via Android back or a
+  // nav-away without choosing, the unmount cleanup fires Dismissed so the Start
+  // still resolves to a terminal outcome.
+  const resolvedRef = useRef(false);
 
-  // Tour Started + the single Step Viewed fire once on mount.
+  // Tour Started + the single Step Viewed fire once on mount. On unmount, if no
+  // button resolved the prompt, fire Dismissed (the back/kill exit).
   useEffect(() => {
     startedAtRef.current = Date.now();
     trackTourStarted();
     trackStepViewed(ONBOARDING_PROMPT_CARD, 0);
+    return () => {
+      if (!resolvedRef.current) {
+        trackTourDismissed(ONBOARDING_PROMPT_CARD, 0);
+      }
+    };
   }, []);
 
   const handleFindBoard = useCallback(() => {
+    resolvedRef.current = true;
     const durationSeconds = Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000));
     trackTourCompleted(durationSeconds);
     hapticSelection();
@@ -70,6 +82,7 @@ export function OnboardingPrompt({
   }, [onFindBoard]);
 
   const handleLookAround = useCallback(() => {
+    resolvedRef.current = true;
     trackTourSkipped(ONBOARDING_PROMPT_CARD, 0);
     onLookAround();
   }, [onLookAround]);

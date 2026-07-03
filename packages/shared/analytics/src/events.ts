@@ -132,6 +132,11 @@ export const SHARED_EVENTS = {
   OnboardingTourStepAdvanced: 'Onboarding Tour Step Advanced',
   OnboardingTourCompleted: 'Onboarding Tour Completed',
   OnboardingTourSkipped: 'Onboarding Tour Skipped',
+  // Mobile-only: the first-run prompt was dismissed without choosing a button
+  // (Android hardware-back / programmatic nav-away). Distinct from Skipped (the
+  // intentional "look around" tap) so every Started resolves to exactly one
+  // outcome — Completed, Skipped, or Dismissed — instead of silently vanishing.
+  OnboardingTourDismissed: 'Onboarding Tour Dismissed',
   // Activation: the user bound a board straight from the first-run handoff — the
   // real activation metric (board history turns on here), distinct from tapping
   // through the framing screen. Props: { boardType, source: 'onboarding' }.
