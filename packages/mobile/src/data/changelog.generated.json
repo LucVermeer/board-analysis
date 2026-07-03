@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-03T21:06:03.465Z",
+  "generatedAt": "2026-07-03T21:13:06.298Z",
   "entries": [
+    {
+      "prNumber": 3365,
+      "category": "fixed",
+      "title": "Fixed climbs not lighting up on Kilter and Tension boards for iPhones on iOS 26.5 — no more blank board mid-session or connect–disconnect churn while your partner queues the next problem.",
+      "mergedAt": "2026-07-03T21:08:44Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3365",
+      "body": "Sending climbs over Bluetooth is faster: LED data now rides bigger Bluetooth packets when your phone and board support them."
+    },
     {
       "prNumber": 3419,
       "category": "fixed",

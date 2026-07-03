@@ -29,6 +29,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed climbs not lighting up on Kilter and Tension boards for iPhones on iOS 26.5 — no more blank board mid-session or connect–disconnect churn while your partner queues the next problem. ([#3365](https://github.com/boardsesh/boardsesh/pull/3365))
+  Sending climbs over Bluetooth is faster: LED data now rides bigger Bluetooth packets when your phone and board support them.
 - Lock-screen and Dynamic Island controls are more reliable: the session card no longer freezes on the wrong climb after quick navigation, dies after a hiccup starting up, or flips to "Session ended" minutes after you use it ([#3419](https://github.com/boardsesh/boardsesh/pull/3419))
 - Party sessions stay in sync on the lock screen: reconnecting after a dead spot no longer freezes the Live Activity, and a crew mate shuffling the queue no longer flips it to the wrong climb ([#3414](https://github.com/boardsesh/boardsesh/pull/3414))
 - What's New now only shows real update notes. Robot commit signatures and stray code links can't sneak into the feed anymore. ([#3424](https://github.com/boardsesh/boardsesh/pull/3424))
