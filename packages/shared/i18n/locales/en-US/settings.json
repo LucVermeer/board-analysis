@@ -319,6 +319,7 @@
       "importFailed": "Import failed. Try again.",
       "importInterrupted": "Import stopped before it finished. Re-importing the file is safe.",
       "requestDataFailed": "Couldn't open email. Try again.",
+      "requestDataCopied": "Request copied. Paste it into your email draft.",
       "passwordHelp": "Your credentials are encrypted before they are stored."
     }
   },
