@@ -319,10 +319,6 @@ function createFakeQueueContext(overrides?: Partial<GraphQLQueueContextType>): G
     startSession: vi.fn(async () => ''),
     joinSession: vi.fn(async () => {}),
     endSession: vi.fn(),
-    sessionSummary: null,
-    sessionSummaryBoardType: null,
-    sessionSummaryHealthKitWorkoutId: null,
-    dismissSessionSummary: vi.fn(),
     sessionGoal: null,
     users: [],
     clientId: null,
@@ -400,7 +396,6 @@ function extractActions(ctx: GraphQLQueueContextType): GraphQLQueueActionsType {
     startSession: ctx.startSession,
     joinSession: ctx.joinSession,
     endSession: ctx.endSession,
-    dismissSessionSummary: ctx.dismissSessionSummary,
     disconnect: ctx.disconnect,
     reportWallDisconnect: ctx.reportWallDisconnect,
   };
@@ -1933,7 +1928,6 @@ describe('queue-bridge-context', () => {
         startSession: vi.fn(async () => ''),
         joinSession: vi.fn(async () => {}),
         endSession: vi.fn(),
-        dismissSessionSummary: vi.fn(),
         disconnect: vi.fn(),
         reportWallDisconnect: vi.fn(async () => {}),
       };

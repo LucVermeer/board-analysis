@@ -51,7 +51,8 @@ vi.mock('@/app/components/graphql-queue', () => ({
     canMutate: mockQueueContext.canMutate ?? true,
     isDisconnected: mockQueueContext.isDisconnected ?? false,
     users: mockQueueContext.users ?? [],
-    clientId: null,
+    clientId: mockQueueContext.clientId ?? null,
+    participantId: mockQueueContext.participantId ?? null,
     isLeader: true,
     isBackendMode: false,
     hasConnected: true,
@@ -214,6 +215,14 @@ vi.mock('qrcode.react', () => ({
 
 vi.mock('@/app/lib/share-utils', () => ({
   shareWithFallback: vi.fn(),
+}));
+
+// Spy on the session cookie clear so the leave-path assertion can check it.
+const mockClearClimbSessionCookie = vi.fn();
+vi.mock('@/app/lib/climb-session-cookie', () => ({
+  clearClimbSessionCookie: () => mockClearClimbSessionCookie(),
+  getClimbSessionCookie: vi.fn(() => null),
+  setClimbSessionCookie: vi.fn(),
 }));
 
 // jsdom doesn't provide window.matchMedia — stub it before the component
@@ -454,5 +463,146 @@ describe('QueueControlBar pivot', () => {
     const orderedUsernames = Array.from(items).map((el) => el.textContent?.trim());
     expect(orderedUsernames).toEqual(['alice', 'bob', 'carol']);
     expect(screen.queryByLabelText(/is driving/)).toBeNull();
+  });
+});
+
+// The bar's "Leave session" button (reached by cancelling a failed reconnect)
+// used to end the session for the whole crew. It now branches on the roster:
+// leave when peers remain, end only when the caller is the last participant.
+//
+// `SessionUser.id` is the PARTICIPANT id — the DB user UUID for an authenticated
+// user, the connection id for an anonymous one (backend room-manager). Self is
+// therefore identified by `participantId` (== the local user's own SessionUser.id),
+// NOT by the connection-only `clientId`. A roster row's stable key is `userId ?? id`.
+describe('QueueControlBar leave session branch', () => {
+  const makeRosterUser = (
+    id: string,
+    options: { userId?: string | null; connectionState?: 'CONNECTED' | 'RECONNECTING' } = {},
+  ) => ({
+    id,
+    username: id,
+    isLeader: false,
+    userId: options.userId ?? null,
+    connectionState: options.connectionState ?? 'CONNECTED',
+  });
+
+  // Drive the bar into the reconnect-cancel confirm row and click "Leave
+  // session". `clientId` is a connection id; `participantId` is the local user's
+  // participant id (== their own SessionUser.id). Returns the end/leave spies.
+  const leaveFromBar = (options: {
+    users: ReturnType<typeof makeRosterUser>[];
+    clientId: string | null;
+    participantId?: string | null;
+  }): { endSession: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> } => {
+    const endSession = vi.fn();
+    const disconnect = vi.fn();
+    mockQueueContext = {
+      ...baseQueueContext,
+      sessionId: 'session-1',
+      connectionState: 'reconnecting',
+      isDisconnected: false,
+      clientId: options.clientId,
+      participantId: options.participantId ?? null,
+      endSession,
+      disconnect,
+    };
+    mockPersistentSessionState = {
+      activeSession: { sessionId: 'session-1', sessionName: 'Test Session' },
+      session: { id: 'session-1', name: 'Test Session' },
+      users: options.users,
+    };
+    render(<QueueControlBar {...defaultProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByLabelText('Leave session'));
+    return { endSession, disconnect };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockQueueContext = { ...baseQueueContext };
+    mockPersistentSessionState = { activeSession: null, session: null, users: [] };
+    mockGetPreference.mockResolvedValue(null);
+    mockSetPreference.mockResolvedValue(undefined);
+  });
+
+  it('ends the session (summary) when an anonymous user is the sole participant', () => {
+    // Anon: SessionUser.id === connection id === participantId; no userId.
+    const { endSession, disconnect } = leaveFromBar({
+      users: [makeRosterUser('conn-me')],
+      clientId: 'conn-me',
+      participantId: 'conn-me',
+    });
+    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it('ends the session (summary) when an AUTHENTICATED user is the sole participant', () => {
+    // Authed: SessionUser.id === participantId === user UUID, distinct from the
+    // connection id carried in clientId. Self-identification must use
+    // participantId — comparing against clientId would misread the user's own
+    // row as a peer and silently LEAVE with no recap (the HIGH bug).
+    const { endSession, disconnect } = leaveFromBar({
+      users: [makeRosterUser('user-uuid', { userId: 'user-uuid' })],
+      clientId: 'conn-abc',
+      participantId: 'user-uuid',
+    });
+    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it('ends the session for an authenticated user on two tabs (same participant id)', () => {
+    // Two connections of one authed user share the same participant id, so the
+    // roster dedupes to a single "me" — still the last participant → end.
+    const { endSession, disconnect } = leaveFromBar({
+      users: [
+        makeRosterUser('user-uuid', { userId: 'user-uuid' }),
+        makeRosterUser('user-uuid', { userId: 'user-uuid' }),
+      ],
+      clientId: 'conn-tab-2',
+      participantId: 'user-uuid',
+    });
+    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it('leaves (no summary) when other participants remain, and clears the session cookie', () => {
+    const { endSession, disconnect } = leaveFromBar({
+      users: [
+        makeRosterUser('user-uuid', { userId: 'user-uuid' }),
+        makeRosterUser('friend-uuid', { userId: 'friend-uuid' }),
+      ],
+      clientId: 'conn-abc',
+      participantId: 'user-uuid',
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(endSession).not.toHaveBeenCalled();
+    // The leave path clears the cookie so a board-route remount doesn't
+    // re-activate the session this participant just left.
+    expect(mockClearClimbSessionCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts a RECONNECTING peer as present, so it leaves instead of ending', () => {
+    const { endSession, disconnect } = leaveFromBar({
+      users: [
+        makeRosterUser('user-uuid', { userId: 'user-uuid' }),
+        makeRosterUser('friend-uuid', { userId: 'friend-uuid', connectionState: 'RECONNECTING' }),
+      ],
+      clientId: 'conn-abc',
+      participantId: 'user-uuid',
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(endSession).not.toHaveBeenCalled();
+  });
+
+  it('ends the session when only the caller remains, even if the participant id is unknown', () => {
+    // Mid-reconnect: neither participantId nor clientId known → fall back to
+    // roster size — a single entry is the caller, so end.
+    const { endSession, disconnect } = leaveFromBar({
+      users: [makeRosterUser('conn-me')],
+      clientId: null,
+      participantId: null,
+    });
+    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
   });
 });

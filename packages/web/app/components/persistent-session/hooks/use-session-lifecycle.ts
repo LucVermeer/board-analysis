@@ -83,7 +83,7 @@ export type SessionLifecycleActions = {
     currentClimb: LocalClimbQueueItem | null,
     sessionName?: string,
   ) => void;
-  endSessionWithSummary: () => void;
+  endSessionWithSummary: (override?: { sessionId?: string | null; boardType?: string | null }) => void;
   setAutoFinishedSummary: (summary: SessionSummary, boardType: string | null) => void;
   dismissSessionSummary: () => void;
   setSession: Dispatch<SetStateAction<Session | null>>;
@@ -196,31 +196,39 @@ export function useSessionLifecycle({
     setSessionSummaryAutoFinished(true);
   }, []);
 
-  const endSessionWithSummary = useCallback(() => {
-    const endingSessionId = activeSessionRef.current?.sessionId;
-    const boardType = activeSessionRef.current?.parsedParams.board_name ?? null;
-    const token = wsAuthTokenRef.current;
+  // `override` lets a caller end a session the persistent provider never
+  // activated — the board-route path (`use-session-id-management`) can hold a
+  // session id in the cookie before `BoardSessionBridge` activates it, so
+  // `activeSessionRef.current` is null there. The override supplies that id (and
+  // its board type) directly. When omitted, we fall back to the active session.
+  const endSessionWithSummary = useCallback(
+    (override?: { sessionId?: string | null; boardType?: string | null }) => {
+      const endingSessionId = override?.sessionId ?? activeSessionRef.current?.sessionId;
+      const boardType = override?.boardType ?? activeSessionRef.current?.parsedParams.board_name ?? null;
+      const token = wsAuthTokenRef.current;
 
-    deactivateSession({ notifyServer: false });
+      deactivateSession({ notifyServer: false });
 
-    if (endingSessionId && token) {
-      const httpClient = createGraphQLHttpClient(token);
-      httpClient
-        .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId, timezone: getBrowserTimezone() })
-        .then((response) => {
-          if (response.endSession) {
-            setSessionSummary(response.endSession);
-            setSessionSummaryBoardType(boardType);
-            setSessionSummaryHealthKitWorkoutId(null);
-            setSessionSummaryAutoFinished(false);
-          }
-        })
-        .catch((err) => {
-          console.error('[PersistentSession] Failed to get session summary:', err);
-        });
-    }
+      if (endingSessionId && token) {
+        const httpClient = createGraphQLHttpClient(token);
+        httpClient
+          .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId, timezone: getBrowserTimezone() })
+          .then((response) => {
+            if (response.endSession) {
+              setSessionSummary(response.endSession);
+              setSessionSummaryBoardType(boardType);
+              setSessionSummaryHealthKitWorkoutId(null);
+              setSessionSummaryAutoFinished(false);
+            }
+          })
+          .catch((err) => {
+            console.error('[PersistentSession] Failed to get session summary:', err);
+          });
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, only .current changes
-  }, [deactivateSession]);
+    [deactivateSession],
+  );
 
   // Re-run the auto-finished pre-flight when the tab returns to visible — backend may have swept the session.
   const visibilityCheckInFlightRef = useRef(false);

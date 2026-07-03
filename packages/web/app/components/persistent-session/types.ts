@@ -150,8 +150,10 @@ export type PersistentSessionActionsType = {
   // Trigger a resync with the server (useful when corrupted data is detected)
   triggerResync: () => void;
 
-  // Session ending with summary
-  endSessionWithSummary: () => void;
+  // Session ending with summary. The optional override lets a caller end a
+  // session the provider never activated (board-route cookie edge case) by
+  // supplying the id/board type directly instead of reading the active session.
+  endSessionWithSummary: (override?: { sessionId?: string | null; boardType?: string | null }) => void;
   dismissSessionSummary: () => void;
 
   // Surface a session that the backend already auto-ended due to inactivity.

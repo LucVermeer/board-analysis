@@ -34,6 +34,8 @@ import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
 import { getBoardDetailsForPlaylist } from '@/app/lib/board-config-for-playlist';
 import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
+import { emitSessionEnded } from '@/app/lib/session-lifecycle-tracking';
+import { clearClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { track } from '@/app/lib/analytics';
 import { getPlaylistSuggestedClimbs } from './playlist-suggestions';
@@ -514,9 +516,32 @@ function usePersistentSessionQueueAdapter(): {
   );
   const noopJoinSession = useCallback(async (_sessionId: string) => {}, []);
   const noopSetClimbSearchParams = useCallback((_params: SearchRequestPagination) => {}, []);
-  // Wrap deactivateSession via ref so actionsValue deps are fully stable
+  // Wrap deactivateSession via ref so actionsValue deps are fully stable. This
+  // is the LEAVE path (exposed as `disconnect`): the participant departs and
+  // the session continues for everyone else — `deactivateSession()` sends
+  // LEAVE_SESSION on cleanup (notifyServer defaults true).
   const stableDeactivateSession = useCallback(() => {
     latestRef.current.ps.deactivateSession();
+  }, []);
+
+  // The END path (exposed as `endSession`): ends the session for everyone and
+  // shows the summary dialog. Routes through the root `endSessionWithSummary`
+  // (the single owner of summary state + dialog) so it behaves identically on
+  // and off board routes. Mirrors `use-session-id-management`'s board-route
+  // `endSession`.
+  const stableEndSession = useCallback(() => {
+    const { ps } = latestRef.current;
+    const endingSessionId = ps.activeSession?.sessionId ?? null;
+    // Intentional asymmetry: clearing the cookie is unconditional (ending always
+    // clears the climb-session cookie, which can hold a session id `ps.activeSession`
+    // never reflected — the board-route cookie edge case), while emitSessionEnded is
+    // guarded because its lifecycle event needs a session id to key off.
+    if (endingSessionId) emitSessionEnded(endingSessionId, 'user_left');
+    clearClimbSessionCookie();
+    ps.endSessionWithSummary({
+      sessionId: endingSessionId,
+      boardType: ps.activeSession?.parsedParams.board_name ?? null,
+    });
   }, []);
 
   // Actions value is now stable — all callbacks use latestRef with empty deps
@@ -540,8 +565,7 @@ function usePersistentSessionQueueAdapter(): {
       reportWallDisconnect,
       startSession: noopStartSession,
       joinSession: noopJoinSession,
-      endSession: stableDeactivateSession,
-      dismissSessionSummary: noop,
+      endSession: stableEndSession,
       disconnect: stableDeactivateSession,
     }),
     [
@@ -561,6 +585,7 @@ function usePersistentSessionQueueAdapter(): {
       setQueue,
       reportWallDisconnect,
       stableDeactivateSession,
+      stableEndSession,
       noopStartSession,
       noopJoinSession,
     ],
@@ -588,7 +613,6 @@ function usePersistentSessionQueueAdapter(): {
       isSessionActive: isParty && ps.hasConnected,
       isPersistentSessionActive: isParty,
       sessionId: ps.activeSession?.sessionId ?? null,
-      sessionSummary: null,
       sessionGoal: ps.session?.goal ?? null,
       users: isParty ? ps.users : [],
       clientId: ps.clientId,
@@ -857,7 +881,6 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       isSessionActive: effectiveContext.isSessionActive,
       isPersistentSessionActive: effectiveContext.isPersistentSessionActive,
       sessionId: effectiveContext.sessionId,
-      sessionSummary: effectiveContext.sessionSummary,
       sessionGoal: effectiveContext.sessionGoal,
       connectionState: effectiveContext.connectionState,
       canMutate: effectiveContext.canMutate,
@@ -877,7 +900,6 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       effectiveContext.isSessionActive,
       effectiveContext.isPersistentSessionActive,
       effectiveContext.sessionId,
-      effectiveContext.sessionSummary,
       effectiveContext.sessionGoal,
       effectiveContext.connectionState,
       effectiveContext.canMutate,

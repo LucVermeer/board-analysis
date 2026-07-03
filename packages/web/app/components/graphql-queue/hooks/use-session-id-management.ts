@@ -7,13 +7,8 @@ import { saveSessionToHistory } from '@/app/lib/session-history-db';
 import { getClimbSessionCookie, setClimbSessionCookie, clearClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import { usePersistentSession } from '../../persistent-session';
 import { useConnectionSettings } from '../../connection-manager/connection-settings-context';
-import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
-import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boardsesh/graphql/operations/sessions';
 import { emitSessionEnded } from '@/app/lib/session-lifecycle-tracking';
-import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '../../queue-control/types';
-import { getBrowserTimezone } from '@/app/lib/browser-timezone';
 
 type UseSessionIdManagementParams = {
   isOffBoardMode: boolean;
@@ -32,23 +27,50 @@ export function useSessionIdManagement({
   const router = useLocaleRouter();
   const pathname = usePathname();
   const { backendUrl } = useConnectionSettings();
-  const { token: wsAuthToken } = useWsAuthToken();
   const persistentSession = usePersistentSession();
 
-  // Session ID source differs by mode:
-  // - Board mode: read from cookie (previously URL ?session= param)
-  // - Off-board mode: read from persistent IndexedDB storage
-  const sessionIdFromCookie = getClimbSessionCookie();
-  const persistentSessionId = persistentSession.activeSession?.sessionId ?? null;
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(
-    isOffBoardMode ? persistentSessionId : sessionIdFromCookie,
+  // Cookie reads (`document.cookie`) are non-reactive, so we mirror the board
+  // route's session cookie in state. The start/join/migration/clear paths keep
+  // it in sync; the derived `sessionId` below reads it. Off-board mode never
+  // touches the cookie (the persistent IndexedDB session is authoritative), so
+  // its mirror starts null.
+  const [cookieSessionId, setCookieSessionId] = useState<string | null>(() =>
+    isOffBoardMode ? null : getClimbSessionCookie(),
   );
+  const persistentSessionId = persistentSession.activeSession?.sessionId ?? null;
 
-  // Compute base board path up front — the board-path gate on the
-  // persistent-session sync effect below reads it. This used to live further
-  // down (after the sync effect), so moving it up keeps the lexical order in
-  // sync with the React hook order it always ran in.
   const baseBoardPath = useMemo(() => propsBaseBoardPath ?? getBaseBoardPath(pathname), [propsBaseBoardPath, pathname]);
+
+  // Board path the persistent session belongs to (null when there's no session).
+  const activeSessionBoardPath = persistentSession.activeSession?.boardPath
+    ? getBaseBoardPath(persistentSession.activeSession.boardPath)
+    : null;
+
+  // The session id is now a pure DERIVATION of its three sources, no longer
+  // reconciled by a local `useState` + two sync effects:
+  //   - Off-board: the persistent (IndexedDB) session is the only authority.
+  //   - Board route: adopt the persistent session's id ONLY when its board
+  //     matches the route we're on, otherwise fall back to the cookie.
+  //
+  // The board-path match folds in both race windows the deleted sync effects
+  // defended:
+  //   * IndexedDB-load window — while `persistentSessionId` is briefly null
+  //     before restore completes, the fallback keeps reading the cookie instead
+  //     of wiping the id.
+  //   * Multi-session restore — a session for board X held in IndexedDB while
+  //     the user browses board Y must not leak X's id into board Y (which would
+  //     flicker `isPersistentSessionActive` true on the wrong board); the match
+  //     keeps board Y reading its own cookie.
+  //
+  // The match is intentionally strict: an active session with no `boardPath`
+  // matches NOTHING (its `activeSessionBoardPath` is null), so every board route
+  // falls back to its own cookie rather than adopting the boardless session.
+  // A permissive `!activeSessionBoardPath` arm would re-open the multi-session
+  // restore race the deleted sync effects guarded against.
+  const boardMatchedPersistentSessionId =
+    persistentSessionId && activeSessionBoardPath === baseBoardPath ? persistentSessionId : null;
+
+  const sessionId = isOffBoardMode ? persistentSessionId : (boardMatchedPersistentSessionId ?? cookieSessionId);
 
   // Backward compat: migrate ?session= URL param to cookie and strip from URL
   useEffect(() => {
@@ -56,7 +78,7 @@ export function useSessionIdManagement({
     const sessionFromUrl = searchParams.get('session');
     if (sessionFromUrl) {
       setClimbSessionCookie(sessionFromUrl);
-      setActiveSessionId(sessionFromUrl);
+      setCookieSessionId(sessionFromUrl);
       const params = new URLSearchParams(searchParams.toString());
       params.delete('session');
       const queryString = params.toString();
@@ -64,43 +86,12 @@ export function useSessionIdManagement({
     }
   }, [searchParams, isOffBoardMode, pathname, router]);
 
-  // Sync activeSessionId from persistent session when a new session is
-  // activated. Covers both modes:
-  //   - Off-board: persistentSessionId is the only source of truth.
-  //   - Board: the cookie set by start-sesh-drawer is the initial value, but
-  //     when the user creates a session from THIS provider's route (no
-  //     navigation, same baseBoardPath as the page they're on), nothing
-  //     else picks up the new id. Without this sync, isPersistentSessionActive
-  //     stays false and the drawer lightbulb keeps reading as "lit BLE"
-  //     (solo) instead of the session-scoped wall-confirmed indicator.
-  //
-  // Guarded on persistentSessionId being non-null so the cookie value isn't
-  // wiped during the initial IndexedDB-load window (where activeSession is
-  // briefly null before restoration completes). The active→null deactivation
-  // case is handled by the prevPersistentSessionIdRef effect below.
-  //
-  // In board mode we further gate the sync on the active session's board path
-  // matching the current route. Multi-session restore can leave session C
-  // (board X) in IndexedDB while the user is browsing board Y — without this
-  // gate we'd write C's id into board Y's cookie/state and have isPersistentSessionActive
-  // briefly flicker true on the wrong board until the boardPath check on
-  // L101-L104 settled. Off-board mode skips the gate (there's no route board
-  // to compare against; persistentSessionId is the authority).
-  const activeSessionBoardPath = persistentSession.activeSession?.boardPath
-    ? getBaseBoardPath(persistentSession.activeSession.boardPath)
-    : null;
-  useEffect(() => {
-    if (!persistentSessionId) return;
-    if (!isOffBoardMode && activeSessionBoardPath && activeSessionBoardPath !== baseBoardPath) {
-      return;
-    }
-    setActiveSessionId(persistentSessionId);
-  }, [persistentSessionId, isOffBoardMode, activeSessionBoardPath, baseBoardPath]);
-
-  // Sync when persistent session is deactivated externally (e.g. sesh-settings-drawer
-  // calling deactivateSession() directly). We track the previous persistentSessionId
-  // so we only clear on an active→inactive transition, not on initial mount where
-  // persistentSessionId starts null before IndexedDB loads.
+  // Clear the cookie mirror when the persistent session is deactivated
+  // externally (e.g. the sesh-settings drawer's stop calling deactivateSession()
+  // directly). We track the previous persistentSessionId so we only clear on an
+  // active→inactive transition, not on the initial mount where persistentSessionId
+  // starts null before IndexedDB loads. This is the ONE cookie-clear effect that
+  // survives the derivation refactor.
   const prevPersistentSessionIdRef = useRef(persistentSessionId);
   useEffect(() => {
     const prev = prevPersistentSessionIdRef.current;
@@ -108,21 +99,15 @@ export function useSessionIdManagement({
 
     if (prev && !persistentSessionId) {
       clearClimbSessionCookie();
-      setActiveSessionId(null);
+      setCookieSessionId(null);
     }
   }, [persistentSessionId]);
-
-  const sessionId = activeSessionId;
 
   // Check if persistent session is active for this board
   const isPersistentSessionActive =
     persistentSession.activeSession?.sessionId === sessionId &&
     (persistentSession.activeSession?.boardPath ? getBaseBoardPath(persistentSession.activeSession.boardPath) : '') ===
       baseBoardPath;
-
-  // Session summary state
-  const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
-  const dismissSessionSummary = useCallback(() => setSessionSummary(null), []);
 
   // Session management functions
   const startSession = useCallback(
@@ -137,7 +122,7 @@ export function useSessionIdManagement({
       }
 
       setClimbSessionCookie(newSessionId);
-      setActiveSessionId(newSessionId);
+      setCookieSessionId(newSessionId);
 
       await saveSessionToHistory({
         id: newSessionId,
@@ -158,7 +143,7 @@ export function useSessionIdManagement({
       if (!backendUrl) throw new Error('Backend URL not configured');
 
       setClimbSessionCookie(sessionIdToJoin);
-      setActiveSessionId(sessionIdToJoin);
+      setCookieSessionId(sessionIdToJoin);
 
       await saveSessionToHistory({
         id: sessionIdToJoin,
@@ -171,27 +156,28 @@ export function useSessionIdManagement({
     [backendUrl, pathname, isOffBoardMode],
   );
 
+  // End the session for everyone (with a summary dialog). Routes through the
+  // root `endSessionWithSummary`, which owns the single session-summary state +
+  // dialog (persistent-session-wrapper.tsx) — no more board-route-local summary.
+  // The `{ sessionId, boardType }` override preserves the board-route edge case:
+  // the cookie can hold a session the persistent provider never activated (before
+  // `BoardSessionBridge` runs), so we pass the cookie-derived id/board type
+  // directly rather than relying on the (possibly still-null) active session.
   const endSession = useCallback(() => {
-    const endingSessionId = activeSessionId;
+    const endingSessionId = sessionId;
     if (endingSessionId) emitSessionEnded(endingSessionId, 'user_left');
-    persistentSession.deactivateSession({ notifyServer: false });
+    // Eager clear. `endSessionWithSummary` below deactivates the persistent
+    // session, which trips the `prevPersistentSessionIdRef` effect to clear the
+    // cookie again — a harmless, idempotent double-clear.
     clearClimbSessionCookie();
-    setActiveSessionId(null);
-
-    if (endingSessionId && wsAuthToken) {
-      const client = createGraphQLHttpClient(wsAuthToken);
-      client
-        .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId, timezone: getBrowserTimezone() })
-        .then((response: EndSessionResponse) => {
-          if (response.endSession) setSessionSummary(response.endSession);
-        })
-        .catch((err: unknown) => console.error('[QueueContext] Failed to get session summary:', err));
-    }
-  }, [persistentSession, activeSessionId, wsAuthToken]);
+    setCookieSessionId(null);
+    const boardType =
+      persistentSession.activeSession?.parsedParams?.board_name ?? baseBoardPath.split('/').filter(Boolean)[0] ?? null;
+    persistentSession.endSessionWithSummary({ sessionId: endingSessionId, boardType });
+  }, [persistentSession, sessionId, baseBoardPath]);
 
   return {
     sessionId,
-    activeSessionId,
     baseBoardPath,
     isPersistentSessionActive,
     persistentSession,
@@ -203,7 +189,5 @@ export function useSessionIdManagement({
     startSession,
     joinSession,
     endSession,
-    sessionSummary,
-    dismissSessionSummary,
   };
 }

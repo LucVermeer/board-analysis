@@ -58,6 +58,7 @@ import IosShare from '@mui/icons-material/IosShare';
 import { QRCodeSVG } from 'qrcode.react';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
+import { clearClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import styles from './queue-control-bar.module.css';
 import { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
@@ -111,8 +112,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const isViewPage = pathname.includes('/view/');
   const { currentClimb } = useCurrentClimb();
   const { queue } = useQueueList();
-  const { viewOnlyMode, connectionState, sessionId, isDisconnected, users, clientId, isPersistentSessionActive } =
-    useSessionData();
+  const {
+    viewOnlyMode,
+    connectionState,
+    sessionId,
+    isDisconnected,
+    users,
+    clientId,
+    participantId,
+    isPersistentSessionActive,
+  } = useSessionData();
 
   // Drawer-local "displayed climb" — populated when a browse caller (list
   // row, suggestion thumbnail, logbook row) opens the drawer with a climb
@@ -362,12 +371,15 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     });
   }, [sessionUsers]);
 
-  // Resolve the current user's stable userId from the session users list
-  const myUserId = useMemo(() => {
-    if (!clientId) return null;
-    const me = sessionUsers.find((u) => u.id === clientId);
-    return me?.userId ?? clientId;
-  }, [sessionUsers, clientId]);
+  // Resolve the current user's stable session id. `participantId` is the local
+  // user's participant id — it equals `SessionUser.id` (the DB user UUID for an
+  // authenticated user, the connection id for an anonymous one), which is what
+  // the roster is keyed by. `clientId` is only a connection id, so for an
+  // authenticated user it never matches their own roster row; comparing against
+  // it would misread self as "someone else" (e.g. a solo authed user's leave
+  // would silently disconnect instead of ending with a recap). Fall back to
+  // clientId only for the brief pre-join window before participantId is known.
+  const myUserId = participantId ?? clientId;
 
   // Track which participants have ticked the current climb.
   // Merges backend-provided tickedBy with locally tracked ticks.
@@ -614,17 +626,51 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const reconnectMessage =
     connectionState === 'error' ? t('queueBar.reconnect.connectionError') : t('queueBar.reconnect.reconnecting');
 
+  // Bar "leave session" (user-approved behaviour change). It used to always end
+  // the session for the whole crew. Now it branches on the roster:
+  //   - Peers still present → truly LEAVE. This participant departs, the
+  //     session keeps going for everyone else, and no summary shows.
+  //   - Sole participant → END the session (root summary dialog).
+  //
+  // "Last participant" reads the WHOLE roster (no connectionState filter):
+  // RECONNECTING peers count as present because their socket merely dropped and
+  // they may return — ending the session would pull it out from under them.
   const handleLeaveSession = useCallback(() => {
-    if (endSession) {
-      endSession();
+    const otherParticipantsPresent = myUserId
+      ? uniqueSessionUsers.some((user) => (user.userId ?? user.id) !== myUserId)
+      : uniqueSessionUsers.length > 1;
+
+    if (otherParticipantsPresent) {
+      // Leave path: `disconnect` (deactivateSession) sends LEAVE_SESSION; clear
+      // the cookie so a board-route remount doesn't re-activate the session we
+      // just left (mirrors the sesh-settings drawer's quiet stop).
+      if (disconnect) {
+        disconnect();
+        clearClimbSessionCookie();
+      } else {
+        // Unreachable while a session is active: both queue providers expose
+        // `disconnect` whenever there's a session to leave, so this only
+        // satisfies the optional type.
+        showMessage(t('queueBar.leaveFailed'), 'warning');
+      }
       return;
     }
-    if (disconnect) {
+
+    // End path: `endSession` emits the lifecycle event, clears the cookie, and
+    // routes through the root `endSessionWithSummary` (the single summary dialog).
+    if (endSession) {
+      endSession();
+    } else if (disconnect) {
+      // Unreachable while a session is active: both queue providers always
+      // expose `endSession` then, so this fallback only satisfies the optional
+      // type. It intentionally leaves WITHOUT a summary — if it ever ran (no
+      // active session) there's no recap to show anyway.
       disconnect();
+      clearClimbSessionCookie();
     } else {
       showMessage(t('queueBar.leaveFailed'), 'warning');
     }
-  }, [endSession, disconnect, showMessage, t]);
+  }, [endSession, disconnect, uniqueSessionUsers, myUserId, showMessage, t]);
 
   // Reconnect-only view helpers
   const renderReconnectingRow = () => (
