@@ -51,10 +51,12 @@ export function classifyBleDisconnect(info: BleDisconnectInfo | null | undefined
     return 'unknown';
   }
 
-  // iOS: only trust the code when it's a CBError. The native adapter reports
-  // the NSError domain (CBATTErrorDomain codes overlap numerically and mean
-  // different things); ble-plx pre-splits into iosErrorCode without a domain.
-  const iosCodeIsCbError = info.errorDomain === undefined || info.errorDomain === 'CBErrorDomain';
+  // iOS: only trust the code when it's a CBError. The native adapter always
+  // reports the NSError domain (CBATTErrorDomain codes overlap numerically and
+  // mean different things), so a domain-less code is trusted only from ble-plx,
+  // which pre-splits into iosErrorCode and never carries a domain.
+  const iosCodeIsCbError =
+    info.errorDomain === 'CBErrorDomain' || (info.errorDomain === undefined && info.source === 'ble-plx');
   if (info.iosErrorCode !== undefined && iosCodeIsCbError) {
     if (info.iosErrorCode === CB_ERROR_PERIPHERAL_DISCONNECTED) return 'peer_terminated';
     if (info.iosErrorCode === CB_ERROR_CONNECTION_TIMEOUT) return 'link_timeout';

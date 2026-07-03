@@ -801,6 +801,23 @@ describe('BluetoothProvider wall-confirm integration', () => {
       expect(disconnectCall?.[1].disconnectCategory).toBe('unknown');
     });
 
+    it('tags a user-initiated disconnect with the resolved board id', async () => {
+      presence.boardId = 99;
+      bluetooth.state.isConnected = true;
+
+      renderProvider(createElement(BluetoothProbe));
+      analytics.track.mockClear();
+
+      await act(async () => {
+        await capturedBluetooth?.disconnect();
+      });
+
+      expect(analytics.track).toHaveBeenCalledWith(
+        'Bluetooth Disconnected',
+        expect.objectContaining({ reason: 'user', boardId: 99 }),
+      );
+    });
+
     it('shows the Undo snackbar once after an armed control gain reports a wall change', async () => {
       presence.enabled = true;
       presence.boardId = 99;

@@ -45,6 +45,9 @@ describe('classifyBleDisconnect', () => {
     expect(classifyBleDisconnect({ source: 'native-ios', iosErrorCode: 7, errorDomain: 'CBATTErrorDomain' })).toBe(
       'unknown',
     );
+    // The native adapter always carries a domain; a domain-less native-ios code
+    // is off-contract and must not be trusted.
+    expect(classifyBleDisconnect({ source: 'native-ios', iosErrorCode: 7 })).toBe('unknown');
   });
 
   it('classifies ble-plx iOS codes without a domain', () => {
