@@ -535,6 +535,13 @@ jobs:
       # push-to-main. Runs before the heavier Metro bundle so it fails fast.
       - name: Check native build-phase deps resolve
         run: vp run check:mobile-native-deps
+      # Every @expo/* and expo-* dep must be exact-pinned: they ship a JS+native
+      # pair, and a `~`/`^` range lets the JS float ahead of a shipped binary's
+      # native layer. With the OTA fingerprint pinned via an override, that
+      # drifted JS still lands on the old binary — the ModalBottomSheetView
+      # .partialExpand "No handler registered" crash from a `~56.0.18` @expo/ui.
+      - name: Check Expo deps are exact-pinned
+        run: vp run check:mobile-expo-deps-pinned
       # Deterministic, read-only dep-health check: compares our declared pins
       # against packages/mobile/node_modules/expo/bundledNativeModules.json for
       # the SDK release we actually have installed, and flags installed-version
