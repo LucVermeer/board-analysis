@@ -42,12 +42,45 @@ vi.mock('../auth-provider', () => ({
 // node/jsdom env without a QueryClient or native AsyncStorage.
 const { useProfileMock } = vi.hoisted(() => ({
   useProfileMock: vi.fn<
-    () => { data: { displayName?: string; avatarUrl?: string; id?: string; email?: string } | undefined }
+    () => {
+      data:
+        | {
+            displayName?: string;
+            avatarUrl?: string;
+            id?: string;
+            email?: string;
+            isTester?: boolean;
+            createdAt?: string;
+            favoriteCount?: number;
+          }
+        | undefined;
+    }
   >(() => ({ data: undefined })),
 }));
 vi.mock('../../lib/graphql/hooks', () => ({ useProfile: useProfileMock }));
 vi.mock('../../lib/analytics-alias-store', () => ({
   aliasDedupeStore: { hasRecordedAlias: () => false, recordAlias: () => {} },
+}));
+
+// The cohort-person-properties effect also reads the home board and connected
+// integrations — both pull in real GraphQL hooks / AsyncStorage transitively.
+// Stub them the same way as useProfile so this suite stays isolated.
+const { useHomeBoardMock, useIntegrationStatusesMock } = vi.hoisted(() => ({
+  useHomeBoardMock: vi.fn(() => ({ board: null, boards: [], isResolving: false })),
+  useIntegrationStatusesMock: vi.fn<() => { data: unknown }>(() => ({ data: undefined })),
+}));
+vi.mock('../../lib/graphql/hooks/use-home-board', () => ({ useHomeBoard: useHomeBoardMock }));
+vi.mock('../../lib/graphql/hooks/use-integrations', () => ({ useIntegrationStatuses: useIntegrationStatusesMock }));
+
+// identify/alias/reset are exercised for real elsewhere in this suite (they're
+// no-ops with no PostHog key in the test env); setPersonProperties is mocked
+// here so the cohort-person-properties effect's call is directly assertable.
+const { setPersonPropertiesMock } = vi.hoisted(() => ({ setPersonPropertiesMock: vi.fn() }));
+vi.mock('../../lib/analytics', () => ({
+  identify: vi.fn(),
+  alias: vi.fn(),
+  reset: vi.fn(),
+  setPersonProperties: setPersonPropertiesMock,
 }));
 
 import { PartyProfileProvider, usePartyProfile } from '../party-profile-provider';
@@ -60,6 +93,9 @@ describe('PartyProfileProvider', () => {
     const secureStore = (await import('expo-secure-store')) as unknown as { __reset: () => void };
     secureStore.__reset();
     useProfileMock.mockReturnValue({ data: undefined });
+    useHomeBoardMock.mockReturnValue({ board: null, boards: [], isResolving: false });
+    useIntegrationStatusesMock.mockReturnValue({ data: undefined });
+    setPersonPropertiesMock.mockClear();
     useAuthMock.mockReset();
     useAuthMock.mockReturnValue({
       isAuthenticated: false,
@@ -159,6 +195,51 @@ describe('PartyProfileProvider', () => {
 
     expect(result.current.username).toBe('Crux Crusher');
     expect(result.current.avatarUrl).toBe('https://img/a.png');
+  });
+
+  it('sets durable cohort person properties once the authenticated profile and home board resolve', async () => {
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      signInWithApple: vi.fn(),
+      signInWithGoogle: vi.fn(),
+      signInWithGoogleWeb: vi.fn(),
+      signInWithAppleWeb: vi.fn(),
+      signInWithCredentials: vi.fn(),
+      register: vi.fn(),
+      signOut: vi.fn(),
+      refreshAuthState: vi.fn(),
+    });
+    useProfileMock.mockReturnValue({
+      data: {
+        id: 'user-1',
+        email: 'climber@example.com',
+        isTester: true,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        favoriteCount: 5,
+      },
+    });
+    useHomeBoardMock.mockReturnValue({
+      board: { boardType: 'kilter' } as never,
+      boards: [],
+      isResolving: false,
+    });
+    useIntegrationStatusesMock.mockReturnValue({ data: [{ provider: 'STRAVA', connected: true }] });
+
+    const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
+    const { result } = renderHook(() => usePartyProfile(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await waitFor(() => expect(setPersonPropertiesMock).toHaveBeenCalled());
+    expect(setPersonPropertiesMock).toHaveBeenLastCalledWith(
+      {
+        role: 'tester',
+        primary_board: 'kilter',
+        favorite_count: 5,
+        integrations_connected_count: 1,
+      },
+      { first_seen_at: '2024-01-01T00:00:00.000Z' },
+    );
   });
 
   it('usePartyProfile throws when called outside a provider', () => {

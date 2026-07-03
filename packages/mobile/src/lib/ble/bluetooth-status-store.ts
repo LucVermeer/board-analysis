@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { setPersonProperties } from '../analytics';
 import { reportHandledError } from '../error-reporting';
 
 let connectedCount = 0;
@@ -26,6 +27,9 @@ export function registerBluetoothConnection(disconnect: () => void): () => void 
   connectedCount += 1;
   activeDisconnects.add(disconnect);
   notify();
+  // setOnce is idempotent server-side, so no local dedup flag is needed here —
+  // this durably marks the person as having connected a physical board at least once.
+  setPersonProperties(undefined, { has_connected_board: true });
   let released = false;
   return () => {
     if (released) return;

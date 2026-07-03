@@ -16,11 +16,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { randomUUID } from 'expo-crypto';
 import { ensureProfile, type PartyProfile } from '@boardsesh/party-profile';
-import { reconcileAnalyticsIdentity } from '@boardsesh/analytics';
+import { reconcileAnalyticsIdentity, buildCohortPersonProperties } from '@boardsesh/analytics';
+import { toBoardName } from '@boardsesh/board-config';
 import { partyProfileStorage } from '../lib/party-profile-store';
-import { alias, identify, reset } from '../lib/analytics';
+import { alias, identify, reset, setPersonProperties } from '../lib/analytics';
 import { aliasDedupeStore } from '../lib/analytics-alias-store';
 import { useProfile } from '../lib/graphql/hooks';
+import { useHomeBoard } from '../lib/graphql/hooks/use-home-board';
+import { useIntegrationStatuses } from '../lib/graphql/hooks/use-integrations';
 import { useAuth } from './auth-provider';
 
 type PartyProfileContextValue = {
@@ -43,6 +46,8 @@ export function PartyProfileProvider({ children }: { children: ReactNode }) {
   // so signed-out launches don't fire the query. Shared `['profile']` query key,
   // so this dedupes with the profile/discover screens that also read it.
   const { data: userProfile } = useProfile({ enabled: isAuthenticated });
+  const { board: homeBoard } = useHomeBoard();
+  const { data: integrationStatuses } = useIntegrationStatuses();
   const lastAnalyticsDistinctId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -93,6 +98,40 @@ export function PartyProfileProvider({ children }: { children: ReactNode }) {
       aliasStore: aliasDedupeStore,
     });
   }, [profileId, isAuthLoading, isAuthenticated, authUserId, authEmail]);
+
+  const hasUserProfile = !!userProfile;
+  const isTester = userProfile?.isTester ?? null;
+  const createdAt = userProfile?.createdAt ?? null;
+  const favoriteCount = userProfile?.favoriteCount ?? null;
+  const primaryBoard = toBoardName(homeBoard?.boardType);
+  const integrationsConnectedCount = integrationStatuses
+    ? integrationStatuses.filter((status) => status.connected).length
+    : null;
+
+  // Durable PostHog person properties for cohorting (new-vs-veteran, board-type,
+  // tester-vs-regular splits). Own effect, mirroring web's `language` person-
+  // property effect, so it only re-fires when one of these traits actually
+  // changes rather than on every identity-effect re-run.
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated || !hasUserProfile) return;
+    const { set, setOnce } = buildCohortPersonProperties({
+      isTester,
+      createdAt,
+      primaryBoard,
+      favoriteCount,
+      integrationsConnectedCount,
+    });
+    setPersonProperties(set, setOnce);
+  }, [
+    isAuthLoading,
+    isAuthenticated,
+    hasUserProfile,
+    isTester,
+    createdAt,
+    favoriteCount,
+    primaryBoard,
+    integrationsConnectedCount,
+  ]);
 
   const refreshProfile = useCallback(async () => {
     try {

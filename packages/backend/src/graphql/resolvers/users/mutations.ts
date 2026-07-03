@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import type {
   ConnectionContext,
   UserProfile,
@@ -83,12 +83,19 @@ export const userMutations = {
     const user = users[0];
     const profile = profiles[0];
 
+    const [favoriteCountRow] = await db
+      .select({ count: count() })
+      .from(dbSchema.userFavorites)
+      .where(eq(dbSchema.userFavorites.userId, user.id));
+
     return {
       id: user.id,
       email: user.email,
       displayName: profile?.displayName || user.name || undefined,
       avatarUrl: profile?.avatarUrl || user.image || undefined,
       isTester: await userIsTester(user.id),
+      createdAt: user.createdAt.toISOString(),
+      favoriteCount: favoriteCountRow?.count ?? 0,
     };
   },
 

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const setPersonPropertiesMock = vi.fn();
+vi.mock('../../analytics', () => ({ setPersonProperties: setPersonPropertiesMock }));
+
 // Each test needs a fresh module to avoid leaked state between tests.
 // We use dynamic import with cache-busting via vi.resetModules().
 
@@ -8,6 +11,7 @@ let disconnectAllBluetooth: typeof import('../bluetooth-status-store').disconnec
 
 beforeEach(async () => {
   vi.resetModules();
+  setPersonPropertiesMock.mockClear();
   const mod = await import('../bluetooth-status-store');
   registerBluetoothConnection = mod.registerBluetoothConnection;
   disconnectAllBluetooth = mod.disconnectAllBluetooth;
@@ -86,6 +90,13 @@ describe('registerBluetoothConnection', () => {
 
     expect(disconnectA).not.toHaveBeenCalled();
     expect(disconnectB).not.toHaveBeenCalled();
+  });
+
+  it('marks has_connected_board as a durable person property on connect', () => {
+    const disconnectFn = vi.fn();
+    registerBluetoothConnection(disconnectFn);
+
+    expect(setPersonPropertiesMock).toHaveBeenCalledWith(undefined, { has_connected_board: true });
   });
 
   it('notifies listeners when a connection is registered', () => {

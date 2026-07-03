@@ -5996,10 +5996,14 @@ export type UserProfile = {
   __typename?: 'UserProfile';
   /** URL to user's avatar image */
   avatarUrl?: Maybe<Scalars['String']['output']>;
+  /** When the account was created (ISO 8601) */
+  createdAt: Scalars['String']['output'];
   /** Display name shown to other users */
   displayName?: Maybe<Scalars['String']['output']>;
   /** User's email address */
   email: Scalars['String']['output'];
+  /** Total number of climbs favourited by this user, across all boards */
+  favoriteCount: Scalars['Int']['output'];
   /** Unique user identifier */
   id: Scalars['ID']['output'];
   /** Whether this user can reach tester-only developer tooling (has the tester or admin community role) */
