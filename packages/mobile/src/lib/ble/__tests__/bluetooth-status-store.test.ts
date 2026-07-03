@@ -99,6 +99,15 @@ describe('registerBluetoothConnection', () => {
     expect(setPersonPropertiesMock).toHaveBeenCalledWith(undefined, { has_connected_board: true });
   });
 
+  it('only marks has_connected_board once per app session, not on every reconnect', () => {
+    const cleanupA = registerBluetoothConnection(vi.fn());
+    cleanupA();
+    registerBluetoothConnection(vi.fn());
+    registerBluetoothConnection(vi.fn());
+
+    expect(setPersonPropertiesMock).toHaveBeenCalledTimes(1);
+  });
+
   it('notifies listeners when a connection is registered', () => {
     // We can access the subscribe/getSnapshot pattern by importing
     // the module and using useSyncExternalStore's contract manually.
