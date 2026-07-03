@@ -29,6 +29,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Lock-screen and Dynamic Island controls are more reliable: the session card no longer freezes on the wrong climb after quick navigation, dies after a hiccup starting up, or flips to "Session ended" minutes after you use it ([#3419](https://github.com/boardsesh/boardsesh/pull/3419))
+- Party sessions stay in sync on the lock screen: reconnecting after a dead spot no longer freezes the Live Activity, and a crew mate shuffling the queue no longer flips it to the wrong climb ([#3414](https://github.com/boardsesh/boardsesh/pull/3414))
 - What's New now only shows real update notes. Robot commit signatures and stray code links can't sneak into the feed anymore. ([#3424](https://github.com/boardsesh/boardsesh/pull/3424))
   The What's New screen also gets its proper background back, so the "you're on this build" chip is readable again instead of gray-on-black.
 - The benchmark badge on a grouped ascents header now matches its climbs — a consensus benchmark no longer shows up on the rows but goes missing on the header. ([#3411](https://github.com/boardsesh/boardsesh/pull/3411))
