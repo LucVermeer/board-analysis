@@ -8,8 +8,9 @@ import { track } from '../analytics';
 import { ONBOARDING_TOTAL_STEPS, type OnboardingCard } from './onboarding-cards';
 
 // The mobile tour is now a single framing screen: Started + one Step Viewed on
-// mount, then Completed (primary CTA) or Skipped (quiet exit). There's no
-// multi-step advance, so `trackStepAdvanced` was removed.
+// mount, then exactly one terminal outcome — Completed (primary CTA), Skipped
+// (the "look around" tap), or Dismissed (back / nav-away without choosing).
+// There's no multi-step advance, so `trackStepAdvanced` was removed.
 
 export function trackTourStarted(): void {
   // The mobile tour always starts fresh on a first run (no resume / restart
@@ -38,5 +39,21 @@ export function trackTourSkipped(card: OnboardingCard, stepIndex: number): void 
   track(SHARED_EVENTS.OnboardingTourSkipped, {
     atStepId: card.id,
     stepIndex,
+    // The intentional secondary-CTA exit ("look around"), tagged so it can't be
+    // read as abandonment. Involuntary exits fire Dismissed instead.
+    exitReason: 'look-around',
+  });
+}
+
+// Fired when the prompt unmounts without the user choosing either button — an
+// Android hardware-back or a programmatic nav-away. Without this, ~a third of
+// first-run Starts resolved to no terminal outcome at all, deflating Completed.
+// `exitReason: 'unresolved'` stays mechanism-neutral: the guard can't tell a
+// hardware-back from a programmatic unmount, so it claims neither.
+export function trackTourDismissed(card: OnboardingCard, stepIndex: number): void {
+  track(SHARED_EVENTS.OnboardingTourDismissed, {
+    atStepId: card.id,
+    stepIndex,
+    exitReason: 'unresolved',
   });
 }

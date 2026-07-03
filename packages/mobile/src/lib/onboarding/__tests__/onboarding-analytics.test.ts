@@ -3,7 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const trackMock = vi.hoisted(() => vi.fn());
 vi.mock('../../analytics', () => ({ track: trackMock }));
 
-import { trackStepViewed, trackTourCompleted, trackTourSkipped, trackTourStarted } from '../onboarding-analytics';
+import {
+  trackStepViewed,
+  trackTourCompleted,
+  trackTourDismissed,
+  trackTourSkipped,
+  trackTourStarted,
+} from '../onboarding-analytics';
 import { ONBOARDING_PROMPT_CARD, ONBOARDING_TOTAL_STEPS } from '../onboarding-cards';
 
 describe('onboarding analytics', () => {
@@ -34,11 +40,21 @@ describe('onboarding analytics', () => {
     expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Completed', { durationSeconds: 42 });
   });
 
-  it('fires "Onboarding Tour Skipped" with atStepId/stepIndex', () => {
+  it('fires "Onboarding Tour Skipped" tagged as the intentional look-around exit', () => {
     trackTourSkipped(ONBOARDING_PROMPT_CARD, 0);
     expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Skipped', {
       atStepId: ONBOARDING_PROMPT_CARD.id,
       stepIndex: 0,
+      exitReason: 'look-around',
+    });
+  });
+
+  it('fires "Onboarding Tour Dismissed" for the back / nav-away exit', () => {
+    trackTourDismissed(ONBOARDING_PROMPT_CARD, 0);
+    expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Dismissed', {
+      atStepId: ONBOARDING_PROMPT_CARD.id,
+      stepIndex: 0,
+      exitReason: 'unresolved',
     });
   });
 });
