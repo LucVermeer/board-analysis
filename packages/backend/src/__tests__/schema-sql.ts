@@ -617,4 +617,51 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "board_beta_links_video_identity_unique" ON "board_beta_links" ("video_identity") WHERE "video_identity" IS NOT NULL;
   CREATE UNIQUE INDEX IF NOT EXISTS "board_beta_links_tick_uuid_unique" ON "board_beta_links" ("tick_uuid") WHERE "tick_uuid" IS NOT NULL;
   CREATE INDEX IF NOT EXISTS "board_beta_links_board_id_idx" ON "board_beta_links" ("board_id") WHERE "board_id" IS NOT NULL;
+
+  -- Community moderation roles (admin / community_leader / tester), global or
+  -- board-type-scoped. enrichBoard/enrichGym + requireBoardEditAccess /
+  -- requireGymOwnerOrAdmin read these to authorize moderators editing catalog
+  -- boards/gyms they don't own. role/board_type kept as plain text so the test
+  -- schema doesn't need the production enum types.
+  DROP TABLE IF EXISTS "community_roles" CASCADE;
+  CREATE TABLE IF NOT EXISTS "community_roles" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "role" text NOT NULL,
+    "board_type" text,
+    "granted_by" text REFERENCES "users"("id") ON DELETE SET NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "community_roles_board_type_idx" ON "community_roles" ("board_type");
+
+  -- Gym membership (owner/admin can manage; admin members can edit the gym +
+  -- its boards). viewerCanAdminGym / requireGymOwnerOrAdmin read this.
+  DROP TABLE IF EXISTS "gym_members" CASCADE;
+  CREATE TABLE IF NOT EXISTS "gym_members" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "gym_id" bigint NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "role" text NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "gym_members_unique_gym_user" ON "gym_members" ("gym_id", "user_id");
+
+  DROP TABLE IF EXISTS "gym_follows" CASCADE;
+  CREATE TABLE IF NOT EXISTS "gym_follows" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "gym_id" bigint NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "gym_follows_unique_gym_user" ON "gym_follows" ("gym_id", "user_id");
+
+  -- Board followers (enrichBoard counts these per board).
+  DROP TABLE IF EXISTS "board_follows" CASCADE;
+  CREATE TABLE IF NOT EXISTS "board_follows" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "board_uuid" text NOT NULL REFERENCES "user_boards"("uuid") ON DELETE CASCADE,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "board_follows_unique_user_board" ON "board_follows" ("user_id", "board_uuid");
 `;

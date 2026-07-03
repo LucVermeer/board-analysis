@@ -53,6 +53,7 @@ const BOARD_FIELDS = `
   gymName
   distanceMeters
   serialNumber
+  canEdit
 `;
 
 export const GET_BOARD = gql`

@@ -218,29 +218,29 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
                 onFollowChange={() => fetchGym()}
               />
             )}
+            {gym.canEdit && (
+              <MuiButton
+                variant="outlined"
+                size="small"
+                startIcon={<EditOutlined />}
+                onClick={() => setIsEditing(true)}
+                sx={{ textTransform: 'none' }}
+              >
+                {t('gymEntity.actions.edit')}
+              </MuiButton>
+            )}
             {isOwner && (
-              <>
-                <MuiButton
-                  variant="outlined"
-                  size="small"
-                  startIcon={<EditOutlined />}
-                  onClick={() => setIsEditing(true)}
-                  sx={{ textTransform: 'none' }}
-                >
-                  {t('gymEntity.actions.edit')}
-                </MuiButton>
-                <MuiButton
-                  variant="outlined"
-                  size="small"
-                  color="error"
-                  startIcon={<DeleteOutlined />}
-                  onClick={() => setShowDeleteDialog(true)}
-                  disabled={isDeleting}
-                  sx={{ textTransform: 'none' }}
-                >
-                  {isDeleting ? <CircularProgress size={16} /> : t('gymEntity.actions.delete')}
-                </MuiButton>
-              </>
+              <MuiButton
+                variant="outlined"
+                size="small"
+                color="error"
+                startIcon={<DeleteOutlined />}
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={isDeleting}
+                sx={{ textTransform: 'none' }}
+              >
+                {isDeleting ? <CircularProgress size={16} /> : t('gymEntity.actions.delete')}
+              </MuiButton>
             )}
           </Box>
         </Box>

@@ -77,6 +77,8 @@ export const boardEntitiesTypeDefs = /* GraphQL */ `
     distanceMeters: Float
     "Controller box serial number"
     serialNumber: String
+    "Whether the current viewer may edit this board (owner, community admin/leader for its board type, or owner/admin of its linked gym)"
+    canEdit: Boolean!
   }
 
   """
@@ -227,11 +229,11 @@ export const boardEntitiesTypeDefs = /* GraphQL */ `
     angle: Int
     "New angle adjustable flag"
     isAngleAdjustable: Boolean
-    "New layout ID (only allowed when board has zero ticks)"
+    "New layout ID (authorized editors only; existing ticks are preserved untouched)"
     layoutId: Int
-    "New size ID (only allowed when board has zero ticks)"
+    "New size ID (authorized editors only; existing ticks are preserved untouched)"
     sizeId: Int
-    "New set IDs (only allowed when board has zero ticks)"
+    "New set IDs (authorized editors only; existing ticks are preserved untouched)"
     setIds: String
     "Controller box serial number"
     serialNumber: String

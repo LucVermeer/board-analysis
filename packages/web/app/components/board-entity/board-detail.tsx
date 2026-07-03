@@ -192,12 +192,7 @@ export function BoardDetailContent({
   if (isEditing) {
     return (
       <Box sx={{ px: 2, pb: 2, overflow: 'auto', flex: 1 }}>
-        <EditBoardForm
-          board={board}
-          totalAscents={board.totalAscents}
-          onSuccess={handleEditSuccess}
-          onCancel={() => setIsEditing(false)}
-        />
+        <EditBoardForm board={board} onSuccess={handleEditSuccess} onCancel={() => setIsEditing(false)} />
       </Box>
     );
   }
@@ -330,29 +325,29 @@ export function BoardDetailContent({
               onFollowChange={handleFollowChange}
             />
           )}
+          {board.canEdit && (
+            <MuiButton
+              variant="outlined"
+              size="small"
+              startIcon={<EditOutlined />}
+              onClick={() => setIsEditing(true)}
+              sx={{ textTransform: 'none' }}
+            >
+              {t('boardEntity.actions.edit')}
+            </MuiButton>
+          )}
           {isOwner && (
-            <>
-              <MuiButton
-                variant="outlined"
-                size="small"
-                startIcon={<EditOutlined />}
-                onClick={() => setIsEditing(true)}
-                sx={{ textTransform: 'none' }}
-              >
-                {t('boardEntity.actions.edit')}
-              </MuiButton>
-              <MuiButton
-                variant="outlined"
-                size="small"
-                color="error"
-                startIcon={<DeleteOutlined />}
-                onClick={() => setShowDeleteDialog(true)}
-                disabled={isDeleting}
-                sx={{ textTransform: 'none' }}
-              >
-                {isDeleting ? <CircularProgress size={16} /> : t('boardEntity.actions.delete')}
-              </MuiButton>
-            </>
+            <MuiButton
+              variant="outlined"
+              size="small"
+              color="error"
+              startIcon={<DeleteOutlined />}
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isDeleting}
+              sx={{ textTransform: 'none' }}
+            >
+              {isDeleting ? <CircularProgress size={16} /> : t('boardEntity.actions.delete')}
+            </MuiButton>
           )}
         </Box>
       </Box>

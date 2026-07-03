@@ -75,6 +75,7 @@ const activeBoard = vi.hoisted(() => {
     followerCount: 0,
     commentCount: 0,
     isFollowedByMe: false,
+    canEdit: false,
   } satisfies UserBoard;
   return {
     defaultStored,

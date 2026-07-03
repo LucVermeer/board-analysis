@@ -58,6 +58,8 @@ export const gymsTypeDefs = /* GraphQL */ `
     isMember: Boolean!
     "Current user's role (null if not a member/owner)"
     myRole: GymMemberRole
+    "Whether the current viewer may edit this gym (owner, gym admin, or community admin/leader for one of its board types)"
+    canEdit: Boolean!
   }
 
   """

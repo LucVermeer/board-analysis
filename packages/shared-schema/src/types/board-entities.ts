@@ -36,6 +36,8 @@ export type UserBoard = {
   gymName?: string | null;
   distanceMeters?: number | null;
   serialNumber?: string | null;
+  /** Whether the current viewer may edit this board (owner, community admin/leader for its board type, or owner/admin of its linked gym). */
+  canEdit?: boolean;
 };
 
 export type UserBoardConnection = {

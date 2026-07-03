@@ -18,6 +18,7 @@ import type {
   UpdateProfileInput,
   SessionSummary,
   SessionHealthExport,
+  UpdateGymInput,
 } from '@boardsesh/shared-schema';
 import {
   SIMILAR_CLIMBS_QUERY,
@@ -36,7 +37,14 @@ import {
   type DeleteDraftClimbMutationVariables,
   type DeleteDraftClimbMutationResponse,
 } from '@boardsesh/graphql/operations/new-climb-feed';
-import { SEARCH_GYMS, type SearchGymsQueryResponse } from '@boardsesh/graphql/operations/gyms';
+import {
+  SEARCH_GYMS,
+  GET_GYM,
+  UPDATE_GYM,
+  type SearchGymsQueryResponse,
+  type GetGymQueryResponse,
+  type UpdateGymMutationResponse,
+} from '@boardsesh/graphql/operations/gyms';
 import {
   UPDATE_BOARD,
   DELETE_BOARD,
@@ -177,6 +185,20 @@ export function useBoard(boardUuid: string | null) {
     queryFn: () => getHttpClient().request<GetBoardQueryResponse>(GET_BOARD, { boardUuid }),
     select: (data) => data.board,
     enabled: !!boardUuid,
+  });
+}
+
+/**
+ * A single gym by uuid, including the viewer's `canEdit` flag. Backs the
+ * gym-edit screen (moderators reach it from the wall finder's edit affordance).
+ * Disabled until a uuid resolves so the edit screen can pass `null` while routing.
+ */
+export function useGym(gymUuid: string | null) {
+  return useQuery({
+    queryKey: ['gym', gymUuid],
+    queryFn: () => getHttpClient().request<GetGymQueryResponse>(GET_GYM, { gymUuid }),
+    select: (data) => data.gym,
+    enabled: !!gymUuid,
   });
 }
 
@@ -360,11 +382,14 @@ export function useCreateBoard() {
 }
 
 /**
- * Edit a board the user owns (name, visibility, angle, location, serial — and
- * layout/size/sets only when the board has zero ticks; the server enforces the
- * latter). Invalidate-only: `myBoards` carries enriched fields (counts, sizeName)
- * that can't be rebuilt client-side. Re-syncing the active board's denormalised
- * AsyncStorage copy is the edit screen's job — see `useSetActiveBoard`.
+ * Edit a board the caller is authorised to edit (owner, or a community
+ * admin/leader for the board type — the server enforces access via `canEdit`).
+ * Config (layout/size/sets) can change too; existing ticks are preserved
+ * server-side. Invalidate-only: `myBoards` carries enriched fields (counts,
+ * sizeName) that can't be rebuilt client-side; also refresh the wall-finder
+ * lists/pins so a moderator's edit from gym discovery shows without a reload.
+ * Re-syncing the active board's denormalised AsyncStorage copy is the edit
+ * screen's job — see `useSetActiveBoard`.
  */
 export function useUpdateBoard() {
   const queryClient = useQueryClient();
@@ -376,6 +401,31 @@ export function useUpdateBoard() {
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
       void queryClient.invalidateQueries({ queryKey: ['board', updated.uuid] });
+      void queryClient.invalidateQueries({ queryKey: ['nearbyBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['searchBoards'] });
+    },
+  });
+}
+
+/**
+ * Edit a gym the viewer can edit (owner, gym admin, or community admin/leader
+ * for one of its board types — the server enforces the access check). Invalidate
+ * the single-gym cache plus the nearby-gym search results so the wall finder's
+ * list/pins reflect the rename or visibility change without a manual reload.
+ * Also refresh the board lists, whose rows render the gym's name (`gymName`).
+ */
+export function useUpdateGym() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateGymInput) => {
+      const response = await getHttpClient().request<UpdateGymMutationResponse>(UPDATE_GYM, { input });
+      return response.updateGym;
+    },
+    onSuccess: (updated) => {
+      void queryClient.invalidateQueries({ queryKey: ['gym', updated.uuid] });
+      void queryClient.invalidateQueries({ queryKey: ['nearbyGyms'] });
+      void queryClient.invalidateQueries({ queryKey: ['nearbyBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
     },
   });
 }

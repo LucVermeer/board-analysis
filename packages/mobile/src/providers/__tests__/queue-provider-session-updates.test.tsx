@@ -81,6 +81,7 @@ const activeBoard = vi.hoisted(() => ({
     followerCount: 0,
     commentCount: 0,
     isFollowedByMe: false,
+    canEdit: false,
   } satisfies UserBoard,
   getStoredActiveBoard: vi.fn(),
   setActiveBoard: vi.fn(async () => {}),
@@ -370,6 +371,7 @@ describe('QueueProvider session update subscription', () => {
       followerCount: 0,
       commentCount: 0,
       isFollowedByMe: false,
+      canEdit: false,
     };
     activeBoard.getStoredActiveBoard.mockReset();
     activeBoard.getStoredActiveBoard.mockResolvedValue(activeBoard.stored);

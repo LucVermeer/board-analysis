@@ -25,20 +25,53 @@ export async function requireAdmin(ctx: ConnectionContext, boardType?: string | 
 }
 
 /**
+ * A community role row reduced to what authorization checks need: the role name
+ * and its board-type scope (null = global, applies to every board type).
+ */
+export type CommunityRoleScope = { role: string; boardType: string | null };
+
+/**
+ * Fetch a user's community role rows ({ role, boardType }). Batch callers fetch
+ * once and compute admin/leader access for many board types in-memory via
+ * `rolesGrantAdminOrLeader`, avoiding a per-row query.
+ */
+export async function getUserCommunityRoles(userId: string): Promise<CommunityRoleScope[]> {
+  return db
+    .select({ role: dbSchema.communityRoles.role, boardType: dbSchema.communityRoles.boardType })
+    .from(dbSchema.communityRoles)
+    .where(eq(dbSchema.communityRoles.userId, userId));
+}
+
+/**
+ * Pure predicate: do the given role rows grant admin/community_leader access for
+ * a board type? A role qualifies when it is admin or community_leader AND its
+ * scope is global (null) or matches the requested board type.
+ */
+export function rolesGrantAdminOrLeader(roles: CommunityRoleScope[], boardType?: string | null): boolean {
+  return roles.some(
+    (entry) =>
+      (entry.role === 'admin' || entry.role === 'community_leader') &&
+      (entry.boardType === null || entry.boardType === boardType),
+  );
+}
+
+/**
+ * Non-throwing check: does the user hold an admin or community_leader role that
+ * is global or scoped to the given board type? Mirrors `requireAdminOrLeader`'s
+ * logic for callers (like `canEdit` computation) that need a boolean, not a throw.
+ */
+export async function hasAdminOrLeader(userId: string, boardType?: string | null): Promise<boolean> {
+  const roles = await getUserCommunityRoles(userId);
+  return rolesGrantAdminOrLeader(roles, boardType);
+}
+
+/**
  * Check if a user has admin or community_leader role.
  */
 export async function requireAdminOrLeader(ctx: ConnectionContext, boardType?: string | null): Promise<void> {
   requireAuthenticated(ctx);
-  const userId = ctx.userId!;
 
-  const roles = await db
-    .select({ role: dbSchema.communityRoles.role, boardType: dbSchema.communityRoles.boardType })
-    .from(dbSchema.communityRoles)
-    .where(eq(dbSchema.communityRoles.userId, userId));
-
-  const hasRole = roles.some(
-    (r) => (r.role === 'admin' || r.role === 'community_leader') && (r.boardType === null || r.boardType === boardType),
-  );
+  const hasRole = await hasAdminOrLeader(ctx.userId!, boardType);
 
   if (!hasRole) {
     throw new Error('Admin or community leader role required for this operation');

@@ -1,5 +1,6 @@
 import { forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Animated from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -33,6 +34,10 @@ type GymListPanelProps = {
   onPressGym: (gym: Gym) => void;
   /** Tap a board (under a gym, or a standalone) — makes it active. */
   onActivateBoard: (board: UserBoard) => void;
+  /** Edit a gym the viewer can edit — only shown on rows whose `gym.canEdit` is true. */
+  onEditGym: (gym: Gym) => void;
+  /** Edit a board the viewer can edit — only shown on rows whose `board.canEdit` is true. */
+  onEditBoard: (board: UserBoard) => void;
   /** Caption shown under an expanded gym that has no boards yet. */
   noBoardsLabel: string;
   /** The pinned search field (lives in the panel header so it survives a blank map). */
@@ -62,6 +67,8 @@ export const GymListPanel = forwardRef<GymListPanelHandle, GymListPanelProps>(fu
     mapAvailable,
     onPressGym,
     onActivateBoard,
+    onEditGym,
+    onEditBoard,
     noBoardsLabel,
     searchSlot,
     placeCaption,
@@ -122,6 +129,8 @@ export const GymListPanel = forwardRef<GymListPanelHandle, GymListPanelProps>(fu
               noBoardsLabel={noBoardsLabel}
               onPressGym={onPressGym}
               onActivateBoard={onActivateBoard}
+              onEditGym={onEditGym}
+              onEditBoard={onEditBoard}
             />
           );
         case 'standalone':
@@ -131,11 +140,12 @@ export const GymListPanel = forwardRef<GymListPanelHandle, GymListPanelProps>(fu
               subtitle={item.subtitle}
               selected={item.selected}
               onActivateBoard={onActivateBoard}
+              onEditBoard={onEditBoard}
             />
           );
       }
     },
-    [noBoardsLabel, onPressGym, onActivateBoard],
+    [noBoardsLabel, onPressGym, onActivateBoard, onEditGym, onEditBoard],
   );
 
   const listContentStyle = useMemo(
@@ -220,6 +230,8 @@ type GymRowProps = {
   noBoardsLabel: string;
   onPressGym: (gym: Gym) => void;
   onActivateBoard: (board: UserBoard) => void;
+  onEditGym: (gym: Gym) => void;
+  onEditBoard: (board: UserBoard) => void;
 };
 
 const GymRow = memo(function GymRow({
@@ -231,9 +243,13 @@ const GymRow = memo(function GymRow({
   noBoardsLabel,
   onPressGym,
   onActivateBoard,
+  onEditGym,
+  onEditBoard,
 }: GymRowProps) {
   const { systemColors, brandColors } = useTheme();
+  const { t } = useTranslation('boards');
   const handlePress = useCallback(() => onPressGym(gym), [onPressGym, gym]);
+  const handleEdit = useCallback(() => onEditGym(gym), [onEditGym, gym]);
   return (
     <View style={[styles.gymBlock, { borderColor: selected ? brandColors.primary : systemColors.separator }]}>
       {selected ? <View style={[styles.selectedAccent, { backgroundColor: brandColors.primary }]} /> : null}
@@ -255,12 +271,15 @@ const GymRow = memo(function GymRow({
             </Text>
           ) : null}
         </View>
+        {gym.canEdit ? <EditButton onPress={handleEdit} label={t('mobile.gyms.editGym')} /> : null}
         <Icon name={expanded ? 'minus' : 'add'} size={20} color={systemColors.tertiaryLabel} />
       </PressableSurface>
 
       {expanded ? (
         boards.length > 0 ? (
-          boards.map((board) => <BoardRow key={board.uuid} board={board} onActivateBoard={onActivateBoard} />)
+          boards.map((board) => (
+            <BoardRow key={board.uuid} board={board} onActivateBoard={onActivateBoard} onEditBoard={onEditBoard} />
+          ))
         ) : (
           <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.noBoards}>
             {noBoardsLabel}
@@ -274,12 +293,16 @@ const GymRow = memo(function GymRow({
 const BoardRow = memo(function BoardRow({
   board,
   onActivateBoard,
+  onEditBoard,
 }: {
   board: UserBoard;
   onActivateBoard: (board: UserBoard) => void;
+  onEditBoard: (board: UserBoard) => void;
 }) {
   const { systemColors, brandColors } = useTheme();
+  const { t } = useTranslation('boards');
   const handlePress = useCallback(() => onActivateBoard(board), [onActivateBoard, board]);
+  const handleEdit = useCallback(() => onEditBoard(board), [onEditBoard, board]);
   return (
     <PressableSurface
       onPress={handlePress}
@@ -293,6 +316,7 @@ const BoardRow = memo(function BoardRow({
           {board.boardType}
         </Text>
       </View>
+      {board.canEdit ? <EditButton onPress={handleEdit} label={t('mobile.gyms.editBoard')} /> : null}
     </PressableSurface>
   );
 });
@@ -302,14 +326,18 @@ const StandaloneRow = memo(function StandaloneRow({
   subtitle,
   selected,
   onActivateBoard,
+  onEditBoard,
 }: {
   board: UserBoard;
   subtitle: string;
   selected: boolean;
   onActivateBoard: (board: UserBoard) => void;
+  onEditBoard: (board: UserBoard) => void;
 }) {
   const { systemColors, brandColors } = useTheme();
+  const { t } = useTranslation('boards');
   const handlePress = useCallback(() => onActivateBoard(board), [onActivateBoard, board]);
+  const handleEdit = useCallback(() => onEditBoard(board), [onEditBoard, board]);
   return (
     <View style={[styles.gymBlock, { borderColor: selected ? brandColors.primary : systemColors.separator }]}>
       {selected ? <View style={[styles.selectedAccent, { backgroundColor: brandColors.primary }]} /> : null}
@@ -321,9 +349,30 @@ const StandaloneRow = memo(function StandaloneRow({
             {subtitle}
           </Text>
         </View>
+        {board.canEdit ? <EditButton onPress={handleEdit} label={t('mobile.gyms.editBoard')} /> : null}
         <Icon name="chevron.right" size={18} color={systemColors.tertiaryLabel} />
       </PressableSurface>
     </View>
+  );
+});
+
+/**
+ * The pencil affordance shown on a row the viewer can edit. Reads its own colour
+ * so the parent rows' `renderItem` deps stay free of theme values; the label is
+ * resolved by the caller (a literal `t(...)`) so the i18n key stays static.
+ */
+const EditButton = memo(function EditButton({ onPress, label }: { onPress: () => void; label: string }) {
+  const { systemColors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={styles.editButton}
+    >
+      <Icon name="edit" size={18} color={systemColors.secondaryLabel} />
+    </Pressable>
   );
 });
 
@@ -414,5 +463,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[3],
     padding: spacing[3],
+  },
+  editButton: {
+    padding: spacing[1],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

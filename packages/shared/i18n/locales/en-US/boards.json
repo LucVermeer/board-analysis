@@ -38,6 +38,30 @@
       "back": "Go back",
       "configLockedHint": "This board has logged climbs, so its layout, size, and sets are locked."
     },
+    "gymEdit": {
+      "screenTitle": "Edit gym",
+      "save": "Save changes",
+      "updateError": "Couldn't save your changes. Try again.",
+      "updateSuccess": "Gym updated",
+      "notFound": "We couldn't find that gym",
+      "back": "Go back",
+      "name": "Name",
+      "namePlaceholder": "Gym name",
+      "description": "Description",
+      "descriptionPlaceholder": "Tell climbers what's on the wall",
+      "address": "Address",
+      "addressPlaceholder": "Street, city",
+      "contactEmail": "Contact email",
+      "contactEmailPlaceholder": "hello@gym.com",
+      "contactPhone": "Contact phone",
+      "contactPhonePlaceholder": "Phone number",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "coordinatePlaceholder": "Decimal degrees",
+      "invalidCoordinate": "Enter a valid coordinate",
+      "public": "Public gym",
+      "publicHint": "Show it on the map so climbers can find it"
+    },
     "manage": {
       "ownedHeader": "Your boards",
       "followingHeader": "Following",
@@ -142,7 +166,9 @@
       "clearSearch": "Clear search",
       "closeMap": "Close",
       "otherBoardsTitle": "Boards nearby",
-      "multiBoardChip": "2+ board types"
+      "multiBoardChip": "2+ board types",
+      "editGym": "Edit gym",
+      "editBoard": "Edit board"
     }
   },
   "boardEntity": {
@@ -223,7 +249,7 @@
       "hideLocation": "Hidden from nearby board searches unless you follow the searcher"
     },
     "alerts": {
-      "configEditable": "You can change the board layout because no climbs have been logged yet."
+      "configEditable": "You can change the layout, size, and hold sets. Climbs already logged stay put."
     }
   },
   "editBoard": {

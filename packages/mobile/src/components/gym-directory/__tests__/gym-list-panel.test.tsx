@@ -137,6 +137,8 @@ describe('GymListPanel', () => {
         mapAvailable
         onPressGym={vi.fn()}
         onActivateBoard={vi.fn()}
+        onEditGym={vi.fn()}
+        onEditBoard={vi.fn()}
         noBoardsLabel="No boards yet"
         searchSlot={<div data-testid="search">search</div>}
       />,
@@ -156,6 +158,8 @@ describe('GymListPanel', () => {
         mapAvailable
         onPressGym={onPressGym}
         onActivateBoard={vi.fn()}
+        onEditGym={vi.fn()}
+        onEditBoard={vi.fn()}
         noBoardsLabel="No boards yet"
         searchSlot={<div>search</div>}
       />,
@@ -172,6 +176,8 @@ describe('GymListPanel', () => {
         mapAvailable
         onPressGym={vi.fn()}
         onActivateBoard={vi.fn()}
+        onEditGym={vi.fn()}
+        onEditBoard={vi.fn()}
         noBoardsLabel="No boards yet"
         searchSlot={<div>search</div>}
         locationPrompt={<div data-testid="loc-prompt">grant location</div>}

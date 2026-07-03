@@ -255,6 +255,25 @@ export default function GymDiscovery() {
     [setActiveBoard, router, boardReturnTo, showToast, t],
   );
 
+  // Edit a board / gym the viewer can edit (the row only renders the pencil when
+  // `canEdit`). The board editor already loads any board by uuid and unlocks its
+  // config for moderators; the gym editor is the new gyms/edit screen.
+  const onEditBoard = useCallback(
+    (board: UserBoard) => {
+      hapticSelection();
+      router.push({ pathname: '/boards/edit', params: { boardUuid: board.uuid } });
+    },
+    [router],
+  );
+
+  const onEditGym = useCallback(
+    (gym: Gym) => {
+      hapticSelection();
+      router.push({ pathname: '/gyms/edit', params: { gymUuid: gym.uuid } });
+    },
+    [router],
+  );
+
   // Tap/expand a gym row: toggle its boards, select it, and recenter the map on it
   // (no-op when the map is blank — the row just expands).
   const onPressGym = useCallback(
@@ -487,6 +506,8 @@ export default function GymDiscovery() {
         mapAvailable={mapAvailable}
         onPressGym={onPressGym}
         onActivateBoard={activate}
+        onEditGym={onEditGym}
+        onEditBoard={onEditBoard}
         noBoardsLabel={t('mobile.gyms.noBoards')}
         searchSlot={searchField}
         placeCaption={placeCaption}

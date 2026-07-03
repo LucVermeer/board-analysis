@@ -1863,6 +1863,8 @@ export type Gym = {
   boardCount: Scalars['Int']['output'];
   /** Distinct board types at this gym (kilter, tension, ...) — for filtering and badges */
   boardTypes: Array<Scalars['String']['output']>;
+  /** Whether the current viewer may edit this gym (owner, gym admin, or community admin/leader for one of its board types) */
+  canEdit: Scalars['Boolean']['output'];
   /** Number of comments */
   commentCount: Scalars['Int']['output'];
   /** Contact email */
@@ -5731,7 +5733,7 @@ export type UpdateBoardInput = {
   isUnlisted?: InputMaybe<Scalars['Boolean']['input']>;
   /** New GPS latitude */
   latitude?: InputMaybe<Scalars['Float']['input']>;
-  /** New layout ID (only allowed when board has zero ticks) */
+  /** New layout ID (authorized editors only; existing ticks are preserved untouched) */
   layoutId?: InputMaybe<Scalars['Int']['input']>;
   /** New location name */
   locationName?: InputMaybe<Scalars['String']['input']>;
@@ -5741,9 +5743,9 @@ export type UpdateBoardInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   /** Controller box serial number */
   serialNumber?: InputMaybe<Scalars['String']['input']>;
-  /** New set IDs (only allowed when board has zero ticks) */
+  /** New set IDs (authorized editors only; existing ticks are preserved untouched) */
   setIds?: InputMaybe<Scalars['String']['input']>;
-  /** New size ID (only allowed when board has zero ticks) */
+  /** New size ID (authorized editors only; existing ticks are preserved untouched) */
   sizeId?: InputMaybe<Scalars['Int']['input']>;
   /** New slug */
   slug?: InputMaybe<Scalars['String']['input']>;
@@ -5861,6 +5863,8 @@ export type UserBoard = {
   angle: Scalars['Int']['output'];
   /** Board type (kilter, tension, moonboard) */
   boardType: Scalars['String']['output'];
+  /** Whether the current viewer may edit this board (owner, community admin/leader for its board type, or owner/admin of its linked gym) */
+  canEdit: Scalars['Boolean']['output'];
   /** Number of comments */
   commentCount: Scalars['Int']['output'];
   /** When created */
