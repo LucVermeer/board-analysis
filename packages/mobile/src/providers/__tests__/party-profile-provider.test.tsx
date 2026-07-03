@@ -88,6 +88,22 @@ import { useAuth } from '../auth-provider';
 
 const useAuthMock = vi.mocked(useAuth);
 
+function makeAuthMock(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnType<typeof useAuth> {
+  return {
+    isAuthenticated: false,
+    isLoading: false,
+    signInWithApple: vi.fn(),
+    signInWithGoogle: vi.fn(),
+    signInWithGoogleWeb: vi.fn(),
+    signInWithAppleWeb: vi.fn(),
+    signInWithCredentials: vi.fn(),
+    register: vi.fn(),
+    signOut: vi.fn(),
+    refreshAuthState: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe('PartyProfileProvider', () => {
   beforeEach(async () => {
     const secureStore = (await import('expo-secure-store')) as unknown as { __reset: () => void };
@@ -97,18 +113,7 @@ describe('PartyProfileProvider', () => {
     useIntegrationStatusesMock.mockReturnValue({ data: undefined });
     setPersonPropertiesMock.mockClear();
     useAuthMock.mockReset();
-    useAuthMock.mockReturnValue({
-      isAuthenticated: false,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock());
   });
 
   it('loads or creates a party profile on mount', async () => {
@@ -143,18 +148,7 @@ describe('PartyProfileProvider', () => {
   });
 
   it('mirrors `isAuthenticated` from the AuthProvider', async () => {
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
 
     const wrapper = ({ children }: { children: ReactNode }) => <PartyProfileProvider>{children}</PartyProfileProvider>;
     const { result } = renderHook(() => usePartyProfile(), { wrapper });
@@ -173,18 +167,7 @@ describe('PartyProfileProvider', () => {
   });
 
   it('surfaces displayName and avatarUrl from the authenticated profile once it loads', async () => {
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
     useProfileMock.mockReturnValue({
       data: { id: 'user-1', email: 'climber@example.com', displayName: 'Crux Crusher', avatarUrl: 'https://img/a.png' },
     });
@@ -198,18 +181,7 @@ describe('PartyProfileProvider', () => {
   });
 
   it('sets durable cohort person properties once the authenticated profile and home board resolve', async () => {
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
     useProfileMock.mockReturnValue({
       data: {
         id: 'user-1',
@@ -243,18 +215,7 @@ describe('PartyProfileProvider', () => {
   });
 
   it('fires again with the complete payload once integrations resolve after the initial partial fire', async () => {
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-      signInWithApple: vi.fn(),
-      signInWithGoogle: vi.fn(),
-      signInWithGoogleWeb: vi.fn(),
-      signInWithAppleWeb: vi.fn(),
-      signInWithCredentials: vi.fn(),
-      register: vi.fn(),
-      signOut: vi.fn(),
-      refreshAuthState: vi.fn(),
-    });
+    useAuthMock.mockReturnValue(makeAuthMock({ isAuthenticated: true }));
     useProfileMock.mockReturnValue({
       data: {
         id: 'user-1',
