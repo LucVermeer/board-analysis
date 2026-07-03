@@ -27,7 +27,7 @@ import { fillMaxWidth, padding, size } from '@expo/ui/jetpack-compose/modifiers'
 import type { ImageSourcePropType } from 'react-native';
 import { useTheme } from '../providers/theme-provider';
 import { brandAccentColor } from '../theme/expo-ui-modifiers';
-import { makeButtonPressHandler } from './Button.logic';
+import { isFullWidthStyle, makeButtonPressHandler } from './Button.logic';
 import { sizeConfig, type ButtonProps } from './Button.types';
 import type { IconName } from './icon-map';
 
@@ -110,12 +110,13 @@ export function Button({
   // button's content colour). The leading Icon omits `color` so it inherits the
   // button's LocalContentColor for free.
   let spinnerColor: string;
-  if (variant === 'filled' || variant === 'tonal') {
-    spinnerColor = isDestructive
-      ? brandColors.onPrimary
-      : variant === 'filled'
-        ? brandColors.onPrimary
-        : brandColors.primary;
+  if (variant === 'filled') {
+    // White on the brand fill (destructive fills with the error container, still white content).
+    spinnerColor = brandColors.onPrimary;
+  } else if (variant === 'tonal') {
+    // Non-destructive tonal content ≈ brand primary; destructive fills the error
+    // container, so its content (and the spinner) is white (onPrimary), not error.
+    spinnerColor = isDestructive ? brandColors.onPrimary : brandColors.primary;
   } else {
     spinnerColor = isDestructive ? brandColors.error : accentColor;
   }
@@ -129,7 +130,7 @@ export function Button({
           ? TextButton
           : ComposeButton;
 
-  const isFullWidth = style?.width === '100%' || style?.flex != null || style?.alignSelf === 'stretch';
+  const isFullWidth = isFullWidthStyle(style);
   const iconSource = icon ? BUTTON_ICON_SOURCE[icon] : undefined;
 
   return (

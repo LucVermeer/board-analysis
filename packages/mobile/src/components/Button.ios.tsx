@@ -40,7 +40,7 @@ import { useGlassCapability } from '../hooks/use-glass-capability';
 import { useTheme } from '../providers/theme-provider';
 import { brandAccentColor } from '../theme/expo-ui-modifiers';
 import { overlays } from '../theme/tokens';
-import { makeButtonPressHandler } from './Button.logic';
+import { isFullWidthStyle, makeButtonPressHandler } from './Button.logic';
 import { useButtonSurface } from './Button.surface';
 import { iconMap } from './icon-map';
 import type { ButtonProps, ButtonSize } from './Button.types';
@@ -116,9 +116,9 @@ export function Button({
     }
   }
 
-  // A footer button styled to fill its row needs the native Button to stretch
-  // (it content-hugs otherwise); an inline button hugs its content in BOTH axes.
-  const isFullWidth = style?.width === '100%' || style?.flex != null || style?.alignSelf === 'stretch';
+  // A footer button styled to fill its row needs the native Button to stretch (it
+  // content-hugs otherwise); an inline button hugs its content in BOTH axes.
+  const isFullWidth = isFullWidthStyle(style);
 
   const modifiers: ModifierConfig[] = [
     styleModifier,

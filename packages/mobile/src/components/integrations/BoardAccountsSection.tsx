@@ -757,7 +757,6 @@ function BoardAccountCard({
               icon="delete"
               variant="text"
               size="small"
-              tintColor={brandColors.error}
               role="destructive"
               loading={isRemoving}
               disabled={isRemoving}
