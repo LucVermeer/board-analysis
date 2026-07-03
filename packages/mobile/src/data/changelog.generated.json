@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T07:11:44.933Z",
+  "generatedAt": "2026-07-03T07:34:25.475Z",
   "entries": [
+    {
+      "prNumber": 3397,
+      "category": "fixed",
+      "title": "Star ratings from imported Kilter and Tension logbooks now show what you actually rated them — a climb you called a 3-star classic is 5 stars again, not \"mediocre\".",
+      "mergedAt": "2026-07-03T07:33:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3397"
+    },
     {
       "prNumber": 3313,
       "category": "new",
