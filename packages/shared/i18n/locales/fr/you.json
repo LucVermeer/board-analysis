@@ -27,10 +27,10 @@
     "unknownName": "Grimpeur",
     "cancel": "Annuler",
     "sessions": {
-      "weeklySends": "{{count}} réussites cette semaine",
+      "weeklySends": "{{count}} croix cette semaine",
       "weekly": {
         "sessions": "Sessions",
-        "sends": "Réussites",
+        "sends": "Croix",
         "flashes": "Flashs",
         "attempts": "Essais"
       },
@@ -153,17 +153,17 @@
       "tries_other": "{{count}} essais",
       "status": {
         "flash": "Flash",
-        "send": "Réussie",
+        "send": "Enchaîné",
         "attempt": "Essai",
-        "sends": "Réussies",
+        "sends": "Croix",
         "attempts": "Essais",
         "both": "Tout"
       },
       "row": {
         "project": "Projet",
         "stars": "{{count}}★",
-        "a11ySent": "Réussie",
-        "a11yFlashed": "Flashée",
+        "a11ySent": "Enchaîné",
+        "a11yFlashed": "Flashé",
         "a11yCommunityGrade": "cotation de la communauté {{grade}}",
         "a11yGradeDelta": "ta cotation {{logged}}, la communauté dit {{consensus}}",
         "a11yStars": "notée {{count}} sur 5 étoiles",
@@ -179,8 +179,8 @@
         "yesterday": "Hier",
         "climbs_one": "{{count}} bloc",
         "climbs_other": "{{count}} blocs",
-        "sends_one": "{{count}} réussite",
-        "sends_other": "{{count}} réussites",
+        "sends_one": "{{count}} croix",
+        "sends_other": "{{count}} croix",
         "top": "max {{grade}}"
       },
       "chooser": {

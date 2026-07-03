@@ -175,16 +175,16 @@
       "replayError": "Impossible de rouvrir le tutoriel. Réessaie.",
       "prompt": {
         "title": "Vois ce qui est allumé sur ton mur, en direct",
-        "body": "Suis le board de ta salle et Boardsesh te montre ce qui est allumé en ce moment : qui l'a allumé, la cotation, qui l'a ouvert, et les sends récents. Tu ne lances rien ; c'est juste là.",
-        "footnote": "En plus : les séances avec ta crew, le générateur d'entraînement et le suivi de tes sends, une fois sur un mur.",
+        "body": "Suis le board de ta salle et Boardsesh te montre ce qui est allumé en ce moment : qui l'a allumé, la cotation, qui l'a ouvert, et les croix récentes. Tu ne lances rien ; c'est juste là.",
+        "footnote": "En plus : les séances avec ta crew, le générateur d'entraînement et le suivi de tes croix, une fois sur un mur.",
         "findBoard": "Trouver mon board",
         "lookAround": "Jeter un œil d'abord"
       },
-      "boardRevealTip": "Touche pour voir ce que d'autres utilisateurs de Boardsesh ont envoyé au mur.",
+      "boardRevealTip": "Touche pour voir ce que d'autres utilisateurs de Boardsesh ont allumé au mur.",
       "tips": {
-        "workout": "Monte une séance : Volume, Pyramide, Échelle ou Cotation ciblée. Fixe une cotation, prévisualise les voies, envoie-les une par une.",
-        "crew": "Tu grimpes à plusieurs ? Lance une séance et partagez une file. N'importe qui envoie la prochaine voie, sans passer le téléphone.",
-        "record": "Tes sends s'affichent ici dans Progression : éventail de cotations et ton plus gros send. Importe ton carnet Kilter et Tension depuis Aurora pour partir avec ton historique.",
+        "workout": "Monte une séance : Volume, Pyramide, Échelle ou Cotation ciblée. Fixe une cotation, prévisualise les voies, enchaîne-les une par une.",
+        "crew": "Tu grimpes à plusieurs ? Lance une séance et partagez une file. N'importe qui allume la voie suivante, sans passer le téléphone.",
+        "record": "Tes croix s'affichent ici dans Progression : éventail de cotations et ta plus grosse croix. Importe ton carnet Kilter et Tension depuis Aurora pour partir avec ton historique.",
         "accessory": "La barre du bas montre toujours ce qui est sur le mur. Change de voie depuis là."
       }
     },
@@ -208,7 +208,7 @@
         "fixed": "Corrigé"
       },
       "viewPr": "Voir sur GitHub",
-      "empty": "Aucun changement pour l'instant : on était trop occupés à grimper. Reviens après le prochain enchaînement.",
+      "empty": "Aucun changement pour l'instant : on était trop occupés à grimper. Reviens après la prochaine croix.",
       "nativeRelease": {
         "title": "Mise à jour de l'app",
         "appStore": "Une nouvelle version est arrivée sur l'App Store.",
@@ -505,12 +505,12 @@
     "deleteTitle": "Supprimer l'ascension",
     "deleteDescription": "Vraiment ? Cette action est irréversible.",
     "statusFlash": "flash",
-    "statusSend": "enchaînement",
+    "statusSend": "croix",
     "statusAttempt": "essai",
     "flashed_one": "Flashé",
     "flashed_other": "{{count}} flashs",
     "sent_one": "Enchaîné",
-    "sent_other": "{{count}} enchaînements",
+    "sent_other": "{{count}} croix",
     "attempts_one": "1 essai",
     "attempts_other": "{{count}} essais"
   },
