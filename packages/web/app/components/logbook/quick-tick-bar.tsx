@@ -173,6 +173,13 @@ export const QuickTickBar = forwardRef<QuickTickBarHandle, QuickTickBarProps>(
       return grades.find((g) => g.difficulty_name === source)?.difficulty_id;
     }, [tickTarget, grades]);
 
+    // Inverse of consensusGradeId: resolve the picked numeric difficulty id
+    // back to its human-readable grade name (e.g. "V5") for analytics.
+    const resolvedGradeName = useMemo(
+      () => grades.find((g) => g.difficulty_id === difficulty)?.difficulty_name,
+      [grades, difficulty],
+    );
+
     // Picker selection handlers.
     const handleStarSelect = useCallback(
       (value: number | null) => {
@@ -205,6 +212,7 @@ export const QuickTickBar = forwardRef<QuickTickBarHandle, QuickTickBarProps>(
       attemptCount,
       comment,
       ascentType,
+      gradeName: resolvedGradeName,
       onSave,
       onError,
     });

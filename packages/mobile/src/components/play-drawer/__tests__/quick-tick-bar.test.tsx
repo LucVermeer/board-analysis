@@ -17,8 +17,20 @@ const boardState = vi.hoisted(() => ({
   current: null as unknown,
 }));
 
+// Grades list returned by useGrades — empty by default (matches most tests,
+// which don't exercise grade selection), overridable per-test.
+const gradesState = vi.hoisted(() => ({
+  current: [] as Array<{ difficultyId: number; name: string }>,
+}));
+
 // Stable save mock so a test can assert on the input passed to saveTick.mutate.
-const saveMock = vi.hoisted(() => ({ mutate: vi.fn() }));
+// Auto-invokes onSuccess so the QuickTickSaved track call (and the
+// savedRef/onDismiss wiring) fires the same way the real mutation would.
+const saveMock = vi.hoisted(() => ({
+  mutate: vi.fn((_input: unknown, callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void }) =>
+    callbacks?.onSuccess?.(),
+  ),
+}));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -45,7 +57,15 @@ vi.mock('../../Text', () => ({
 vi.mock('../../Icon', () => ({ Icon: () => createElement('span') }));
 vi.mock('../InlineStarPicker', () => ({ InlineStarPicker: () => null }));
 vi.mock('../InlineTriesPicker', () => ({ InlineTriesPicker: () => null }));
-vi.mock('../../grade', () => ({ GradeSingleSelectRail: () => null }));
+// Stub GradeSingleSelectRail: clicking the rail always selects the first
+// loaded grade, so a test can drive grade selection without the real chip UI.
+vi.mock('../../grade', () => ({
+  GradeSingleSelectRail: ({ onSelect }: { onSelect: (difficultyId: number | undefined) => void }) =>
+    createElement('button', {
+      'data-testid': 'grade-rail-select',
+      onClick: () => onSelect(gradesState.current[0]?.difficultyId),
+    }),
+}));
 // Stub ClimbedAtField: clicking the date button drives a fixed past date, so a
 // test can prove the picked value threads into saveTick without the native
 // datetimepicker (which doesn't load under jsdom).
@@ -59,7 +79,7 @@ vi.mock('../../logbook/ClimbedAtField', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: { primary: '#6D28D9' } }),
 }));
-vi.mock('../../../lib/graphql/hooks', () => ({ useGrades: () => ({ data: [] }) }));
+vi.mock('../../../lib/graphql/hooks', () => ({ useGrades: () => ({ data: gradesState.current }) }));
 // Partial mock: keep the real exports (BOULDER_GRADES et al., pulled in
 // transitively via climbed-at.ts → @boardsesh/profile-stats) and override only
 // the board-name normaliser.
@@ -67,7 +87,13 @@ vi.mock('@boardsesh/board-config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@boardsesh/board-config')>();
   return { ...actual, toBoardName: (name: string) => name };
 });
-vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
+vi.mock('@boardsesh/analytics', () => ({
+  SHARED_EVENTS: {
+    TickButtonClicked: 'Tick Button Clicked',
+    QuickTickSaved: 'Quick Tick Saved',
+    QuickTickFailed: 'Quick Tick Failed',
+  },
+}));
 vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 // QuickTickBar reads board-presence flags; mock the provider so the test doesn't
 // pull in its ws-client → expo-secure-store chain (un-mockable native module).
@@ -95,9 +121,10 @@ vi.mock('@boardsesh/board-react', async (importOriginal) => {
   };
 });
 
-import { QuickTickBar } from '../QuickTickBar';
+import { QuickTickBar, type QuickTickBarProps, type QuickTickDismissSnapshot } from '../QuickTickBar';
+import { track } from '../../../lib/analytics';
 
-function renderBar() {
+function renderBar(overrides: Partial<QuickTickBarProps> = {}) {
   return render(
     createElement(QuickTickBar, {
       climbUuid: CLIMB_UUID,
@@ -106,12 +133,15 @@ function renderBar() {
       isMirror: false,
       isBenchmark: false,
       onDismiss: vi.fn(),
+      ...overrides,
     }),
   );
 }
 
 beforeEach(() => {
   saveMock.mutate.mockClear();
+  gradesState.current = [];
+  vi.mocked(track).mockClear();
 });
 
 afterEach(() => {
@@ -195,5 +225,70 @@ describe('QuickTickBar climbedAt', () => {
     expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
       climbedAt: '2025-03-15T12:10:00.000Z',
     });
+  });
+});
+
+describe('QuickTickBar grade value on Quick Tick Saved', () => {
+  it('resolves the picked numeric difficulty id to a human grade label', () => {
+    boardState.current = null;
+    gradesState.current = [{ difficultyId: 5, name: 'V5' }];
+    const { container, getByTestId } = renderBar();
+
+    fireEvent.click(getByTestId('grade-rail-select'));
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (node) => node.textContent === 'playView.tickBar.sendSaveLabel',
+    );
+    fireEvent.click(sendButton as Element);
+
+    expect(track).toHaveBeenCalledWith(
+      'Quick Tick Saved',
+      expect.objectContaining({ difficulty: 5, grade: 'V5', hasDifficulty: true }),
+    );
+  });
+
+  it('sends grade: null when no grade was picked', () => {
+    boardState.current = null;
+    const { container } = renderBar();
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (node) => node.textContent === 'playView.tickBar.sendSaveLabel',
+    );
+    fireEvent.click(sendButton as Element);
+
+    expect(track).toHaveBeenCalledWith('Quick Tick Saved', expect.objectContaining({ grade: null, difficulty: null }));
+  });
+});
+
+describe('QuickTickBar dismiss-analytics plumbing (savedRef / fieldSnapshotRef)', () => {
+  it('keeps fieldSnapshotRef in sync with the field-completeness state', () => {
+    boardState.current = null;
+    gradesState.current = [{ difficultyId: 5, name: 'V5' }];
+    const fieldSnapshotRef: { current: QuickTickDismissSnapshot } = {
+      current: { hasQuality: false, hasDifficulty: false, hasComment: false, attemptCountChanged: false },
+    };
+    const { getByTestId } = renderBar({ fieldSnapshotRef });
+
+    fireEvent.click(getByTestId('grade-rail-select'));
+
+    expect(fieldSnapshotRef.current).toMatchObject({ hasDifficulty: true });
+  });
+
+  it('sets savedRef to true right before calling onDismiss on a successful save', () => {
+    boardState.current = null;
+    const savedRef: { current: boolean } = { current: false };
+    const onDismiss = vi.fn(() => {
+      // Assert inside the callback so we prove the flag was already flipped
+      // by the time the sheet is told to close (ordering matters — the
+      // wrapping close handler in LogAscentSheet reads this synchronously).
+      expect(savedRef.current).toBe(true);
+    });
+    const { container } = renderBar({ savedRef, onDismiss });
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (node) => node.textContent === 'playView.tickBar.sendSaveLabel',
+    );
+    fireEvent.click(sendButton as Element);
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

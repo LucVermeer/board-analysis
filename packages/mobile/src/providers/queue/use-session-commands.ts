@@ -230,7 +230,14 @@ export function useSessionCommands({
       await clearSession();
       locallyEndingSessionIdRef.current = null;
       suppressedRemoteEndSessionIdRef.current = null;
-      track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
+      track(SHARED_EVENTS.SessionEnded, {
+        sessionId: currentSessionId,
+        // Seconds (not minutes) to match web's Session Ended property/unit
+        // (session-lifecycle-tracking.ts) so both platforms land on one
+        // PostHog dimension.
+        durationSec:
+          response.endSession?.durationMinutes != null ? Math.round(response.endSession.durationMinutes * 60) : null,
+      });
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {

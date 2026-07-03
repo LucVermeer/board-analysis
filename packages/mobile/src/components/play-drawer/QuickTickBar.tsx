@@ -39,7 +39,22 @@ import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
-type QuickTickBarProps = {
+// Read once at module load rather than allocating a fresh createInitialTickState()
+// on every field-snapshot sync (see below) just to read this one default.
+const DEFAULT_ATTEMPT_COUNT = createInitialTickState().attemptCount;
+
+// Field-completeness snapshot for the "abandoned the form" analytics event.
+// Owned by QuickTickBar (only place with the tick-state fields) but read by
+// LogAscentSheet, which is the only place able to see the X-button and
+// pan-down dismiss paths that never call onDismiss themselves.
+export type QuickTickDismissSnapshot = {
+  hasQuality: boolean;
+  hasDifficulty: boolean;
+  hasComment: boolean;
+  attemptCountChanged: boolean;
+};
+
+export type QuickTickBarProps = {
   climbUuid: string;
   boardName: string;
   angle: number;
@@ -55,6 +70,10 @@ type QuickTickBarProps = {
   // visually outlined) without being preselected.
   consensusGradeName?: string;
   onDismiss: () => void;
+  // Optional analytics plumbing for LogAscentSheet's dismiss tracking. Both
+  // are refs (not state) so updating them never triggers a re-render.
+  savedRef?: React.RefObject<boolean>;
+  fieldSnapshotRef?: React.RefObject<QuickTickDismissSnapshot>;
 };
 
 export const QuickTickBar = React.memo(function QuickTickBar({
@@ -69,6 +88,8 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   sessionId,
   consensusGradeName,
   onDismiss,
+  savedRef,
+  fieldSnapshotRef,
 }: QuickTickBarProps) {
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
@@ -135,8 +156,28 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     return grades.find((grade) => grade.name === consensusGradeName)?.difficultyId;
   }, [consensusGradeName, grades]);
 
+  // Inverse of consensusDifficultyId: resolve the picked numeric difficulty
+  // id back to its human-readable grade name (e.g. "V5") for analytics.
+  const resolvedGradeName = useMemo(() => {
+    if (tickState.difficulty == null || !grades) return undefined;
+    return grades.find((grade) => grade.difficultyId === tickState.difficulty)?.name;
+  }, [tickState.difficulty, grades]);
+
   const ascentType = deriveAscentType(hasPriorHistory, tickState.attemptCount);
   const minAttempts = useMemo(() => getMinAttempts(ascentType), [ascentType]);
+
+  // Keep the dismiss-analytics snapshot current so LogAscentSheet can read
+  // field-completeness at close time — its X-button/pan-down paths never
+  // call back into this component, so they can't read tickState directly.
+  useEffect(() => {
+    if (!fieldSnapshotRef) return;
+    fieldSnapshotRef.current = {
+      hasQuality: tickState.quality != null && tickState.quality > 0,
+      hasDifficulty: tickState.difficulty != null,
+      hasComment: comment.length > 0,
+      attemptCountChanged: tickState.attemptCount !== DEFAULT_ATTEMPT_COUNT,
+    };
+  }, [fieldSnapshotRef, tickState.quality, tickState.difficulty, tickState.attemptCount, comment]);
 
   // Reset form state when the climb context changes underneath an open
   // sheet (e.g. user swiped to next while the sheet was already open).
@@ -220,6 +261,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
               hasQuality: tickState.quality != null && tickState.quality > 0,
               hasDifficulty: tickState.difficulty != null,
               difficulty: tickState.difficulty ?? null,
+              grade: resolvedGradeName ?? null,
               hasComment: comment.length > 0,
             });
             hapticSuccess();
@@ -232,6 +274,9 @@ export const QuickTickBar = React.memo(function QuickTickBar({
             setMaximumClimbedAtDate(new Date());
             hasEditedClimbedAtRef.current = false;
             showToast(tClimbs('mobile.logAscent.savedToast'), 'success');
+            // Tell LogAscentSheet this close is a completed save, not an
+            // abandon, so its wrapped onClose doesn't fire QuickTickDismissed.
+            if (savedRef) savedRef.current = true;
             onDismiss();
           },
           onError: (error: unknown) => {
@@ -262,6 +307,8 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       onDismiss,
       showToast,
       tClimbs,
+      resolvedGradeName,
+      savedRef,
     ],
   );
 

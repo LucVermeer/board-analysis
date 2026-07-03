@@ -6,6 +6,7 @@ import type { Climb, Angle, BoardDetails, BoardName } from '@/app/lib/types';
 import type { LogbookEntry } from '@boardsesh/board-react';
 import { hasPriorHistoryForClimb, buildTickTarget, useTickSave, type UseTickSaveOptions } from '../use-tick-save';
 import { saveTickDraft } from '@/app/lib/tick-draft-db';
+import { track } from '@/app/lib/analytics';
 
 // --- Mocks (must be hoisted before imports of the module under test) ---
 
@@ -394,6 +395,51 @@ describe('useTickSave', () => {
 
     const call = mockSaveTick.mock.calls[0][0];
     expect(call.status).toBe('attempt');
+  });
+
+  it('save() sends the resolved grade label alongside the numeric difficulty on Quick Tick Saved', async () => {
+    const opts = makeOptions({
+      difficulty: 5,
+      gradeName: 'V5',
+      tickTarget: {
+        climb: makeClimb(),
+        angle: 40 as Angle,
+        boardDetails: makeBoardDetails(),
+        hasPriorHistory: true,
+      },
+    });
+
+    const { result } = renderHook(() => useTickSave(opts));
+
+    await act(async () => {
+      result.current.save();
+      await vi.waitFor(() => expect(track).toHaveBeenCalledWith('Quick Tick Saved', expect.anything()));
+    });
+
+    expect(track).toHaveBeenCalledWith(
+      'Quick Tick Saved',
+      expect.objectContaining({ difficulty: 5, grade: 'V5', hasDifficulty: true }),
+    );
+  });
+
+  it('save() sends grade: null when no gradeName was resolved', async () => {
+    const opts = makeOptions({
+      tickTarget: {
+        climb: makeClimb(),
+        angle: 40 as Angle,
+        boardDetails: makeBoardDetails(),
+        hasPriorHistory: true,
+      },
+    });
+
+    const { result } = renderHook(() => useTickSave(opts));
+
+    await act(async () => {
+      result.current.save();
+      await vi.waitFor(() => expect(track).toHaveBeenCalledWith('Quick Tick Saved', expect.anything()));
+    });
+
+    expect(track).toHaveBeenCalledWith('Quick Tick Saved', expect.objectContaining({ grade: null }));
   });
 
   describe('confetti variant selection', () => {
