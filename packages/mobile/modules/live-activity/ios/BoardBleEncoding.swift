@@ -8,6 +8,9 @@ struct BoardBleConfiguration: Codable, Equatable {
     let apiLevel: Int?
     let deviceName: String?
     let colorOverrides: [String: String]
+    // MoonBoard grid rows (18 standard, 12 Mini). Optional so configs
+    // persisted by builds that predate it still decode (#3392).
+    let numRows: Int?
 }
 
 struct BoardBlePacketResult: Equatable {
@@ -311,14 +314,21 @@ enum BoardBleEncoding {
     // placement map and no binary packet wrapper. Ported from
     // packages/shared/ble-protocol/src/moonboard.ts; keep the two in lockstep
     // (parity asserted in LiveActivityWidgetTests).
+    //
+    // All layouts are 11 columns wide, but the row count varies: the standard
+    // wall is 18 rows while the Mini's LED strip is 12 (#3392). The row count
+    // comes from the JS-side board config (getMoonBoardGeometryByLayoutId) via
+    // configureBoard; 18 is the fallback for configs persisted before numRows
+    // existed.
     private static let moonboardGridColumns = 11
-    private static let moonboardGridRows = 18
+    private static let moonboardDefaultGridRows = 18
     private static let moonboardRoleMap: [Int: String] = [42: "S", 43: "P", 44: "E"]
     private static let moonboardFramePrefix = "l#"
     private static let moonboardFrameSuffix = "#"
 
-    static func moonboardSerialPosition(holdId: Int) -> Int? {
-        let maxHoldId = moonboardGridColumns * moonboardGridRows
+    static func moonboardSerialPosition(holdId: Int, numRows: Int? = nil) -> Int? {
+        let gridRows = numRows ?? moonboardDefaultGridRows
+        let maxHoldId = moonboardGridColumns * gridRows
         guard holdId >= 1, holdId <= maxHoldId else { return nil }
 
         let zeroBasedHoldId = holdId - 1
@@ -327,12 +337,12 @@ enum BoardBleEncoding {
 
         // Odd columns are wired bottom-to-top, so their row order is reversed.
         if colIndex % 2 == 0 {
-            return colIndex * moonboardGridRows + rowIndex
+            return colIndex * gridRows + rowIndex
         }
-        return colIndex * moonboardGridRows + (moonboardGridRows - 1 - rowIndex)
+        return colIndex * gridRows + (gridRows - 1 - rowIndex)
     }
 
-    static func makeMoonboardPacket(frames: String) -> BoardBlePacketResult {
+    static func makeMoonboardPacket(frames: String, numRows: Int? = nil) -> BoardBlePacketResult {
         var encodedHolds: [String] = []
         var skippedRoleCount = 0
         var skippedPositionCount = 0
@@ -343,7 +353,7 @@ enum BoardBleEncoding {
                 skippedRoleCount += 1
                 continue
             }
-            guard let position = moonboardSerialPosition(holdId: frame.placementId) else {
+            guard let position = moonboardSerialPosition(holdId: frame.placementId, numRows: numRows) else {
                 skippedPositionCount += 1
                 continue
             }
