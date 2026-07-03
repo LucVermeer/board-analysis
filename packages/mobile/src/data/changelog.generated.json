@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T06:43:20.180Z",
+  "generatedAt": "2026-07-03T06:48:34.443Z",
   "entries": [
+    {
+      "prNumber": 3338,
+      "category": "fixed",
+      "title": "See exactly who's in your session — the crew count no longer balloons with phantom climbers after a shaky connection, so a solo send stops reading as a party.",
+      "mergedAt": "2026-07-03T06:45:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3338"
+    },
     {
       "prNumber": 3389,
       "category": "new",

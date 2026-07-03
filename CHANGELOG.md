@@ -25,6 +25,10 @@ manual changes). See docs/mobile-ota-updates.md.
 - Co-Authored-By: Claude Fable 5 <noreply@anthropic.com> ([#3367](https://github.com/boardsesh/boardsesh/pull/3367))
   https://claude.ai/code/session_01M9eAY2yZDGSqossL5UtUQo
 
+### Fixed
+
+- See exactly who's in your session — the crew count no longer balloons with phantom climbers after a shaky connection, so a solo send stops reading as a party. ([#3338](https://github.com/boardsesh/boardsesh/pull/3338))
+
 ## 2026-07-02
 
 ### New
