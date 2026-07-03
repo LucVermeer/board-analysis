@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { logbookClimbAngleKey, type LogbookEntry } from '@boardsesh/board-react';
 
@@ -17,10 +17,22 @@ const boardState = vi.hoisted(() => ({
   current: null as unknown,
 }));
 
+// Stable save mock so a test can assert on the input passed to saveTick.mutate.
+const saveMock = vi.hoisted(() => ({ mutate: vi.fn() }));
+
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-  Pressable: ({ children, accessibilityLabel }: { children?: ReactNode; accessibilityLabel?: string }) =>
-    createElement('button', { 'data-label': accessibilityLabel }, children),
+  Pressable: ({
+    children,
+    accessibilityLabel,
+    onPress,
+    disabled,
+  }: {
+    children?: ReactNode;
+    accessibilityLabel?: string;
+    onPress?: () => void;
+    disabled?: boolean;
+  }) => createElement('button', { 'data-label': accessibilityLabel, onClick: onPress, disabled }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 vi.mock('@expo/ui/community/bottom-sheet', () => ({ BottomSheetTextInput: () => null }));
@@ -34,11 +46,27 @@ vi.mock('../../Icon', () => ({ Icon: () => createElement('span') }));
 vi.mock('../InlineStarPicker', () => ({ InlineStarPicker: () => null }));
 vi.mock('../InlineTriesPicker', () => ({ InlineTriesPicker: () => null }));
 vi.mock('../../grade', () => ({ GradeSingleSelectRail: () => null }));
+// Stub ClimbedAtField: clicking the date button drives a fixed past date, so a
+// test can prove the picked value threads into saveTick without the native
+// datetimepicker (which doesn't load under jsdom).
+vi.mock('../../logbook/ClimbedAtField', () => ({
+  ClimbedAtField: ({ mode, onChange }: { mode: 'date' | 'time'; onChange: (next: Date) => void }) =>
+    createElement('button', {
+      'data-testid': `climbedat-${mode}`,
+      onClick: () => onChange(new Date('2025-03-15T12:00:00.000Z')),
+    }),
+}));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: { primary: '#6D28D9' } }),
 }));
 vi.mock('../../../lib/graphql/hooks', () => ({ useGrades: () => ({ data: [] }) }));
-vi.mock('@boardsesh/board-config', () => ({ toBoardName: (name: string) => name }));
+// Partial mock: keep the real exports (BOULDER_GRADES et al., pulled in
+// transitively via climbed-at.ts → @boardsesh/profile-stats) and override only
+// the board-name normaliser.
+vi.mock('@boardsesh/board-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@boardsesh/board-config')>();
+  return { ...actual, toBoardName: (name: string) => name };
+});
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 // QuickTickBar reads board-presence flags; mock the provider so the test doesn't
@@ -63,7 +91,7 @@ vi.mock('@boardsesh/board-react', async (importOriginal) => {
     ...actual,
     useOptionalBoardActions: () => boardState.current,
     useOptionalBoardLogbook: () => boardState.current,
-    useSaveTick: () => ({ mutate: vi.fn(), isPending: false }),
+    useSaveTick: () => ({ mutate: saveMock.mutate, isPending: false }),
   };
 });
 
@@ -81,6 +109,14 @@ function renderBar() {
     }),
   );
 }
+
+beforeEach(() => {
+  saveMock.mutate.mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('QuickTickBar hasPriorHistory', () => {
   it('reads the logbookByClimbAngle index, not the raw logbook array', () => {
@@ -117,5 +153,47 @@ describe('QuickTickBar hasPriorHistory', () => {
       (node) => node.textContent === 'playView.tickBar.flashSaveLabel',
     );
     expect(flashButton).toBeUndefined();
+  });
+});
+
+describe('QuickTickBar climbedAt', () => {
+  it('threads the picked climb date into saveTick instead of always sending now', () => {
+    boardState.current = null;
+    const { getByTestId, container } = renderBar();
+
+    // Pick a fixed past date via the stubbed ClimbedAtField.
+    fireEvent.click(getByTestId('climbedat-date'));
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (node) => node.textContent === 'playView.tickBar.sendSaveLabel',
+    );
+    fireEvent.click(sendButton as Element);
+
+    expect(saveMock.mutate).toHaveBeenCalledTimes(1);
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
+      climbedAt: '2025-03-15T12:00:00.000Z',
+    });
+  });
+
+  it('logs a fresh save-time now when the date is left untouched', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-03-15T12:00:00.000Z'));
+    boardState.current = null;
+    const { container } = renderBar();
+
+    // The sheet stays mounted (PlayDrawer) and time passes without the user
+    // touching the date field — the saved timestamp must be save-time now,
+    // not the value captured at mount.
+    vi.setSystemTime(new Date('2025-03-15T12:10:00.000Z'));
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (node) => node.textContent === 'playView.tickBar.sendSaveLabel',
+    );
+    fireEvent.click(sendButton as Element);
+
+    expect(saveMock.mutate).toHaveBeenCalledTimes(1);
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
+      climbedAt: '2025-03-15T12:10:00.000Z',
+    });
   });
 });

@@ -575,7 +575,10 @@
       "decreaseTriesAria": "Diminuer les essais",
       "increaseTriesAria": "Augmenter les essais",
       "starRating_one": "{{count}} etoile",
-      "starRating_other": "{{count}} etoiles"
+      "starRating_other": "{{count}} etoiles",
+      "dateLabel": "Date",
+      "timeLabel": "Heure",
+      "futureTimeAdjusted": "Heure future ajustée à maintenant."
     }
   },
   "mobileDetail": {

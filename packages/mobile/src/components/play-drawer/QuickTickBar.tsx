@@ -2,7 +2,7 @@
 // BottomSheetModal — the sheet owns positioning, slide-in, backdrop,
 // pan-down-to-close, and the drag handle. This component is just the
 // pickers + save row.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, type TextStyle } from 'react-native';
 import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,8 @@ import { Icon } from '../Icon';
 import { InlineStarPicker } from './InlineStarPicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
 import { GradeSingleSelectRail } from '../grade';
+import { ClimbedAtField } from '../logbook/ClimbedAtField';
+import { clampToNow, MAXIMUM_CLIMBED_AT_REFRESH_MS } from '../logbook/climbed-at';
 import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import {
@@ -112,6 +114,15 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 
   const [tickState, setTickState] = useState(createInitialTickState);
   const [comment, setComment] = useState('');
+  // The climb date/time to log. Defaults to now; the Date/Time rows let the
+  // user backdate a send they forgot to log (issue #3303).
+  const [climbedAt, setClimbedAt] = useState(() => new Date());
+  const [maximumClimbedAtDate, setMaximumClimbedAtDate] = useState(() => new Date());
+  // Whether the user explicitly picked a date/time. Until they do, the tick logs
+  // at *save-time* now — this sheet stays mounted (PlayDrawer only toggles
+  // visibility), so a value frozen at mount would otherwise save a stale
+  // timestamp minutes/hours in the past.
+  const hasEditedClimbedAtRef = useRef(false);
   // Renders an inline error row above the save buttons when the last
   // save attempt failed. Cleared on the next attempt or on success.
   const [lastError, setLastError] = useState<string | null>(null);
@@ -133,11 +144,35 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     setTickState(createInitialTickState());
     setComment('');
     setLastError(null);
+    setClimbedAt(new Date());
+    setMaximumClimbedAtDate(new Date());
+    hasEditedClimbedAtRef.current = false;
   }, [climbUuid]);
+
+  // Keep "now" fresh while the sheet lives on. The picker's upper bound tracks
+  // now so a long-open sheet can't select a future minute; and, until the user
+  // picks a date, the displayed default tracks now too so a reopened sheet
+  // doesn't show a stale day. Mirrors LogbookEditSheet's max-date refresh.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setMaximumClimbedAtDate(new Date());
+      if (!hasEditedClimbedAtRef.current) setClimbedAt(new Date());
+    }, MAXIMUM_CLIMBED_AT_REFRESH_MS);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleQualitySelect = useCallback((value: number | null) => {
     setTickState((prev) => ({ ...prev, quality: value }));
   }, []);
+
+  const handleClimbedAtChange = useCallback((next: Date) => {
+    hasEditedClimbedAtRef.current = true;
+    setClimbedAt(next);
+  }, []);
+
+  const handleFutureAdjusted = useCallback(() => {
+    showToast(t('playView.tickBar.futureTimeAdjusted'), 'warning');
+  }, [showToast, t]);
 
   const handleGradeSelect = useCallback((difficultyId: number | undefined) => {
     setTickState((prev) => ({ ...prev, difficulty: difficultyId }));
@@ -166,7 +201,9 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           difficulty: tickState.difficulty ?? null,
           isBenchmark,
           comment,
-          climbedAt: new Date().toISOString(),
+          // Untouched: log a fresh save-time "now". Edited: honour the pick
+          // (clamped, in case the sheet sat open past the chosen minute).
+          climbedAt: (hasEditedClimbedAtRef.current ? clampToNow(climbedAt) : new Date()).toISOString(),
           ...(sessionId ? { sessionId } : {}),
           ...(layoutId != null ? { layoutId } : {}),
           ...(sizeId != null ? { sizeId } : {}),
@@ -190,6 +227,9 @@ export const QuickTickBar = React.memo(function QuickTickBar({
             setTickState(createInitialTickState());
             setComment('');
             setLastError(null);
+            setClimbedAt(new Date());
+            setMaximumClimbedAtDate(new Date());
+            hasEditedClimbedAtRef.current = false;
             showToast(tClimbs('mobile.logAscent.savedToast'), 'success');
             onDismiss();
           },
@@ -217,6 +257,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       boardPresenceBoardId,
       tickState,
       comment,
+      climbedAt,
       onDismiss,
       showToast,
       tClimbs,
@@ -268,6 +309,38 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         </Text>
         <View style={styles.rowPicker}>
           <InlineStarPicker quality={tickState.quality} onSelect={handleQualitySelect} />
+        </View>
+      </View>
+
+      <View style={styles.row}>
+        <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
+          {t('playView.tickBar.dateLabel')}
+        </Text>
+        <View style={styles.rowPicker}>
+          <ClimbedAtField
+            value={climbedAt}
+            mode="date"
+            maximumDate={maximumClimbedAtDate}
+            onChange={handleClimbedAtChange}
+            onFutureAdjusted={handleFutureAdjusted}
+            accessibilityLabel={t('playView.tickBar.dateLabel')}
+          />
+        </View>
+      </View>
+
+      <View style={styles.row}>
+        <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
+          {t('playView.tickBar.timeLabel')}
+        </Text>
+        <View style={styles.rowPicker}>
+          <ClimbedAtField
+            value={climbedAt}
+            mode="time"
+            maximumDate={maximumClimbedAtDate}
+            onChange={handleClimbedAtChange}
+            onFutureAdjusted={handleFutureAdjusted}
+            accessibilityLabel={t('playView.tickBar.timeLabel')}
+          />
         </View>
       </View>
 

@@ -1,16 +1,11 @@
 import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Pressable, Platform, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { BottomSheetTextInput, type BottomSheet } from '@expo/ui/community/bottom-sheet';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
 import { useTranslation } from 'react-i18next';
 import { useUpdateTick, useDeleteTick } from '@boardsesh/board-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import type { AscentFeedItem, UpdateTickInput } from '@boardsesh/graphql/operations';
-import { parseTickTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { Sheet } from '../Sheet';
@@ -19,6 +14,8 @@ import { StarRating } from '../StarRating';
 import { SegmentedControl } from '../SegmentedControl';
 import { SectionHeader } from '../SectionHeader';
 import { GradeSingleSelectRail } from '../grade';
+import { ClimbedAtField } from '../logbook/ClimbedAtField';
+import { clampToNow, toEditableDate, MAXIMUM_CLIMBED_AT_REFRESH_MS } from '../logbook/climbed-at';
 import { useGrades } from '../../lib/graphql/hooks';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -28,48 +25,11 @@ import { useConfirm } from '../../providers/dialog-provider';
 
 type TickStatus = 'flash' | 'send' | 'attempt';
 
-const MAXIMUM_CLIMBED_AT_REFRESH_MS = 60_000;
-
 type LogbookEditSheetProps = {
   sheetRef: RefObject<BottomSheet | null>;
   ascent: AscentFeedItem | null;
   onClose: () => void;
 };
-
-function toEditableDate(climbedAt: string): Date {
-  const parsed = parseTickTime(climbedAt).toDate();
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-}
-
-function clampToNow(date: Date): Date {
-  const now = new Date();
-  return date.getTime() > now.getTime() ? now : date;
-}
-
-function applyDatePart(current: Date, selectedDate: Date, options: { clampToPresent: boolean }): Date {
-  const next = new Date(current);
-  next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-  return options.clampToPresent ? clampToNow(next) : next;
-}
-
-function applyTimePart(current: Date, selectedTime: Date, options: { clampToPresent: boolean }): Date {
-  const next = new Date(current);
-  next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-  return options.clampToPresent ? clampToNow(next) : next;
-}
-
-function formatDateForDisplay(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function formatTimeForDisplay(date: Date): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
 
 /** Edit (status / grade / stars / tries / comment) or delete a logged ascent. */
 export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheetProps) {
@@ -129,79 +89,14 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     setStatus(nextStatus);
   }, []);
 
-  const handleDateChange = useCallback(
-    (_event: DateTimePickerEvent, selectedDate?: Date) => {
-      if (!selectedDate) return;
-      setHasClimbedAtChanged(true);
-      setClimbedAt((current) => {
-        const requestedDate = applyDatePart(current, selectedDate, { clampToPresent: false });
-        const clampedDate = clampToNow(requestedDate);
-        if (clampedDate.getTime() !== requestedDate.getTime()) {
-          showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
-        }
-        return clampedDate;
-      });
-    },
-    [showToast, t],
-  );
+  const handleClimbedAtChange = useCallback((next: Date) => {
+    setHasClimbedAtChanged(true);
+    setClimbedAt(next);
+  }, []);
 
-  const handleTimeChange = useCallback(
-    (_event: DateTimePickerEvent, selectedTime?: Date) => {
-      if (!selectedTime) return;
-      setHasClimbedAtChanged(true);
-      setClimbedAt((current) => {
-        const requestedTime = applyTimePart(current, selectedTime, { clampToPresent: false });
-        const clampedTime = clampToNow(requestedTime);
-        if (clampedTime.getTime() !== requestedTime.getTime()) {
-          showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
-        }
-        return clampedTime;
-      });
-    },
-    [showToast, t],
-  );
-
-  const openAndroidDatePicker = useCallback(() => {
-    DateTimePickerAndroid.open({
-      value: climbedAt,
-      mode: 'date',
-      display: 'default',
-      maximumDate: new Date(),
-      onChange: (event, selectedDate) => {
-        if (event.type !== 'set' || !selectedDate) return;
-        setHasClimbedAtChanged(true);
-        setClimbedAt((current) => {
-          const requestedDate = applyDatePart(current, selectedDate, { clampToPresent: false });
-          const clampedDate = clampToNow(requestedDate);
-          if (clampedDate.getTime() !== requestedDate.getTime()) {
-            showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
-          }
-          return clampedDate;
-        });
-      },
-    });
-  }, [climbedAt, showToast, t]);
-
-  const openAndroidTimePicker = useCallback(() => {
-    DateTimePickerAndroid.open({
-      value: climbedAt,
-      mode: 'time',
-      display: 'default',
-      maximumDate: new Date(),
-      onChange: (event, selectedTime) => {
-        if (event.type !== 'set' || !selectedTime) return;
-        setHasClimbedAtChanged(true);
-        setClimbedAt((current) => {
-          const requestedTime = applyTimePart(current, selectedTime, { clampToPresent: false });
-          const clampedTime = clampToNow(requestedTime);
-          if (clampedTime.getTime() !== requestedTime.getTime()) {
-            showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
-          }
-          return clampedTime;
-        });
-      },
-    });
-  }, [climbedAt, showToast, t]);
+  const handleFutureAdjusted = useCallback(() => {
+    showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
+  }, [showToast, t]);
 
   const save = useCallback(() => {
     if (!ascent || isMutating) return;
@@ -298,54 +193,26 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
 
       <SectionHeader title={t('mobile.logbook.dateLabel')} />
       <View style={styles.field}>
-        {Platform.OS === 'ios' ? (
-          <DateTimePicker
-            value={climbedAt}
-            mode="date"
-            display="compact"
-            maximumDate={maximumClimbedAtDate}
-            accessibilityLabel={t('mobile.logbook.dateLabel')}
-            onChange={handleDateChange}
-          />
-        ) : (
-          <Pressable
-            onPress={openAndroidDatePicker}
-            style={[styles.dateTimeButton, { backgroundColor: systemColors.fill }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.logbook.dateLabel')}
-          >
-            <Text variant="body" color={systemColors.label}>
-              {formatDateForDisplay(climbedAt)}
-            </Text>
-            <Icon name="calendar" size={18} color={systemColors.secondaryLabel} />
-          </Pressable>
-        )}
+        <ClimbedAtField
+          value={climbedAt}
+          mode="date"
+          maximumDate={maximumClimbedAtDate}
+          onChange={handleClimbedAtChange}
+          onFutureAdjusted={handleFutureAdjusted}
+          accessibilityLabel={t('mobile.logbook.dateLabel')}
+        />
       </View>
 
       <SectionHeader title={t('mobile.logbook.timeLabel')} />
       <View style={styles.field}>
-        {Platform.OS === 'ios' ? (
-          <DateTimePicker
-            value={climbedAt}
-            mode="time"
-            display="compact"
-            maximumDate={maximumClimbedAtDate}
-            accessibilityLabel={t('mobile.logbook.timeLabel')}
-            onChange={handleTimeChange}
-          />
-        ) : (
-          <Pressable
-            onPress={openAndroidTimePicker}
-            style={[styles.dateTimeButton, { backgroundColor: systemColors.fill }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.logbook.timeLabel')}
-          >
-            <Text variant="body" color={systemColors.label}>
-              {formatTimeForDisplay(climbedAt)}
-            </Text>
-            <Icon name="clock" size={18} color={systemColors.secondaryLabel} />
-          </Pressable>
-        )}
+        <ClimbedAtField
+          value={climbedAt}
+          mode="time"
+          maximumDate={maximumClimbedAtDate}
+          onChange={handleClimbedAtChange}
+          onFutureAdjusted={handleFutureAdjusted}
+          accessibilityLabel={t('mobile.logbook.timeLabel')}
+        />
       </View>
 
       <SectionHeader title={t('mobile.logbook.gradeLabel')} />
@@ -412,14 +279,6 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
 const styles = StyleSheet.create({
   title: { paddingHorizontal: spacing[4], paddingTop: spacing[2] },
   field: { paddingHorizontal: spacing[4] },
-  dateTimeButton: {
-    minHeight: 44,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing[5] },
   stepperValue: { minWidth: 40, textAlign: 'center' },
   input: {
