@@ -128,6 +128,14 @@ describe('LogAscentSheet dismiss tracking', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('sends layoutId: null (not undefined) when the sheet has no layoutId', () => {
+    const { container } = renderSheet({ layoutId: undefined });
+
+    fireEvent.click(container.querySelector('[data-label="playView.tickBar.closeAria"]') as Element);
+
+    expect(track).toHaveBeenCalledWith('Quick Tick Dismissed', expect.objectContaining({ layoutId: null }));
+  });
+
   it('does not fire Quick Tick Dismissed when the tick was just saved', () => {
     const { getByTestId, onClose } = renderSheet();
 
