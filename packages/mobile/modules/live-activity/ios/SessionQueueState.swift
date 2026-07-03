@@ -1,0 +1,295 @@
+import Foundation
+
+// Pure queue-update logic for the native session WebSocket: event types,
+// payload parsing, sequence acceptance, and the state reducer. Split out of
+// SessionWebSocketManager so the state transitions compile into the
+// BoardseshTests target (the manager itself drags in URLSession/BLE and
+// can't) — keep everything here side-effect free.
+
+// MARK: - Queue Update Events
+
+enum QueueUpdateEvent {
+    case fullSync(items: [SharedQueueItem], currentItem: SharedQueueItem?, sequence: Int)
+    case currentClimbChanged(item: SharedQueueItem?, sequence: Int)
+    case itemAdded(item: SharedQueueItem, position: Int, sequence: Int)
+    case itemRemoved(uuid: String, sequence: Int)
+    case reordered(uuid: String, oldIndex: Int, newIndex: Int, sequence: Int)
+    case climbMirrored(uuid: String?, mirrored: Bool, sequence: Int)
+}
+
+enum QueueEventRepaintPolicy {
+    static func shouldRepaintBoard(for event: QueueUpdateEvent) -> Bool {
+        switch event {
+        case .currentClimbChanged(_, _), .climbMirrored(_, _, _):
+            return true
+        case .fullSync(_, _, _), .itemAdded(_, _, _), .itemRemoved(_, _), .reordered(_, _, _, _):
+            return false
+        }
+    }
+}
+
+// MARK: - Sequence Acceptance
+
+/// Decides what to do with an incoming event's sequence number. FullSync is an
+/// authoritative snapshot the server sends on every (re)subscribe, so it is
+/// accepted unconditionally — gap-checking it against a sequence recorded on a
+/// previous connection made every reconnect after ≥2 missed events cancel the
+/// socket, refetch the same FullSync, and cancel again, forever.
+enum QueueSequencePolicy {
+    enum Decision: Equatable {
+        /// Apply the event and advance lastSequence to the given value.
+        case apply(newLastSequence: Int)
+        /// A mid-stream gap — drop the event and resync (reconnect fetches a
+        /// fresh FullSync).
+        case resync
+    }
+
+    static func decision(for event: QueueUpdateEvent, receivedSequence: Int, lastKnown: Int) -> Decision {
+        if case .fullSync = event {
+            return .apply(newLastSequence: receivedSequence)
+        }
+        if QueueMessageParser.hasSequenceGap(lastKnown: lastKnown, received: receivedSequence) {
+            return .resync
+        }
+        return .apply(newLastSequence: receivedSequence)
+    }
+}
+
+// MARK: - State Reducer
+
+/// Applies queue events to (items, currentIndex), keeping the *current item*
+/// stable by uuid the way the JS reducer does — a raw index survives inserts,
+/// removals, and reorders ahead of it only if it moves with the item.
+enum QueueStateReducer {
+    struct QueueState: Equatable {
+        var items: [SharedQueueItem]
+        var currentIndex: Int
+    }
+
+    static func apply(_ event: QueueUpdateEvent, to state: QueueState) -> QueueState {
+        var items = state.items
+        let currentUuid = currentItemUuid(in: state)
+
+        switch event {
+        case .fullSync(let syncedItems, let currentItem, _):
+            return stateSettingCurrent(item: currentItem, items: syncedItems, fallbackIndex: 0)
+
+        case .currentClimbChanged(let item, _):
+            guard let item else { return state }
+            // Mirrors the JS reducer's shouldAddToQueue: a current climb that
+            // isn't a queue member (picked from search) is appended so the
+            // wall, Live Activity, and widget nav all see it — instead of the
+            // stale index repainting the previous climb over the peer's choice.
+            return stateSettingCurrent(item: item, items: items, fallbackIndex: state.currentIndex)
+
+        case .itemAdded(let item, let position, _):
+            let insertIndex = min(max(position, 0), items.count)
+            items.insert(item, at: insertIndex)
+            return QueueState(items: items, currentIndex: resolveCurrentIndex(previousUuid: currentUuid, previousIndex: state.currentIndex, items: items))
+
+        case .itemRemoved(let uuid, _):
+            guard let removeIndex = items.firstIndex(where: { $0.uuid == uuid }) else { return state }
+            items.remove(at: removeIndex)
+            // When the current item itself was removed the uuid lookup misses
+            // and the clamped old index lands on its successor.
+            return QueueState(items: items, currentIndex: resolveCurrentIndex(previousUuid: currentUuid, previousIndex: state.currentIndex, items: items))
+
+        case .reordered(let uuid, let oldIndex, let newIndex, _):
+            let sourceIndex: Int
+            if oldIndex >= 0, oldIndex < items.count, items[oldIndex].uuid == uuid {
+                sourceIndex = oldIndex
+            } else if let found = items.firstIndex(where: { $0.uuid == uuid }) {
+                sourceIndex = found
+            } else {
+                return state
+            }
+            let item = items.remove(at: sourceIndex)
+            let dest = min(max(newIndex, 0), items.count)
+            items.insert(item, at: dest)
+            return QueueState(items: items, currentIndex: resolveCurrentIndex(previousUuid: currentUuid, previousIndex: state.currentIndex, items: items))
+
+        case .climbMirrored(let uuid, let mirrored, _):
+            guard let uuid, let itemIndex = items.firstIndex(where: { $0.uuid == uuid }) else { return state }
+            let item = items[itemIndex]
+            items[itemIndex] = SharedQueueItem(
+                uuid: item.uuid,
+                climbUuid: item.climbUuid,
+                climbName: item.climbName,
+                difficulty: item.difficulty,
+                angle: item.angle,
+                frames: item.frames,
+                setterUsername: item.setterUsername,
+                mirrored: mirrored
+            )
+            return QueueState(items: items, currentIndex: state.currentIndex)
+        }
+    }
+
+    private static func currentItemUuid(in state: QueueState) -> String? {
+        guard state.currentIndex >= 0, state.currentIndex < state.items.count else { return nil }
+        return state.items[state.currentIndex].uuid
+    }
+
+    /// The current item follows its uuid; if it vanished, clamp the old index
+    /// into bounds.
+    private static func resolveCurrentIndex(previousUuid: String?, previousIndex: Int, items: [SharedQueueItem]) -> Int {
+        if let previousUuid, let index = items.firstIndex(where: { $0.uuid == previousUuid }) {
+            return index
+        }
+        return min(max(previousIndex, 0), max(items.count - 1, 0))
+    }
+
+    private static func stateSettingCurrent(item: SharedQueueItem?, items: [SharedQueueItem], fallbackIndex: Int) -> QueueState {
+        guard let item else {
+            return QueueState(items: items, currentIndex: fallbackIndex)
+        }
+        if let index = items.firstIndex(where: { $0.uuid == item.uuid }) {
+            return QueueState(items: items, currentIndex: index)
+        }
+        var appended = items
+        appended.append(item)
+        return QueueState(items: appended, currentIndex: appended.count - 1)
+    }
+}
+
+// MARK: - Message Parsing Helpers
+
+enum QueueMessageParser {
+
+    /// Extract the `queueUpdates` dictionary from a graphql-ws `next` payload.
+    static func extractQueueUpdates(from payload: [String: Any]?) -> [String: Any]? {
+        guard let data = payload?["data"] as? [String: Any],
+              let updates = data["queueUpdates"] as? [String: Any]
+        else {
+            return nil
+        }
+        return updates
+    }
+
+    /// Convert a raw climb+queue-item dictionary into a `SharedQueueItem`.
+    static func parseQueueItem(_ dict: [String: Any]?) -> SharedQueueItem? {
+        guard let dict = dict,
+              let uuid = dict["uuid"] as? String,
+              let climb = dict["climb"] as? [String: Any],
+              let climbUuid = climb["uuid"] as? String
+        else {
+            return nil
+        }
+
+        let name = climb["name"] as? String ?? ""
+        let difficulty = Self.parseDifficulty(climb["difficulty"])
+        let angle = Self.parseIntValue(climb["angle"]) ?? 0
+        let frames = climb["frames"] as? String ?? ""
+        let setter = climb["setter_username"] as? String ?? ""
+        let mirrored = climb["mirrored"] as? Bool ?? false
+
+        return SharedQueueItem(
+            uuid: uuid,
+            climbUuid: climbUuid,
+            climbName: name,
+            difficulty: difficulty,
+            angle: angle,
+            frames: frames,
+            setterUsername: setter,
+            mirrored: mirrored
+        )
+    }
+
+    /// Parse a FullSync event from the queueUpdates dictionary.
+    static func parseFullSync(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        guard let state = updates["state"] as? [String: Any] else { return nil }
+        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+
+        let queueArray = state["queue"] as? [[String: Any]] ?? []
+        let items = queueArray.compactMap { parseQueueItem($0) }
+
+        let currentItem = parseQueueItem(state["currentClimbQueueItem"] as? [String: Any])
+
+        return .fullSync(items: items, currentItem: currentItem, sequence: sequence)
+    }
+
+    /// Parse a CurrentClimbChanged event.
+    static func parseCurrentClimbChanged(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+        let item = parseQueueItem(updates["currentItem"] as? [String: Any])
+        return .currentClimbChanged(item: item, sequence: sequence)
+    }
+
+    /// Parse a QueueItemAdded event.
+    static func parseQueueItemAdded(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+        let position = Self.parseIntValue(updates["position"]) ?? 0
+        let item = parseQueueItem(updates["addedItem"] as? [String: Any])
+        guard let item = item else { return nil }
+        return .itemAdded(item: item, position: position, sequence: sequence)
+    }
+
+    /// Parse a QueueItemRemoved event.
+    static func parseQueueItemRemoved(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        guard let uuid = updates["uuid"] as? String else { return nil }
+        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+        return .itemRemoved(uuid: uuid, sequence: sequence)
+    }
+
+    /// Parse a QueueReordered event.
+    static func parseQueueReordered(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        guard let uuid = updates["uuid"] as? String else { return nil }
+        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+        let oldIndex = Self.parseIntValue(updates["oldIndex"]) ?? 0
+        let newIndex = Self.parseIntValue(updates["newIndex"]) ?? 0
+        return .reordered(uuid: uuid, oldIndex: oldIndex, newIndex: newIndex, sequence: sequence)
+    }
+
+    /// Parse a ClimbMirrored event.
+    static func parseClimbMirrored(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+        let uuid = updates["mirroredUuid"] as? String ?? updates["uuid"] as? String
+        let mirrored = updates["mirrored"] as? Bool ?? false
+        return .climbMirrored(uuid: uuid, mirrored: mirrored, sequence: sequence)
+    }
+
+    /// Route the queueUpdates dictionary to the correct parser based on __typename.
+    static func parseQueueUpdate(_ updates: [String: Any]) -> QueueUpdateEvent? {
+        guard let typename = updates["__typename"] as? String else { return nil }
+        switch typename {
+        case "FullSync":
+            return parseFullSync(updates)
+        case "CurrentClimbChanged":
+            return parseCurrentClimbChanged(updates)
+        case "QueueItemAdded":
+            return parseQueueItemAdded(updates)
+        case "QueueItemRemoved":
+            return parseQueueItemRemoved(updates)
+        case "QueueReordered":
+            return parseQueueReordered(updates)
+        case "ClimbMirrored":
+            return parseClimbMirrored(updates)
+        default:
+            return nil
+        }
+    }
+
+    /// Detect a sequence gap: returns true when `received` is more than one
+    /// step ahead of `lastKnown`. A value of -1 for `lastKnown` means no
+    /// previous sequence has been recorded (first message).
+    static func hasSequenceGap(lastKnown: Int, received: Int) -> Bool {
+        guard lastKnown >= 0 else { return false }
+        return received > lastKnown + 1
+    }
+
+    // MARK: - Private Helpers
+
+    static func parseDifficulty(_ value: Any?) -> String {
+        if let str = value as? String { return str }
+        if let num = value as? Double { return String(format: "%.1f", num) }
+        if let num = value as? Int { return String(num) }
+        return ""
+    }
+
+    static func parseIntValue(_ value: Any?) -> Int? {
+        if let i = value as? Int { return i }
+        if let d = value as? Double { return Int(d) }
+        if let s = value as? String { return Int(s) }
+        return nil
+    }
+}

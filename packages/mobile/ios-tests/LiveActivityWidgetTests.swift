@@ -170,6 +170,98 @@ final class LiveActivityWidgetTests: XCTestCase {
         XCTAssertNil(BoardBleEncoding.moonboardSerialPosition(holdId: 199))
     }
 
+    // MARK: - Session queue sync (SessionQueueState.swift)
+
+    private func makeQueueState(uuids: [String], currentIndex: Int) -> QueueStateReducer.QueueState {
+        let items = uuids.map { makeQueueItem(uuid: $0, climbUuid: "climb-\($0)", climbName: "Climb \($0)") }
+        return QueueStateReducer.QueueState(items: items, currentIndex: currentIndex)
+    }
+
+    func testFullSyncIsAcceptedRegardlessOfSequenceGap() {
+        // A FullSync is an authoritative snapshot sent on every (re)subscribe.
+        // Gap-checking it against the previous connection's sequence caused an
+        // infinite reconnect loop after ≥2 events were missed while offline.
+        let fullSync = QueueUpdateEvent.fullSync(items: [], currentItem: nil, sequence: 12)
+        XCTAssertEqual(
+            QueueSequencePolicy.decision(for: fullSync, receivedSequence: 12, lastKnown: 3),
+            .apply(newLastSequence: 12)
+        )
+
+        // Deltas still gap-check: one step ahead applies, a jump resyncs.
+        let delta = QueueUpdateEvent.itemRemoved(uuid: "q1", sequence: 5)
+        XCTAssertEqual(
+            QueueSequencePolicy.decision(for: delta, receivedSequence: 5, lastKnown: 4),
+            .apply(newLastSequence: 5)
+        )
+        XCTAssertEqual(
+            QueueSequencePolicy.decision(for: delta, receivedSequence: 5, lastKnown: 3),
+            .resync
+        )
+        // First event after a (re)connect (lastKnown reset to -1) always applies.
+        XCTAssertEqual(
+            QueueSequencePolicy.decision(for: delta, receivedSequence: 5, lastKnown: -1),
+            .apply(newLastSequence: 5)
+        )
+    }
+
+    func testQueueMutationsAheadOfCurrentKeepTheCurrentItem() {
+        // Remove ahead of current: [A, B, C, D] current C → [B, C, D] current C.
+        var state = makeQueueState(uuids: ["A", "B", "C", "D"], currentIndex: 2)
+        state = QueueStateReducer.apply(.itemRemoved(uuid: "A", sequence: 1), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["B", "C", "D"])
+        XCTAssertEqual(state.currentIndex, 1)
+
+        // Insert ahead of current keeps following the item.
+        let inserted = makeQueueItem(uuid: "X", climbUuid: "climb-X", climbName: "Climb X")
+        state = QueueStateReducer.apply(.itemAdded(item: inserted, position: 0, sequence: 2), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["X", "B", "C", "D"])
+        XCTAssertEqual(state.currentIndex, 2)
+
+        // Reorder across the current item keeps following it too.
+        state = QueueStateReducer.apply(.reordered(uuid: "D", oldIndex: 3, newIndex: 0, sequence: 3), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["D", "X", "B", "C"])
+        XCTAssertEqual(state.currentIndex, 3)
+    }
+
+    func testRemovingTheCurrentItemFallsToItsSuccessor() {
+        var state = makeQueueState(uuids: ["A", "B", "C"], currentIndex: 1)
+        state = QueueStateReducer.apply(.itemRemoved(uuid: "B", sequence: 1), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["A", "C"])
+        XCTAssertEqual(state.currentIndex, 1) // now C
+
+        // Removing the last item while it is current clamps to the new tail.
+        state = QueueStateReducer.apply(.itemRemoved(uuid: "C", sequence: 2), to: state)
+        XCTAssertEqual(state.currentIndex, 0)
+    }
+
+    func testOffQueueCurrentClimbIsAppendedNotIgnored() {
+        // Mirrors the JS reducer's shouldAddToQueue: a peer navigating to a
+        // search result (not a queue member) must not leave the stale index
+        // repainting the previous climb over theirs.
+        let offQueue = makeQueueItem(uuid: "S", climbUuid: "climb-S", climbName: "Search Pick")
+        var state = makeQueueState(uuids: ["A", "B"], currentIndex: 0)
+        state = QueueStateReducer.apply(.currentClimbChanged(item: offQueue, sequence: 1), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["A", "B", "S"])
+        XCTAssertEqual(state.currentIndex, 2)
+
+        // An in-queue current climb just moves the index — no duplicate append.
+        state = QueueStateReducer.apply(
+            .currentClimbChanged(item: state.items[1], sequence: 2), to: state)
+        XCTAssertEqual(state.items.map(\.uuid), ["A", "B", "S"])
+        XCTAssertEqual(state.currentIndex, 1)
+    }
+
+    func testFullSyncWithOffQueueCurrentItemAppendsIt() {
+        let items = ["A", "B"].map { makeQueueItem(uuid: $0, climbUuid: "climb-\($0)", climbName: "Climb \($0)") }
+        let offQueue = makeQueueItem(uuid: "S", climbUuid: "climb-S", climbName: "Search Pick")
+        let state = QueueStateReducer.apply(
+            .fullSync(items: items, currentItem: offQueue, sequence: 7),
+            to: makeQueueState(uuids: [], currentIndex: 0)
+        )
+        XCTAssertEqual(state.items.map(\.uuid), ["A", "B", "S"])
+        XCTAssertEqual(state.currentIndex, 2)
+    }
+
     func testBoardRenderUrlUsesSharedBoardContext() {
         defaults.set("https://www.boardsesh.com", forKey: SharedConstants.serverUrlKey)
         defaults.set("kilter", forKey: SharedConstants.boardNameKey)

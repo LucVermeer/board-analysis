@@ -33,6 +33,10 @@ const TEST_SOURCE_FILES = [
     projectPath: 'BoardseshTests/LiveActivitySources/SharedConstants.swift',
   },
   {
+    sourcePath: '../modules/live-activity/ios/SessionQueueState.swift',
+    projectPath: 'BoardseshTests/LiveActivitySources/SessionQueueState.swift',
+  },
+  {
     sourcePath: '../modules/live-activity/ios/SharedKeychain.swift',
     projectPath: 'BoardseshTests/LiveActivitySources/SharedKeychain.swift',
   },
