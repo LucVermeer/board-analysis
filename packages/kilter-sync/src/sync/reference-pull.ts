@@ -109,12 +109,18 @@ export async function pullKilterReference(args: {
   accessToken: string;
   log?: (message: string) => void;
 }): Promise<KilterReferencePull> {
-  const products: KilterRefProduct[] = [];
-  const productLayouts: KilterRefProductLayout[] = [];
-  const holds: KilterRefHold[] = [];
-  const difficultyGrades: KilterRefDifficultyGrade[] = [];
-  const gyms: KilterRefGym[] = [];
-  const walls: KilterRefWall[] = [];
+  // A PowerSync stream can emit multiple PUT ops for the same row (initial
+  // snapshot then updates, or the same row surfaced by both the `global` and
+  // `global_gyms` buckets). Key each entity by its natural id so the latest op
+  // wins and we never enumerate — or skip-log — the same wall/gym twice. Before
+  // this, flat push() arrays let one duplicated `wall_uuid` inflate boardsSeen
+  // and stack identical entries in the locations skip report.
+  const products = new Map<string, KilterRefProduct>();
+  const productLayouts = new Map<string, KilterRefProductLayout>();
+  const holds = new Map<number, KilterRefHold>();
+  const difficultyGrades = new Map<number, KilterRefDifficultyGrade>();
+  const gyms = new Map<string, KilterRefGym>();
+  const walls = new Map<string, KilterRefWall>();
 
   await streamKilterPowerSync({
     accessToken: args.accessToken,
@@ -124,10 +130,14 @@ export async function pullKilterReference(args: {
       const data = op.data;
       switch (op.object_type) {
         case 'products':
-          products.push({ id: str(data.id), productName: str(data.product_name), isListed: bool(data.is_listed) });
+          products.set(str(data.id), {
+            id: str(data.id),
+            productName: str(data.product_name),
+            isListed: bool(data.is_listed),
+          });
           break;
         case 'product_layouts':
-          productLayouts.push({
+          productLayouts.set(str(data.product_layout_uuid), {
             productLayoutUuid: str(data.product_layout_uuid),
             productName: str(data.product_name),
             isListed: bool(data.is_listed),
@@ -138,20 +148,22 @@ export async function pullKilterReference(args: {
           });
           break;
         case 'holds':
-          holds.push({ holdId: num(data.hold_id), holdSetName: nullableStr(data.hold_set_name) });
+          holds.set(num(data.hold_id), { holdId: num(data.hold_id), holdSetName: nullableStr(data.hold_set_name) });
           break;
         case 'difficulty_grades':
-          difficultyGrades.push({
+          difficultyGrades.set(num(data.difficulty_grade_id), {
             difficultyGradeId: num(data.difficulty_grade_id),
             boulderDifficulty: nullableStr(data.boulder_difficulty),
             routeDifficulty: nullableStr(data.route_difficulty),
             isListed: bool(data.is_listed),
           });
           break;
-        case 'gyms':
-          gyms.push({
-            id: str(data.id ?? op.object_id),
-            gymUuid: str(data.gym_uuid),
+        case 'gyms': {
+          const id = str(data.id ?? op.object_id);
+          const gymUuid = str(data.gym_uuid);
+          gyms.set(gymUuid || id, {
+            id,
+            gymUuid,
             name: nullableStr(data.name),
             address: nullableStr(data.address),
             city: nullableStr(data.city),
@@ -166,10 +178,13 @@ export async function pullKilterReference(args: {
             isListed: nullableBool(data.isListed ?? data.is_listed),
           });
           break;
-        case 'walls':
-          walls.push({
-            id: str(data.id ?? op.object_id),
-            wallUuid: str(data.wall_uuid),
+        }
+        case 'walls': {
+          const id = str(data.id ?? op.object_id);
+          const wallUuid = str(data.wall_uuid);
+          walls.set(wallUuid || id, {
+            id,
+            wallUuid,
             gymUuid: nullableStr(data.gym_uuid),
             name: nullableStr(data.name),
             productName: nullableStr(data.product_name),
@@ -185,6 +200,7 @@ export async function pullKilterReference(args: {
             createdAt: nullableStr(data.created_at),
           });
           break;
+        }
         default:
           // hold_sets / placement_types / videos / grade_systems stream too but
           // aren't needed for catalog ingest — ignore.
@@ -195,15 +211,23 @@ export async function pullKilterReference(args: {
 
   // An empty product_layouts pull means we can't enumerate the catalog at
   // all — fail loud rather than silently sync nothing.
-  if (productLayouts.length === 0) {
+  if (productLayouts.size === 0) {
     throw new KilterApiError(
       'powersync',
       'Kilter reference pull returned no product_layouts — cannot enumerate the catalog',
     );
   }
 
+  const result: KilterReferencePull = {
+    products: [...products.values()],
+    productLayouts: [...productLayouts.values()],
+    holds: [...holds.values()],
+    difficultyGrades: [...difficultyGrades.values()],
+    gyms: [...gyms.values()],
+    walls: [...walls.values()],
+  };
   args.log?.(
-    `[kilter-catalog] reference pulled: ${products.length} products, ${productLayouts.length} layouts, ${holds.length} holds, ${difficultyGrades.length} grades, ${gyms.length} gyms, ${walls.length} walls`,
+    `[kilter-catalog] reference pulled: ${result.products.length} products, ${result.productLayouts.length} layouts, ${result.holds.length} holds, ${result.difficultyGrades.length} grades, ${result.gyms.length} gyms, ${result.walls.length} walls`,
   );
-  return { products, productLayouts, holds, difficultyGrades, gyms, walls };
+  return result;
 }

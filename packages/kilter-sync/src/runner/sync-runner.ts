@@ -271,7 +271,15 @@ export class SyncRunner {
     };
 
     try {
-      await syncKilterCatalog({ db, tokenProvider, log: (message) => this.log(message), applyDeletions: false });
+      // Deletions default ON: batched, reversible (soft-delete), and scoped to
+      // Kilter-synced climbs only (never user-authored). See deletions.ts.
+      await syncKilterCatalog({
+        db,
+        tokenProvider,
+        log: (message) => this.log(message),
+        applyDeletions: this.config.applyCatalogDeletions ?? true,
+        deleteBatchLimit: this.config.deleteBatchLimit,
+      });
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error(String(error)), { board });
     } finally {

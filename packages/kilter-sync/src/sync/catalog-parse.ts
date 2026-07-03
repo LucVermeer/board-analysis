@@ -54,6 +54,22 @@ export function gripsClimbConcatToFrames(climbConcat: string, holeToPlacement: M
 }
 
 /**
+ * Diagnostic-only: the first holeId in `climb_concat` with no placement on this
+ * layout — i.e. why `gripsClimbConcatToFrames` returned null. Called only on the
+ * (rare) unmapped path to make the climbsUnmapped counter diagnosable in logs.
+ * Returns null when the failure wasn't a missing hole (e.g. a malformed frame).
+ */
+export function firstUnplaceableHole(climbConcat: string, holeToPlacement: Map<number, number>): number | null {
+  const holdRe = /h(\d+)p(\d+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = holdRe.exec(climbConcat)) !== null) {
+    const holeId = Number(match[1]);
+    if (!holeToPlacement.has(holeId)) return holeId;
+  }
+  return null;
+}
+
+/**
  * Flatten an Aurora-format frames string into fingerprint tuples — identical
  * to aurora-sync `shared-sync.ts` so board_climb_holds rows match exactly.
  */

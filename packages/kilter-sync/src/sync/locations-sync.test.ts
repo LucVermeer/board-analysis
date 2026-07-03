@@ -139,4 +139,53 @@ describe('buildKilterLocationRecords', () => {
       skipped: [{ sourceKey: 'kilter:gym-uuid:wall-uuid', reason: 'unlisted gym' }],
     });
   });
+
+  it('dedupes repeated skip entries for the same wall (defense-in-depth)', () => {
+    const gym = {
+      id: 'gym-row',
+      gymUuid: 'gym-uuid',
+      name: 'Board House',
+      address: null,
+      city: null,
+      country: null,
+      countryCode: null,
+      postalCode: null,
+      latitude: 1,
+      longitude: 2,
+      instagramUsername: null,
+      gymLogo: null,
+      bannerLogo: null,
+      isListed: true,
+    };
+    const wall = {
+      id: 'wall-row',
+      wallUuid: 'wall-uuid',
+      gymUuid: 'gym-uuid',
+      name: null,
+      productName: 'Unknown Product',
+      productLayoutUuid: '99',
+      isAdjustable: true,
+      minAngle: null,
+      maxAngle: null,
+      angleIncrements: null,
+      angle: 35,
+      serialNumber: null,
+      accumulatedHoldSetValue: 1,
+      isListed: true,
+      createdAt: null,
+    };
+    // Same wall surfaced twice (a dup that slipped past the reference pull).
+    const reference: KilterReferencePull = {
+      products: [],
+      holds: [],
+      difficultyGrades: [],
+      productLayouts: [],
+      gyms: [gym],
+      walls: [wall, { ...wall }],
+    };
+
+    const { records, skipped } = buildKilterLocationRecords(reference, resolver());
+    expect(records).toEqual([]);
+    expect(skipped).toEqual([{ sourceKey: 'kilter:gym-uuid:wall-uuid', reason: 'unmapped product layout 99' }]);
+  });
 });
