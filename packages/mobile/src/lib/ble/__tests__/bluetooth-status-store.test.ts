@@ -99,7 +99,9 @@ describe('registerBluetoothConnection', () => {
     expect(setPersonPropertiesMock).toHaveBeenCalledWith(undefined, { has_connected_board: true });
   });
 
-  it('only marks has_connected_board once per app session, not on every reconnect', () => {
+  it('only marks has_connected_board once per app session across a disconnect and reconnects', () => {
+    // Disconnect after the first connect, then reconnect twice more — the flag
+    // must fire only on the very first connect above, never on these.
     const cleanupA = registerBluetoothConnection(vi.fn());
     cleanupA();
     registerBluetoothConnection(vi.fn());
