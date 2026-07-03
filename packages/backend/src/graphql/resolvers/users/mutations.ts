@@ -1,4 +1,4 @@
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import type {
   ConnectionContext,
   UserProfile,
@@ -72,7 +72,19 @@ export const userMutations = {
     }
 
     // Fetch and return updated profile
-    const users = await db.select().from(dbSchema.users).where(eq(dbSchema.users.id, userId)).limit(1);
+    const users = await db
+      .select({
+        id: dbSchema.users.id,
+        email: dbSchema.users.email,
+        name: dbSchema.users.name,
+        image: dbSchema.users.image,
+        createdAt: dbSchema.users.createdAt,
+        // Correlated subquery rather than a second round trip.
+        favoriteCount: sql<number>`(select count(*)::int from ${dbSchema.userFavorites} where ${dbSchema.userFavorites.userId} = ${dbSchema.users.id})`,
+      })
+      .from(dbSchema.users)
+      .where(eq(dbSchema.users.id, userId))
+      .limit(1);
 
     const profiles = await db
       .select()
@@ -83,11 +95,6 @@ export const userMutations = {
     const user = users[0];
     const profile = profiles[0];
 
-    const [favoriteCountRow] = await db
-      .select({ count: count() })
-      .from(dbSchema.userFavorites)
-      .where(eq(dbSchema.userFavorites.userId, user.id));
-
     return {
       id: user.id,
       email: user.email,
@@ -95,7 +102,7 @@ export const userMutations = {
       avatarUrl: profile?.avatarUrl || user.image || undefined,
       isTester: await userIsTester(user.id),
       createdAt: user.createdAt.toISOString(),
-      favoriteCount: favoriteCountRow?.count ?? 0,
+      favoriteCount: user.favoriteCount,
     };
   },
 
