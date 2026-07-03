@@ -266,6 +266,15 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(mocks.openURL).not.toHaveBeenCalled();
   });
 
+  it('shows an error toast when the mail draft fails to open after confirming', async () => {
+    mocks.openURL.mockReset().mockRejectedValueOnce(new Error('no mail handler'));
+    const { container } = render(<BoardAccountsSection />);
+    fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
+    await waitFor(() => {
+      expect(mocks.showToast).toHaveBeenCalledWith('aurora.mobile.requestDataFailed', 'error');
+    });
+  });
+
   it('shows a copy-failed toast and skips the dialog and email when the clipboard write fails', async () => {
     mocks.setClipboard.mockReset().mockRejectedValueOnce(new Error('no clipboard'));
     const { container } = render(<BoardAccountsSection />);

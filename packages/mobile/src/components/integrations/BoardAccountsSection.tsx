@@ -545,9 +545,13 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
         confirmLabel: t('aurora.moonboard.requestDataDialog.confirm'),
         cancelLabel: t('aurora.moonboard.requestDataDialog.cancel'),
       });
-      // The letter is on the clipboard either way; opening the draft is
-      // best-effort, so a missing mail app isn't worth surfacing as a failure.
-      if (openEmail) void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {});
+      // The letter is on the clipboard either way (the dialog said so), but if
+      // the user asked to open their email and no client is installed, say so.
+      if (openEmail) {
+        void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {
+          showToast(t('aurora.mobile.requestDataFailed'), 'error');
+        });
+      }
     };
     void openRequest();
   }, [confirm, showToast, t]);
