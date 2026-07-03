@@ -16,9 +16,123 @@ import {
   consensusGradeTable,
   consensusGradeJoinCondition,
 } from '../shared/sql-expressions';
+import type { z } from 'zod';
 import { GetTicksInputSchema, BoardNameSchema, AscentFeedInputSchema } from '../../../validation/schemas';
 import { escapeLikePattern } from '../../../utils/like-pattern';
 import { extractInstagramHandle } from '../beta-videos/queries';
+
+// Benchmark resolution shared by the flat and grouped ascent feeds: a climb
+// counts as benchmark when the stats row says so or the tick itself was
+// imported as one.
+const resolvedBenchmarkExpr = sql<boolean>`CASE
+  WHEN COALESCE(${dbSchema.boardClimbStats.benchmarkDifficulty}, 0) > 0 OR ${dbSchema.boardseshTicks.isBenchmark} = true THEN true
+  ELSE false
+END`;
+
+// Filter on the effective difficulty (user override → consensus fallback) so a
+// grade-range filter doesn't silently hide ungraded ascents whose consensus is
+// in range. See docs/ascents-and-attempts.md.
+const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
+
+// The validated AscentFeedInput both feeds filter on — inferred from the zod
+// schema so a new filter field can't silently diverge from validation.
+type AscentFeedFilterInput = z.infer<typeof AscentFeedInputSchema>;
+
+/**
+ * WHERE conditions over the ticks table (+ stats/consensus joins for grade and
+ * benchmark filters) shared by userAscentsFeed and userGroupedAscentsFeed so
+ * the two feeds can never disagree about what a filter means.
+ */
+function buildAscentTickConditions(validated: AscentFeedFilterInput, userId: string) {
+  const legacyStatus = validated.status;
+  let inferredStatusMode = 'both';
+  if (legacyStatus === 'attempt') {
+    inferredStatusMode = 'attempt';
+  } else if (legacyStatus) {
+    inferredStatusMode = 'send';
+  }
+  const statusMode = validated.statusMode ?? inferredStatusMode;
+  const flashOnly = validated.flashOnly ?? legacyStatus === 'flash';
+
+  const conditions = [
+    eq(dbSchema.boardseshTicks.userId, userId),
+    ...(validated.boardType ? [eq(dbSchema.boardseshTicks.boardType, validated.boardType)] : []),
+    ...(validated.boardTypes && validated.boardTypes.length > 0 && !validated.boardType
+      ? [inArray(dbSchema.boardseshTicks.boardType, validated.boardTypes)]
+      : []),
+    ...(validated.minDifficulty !== undefined ? [gte(effectiveDifficultyExpr, validated.minDifficulty)] : []),
+    ...(validated.maxDifficulty !== undefined ? [lte(effectiveDifficultyExpr, validated.maxDifficulty)] : []),
+    ...(validated.minAngle !== undefined ? [gte(dbSchema.boardseshTicks.angle, validated.minAngle)] : []),
+    ...(validated.maxAngle !== undefined ? [lte(dbSchema.boardseshTicks.angle, validated.maxAngle)] : []),
+    ...(validated.fromDate ? [gte(dbSchema.boardseshTicks.climbedAt, validated.fromDate)] : []),
+    ...(validated.toDate ? [lte(dbSchema.boardseshTicks.climbedAt, validated.toDate + 'T23:59:59.999Z')] : []),
+  ];
+
+  if (statusMode === 'attempt') {
+    conditions.push(eq(dbSchema.boardseshTicks.status, 'attempt'));
+  } else if (statusMode === 'send') {
+    conditions.push(
+      flashOnly
+        ? eq(dbSchema.boardseshTicks.status, 'flash')
+        : inArray(dbSchema.boardseshTicks.status, ['flash', 'send']),
+    );
+  } else if (flashOnly) {
+    conditions.push(eq(dbSchema.boardseshTicks.status, 'flash'));
+  }
+
+  if (validated.benchmarkOnly) {
+    conditions.push(sql`(${resolvedBenchmarkExpr}) = true`);
+  }
+
+  return conditions;
+}
+
+/** Conditions that need the canonical board_climbs join (layout + name search). */
+function buildAscentClimbConditions(validated: AscentFeedFilterInput) {
+  return [
+    ...(validated.layoutIds && validated.layoutIds.length > 0
+      ? [inArray(dbSchema.boardClimbs.layoutId, validated.layoutIds)]
+      : []),
+    ...(validated.climbName
+      ? [
+          or(
+            ilike(dbSchema.boardClimbs.name, `%${escapeLikePattern(validated.climbName)}%`),
+            ilike(dbSchema.boardseshTicks.comment, `%${escapeLikePattern(validated.climbName)}%`),
+          ),
+        ]
+      : []),
+  ];
+}
+
+/**
+ * Which of these climbs carry a beta video of THIS user's — created by them,
+ * matching their Instagram handle (legacy synced rows have tick_uuid NULL), or
+ * directly attached to one of the given ticks. Ownership mirrors userBetaLinks
+ * (the profile beta shelf). One profile lookup + one links query per call.
+ * Returns `boardType:climbUuid` keys.
+ */
+async function fetchUserBetaClimbKeys(userId: string, climbUuids: string[], tickUuids: string[]): Promise<Set<string>> {
+  if (climbUuids.length === 0) return new Set();
+  const profileRows = await db
+    .select({ instagramUrl: dbSchema.userProfiles.instagramUrl })
+    .from(dbSchema.userProfiles)
+    .where(eq(dbSchema.userProfiles.userId, userId))
+    .limit(1);
+  const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
+  // createdByUserId is unconditional, so this array is never empty — or()
+  // always gets at least one condition (single-arg or() is valid but don't
+  // let a refactor remove the guaranteed first element).
+  const ownershipConditions = [
+    eq(dbSchema.boardBetaLinks.createdByUserId, userId),
+    ...(tickUuids.length > 0 ? [inArray(dbSchema.boardBetaLinks.tickUuid, tickUuids)] : []),
+    ...(igHandle ? [eq(dbSchema.boardBetaLinks.foreignUsername, igHandle)] : []),
+  ];
+  const betaLinkRows = await db
+    .select({ boardType: dbSchema.boardBetaLinks.boardType, climbUuid: dbSchema.boardBetaLinks.climbUuid })
+    .from(dbSchema.boardBetaLinks)
+    .where(and(inArray(dbSchema.boardBetaLinks.climbUuid, climbUuids), or(...ownershipConditions)));
+  return new Set(betaLinkRows.map((row) => `${row.boardType}:${row.climbUuid}`));
+}
 
 // Shape of a row produced by the userAscentsFeed item mapper. Declared so
 // userAscentCaptionMatches (which reuses that builder) returns a typed ascent
@@ -289,71 +403,14 @@ export const tickQueries = {
     const validatedInput = validateInput(AscentFeedInputSchema, input || {}, 'input');
     const limit = validatedInput.limit ?? 20;
     const offset = validatedInput.offset ?? 0;
-    const boardType = validatedInput.boardType;
-    const boardTypes = validatedInput.boardTypes;
-    const layoutIds = validatedInput.layoutIds;
-    const climbName = validatedInput.climbName;
     const sortBy = validatedInput.sortBy ?? 'recent';
     const sortOrder = validatedInput.sortOrder ?? 'desc';
     const secondarySortBy = validatedInput.secondarySortBy;
     const secondarySortOrder = validatedInput.secondarySortOrder ?? 'desc';
-    const minDifficulty = validatedInput.minDifficulty;
-    const maxDifficulty = validatedInput.maxDifficulty;
-    const minAngle = validatedInput.minAngle;
-    const maxAngle = validatedInput.maxAngle;
-    const benchmarkOnly = validatedInput.benchmarkOnly ?? false;
-    const fromDate = validatedInput.fromDate;
-    const toDate = validatedInput.toDate;
-    const legacyStatus = validatedInput.status;
-    let inferredStatusMode = 'both';
-    if (legacyStatus === 'attempt') {
-      inferredStatusMode = 'attempt';
-    } else if (legacyStatus) {
-      inferredStatusMode = 'send';
-    }
-    const statusMode = validatedInput.statusMode ?? inferredStatusMode;
-    const flashOnly = validatedInput.flashOnly ?? legacyStatus === 'flash';
 
-    const resolvedBenchmarkExpr = sql<boolean>`CASE
-      WHEN COALESCE(${dbSchema.boardClimbStats.benchmarkDifficulty}, 0) > 0 OR ${dbSchema.boardseshTicks.isBenchmark} = true THEN true
-      ELSE false
-    END`;
-
-    // Filter on the effective difficulty (user override → consensus fallback) so
-    // a grade-range filter doesn't silently hide ungraded ascents whose consensus
-    // is in range. See docs/ascents-and-attempts.md.
-    const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
-
-    // Build shared WHERE conditions
-    const tickConditions = [
-      eq(dbSchema.boardseshTicks.userId, userId),
-      ...(boardType ? [eq(dbSchema.boardseshTicks.boardType, boardType)] : []),
-      ...(boardTypes && boardTypes.length > 0 && !boardType
-        ? [inArray(dbSchema.boardseshTicks.boardType, boardTypes)]
-        : []),
-      ...(minDifficulty !== undefined ? [gte(effectiveDifficultyExpr, minDifficulty)] : []),
-      ...(maxDifficulty !== undefined ? [lte(effectiveDifficultyExpr, maxDifficulty)] : []),
-      ...(minAngle !== undefined ? [gte(dbSchema.boardseshTicks.angle, minAngle)] : []),
-      ...(maxAngle !== undefined ? [lte(dbSchema.boardseshTicks.angle, maxAngle)] : []),
-      ...(fromDate ? [gte(dbSchema.boardseshTicks.climbedAt, fromDate)] : []),
-      ...(toDate ? [lte(dbSchema.boardseshTicks.climbedAt, toDate + 'T23:59:59.999Z')] : []),
-    ];
-
-    if (statusMode === 'attempt') {
-      tickConditions.push(eq(dbSchema.boardseshTicks.status, 'attempt'));
-    } else if (statusMode === 'send') {
-      tickConditions.push(
-        flashOnly
-          ? eq(dbSchema.boardseshTicks.status, 'flash')
-          : inArray(dbSchema.boardseshTicks.status, ['flash', 'send']),
-      );
-    } else if (flashOnly) {
-      tickConditions.push(eq(dbSchema.boardseshTicks.status, 'flash'));
-    }
-
-    if (benchmarkOnly) {
-      tickConditions.push(sql`(${resolvedBenchmarkExpr}) = true`);
-    }
+    // WHERE conditions shared with userGroupedAscentsFeed — one definition of
+    // what every filter means (see buildAscentTickConditions at module scope).
+    const tickConditions = buildAscentTickConditions(validatedInput, userId);
 
     // Base query with JOINs (shared by count and data queries)
     const baseQuery = db
@@ -409,18 +466,7 @@ export const tickQueries = {
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition);
 
     // Full conditions including climb name filter (requires JOIN)
-    const allConditions = [
-      ...tickConditions,
-      ...(layoutIds && layoutIds.length > 0 ? [inArray(dbSchema.boardClimbs.layoutId, layoutIds)] : []),
-      ...(climbName
-        ? [
-            or(
-              ilike(dbSchema.boardClimbs.name, `%${escapeLikePattern(climbName)}%`),
-              ilike(dbSchema.boardseshTicks.comment, `%${escapeLikePattern(climbName)}%`),
-            ),
-          ]
-        : []),
-    ];
+    const allConditions = [...tickConditions, ...buildAscentClimbConditions(validatedInput)];
 
     // Get total count
     const countQuery = db
@@ -523,33 +569,13 @@ export const tickQueries = {
       .limit(limit)
       .offset(offset);
 
-    // Which of this page's CLIMBS carry a beta video of this user's. Ownership
-    // mirrors userBetaLinks (the profile beta shelf): a link the user created,
-    // one matching their Instagram handle (Aurora-synced/backfilled legacy rows
-    // have tick_uuid NULL), or one directly attached to a tick on this page.
-    // Climb-level on purpose — "do I have beta for this climb" — and batched:
-    // two queries per page (profile handle + links), no N+1.
-    const pageTickUuids = results.map(({ tick }) => tick.uuid);
-    const pageClimbUuids = Array.from(new Set(results.map(({ tick }) => tick.climbUuid)));
-    let climbsWithBeta = new Set<string>();
-    if (pageClimbUuids.length > 0) {
-      const profileRows = await db
-        .select({ instagramUrl: dbSchema.userProfiles.instagramUrl })
-        .from(dbSchema.userProfiles)
-        .where(eq(dbSchema.userProfiles.userId, userId))
-        .limit(1);
-      const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
-      const ownershipConditions = [
-        eq(dbSchema.boardBetaLinks.createdByUserId, userId),
-        inArray(dbSchema.boardBetaLinks.tickUuid, pageTickUuids),
-        ...(igHandle ? [eq(dbSchema.boardBetaLinks.foreignUsername, igHandle)] : []),
-      ];
-      const betaLinkRows = await db
-        .select({ boardType: dbSchema.boardBetaLinks.boardType, climbUuid: dbSchema.boardBetaLinks.climbUuid })
-        .from(dbSchema.boardBetaLinks)
-        .where(and(inArray(dbSchema.boardBetaLinks.climbUuid, pageClimbUuids), or(...ownershipConditions)));
-      climbsWithBeta = new Set(betaLinkRows.map((row) => `${row.boardType}:${row.climbUuid}`));
-    }
+    // Which of this page's CLIMBS carry a beta video of this user's — shared
+    // helper (ownership mirrors the profile beta shelf), batched per page.
+    const climbsWithBeta = await fetchUserBetaClimbKeys(
+      userId,
+      Array.from(new Set(results.map(({ tick }) => tick.climbUuid))),
+      results.map(({ tick }) => tick.uuid),
+    );
 
     // Map results to response format
     const items = results.map(
@@ -675,16 +701,24 @@ export const tickQueries = {
    */
   userGroupedAscentsFeed: async (
     _: unknown,
-    { userId, input }: { userId: string; input?: { limit?: number; offset?: number } },
+    { userId, input }: { userId: string; input?: Record<string, unknown> },
+    ctx?: ConnectionContext,
   ): Promise<{
     groups: unknown[];
     totalCount: number;
     hasMore: boolean;
   }> => {
-    // Validate and set defaults
+    // Validate and set defaults. Accepts the full AscentFeedInput: filters are
+    // shared with userAscentsFeed (one definition per filter), applied to BOTH
+    // the group page and the tick fetch so group aggregates reflect exactly the
+    // visible entries. Sort stays latest-activity — grouping is a date-view
+    // concept; clients use the flat feed for grade-ordered views.
     const validatedInput = validateInput(AscentFeedInputSchema, input || {}, 'input');
     const limit = validatedInput.limit ?? 20;
     const offset = validatedInput.offset ?? 0;
+    const tickConditions = buildAscentTickConditions(validatedInput, userId);
+    const climbConditions = buildAscentClimbConditions(validatedInput);
+    const groupFilterConditions = [...tickConditions, ...climbConditions];
 
     // boardsesh_ticks.climbed_at is `timestamp without time zone` storing the
     // climber's wall-clock time at the moment of the tick (the rest of the
@@ -695,31 +729,57 @@ export const tickQueries = {
 
     // 1) Page of (climbUuid, day) keys, ordered by latest activity in that group.
     //    Bounds the SQL fetch to exactly the groups we'll return.
-    const pageGroups = await db
+    // One filtered-groups base: joins (canonical climb for layout/name, stats +
+    // consensus for grade/benchmark — 1:1 per tick, never multiplying group
+    // rows) and WHERE applied ONCE, then both the page query and the count read
+    // from it, so a join change can't drift between them.
+    const filteredGroupsBase = db
       .select({
         climbUuid: dbSchema.boardseshTicks.climbUuid,
         day: dayExpr.as('day'),
         latestClimbedAt: sql<string>`max(${dbSchema.boardseshTicks.climbedAt})`.as('latest_climbed_at'),
       })
       .from(dbSchema.boardseshTicks)
-      .where(eq(dbSchema.boardseshTicks.userId, userId))
+      .leftJoin(
+        dbSchema.boardClimbAliases,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
+        ),
+      )
+      .leftJoin(
+        dbSchema.boardClimbs,
+        and(
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
+        ),
+      )
+      .leftJoin(
+        dbSchema.boardClimbStats,
+        and(
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbStats.climbUuid}`,
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
+          eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
+        ),
+      )
+      .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
+      .where(and(...groupFilterConditions))
       .groupBy(dbSchema.boardseshTicks.climbUuid, dayExpr)
-      .orderBy(sql`max(${dbSchema.boardseshTicks.climbedAt}) desc`)
+      .as('filtered_groups');
+
+    const pageGroups = await db
+      .select({
+        climbUuid: filteredGroupsBase.climbUuid,
+        day: filteredGroupsBase.day,
+        latestClimbedAt: filteredGroupsBase.latestClimbedAt,
+      })
+      .from(filteredGroupsBase)
+      .orderBy(sql`${filteredGroupsBase.latestClimbedAt} desc`)
       .limit(limit)
       .offset(offset);
 
     // 2) True total group count — runs in parallel with the data fetch below.
-    const totalCountPromise = db.select({ count: count() }).from(
-      db
-        .select({
-          climbUuid: dbSchema.boardseshTicks.climbUuid,
-          day: dayExpr.as('day'),
-        })
-        .from(dbSchema.boardseshTicks)
-        .where(eq(dbSchema.boardseshTicks.userId, userId))
-        .groupBy(dbSchema.boardseshTicks.climbUuid, dayExpr)
-        .as('group_keys'),
-    );
+    const totalCountPromise = db.select({ count: count() }).from(filteredGroupsBase);
 
     if (pageGroups.length === 0) {
       const totalCountResult = await totalCountPromise;
@@ -752,9 +812,17 @@ export const tickQueries = {
         layoutId: dbSchema.boardClimbs.layoutId,
         frames: dbSchema.boardClimbs.frames,
         difficultyName: difficultyNameWithFallbackExpr,
+        boardName: dbSchema.userBoards.name,
+        boardIsPublic: dbSchema.userBoards.isPublic,
+        boardIsUnlisted: dbSchema.userBoards.isUnlisted,
+        consensusDifficulty: consensusDifficultyExpr,
+        consensusDifficultyName: consensusDifficultyNameExpr,
+        resolvedIsBenchmark: resolvedBenchmarkExpr,
+        qualityAverage: dbSchema.boardClimbStats.qualityAverage,
         day: dayExpr.as('day'),
       })
       .from(dbSchema.boardseshTicks)
+      .leftJoin(dbSchema.userBoards, eq(dbSchema.boardseshTicks.boardId, dbSchema.userBoards.id))
       // Resolve dedup-merged climbs to their canonical UUID before joining
       // board_climbs / board_climb_stats. See the `ticks` resolver for rationale.
       // The (climbUuid, day) grouping itself stays keyed on the tick's own
@@ -792,7 +860,7 @@ export const tickQueries = {
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
       .where(
         and(
-          eq(dbSchema.boardseshTicks.userId, userId),
+          ...groupFilterConditions,
           inArray(dbSchema.boardseshTicks.climbUuid, climbUuidsInPage),
           gte(dbSchema.boardseshTicks.climbedAt, minTimestamp),
           lte(dbSchema.boardseshTicks.climbedAt, maxTimestamp),
@@ -806,6 +874,8 @@ export const tickQueries = {
       climbName: string;
       setterUsername: string | null;
       boardType: string;
+      boardId: number | null;
+      boardDisplayName: string | null;
       layoutId: number | null;
       angle: number;
       isMirror: boolean;
@@ -814,11 +884,15 @@ export const tickQueries = {
       quality: number | null;
       difficulty: number | null;
       difficultyName: string | null;
+      consensusDifficulty: number | null;
+      consensusDifficultyName: string | null;
+      qualityAverage: number | null;
       isBenchmark: boolean;
       isNoMatch: boolean;
       comment: string;
       climbedAt: string;
       frames: string | null;
+      hasBetaVideo: boolean;
     };
 
     type GroupedAscent = {
@@ -843,6 +917,14 @@ export const tickQueries = {
       latestComment: string | null;
     };
 
+    // Beta ownership for the page's climbs — same helper + semantics as the
+    // flat feed, so a group item and its flat-feed twin can never disagree.
+    const climbsWithBeta = await fetchUserBetaClimbKeys(
+      userId,
+      climbUuidsInPage,
+      tickRows.map(({ tick }) => tick.uuid),
+    );
+
     const groupMap = new Map<string, GroupedAscent>();
 
     for (const {
@@ -853,6 +935,13 @@ export const tickQueries = {
       layoutId,
       frames,
       difficultyName,
+      boardName,
+      boardIsPublic,
+      boardIsUnlisted,
+      consensusDifficulty,
+      consensusDifficultyName,
+      resolvedIsBenchmark,
+      qualityAverage,
       day,
     } of tickRows) {
       const key = `${tick.climbUuid}-${day}`;
@@ -861,12 +950,16 @@ export const tickQueries = {
 
       const isNoMatch = isNoMatchClimb(climbDescription);
 
+      const canShowBoard =
+        tick.boardId != null && (ctx?.userId === userId || (boardIsPublic === true && boardIsUnlisted !== true));
       const item: AscentItem = {
         uuid: tick.uuid,
         climbUuid: tick.climbUuid,
         climbName: climbName || 'Unknown Climb',
         setterUsername,
         boardType: tick.boardType,
+        boardId: canShowBoard ? tick.boardId : null,
+        boardDisplayName: canShowBoard ? boardName : null,
         layoutId,
         angle: tick.angle,
         isMirror: tick.isMirror ?? false,
@@ -875,11 +968,16 @@ export const tickQueries = {
         quality: tick.quality,
         difficulty: tick.difficulty,
         difficultyName,
-        isBenchmark: tick.isBenchmark ?? false,
+        consensusDifficulty:
+          consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
+        consensusDifficultyName,
+        qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
+        isBenchmark: Boolean(resolvedIsBenchmark),
         isNoMatch,
         comment: tick.comment || '',
         climbedAt: tick.climbedAt,
         frames,
+        hasBetaVideo: climbsWithBeta.has(`${tick.boardType}:${tick.climbUuid}`),
       };
 
       let group = groupMap.get(key);
