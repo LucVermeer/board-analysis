@@ -4,6 +4,13 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-03
+
+### Improved
+
+- Co-Authored-By: Claude Fable 5 <noreply@anthropic.com> ([#3367](https://github.com/boardsesh/boardsesh/pull/3367))
+  https://claude.ai/code/session_01M9eAY2yZDGSqossL5UtUQo
+
 ## 2026-07-02
 
 ### New

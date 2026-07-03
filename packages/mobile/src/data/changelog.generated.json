@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-02T12:55:46.130Z",
+  "generatedAt": "2026-07-03T01:09:21.965Z",
   "entries": [
+    {
+      "prNumber": 3367,
+      "category": "improved",
+      "title": "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>",
+      "mergedAt": "2026-07-03T01:04:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3367",
+      "body": "https://claude.ai/code/session_01M9eAY2yZDGSqossL5UtUQo"
+    },
     {
       "prNumber": 3352,
       "category": "fixed",
