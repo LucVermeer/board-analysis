@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-03T11:51:49.733Z",
+  "generatedAt": "2026-07-03T20:52:57.794Z",
   "entries": [
+    {
+      "prNumber": 3384,
+      "category": "new",
+      "title": "Working a climb all session no longer floods your logbook — burns and the send collapse into one row with the day's total tries. Tap-and-hold or swipe still reaches every individual entry.",
+      "mergedAt": "2026-07-03T20:52:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3384",
+      "body": "Your projects now show alongside your sends by default. Flip back to sends-only anytime with the Show filter — your choice sticks.\nOpen any climb you've worked and see your history per angle: total tries, sessions, and sends at 40° vs 45°."
+    },
     {
       "prNumber": 3411,
       "category": "fixed",
