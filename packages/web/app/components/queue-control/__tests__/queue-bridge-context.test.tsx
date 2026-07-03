@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import React from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { QueueBridgeProvider, QueueBridgeInjector, useQueueBridgeBoardInfo } from '../queue-bridge-context';
 import { createPlaylistSuggestionSource } from '../playlist-suggestions';
 import {
@@ -267,7 +268,7 @@ function createDefaultPersistentSession(overrides?: Record<string, unknown>) {
     // clearLocalQueue.
     soloBoardPath: null,
     soloBoardDetails: null,
-    isBoardContextLoaded: false,
+    isSessionRestoreComplete: false,
     setBoardContext: mockSetBoardContext,
     deactivateSession: mockDeactivateSession,
     activateSession: vi.fn(),
@@ -452,7 +453,7 @@ describe('queue-bridge-context', () => {
       mockPersistentSession = createDefaultPersistentSession({
         soloBoardDetails: bd,
         soloBoardPath: '/kilter/1/10/1,2',
-        isBoardContextLoaded: true,
+        isSessionRestoreComplete: true,
       });
       const { result } = renderBridgeHook({ queue: [item], currentClimbQueueItem: item });
       expect(result.current.boardInfo.hasActiveQueue).toBe(true);
@@ -473,7 +474,7 @@ describe('queue-bridge-context', () => {
             angle: 40,
           },
         },
-        isBoardContextLoaded: true,
+        isSessionRestoreComplete: true,
       });
 
       const { result } = renderBridgeHook({ queue: [], currentClimbQueueItem: null });
@@ -488,7 +489,7 @@ describe('queue-bridge-context', () => {
       mockPersistentSession = createDefaultPersistentSession({
         soloBoardDetails: createTestBoardDetails(),
         soloBoardPath: '/kilter/1/10/1,2',
-        isBoardContextLoaded: true,
+        isSessionRestoreComplete: true,
       });
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -519,7 +520,7 @@ describe('queue-bridge-context', () => {
         mockPersistentSession = createDefaultPersistentSession({
           soloBoardDetails: bd,
           soloBoardPath: '/kilter/1/10/1,2',
-          isBoardContextLoaded: true,
+          isSessionRestoreComplete: true,
         });
         const wrapper = ({ children }: { children: React.ReactNode }) => (
           <MockRootQueueProvider seed={{ queue, currentClimbQueueItem: current }}>
@@ -561,6 +562,35 @@ describe('queue-bridge-context', () => {
         expect(result.current!.queue[0].climb.uuid).toBe('c-existing');
         // ...and, crucially, no spurious current-climb activation fired.
         expect(result.current!.currentClimbQueueItem).toBeNull();
+      });
+
+      it('two synchronous same-uuid adds keep one queue entry and one current climb (stale-ref idempotency)', () => {
+        // Pins the stale-ref guard's idempotency. `applyLocal` decides whether
+        // to fire the solo auto-activate follow-up from the PRE-dispatch
+        // `latestRef` snapshot. Two adds in one tick (a rapid double-tap) don't
+        // re-render between calls, so both read the same empty snapshot and both
+        // pass the `!queue.some(uuid===...)` guard. The second add and its
+        // follow-up are reducer no-ops (insertQueueItemIdempotent returns the
+        // same array reference; the repeated DELTA_UPDATE_CURRENT_CLIMB
+        // re-activates the already-current item), so the end state must stay
+        // correct even though the guard fired twice. Force both builds to mint
+        // the same item uuid so the second add genuinely collides.
+        // `uuid`'s v4 has a Uint8Array-returning overload; narrow to the string
+        // form so the mocked return values type-check.
+        const mintFixedUuid = vi.mocked(uuidv4 as unknown as () => string);
+        mintFixedUuid.mockReturnValueOnce('rapid-uuid').mockReturnValueOnce('rapid-uuid');
+        const { result } = renderWithLocalQueue([], null); // empty queue, no current
+
+        act(() => {
+          result.current!.addToQueue(climb1);
+          result.current!.addToQueue(climb1);
+        });
+
+        // No duplicate queue entry despite two adds in the same tick...
+        expect(result.current!.queue).toHaveLength(1);
+        expect(result.current!.queue[0].uuid).toBe('rapid-uuid');
+        // ...and exactly one current-climb activation, not a corrupted double-fire.
+        expect(result.current!.currentClimbQueueItem?.uuid).toBe('rapid-uuid');
       });
 
       it('removeFromQueue filters item and updates state', () => {
@@ -800,7 +830,7 @@ describe('queue-bridge-context', () => {
         mockPersistentSession = createDefaultPersistentSession({
           soloBoardDetails: bd,
           soloBoardPath: '/kilter/1/10/1,2',
-          isBoardContextLoaded: true,
+          isSessionRestoreComplete: true,
         });
         const wrapper = ({ children }: { children: React.ReactNode }) => (
           <MockRootQueueProvider seed={{ queue, currentClimbQueueItem: current }}>
@@ -944,7 +974,7 @@ describe('queue-bridge-context', () => {
         mockPersistentSession = createDefaultPersistentSession({
           soloBoardDetails: null,
           soloBoardPath: null,
-          isBoardContextLoaded: true,
+          isSessionRestoreComplete: true,
         });
         const wrapper = ({ children }: { children: React.ReactNode }) => (
           <MockRootQueueProvider seed={{ queue: [], currentClimbQueueItem: null }}>
@@ -1061,7 +1091,7 @@ describe('queue-bridge-context', () => {
       ) {
         mockPersistentSession = createDefaultPersistentSession({
           activeSession,
-          isBoardContextLoaded: true,
+          isSessionRestoreComplete: true,
           clientId: 'client-abc',
           ...psOverrides,
         });
@@ -1434,7 +1464,7 @@ describe('queue-bridge-context', () => {
         try {
           mockPersistentSession = createDefaultPersistentSession({
             activeSession,
-            isBoardContextLoaded: true,
+            isSessionRestoreComplete: true,
             clientId: 'client-abc',
             addQueueItem: vi.fn(() => Promise.reject(new Error('ws send failed'))),
           });
@@ -1481,7 +1511,7 @@ describe('queue-bridge-context', () => {
           });
           mockPersistentSession = createDefaultPersistentSession({
             activeSession,
-            isBoardContextLoaded: true,
+            isSessionRestoreComplete: true,
             clientId: 'client-abc',
             addQueueItem: vi.fn(() => Promise.reject(new Error('ws send failed'))),
           });
@@ -1525,7 +1555,7 @@ describe('queue-bridge-context', () => {
         try {
           mockPersistentSession = createDefaultPersistentSession({
             activeSession,
-            isBoardContextLoaded: true,
+            isSessionRestoreComplete: true,
             clientId: 'client-abc',
             addQueueItem: vi.fn(() => Promise.resolve()),
             setCurrentClimb: vi.fn(() => Promise.reject(new Error('set-current ws send failed'))),
@@ -1558,7 +1588,7 @@ describe('queue-bridge-context', () => {
           const item1 = createTestQueueItem(climb1, 'u1');
           mockPersistentSession = createDefaultPersistentSession({
             activeSession,
-            isBoardContextLoaded: true,
+            isSessionRestoreComplete: true,
             clientId: 'client-abc',
             setCurrentClimb: vi.fn(() => Promise.reject(new Error('set-current rejected'))),
           });
@@ -1595,7 +1625,7 @@ describe('queue-bridge-context', () => {
         mockPersistentSession = createDefaultPersistentSession({
           soloBoardDetails: bd,
           soloBoardPath: '/kilter/1/10/1,2',
-          isBoardContextLoaded: true,
+          isSessionRestoreComplete: true,
         });
         const wrapper = ({ children }: { children: React.ReactNode }) => (
           <MockRootQueueProvider seed={{ queue: [], currentClimbQueueItem: null }}>
@@ -1656,7 +1686,7 @@ describe('queue-bridge-context', () => {
       function renderWithSession(psOverrides?: Record<string, unknown>) {
         mockPersistentSession = createDefaultPersistentSession({
           activeSession,
-          isBoardContextLoaded: true,
+          isSessionRestoreComplete: true,
           hasConnected: true,
           clientId: 'client-self-ws',
           participantId: 'participant-self',

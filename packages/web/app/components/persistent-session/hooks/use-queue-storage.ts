@@ -28,13 +28,13 @@ export type QueueStorageState = {
   soloBoardPath: string | null;
   soloBoardDetails: BoardDetails | null;
   /**
-   * True once the mount-time auth pre-flight has finished (a real token ran the
-   * auto-finished check, or there was no persisted session / no token to try).
-   * Despite the name it does NOT mean a board context is loaded — a solo user
-   * with no board still flips this true; it just gates the UI on "session
+   * True once the mount-time session-restore/auth pre-flight has finished (a
+   * real token ran the auto-finished check, or there was no persisted session /
+   * no token to try). A solo user with no board still flips this true — it does
+   * not imply a board context is loaded; it just gates the UI on "session
    * restore has been decided" so the queue isn't blocked waiting on it.
    */
-  isBoardContextLoaded: boolean;
+  isSessionRestoreComplete: boolean;
 };
 
 export type QueueStorageActions = {
@@ -51,7 +51,7 @@ export function useQueueStorage({
 }: UseQueueStorageArgs): QueueStorageState & QueueStorageActions {
   const [soloBoardPath, setSoloBoardPath] = useState<string | null>(null);
   const [soloBoardDetails, setSoloBoardDetails] = useState<BoardDetails | null>(null);
-  const [isBoardContextLoaded, setIsBoardContextLoaded] = useState(false);
+  const [isSessionRestoreComplete, setIsSessionRestoreComplete] = useState(false);
   // Flips true only after we ran the auto-finished pre-flight with a real
   // token (or determined there was no persisted session at all). The no-token
   // branch deliberately leaves this false so a later non-null `wsAuthToken`
@@ -156,7 +156,7 @@ export function useQueueStorage({
                 persistedSessionId: persisted.sessionId,
               });
             hasRunPreflightRef.current = true;
-            setIsBoardContextLoaded(true);
+            setIsSessionRestoreComplete(true);
             return;
           }
 
@@ -170,7 +170,7 @@ export function useQueueStorage({
               hasActivatedRef.current = true;
               setActiveSession(persisted);
             }
-            setIsBoardContextLoaded(true);
+            setIsSessionRestoreComplete(true);
             return;
           }
 
@@ -180,7 +180,7 @@ export function useQueueStorage({
             if (DEBUG) console.info('[PersistentSession] Session was auto-finished, showing summary');
             await removePreference(ACTIVE_SESSION_KEY);
             onSessionAutoFinished(autoFinished.summary, autoFinished.boardType);
-            setIsBoardContextLoaded(true);
+            setIsSessionRestoreComplete(true);
             return;
           }
 
@@ -188,7 +188,7 @@ export function useQueueStorage({
             hasActivatedRef.current = true;
             setActiveSession(persisted);
           }
-          setIsBoardContextLoaded(true);
+          setIsSessionRestoreComplete(true);
           return;
         }
       } catch (error) {
@@ -197,7 +197,7 @@ export function useQueueStorage({
 
       // No persisted session, or read failed — nothing the token would change.
       hasRunPreflightRef.current = true;
-      setIsBoardContextLoaded(true);
+      setIsSessionRestoreComplete(true);
     }
 
     void restoreState();
@@ -237,7 +237,7 @@ export function useQueueStorage({
   return {
     soloBoardPath,
     soloBoardDetails,
-    isBoardContextLoaded,
+    isSessionRestoreComplete,
     setBoardContext,
   };
 }

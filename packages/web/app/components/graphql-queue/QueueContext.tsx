@@ -159,12 +159,13 @@ export const GraphQLQueueProvider = ({
   const { state: connectionState } = useWebSocketConnection();
 
   // Root-owned queue state (W6: the ONLY queue state). Read directly via
-  // `usePersistentSession()` here (rather than only through
-  // `useSessionIdManagement`'s return below) so `currentQueue`/
-  // `currentClimbQueueItem` are available to seed `useSessionIdManagement`'s
-  // `startSession` — `useSessionIdManagement` internally reads the same
-  // context, so `persistentSession` below the next call resolves to the
-  // identical object.
+  // `usePersistentSession()` here because we need `queue`/`currentClimbQueueItem`
+  // to seed `useSessionIdManagement` below — but `persistentSession` is a RETURN
+  // value of that very hook, so it isn't available yet at this point (ordering
+  // constraint, not redundancy). `useSessionIdManagement` reads the same context
+  // internally, so both calls resolve to the identical object and this direct
+  // read is a zero-cost extra context subscription. After the hook returns,
+  // everything below reads through `persistentSession`.
   const rootQueueState = usePersistentSession();
 
   // --- Session ID management ---
@@ -319,10 +320,13 @@ export const GraphQLQueueProvider = ({
   // persistent-session provider (`use-event-processor.ts`) is the ONLY
   // queue-state owner now, so this component already re-renders whenever
   // `persistentSession.queue`/`currentClimbQueueItem` change — no separate
-  // dispatch-mirroring subscription to maintain. `needsResync` handling and
-  // the peer-broadcast 'Climb Added/Removed to/from Queue' analytics moved
-  // to the root provider too (the latter gated to board routes there, since
-  // this file is now the only thing that used to make that true implicitly).
+  // dispatch-mirroring subscription to maintain. The reactive `needsResync`
+  // handler already lives in the root provider (`use-session-subscriptions.ts`,
+  // fed by `eventProcessor.needsResync`); what this file dropped was the
+  // now-deleted `useQueueEventSubscription`, whose second handler duplicated it.
+  // The peer-broadcast 'Climb Added/Removed to/from Queue' analytics likewise
+  // moved to the root provider (gated to board routes there, since this file is
+  // now the only thing that used to make that true implicitly).
 
   // --- Session-event relay ---
   // The BLE-paired phone broadcasts WallConfirmedClimb whenever it relays a

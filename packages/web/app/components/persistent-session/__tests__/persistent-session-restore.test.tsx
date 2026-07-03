@@ -202,11 +202,11 @@ describe('Active session persistence', () => {
 // ---------------------------------------------------------------------------
 
 describe('PersistentSessionProvider auto-restore on mount', () => {
-  it('sets isBoardContextLoaded=true when no stored data exists', async () => {
+  it('sets isSessionRestoreComplete=true when no stored data exists', async () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isBoardContextLoaded).toBe(true);
+      expect(result.current.isSessionRestoreComplete).toBe(true);
     });
 
     expect(result.current.queue).toEqual([]);
@@ -234,7 +234,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isBoardContextLoaded).toBe(true);
+      expect(result.current.isSessionRestoreComplete).toBe(true);
     });
 
     // Party session should be active
@@ -247,7 +247,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isBoardContextLoaded).toBe(true);
+      expect(result.current.isSessionRestoreComplete).toBe(true);
     });
 
     const sessionInfo = {
@@ -545,7 +545,7 @@ describe('Stale IndexedDB vs fresh /join cookie', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.isBoardContextLoaded).toBe(true);
+      expect(result.current.isSessionRestoreComplete).toBe(true);
     });
 
     expect(result.current.activeSession).toBeNull();
