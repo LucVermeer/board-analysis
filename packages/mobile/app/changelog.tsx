@@ -276,8 +276,12 @@ export default function ChangelogScreen() {
       <Stack.Screen options={{ ...screenOptions, title: t('mobile.changelog.title'), headerShown: true }} />
       {/* FlashList needs a parent with a bounded height; without this flex:1
           wrapper it collapses to zero height and renders nothing (mirrors
-          licenses.tsx). */}
-      <View style={styles.flex}>
+          licenses.tsx). The wrapper also paints the grouped background itself
+          (mirrors users/[userId]): the glass variant's contentStyle is
+          transparent, and this screen is pushed over the user-drawer's
+          transparentModal, so an unpainted scene shows the drawer scrim — the
+          build chip and intro text were unreadable on that stray black. */}
+      <View style={[styles.flex, { backgroundColor: systemColors.groupedBackground }]}>
         {timeline.length === 0 ? (
           <View style={styles.emptyWrap}>
             <CurrentBuildChip />
