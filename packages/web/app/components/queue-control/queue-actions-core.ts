@@ -370,6 +370,24 @@ export function createQueueActionsCore(deps: QueueActionsCoreDeps): QueueActions
         : null;
     const optimisticItem = reuseTarget ?? newItem;
 
+    // Set the playlist source here AND again inside the DELTA_UPDATE_CURRENT_CLIMB
+    // payload below. This is an intentional double-set, not dead code — the two
+    // writes cover disjoint cases and neither is safely removable:
+    //   - The DELTA payload's `playlistSuggestionSource` is load-bearing beyond
+    //     just writing the field: the reducer uses it to gate
+    //     `pruneSuggestedQueueItemsAfterCurrent` on the optimistic queue
+    //     (reducer.ts `DELTA_UPDATE_CURRENT_CLIMB`). Dropping it would leave
+    //     stale suggested items in the local queue until the server echo.
+    //   - This early unconditional set is load-bearing for the reuse-existing
+    //     branch: when `optimisticItem` is already the current climb (reuse
+    //     target === current), the reducer's own-tap guard short-circuits
+    //     DELTA_UPDATE_CURRENT_CLIMB and returns state unchanged, so the DELTA
+    //     never applies its `playlistSuggestionSource`. Without this call the
+    //     source would silently not update when re-activating the current climb
+    //     with a new playlist context.
+    // On the common path (fresh-uuid item) both write the same value; the
+    // duplicate reducer dispatch batches into one render and is a negligible
+    // cost next to the correctness the two cases require.
     setPlaylistSuggestionSourceLocal(nextPlaylistSuggestionSource);
     hooks.onSetActiveClimb({
       climbUuid: climb.uuid,

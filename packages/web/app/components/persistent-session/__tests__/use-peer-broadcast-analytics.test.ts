@@ -164,6 +164,39 @@ describe('usePeerBroadcastAnalytics', () => {
     expect(subscribeToQueueEvents).toHaveBeenCalledTimes(1);
   });
 
+  // FIX 1 guard: the analytics reads `queueRef.current.length` LIVE at emit
+  // time, so as long as the provider keeps the ref current (it assigns it
+  // during render, not in a post-paint useEffect), a same-frame queue mutation
+  // is reflected. If the hook ever captured the length at subscribe time, this
+  // fails. A stale ref (assigned in a useEffect) would report the pre-event
+  // length here.
+  it('reads the queue length live from the ref at emit time', () => {
+    const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
+    const queueRef = { current: new Array(2) as unknown[] };
+    renderHook(() =>
+      usePeerBroadcastAnalytics({
+        subscribeToQueueEvents,
+        isOnBoardRoute: true,
+        boardLayoutName: 'Original',
+        queueRef,
+      }),
+    );
+
+    emit(addedEvent);
+    expect(mockTrack).toHaveBeenLastCalledWith(
+      'Climb Added to Queue',
+      expect.objectContaining({ currentQueueLength: 3 }),
+    );
+
+    // Provider advances the ref (render-body assignment) before the next event.
+    queueRef.current = new Array(5);
+    emit(addedEvent);
+    expect(mockTrack).toHaveBeenLastCalledWith(
+      'Climb Added to Queue',
+      expect.objectContaining({ currentQueueLength: 6 }),
+    );
+  });
+
   it('picks up a mid-flight isOnBoardRoute flip via the ref without re-subscribing', () => {
     const { subscribeToQueueEvents, emit } = createSubscribeToQueueEvents();
     const { rerender } = renderHook(

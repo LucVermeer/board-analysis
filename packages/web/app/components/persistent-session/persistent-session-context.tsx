@@ -105,13 +105,18 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   // 1. Event processor: queue state (shared queueReducer) + event handling
   const eventProcessor = useEventProcessor({ syncGate, refs });
 
-  // Keep queue refs in sync with event processor state
-  useEffect(() => {
-    queueRef.current = eventProcessor.queue;
-  }, [eventProcessor.queue]);
-  useEffect(() => {
-    currentClimbQueueItemRef.current = eventProcessor.currentClimbQueueItem;
-  }, [eventProcessor.currentClimbQueueItem]);
+  // Keep queue refs in sync with event processor state. Assigned DURING RENDER
+  // (not in a useEffect) so the refs are current before paint. Peer queue
+  // events fire synchronously through the subscription and read these refs in
+  // the same tick as the queue mutation they carry — e.g.
+  // `use-peer-broadcast-analytics` reads `queueRef.current.length`. A post-paint
+  // useEffect assignment leaves the ref one render behind, so the analytics
+  // would report the pre-event queue length. Assign-during-render matches the
+  // sibling refs in this provider tree (`activeSessionRef`/`boardContextRef`)
+  // and restores the behavior of the deleted `use-queue-event-subscription`
+  // hook, which updated its length ref in the render body.
+  queueRef.current = eventProcessor.queue;
+  currentClimbQueueItemRef.current = eventProcessor.currentClimbQueueItem;
 
   // 2. Session lifecycle: connect/disconnect, join/leave
   const lifecycle = useSessionLifecycle({

@@ -71,6 +71,10 @@ export function usePeerBroadcastAnalytics({
           partyMode: true,
         });
       } else if (event.__typename === 'QueueItemRemoved') {
+        // TODO(#3383): `removedBy: 'peer'` mislabels echoes of THIS client's
+        // own removes. `QueueItemRemoved` has no `clientId` (unlike
+        // `CurrentClimbChanged`), so self-echoes can't be filtered here — a
+        // proper fix needs the wire field. Left hardcoded until then.
         track('Climb Removed from Queue', {
           boardLayout: boardLayoutNameRef.current,
           partyMode: true,

@@ -988,10 +988,21 @@ export function QueueBridgeInjector({ boardDetails, angle, boardUuid = null }: Q
       hasInjectedRef.current = false;
       clear();
     };
-    // Only re-run when board details or angle change (navigation between boards)
-    // and not when pathname changes during transition off the board route.
+    // Re-run on board-details change (navigation between boards), NOT on angle.
+    // `boardDetails` and `angle` are both resolved from the same server render
+    // of this route's layout (`[angle]/layout.tsx`), so they change in lockstep:
+    // any navigation that changes the angle re-renders the layout and hands down
+    // a fresh `boardDetails` object (new identity), which already re-fires this
+    // effect. Listing `angle` is therefore redundant — it can never trigger a run
+    // `boardDetails` wouldn't — and it makes solo angle changes fire redundant
+    // `setBoardContext` writes (the base path strips the angle, so the CLEAR_QUEUE
+    // guard short-circuits anyway). Dropping it keeps `setInjectedAngle` correct
+    // (the effect still re-runs via `boardDetails`, reading the current `angle`
+    // from scope) while avoiding the redundant writes. `usePathname`-driven angle
+    // rewrites (`useDrawerUrlSync` via raw `history.replaceState`) don't touch the
+    // server-resolved `angle` prop, so they never needed this dep either.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardDetails, angle, inject, clear]);
+  }, [boardDetails, inject, clear]);
 
   // Update the context ref whenever any of the queue context values change.
   // Also handles deferred injection if contexts were null during the useLayoutEffect.
