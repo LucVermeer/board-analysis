@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   streamImport: vi.fn(),
   showToast: vi.fn(),
   openURL: vi.fn((_url: string) => Promise.resolve()),
+  setClipboard: vi.fn((_text: string) => Promise.resolve()),
   confirm: vi.fn(() => Promise.resolve(true)),
   invalidate: vi.fn(() => Promise.resolve()),
   refetch: vi.fn(() => Promise.resolve()),
@@ -86,6 +87,7 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('expo-file-system', () => ({ File: class File {} }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: mocks.setClipboard }));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -212,6 +214,8 @@ describe('BoardAccountsSection — MoonBoard card', () => {
   beforeEach(() => {
     mocks.showToast.mockReset();
     mocks.openURL.mockReset().mockResolvedValue(undefined);
+    mocks.setClipboard.mockReset().mockResolvedValue(undefined);
+    mocks.confirm.mockReset().mockResolvedValue(true);
     mocks.flags = {};
     mocks.credentials = [];
   });
@@ -222,11 +226,20 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(button(container, 'aurora.moonboard.requestData')).not.toBeNull();
   });
 
-  it('opens a MoonBoard support email when "Request your data" is pressed', () => {
+  it('copies the request body and opens a subject-only MoonBoard email after confirming', async () => {
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
-    expect(mocks.openURL).toHaveBeenCalledTimes(1);
-    expect(mocks.openURL.mock.calls[0]?.[0]).toContain('mailto:moonboardsupport@moonclimbing.com');
+    await waitFor(() => {
+      expect(mocks.setClipboard).toHaveBeenCalledWith('aurora.moonboard.email.body');
+      expect(mocks.openURL).toHaveBeenCalledTimes(1);
+    });
+    // The paste instruction is shown in a dialog before the app switches away.
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
+    const mailto = mocks.openURL.mock.calls[0]?.[0] ?? '';
+    expect(mailto).toContain('mailto:moonboardsupport@moonclimbing.com');
+    // The long GDPR letter rides the clipboard, so it must not be encoded into
+    // the mailto: body (which would blow past client URI limits).
+    expect(mailto).not.toContain('body=');
   });
 
   it('opens the Discord hand-off dialog from "Import data" and links to Discord', () => {
@@ -242,13 +255,35 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(mocks.openURL).toHaveBeenCalledWith('https://discord.gg/YXA8GsXfQK');
   });
 
-  it('shows an error toast when the support email fails to open', async () => {
+  it('copies the letter but leaves email unopened when the dialog is dismissed', async () => {
+    mocks.confirm.mockReset().mockResolvedValueOnce(false);
+    const { container } = render(<BoardAccountsSection />);
+    fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
+    await waitFor(() => {
+      expect(mocks.setClipboard).toHaveBeenCalledWith('aurora.moonboard.email.body');
+      expect(mocks.confirm).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.openURL).not.toHaveBeenCalled();
+  });
+
+  it('shows an error toast when the mail draft fails to open after confirming', async () => {
     mocks.openURL.mockReset().mockRejectedValueOnce(new Error('no mail handler'));
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
     await waitFor(() => {
       expect(mocks.showToast).toHaveBeenCalledWith('aurora.mobile.requestDataFailed', 'error');
     });
+  });
+
+  it('shows a copy-failed toast and skips the dialog and email when the clipboard write fails', async () => {
+    mocks.setClipboard.mockReset().mockRejectedValueOnce(new Error('no clipboard'));
+    const { container } = render(<BoardAccountsSection />);
+    fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
+    await waitFor(() => {
+      expect(mocks.showToast).toHaveBeenCalledWith('aurora.mobile.requestDataCopyFailed', 'error');
+    });
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(mocks.openURL).not.toHaveBeenCalled();
   });
 
   it('shows a Discord-specific error toast when the Discord link fails to open', async () => {

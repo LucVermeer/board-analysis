@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { File } from 'expo-file-system';
+import * as Clipboard from 'expo-clipboard';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -85,9 +86,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // The i18n keys must stay literal in each builder (the linter hard-fails on
-// `t(variable)`), so only the mailto string assembly is shared here.
-function dataRequestMailto(recipient: string, subject: string, body: string): string {
-  return `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+// `t(variable)`), so only the mailto string assembly is shared here. The body is
+// optional: the MoonBoard GDPR letter is too long to survive URL-encoding into a
+// mailto: URI on many clients, so it rides the clipboard instead and only the
+// subject goes in the URI.
+function dataRequestMailto(recipient: string, subject: string, body?: string): string {
+  const query = body
+    ? `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    : `subject=${encodeURIComponent(subject)}`;
+  return `mailto:${recipient}?${query}`;
 }
 
 function buildKilterDataRequestMailto(t: TFunction<'settings'>): string {
@@ -99,11 +106,8 @@ function buildKilterDataRequestMailto(t: TFunction<'settings'>): string {
 }
 
 function buildMoonBoardDataRequestMailto(t: TFunction<'settings'>): string {
-  const name = t('aurora.moonboard.email.namePlaceholder');
-  const email = t('aurora.moonboard.email.emailPlaceholder');
   const subject = t('aurora.moonboard.email.subject');
-  const body = t('aurora.moonboard.email.body', { name, email });
-  return dataRequestMailto(MOONBOARD_SUPPORT_EMAIL, subject, body);
+  return dataRequestMailto(MOONBOARD_SUPPORT_EMAIL, subject);
 }
 
 function totalImported(result: ImportResult): number {
@@ -516,16 +520,41 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
   const { t: tCommon } = useTranslation('common');
   const { systemColors } = useTheme();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const openImportDialog = useCallback(() => setImportDialogOpen(true), []);
   const closeImportDialog = useCallback(() => setImportDialogOpen(false), []);
 
   const handleRequestData = useCallback(() => {
-    void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {
-      showToast(t('aurora.mobile.requestDataFailed'), 'error');
-    });
-  }, [showToast, t]);
+    // The GDPR letter is too long to encode into the mailto: body reliably, so
+    // copy it to the clipboard and open a draft with just the subject.
+    const openRequest = async () => {
+      try {
+        await Clipboard.setStringAsync(t('aurora.moonboard.email.body'));
+      } catch {
+        showToast(t('aurora.mobile.requestDataCopyFailed'), 'error');
+        return;
+      }
+      // Surface the paste instruction in a dialog *before* opening the mail app.
+      // A toast would be hidden by the app switch, leaving the user staring at a
+      // blank draft (the mailto: has no body) with no prompt to paste.
+      const shouldOpenEmail = await confirm({
+        title: t('aurora.moonboard.requestDataDialog.title'),
+        message: t('aurora.moonboard.requestDataDialog.message'),
+        confirmLabel: t('aurora.moonboard.requestDataDialog.confirm'),
+        cancelLabel: t('aurora.moonboard.requestDataDialog.cancel'),
+      });
+      // The letter is on the clipboard either way (the dialog said so), but if
+      // the user asked to open their email and no client is installed, say so.
+      if (shouldOpenEmail) {
+        void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {
+          showToast(t('aurora.mobile.requestDataFailed'), 'error');
+        });
+      }
+    };
+    void openRequest();
+  }, [confirm, showToast, t]);
 
   const handleOpenDiscord = useCallback(() => {
     void Linking.openURL(MOONBOARD_DISCORD_URL).catch(() => {
