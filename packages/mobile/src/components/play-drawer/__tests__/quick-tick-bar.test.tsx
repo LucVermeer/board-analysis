@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { logbookClimbAngleKey, type LogbookEntry } from '@boardsesh/board-react';
@@ -114,6 +114,10 @@ beforeEach(() => {
   saveMock.mutate.mockClear();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('QuickTickBar hasPriorHistory', () => {
   it('reads the logbookByClimbAngle index, not the raw logbook array', () => {
     const tick = { climb_uuid: CLIMB_UUID, angle: ANGLE } as unknown as LogbookEntry;
@@ -168,6 +172,28 @@ describe('QuickTickBar climbedAt', () => {
     expect(saveMock.mutate).toHaveBeenCalledTimes(1);
     expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
       climbedAt: '2025-03-15T12:00:00.000Z',
+    });
+  });
+
+  it('logs a fresh save-time now when the date is left untouched', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-03-15T12:00:00.000Z'));
+    boardState.current = null;
+    const { container } = renderBar();
+
+    // The sheet stays mounted (PlayDrawer) and time passes without the user
+    // touching the date field — the saved timestamp must be save-time now,
+    // not the value captured at mount.
+    vi.setSystemTime(new Date('2025-03-15T12:10:00.000Z'));
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (node) => node.textContent === 'playView.tickBar.sendSaveLabel',
+    );
+    fireEvent.click(sendButton as Element);
+
+    expect(saveMock.mutate).toHaveBeenCalledTimes(1);
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
+      climbedAt: '2025-03-15T12:10:00.000Z',
     });
   });
 });
