@@ -11,6 +11,7 @@ import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-
 import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth, boardConfigKey, type SendFramesToBoard } from '../lib/ble/use-board-bluetooth';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
+import { classifyBleDisconnect } from '../lib/ble/disconnect-category';
 import {
   decideBlePickerSelection,
   classifyClimbBoardCompatibility,
@@ -1108,7 +1109,12 @@ export function BluetoothProvider({
     releaseBoardHolder();
     connectedViaMismatchOverrideRef.current = false;
     isUserDisconnectRef.current = true;
-    track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
+    track(SHARED_EVENTS.BluetoothDisconnected, {
+      boardName,
+      boardId: resolvedPresenceBoardIdRef.current ?? presenceBoardIdRef.current ?? undefined,
+      reason: 'user',
+      inSession: sessionIdRef.current != null,
+    });
     try {
       await disconnect();
     } catch {
@@ -1155,6 +1161,10 @@ export function BluetoothProvider({
       const disconnectInfo = lastDisconnectInfoRef.current;
       track(SHARED_EVENTS.BluetoothDisconnected, {
         boardName,
+        // The resolved DB board id (same value the send events carry), so
+        // takeover analysis can join disconnects to another user's connect on
+        // the SAME board instead of a fragile last-connect join per user.
+        boardId: resolvedPresenceBoardIdRef.current ?? presenceBoardIdRef.current ?? undefined,
         reason: 'unexpected',
         inSession: sessionIdRef.current != null,
         disconnectSource: disconnectInfo?.source,
@@ -1164,6 +1174,7 @@ export function BluetoothProvider({
         disconnectAndroidCode: disconnectInfo?.androidErrorCode,
         disconnectBleCode: disconnectInfo?.bleErrorCode,
         disconnectErrorDomain: disconnectInfo?.errorDomain,
+        disconnectCategory: classifyBleDisconnect(disconnectInfo),
       });
     }
     wasConnectedRef.current = isConnected;
