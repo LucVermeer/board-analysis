@@ -3,6 +3,12 @@
 // worklet-serialization global-error-capture install, which must wrap Sentry's
 // handler, not the other way round.
 import { wrapWithSentry } from '../src/lib/sentry';
+// Import second, still ahead of anything that reaches posthog-client.ts (e.g.
+// AnalyticsProvider below): resolves the party-profile UUID synchronously and
+// stores it for posthog-client.ts to bootstrap the PostHog SDK's anonymous
+// distinct_id with, before the SDK's own module-eval side effect constructs
+// the client and fires its app-lifecycle autocapture. See analytics-bootstrap.ts.
+import '../src/lib/analytics-bootstrap';
 import { useCallback, useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
 import { LogBox, Pressable, StyleSheet, View } from 'react-native';
 // Navigation theme comes from expo-router's vendored React Navigation. Expo
