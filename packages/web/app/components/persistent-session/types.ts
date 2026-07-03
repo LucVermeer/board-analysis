@@ -220,7 +220,10 @@ export type PersistentSessionStateType = {
   // single root queue is scoped to while off a party session.
   soloBoardPath: string | null;
   soloBoardDetails: BoardDetails | null;
-  isBoardContextLoaded: boolean;
+  // True once mount-time session restore has been decided (see
+  // `use-queue-storage.ts`). Not board-context state despite sitting next to
+  // the two fields above — a solo user with no board still flips it true.
+  isSessionRestoreComplete: boolean;
 
   // Ref for offline queue buffer (used by QueueContext to populate, read by event processor during FullSync)
   offlineBufferRef: MutableRefObject<LocalClimbQueueItem[]>;

@@ -643,7 +643,7 @@ function usePersistentSessionQueueAdapter(): {
     angle,
     hasResolvedAngle,
     hasActiveQueue,
-    isHydrated: ps.isBoardContextLoaded,
+    isHydrated: ps.isSessionRestoreComplete,
     syncFromInjected,
   };
 }

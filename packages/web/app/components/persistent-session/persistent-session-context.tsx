@@ -289,7 +289,7 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       pendingCurrentClimbUpdates: eventProcessor.pendingCurrentClimbUpdates,
       soloBoardPath: queueStorage.soloBoardPath,
       soloBoardDetails: queueStorage.soloBoardDetails,
-      isBoardContextLoaded: queueStorage.isBoardContextLoaded,
+      isSessionRestoreComplete: queueStorage.isSessionRestoreComplete,
       offlineBufferRef,
       lastReceivedSequenceRef,
       sessionSummary: lifecycle.sessionSummary,
@@ -314,7 +314,7 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       eventProcessor.pendingCurrentClimbUpdates,
       queueStorage.soloBoardPath,
       queueStorage.soloBoardDetails,
-      queueStorage.isBoardContextLoaded,
+      queueStorage.isSessionRestoreComplete,
     ],
   );
 

@@ -69,7 +69,7 @@ const mockPersistentSession = {
   // supplied by the MockRootQueueProvider (real reducer) via the factory below.
   soloBoardPath: null,
   soloBoardDetails: null,
-  isBoardContextLoaded: true,
+  isSessionRestoreComplete: true,
   setBoardContext: vi.fn(),
   activateSession: vi.fn(),
   deactivateSession: vi.fn(),

@@ -89,7 +89,7 @@ function renderHarness(initialProps: HarnessProps) {
 async function flushMount(result: { current: ReturnType<typeof useHarness> }) {
   // Let the async mount restore effect settle so its setState doesn't leak into
   // a later act() and so assertions run against a stable state.
-  await waitFor(() => expect(result.current.storage.isBoardContextLoaded).toBe(true));
+  await waitFor(() => expect(result.current.storage.isSessionRestoreComplete).toBe(true));
 }
 
 describe('useQueueStorage — setBoardContext board-change clear', () => {
