@@ -42,7 +42,11 @@ export function getOrCreatePartyProfileIdSync(generateId: () => string = randomU
     const created: PartyProfile = { id: generateId() };
     SecureStore.setItem(PARTY_PROFILE_KEY, JSON.stringify(created));
     return created.id;
-  } catch {
+  } catch (error) {
+    // Dev-only: this failing means the PostHog bootstrap silently falls back to
+    // an unlinked anonymous id (see analytics-bootstrap.ts) with no other
+    // symptom — worth a breadcrumb if the install-funnel fix looks ineffective.
+    if (__DEV__) console.warn('[analytics] failed to resolve party-profile id synchronously', error);
     return null;
   }
 }
