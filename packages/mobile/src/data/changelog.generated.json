@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T05:30:48.634Z",
+  "generatedAt": "2026-07-03T06:43:20.180Z",
   "entries": [
+    {
+      "prNumber": 3389,
+      "category": "new",
+      "title": "Log a climb on a date other than today — backdate a send you forgot to tick, right from the log sheet.",
+      "mergedAt": "2026-07-03T06:42:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3389"
+    },
     {
       "prNumber": 3375,
       "category": "improved",
