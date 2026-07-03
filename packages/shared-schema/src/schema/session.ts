@@ -41,9 +41,10 @@ export const sessionTypeDefs = /* GraphQL */ `
     queueState: QueueState
     "Whether the current client is the session leader (presentation/backward compatibility only)"
     isLeader: Boolean!
+    "Deprecated. Sessions are always-live; there is no driver. Always null. Removal of this field is DEFERRED pending the stale-bundle drain (workstream B7, reduced variant, 2026-07): a telemetry check found ~15-20 users/14d on cached mobile JS bundles whose JoinSession documents still select this field, and whole-document GraphQL validation means removing it would break join entirely for those clients. Re-check via last-14d Session Joined/Started events grouped by $app_build + ota_is_embedded; safe to remove once pre-2026-06-15 builds are ≈ 0. Do not remove without re-running that check."
     driverParticipantId: ID
       @deprecated(
-        reason: "Sessions are always-live; there is no driver. Always null. Kept one release for stale clients (cached web bundles, un-OTA'd native apps); remove after rollout."
+        reason: "Sessions are always-live; there is no driver. Always null. Kept for stale clients (cached web bundles, un-OTA'd native apps); removal is telemetry-gated, see field description."
       )
     "Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded."
     lastConnectedBoardSerial: String

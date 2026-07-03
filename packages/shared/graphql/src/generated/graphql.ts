@@ -1352,11 +1352,18 @@ export type DiscoverableSession = {
 
 /**
  * DEPRECATED. Sessions are always-live; there is no wall driver. This type and its
- * SessionEvent union membership are kept one release purely so stale clients (cached web
- * bundles, un-OTA'd native apps) whose `sessionUpdates` documents still contain
+ * SessionEvent union membership are kept purely so stale clients (cached web bundles,
+ * un-OTA'd native apps) whose `sessionUpdates` documents still contain
  * `... on DriverChanged` keep passing GraphQL validation. The backend never publishes it.
- * Remove after the rollout window. (GraphQL has no @deprecated for union members/object
- * types, hence this comment.)
+ * (GraphQL has no @deprecated for union members/object types, hence this comment.)
+ *
+ * Removal is DEFERRED — workstream B7 (reduced variant, 2026-07) removed only the
+ * takeControl/releaseControl mutations. A telemetry check found a real tail of stale
+ * mobile JS bundles (~15-20 users/14d) with `sessionUpdates` subscriptions still
+ * containing this fragment; whole-document GraphQL validation means removing the type
+ * would break the ENTIRE subscription for those clients, not just this arm. Re-check via
+ * last-14d Session Joined/Started events grouped by $app_build + ota_is_embedded; safe to
+ * remove once pre-2026-06-15 builds are ≈ 0. Do not remove without re-running that check.
  */
 export type DriverChanged = {
   __typename?: 'DriverChanged';
@@ -2303,12 +2310,6 @@ export type Mutation = {
    */
   registerActivityPushToken: Scalars['Boolean']['output'];
   registerController: ControllerRegistration;
-  /**
-   * Deprecated. No wall driver exists; inert no-op kept one release for stale clients.
-   * Returns the session unchanged and never publishes `DriverChanged`. Remove after rollout.
-   * @deprecated Always-live; no driver. No-op. Remove after rollout.
-   */
-  releaseControl: Session;
   /** Remove a climb from a playlist. */
   removeClimbFromPlaylist: Scalars['Boolean']['output'];
   /** Remove a member from a gym. */
@@ -2456,15 +2457,6 @@ export type Mutation = {
    * Caller must be a participant of the session. Requires authentication.
    */
   syncSessionToIntegration: IntegrationExportResult;
-  /**
-   * Deprecated. Sessions are always-live, so there is no wall driver to claim. Kept one
-   * release as an inert compat shim for stale clients (cached web bundles, un-OTA'd native
-   * apps) that still call it: if `climb` is provided it is set as the current climb (so the
-   * stale client's wall change still propagates), otherwise it is a no-op. Never publishes
-   * `DriverChanged`. Remove after the rollout window.
-   * @deprecated Always-live; no driver. Sets the climb (if given) and returns the session. Remove after rollout.
-   */
-  takeControl: Session;
   /**
    * Toggle favorite status for a climb.
    * Returns new favorite state.
@@ -2944,11 +2936,6 @@ export type MutationSubscribeNewClimbsArgs = {
 export type MutationSyncSessionToIntegrationArgs = {
   provider: IntegrationProvider;
   sessionId: Scalars['ID']['input'];
-};
-
-/** Root mutation type for all write operations. */
-export type MutationTakeControlArgs = {
-  climb?: InputMaybe<ClimbQueueItemInput>;
 };
 
 /** Root mutation type for all write operations. */
@@ -4797,7 +4784,10 @@ export type Session = {
   clientId: Scalars['ID']['output'];
   /** Hex color for multi-session display */
   color?: Maybe<Scalars['String']['output']>;
-  /** @deprecated Sessions are always-live; there is no driver. Always null. Kept one release for stale clients (cached web bundles, un-OTA'd native apps); remove after rollout. */
+  /**
+   * Deprecated. Sessions are always-live; there is no driver. Always null. Removal of this field is DEFERRED pending the stale-bundle drain (workstream B7, reduced variant, 2026-07): a telemetry check found ~15-20 users/14d on cached mobile JS bundles whose JoinSession documents still select this field, and whole-document GraphQL validation means removing it would break join entirely for those clients. Re-check via last-14d Session Joined/Started events grouped by $app_build + ota_is_embedded; safe to remove once pre-2026-06-15 builds are ≈ 0. Do not remove without re-running that check.
+   * @deprecated Sessions are always-live; there is no driver. Always null. Kept for stale clients (cached web bundles, un-OTA'd native apps); removal is telemetry-gated, see field description.
+   */
   driverParticipantId?: Maybe<Scalars['ID']['output']>;
   /** When the session was ended (ISO 8601) */
   endedAt?: Maybe<Scalars['String']['output']>;

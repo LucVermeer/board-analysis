@@ -51,11 +51,18 @@ export const eventsTypeDefs = /* GraphQL */ `
 
   """
   DEPRECATED. Sessions are always-live; there is no wall driver. This type and its
-  SessionEvent union membership are kept one release purely so stale clients (cached web
-  bundles, un-OTA'd native apps) whose \`sessionUpdates\` documents still contain
+  SessionEvent union membership are kept purely so stale clients (cached web bundles,
+  un-OTA'd native apps) whose \`sessionUpdates\` documents still contain
   \`... on DriverChanged\` keep passing GraphQL validation. The backend never publishes it.
-  Remove after the rollout window. (GraphQL has no @deprecated for union members/object
-  types, hence this comment.)
+  (GraphQL has no @deprecated for union members/object types, hence this comment.)
+
+  Removal is DEFERRED — workstream B7 (reduced variant, 2026-07) removed only the
+  takeControl/releaseControl mutations. A telemetry check found a real tail of stale
+  mobile JS bundles (~15-20 users/14d) with \`sessionUpdates\` subscriptions still
+  containing this fragment; whole-document GraphQL validation means removing the type
+  would break the ENTIRE subscription for those clients, not just this arm. Re-check via
+  last-14d Session Joined/Started events grouped by $app_build + ota_is_embedded; safe to
+  remove once pre-2026-06-15 builds are ≈ 0. Do not remove without re-running that check.
   """
   type DriverChanged {
     driverParticipantId: ID

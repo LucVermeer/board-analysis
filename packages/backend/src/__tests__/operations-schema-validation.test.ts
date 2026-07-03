@@ -106,16 +106,28 @@ describe('native iOS queue subscription drift guard', () => {
   });
 });
 
-describe('previous-release driver operations still validate (deprecated compat shims)', () => {
-  // Stale clients — cached web bundles and un-OTA'd native binaries — still send
-  // the pre-always-live driver operations. The deprecated schema shims
-  // (Session.driverParticipantId, takeControl/releaseControl, the DriverChanged
-  // union member) exist so these keep passing GraphQL validation through the
-  // rollout window. Without them, a single `... on DriverChanged` fragment would
-  // fail validation and take down the WHOLE sessionUpdates subscription (and a
-  // driverParticipantId selection would break join). This test fails loudly if
-  // a shim is removed before the rollout window closes.
-  const legacyOperations: Array<[string, string]> = [
+// Workstream B7 (reduced variant, 2026-07) removed ONLY the takeControl/releaseControl
+// mutations. Session.driverParticipantId, the DriverChanged type, and its SessionEvent
+// union membership are DEFERRED: telemetry found a real tail of stale mobile JS bundles
+// (~15-20 users/14d) whose JoinSession documents still select driverParticipantId and
+// whose sessionUpdates subscriptions still contain `... on DriverChanged`. Whole-document
+// GraphQL validation means removing those would break the ENTIRE document (join, or the
+// whole subscription) for those clients — a much bigger blast radius than a single unknown
+// mutation failing on its own. The removed mutations were NOT pure no-ops: takeControl
+// with a `climb` argument still propagated that climb via setCurrentClimbAndPublish, and
+// stale bundles' party-mode lightbulb press routed through it — those users now lose the
+// go-live gesture in party mode (their client's catch handler rolls back and resyncs;
+// join and subscriptions are unaffected). That degradation is an accepted,
+// telemetry-bounded trade-off (coordinator ruling, reduced-B7): the cohort is a shrinking
+// stale-bundle tail whose fix is one app open (OTA).
+//
+// This is the safety contract of the reduced variant, made explicit as an assertion split:
+//   - legacy JoinSession / SessionUpdates documents (driverParticipantId, DriverChanged)
+//     must STILL validate — those types were not touched.
+//   - legacy TakeControl / ReleaseControl documents must NOW fail validation — those
+//     mutations are gone.
+describe('previous-release driver operations: reduced-B7 validation split', () => {
+  const stillValidLegacyOperations: Array<[string, string]> = [
     [
       'legacy JoinSession selecting driverParticipantId',
       `mutation JoinSession($sessionId: ID!, $boardPath: String!) {
@@ -123,24 +135,6 @@ describe('previous-release driver operations still validate (deprecated compat s
           id
           participantId
           isLeader
-          driverParticipantId
-        }
-      }`,
-    ],
-    [
-      'legacy TakeControl mutation',
-      `mutation TakeControl($climb: ClimbQueueItemInput) {
-        takeControl(climb: $climb) {
-          id
-          driverParticipantId
-        }
-      }`,
-    ],
-    [
-      'legacy ReleaseControl mutation',
-      `mutation ReleaseControl {
-        releaseControl {
-          id
           driverParticipantId
         }
       }`,
@@ -162,15 +156,50 @@ describe('previous-release driver operations still validate (deprecated compat s
     ],
   ];
 
-  for (const [name, source] of legacyOperations) {
-    it(`${name} still validates against the shimmed schema`, () => {
+  for (const [name, source] of stillValidLegacyOperations) {
+    it(`${name} still validates against the schema (driver type removal is deferred)`, () => {
       const document = parse(source);
       const errors = validate(schema, document);
       if (errors.length > 0) {
         const detail = errors.map((error, index) => `  ${index + 1}. ${error.message}`).join('\n');
-        throw new Error(`Legacy operation "${name}" must keep validating during rollout but errored:\n${detail}`);
+        throw new Error(`Legacy operation "${name}" must keep validating (deferred removal) but errored:\n${detail}`);
       }
       expect(errors).toHaveLength(0);
+    });
+  }
+
+  const nowInvalidLegacyOperations: Array<[string, string]> = [
+    [
+      'legacy TakeControl mutation',
+      `mutation TakeControl($climb: ClimbQueueItemInput) {
+        takeControl(climb: $climb) {
+          id
+          driverParticipantId
+        }
+      }`,
+    ],
+    [
+      'legacy ReleaseControl mutation',
+      `mutation ReleaseControl {
+        releaseControl {
+          id
+          driverParticipantId
+        }
+      }`,
+    ],
+  ];
+
+  for (const [name, source] of nowInvalidLegacyOperations) {
+    it(`${name} now fails validation (mutation removed by reduced-B7)`, () => {
+      const document = parse(source);
+      const errors = validate(schema, document);
+      // Pin the failure reason: it must be the removed mutation field itself, not an
+      // incidental error elsewhere in the document (e.g. driverParticipantId, which
+      // deliberately still validates).
+      const unknownMutationErrors = errors.filter((error) =>
+        /Cannot query field "(takeControl|releaseControl)"/.test(error.message),
+      );
+      expect(unknownMutationErrors.length).toBeGreaterThan(0);
     });
   }
 });
