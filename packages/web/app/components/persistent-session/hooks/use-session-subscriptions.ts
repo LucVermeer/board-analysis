@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import type { SubscriptionQueueEvent, SessionEvent } from '@boardsesh/shared-schema';
 import { RESYNC_LOOP_THRESHOLD, type QueueSyncGate } from '@boardsesh/queue-runtime';
-import { computeQueueStateHash } from '@/app/utils/hash';
+import { computeQueueStateHash, computeQueueStateHashOrdered } from '@/app/utils/hash';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import { type Session, type SharedRefs, DEBUG } from '../types';
 
@@ -80,8 +80,18 @@ export function useSessionSubscriptions({
     }
 
     const verifyInterval = setInterval(() => {
+      // Compute both hashes; the gate prefers the ordered (v2) comparison when
+      // the server sent an ordered hash, else falls back to v1. The returned
+      // `serverHash` is whichever version the gate actually compared, so the
+      // drift report below carries BOTH local hashes — otherwise a v2 serverHash
+      // would be logged next to a v1 localHash and look mismatched by version,
+      // not by drift.
       const localHash = computeQueueStateHash(queue, currentClimbQueueItem?.uuid || null);
-      const { verdict, consecutiveResyncs, serverHash } = syncGate.verifyLocalHash(localHash);
+      const localHashOrdered = computeQueueStateHashOrdered(queue, currentClimbQueueItem?.uuid || null);
+      const { verdict, consecutiveResyncs, serverHash } = syncGate.verifyLocalHash({
+        stateHash: localHash,
+        stateHashOrdered: localHashOrdered,
+      });
 
       if (verdict === 'ok') {
         if (DEBUG) console.info('[PersistentSession] State hash verification passed');
@@ -90,7 +100,7 @@ export function useSessionSubscriptions({
 
       console.warn(
         '[PersistentSession] State hash mismatch detected!',
-        `Local: ${localHash}, Server: ${serverHash}`,
+        `Local v1: ${localHash}, Local v2: ${localHashOrdered}, Server (compared): ${serverHash}`,
         'Triggering automatic resync...',
       );
 
@@ -99,7 +109,7 @@ export function useSessionSubscriptions({
       // ref-based implementation reported at).
       if (consecutiveResyncs === RESYNC_LOOP_THRESHOLD) {
         console.error(
-          `[PersistentSession] Resync loop detected: ${consecutiveResyncs} consecutive resyncs for server hash ${serverHash} (local hash ${localHash}). Capturing Sentry message.`,
+          `[PersistentSession] Resync loop detected: ${consecutiveResyncs} consecutive resyncs for server hash ${serverHash} (local v1 ${localHash}, local v2 ${localHashOrdered}). Capturing Sentry message.`,
         );
         Sentry.captureMessage('Resync loop: client keeps disagreeing with server hash', {
           level: 'warning',
@@ -107,8 +117,12 @@ export function useSessionSubscriptions({
           fingerprint: ['party-session', 'hash-resync-loop'],
           extra: {
             sessionId: session.id,
+            // `serverHash` is the active comparison hash (v2 when the gate
+            // preferred ordered). Include both local hashes so triage can line
+            // the right pair up regardless of which version was compared.
             serverHash,
             localHash,
+            localHashOrdered,
             consecutiveResyncs,
             queueLength: queue.length,
             currentClimbUuid: currentClimbQueueItem?.uuid ?? null,

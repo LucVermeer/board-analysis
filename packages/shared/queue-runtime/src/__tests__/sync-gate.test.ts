@@ -139,7 +139,11 @@ describe('createQueueSyncGate', () => {
   describe('verifyLocalHash', () => {
     it('returns ok with no server hash tracked yet', () => {
       const gate = createQueueSyncGate();
-      expect(gate.verifyLocalHash('anything')).toEqual({ verdict: 'ok', consecutiveResyncs: 0, serverHash: null });
+      expect(gate.verifyLocalHash({ stateHash: 'anything' })).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: null,
+      });
     });
 
     it('returns ok when the local hash matches the tracked server hash', () => {
@@ -147,14 +151,20 @@ describe('createQueueSyncGate', () => {
       const event = fullSync(1, 'hash-a');
       gate.evaluateIncoming(event);
 
-      expect(gate.verifyLocalHash('hash-a')).toEqual({ verdict: 'ok', consecutiveResyncs: 0, serverHash: 'hash-a' });
+      expect(gate.verifyLocalHash({ stateHash: 'hash-a' })).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: 'hash-a',
+      });
     });
 
     it('escalates through resync-drift for the first RESYNC_LOOP_THRESHOLD mismatches, then backs off', () => {
       const gate = createQueueSyncGate();
       gate.evaluateIncoming(fullSync(1, 'server-hash'));
 
-      const results = Array.from({ length: RESYNC_LOOP_THRESHOLD + 2 }, () => gate.verifyLocalHash('local-hash'));
+      const results = Array.from({ length: RESYNC_LOOP_THRESHOLD + 2 }, () =>
+        gate.verifyLocalHash({ stateHash: 'local-hash' }),
+      );
 
       for (let strike = 0; strike < RESYNC_LOOP_THRESHOLD; strike++) {
         expect(results[strike]).toEqual({
@@ -181,9 +191,9 @@ describe('createQueueSyncGate', () => {
       const gate = createQueueSyncGate();
       gate.evaluateIncoming(fullSync(1, 'server-hash'));
 
-      gate.verifyLocalHash('local-hash');
-      gate.verifyLocalHash('local-hash');
-      expect(gate.verifyLocalHash('server-hash')).toEqual({
+      gate.verifyLocalHash({ stateHash: 'local-hash' });
+      gate.verifyLocalHash({ stateHash: 'local-hash' });
+      expect(gate.verifyLocalHash({ stateHash: 'server-hash' })).toEqual({
         verdict: 'ok',
         consecutiveResyncs: 0,
         serverHash: 'server-hash',
@@ -191,7 +201,7 @@ describe('createQueueSyncGate', () => {
 
       // A subsequent mismatch against the *same* server hash starts a fresh
       // streak at strike 1, not 3.
-      expect(gate.verifyLocalHash('local-hash')).toEqual({
+      expect(gate.verifyLocalHash({ stateHash: 'local-hash' })).toEqual({
         verdict: 'resync-drift',
         consecutiveResyncs: 1,
         serverHash: 'server-hash',
@@ -202,9 +212,9 @@ describe('createQueueSyncGate', () => {
       const gate = createQueueSyncGate();
       gate.evaluateIncoming(fullSync(1, 'server-hash-a'));
 
-      gate.verifyLocalHash('local-hash');
-      gate.verifyLocalHash('local-hash');
-      expect(gate.verifyLocalHash('local-hash')).toEqual({
+      gate.verifyLocalHash({ stateHash: 'local-hash' });
+      gate.verifyLocalHash({ stateHash: 'local-hash' });
+      expect(gate.verifyLocalHash({ stateHash: 'local-hash' })).toEqual({
         verdict: 'resync-drift',
         consecutiveResyncs: 3,
         serverHash: 'server-hash-a',
@@ -218,10 +228,100 @@ describe('createQueueSyncGate', () => {
       gate.evaluateIncoming(next);
       gate.noteApplied(next);
 
-      expect(gate.verifyLocalHash('local-hash')).toEqual({
+      expect(gate.verifyLocalHash({ stateHash: 'local-hash' })).toEqual({
         verdict: 'resync-drift',
         consecutiveResyncs: 1,
         serverHash: 'server-hash-b',
+      });
+    });
+  });
+
+  // X1: the whole point of the order-sensitive (v2) hash — a reorder that keeps
+  // the same members produces the SAME v1 hash but a DIFFERENT ordered hash.
+  // These tests prove v1's blind spot and v2's fix, and that the dual-hash
+  // preference degrades cleanly to v1 when either side lacks an ordered hash.
+  describe('verifyLocalHash — dual-hash (v2 ordered) preference', () => {
+    // A reorder drift: identical v1 (members unchanged), diverging ordered.
+    const V1_SAME = 'v1-shared';
+    const ORDERED_SERVER = 'ordered-server';
+    const ORDERED_LOCAL = 'ordered-local-diverged';
+
+    function fullSyncDual(sequence: number, stateHash: string, stateHashOrdered: string): QueueSyncGateEvent {
+      return { __typename: 'FullSync', sequence, stateHash, stateHashOrdered };
+    }
+
+    it('CATCHES reorder drift (same v1, different ordered) as resync-drift when ordered hashes are present', () => {
+      const gate = createQueueSyncGate();
+      gate.evaluateIncoming(fullSyncDual(1, V1_SAME, ORDERED_SERVER));
+
+      // v1 matches — the v1-only watchdog would have called this 'ok' (its blind
+      // spot). With ordered hashes on both sides the gate compares them and sees
+      // the divergence.
+      expect(gate.verifyLocalHash({ stateHash: V1_SAME, stateHashOrdered: ORDERED_LOCAL })).toEqual({
+        verdict: 'resync-drift',
+        consecutiveResyncs: 1,
+        // The reported serverHash is the ACTIVE (ordered) comparison hash.
+        serverHash: ORDERED_SERVER,
+      });
+    });
+
+    it("does NOT catch the same reorder drift when only v1 hashes are present (proves v1's blind spot)", () => {
+      const gate = createQueueSyncGate();
+      // Old backend: FullSync carries only v1, no ordered hash.
+      gate.evaluateIncoming(fullSync(1, V1_SAME));
+
+      // Even though the caller has a diverged ordered hash, the server never sent
+      // one, so the gate falls back to v1 — which matches → 'ok'. This is exactly
+      // the reorder-drift the 60s watchdog used to miss entirely.
+      expect(gate.verifyLocalHash({ stateHash: V1_SAME, stateHashOrdered: ORDERED_LOCAL })).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: V1_SAME,
+      });
+    });
+
+    it('falls back to v1 when the caller omits the local ordered hash (old client, new backend)', () => {
+      const gate = createQueueSyncGate();
+      gate.evaluateIncoming(fullSyncDual(1, V1_SAME, ORDERED_SERVER));
+
+      // Caller passes only v1 → cannot compare ordered → v1 comparison, matches.
+      expect(gate.verifyLocalHash({ stateHash: V1_SAME })).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: V1_SAME,
+      });
+    });
+
+    it('reports ok via the ordered path when both ordered hashes agree', () => {
+      const gate = createQueueSyncGate();
+      gate.evaluateIncoming(fullSyncDual(1, V1_SAME, ORDERED_SERVER));
+
+      expect(gate.verifyLocalHash({ stateHash: V1_SAME, stateHashOrdered: ORDERED_SERVER })).toEqual({
+        verdict: 'ok',
+        consecutiveResyncs: 0,
+        serverHash: ORDERED_SERVER,
+      });
+    });
+
+    it('tracks the ordered hash through a delta via noteApplied, then catches ordered drift', () => {
+      const gate = createQueueSyncGate();
+      gate.evaluateIncoming(fullSyncDual(1, 'v1-a', 'ordered-a'));
+
+      const reorder: QueueSyncGateEvent = {
+        __typename: 'QueueReordered',
+        sequence: 2,
+        // A pure reorder: v1 unchanged, ordered advanced.
+        stateHash: 'v1-a',
+        stateHashOrdered: 'ordered-b',
+      };
+      expect(gate.evaluateIncoming(reorder)).toBe('apply');
+      gate.noteApplied(reorder);
+
+      // Local still has the pre-reorder ordering → ordered mismatch caught.
+      expect(gate.verifyLocalHash({ stateHash: 'v1-a', stateHashOrdered: 'ordered-a' })).toEqual({
+        verdict: 'resync-drift',
+        consecutiveResyncs: 1,
+        serverHash: 'ordered-b',
       });
     });
   });
@@ -296,6 +396,52 @@ describe('createQueueSyncGate', () => {
       ).toBe('full-sync');
     });
 
+    // The recovery half of the reorder-drift fix: at the same sequence with an
+    // equal v1 hash but a diverged ordered hash, the reconnect must full-sync so
+    // the client's queue is actually re-ordered — not just detected as drifted.
+    it('full-syncs at gap 0 when v1 hashes match but the ordered (v2) hashes diverge', () => {
+      const gate = createQueueSyncGate();
+      expect(
+        gate.decideReconnectStrategy({
+          lastSequence: 10,
+          serverSequence: 10,
+          serverStateHash: 'same-v1',
+          localStateHash: 'same-v1',
+          serverStateHashOrdered: 'ordered-server',
+          localStateHashOrdered: 'ordered-local-diverged',
+        }),
+      ).toBe('full-sync');
+    });
+
+    it('does nothing at gap 0 when both v1 and ordered hashes match', () => {
+      const gate = createQueueSyncGate();
+      expect(
+        gate.decideReconnectStrategy({
+          lastSequence: 10,
+          serverSequence: 10,
+          serverStateHash: 'same-v1',
+          localStateHash: 'same-v1',
+          serverStateHashOrdered: 'same-ordered',
+          localStateHashOrdered: 'same-ordered',
+        }),
+      ).toBe('none');
+    });
+
+    it('falls back to v1 at gap 0 when ordered hashes are not both present (old backend)', () => {
+      const gate = createQueueSyncGate();
+      // Server sent no ordered hash: a diverged local ordered hash is ignored,
+      // v1 matches → 'none' (exactly the pre-dual-hash behaviour).
+      expect(
+        gate.decideReconnectStrategy({
+          lastSequence: 10,
+          serverSequence: 10,
+          serverStateHash: 'same-v1',
+          localStateHash: 'same-v1',
+          localStateHashOrdered: 'ordered-local-diverged',
+        }),
+      ).toBe('none');
+    });
+
     it('delta-replays for a small gap (1..100)', () => {
       const gate = createQueueSyncGate();
       expect(
@@ -329,10 +475,14 @@ describe('createQueueSyncGate', () => {
       ).toBe('full-sync');
     });
 
-    it('does nothing when the server-reported sequence is behind the last one applied (negative gap)', () => {
-      // Matches web's current use-session-lifecycle.ts behaviour: none of
-      // the gap>0/gap>100/lastSeq===null/gap===0 branches fire for a
-      // negative gap, so the reconnect flow falls through with no resync.
+    it('full-syncs when the server-reported sequence is behind the last one applied (negative gap)', () => {
+      // MIGRATED from the old 'none' assertion (carried in from the W3 review):
+      // a negative gap means the backend re-seeded its sequence counter LOW
+      // (restart with Redis lost / a dormant Postgres row), leaving this client
+      // permanently ahead. Under the old 'none' verdict every later delta looked
+      // stale against the client's higher tracked sequence and was dropped
+      // forever ('ignore-stale' loop). A full-sync re-baselines the client to
+      // the server's authoritative state and recovers it.
       const gate = createQueueSyncGate();
       expect(
         gate.decideReconnectStrategy({
@@ -341,7 +491,7 @@ describe('createQueueSyncGate', () => {
           serverStateHash: 'server-hash',
           localStateHash: 'local-hash',
         }),
-      ).toBe('none');
+      ).toBe('full-sync');
     });
 
     it('is pure with respect to gate-tracked state — ignores getLastSequence() and only reads its input', () => {
@@ -371,8 +521,8 @@ describe('createQueueSyncGate', () => {
 
       const event = fullSync(10, 'server-hash');
       gate.evaluateIncoming(event);
-      gate.verifyLocalHash('local-hash');
-      gate.verifyLocalHash('local-hash');
+      gate.verifyLocalHash({ stateHash: 'local-hash' });
+      gate.verifyLocalHash({ stateHash: 'local-hash' });
       gate.evaluateCorruption();
 
       gate.reset();
@@ -382,7 +532,7 @@ describe('createQueueSyncGate', () => {
       // from 2.
       const event2 = fullSync(1, 'server-hash-2');
       gate.evaluateIncoming(event2);
-      expect(gate.verifyLocalHash('local-hash')).toEqual({
+      expect(gate.verifyLocalHash({ stateHash: 'local-hash' })).toEqual({
         verdict: 'resync-drift',
         consecutiveResyncs: 1,
         serverHash: 'server-hash-2',

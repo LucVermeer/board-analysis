@@ -57,8 +57,10 @@ export const queueTypeDefs = /* GraphQL */ `
   type QueueState {
     "Monotonically increasing sequence number for ordering events"
     sequence: Int!
-    "Hash of the current state for consistency checking"
+    "Order-insensitive hash (v1) of the current state for consistency checking (sorted UUIDs)"
     stateHash: String!
+    "Order-SENSITIVE hash (v2) of the current state (UUIDs in queue order). Optional during the dual-hash rollout: old clients ignore it; new clients prefer it when present so a reorder that diverges is detectable."
+    stateHashOrdered: String
     "List of climbs in the queue"
     queue: [ClimbQueueItem!]!
     "The climb currently being attempted"

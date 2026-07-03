@@ -77,6 +77,7 @@ const sampleSessionData = {
 const sampleQueueState = {
   sequence: 5,
   stateHash: 'hash-5',
+  stateHashOrdered: 'hash-5-ordered',
   queue: [],
   currentClimbQueueItem: null,
   version: 3,
@@ -106,6 +107,7 @@ describe('buildSessionPayload — defaults (no overrides)', () => {
       queueState: {
         sequence: 5,
         stateHash: 'hash-5',
+        stateHashOrdered: 'hash-5-ordered',
         queue: [],
         currentClimbQueueItem: null,
       },
@@ -146,6 +148,7 @@ describe('buildSessionPayload — override short-circuits', () => {
     const prefetched = {
       sequence: 99,
       stateHash: 'fresh',
+      stateHashOrdered: 'fresh-ordered',
       queue: [],
       currentClimbQueueItem: null,
     };

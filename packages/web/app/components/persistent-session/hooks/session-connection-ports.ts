@@ -29,7 +29,7 @@ import {
 } from '@boardsesh/queue-runtime';
 import type { SubscriptionQueueEvent, SessionEvent, QueueEvent, EventsReplayResponse } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
-import { computeQueueStateHash } from '@/app/utils/hash';
+import { computeQueueStateHash, computeQueueStateHashOrdered } from '@/app/utils/hash';
 import { removePreference } from '@/app/lib/user-preferences-db';
 import { coerceSessionUser } from '../event-utils';
 import {
@@ -324,6 +324,12 @@ export function createWebSessionConnectionDeps({
     gate: syncGate,
 
     getLocalStateHash: () => computeQueueStateHash(queueRef.current, currentClimbQueueItemRef.current?.uuid || null),
+
+    // Order-sensitive (v2) local hash — paired with the server's
+    // `queueState.stateHashOrdered` so `decideReconnectStrategy` can full-sync
+    // and re-order on a pure reorder drift the v1 comparison can't see.
+    getLocalStateHashOrdered: () =>
+      computeQueueStateHashOrdered(queueRef.current, currentClimbQueueItemRef.current?.uuid || null),
 
     applyFullSync: (sessionData) => {
       if (sessionData.queueState) {

@@ -181,6 +181,7 @@ export const sessionMutations = {
       queueState: {
         sequence: result.sequence,
         stateHash: result.stateHash,
+        stateHashOrdered: result.stateHashOrdered,
         queue: result.queue,
         currentClimbQueueItem: result.currentClimbQueueItem,
       },
@@ -287,6 +288,7 @@ export const sessionMutations = {
           queueState: {
             sequence: result.sequence,
             stateHash: result.stateHash,
+            stateHashOrdered: result.stateHashOrdered,
             queue: result.queue,
             currentClimbQueueItem: result.currentClimbQueueItem,
           },
@@ -614,6 +616,7 @@ export const sessionMutations = {
       queueState: {
         sequence: queueState.sequence,
         stateHash: queueState.stateHash,
+        stateHashOrdered: queueState.stateHashOrdered,
         queue: queueState.queue,
         currentClimbQueueItem: queueState.currentClimbQueueItem,
       },

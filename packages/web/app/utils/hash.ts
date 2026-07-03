@@ -4,4 +4,4 @@
  * existing `@/app/utils/hash` import path — and the test mocks pinned to it —
  * working without duplicating the logic.
  */
-export { fnv1aHash, computeQueueStateHash } from '@boardsesh/queue';
+export { fnv1aHash, computeQueueStateHash, computeQueueStateHashOrdered } from '@boardsesh/queue';

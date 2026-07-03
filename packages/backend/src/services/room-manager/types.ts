@@ -111,6 +111,7 @@ export type JoinSessionCallbacks = {
     version: number;
     sequence: number;
     stateHash: string;
+    stateHashOrdered: string;
   }>;
   getSessionUsers: (sessionId: string) => Promise<SessionUser[]>;
   getSessionUsersLocal: (sessionId: string) => SessionUser[];
@@ -156,6 +157,7 @@ export type QueueState = {
   version: number;
   sequence: number;
   stateHash: string;
+  stateHashOrdered: string;
 };
 
 export type PendingWrite = {

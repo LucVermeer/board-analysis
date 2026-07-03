@@ -4,8 +4,14 @@ import { createQueueSyncGate, CORRUPTION_RESYNC_COOLDOWN_MS } from '@boardsesh/q
 
 // Force the watchdog into a permanent mismatch: the local hash never equals the
 // server hash below, so every 60s tick sees drift and would resync forever
-// without the convergence guard (issue #2359).
-vi.mock('@/app/utils/hash', () => ({ computeQueueStateHash: () => 'local-hash' }));
+// without the convergence guard (issue #2359). The gate here is only seeded
+// with a v1 server hash (via noteApplied), so it compares v1 — the ordered mock
+// value is present only so the watchdog's dual-hash computation has something to
+// pass; it never wins the comparison here.
+vi.mock('@/app/utils/hash', () => ({
+  computeQueueStateHash: () => 'local-hash',
+  computeQueueStateHashOrdered: () => 'local-hash-ordered',
+}));
 vi.mock('@sentry/nextjs', () => ({ captureMessage: vi.fn() }));
 
 import { useSessionSubscriptions } from '../hooks/use-session-subscriptions';

@@ -51,7 +51,26 @@ export const CORRUPTION_RESYNC_COOLDOWN_MS = 30_000;
 export type QueueSyncGateEvent = {
   __typename: string;
   sequence?: number | null;
+  /** Order-insensitive hash (v1). */
   stateHash?: string | null;
+  /** Order-SENSITIVE hash (v2). Optional during the dual-hash rollout: an old
+   *  backend omits it and the gate falls back to comparing v1; a new backend
+   *  always sends it and the gate prefers ordered-vs-ordered so a reorder that
+   *  diverges is finally caught (v1 is blind to reorders). */
+  stateHashOrdered?: string | null;
+};
+
+/**
+ * The pair of locally-computed hashes the watchdog passes to `verifyLocalHash`.
+ * `stateHash` (v1) is always present; `stateHashOrdered` (v2) is present once
+ * the platform computes it. The gate compares ordered-vs-ordered only when BOTH
+ * the server sent an ordered hash and this local ordered hash is present —
+ * otherwise it falls back to the v1 comparison, so behaviour is identical to
+ * today's against an old backend.
+ */
+export type LocalStateHashes = {
+  stateHash: string;
+  stateHashOrdered?: string | null;
 };
 
 export type IncomingEventDecision = 'apply' | 'ignore-stale' | 'resync-gap';
@@ -65,11 +84,12 @@ export type HashVerifyResult = {
    *  streak by checking `consecutiveResyncs === RESYNC_LOOP_THRESHOLD`
    *  (the same one-shot point `use-session-subscriptions.ts` reports at). */
   consecutiveResyncs: number;
-  /** The server hash the local hash was compared against (the gate's tracked
-   *  `lastServerStateHash`), or `null` when nothing was tracked yet. Web's
-   *  Sentry drift report includes it (`use-session-subscriptions.ts:150-160`)
-   *  — returning it here keeps callers from mirroring the exact value the
-   *  gate exists to own. */
+  /** The server hash the local hash was compared against, or `null` when
+   *  nothing was tracked yet. This is the *active* comparison hash: the
+   *  tracked ordered (v2) server hash when the gate compared ordered-vs-ordered,
+   *  otherwise the tracked v1 server hash. Web's Sentry drift report includes
+   *  it (`use-session-subscriptions.ts:150-160`) — returning it here keeps
+   *  callers from mirroring the exact value the gate exists to own. */
   serverHash: string | null;
 };
 
@@ -82,6 +102,14 @@ export type ReconnectStrategyInput = {
   serverSequence: number;
   serverStateHash: string;
   localStateHash: string;
+  /** Order-sensitive (v2) hashes. Optional during the dual-hash rollout: when
+   *  BOTH are present the `gap === 0` branch compares them instead of v1, so a
+   *  pure reorder drift (identical members, same sequence, equal v1 hash but
+   *  diverged order) triggers a recovering `'full-sync'` — v1 alone returns
+   *  `'none'` and would leave the client detecting the drift forever without
+   *  fixing it. Omitting either falls back to the exact v1 comparison. */
+  serverStateHashOrdered?: string | null;
+  localStateHashOrdered?: string | null;
 };
 
 export type QueueSyncGateOptions = {
@@ -116,11 +144,15 @@ export type QueueSyncGate = {
    */
   noteApplied(event: QueueSyncGateEvent): void;
   /**
-   * Periodic watchdog: compare a freshly computed local hash against the
-   * last known server hash. Tracks consecutive resyncs against the same
-   * server hash and backs off after `RESYNC_LOOP_THRESHOLD` strikes.
+   * Periodic watchdog: compare freshly computed local hashes against the last
+   * known server hashes. Prefers the order-sensitive (v2) comparison when the
+   * server sent an ordered hash AND the caller provides a local ordered hash;
+   * otherwise falls back to the v1 comparison (identical to pre-dual-hash
+   * behaviour against an old backend). Tracks consecutive resyncs against the
+   * *active* comparison server hash and backs off after `RESYNC_LOOP_THRESHOLD`
+   * strikes.
    */
-  verifyLocalHash(localHash: string): HashVerifyResult;
+  verifyLocalHash(local: LocalStateHashes): HashVerifyResult;
   /**
    * Corrupted (null/undefined) queue item detected locally. Returns
    * `'cooldown'` when a corruption-triggered resync already happened within
@@ -147,6 +179,10 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
 
   let lastSequence: number | null = null;
   let lastServerStateHash: string | null = null;
+  // Order-sensitive (v2) server hash, tracked alongside v1. Stays null against
+  // an old backend that never sends one, which is exactly what makes
+  // `verifyLocalHash` fall back to the v1 comparison there.
+  let lastServerStateHashOrdered: string | null = null;
 
   let resyncLoopHash: string | null = null;
   let consecutiveResyncCount = 0;
@@ -168,6 +204,11 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
     if (event.stateHash != null) {
       lastServerStateHash = event.stateHash;
     }
+    // Track the ordered hash the same way. A null (old backend) doesn't clobber
+    // a previously-tracked ordered hash — matching the v1 conditional above.
+    if (event.stateHashOrdered != null) {
+      lastServerStateHashOrdered = event.stateHashOrdered;
+    }
   }
 
   return {
@@ -175,6 +216,9 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
       if (event.__typename === 'FullSync') {
         lastSequence = event.sequence ?? null;
         lastServerStateHash = event.stateHash ?? null;
+        // Re-baseline the ordered hash too. A FullSync from an old backend
+        // carries no ordered hash → null → verifyLocalHash compares v1.
+        lastServerStateHashOrdered = event.stateHashOrdered ?? null;
         return 'apply';
       }
 
@@ -208,24 +252,35 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
       advanceTracking(event);
     },
 
-    verifyLocalHash(localHash) {
-      if (lastServerStateHash === null || localHash === lastServerStateHash) {
+    verifyLocalHash(local) {
+      // Prefer the order-sensitive comparison only when BOTH sides have an
+      // ordered hash: the server sent one (new backend) and the caller computed
+      // one. Otherwise fall back to v1 — identical to the pre-dual-hash
+      // behaviour, so an old backend (no server ordered hash) keeps working and
+      // a caller that only passes v1 keeps working. The chosen pair is compared
+      // and the *active* server hash keys the resync-loop counter, so a reorder
+      // that changes only the ordered hash resets/advances the streak correctly.
+      const preferOrdered = lastServerStateHashOrdered != null && local.stateHashOrdered != null;
+      const serverHash = preferOrdered ? lastServerStateHashOrdered : lastServerStateHash;
+      const localHash = preferOrdered ? (local.stateHashOrdered as string) : local.stateHash;
+
+      if (serverHash === null || localHash === serverHash) {
         // Hashes agree (or nothing to compare against yet) — reset the loop
         // counter so future drift starts fresh.
         resyncLoopHash = null;
         consecutiveResyncCount = 0;
-        return { verdict: 'ok', consecutiveResyncs: 0, serverHash: lastServerStateHash };
+        return { verdict: 'ok', consecutiveResyncs: 0, serverHash };
       }
 
-      if (resyncLoopHash === lastServerStateHash) {
+      if (resyncLoopHash === serverHash) {
         consecutiveResyncCount += 1;
       } else {
-        resyncLoopHash = lastServerStateHash;
+        resyncLoopHash = serverHash;
         consecutiveResyncCount = 1;
       }
 
       const verdict: HashVerifyVerdict = consecutiveResyncCount <= RESYNC_LOOP_THRESHOLD ? 'resync-drift' : 'backoff';
-      return { verdict, consecutiveResyncs: consecutiveResyncCount, serverHash: lastServerStateHash };
+      return { verdict, consecutiveResyncs: consecutiveResyncCount, serverHash };
     },
 
     evaluateCorruption() {
@@ -238,7 +293,14 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
       return 'resync';
     },
 
-    decideReconnectStrategy({ lastSequence: lastSeq, serverSequence, serverStateHash, localStateHash }) {
+    decideReconnectStrategy({
+      lastSequence: lastSeq,
+      serverSequence,
+      serverStateHash,
+      localStateHash,
+      serverStateHashOrdered,
+      localStateHashOrdered,
+    }) {
       if (lastSeq === null) {
         return 'full-sync';
       }
@@ -255,23 +317,33 @@ export function createQueueSyncGate(options: QueueSyncGateOptions = {}): QueueSy
         return 'full-sync';
       }
       if (gap === 0) {
-        return localStateHash !== serverStateHash ? 'full-sync' : 'none';
+        // Same sequence: only a hash mismatch means state diverged. Prefer the
+        // order-sensitive comparison when both ordered hashes are present so a
+        // pure reorder (equal v1 hash, diverged order) still full-syncs and
+        // RECOVERS — not just gets detected by the watchdog. Falls back to v1
+        // against an old backend / a caller that didn't pass ordered hashes.
+        const preferOrdered = serverStateHashOrdered != null && localStateHashOrdered != null;
+        const serverHash = preferOrdered ? (serverStateHashOrdered as string) : serverStateHash;
+        const localHash = preferOrdered ? (localStateHashOrdered as string) : localStateHash;
+        return localHash !== serverHash ? 'full-sync' : 'none';
       }
 
-      // gap < 0: the freshly rejoined session reports a sequence *behind*
-      // what this client already applied. Web's
-      // `use-session-lifecycle.ts:555-609` if/else-if chain has no branch
-      // for this case — `gap > 0 && gap <= 100` and `gap > 100` both fail
-      // (gap is negative), `lastSeq === null` fails (we're in the `else`
-      // already), and `gap === 0` fails too, so the chain falls straight
-      // through with no resync at all before `setSession`/resubscribe.
-      // Match that behaviour exactly instead of assuming a full-sync.
-      return 'none';
+      // gap < 0: the freshly rejoined session reports a sequence *behind* what
+      // this client already applied. This happens when the backend restarts and
+      // re-seeds sequence counters low (e.g. Redis lost, Postgres row dormant) —
+      // the client is then permanently ahead and, under the old 'none' verdict,
+      // would sit in 'ignore-stale' forever, dropping every subsequent delta
+      // because they all look stale against its higher tracked sequence. A
+      // full-sync re-baselines the client to the server's authoritative state
+      // and recovers it. (Carried in from the W3 review — the ported web chain
+      // fell through to no resync here, which is the bug this fixes.)
+      return 'full-sync';
     },
 
     reset() {
       lastSequence = null;
       lastServerStateHash = null;
+      lastServerStateHashOrdered = null;
       resyncLoopHash = null;
       consecutiveResyncCount = 0;
       // Deliberate per-session scoping: web's `lastCorruptionResyncRef`

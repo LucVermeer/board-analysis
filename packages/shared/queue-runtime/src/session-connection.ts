@@ -91,6 +91,11 @@ export type SessionConnectionSessionData = {
   queueState: {
     sequence: number;
     stateHash: string;
+    /** Order-sensitive (v2) hash — optional during the dual-hash rollout. Fed
+     *  into `gate.decideReconnectStrategy` so a pure reorder drift (same
+     *  members/sequence, equal v1 hash) full-syncs and recovers. Null when the
+     *  server predates the rollout. */
+    stateHashOrdered?: string | null;
   } | null;
 };
 
@@ -194,6 +199,12 @@ export type SessionConnectionDeps<
    *  `computeQueueStateHash(queueRef.current, currentClimbQueueItemRef.current?.uuid || null)`
    *  in `use-session-lifecycle.ts:530`. */
   getLocalStateHash: () => string;
+  /** Synchronous local order-sensitive (v2) queue-state hash, fed into
+   *  `gate.decideReconnectStrategy` alongside `getLocalStateHash`. Optional
+   *  during the dual-hash rollout — when omitted (or it returns null) the gate
+   *  falls back to the v1 comparison. Web supplies
+   *  `computeQueueStateHashOrdered(queueRef.current, currentClimbQueueItemRef.current?.uuid || null)`. */
+  getLocalStateHashOrdered?: () => string | null;
   /** Apply a full-sync snapshot from freshly (re)joined session data.
    *  Mirrors the `applyFullSync` local helper in
    *  `use-session-lifecycle.ts:603-611` — the controller can't construct a
@@ -588,6 +599,11 @@ export function createSessionConnectionController<
         serverSequence,
         serverStateHash: rejoinedQueueState.stateHash,
         localStateHash: deps.getLocalStateHash(),
+        // Order-sensitive hashes so a pure reorder drift (same members/sequence,
+        // equal v1 hash) full-syncs and recovers instead of returning 'none'.
+        // Both null when either side predates the rollout → gate falls back to v1.
+        serverStateHashOrdered: rejoinedQueueState.stateHashOrdered ?? null,
+        localStateHashOrdered: deps.getLocalStateHashOrdered?.() ?? null,
       });
 
       // The original's delta-replay branch also required a truthy

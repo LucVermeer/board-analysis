@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { computeQueueStateHash } from '@boardsesh/queue';
+import { computeQueueStateHash, computeQueueStateHashOrdered } from '@boardsesh/queue';
 import type { QueueAction, QueueState } from '@boardsesh/queue';
 import {
   applySessionRuntimeEvent,
@@ -57,9 +57,15 @@ function toSyncQueueEvent(event: QueueUpdateEvent): QueueSyncGateEvent {
     return {
       __typename: 'FullSync',
       sequence: event.sequence,
-      stateHash: (event.state as { stateHash?: string | null }).stateHash ?? null,
+      stateHash: event.state.stateHash ?? null,
+      // Order-sensitive (v2) hash — nested under `state` like stateHash. Rides
+      // through to the gate so it can prefer ordered-vs-ordered on reorder drift.
+      stateHashOrdered: event.state.stateHashOrdered ?? null,
     };
   }
+  // Non-FullSync variants carry `stateHash`/`stateHashOrdered` at the top level
+  // (matching the subscription selection), so the raw envelope is already a
+  // valid QueueSyncGateEvent — the ordered hash flows through untouched.
   return event;
 }
 
@@ -521,15 +527,19 @@ export function useSessionRealtime({
       const gate = queueSyncGateRef.current;
       if (!gate) return;
       const { queue, currentClimbQueueItem } = stateRef.current;
+      // Compute both hashes; the gate prefers the ordered (v2) comparison when
+      // the server sent an ordered hash, else falls back to v1. `localHash` (v1)
+      // is retained for the drift log/analytics below.
       const localHash = computeQueueStateHash(queue, currentClimbQueueItem?.uuid ?? null);
-      const result = gate.verifyLocalHash(localHash);
+      const localHashOrdered = computeQueueStateHashOrdered(queue, currentClimbQueueItem?.uuid ?? null);
+      const result = gate.verifyLocalHash({ stateHash: localHash, stateHashOrdered: localHashOrdered });
       if (result.verdict === 'ok') return;
 
       if (result.verdict === 'resync-drift') {
         if (__DEV__) {
           console.warn(
             '[queue] hash drift detected; resyncing',
-            `local=${localHash} server=${result.serverHash} strikes=${result.consecutiveResyncs}`,
+            `localV1=${localHash} localV2=${localHashOrdered} server(compared)=${result.serverHash} strikes=${result.consecutiveResyncs}`,
           );
         }
         track(SHARED_EVENTS.QueueSyncHashDrift, {
@@ -551,7 +561,7 @@ export function useSessionRealtime({
       if (__DEV__) {
         console.warn(
           '[queue] hash drift backoff — resync loop threshold hit',
-          `local=${localHash} server=${result.serverHash} strikes=${result.consecutiveResyncs}`,
+          `localV1=${localHash} localV2=${localHashOrdered} server(compared)=${result.serverHash} strikes=${result.consecutiveResyncs}`,
         );
       }
       // Report to analytics ONCE per drift streak — the first backoff tick

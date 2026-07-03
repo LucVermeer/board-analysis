@@ -32,21 +32,31 @@ export type EventsReplayResponse = {
 
 export type ReplayQueueEvent = QueueEvent | SubscriptionQueueEvent;
 
-// Server-side event type - uses actual GraphQL field names
+// Server-side event type - uses actual GraphQL field names.
+// `stateHashOrdered` is the optional order-sensitive (v2) hash, additive during
+// the dual-hash rollout — the backend always sends it now; old clients ignore it.
 export type QueueEvent =
   | { __typename: 'FullSync'; sequence: number; state: QueueState }
   | {
       __typename: 'QueueItemAdded';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       item: ClimbQueueItem;
       position?: number | null;
     }
-  | { __typename: 'QueueItemRemoved'; sequence: number; stateHash: string; uuid: string }
+  | {
+      __typename: 'QueueItemRemoved';
+      sequence: number;
+      stateHash: string;
+      stateHashOrdered?: string | null;
+      uuid: string;
+    }
   | {
       __typename: 'QueueReordered';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       uuid: string;
       oldIndex: number;
       newIndex: number;
@@ -55,12 +65,20 @@ export type QueueEvent =
       __typename: 'CurrentClimbChanged';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       item: ClimbQueueItem | null;
       frames?: string | null;
       clientId: string | null;
       correlationId: string | null;
     }
-  | { __typename: 'ClimbMirrored'; sequence: number; stateHash: string; uuid?: string | null; mirrored: boolean }
+  | {
+      __typename: 'ClimbMirrored';
+      sequence: number;
+      stateHash: string;
+      stateHashOrdered?: string | null;
+      uuid?: string | null;
+      mirrored: boolean;
+    }
   | {
       __typename: 'PlaybackStateChanged';
       sequence: number;
@@ -73,21 +91,30 @@ export type QueueEvent =
       clientId: string | null;
     };
 
-// Client-side subscription event type - uses aliased field names to avoid GraphQL union conflicts
+// Client-side subscription event type - uses aliased field names to avoid GraphQL union conflicts.
+// `stateHashOrdered` mirrors the server type's optional order-sensitive (v2) hash.
 export type SubscriptionQueueEvent =
   | { __typename: 'FullSync'; sequence: number; state: QueueState }
   | {
       __typename: 'QueueItemAdded';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       addedItem: ClimbQueueItem;
       position?: number | null;
     }
-  | { __typename: 'QueueItemRemoved'; sequence: number; stateHash: string; uuid: string }
+  | {
+      __typename: 'QueueItemRemoved';
+      sequence: number;
+      stateHash: string;
+      stateHashOrdered?: string | null;
+      uuid: string;
+    }
   | {
       __typename: 'QueueReordered';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       uuid: string;
       oldIndex: number;
       newIndex: number;
@@ -96,6 +123,7 @@ export type SubscriptionQueueEvent =
       __typename: 'CurrentClimbChanged';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       currentItem: ClimbQueueItem | null;
       frames?: string | null;
       clientId: string | null;
@@ -105,6 +133,7 @@ export type SubscriptionQueueEvent =
       __typename: 'ClimbMirrored';
       sequence: number;
       stateHash: string;
+      stateHashOrdered?: string | null;
       mirroredUuid?: string | null;
       mirrored: boolean;
     }

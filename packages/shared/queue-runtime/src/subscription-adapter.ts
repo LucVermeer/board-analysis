@@ -24,10 +24,12 @@ import {
  * `currentItem`/`item` on CurrentClimbChanged, `mirroredUuid`/`uuid` on
  * ClimbMirrored.
  *
- * `sequence`/`stateHash` are optional on every variant so callers can pass
- * the same envelope through `@boardsesh/queue-runtime`'s `createQueueSyncGate`
- * (see `sync-gate.ts`) for resync decisions before lifting it to a reducer
- * action here. Additive — existing callers that omit them are unaffected.
+ * `sequence`/`stateHash`/`stateHashOrdered` are optional on every variant so
+ * callers can pass the same envelope through `@boardsesh/queue-runtime`'s
+ * `createQueueSyncGate` (see `sync-gate.ts`) for resync decisions before lifting
+ * it to a reducer action here. `stateHashOrdered` is the order-sensitive (v2)
+ * hash — additive during the dual-hash rollout; existing callers that omit any
+ * of these are unaffected.
  */
 export type SubscriptionWireEnvelope<TWireItem> =
   | {
@@ -35,9 +37,12 @@ export type SubscriptionWireEnvelope<TWireItem> =
       state: {
         queue: TWireItem[];
         currentClimbQueueItem: TWireItem | null;
+        stateHash?: string | null;
+        stateHashOrdered?: string | null;
       };
       sequence?: number | null;
       stateHash?: string | null;
+      stateHashOrdered?: string | null;
     }
   | {
       __typename: 'QueueItemAdded';
@@ -46,12 +51,14 @@ export type SubscriptionWireEnvelope<TWireItem> =
       position?: number | null;
       sequence?: number | null;
       stateHash?: string | null;
+      stateHashOrdered?: string | null;
     }
   | {
       __typename: 'QueueItemRemoved';
       uuid: string;
       sequence?: number | null;
       stateHash?: string | null;
+      stateHashOrdered?: string | null;
     }
   | {
       __typename: 'QueueReordered';
@@ -60,6 +67,7 @@ export type SubscriptionWireEnvelope<TWireItem> =
       newIndex: number;
       sequence?: number | null;
       stateHash?: string | null;
+      stateHashOrdered?: string | null;
     }
   | {
       __typename: 'CurrentClimbChanged';
@@ -69,6 +77,7 @@ export type SubscriptionWireEnvelope<TWireItem> =
       correlationId?: string | null;
       sequence?: number | null;
       stateHash?: string | null;
+      stateHashOrdered?: string | null;
     }
   | {
       __typename: 'ClimbMirrored';
@@ -77,6 +86,7 @@ export type SubscriptionWireEnvelope<TWireItem> =
       uuid?: string | null;
       sequence?: number | null;
       stateHash?: string | null;
+      stateHashOrdered?: string | null;
     };
 
 export type MapEnvelopeOptions<TWireItem> = {

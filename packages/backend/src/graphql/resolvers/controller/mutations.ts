@@ -192,6 +192,7 @@ export const controllerMutations = {
         __typename: 'CurrentClimbChanged',
         sequence: currentState.sequence,
         stateHash: currentState.stateHash,
+        stateHashOrdered: currentState.stateHashOrdered,
         item: null, // No queue item for unknown climb
         frames: framesString,
         clientId: clientIdForEvent, // ESP32 compares this with its MAC
@@ -241,7 +242,11 @@ export const controllerMutations = {
         ? [...currentState.queue, queueItem]
         : [...currentState.queue.slice(0, currentIndex + 1), queueItem, ...currentState.queue.slice(currentIndex + 1)];
 
-    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, updatedQueue, queueItem);
+    const { sequence, stateHash, stateHashOrdered } = await roomManager.updateQueueState(
+      sessionId,
+      updatedQueue,
+      queueItem,
+    );
 
     // Publish a FullSync for clients because one mutation changed both queue
     // membership and current climb. The controller-specific CurrentClimbChanged
@@ -252,6 +257,7 @@ export const controllerMutations = {
       state: {
         sequence,
         stateHash,
+        stateHashOrdered,
         queue: updatedQueue,
         currentClimbQueueItem: queueItem,
       },
@@ -265,6 +271,7 @@ export const controllerMutations = {
       __typename: 'CurrentClimbChanged',
       sequence,
       stateHash,
+      stateHashOrdered,
       item: queueItem,
       clientId: matchClientId,
       correlationId: null,
@@ -389,13 +396,18 @@ export const controllerMutations = {
         );
 
         // Update queue state
-        const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, newCurrentClimb);
+        const { sequence, stateHash, stateHashOrdered } = await roomManager.updateQueueState(
+          sessionId,
+          queue,
+          newCurrentClimb,
+        );
 
         // Publish CurrentClimbChanged event
         pubsub.publishQueueEvent(sessionId, {
           __typename: 'CurrentClimbChanged',
           sequence,
           stateHash,
+          stateHashOrdered,
           item: newCurrentClimb,
           clientId: null,
           correlationId: null,
@@ -454,7 +466,11 @@ export const controllerMutations = {
     logger.info(`[Controller] Queue has ${queue.length} items, updating current to index ${targetIndex}`);
 
     // Update queue state (keep the same queue, just change current climb)
-    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, newCurrentClimb);
+    const { sequence, stateHash, stateHashOrdered } = await roomManager.updateQueueState(
+      sessionId,
+      queue,
+      newCurrentClimb,
+    );
 
     // Publish CurrentClimbChanged event WITHOUT clientId
     // Unlike setClimbFromLedPositions (where we skip because ESP32 already has LEDs from BLE),
@@ -463,6 +479,7 @@ export const controllerMutations = {
       __typename: 'CurrentClimbChanged',
       sequence,
       stateHash,
+      stateHashOrdered,
       item: newCurrentClimb,
       clientId: null, // Don't skip - ESP32 needs the new climb data
       correlationId: null,

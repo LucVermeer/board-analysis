@@ -3,7 +3,7 @@ import { db } from '../../db/client';
 import { sessionQueues } from '../../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import type { RedisSessionStore } from '../redis-session-store';
-import { computeQueueStateHash } from '@boardsesh/queue';
+import { computeQueueStateHash, computeQueueStateHashOrdered } from '@boardsesh/queue';
 import { VersionConflictError, type QueueState, type RoomManagerDeps } from './types';
 import { writeQueueStateToPostgres } from './write-scheduler';
 
@@ -16,7 +16,13 @@ export async function updateQueueState(
   queue: ClimbQueueItem[],
   currentClimbQueueItem: ClimbQueueItem | null,
   expectedVersion: number | undefined,
-): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
+): Promise<{
+  version: number;
+  sequence: number;
+  stateHash: string;
+  stateHashOrdered: string;
+  previousStateHash: string | null;
+}> {
   const { redisStore, writeScheduler, distributedState } = deps;
 
   // Get current version, sequence, and prior state hash from Redis if
@@ -69,6 +75,10 @@ export async function updateQueueState(
   const newVersion = currentVersion + 1;
   const newSequence = currentSequence + 1;
   const stateHash = computeQueueStateHash(queue, currentClimbQueueItem?.uuid || null);
+  // Order-sensitive companion (v2), computed from the exact same inputs so the
+  // pair stays consistent. Additive: only Redis's v1 hash is persisted; the
+  // ordered one is recomputed on read (see getQueueState) and sent on the wire.
+  const stateHashOrdered = computeQueueStateHashOrdered(queue, currentClimbQueueItem?.uuid || null);
 
   // Write to Redis immediately (source of truth for active sessions)
   if (redisStore) {
@@ -91,7 +101,7 @@ export async function updateQueueState(
     );
   }
 
-  return { version: newVersion, sequence: newSequence, stateHash, previousStateHash };
+  return { version: newVersion, sequence: newSequence, stateHash, stateHashOrdered, previousStateHash };
 }
 
 /**
@@ -220,7 +230,7 @@ export async function updateQueueOnly(
   sessionId: string,
   queue: ClimbQueueItem[],
   expectedVersion: number | undefined,
-): Promise<{ version: number; sequence: number; stateHash: string }> {
+): Promise<{ version: number; sequence: number; stateHash: string; stateHashOrdered: string }> {
   const { redisStore, writeScheduler, distributedState } = deps;
 
   // Get current state from Redis (source of truth for real-time sync)
@@ -253,6 +263,7 @@ export async function updateQueueOnly(
   const newVersion = currentVersion + 1;
   const newSequence = currentSequence + 1;
   const stateHash = computeQueueStateHash(queue, currentClimbQueueItem?.uuid || null);
+  const stateHashOrdered = computeQueueStateHashOrdered(queue, currentClimbQueueItem?.uuid || null);
 
   // Write to Redis immediately (source of truth for real-time state)
   if (redisStore) {
@@ -275,7 +286,7 @@ export async function updateQueueOnly(
     );
   }
 
-  return { version: newVersion, sequence: newSequence, stateHash };
+  return { version: newVersion, sequence: newSequence, stateHash, stateHashOrdered };
 }
 
 /**
@@ -292,6 +303,13 @@ export async function getQueueState(sessionId: string, redisStore: RedisSessionS
         version: redisSession.version,
         sequence: redisSession.sequence,
         stateHash: redisSession.stateHash,
+        // Only the v1 hash is persisted in Redis; recompute the order-sensitive
+        // v2 hash from the same stored queue so the pair stays consistent
+        // without a Redis schema change (additive dual-hash rollout).
+        stateHashOrdered: computeQueueStateHashOrdered(
+          redisSession.queue,
+          redisSession.currentClimbQueueItem?.uuid || null,
+        ),
       };
     }
   }
@@ -306,10 +324,12 @@ export async function getQueueState(sessionId: string, redisStore: RedisSessionS
       version: 0,
       sequence: 0,
       stateHash: computeQueueStateHash([], null),
+      stateHashOrdered: computeQueueStateHashOrdered([], null),
     };
   }
 
   const stateHash = computeQueueStateHash(result[0].queue, result[0].currentClimbQueueItem?.uuid || null);
+  const stateHashOrdered = computeQueueStateHashOrdered(result[0].queue, result[0].currentClimbQueueItem?.uuid || null);
 
   return {
     queue: result[0].queue,
@@ -317,5 +337,6 @@ export async function getQueueState(sessionId: string, redisStore: RedisSessionS
     version: result[0].version,
     sequence: result[0].sequence,
     stateHash,
+    stateHashOrdered,
   };
 }

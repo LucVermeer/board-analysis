@@ -10,6 +10,7 @@ import type { Session as SessionDbRow } from '../../../db/schema';
 type SessionQueueState = {
   sequence: number;
   stateHash: string;
+  stateHashOrdered?: string | null;
   queue: ClimbQueueItem[];
   currentClimbQueueItem: ClimbQueueItem | null;
 };
@@ -94,6 +95,7 @@ export async function buildSessionPayload(
       ? {
           sequence: queueState.sequence,
           stateHash: queueState.stateHash,
+          stateHashOrdered: queueState.stateHashOrdered ?? null,
           queue: queueState.queue,
           currentClimbQueueItem: queueState.currentClimbQueueItem,
         }

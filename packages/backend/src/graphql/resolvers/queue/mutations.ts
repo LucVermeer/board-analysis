@@ -61,6 +61,7 @@ export const queueMutations = {
     let itemWasAdded = false;
     let resultSequence = 0;
     let resultStateHash = '';
+    let resultStateHashOrdered = '';
 
     // Retry loop for optimistic locking
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -95,6 +96,7 @@ export const queueMutations = {
         itemWasAdded = true;
         resultSequence = result.sequence;
         resultStateHash = result.stateHash;
+        resultStateHashOrdered = result.stateHashOrdered;
         break; // Success, exit retry loop
       } catch (error) {
         if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
@@ -117,6 +119,7 @@ export const queueMutations = {
         __typename: 'QueueItemAdded',
         sequence: resultSequence,
         stateHash: resultStateHash,
+        stateHashOrdered: resultStateHashOrdered,
         item: item,
         position: actualPosition,
       });
@@ -149,12 +152,17 @@ export const queueMutations = {
       currentClimb = null;
     }
 
-    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimb);
+    const { sequence, stateHash, stateHashOrdered } = await roomManager.updateQueueState(
+      sessionId,
+      queue,
+      currentClimb,
+    );
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'QueueItemRemoved',
       sequence,
       stateHash,
+      stateHashOrdered,
       uuid,
     });
 
@@ -189,6 +197,7 @@ export const queueMutations = {
 
     let resultSequence = currentState.sequence;
     let resultStateHash = currentState.stateHash;
+    let resultStateHashOrdered = currentState.stateHashOrdered;
 
     if (oldIndex >= 0 && oldIndex < queue.length && newIndex >= 0 && newIndex < queue.length) {
       const [movedItem] = queue.splice(oldIndex, 1);
@@ -197,12 +206,16 @@ export const queueMutations = {
       const result = await roomManager.updateQueueOnly(sessionId, queue);
       resultSequence = result.sequence;
       resultStateHash = result.stateHash;
+      resultStateHashOrdered = result.stateHashOrdered;
     }
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'QueueReordered',
       sequence: resultSequence,
       stateHash: resultStateHash,
+      // The v1 stateHash is unchanged by a reorder (sorted UUIDs); the ordered
+      // v2 hash is what actually moves — this is the drift the watchdog now sees.
+      stateHashOrdered: resultStateHashOrdered,
       uuid,
       oldIndex,
       newIndex,
@@ -304,12 +317,17 @@ export const queueMutations = {
       i.uuid === currentClimb!.uuid ? { ...i, climb: { ...i.climb, mirrored } } : i,
     );
 
-    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimb);
+    const { sequence, stateHash, stateHashOrdered } = await roomManager.updateQueueState(
+      sessionId,
+      queue,
+      currentClimb,
+    );
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'ClimbMirrored',
       sequence,
       stateHash,
+      stateHashOrdered,
       uuid: currentClimb.uuid,
       mirrored,
     });
@@ -344,13 +362,17 @@ export const queueMutations = {
       currentClimb = item;
     }
 
-    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimb);
+    const { sequence, stateHash, stateHashOrdered } = await roomManager.updateQueueState(
+      sessionId,
+      queue,
+      currentClimb,
+    );
 
     // Publish as FullSync since replace is less common
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'FullSync',
       sequence,
-      state: { sequence, stateHash, queue, currentClimbQueueItem: currentClimb },
+      state: { sequence, stateHash, stateHashOrdered, queue, currentClimbQueueItem: currentClimb },
     });
 
     logMutationMetrics('replaceQueueItem', performance.now() - startTime, sessionId);
@@ -385,7 +407,7 @@ export const queueMutations = {
     // had, the client was wrong about the drift — usually a bug in the
     // local hash computation or event processor — and the loop will fire
     // again next minute. The warn surfaces those loops.
-    const { sequence, stateHash, previousStateHash } = await roomManager.updateQueueState(
+    const { sequence, stateHash, stateHashOrdered, previousStateHash } = await roomManager.updateQueueState(
       sessionId,
       queue,
       currentClimbQueueItem || null,
@@ -400,6 +422,7 @@ export const queueMutations = {
     const state: QueueState = {
       sequence,
       stateHash,
+      stateHashOrdered,
       queue,
       currentClimbQueueItem: currentClimbQueueItem || null,
     };
