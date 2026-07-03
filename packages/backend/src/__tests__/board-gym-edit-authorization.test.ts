@@ -506,6 +506,65 @@ describe('gym membership management excludes community moderators (escalation gu
   });
 });
 
+describe('gym admin edit access is revoked when the linked gym is soft-deleted', () => {
+  // The board keeps its gym_id, but the gym is soft-deleted. A gym admin member
+  // should lose the linked-gym edit path — a removed gym must not keep granting
+  // edit rights on the boards that still point at it.
+  beforeEach(async () => {
+    await db.execute(sql`UPDATE gyms SET deleted_at = now() WHERE id = ${kilterGymId}`);
+  });
+
+  it('rejects a gym admin member updating a board linked to the deleted gym', async () => {
+    await expect(
+      socialBoardMutations.updateBoard(
+        null,
+        { input: { boardUuid: kilterBoardUuid, name: 'deleted-gym edit' } },
+        authCtx(GYM_ADMIN_MEMBER),
+      ),
+    ).rejects.toThrow(/Not authorized to update this board/);
+
+    expect((await boardConfig(kilterBoardUuid)).name).toBe('Bonsist Wall');
+  });
+
+  it('reports canEdit=false for a gym admin member of the deleted gym', async () => {
+    const board = await socialBoardQueries.board(null, { boardUuid: kilterBoardUuid }, authCtx(GYM_ADMIN_MEMBER));
+    expect(board?.canEdit).toBe(false);
+  });
+});
+
+describe('gym admin member can edit a PRIVATE board linked to their gym', () => {
+  // Linking a board to a gym requires the board's own owner (linkBoardToGym),
+  // so this is opt-in: the owner deliberately connected their private board to
+  // the gym, and gym admins manage the gym's physical boards. Unlike a community
+  // role, the linked-gym path intentionally reaches private boards.
+  let privateGymBoardUuid: string;
+
+  beforeEach(async () => {
+    privateGymBoardUuid = uuidv4();
+    await db.execute(sql`
+      INSERT INTO user_boards
+        (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, gym_id, is_public, created_at, updated_at)
+      VALUES (${privateGymBoardUuid}, ${privateGymBoardUuid}, ${SYS_OWNER}, 'kilter', 7, 7, '7,8', 'Private gym wall', ${kilterGymId}, false, now(), now())
+    `);
+  });
+
+  it('lets the gym admin member update the private linked board', async () => {
+    const result = await socialBoardMutations.updateBoard(
+      null,
+      { input: { boardUuid: privateGymBoardUuid, name: 'Gym-admin private edit' } },
+      authCtx(GYM_ADMIN_MEMBER),
+    );
+
+    expect(result.name).toBe('Gym-admin private edit');
+    expect((await boardConfig(privateGymBoardUuid)).name).toBe('Gym-admin private edit');
+  });
+
+  it('reports canEdit=true for the gym admin member on the private linked board', async () => {
+    const board = await socialBoardQueries.board(null, { boardUuid: privateGymBoardUuid }, authCtx(GYM_ADMIN_MEMBER));
+    expect(board?.canEdit).toBe(true);
+  });
+});
+
 describe('community roles reach public/catalog boards only, not private ones', () => {
   let privateBoardUuid: string;
 
