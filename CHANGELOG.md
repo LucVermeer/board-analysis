@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Requesting your MoonBoard data now sends a formal GDPR request that spells out exactly what Moon owes you — including what happened to any logbook that went missing. The letter lands on your clipboard so it pastes cleanly into your email. ([#3378](https://github.com/boardsesh/boardsesh/pull/3378))
 - Your logbook now reads like a climbing diary — day headers with your send count and hardest send of the day, plus which board you were on. ([#3350](https://github.com/boardsesh/boardsesh/pull/3350))
   Rows lead with how it went: flash, send, or project, with your tries, your stars, and your grade next to the community's call.
   Spot beta at a glance — a violet camera marks every climb you have a video for, and a pencil marks your written notes.
