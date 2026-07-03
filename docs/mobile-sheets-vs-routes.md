@@ -61,6 +61,19 @@ coordinator — it opens once as the create-climb route's primary sheet, and its
 presenter) and the `FullWindowOverlay` menus (e.g. `ClimbReactionMenu`), which are custom overlays
 in a higher window, not native sheets.
 
+**How a dismiss "settles."** The coordinator needs to know when a dismiss animation has
+really finished before it starts the next transition. On **iOS** that's the accurate native
+signal: our `@expo/ui` patch (`patches/@expo%2Fui@56.0.18.patch`) forwards SwiftUI's
+post-animation `.sheet(onDismiss:)` out of the community wrapper as `onFullyDismissed`, which
+`useManagedSheet` routes into `coordinator.notifyFullyDismissed`. So a surface that renders the
+raw `BottomSheetModal`/`BottomSheet` must pass `onFullyDismissed={managed.onFullyDismissed}` (the
+`Sheet`/`ModalSheet` wrappers already do) — otherwise its handoffs fall back to the ceiling timer
+and wait the full delay. A fixed per-platform timer (`IOS_SHEET_SETTLE_MS` / `ANDROID_SHEET_SETTLE_MS`)
+is the fallback: it's the only settle signal on **Android** (Compose has no post-animation event),
+and on iOS it's the ceiling for the rare case the native event never arrives (a Host torn down
+mid-animation). A `__DEV__` warning fires only when the ceiling beats a native signal that was
+expected (an iOS dismiss of a still-registered sheet).
+
 **iOS sizing — the single-flex-child contract.** Hand the native `@expo/ui` sheet exactly ONE
 flex child; multiple direct children make it size to content and collapse a `flex: 1` scroll body.
 And on iOS the SwiftUI host can propose an **unbounded** height to that child, so a `flex: 1`

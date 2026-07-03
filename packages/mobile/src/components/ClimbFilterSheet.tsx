@@ -678,6 +678,7 @@ export function ClimbFilterSheet({
       enableDynamicSizing={false}
       enablePanDownToClose
       onChange={managed.onChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={[styles.indicator, { backgroundColor: systemColors.separator }]}
     >
       {/* One column child bounded to the detent height (JS-computed on iOS, see

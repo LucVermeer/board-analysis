@@ -457,6 +457,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       enableDynamicSizing={false}
       enablePanDownToClose
       onChange={handleSheetChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={sheet.handleStyle}
       style={styles.sheet}
     >

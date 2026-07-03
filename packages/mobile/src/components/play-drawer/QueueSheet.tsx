@@ -176,6 +176,7 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
       enableContentPanningGesture={!isDragging}
       enableHandlePanningGesture={!isDragging}
       onChange={handleSheetChange}
+      onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={sheet.handleStyle}
       style={styles.sheet}
     >
