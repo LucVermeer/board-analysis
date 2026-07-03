@@ -757,8 +757,10 @@ export type ClimbMirrored = {
   mirrored: Scalars['Boolean']['output'];
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
-  /** Queue state hash after this event is applied */
+  /** Order-insensitive queue state hash (v1) after this event is applied */
   stateHash: Scalars['String']['output'];
+  /** Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered. */
+  stateHashOrdered?: Maybe<Scalars['String']['output']>;
   /** UUID of the mirrored queue item, when a current climb exists */
   uuid?: Maybe<Scalars['ID']['output']>;
 };
@@ -1220,8 +1222,10 @@ export type CurrentClimbChanged = {
   item?: Maybe<ClimbQueueItem>;
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
-  /** Queue state hash after this event is applied */
+  /** Order-insensitive queue state hash (v1) after this event is applied */
   stateHash: Scalars['String']['output'];
+  /** Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered. */
+  stateHashOrdered?: Maybe<Scalars['String']['output']>;
 };
 
 /** Information needed before account deletion. */
@@ -4399,8 +4403,10 @@ export type QueueItemAdded = {
   position?: Maybe<Scalars['Int']['output']>;
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
-  /** Queue state hash after this event is applied */
+  /** Order-insensitive queue state hash (v1) after this event is applied */
   stateHash: Scalars['String']['output'];
+  /** Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered. */
+  stateHashOrdered?: Maybe<Scalars['String']['output']>;
 };
 
 /** Event when an item is removed from the queue. */
@@ -4408,8 +4414,10 @@ export type QueueItemRemoved = {
   __typename?: 'QueueItemRemoved';
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
-  /** Queue state hash after this event is applied */
+  /** Order-insensitive queue state hash (v1) after this event is applied */
   stateHash: Scalars['String']['output'];
+  /** Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered. */
+  stateHashOrdered?: Maybe<Scalars['String']['output']>;
   /** UUID of the removed item */
   uuid: Scalars['ID']['output'];
 };
@@ -4460,8 +4468,10 @@ export type QueueReordered = {
   oldIndex: Scalars['Int']['output'];
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
-  /** Queue state hash after this event is applied */
+  /** Order-insensitive queue state hash (v1) after this event is applied. Reorders leave this UNCHANGED — that blind spot is why stateHashOrdered exists. */
   stateHash: Scalars['String']['output'];
+  /** Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered. */
+  stateHashOrdered?: Maybe<Scalars['String']['output']>;
   /** UUID of the moved item */
   uuid: Scalars['ID']['output'];
 };
@@ -4478,8 +4488,10 @@ export type QueueState = {
   queue: Array<ClimbQueueItem>;
   /** Monotonically increasing sequence number for ordering events */
   sequence: Scalars['Int']['output'];
-  /** Hash of the current state for consistency checking */
+  /** Order-insensitive hash (v1) of the current state for consistency checking (sorted UUIDs) */
   stateHash: Scalars['String']['output'];
+  /** Order-SENSITIVE hash (v2) of the current state (UUIDs in queue order). Optional during the dual-hash rollout: old clients ignore it; new clients prefer it when present so a reorder that diverges is detectable. */
+  stateHashOrdered?: Maybe<Scalars['String']['output']>;
 };
 
 /**

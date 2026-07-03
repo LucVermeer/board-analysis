@@ -310,6 +310,7 @@ class RoomManager {
     currentClimbQueueItem: ClimbQueueItem | null;
     sequence: number;
     stateHash: string;
+    stateHashOrdered: string;
     isLeader: boolean;
     sessionName: string | null;
     participantId: string;
@@ -535,7 +536,13 @@ class RoomManager {
     queue: ClimbQueueItem[],
     currentClimbQueueItem: ClimbQueueItem | null,
     expectedVersion?: number,
-  ): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
+  ): Promise<{
+    version: number;
+    sequence: number;
+    stateHash: string;
+    stateHashOrdered: string;
+    previousStateHash: string | null;
+  }> {
     return updateQueueStateFn(this.deps(), sessionId, queue, currentClimbQueueItem, expectedVersion);
   }
 
@@ -552,7 +559,7 @@ class RoomManager {
     sessionId: string,
     queue: ClimbQueueItem[],
     expectedVersion?: number,
-  ): Promise<{ version: number; sequence: number; stateHash: string }> {
+  ): Promise<{ version: number; sequence: number; stateHash: string; stateHashOrdered: string }> {
     return updateQueueOnlyFn(this.deps(), sessionId, queue, expectedVersion);
   }
 

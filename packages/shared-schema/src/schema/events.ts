@@ -196,8 +196,10 @@ export const eventsTypeDefs = /* GraphQL */ `
   type QueueItemAdded {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
+    "Order-insensitive queue state hash (v1) after this event is applied"
     stateHash: String!
+    "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+    stateHashOrdered: String
     "The added item"
     item: ClimbQueueItem!
     "Position where item was inserted (null = end)"
@@ -210,8 +212,10 @@ export const eventsTypeDefs = /* GraphQL */ `
   type QueueItemRemoved {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
+    "Order-insensitive queue state hash (v1) after this event is applied"
     stateHash: String!
+    "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+    stateHashOrdered: String
     "UUID of the removed item"
     uuid: ID!
   }
@@ -222,8 +226,10 @@ export const eventsTypeDefs = /* GraphQL */ `
   type QueueReordered {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
+    "Order-insensitive queue state hash (v1) after this event is applied. Reorders leave this UNCHANGED — that blind spot is why stateHashOrdered exists."
     stateHash: String!
+    "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+    stateHashOrdered: String
     "UUID of the moved item"
     uuid: ID!
     "Previous position"
@@ -238,8 +244,10 @@ export const eventsTypeDefs = /* GraphQL */ `
   type CurrentClimbChanged {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
+    "Order-insensitive queue state hash (v1) after this event is applied"
     stateHash: String!
+    "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+    stateHashOrdered: String
     "New current climb (null to clear)"
     item: ClimbQueueItem
     "Raw Aurora frames for an unknown BLE climb when no database match exists"
@@ -256,8 +264,10 @@ export const eventsTypeDefs = /* GraphQL */ `
   type ClimbMirrored {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
+    "Order-insensitive queue state hash (v1) after this event is applied"
     stateHash: String!
+    "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+    stateHashOrdered: String
     "UUID of the mirrored queue item, when a current climb exists"
     uuid: ID
     "New mirror state"

@@ -32,24 +32,68 @@ export function fnv1aHash(str: string): string {
 }
 
 /**
- * Compute a deterministic hash of queue state: sorted queue UUIDs + current
- * item UUID. Only UUIDs contribute — climb metadata is intentionally ignored.
+ * Sanitize a queue into the list of UUIDs that contribute to a hash.
  *
  * Malformed entries (null/undefined items, or items without a string `uuid`)
- * are filtered out before hashing. This keeps the hash crash-safe and, more
- * importantly, invariant to the shape corruption that the reducer's
- * `climb != null` filter lets through — so client and server agree even when a
- * queue item is missing its uuid.
+ * are filtered out. This keeps hashing crash-safe and, more importantly,
+ * invariant to the shape corruption that the reducer's `climb != null` filter
+ * lets through — so client and server agree even when a queue item is missing
+ * its uuid. Shared by the order-insensitive (v1) and order-sensitive (v2)
+ * hashes so both filter identically.
+ */
+function sanitizeQueueUuids(queue: Array<{ uuid: string } | null | undefined>): string[] {
+  return queue
+    .filter((item): item is { uuid: string } => item != null && typeof item === 'object' && item.uuid != null)
+    .map((item) => item.uuid);
+}
+
+/**
+ * Compute a deterministic hash of queue state: SORTED queue UUIDs + current
+ * item UUID. Only UUIDs contribute — climb metadata is intentionally ignored.
+ *
+ * Because the UUIDs are sorted before hashing, this hash is ORDER-INSENSITIVE:
+ * a reorder that keeps the same membership produces the same hash. That blind
+ * spot is exactly why the order-sensitive `computeQueueStateHashOrdered` (v2)
+ * exists — see its doc.
+ *
+ * TODO(x1-cleanup): once telemetry confirms every live client is v2-aware
+ * (computes/compares `computeQueueStateHashOrdered`), this v1 hash can be
+ * retired in favour of the ordered one. Kept until then so the dual-hash
+ * transition stays non-breaking for clients that only understand v1 — same
+ * client-adoption-gated deferral pattern as B7.
  */
 export function computeQueueStateHash(
   queue: Array<{ uuid: string } | null | undefined>,
   currentItemUuid: string | null,
 ): string {
-  const queueUuids = queue
-    .filter((item): item is { uuid: string } => item != null && typeof item === 'object' && item.uuid != null)
-    .map((item) => item.uuid)
-    .sort()
-    .join(',');
+  const queueUuids = sanitizeQueueUuids(queue).sort().join(',');
+  const currentUuid = currentItemUuid || 'null';
+
+  const canonical = `${queueUuids}|${currentUuid}`;
+
+  return fnv1aHash(canonical);
+}
+
+/**
+ * Compute a deterministic hash of queue state: queue UUIDs IN ORDER (not
+ * sorted) + current item UUID. Only UUIDs contribute — climb metadata is
+ * intentionally ignored. The order-sensitive (v2) companion to
+ * `computeQueueStateHash`.
+ *
+ * Unlike v1, this hash CHANGES when the queue is reordered even though the
+ * membership is unchanged — so a reorder that diverges between client and
+ * server is finally visible to the hash watchdog. Add/remove changes both v1
+ * and v2; a pure reorder changes only v2.
+ *
+ * Malformed-entry filtering is identical to v1 (via `sanitizeQueueUuids`), so
+ * the two hashes stay in lock-step on corruption handling and both sides agree
+ * for identical queues.
+ */
+export function computeQueueStateHashOrdered(
+  queue: Array<{ uuid: string } | null | undefined>,
+  currentItemUuid: string | null,
+): string {
+  const queueUuids = sanitizeQueueUuids(queue).join(',');
   const currentUuid = currentItemUuid || 'null';
 
   const canonical = `${queueUuids}|${currentUuid}`;

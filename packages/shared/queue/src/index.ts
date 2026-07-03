@@ -4,7 +4,7 @@
 
 export { queueReducer, initialState } from './reducer';
 
-export { fnv1aHash, computeQueueStateHash } from './state-hash';
+export { fnv1aHash, computeQueueStateHash, computeQueueStateHashOrdered } from './state-hash';
 
 export type {
   QueueState,

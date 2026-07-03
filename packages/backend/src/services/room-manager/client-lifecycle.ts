@@ -70,6 +70,7 @@ export async function joinSession(
   currentClimbQueueItem: ClimbQueueItem | null;
   sequence: number;
   stateHash: string;
+  stateHashOrdered: string;
   isLeader: boolean;
   sessionName: string | null;
   participantId: string;
@@ -264,6 +265,7 @@ export async function joinSession(
     currentClimbQueueItem: queueState.currentClimbQueueItem,
     sequence: queueState.sequence,
     stateHash: queueState.stateHash,
+    stateHashOrdered: queueState.stateHashOrdered,
     isLeader,
     sessionName: resolvedSessionName,
     participantId: resolvedParticipantId,

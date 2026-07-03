@@ -70,6 +70,7 @@ export const JOIN_SESSION = `
       queueState {
         sequence
         stateHash
+        stateHashOrdered
         queue {
           ${QUEUE_ITEM_FIELDS}
         }
@@ -229,6 +230,7 @@ export const SET_QUEUE = `
     setQueue(queue: $queue, currentClimbQueueItem: $currentClimbQueueItem) {
       sequence
       stateHash
+      stateHashOrdered
       queue {
         ${QUEUE_ITEM_FIELDS}
       }
@@ -266,6 +268,7 @@ export const CREATE_SESSION = `
       queueState {
         sequence
         stateHash
+        stateHashOrdered
         queue {
           ${QUEUE_ITEM_FIELDS}
         }
@@ -392,6 +395,7 @@ export const EVENTS_REPLAY = `
           state {
             sequence
             stateHash
+            stateHashOrdered
             queue {
               ${QUEUE_ITEM_FIELDS}
             }
@@ -403,6 +407,7 @@ export const EVENTS_REPLAY = `
         ... on QueueItemAdded {
           sequence
           stateHash
+          stateHashOrdered
           addedItem: item {
             ${QUEUE_ITEM_FIELDS}
           }
@@ -411,11 +416,13 @@ export const EVENTS_REPLAY = `
         ... on QueueItemRemoved {
           sequence
           stateHash
+          stateHashOrdered
           uuid
         }
         ... on QueueReordered {
           sequence
           stateHash
+          stateHashOrdered
           uuid
           oldIndex
           newIndex
@@ -423,6 +430,7 @@ export const EVENTS_REPLAY = `
         ... on CurrentClimbChanged {
           sequence
           stateHash
+          stateHashOrdered
           currentItem: item {
             ${QUEUE_ITEM_FIELDS}
           }
@@ -432,6 +440,7 @@ export const EVENTS_REPLAY = `
         ... on ClimbMirrored {
           sequence
           stateHash
+          stateHashOrdered
           mirroredUuid: uuid
           mirrored
         }
@@ -459,6 +468,7 @@ export const QUEUE_UPDATES = `
         state {
           sequence
           stateHash
+          stateHashOrdered
           queue {
             ${QUEUE_ITEM_FIELDS}
           }
@@ -470,6 +480,7 @@ export const QUEUE_UPDATES = `
       ... on QueueItemAdded {
         sequence
         stateHash
+        stateHashOrdered
         addedItem: item {
           ${QUEUE_ITEM_FIELDS}
         }
@@ -478,11 +489,13 @@ export const QUEUE_UPDATES = `
       ... on QueueItemRemoved {
         sequence
         stateHash
+        stateHashOrdered
         uuid
       }
       ... on QueueReordered {
         sequence
         stateHash
+        stateHashOrdered
         uuid
         oldIndex
         newIndex
@@ -490,6 +503,7 @@ export const QUEUE_UPDATES = `
       ... on CurrentClimbChanged {
         sequence
         stateHash
+        stateHashOrdered
         currentItem: item {
           ${QUEUE_ITEM_FIELDS}
         }
@@ -499,6 +513,7 @@ export const QUEUE_UPDATES = `
       ... on ClimbMirrored {
         sequence
         stateHash
+        stateHashOrdered
         mirroredUuid: uuid
         mirrored
       }

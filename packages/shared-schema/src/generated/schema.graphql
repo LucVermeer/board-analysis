@@ -299,8 +299,10 @@ Used for synchronization between clients.
 type QueueState {
   "Monotonically increasing sequence number for ordering events"
   sequence: Int!
-  "Hash of the current state for consistency checking"
+  "Order-insensitive hash (v1) of the current state for consistency checking (sorted UUIDs)"
   stateHash: String!
+  "Order-SENSITIVE hash (v2) of the current state (UUIDs in queue order). Optional during the dual-hash rollout: old clients ignore it; new clients prefer it when present so a reorder that diverges is detectable."
+  stateHashOrdered: String
   "List of climbs in the queue"
   queue: [ClimbQueueItem!]!
   "The climb currently being attempted"
@@ -5476,8 +5478,10 @@ Event when an item is added to the queue.
 type QueueItemAdded {
   "Sequence number of this event"
   sequence: Int!
-  "Queue state hash after this event is applied"
+  "Order-insensitive queue state hash (v1) after this event is applied"
   stateHash: String!
+  "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+  stateHashOrdered: String
   "The added item"
   item: ClimbQueueItem!
   "Position where item was inserted (null = end)"
@@ -5490,8 +5494,10 @@ Event when an item is removed from the queue.
 type QueueItemRemoved {
   "Sequence number of this event"
   sequence: Int!
-  "Queue state hash after this event is applied"
+  "Order-insensitive queue state hash (v1) after this event is applied"
   stateHash: String!
+  "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+  stateHashOrdered: String
   "UUID of the removed item"
   uuid: ID!
 }
@@ -5502,8 +5508,10 @@ Event when queue order changes.
 type QueueReordered {
   "Sequence number of this event"
   sequence: Int!
-  "Queue state hash after this event is applied"
+  "Order-insensitive queue state hash (v1) after this event is applied. Reorders leave this UNCHANGED — that blind spot is why stateHashOrdered exists."
   stateHash: String!
+  "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+  stateHashOrdered: String
   "UUID of the moved item"
   uuid: ID!
   "Previous position"
@@ -5518,8 +5526,10 @@ Event when the current climb changes.
 type CurrentClimbChanged {
   "Sequence number of this event"
   sequence: Int!
-  "Queue state hash after this event is applied"
+  "Order-insensitive queue state hash (v1) after this event is applied"
   stateHash: String!
+  "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+  stateHashOrdered: String
   "New current climb (null to clear)"
   item: ClimbQueueItem
   "Raw Aurora frames for an unknown BLE climb when no database match exists"
@@ -5536,8 +5546,10 @@ Event when the current climb's mirror state changes.
 type ClimbMirrored {
   "Sequence number of this event"
   sequence: Int!
-  "Queue state hash after this event is applied"
+  "Order-insensitive queue state hash (v1) after this event is applied"
   stateHash: String!
+  "Order-sensitive queue state hash (v2) after this event is applied. Optional during the dual-hash rollout; see QueueState.stateHashOrdered."
+  stateHashOrdered: String
   "UUID of the mirrored queue item, when a current climb exists"
   uuid: ID
   "New mirror state"

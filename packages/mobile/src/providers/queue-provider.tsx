@@ -455,6 +455,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         __typename: 'FullSync',
         sequence: queueState.sequence,
         stateHash: queueState.stateHash,
+        stateHashOrdered: queueState.stateHashOrdered ?? null,
       });
       return true;
     } catch (error) {

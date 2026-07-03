@@ -521,6 +521,129 @@ describe('reorderQueueItem - Return type handling', () => {
   });
 });
 
+describe('order-sensitive dual-hash (stateHashOrdered)', () => {
+  let mockRedis: MockRedis;
+  let publishSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    mockRedis = createMockRedis();
+    roomManager.reset();
+    await roomManager.initialize(mockRedis);
+    publishSpy = vi.spyOn(pubsub, 'publishQueueEvent').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const ctxFor = (sessionId: string) => ({
+    connectionId: 'client-1',
+    sessionId,
+    rateLimitTokens: 60,
+    rateLimitLastReset: Date.now(),
+  });
+
+  it('updateQueueState / updateQueueOnly / getQueueState all return both hashes', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const climbs = [createTestClimb(), createTestClimb()];
+    const updateResult = await roomManager.updateQueueState(sessionId, climbs, null);
+    expect(typeof updateResult.stateHash).toBe('string');
+    expect(updateResult.stateHash.length).toBeGreaterThan(0);
+    expect(typeof updateResult.stateHashOrdered).toBe('string');
+    expect(updateResult.stateHashOrdered.length).toBeGreaterThan(0);
+
+    const onlyResult = await roomManager.updateQueueOnly(sessionId, climbs);
+    expect(typeof onlyResult.stateHashOrdered).toBe('string');
+    expect(onlyResult.stateHashOrdered.length).toBeGreaterThan(0);
+
+    const state = await roomManager.getQueueState(sessionId);
+    expect(typeof state.stateHash).toBe('string');
+    expect(typeof state.stateHashOrdered).toBe('string');
+    expect(state.stateHashOrdered.length).toBeGreaterThan(0);
+  });
+
+  it('a reorder changes stateHashOrdered but NOT stateHash (the whole point of v2)', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const climb1 = createTestClimb();
+    const climb2 = createTestClimb();
+    const initial = await roomManager.getQueueState(sessionId);
+    await roomManager.updateQueueState(sessionId, [climb1, climb2], null, initial.version);
+    const before = await roomManager.getQueueState(sessionId);
+    publishSpy.mockClear();
+
+    // Move climb1 from index 0 to index 1 — same members, different order.
+    await queueMutations.reorderQueueItem({}, { uuid: climb1.uuid, oldIndex: 0, newIndex: 1 }, ctxFor(sessionId));
+
+    const reorderedCall = publishSpy.mock.calls.find(
+      (call: unknown[]) => (call[1] as { __typename: string }).__typename === 'QueueReordered',
+    );
+    expect(reorderedCall).toBeDefined();
+    const event = reorderedCall![1] as { stateHash: string; stateHashOrdered: string };
+
+    // v1 is order-insensitive → unchanged by the reorder.
+    expect(event.stateHash).toBe(before.stateHash);
+    // v2 is order-sensitive → it moves. This is the drift the watchdog now sees.
+    expect(typeof event.stateHashOrdered).toBe('string');
+    expect(event.stateHashOrdered.length).toBeGreaterThan(0);
+    expect(event.stateHashOrdered).not.toBe(before.stateHashOrdered);
+  });
+
+  it('QueueItemAdded and QueueItemRemoved deltas carry both hashes (and both change)', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const climb1 = createTestClimb();
+    const before = await roomManager.getQueueState(sessionId);
+    publishSpy.mockClear();
+
+    await queueMutations.addQueueItem({}, { item: climb1 }, ctxFor(sessionId));
+    const addedCall = publishSpy.mock.calls.find(
+      (call: unknown[]) => (call[1] as { __typename: string }).__typename === 'QueueItemAdded',
+    );
+    expect(addedCall).toBeDefined();
+    const added = addedCall![1] as { stateHash: string; stateHashOrdered: string };
+    expect(added.stateHashOrdered.length).toBeGreaterThan(0);
+    // An add changes BOTH hashes.
+    expect(added.stateHash).not.toBe(before.stateHash);
+    expect(added.stateHashOrdered).not.toBe(before.stateHashOrdered);
+
+    publishSpy.mockClear();
+    await queueMutations.removeQueueItem({}, { uuid: climb1.uuid }, ctxFor(sessionId));
+    const removedCall = publishSpy.mock.calls.find(
+      (call: unknown[]) => (call[1] as { __typename: string }).__typename === 'QueueItemRemoved',
+    );
+    expect(removedCall).toBeDefined();
+    const removed = removedCall![1] as { stateHash: string; stateHashOrdered: string };
+    expect(removed.stateHashOrdered.length).toBeGreaterThan(0);
+    // Removing the just-added climb returns to the empty-queue hashes.
+    expect(removed.stateHash).toBe(before.stateHash);
+    expect(removed.stateHashOrdered).toBe(before.stateHashOrdered);
+  });
+
+  it('setQueue publishes a FullSync whose state carries both hashes', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+    publishSpy.mockClear();
+
+    await queueMutations.setQueue({}, { queue: [createTestClimb(), createTestClimb()] }, ctxFor(sessionId));
+
+    expect(publishSpy).toHaveBeenCalledWith(
+      sessionId,
+      expect.objectContaining({
+        __typename: 'FullSync',
+        state: expect.objectContaining({
+          stateHash: expect.any(String),
+          stateHashOrdered: expect.any(String),
+        }),
+      }),
+    );
+  });
+});
+
 describe('setCurrentClimb - combined queue/current state publishing', () => {
   let mockRedis: MockRedis;
   let publishSpy: ReturnType<typeof vi.spyOn>;

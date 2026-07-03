@@ -28,6 +28,7 @@ export async function setCurrentClimbAndPublish(
 ): Promise<{ sequence: number; stateHash: string; queue: ClimbQueueItem[]; addedToQueue: boolean }> {
   let sequence = 0;
   let stateHash = '';
+  let stateHashOrdered = '';
   let addedToQueue = false;
   let updatedQueue: ClimbQueueItem[] = [];
 
@@ -45,6 +46,7 @@ export async function setCurrentClimbAndPublish(
       const result = await roomManager.updateQueueState(sessionId, queue, item, currentState.version);
       sequence = result.sequence;
       stateHash = result.stateHash;
+      stateHashOrdered = result.stateHashOrdered;
       updatedQueue = queue;
       addedToQueue = addedInThisAttempt;
       break;
@@ -64,6 +66,7 @@ export async function setCurrentClimbAndPublish(
       __typename: 'CurrentClimbChanged',
       sequence,
       stateHash,
+      stateHashOrdered,
       item: null,
       clientId: clientId ?? null,
       correlationId: correlationId ?? null,
@@ -81,13 +84,14 @@ export async function setCurrentClimbAndPublish(
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'FullSync',
       sequence,
-      state: { sequence, stateHash, queue: updatedQueue, currentClimbQueueItem: item },
+      state: { sequence, stateHash, stateHashOrdered, queue: updatedQueue, currentClimbQueueItem: item },
     });
   } else {
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'CurrentClimbChanged',
       sequence,
       stateHash,
+      stateHashOrdered,
       item,
       clientId: clientId ?? null,
       correlationId: correlationId ?? null,
@@ -118,6 +122,7 @@ export async function navigateToQueueItem(
   let resultItem: ClimbQueueItem | null = null;
   let resultSequence = 0;
   let resultStateHash = '';
+  let resultStateHashOrdered = '';
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const currentState = await roomManager.getQueueState(sessionId);
@@ -135,6 +140,7 @@ export async function navigateToQueueItem(
       resultItem = item;
       resultSequence = result.sequence;
       resultStateHash = result.stateHash;
+      resultStateHashOrdered = result.stateHashOrdered;
       break; // success
     } catch (error) {
       if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
@@ -153,6 +159,7 @@ export async function navigateToQueueItem(
       __typename: 'CurrentClimbChanged',
       sequence: resultSequence,
       stateHash: resultStateHash,
+      stateHashOrdered: resultStateHashOrdered,
       item: resultItem,
       clientId: clientId ?? null,
       correlationId: correlationId ?? null,

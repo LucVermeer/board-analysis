@@ -113,6 +113,7 @@ const sampleUsers = [
 const sampleQueueState = {
   sequence: 5,
   stateHash: 'hash-5',
+  stateHashOrdered: 'hash-5-ordered',
   queue: [],
   currentClimbQueueItem: null,
   version: 1,
@@ -141,6 +142,7 @@ describe('session query — membership gate compat matrix', () => {
     expect(result!.queueState).toEqual({
       sequence: 5,
       stateHash: 'hash-5',
+      stateHashOrdered: 'hash-5-ordered',
       queue: [],
       currentClimbQueueItem: null,
     });

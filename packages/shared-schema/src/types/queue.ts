@@ -38,6 +38,10 @@ export type ClimbQueueItemInput = {
 export type QueueState = {
   sequence: number;
   stateHash: string;
+  /** Order-sensitive hash (v2). Optional during the dual-hash rollout: old
+   *  backends omit it, new backends always send it. See
+   *  `computeQueueStateHashOrdered` in `@boardsesh/queue`. */
+  stateHashOrdered?: string | null;
   queue: ClimbQueueItem[];
   currentClimbQueueItem: ClimbQueueItem | null;
 };

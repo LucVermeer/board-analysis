@@ -729,6 +729,8 @@ export type GetSessionQueueStateQueryResponse = {
       // after applying it — see resyncQueueFromServer in queue-provider.tsx.
       sequence: number;
       stateHash: string;
+      // Order-sensitive (v2) hash — optional during the dual-hash rollout.
+      stateHashOrdered?: string | null;
       queue: SubscriptionQueueItem[];
       currentClimbQueueItem: SubscriptionQueueItem | null;
     } | null;
@@ -1190,6 +1192,7 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
         state {
           sequence
           stateHash
+          stateHashOrdered
           queue { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
           currentClimbQueueItem { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         }
@@ -1197,17 +1200,20 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
       ... on QueueItemAdded {
         sequence
         stateHash
+        stateHashOrdered
         addedItem: item { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         position
       }
       ... on QueueItemRemoved {
         sequence
         stateHash
+        stateHashOrdered
         uuid
       }
       ... on QueueReordered {
         sequence
         stateHash
+        stateHashOrdered
         uuid
         oldIndex
         newIndex
@@ -1215,6 +1221,7 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
       ... on CurrentClimbChanged {
         sequence
         stateHash
+        stateHashOrdered
         currentItem: item { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         clientId
         correlationId
@@ -1222,6 +1229,7 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
       ... on ClimbMirrored {
         sequence
         stateHash
+        stateHashOrdered
         mirroredUuid: uuid
         mirrored
       }
@@ -1240,6 +1248,7 @@ export const GET_SESSION_QUEUE_STATE = gql`
       queueState {
         sequence
         stateHash
+        stateHashOrdered
         queue { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         currentClimbQueueItem { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
       }

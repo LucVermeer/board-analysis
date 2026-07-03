@@ -77,16 +77,29 @@ export type EventProcessorActions = {
 /**
  * Flatten a wire event into the shape the sync gate reasons about. FullSync
  * nests its stateHash under `state`; PlaybackStateChanged carries no hash
- * (it doesn't mutate the queue).
+ * (it doesn't mutate the queue). The order-sensitive `stateHashOrdered` (v2)
+ * rides alongside `stateHash` when the backend sends it — the gate prefers it
+ * so reorder drift is detectable; an old backend omits it and the gate falls
+ * back to v1.
  */
 function toGateEvent(event: SubscriptionQueueEvent): QueueSyncGateEvent {
   if (event.__typename === 'FullSync') {
-    return { __typename: event.__typename, sequence: event.sequence, stateHash: event.state.stateHash };
+    return {
+      __typename: event.__typename,
+      sequence: event.sequence,
+      stateHash: event.state.stateHash,
+      stateHashOrdered: event.state.stateHashOrdered ?? null,
+    };
   }
   if (event.__typename === 'PlaybackStateChanged') {
     return { __typename: event.__typename, sequence: event.sequence };
   }
-  return { __typename: event.__typename, sequence: event.sequence, stateHash: event.stateHash };
+  return {
+    __typename: event.__typename,
+    sequence: event.sequence,
+    stateHash: event.stateHash,
+    stateHashOrdered: event.stateHashOrdered ?? null,
+  };
 }
 
 /**

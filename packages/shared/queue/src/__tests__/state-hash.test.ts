@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fnv1aHash, computeQueueStateHash } from '../state-hash';
+import { fnv1aHash, computeQueueStateHash, computeQueueStateHashOrdered } from '../state-hash';
 
 describe('state-hash', () => {
   describe('fnv1aHash', () => {
@@ -125,6 +125,69 @@ describe('state-hash', () => {
       it('does not throw on a literal null entry (the pre-fix backend crash)', () => {
         expect(() => computeQueueStateHash([null, { uuid: 'climb-a' }], 'climb-a')).not.toThrow();
       });
+    });
+  });
+
+  describe('computeQueueStateHashOrdered (v2, order-sensitive)', () => {
+    it('returns a consistent hash for the same queue state', () => {
+      const queue = [{ uuid: 'item-1' }, { uuid: 'item-2' }];
+      expect(computeQueueStateHashOrdered(queue, 'item-1')).toBe(computeQueueStateHashOrdered(queue, 'item-1'));
+    });
+
+    it('returns an 8-character hex string', () => {
+      expect(computeQueueStateHashOrdered([{ uuid: 'item-1' }], 'item-1')).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it('changes when currentItemUuid changes', () => {
+      const queue = [{ uuid: 'item-1' }, { uuid: 'item-2' }];
+      expect(computeQueueStateHashOrdered(queue, 'item-1')).not.toBe(computeQueueStateHashOrdered(queue, 'item-2'));
+    });
+
+    it('handles the empty queue and the single-item queue', () => {
+      expect(computeQueueStateHashOrdered([], null)).toMatch(/^[0-9a-f]{8}$/);
+      expect(computeQueueStateHashOrdered([], 'item-1')).toMatch(/^[0-9a-f]{8}$/);
+      expect(computeQueueStateHashOrdered([{ uuid: 'only' }], 'only')).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it('filters malformed entries identically to v1 (same lock-step corruption handling)', () => {
+      const withNulls = computeQueueStateHashOrdered(
+        [{ uuid: 'item-1' }, null, { uuid: null as unknown as string }, undefined, { uuid: 'item-2' }],
+        'item-1',
+      );
+      const clean = computeQueueStateHashOrdered([{ uuid: 'item-1' }, { uuid: 'item-2' }], 'item-1');
+      expect(withNulls).toBe(clean);
+    });
+
+    // The core reason v2 exists: a reorder that keeps membership is invisible
+    // to v1 (sorted uuids) but MUST change v2 (uuids in order).
+    it('CHANGES on a reorder that keeps the same members (v1 does NOT)', () => {
+      const original = [{ uuid: 'item-1' }, { uuid: 'item-2' }, { uuid: 'item-3' }];
+      const reordered = [{ uuid: 'item-2' }, { uuid: 'item-1' }, { uuid: 'item-3' }];
+
+      // v1 is blind to the reorder (sorted internally)...
+      expect(computeQueueStateHash(original, 'item-1')).toBe(computeQueueStateHash(reordered, 'item-1'));
+      // ...v2 catches it.
+      expect(computeQueueStateHashOrdered(original, 'item-1')).not.toBe(
+        computeQueueStateHashOrdered(reordered, 'item-1'),
+      );
+    });
+
+    it('changes for BOTH v1 and v2 on an add', () => {
+      const before = [{ uuid: 'item-1' }, { uuid: 'item-2' }];
+      const afterAdd = [{ uuid: 'item-1' }, { uuid: 'item-2' }, { uuid: 'item-3' }];
+
+      expect(computeQueueStateHash(before, 'item-1')).not.toBe(computeQueueStateHash(afterAdd, 'item-1'));
+      expect(computeQueueStateHashOrdered(before, 'item-1')).not.toBe(computeQueueStateHashOrdered(afterAdd, 'item-1'));
+    });
+
+    it('changes for BOTH v1 and v2 on a remove', () => {
+      const before = [{ uuid: 'item-1' }, { uuid: 'item-2' }, { uuid: 'item-3' }];
+      const afterRemove = [{ uuid: 'item-1' }, { uuid: 'item-3' }];
+
+      expect(computeQueueStateHash(before, 'item-1')).not.toBe(computeQueueStateHash(afterRemove, 'item-1'));
+      expect(computeQueueStateHashOrdered(before, 'item-1')).not.toBe(
+        computeQueueStateHashOrdered(afterRemove, 'item-1'),
+      );
     });
   });
 });
