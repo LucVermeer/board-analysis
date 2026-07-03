@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-03T01:09:21.965Z",
+  "generatedAt": "2026-07-03T03:27:37.816Z",
   "entries": [
+    {
+      "prNumber": 3350,
+      "category": "new",
+      "title": "Your logbook now reads like a climbing diary — day headers with your send count and hardest send of the day, plus which board you were on.",
+      "mergedAt": "2026-07-03T03:26:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3350",
+      "body": "Rows lead with how it went: flash, send, or project, with your tries, your stars, and your grade next to the community's call.\nSpot beta at a glance — a violet camera marks every climb you have a video for, and a pencil marks your written notes.\nSwipe a logbook entry right to edit, left to delete (with a confirmation)."
+    },
     {
       "prNumber": 3367,
       "category": "improved",

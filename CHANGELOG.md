@@ -6,6 +6,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-03
 
+### New
+
+- Your logbook now reads like a climbing diary — day headers with your send count and hardest send of the day, plus which board you were on. ([#3350](https://github.com/boardsesh/boardsesh/pull/3350))
+  Rows lead with how it went: flash, send, or project, with your tries, your stars, and your grade next to the community's call.
+  Spot beta at a glance — a violet camera marks every climb you have a video for, and a pencil marks your written notes.
+  Swipe a logbook entry right to edit, left to delete (with a confirmation).
+
 ### Improved
 
 - Co-Authored-By: Claude Fable 5 <noreply@anthropic.com> ([#3367](https://github.com/boardsesh/boardsesh/pull/3367))
