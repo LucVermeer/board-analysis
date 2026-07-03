@@ -149,7 +149,7 @@ Note the aggregate column `board_climb_stats.quality_average` is *separately* no
 `normalizeQualityTo5`, guarded by `quality_normalized`) and is fine. The bug is specific to the
 per-tick `boardsesh_ticks.quality` column — which is the one you'd read to show *who* rated *what*.
 
-### What a fix looks like (not built yet — documentation phase)
+### What a fix looks like (tracked in [#3390](https://github.com/boardsesh/boardsesh/issues/3390))
 
 1. **Re-normalise the JSON-import backfill.** Convert the raw-1–3 Kilter import rows to 1–5 using
    the same `convertQuality` mapping the API path uses (1→1, 2→3, 3→5). The tricky part: a raw
