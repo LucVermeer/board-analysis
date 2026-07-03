@@ -993,7 +993,7 @@ export const tickQueries = {
           isMirror: tick.isMirror ?? false,
           frames,
           difficultyName,
-          isBenchmark: tick.isBenchmark ?? false,
+          isBenchmark: Boolean(resolvedIsBenchmark),
           isNoMatch,
           date: day,
           items: [],
