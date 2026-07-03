@@ -521,7 +521,7 @@ describe('reorderQueueItem - Return type handling', () => {
   });
 });
 
-describe('X1: order-sensitive dual-hash (stateHashOrdered)', () => {
+describe('order-sensitive dual-hash (stateHashOrdered)', () => {
   let mockRedis: MockRedis;
   let publishSpy: ReturnType<typeof vi.spyOn>;
 
