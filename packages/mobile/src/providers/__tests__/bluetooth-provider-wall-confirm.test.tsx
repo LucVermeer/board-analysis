@@ -816,6 +816,10 @@ describe('BluetoothProvider wall-confirm integration', () => {
         'Bluetooth Disconnected',
         expect.objectContaining({ reason: 'user', boardId: 99 }),
       );
+      // Deliberate disconnects have nothing to classify — the category is an
+      // unexpected-drop-only field, so queries read its absence as "user chose".
+      const userDisconnectCall = analytics.track.mock.calls.find(([event]) => event === 'Bluetooth Disconnected');
+      expect(userDisconnectCall?.[1].disconnectCategory).toBeUndefined();
     });
 
     it('shows the Undo snackbar once after an armed control gain reports a wall change', async () => {
