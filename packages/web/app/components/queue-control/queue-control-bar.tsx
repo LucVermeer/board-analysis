@@ -112,8 +112,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const isViewPage = pathname.includes('/view/');
   const { currentClimb } = useCurrentClimb();
   const { queue } = useQueueList();
-  const { viewOnlyMode, connectionState, sessionId, isDisconnected, users, clientId, isPersistentSessionActive } =
-    useSessionData();
+  const {
+    viewOnlyMode,
+    connectionState,
+    sessionId,
+    isDisconnected,
+    users,
+    clientId,
+    participantId,
+    isPersistentSessionActive,
+  } = useSessionData();
 
   // Drawer-local "displayed climb" — populated when a browse caller (list
   // row, suggestion thumbnail, logbook row) opens the drawer with a climb
@@ -363,12 +371,15 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     });
   }, [sessionUsers]);
 
-  // Resolve the current user's stable userId from the session users list
-  const myUserId = useMemo(() => {
-    if (!clientId) return null;
-    const me = sessionUsers.find((u) => u.id === clientId);
-    return me?.userId ?? clientId;
-  }, [sessionUsers, clientId]);
+  // Resolve the current user's stable session id. `participantId` is the local
+  // user's participant id — it equals `SessionUser.id` (the DB user UUID for an
+  // authenticated user, the connection id for an anonymous one), which is what
+  // the roster is keyed by. `clientId` is only a connection id, so for an
+  // authenticated user it never matches their own roster row; comparing against
+  // it would misread self as "someone else" (e.g. a solo authed user's leave
+  // would silently disconnect instead of ending with a recap). Fall back to
+  // clientId only for the brief pre-join window before participantId is known.
+  const myUserId = participantId ?? clientId;
 
   // Track which participants have ticked the current climb.
   // Merges backend-provided tickedBy with locally tracked ticks.
