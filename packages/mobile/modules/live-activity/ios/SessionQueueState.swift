@@ -15,6 +15,18 @@ enum QueueUpdateEvent {
     case itemRemoved(uuid: String, sequence: Int)
     case reordered(uuid: String, oldIndex: Int, newIndex: Int, sequence: Int)
     case climbMirrored(uuid: String?, mirrored: Bool, sequence: Int)
+
+    var sequence: Int {
+        switch self {
+        case .fullSync(_, _, let sequence),
+             .currentClimbChanged(_, let sequence),
+             .itemAdded(_, _, let sequence),
+             .itemRemoved(_, let sequence),
+             .reordered(_, _, _, let sequence),
+             .climbMirrored(_, _, let sequence):
+            return sequence
+        }
+    }
 }
 
 enum QueueEventRepaintPolicy {
@@ -44,14 +56,14 @@ enum QueueSequencePolicy {
         case resync
     }
 
-    static func decision(for event: QueueUpdateEvent, receivedSequence: Int, lastKnown: Int) -> Decision {
+    static func decision(for event: QueueUpdateEvent, lastKnown: Int) -> Decision {
         if case .fullSync = event {
-            return .apply(newLastSequence: receivedSequence)
+            return .apply(newLastSequence: event.sequence)
         }
-        if QueueMessageParser.hasSequenceGap(lastKnown: lastKnown, received: receivedSequence) {
+        if QueueMessageParser.hasSequenceGap(lastKnown: lastKnown, received: event.sequence) {
             return .resync
         }
-        return .apply(newLastSequence: receivedSequence)
+        return .apply(newLastSequence: event.sequence)
     }
 }
 

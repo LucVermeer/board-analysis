@@ -183,25 +183,42 @@ final class LiveActivityWidgetTests: XCTestCase {
         // infinite reconnect loop after ≥2 events were missed while offline.
         let fullSync = QueueUpdateEvent.fullSync(items: [], currentItem: nil, sequence: 12)
         XCTAssertEqual(
-            QueueSequencePolicy.decision(for: fullSync, receivedSequence: 12, lastKnown: 3),
+            QueueSequencePolicy.decision(for: fullSync, lastKnown: 3),
             .apply(newLastSequence: 12)
         )
 
         // Deltas still gap-check: one step ahead applies, a jump resyncs.
         let delta = QueueUpdateEvent.itemRemoved(uuid: "q1", sequence: 5)
         XCTAssertEqual(
-            QueueSequencePolicy.decision(for: delta, receivedSequence: 5, lastKnown: 4),
+            QueueSequencePolicy.decision(for: delta, lastKnown: 4),
             .apply(newLastSequence: 5)
         )
         XCTAssertEqual(
-            QueueSequencePolicy.decision(for: delta, receivedSequence: 5, lastKnown: 3),
+            QueueSequencePolicy.decision(for: delta, lastKnown: 3),
             .resync
         )
         // First event after a (re)connect (lastKnown reset to -1) always applies.
         XCTAssertEqual(
-            QueueSequencePolicy.decision(for: delta, receivedSequence: 5, lastKnown: -1),
+            QueueSequencePolicy.decision(for: delta, lastKnown: -1),
             .apply(newLastSequence: 5)
         )
+    }
+
+    func testClimbMirroredUpdatesOnlyTheMatchingItem() {
+        var state = makeQueueState(uuids: ["A", "B"], currentIndex: 0)
+        state = QueueStateReducer.apply(.climbMirrored(uuid: "B", mirrored: true, sequence: 1), to: state)
+        XCTAssertFalse(state.items[0].mirrored)
+        XCTAssertTrue(state.items[1].mirrored)
+        XCTAssertEqual(state.currentIndex, 0)
+
+        // A nil or unknown uuid is a no-op on the state (the manager still
+        // persists + repaints unconditionally after every event, so downstream
+        // behaviour matches the pre-refactor code).
+        let unchanged = state
+        state = QueueStateReducer.apply(.climbMirrored(uuid: nil, mirrored: true, sequence: 2), to: state)
+        XCTAssertEqual(state, unchanged)
+        state = QueueStateReducer.apply(.climbMirrored(uuid: "missing", mirrored: true, sequence: 3), to: state)
+        XCTAssertEqual(state, unchanged)
     }
 
     func testQueueMutationsAheadOfCurrentKeepTheCurrentItem() {

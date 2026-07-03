@@ -459,18 +459,16 @@ final class SessionWebSocketManager {
         guard let updates = QueueMessageParser.extractQueueUpdates(from: msg.payload) else { return }
         guard let event = QueueMessageParser.parseQueueUpdate(updates) else { return }
 
-        let receivedSeq = sequenceFromEvent(event)
-
         // Sequence acceptance and lastSequence update must be atomic
         stateQueue.async { [weak self] in
             guard let self = self else { return }
 
-            switch QueueSequencePolicy.decision(for: event, receivedSequence: receivedSeq, lastKnown: self.lastSequence) {
+            switch QueueSequencePolicy.decision(for: event, lastKnown: self.lastSequence) {
             case .resync:
                 // Mid-stream gap — cancel the current task so listenForMessages'
                 // failure path calls handleDisconnect(), which schedules a
                 // reconnect whose FullSync restores consistent state.
-                print("[SessionWS] Sequence gap: expected \(self.lastSequence + 1), got \(receivedSeq) — reconnecting")
+                print("[SessionWS] Sequence gap: expected \(self.lastSequence + 1), got \(event.sequence) — reconnecting")
                 self.webSocketTask?.cancel(with: .goingAway, reason: nil)
                 return
             case .apply(let newLastSequence):
@@ -484,17 +482,6 @@ final class SessionWebSocketManager {
             // Apply event inline (already on stateQueue) rather than calling
             // applyEvent which would double-dispatch
             self.applyEventOnQueue(event)
-        }
-    }
-
-    private func sequenceFromEvent(_ event: QueueUpdateEvent) -> Int {
-        switch event {
-        case .fullSync(_, _, let seq): return seq
-        case .currentClimbChanged(_, let seq): return seq
-        case .itemAdded(_, _, let seq): return seq
-        case .itemRemoved(_, let seq): return seq
-        case .reordered(_, _, _, let seq): return seq
-        case .climbMirrored(_, _, let seq): return seq
         }
     }
 
