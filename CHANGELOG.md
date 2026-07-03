@@ -28,6 +28,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- The benchmark badge on a grouped ascents header now matches its climbs — a consensus benchmark no longer shows up on the rows but goes missing on the header. ([#3411](https://github.com/boardsesh/boardsesh/pull/3411))
 - Star ratings from imported Kilter and Tension logbooks now show what you actually rated them — a climb you called a 3-star classic is 5 stars again, not "mediocre". ([#3397](https://github.com/boardsesh/boardsesh/pull/3397))
 - See exactly who's in your session — the crew count no longer balloons with phantom climbers after a shaky connection, so a solo send stops reading as a party. ([#3338](https://github.com/boardsesh/boardsesh/pull/3338))
 

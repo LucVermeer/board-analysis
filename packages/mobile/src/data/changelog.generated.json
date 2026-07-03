@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T07:34:25.475Z",
+  "generatedAt": "2026-07-03T11:51:49.733Z",
   "entries": [
+    {
+      "prNumber": 3411,
+      "category": "fixed",
+      "title": "The benchmark badge on a grouped ascents header now matches its climbs — a consensus benchmark no longer shows up on the rows but goes missing on the header.",
+      "mergedAt": "2026-07-03T11:47:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3411"
+    },
     {
       "prNumber": 3397,
       "category": "fixed",
