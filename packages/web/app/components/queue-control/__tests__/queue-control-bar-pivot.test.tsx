@@ -551,8 +551,11 @@ describe('QueueControlBar leave session branch', () => {
   });
 
   it('ends the session for an authenticated user on two tabs (same participant id)', () => {
-    // Two connections of one authed user share the same participant id, so the
-    // roster dedupes to a single "me" — still the last participant → end.
+    // Two connections of one authed user share the same participant id. Every
+    // roster row carries the caller's own userId, so the "any other participant?"
+    // check finds none → caller is the last participant → end. (This asserts the
+    // last-participant decision, not roster dedup: the check would still find no
+    // "other" even without dedup, since both rows equal `myUserId`.)
     const { endSession, disconnect } = leaveFromBar({
       users: [
         makeRosterUser('user-uuid', { userId: 'user-uuid' }),

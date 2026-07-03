@@ -540,7 +540,7 @@ function usePersistentSessionQueueAdapter(): {
     clearClimbSessionCookie();
     ps.endSessionWithSummary({
       sessionId: endingSessionId,
-      boardType: ps.activeSession?.parsedParams.board_name ?? null,
+      boardType: ps.activeSession?.parsedParams?.board_name ?? null,
     });
   }, []);
 

@@ -171,6 +171,9 @@ export function useSessionIdManagement({
     // cookie again — a harmless, idempotent double-clear.
     clearClimbSessionCookie();
     setCookieSessionId(null);
+    // Nothing to end — cookie already cleared above. Skip so we don't deactivate
+    // a persistent session that isn't active.
+    if (!endingSessionId) return;
     const boardType =
       persistentSession.activeSession?.parsedParams?.board_name ?? baseBoardPath.split('/').filter(Boolean)[0] ?? null;
     persistentSession.endSessionWithSummary({ sessionId: endingSessionId, boardType });
