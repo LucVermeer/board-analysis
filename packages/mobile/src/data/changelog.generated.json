@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T22:08:43.401Z",
+  "generatedAt": "2026-07-03T23:43:18.981Z",
   "entries": [
+    {
+      "prNumber": 3438,
+      "category": "fixed",
+      "title": "French version now speaks climber French: log an « Enchaîné », count your « croix » — no more « envoyer » a climb",
+      "mergedAt": "2026-07-03T23:42:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3438"
+    },
     {
       "prNumber": 3321,
       "category": "new",
@@ -821,6 +828,28 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T08:03:22+10:00",
+      "sha": "31b9f3d249f8d463a377de961fc686d617a6053d",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "9012aef27ecf9d5a397b33fa51ec14638a15dea8"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T08:00:37+10:00",
+      "sha": "55495fe0ceb8bd62d8fef63b79cb3df90493012b",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "61e9acbe226ab4684b0f3478aefa425d82e3e4f4"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-04T07:17:42+10:00",

@@ -8,7 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### App update
 
-A new version shipped to the Play Store.
+A new version shipped to the App Store and Play Store.
 
 ## 2026-07-03
 
@@ -36,6 +36,7 @@ A new version shipped to the Play Store.
 
 ### Fixed
 
+- French version now speaks climber French: log an « Enchaîné », count your « croix » — no more « envoyer » a climb ([#3438](https://github.com/boardsesh/boardsesh/pull/3438))
 - On iPhone, opening one sheet right after another no longer stalls — the second one comes up as soon as the first finishes sliding away, instead of waiting out a fixed half-second. ([#3425](https://github.com/boardsesh/boardsesh/pull/3425))
 - Mini MoonBoard now lights the right holds when you drive the wall from the lock screen or Dynamic Island ([#3413](https://github.com/boardsesh/boardsesh/pull/3413))
 - Fixed climbs not lighting up on Kilter and Tension boards for iPhones on iOS 26.5 — no more blank board mid-session or connect–disconnect churn while your partner queues the next problem. ([#3365](https://github.com/boardsesh/boardsesh/pull/3365))
