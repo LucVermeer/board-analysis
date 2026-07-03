@@ -1,4 +1,4 @@
-import { eq, and, count, sql } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import type {
   ConnectionContext,
   UserProfile,
@@ -11,6 +11,7 @@ import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { BoardNameSchema } from '../../../validation/schemas';
 import { getAuroraCredentialStatuses } from '../../../services/aurora-credentials';
 import { userIsTester } from './tester';
+import { FAVORITE_COUNT_SUBQUERY } from './favorite-count';
 
 export const userQueries = {
   /**
@@ -30,10 +31,7 @@ export const userQueries = {
         createdAt: dbSchema.users.createdAt,
         displayName: dbSchema.userProfiles.displayName,
         avatarUrl: dbSchema.userProfiles.avatarUrl,
-        // Correlated subquery rather than a second round trip — this resolver
-        // returns a single row, so a join on userFavorites would need a GROUP BY
-        // to avoid multiplying it per favourite.
-        favoriteCount: sql<number>`(select count(*)::int from ${dbSchema.userFavorites} where ${dbSchema.userFavorites.userId} = ${dbSchema.users.id})`,
+        favoriteCount: FAVORITE_COUNT_SUBQUERY,
       })
       .from(dbSchema.users)
       .leftJoin(dbSchema.userProfiles, eq(dbSchema.userProfiles.userId, dbSchema.users.id))

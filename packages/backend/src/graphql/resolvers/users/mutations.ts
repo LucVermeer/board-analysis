@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type {
   ConnectionContext,
   UserProfile,
@@ -9,6 +9,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { userIsTester } from './tester';
+import { FAVORITE_COUNT_SUBQUERY } from './favorite-count';
 import {
   UpdateProfileInputSchema,
   SaveAuroraCredentialInputSchema,
@@ -79,8 +80,7 @@ export const userMutations = {
         name: dbSchema.users.name,
         image: dbSchema.users.image,
         createdAt: dbSchema.users.createdAt,
-        // Correlated subquery rather than a separate round trip.
-        favoriteCount: sql<number>`(select count(*)::int from ${dbSchema.userFavorites} where ${dbSchema.userFavorites.userId} = ${dbSchema.users.id})`,
+        favoriteCount: FAVORITE_COUNT_SUBQUERY,
       })
       .from(dbSchema.users)
       .where(eq(dbSchema.users.id, userId))
