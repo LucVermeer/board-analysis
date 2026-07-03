@@ -215,6 +215,7 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     mocks.showToast.mockReset();
     mocks.openURL.mockReset().mockResolvedValue(undefined);
     mocks.setClipboard.mockReset().mockResolvedValue(undefined);
+    mocks.confirm.mockReset().mockResolvedValue(true);
     mocks.flags = {};
     mocks.credentials = [];
   });
@@ -225,19 +226,20 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(button(container, 'aurora.moonboard.requestData')).not.toBeNull();
   });
 
-  it('copies the request body to the clipboard and opens a subject-only MoonBoard email', async () => {
+  it('copies the request body and opens a subject-only MoonBoard email after confirming', async () => {
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
     await waitFor(() => {
       expect(mocks.setClipboard).toHaveBeenCalledWith('aurora.moonboard.email.body');
       expect(mocks.openURL).toHaveBeenCalledTimes(1);
     });
+    // The paste instruction is shown in a dialog before the app switches away.
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
     const mailto = mocks.openURL.mock.calls[0]?.[0] ?? '';
     expect(mailto).toContain('mailto:moonboardsupport@moonclimbing.com');
     // The long GDPR letter rides the clipboard, so it must not be encoded into
     // the mailto: body (which would blow past client URI limits).
     expect(mailto).not.toContain('body=');
-    expect(mocks.showToast).toHaveBeenCalledWith('aurora.mobile.requestDataCopied', 'success');
   });
 
   it('opens the Discord hand-off dialog from "Import data" and links to Discord', () => {
@@ -253,27 +255,26 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(mocks.openURL).toHaveBeenCalledWith('https://discord.gg/YXA8GsXfQK');
   });
 
-  it('still confirms the copy when the mail draft fails to open', async () => {
-    // The letter is already on the clipboard, so a missing mail app isn't an
-    // error — the copied toast stands and no failure toast is shown.
-    mocks.openURL.mockReset().mockRejectedValueOnce(new Error('no mail handler'));
+  it('copies the letter but leaves email unopened when the dialog is dismissed', async () => {
+    mocks.confirm.mockReset().mockResolvedValueOnce(false);
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
     await waitFor(() => {
-      expect(mocks.showToast).toHaveBeenCalledWith('aurora.mobile.requestDataCopied', 'success');
+      expect(mocks.setClipboard).toHaveBeenCalledWith('aurora.moonboard.email.body');
+      expect(mocks.confirm).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.showToast).not.toHaveBeenCalledWith('aurora.mobile.requestDataFailed', 'error');
+    expect(mocks.openURL).not.toHaveBeenCalled();
   });
 
-  it('shows a copy-failed toast and skips the email when the clipboard write fails', async () => {
+  it('shows a copy-failed toast and skips the dialog and email when the clipboard write fails', async () => {
     mocks.setClipboard.mockReset().mockRejectedValueOnce(new Error('no clipboard'));
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.requestData')!);
     await waitFor(() => {
       expect(mocks.showToast).toHaveBeenCalledWith('aurora.mobile.requestDataCopyFailed', 'error');
     });
+    expect(mocks.confirm).not.toHaveBeenCalled();
     expect(mocks.openURL).not.toHaveBeenCalled();
-    expect(mocks.showToast).not.toHaveBeenCalledWith('aurora.mobile.requestDataCopied', 'success');
   });
 
   it('shows a Discord-specific error toast when the Discord link fails to open', async () => {

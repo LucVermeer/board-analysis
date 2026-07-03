@@ -520,6 +520,7 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
   const { t: tCommon } = useTranslation('common');
   const { systemColors } = useTheme();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const openImportDialog = useCallback(() => setImportDialogOpen(true), []);
@@ -535,14 +536,21 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
         showToast(t('aurora.mobile.requestDataCopyFailed'), 'error');
         return;
       }
-      // The letter is safely on the clipboard now, so the toast tells the user
-      // to paste it in. Opening the mail draft is best-effort — a missing mail
-      // app isn't a failure worth surfacing since the copy already succeeded.
-      showToast(t('aurora.mobile.requestDataCopied'), 'success');
-      void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {});
+      // Surface the paste instruction in a dialog *before* opening the mail app.
+      // A toast would be hidden by the app switch, leaving the user staring at a
+      // blank draft (the mailto: has no body) with no prompt to paste.
+      const openEmail = await confirm({
+        title: t('aurora.moonboard.requestDataDialog.title'),
+        message: t('aurora.moonboard.requestDataDialog.message'),
+        confirmLabel: t('aurora.moonboard.requestDataDialog.confirm'),
+        cancelLabel: t('aurora.moonboard.requestDataDialog.cancel'),
+      });
+      // The letter is on the clipboard either way; opening the draft is
+      // best-effort, so a missing mail app isn't worth surfacing as a failure.
+      if (openEmail) void Linking.openURL(buildMoonBoardDataRequestMailto(t)).catch(() => {});
     };
     void openRequest();
-  }, [showToast, t]);
+  }, [confirm, showToast, t]);
 
   const handleOpenDiscord = useCallback(() => {
     void Linking.openURL(MOONBOARD_DISCORD_URL).catch(() => {
