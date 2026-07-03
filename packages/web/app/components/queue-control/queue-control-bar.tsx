@@ -14,6 +14,7 @@ import SyncOutlined from '@mui/icons-material/SyncOutlined';
 import CloudOffOutlined from '@mui/icons-material/CloudOffOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import { track } from '@/app/lib/analytics';
+import { dedupeSessionUsers, countDistinctSessionUsers } from '@boardsesh/queue-runtime';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
 import QueueNavButton from './queue-nav-button';
 import { usePathname } from 'next/navigation';
@@ -358,18 +359,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     [displayedClimb?.difficulty, isDark],
   );
 
-  // Deduplicate session users by userId (stable DB UUID).
-  // When userId is absent (unauthenticated), fall back to connection id
-  // so distinct participants with the same display name aren't merged.
-  const uniqueSessionUsers = useMemo(() => {
-    const seen = new Set<string>();
-    return sessionUsers.filter((user) => {
-      const key = user.userId ?? user.id;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [sessionUsers]);
+  // Deduplicate the crew by stable identity (userId, or connection id for
+  // anonymous users) so a person the roster briefly lists twice isn't shown —
+  // or counted — twice. Shared with peerCount/partyMode in QueueContext.
+  const uniqueSessionUsers = useMemo(() => dedupeSessionUsers(sessionUsers), [sessionUsers]);
 
   // Resolve the current user's stable session id. `participantId` is the local
   // user's participant id — it equals `SessionUser.id` (the DB user UUID for an
@@ -755,7 +748,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   let offlineBannerText: string;
   if (!sessionId) {
     offlineBannerText = t('queueBar.offline.idle');
-  } else if (users && users.length > 1) {
+  } else if (countDistinctSessionUsers(users) > 1) {
     offlineBannerText = t('queueBar.offline.party');
   } else {
     offlineBannerText = t('queueBar.offline.solo');

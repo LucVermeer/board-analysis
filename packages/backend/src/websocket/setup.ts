@@ -193,7 +193,15 @@ export function setupWebSocketServer(httpServer: HttpServer): {
           if (latestContext?.sessionId) {
             const result = await roomManager.disconnectClient(context.connectionId);
 
-            if (result?.presenceUser) {
+            if (result?.participantFullyLeft) {
+              // WS-anonymous participant removed outright (can't be resumed on
+              // reconnect) — the schema field is `userId` but clients compare it
+              // to `SessionUser.id`, which is the participantId.
+              pubsub.publishSessionEvent(result.sessionId, {
+                __typename: 'UserLeft',
+                userId: result.participantId,
+              });
+            } else if (result?.presenceUser) {
               pubsub.publishSessionEvent(result.sessionId, {
                 __typename: 'UserPresenceChanged',
                 user: result.presenceUser,

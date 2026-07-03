@@ -38,6 +38,14 @@ export { hasContiguousReplayCoverage };
 
 type UseSessionLifecycleArgs = {
   isAuthLoading: boolean;
+  /**
+   * Whether the WS auth token is currently present (`Boolean(token)`), NOT the
+   * token string. The connection effect lists this so a null→token recovery
+   * tears the anonymous controller down and rebuilds it authenticated (the ref
+   * carries the fresh token by rebuild time). A boolean (not the string) so a
+   * rotating JWT doesn't churn a healthy authenticated socket.
+   */
+  hasWsAuthToken: boolean;
   handleQueueEvent: (event: SubscriptionQueueEvent) => void;
   handleSessionEvent: (event: SessionEvent) => void;
   /**
@@ -91,6 +99,7 @@ export type SessionLifecycleActions = {
 
 export function useSessionLifecycle({
   isAuthLoading,
+  hasWsAuthToken,
   handleQueueEvent,
   handleSessionEvent,
   syncGate,
@@ -280,12 +289,18 @@ export function useSessionLifecycle({
   }, [deactivateSession, setAutoFinishedSummary]);
 
   // Connect to session when activeSession changes. Instantiates a fresh
-  // `SessionConnectionController` per (activeSession, isAuthLoading, ...)
-  // effect run — the controller owns connect/join/subscribe/reconnect/retry
-  // (see `@boardsesh/queue-runtime/session-connection.ts` for that state
-  // machine and its ownership-split doc comment); this effect wires the
-  // controller's ports (built by `createWebSessionConnectionDeps`) to React
-  // state and starts/stops it.
+  // `SessionConnectionController` per (activeSession, isAuthLoading,
+  // hasWsAuthToken, ...) effect run — the controller owns
+  // connect/join/subscribe/reconnect/retry (see
+  // `@boardsesh/queue-runtime/session-connection.ts` for that state machine and
+  // its ownership-split doc comment); this effect wires the controller's ports
+  // (built by `createWebSessionConnectionDeps`) to React state and starts/stops
+  // it. `hasWsAuthToken` is in the deps so a null→token recovery re-runs this
+  // effect: the cleanup tears down the anonymous controller and start()
+  // rebuilds it with the now-present token (read from `wsAuthTokenRef.current`
+  // inside `createWebSessionConnectionDeps`). Recreating through the existing
+  // teardown path — never a second controller alongside the first — is
+  // deliberate: a double controller would itself inflate presence.
   useEffect(() => {
     if (!activeSession) {
       if (DEBUG) console.info('[PersistentSession] No active session, skipping connection');
@@ -347,7 +362,7 @@ export function useSessionLifecycle({
       setIsConnecting(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, only .current changes; intentional dep list
-  }, [activeSession, isAuthLoading, handleQueueEvent, handleSessionEvent, syncGate, setSession]);
+  }, [activeSession, isAuthLoading, hasWsAuthToken, handleQueueEvent, handleSessionEvent, syncGate, setSession]);
 
   return {
     activeSession,

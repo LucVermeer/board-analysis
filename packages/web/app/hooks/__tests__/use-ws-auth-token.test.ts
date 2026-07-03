@@ -52,7 +52,10 @@ describe('useWsAuthToken', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('returns null token when API returns null token', async () => {
+  it('returns a settled null token for an anonymous (unauthenticated) session', async () => {
+    // A logged-out user legitimately has no WS token — that's the settled
+    // result, not a failure to retry.
+    mockUseSession.mockReturnValue({ status: 'unauthenticated' });
     mockFetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ token: null, authenticated: false }),
@@ -64,6 +67,30 @@ describe('useWsAuthToken', () => {
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.token).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('surfaces an error instead of caching a null token for a logged-in session', async () => {
+    // Regression guard: a logged-in user must never silently settle on a null
+    // token, or the session WebSocket connects anonymously and inflates the
+    // crew/peer count. The null is treated as a transient failure (retried,
+    // then surfaced) rather than an "anonymous" result.
+    mockUseSession.mockReturnValue({ status: 'authenticated' });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: null, authenticated: false }),
+    });
+
+    const { result } = renderHook(() => useWsAuthToken(), {
+      wrapper: createQueryWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).not.toBeNull();
     });
 
     expect(result.current.token).toBeNull();
@@ -90,6 +117,9 @@ describe('useWsAuthToken', () => {
   });
 
   it('returns API error from response data', async () => {
+    // An unauthenticated session surfaces the endpoint's own error field
+    // verbatim (no throw/retry — anonymous null tokens are legitimate).
+    mockUseSession.mockReturnValue({ status: 'unauthenticated' });
     mockFetch.mockResolvedValue({
       ok: true,
       json: () =>

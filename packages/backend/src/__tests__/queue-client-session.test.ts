@@ -103,6 +103,30 @@ describe('Queue client ↔ real backend (4-participant party session)', () => {
         expect(participant.users.some((user) => user.username === 'Dre')).toBe(false);
       }
     });
+
+    it('does not inflate a peer’s roster when an anonymous member reconnects repeatedly', async () => {
+      // Reproduces the production "false party" bug. The harness participants are
+      // anonymous (no auth token), so each reconnect() comes back on a fresh
+      // socket = a brand-new participantId. Pre-fix the server parked the old
+      // identity as RECONNECTING for 60s and stacked a new one per reconnect, so
+      // a peer's roster (and peerCount / partyMode) climbed past the real party
+      // size. Post-fix the stale identity leaves immediately, so the roster
+      // returns to four and never exceeds it.
+      const party = await spawnParty(['Alice', 'Bob', 'Cara', 'Dre']);
+      const [alice, , , dre] = party;
+
+      for (let cycle = 0; cycle < 4; cycle++) {
+        await dre.disconnect();
+        await dre.reconnect();
+        // Pre-fix this settle would time out — the roster climbed past 4 as
+        // ghosts stacked and never came back down to the real party size.
+        await waitFor(() => alice.users.length === 4, { label: `roster settles at 4 (cycle ${cycle})` });
+      }
+
+      // Still exactly four people, with a single live "Dre" — no ghost pile-up.
+      expect(alice.users).toHaveLength(4);
+      expect(alice.users.filter((user) => user.username === 'Dre')).toHaveLength(1);
+    });
   });
 
   describe('Collaborative queue editing', () => {

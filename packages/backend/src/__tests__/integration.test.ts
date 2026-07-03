@@ -630,15 +630,15 @@ describe('Daemon Integration Tests', () => {
       expect(result1.joinSession.isLeader).toBe(true);
 
       // Client 2 joins second (not leader)
-      await execute(client2, {
-        query: `mutation { joinSession(sessionId: "${sessionId}", boardPath: "${TEST_BOARD_PATH}", username: "Follower") { isLeader } }`,
+      const result2 = await execute<{ joinSession: JoinSessionResult }>(client2, {
+        query: `mutation { joinSession(sessionId: "${sessionId}", boardPath: "${TEST_BOARD_PATH}", username: "Follower") { isLeader clientId } }`,
       });
 
-      // Client 1 subscribes to session updates to detect passive presence changes
+      // Client 1 subscribes to session updates to detect the passive disconnect.
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client1,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId leaderConnectionId } } }`,
-        (e) => e.__typename === 'UserPresenceChanged',
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserLeft { userId } ... on LeaderChanged { leaderId leaderConnectionId } } }`,
+        (e) => e.__typename === 'UserLeft',
       );
 
       // Client 2 disconnects
@@ -648,9 +648,11 @@ describe('Daemon Integration Tests', () => {
 
       const event = await eventPromise;
 
-      // Should only get UserPresenceChanged, not LeaderChanged (leader is still client1)
-      expectTypename(event, 'UserPresenceChanged');
-      expect(event.user.connectionState).toBe('RECONNECTING');
+      // The anonymous follower is removed outright (UserLeft), not parked as
+      // RECONNECTING; leadership stays with client1 (no LeaderChanged for a
+      // non-leader departure).
+      expectTypename(event, 'UserLeft');
+      expect(event.userId).toBe(result2.joinSession.clientId);
     });
   });
 
@@ -684,7 +686,7 @@ describe('Daemon Integration Tests', () => {
       expect(event.user.username).toBe('Second');
     });
 
-    it('should emit UserPresenceChanged when client passively disconnects', async () => {
+    it('should emit UserLeft when an anonymous client passively disconnects', async () => {
       const sessionId = createTestSessionId();
       const client1 = createTestClient();
       const client2 = createTestClient();
@@ -700,22 +702,23 @@ describe('Daemon Integration Tests', () => {
       // Client 1 subscribes to session updates
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client1,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } } }`,
-        (e) => e.__typename === 'UserPresenceChanged',
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserLeft { userId } } }`,
+        (e) => e.__typename === 'UserLeft',
       );
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Client 2 disconnects
+      // Client 2 disconnects. An anonymous connection can't be resumed on
+      // reconnect, so the server removes it immediately (UserLeft) rather than
+      // parking it as RECONNECTING.
       await client2.dispose();
       const idx = activeClients.indexOf(client2);
       if (idx > -1) activeClients.splice(idx, 1);
 
       const event = await eventPromise;
 
-      expectTypename(event, 'UserPresenceChanged');
-      expect(event.user.id).toBe(result2.joinSession.clientId);
-      expect(event.user.connectionState).toBe('RECONNECTING');
+      expectTypename(event, 'UserLeft');
+      expect(event.userId).toBe(result2.joinSession.clientId);
     });
 
     it('should emit LeaderChanged when leader leaves', async () => {
@@ -736,8 +739,8 @@ describe('Daemon Integration Tests', () => {
       // Client 2 subscribes to session updates
       const eventPromise = collectEvents<SessionEvent>(
         client2,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId leaderConnectionId } } }`,
-        2, // UserPresenceChanged + LeaderChanged
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserLeft { userId } ... on LeaderChanged { leaderId leaderConnectionId } } }`,
+        2, // UserLeft + LeaderChanged
       );
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -749,16 +752,16 @@ describe('Daemon Integration Tests', () => {
 
       const events = await eventPromise;
 
-      // Should get both UserPresenceChanged and LeaderChanged
-      const userPresenceEvent = events.find((e) => e.__typename === 'UserPresenceChanged');
+      // The anonymous leader is removed outright (UserLeft) and leadership hands
+      // off to client2 (LeaderChanged) — no RECONNECTING park in between.
+      const userLeftEvent = events.find((e) => e.__typename === 'UserLeft');
       const leaderChangedEvent = events.find((e) => e.__typename === 'LeaderChanged');
 
-      expect(userPresenceEvent).toBeDefined();
+      expect(userLeftEvent).toBeDefined();
       expect(leaderChangedEvent).toBeDefined();
-      expectTypename(userPresenceEvent!, 'UserPresenceChanged');
+      expectTypename(userLeftEvent!, 'UserLeft');
       expectTypename(leaderChangedEvent!, 'LeaderChanged');
-      expect(userPresenceEvent.user.id).toBe(result1.joinSession.clientId);
-      expect(userPresenceEvent.user.connectionState).toBe('RECONNECTING');
+      expect(userLeftEvent.userId).toBe(result1.joinSession.clientId);
       expect(leaderChangedEvent.leaderId).toBe(result2.joinSession.clientId);
       expect(leaderChangedEvent.leaderConnectionId).toBe(result2.joinSession.clientId);
     });
@@ -786,7 +789,9 @@ describe('Daemon Integration Tests', () => {
       // Wait for cleanup
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // New client joins same session during the reconnect grace window.
+      // New client joins the same session. The anonymous first client was
+      // removed on disconnect (no RECONNECTING ghost), so only the new client is
+      // in the roster — but the queue state is still recoverable from Redis.
       const client2 = createTestClient();
       const result = await execute<{ joinSession: JoinSessionResult }>(client2, {
         query: `mutation { joinSession(sessionId: "${sessionId}", boardPath: "${TEST_BOARD_PATH}") { isLeader users { id } queueState { queue { uuid } } } }`,
@@ -795,7 +800,7 @@ describe('Daemon Integration Tests', () => {
       // New client should be leader, and the queue should remain recoverable.
       expect(result.joinSession.isLeader).toBe(true);
       expect(result.joinSession.queueState.queue).toHaveLength(1);
-      expect(result.joinSession.users).toHaveLength(2);
+      expect(result.joinSession.users).toHaveLength(1);
     });
 
     it('should continue session when one of multiple clients disconnects', async () => {
@@ -831,7 +836,10 @@ describe('Daemon Integration Tests', () => {
 
       expect(result.session.queueState.queue).toHaveLength(1);
       expect(result.session.queueState.queue[0].uuid).toBe(getTestClimbUuid('persist-test'));
-      expect(result.session.users).toHaveLength(2); // client1 is reconnecting, client2 is connected
+      // The anonymous client1 was removed on disconnect; only the still-connected
+      // client2 remains in the roster.
+      expect(result.session.users).toHaveLength(1);
+      expect(result.session.users[0].connectionState).toBe('CONNECTED');
     });
   });
 

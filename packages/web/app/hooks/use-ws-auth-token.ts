@@ -30,9 +30,28 @@ export function useWsAuthToken(enabled = true) {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['wsAuthToken', status],
-    queryFn: fetchWsAuthToken,
-    staleTime: Infinity,
-    retry: 1,
+    queryFn: async () => {
+      const result = await fetchWsAuthToken();
+      // A logged-in NextAuth session must yield a token. A null here is a
+      // transient cookie/endpoint hiccup, not a genuine "anonymous" — throw so
+      // React Query retries with backoff instead of caching null forever.
+      // Caching null strands the persistent-session WebSocket on
+      // `authToken: null`: it connects the session anonymously, so every
+      // reconnect becomes a fresh connection-keyed participant (a ghost) and
+      // inflates the crew/peer count into a false "party".
+      if (status === 'authenticated' && !result.token) {
+        throw new Error('ws-auth returned no token for an authenticated session');
+      }
+      return result;
+    },
+    // The NextAuth JWT is long-lived, but revalidate periodically and on
+    // focus/reconnect so a transient failure self-heals. When the token value
+    // is unchanged this is a no-op; only a null→token recovery tears down and
+    // reconnects the socket (persistent-session-context) — now authenticated.
+    staleTime: 5 * 60_000,
+    retry: 3,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     enabled: enabled && status !== 'loading',
   });
 

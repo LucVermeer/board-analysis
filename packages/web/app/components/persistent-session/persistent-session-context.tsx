@@ -60,10 +60,13 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   const sessionEventSubscribersRef = useRef<Set<(event: SessionEvent) => void>>(new Set());
 
   // Keep auth ref in sync. The graphql-ws connectionParams are baked in at
-  // connect-time, so when the token loads *after* the lifecycle hook has
-  // established an unauthenticated connection, the lifecycle effect's
-  // `wsAuthToken` dependency below tears the socket down and reconnects with
-  // the token in connectionParams.
+  // connect-time from `wsAuthTokenRef.current`, so when the token recovers
+  // *after* the lifecycle hook already established an anonymous connection, the
+  // socket has to be rebuilt to send the token. The lifecycle effect depends on
+  // `hasWsAuthToken` (below) — a null→token transition flips it, tearing the
+  // anonymous socket down and reconnecting authenticated. This ref effect is
+  // registered before the lifecycle effect, so the ref already carries the
+  // fresh token by the time the rebuild reads it.
   useEffect(() => {
     wsAuthTokenRef.current = wsAuthToken;
   }, [wsAuthToken]);
@@ -118,9 +121,15 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   queueRef.current = eventProcessor.queue;
   currentClimbQueueItemRef.current = eventProcessor.currentClimbQueueItem;
 
-  // 2. Session lifecycle: connect/disconnect, join/leave
+  // 2. Session lifecycle: connect/disconnect, join/leave.
+  // Pass token *presence* (not the token string): a null→token recovery must
+  // rebuild the socket, but the raw NextAuth JWT can rotate on refetch
+  // (staleTime + refetchOnWindowFocus) and a string dep would needlessly tear
+  // down a healthy authenticated socket on every rotation.
+  const hasWsAuthToken = Boolean(wsAuthToken);
   const lifecycle = useSessionLifecycle({
     isAuthLoading,
+    hasWsAuthToken,
     handleQueueEvent: eventProcessor.handleQueueEvent,
     handleSessionEvent: eventProcessor.handleSessionEvent,
     syncGate,
