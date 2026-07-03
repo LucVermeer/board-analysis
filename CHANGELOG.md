@@ -16,6 +16,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Improved
 
+- Leaving a session from the queue bar now just takes you out of the crew's session — it keeps going for everyone else. It only wraps up the whole session (with the recap) when you're the last one on the wall. ([#3375](https://github.com/boardsesh/boardsesh/pull/3375))
+- Party mode: picking a climb from your logbook or a playlist while away from the board view now updates the shared queue instantly — no more waiting on the round trip. ([#3372](https://github.com/boardsesh/boardsesh/pull/3372))
 - The hold, area, and setter filter pickers get proper navigation headers with a back button. ([#3371](https://github.com/boardsesh/boardsesh/pull/3371))
   Pasting a beta-video link no longer hides the text field behind the keyboard.
   The invite sheet opens at its intended height on Android.
