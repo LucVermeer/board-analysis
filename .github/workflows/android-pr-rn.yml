@@ -1,7 +1,6 @@
 name: Android PR Build (React Native)
 
-# Two jobs in one, for PRs touching packages/mobile (managed Expo, no committed
-# android/):
+# For PRs touching packages/mobile (managed Expo, no committed android/). It:
 #   1. Catches what the JS-only checks can't — a broken Expo config plugin, an
 #      app.config.ts mistake, or a Gradle/native-module compile failure — BEFORE
 #      it reaches the push-to-main android-apk-rn.yml release build.
@@ -15,6 +14,13 @@ name: Android PR Build (React Native)
 # but with a DIFFERENT signature than the production/Play build — uninstall any
 # existing com.boardsesh.app before installing it.
 #
+# Shape (see docs/android-pr-build-speed-spec.md):
+#   gate → { robolectric-tests, build-apk }
+#   - gate skips both native jobs on a JS-only PR (no native-input change / an
+#     unchanged Expo fingerprint), mirroring main's native-skip for JS-only
+#     merges. The build jobs run in parallel and share android-rn-setup, and the
+#     Gradle cache is restored read-only from the cache main already warms.
+#
 # ci.yml already runs typecheck:mobile + the mobile vitest project +
 # check:mobile-bundle on PRs, so this doesn't duplicate those. pull_request only
 # (no push trigger) so it runs exactly once per PR sync.
@@ -26,7 +32,10 @@ on:
       - 'packages/shared/**'
       - 'packages/board-constants/**'
       - 'packages/shared-schema/**'
+      - 'patches/**' # bun patches to mobile deps live in root patches/, not under packages/mobile/**
       - '.github/workflows/android-pr-rn.yml'
+      - '.github/actions/android-rn-setup/**'
+      - '.github/actions/mobile-native-gate/**'
   workflow_dispatch:
 
 concurrency:
@@ -36,81 +45,59 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The app's env.ts already defaults to the production backend/web URLs, so the
+  # test APK talks to prod without any secrets. Sentry stays off (no DSN).
+  # Workflow-level so the gate's fingerprint resolve and both build jobs read an
+  # identical set (the .env they each write is hashed into the fingerprint).
+  EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
+  EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
+  EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
+  EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
+  EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
+
 jobs:
-  prebuild-and-build:
+  gate:
+    # Cheap ubuntu gate that decides whether the native jobs run. It resolves the
+    # Expo fingerprint (file-hash based — no Android SDK needed), so it always
+    # reports a check even when it skips the build, which keeps a required-check
+    # config from waiting on a job that never arrives.
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    env:
-      # The app's env.ts already defaults to the production backend/web URLs, so
-      # the test APK talks to prod without any secrets. Sentry stays off (no DSN).
-      EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
-      EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
-      EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
-      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
-      EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
-      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
-
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read # dorny/paths-filter lists PR files via the API
+    outputs:
+      should_build: ${{ steps.gate.outputs.should_build }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Install Node.js dependencies (workspace root)
-        run: bun install --frozen-lockfile
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - id: gate
+        uses: ./.github/actions/mobile-native-gate
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          platform: android
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+  robolectric-tests:
+    needs: gate
+    if: needs.gate.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    # ~2.5× the observed cold-cache duration (7m32s): kills a hung Gradle daemon
+    # without flaking on a slow runner.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Accept licenses and install SDK components
-        run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          # Separate key prefix from the release workflow so a debug-signed cache
-          # never masks a release-build regression (and vice versa).
-          key: ${{ runner.os }}-gradle-rn-pr-${{ hashFiles('packages/mobile/package.json', 'bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-rn-pr-
-
-      - name: Write .env for Expo build-time inlining
-        working-directory: packages/mobile
-        run: |
-          cat > .env <<EOF
-          EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
-          EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
-          EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
-          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
-          EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
-          EOF
-
-      - name: Expo prebuild (generate android/)
-        working-directory: packages/mobile
-        env:
-          # Skip the tailscale probe (already short-circuited on CI, set
-          # explicitly so a misconfigured runner never pays the 2s timeout).
-          TAILSCALE_HOSTS: ''
-        run: bunx expo prebuild --platform android --clean --no-install
+      - uses: ./.github/actions/android-rn-setup
 
       - name: Run live-activity module unit tests (Robolectric)
         working-directory: packages/mobile/android
         # Robolectric/JUnit tests for the session-presence lifecycle + the
-        # foreground-service retry path. Run before the slow APK build so a
-        # regression surfaces fast. The gradle project path for an Expo local
+        # foreground-service retry path. The gradle project path for an Expo local
         # module is autolinking-derived, so discover it rather than hardcode.
         run: |
           set -euo pipefail
@@ -123,6 +110,17 @@ jobs:
           PROJECT="${PROJECTS[0]}"
           echo "Testing module project: $PROJECT"
           ./gradlew "${PROJECT}:testDebugUnitTest" --stacktrace
+
+  build-apk:
+    needs: gate
+    if: needs.gate.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/android-rn-setup
 
       - name: Build debug-signed release APK (compiles all native modules + plugins)
         working-directory: packages/mobile/android

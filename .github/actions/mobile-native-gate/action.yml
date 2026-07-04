@@ -1,0 +1,131 @@
+name: Mobile native-build gate
+description: >
+  Decide whether a PR needs a native build. Skips when no native-input file
+  changed vs the PR base, or when the resolved Expo fingerprint is unchanged vs
+  the base — the PR-side mirror of how main skips the native build for JS-only
+  merges. Runs on ubuntu for both platforms (the fingerprint resolve is
+  file-hash based; it needs neither Xcode nor the Android SDK). See
+  docs/android-pr-build-speed-spec.md.
+
+# Why a fingerprint diff and not main's fingerprint-tag lookup: main resolves the
+# fingerprint WITH Production-environment secrets (GOOGLE_MAPS_API_KEY perturbs
+# it) and skips when a `fingerprint-<platform>-<hash>` tag already shipped. A PR
+# run — a fork PR especially — can't read those secrets, so its resolve would
+# never match the shipped tags. Resolving head and base with the PR workflow's
+# own (identical) env instead makes the env cancel out, leaving only real
+# native-input changes to move the comparison.
+inputs:
+  platform:
+    description: 'Expo platform to resolve the fingerprint for (android | ios).'
+    required: true
+outputs:
+  should_build:
+    description: 'true when the native build must run; false to skip it.'
+    value: ${{ steps.decide.outputs.should_build }}
+runs:
+  using: composite
+  steps:
+    - name: Screen changed paths
+      id: changed
+      if: github.event_name == 'pull_request'
+      uses: dorny/paths-filter@v3
+      with:
+        # `native` mirrors the repo's canonical native-input set (the ios-rn-ci
+        # CocoaPods cache key). `ci` is the workflow/action plumbing itself: a
+        # change there can't move the fingerprint, so it must force a build to be
+        # exercised at all rather than get skipped by the fingerprint diff.
+        filters: |
+          native:
+            - 'packages/mobile/package.json'
+            - 'bun.lock'
+            - 'packages/mobile/app.config.ts'
+            - 'packages/mobile/plugins/**'
+            - 'packages/mobile/modules/**'
+            - 'patches/**'
+          ci:
+            - '.github/workflows/android-pr-rn.yml'
+            - '.github/workflows/ios-rn-ci.yml'
+            - '.github/actions/android-rn-setup/**'
+            - '.github/actions/mobile-native-gate/**'
+
+    - name: Decide whether to build
+      id: decide
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+        NATIVE_CHANGED: ${{ steps.changed.outputs.native }}
+        CI_CHANGED: ${{ steps.changed.outputs.ci }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set -uo pipefail
+
+        # Non-PR events (branch push, manual dispatch) always build: there's no
+        # base to diff against, and this preserves the pre-gate behaviour.
+        if [ "${{ github.event_name }}" != "pull_request" ]; then
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Not a pull_request event — building."
+          exit 0
+        fi
+
+        # A change to the workflow/action plumbing must actually run the build.
+        if [ "$CI_CHANGED" = "true" ]; then
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::CI plumbing changed — building to exercise it."
+          exit 0
+        fi
+
+        # Nothing that can move the native fingerprint changed → skip outright,
+        # without paying for a fingerprint resolve. This is the JS-only path.
+        if [ "$NATIVE_CHANGED" != "true" ]; then
+          echo "should_build=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::No native-input files changed vs base — skipping the $PLATFORM native build (JS rides OTA)."
+          exit 0
+        fi
+
+        # A native-input file changed, but that set includes bun.lock — which any
+        # web/backend dep bump churns without touching the mobile native shape.
+        # Resolve the Expo fingerprint at head and base and skip when identical.
+        # Fail open: any resolve/checkout trouble builds.
+        resolve_fp() {
+          ( cd packages/mobile \
+            && TAILSCALE_HOSTS='' bunx expo-updates runtimeversion:resolve --platform "$PLATFORM" 2>/dev/null ) \
+            | jq -r '.runtimeVersion // empty' 2>/dev/null || true
+        }
+
+        bun install --frozen-lockfile
+        # The .env is hashed into the fingerprint, so both resolves must see the
+        # same one. It's untracked, so it survives the base checkout below.
+        cat > packages/mobile/.env <<EOF
+        EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+        EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
+        EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
+        EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+        EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+        EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        EOF
+
+        HEAD_FP="$(resolve_fp)"
+
+        # Resolve the base fingerprint in-place. Checking out base rewrites the
+        # working tree to main, which doesn't have this action's files yet — safe
+        # because `decide` is the composite's LAST step (nothing re-reads
+        # action.yml after this) and $GITHUB_OUTPUT lives in RUNNER_TEMP, outside
+        # the workspace, so the write below still lands. The untracked .env
+        # survives the checkout, so both resolves hash the same one.
+        if ! git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null \
+          || ! git checkout --quiet --force "$BASE_SHA" 2>/dev/null; then
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not check out base $BASE_SHA to diff the fingerprint — building to be safe."
+          exit 0
+        fi
+        bun install --frozen-lockfile
+        BASE_FP="$(resolve_fp)"
+
+        echo "platform=$PLATFORM head=$HEAD_FP base=$BASE_FP"
+        if [ -n "$HEAD_FP" ] && [ -n "$BASE_FP" ] && [ "$HEAD_FP" = "$BASE_FP" ]; then
+          echo "should_build=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::$PLATFORM fingerprint unchanged vs base ($HEAD_FP) — skipping the native build (JS rides OTA)."
+        else
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::$PLATFORM fingerprint changed (base=$BASE_FP head=$HEAD_FP) — running the native build."
+        fi

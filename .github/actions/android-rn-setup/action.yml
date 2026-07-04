@@ -1,0 +1,71 @@
+name: Android RN setup
+description: >
+  Shared setup for the Android PR jobs — workspace deps, JDK 21, the Android SDK,
+  a read-only Gradle cache, and `expo prebuild`. Factored out so the parallel
+  robolectric-tests and build-apk jobs can't drift. See
+  docs/android-pr-build-speed-spec.md.
+
+# No inputs: the EXPO_PUBLIC_* values the .env step reads are workflow-level `env`
+# on the caller, which composite `run` steps inherit as process environment. No
+# secrets are involved.
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+
+    - name: Install Node.js dependencies (workspace root)
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Accept licenses and install SDK components
+      shell: bash
+      run: |
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+    - name: Restore Gradle cache (read-only, warmed by android-apk-rn.yml on main)
+      # restore, not cache: PR runs never save. Each save was a 3.4 GB entry that
+      # blew the 10 GB repo cache budget and evicted main's release/dev caches, so
+      # every new PR built cold. Reusing main's `gradle-rn-` cache (prefix also
+      # matches the dev-client `gradle-rn-dev-` cache — a harmless, additive
+      # dependency-cache hit) means a warm build without the eviction cascade.
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-rn-${{ hashFiles('packages/mobile/package.json', 'bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-rn-
+
+    - name: Write .env for Expo build-time inlining
+      shell: bash
+      working-directory: packages/mobile
+      run: |
+        cat > .env <<EOF
+        EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+        EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
+        EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
+        EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+        EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+        EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        EOF
+
+    - name: Expo prebuild (generate android/)
+      shell: bash
+      working-directory: packages/mobile
+      env:
+        # Skip the tailscale probe (already short-circuited on CI, set explicitly
+        # so a misconfigured runner never pays the 2s timeout). Step-level env
+        # travels with the step into the composite.
+        TAILSCALE_HOSTS: ''
+      run: bunx expo prebuild --platform android --clean --no-install
