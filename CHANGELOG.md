@@ -36,6 +36,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- The "Show climbs" button in the filter now stays put on smaller iPhones — no more scrolling into a button you can't reach. ([#3433](https://github.com/boardsesh/boardsesh/pull/3433))
+  Connecting a board? If yours isn't in the list, the picker now tells you why (asleep, connected to another phone, or too far) and flags when the boards nearby are a different type than the one you've got selected.
 - French version now speaks climber French: log an « Enchaîné », count your « croix » — no more « envoyer » a climb ([#3438](https://github.com/boardsesh/boardsesh/pull/3438))
 - On iPhone, opening one sheet right after another no longer stalls — the second one comes up as soon as the first finishes sliding away, instead of waiting out a fixed half-second. ([#3425](https://github.com/boardsesh/boardsesh/pull/3425))
 - Mini MoonBoard now lights the right holds when you drive the wall from the lock screen or Dynamic Island ([#3413](https://github.com/boardsesh/boardsesh/pull/3413))

@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-03T23:43:18.981Z",
+  "generatedAt": "2026-07-03T23:59:37.187Z",
   "entries": [
+    {
+      "prNumber": 3433,
+      "category": "fixed",
+      "title": "The \"Show climbs\" button in the filter now stays put on smaller iPhones — no more scrolling into a button you can't reach.",
+      "mergedAt": "2026-07-03T23:53:59Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3433",
+      "body": "Connecting a board? If yours isn't in the list, the picker now tells you why (asleep, connected to another phone, or too far) and flags when the boards nearby are a different type than the one you've got selected."
+    },
     {
       "prNumber": 3438,
       "category": "fixed",
