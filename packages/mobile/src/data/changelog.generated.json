@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-04T08:52:12.499Z",
+  "generatedAt": "2026-07-04T11:30:29.746Z",
   "entries": [
+    {
+      "prNumber": 3455,
+      "category": "fixed",
+      "title": "Turn off your MoonBoard's lights from the app — the Clear Lights button now works on MoonBoard walls.",
+      "mergedAt": "2026-07-04T11:29:33Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3455"
+    },
     {
       "prNumber": 3454,
       "category": "fixed",
@@ -893,6 +900,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T18:47:53+10:00",
+      "sha": "23bd627752b8f7c742c7af0501de974607f05775",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "0f0818e79d6ade0292b8645c0c50bace93012824",
+        "ios": "04b2c3d3bd1cdac89e98eb3c6b5c27cc56b67b3c"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-04T11:02:37+10:00",
