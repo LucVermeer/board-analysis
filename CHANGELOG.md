@@ -16,6 +16,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Gyms with a single board now say "1 board", not "1 boards" — fixed in English, Spanish, and French ([#3449](https://github.com/boardsesh/boardsesh/pull/3449))
+- The About, Acknowledgements, Licenses, and gym-edit screens no longer flash a black background when opened from the side menu in light mode ([#3426](https://github.com/boardsesh/boardsesh/pull/3426))
 - On iPad, the sidebar highlight no longer flickers off when you move the pointer away from a tab you're navigating with the keyboard. ([#3446](https://github.com/boardsesh/boardsesh/pull/3446))
 - French UI now calls your board « la board » everywhere — no more « panneau » or « planche » ([#3440](https://github.com/boardsesh/boardsesh/pull/3440))
 - The board picker no longer flashes "Don't see your board?" tips while it's still scanning — they wait until the scan comes up empty. ([#3444](https://github.com/boardsesh/boardsesh/pull/3444))

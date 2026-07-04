@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-04T01:10:24.025Z",
+  "generatedAt": "2026-07-04T07:22:43.665Z",
   "entries": [
+    {
+      "prNumber": 3449,
+      "category": "fixed",
+      "title": "Gyms with a single board now say \"1 board\", not \"1 boards\" — fixed in English, Spanish, and French",
+      "mergedAt": "2026-07-04T07:14:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3449"
+    },
+    {
+      "prNumber": 3426,
+      "category": "fixed",
+      "title": "The About, Acknowledgements, Licenses, and gym-edit screens no longer flash a black background when opened from the side menu in light mode",
+      "mergedAt": "2026-07-04T07:13:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3426"
+    },
     {
       "prNumber": 3320,
       "category": "new",
@@ -864,6 +878,28 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T11:02:37+10:00",
+      "sha": "bc07d678be6ea0f13a1e98c10d90b5210d4e70a1",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "4ff503d94a2bb81a6902937050d56afb981b8040"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T10:36:47+10:00",
+      "sha": "027932017bbe60c6829720ca9d3e11f3fd5177fa",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "df4cdab634a708d32a53eb58637ff9f07d411e13"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-04T09:55:35+10:00",
