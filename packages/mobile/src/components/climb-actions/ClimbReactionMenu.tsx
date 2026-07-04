@@ -181,11 +181,15 @@ export function ClimbReactionMenu({
   // bottom safe area now that the content is top-aligned rather than centered.
   const contentTopOffset = Math.round(windowHeight * 0.06);
 
-  // Cap the menu so preview + menu always fit; it scrolls internally if the action
-  // list is long on a short screen.
+  // Cap the menu/picker so it fills all the way down to the bottom safe area — no
+  // taller (it would clip past it), no shorter (wasting vertical space). Measure
+  // the preview's real height rather than reserving a fixed guess; fall back to an
+  // estimate until the first layout. The card scrolls internally past this cap.
+  const [previewHeight, setPreviewHeight] = useState(0);
+  const reservedForPreview = previewHeight > 0 ? previewHeight : artMaxSize + spacing[5] * 4;
   const menuMaxHeight = Math.max(
     180,
-    windowHeight - insets.top - insets.bottom - contentTopOffset - artMaxSize - 140 - spacing[5],
+    windowHeight - insets.top - insets.bottom - contentTopOffset - spacing[5] * 2 - reservedForPreview,
   );
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
@@ -247,8 +251,13 @@ export function ClimbReactionMenu({
           ]}
         >
           {/* The enlarged climb stays visible in both views — the playlist picker
-              replaces the action list below it, not the climb itself. */}
-          <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
+              replaces the action list below it, not the climb itself. onLayout
+              feeds the real preview height into the menu/picker cap. */}
+          <Animated.View
+            pointerEvents="box-none"
+            onLayout={(event) => setPreviewHeight(event.nativeEvent.layout.height)}
+            style={[styles.preview, previewStyle]}
+          >
             {boardRenderData && artStyle ? (
               <BoardImageNative
                 frames={climb.frames}
