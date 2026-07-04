@@ -260,6 +260,7 @@ export function useBoardBluetooth({
   // the AutoSender both re-invoke sendFramesToBoard for the same climb, and
   // one toast per climb is enough. Cleared on any successful send so a later
   // board switch back to a mismatched config re-surfaces the message.
+  // Also cleared on both disconnect paths (handleDisconnection, disconnect()) so a fresh connection re-arms it.
   const lastIncompatibleToastUuidRef = useRef<string | null>(null);
 
   // Device picker state for custom Capacitor scanning.
@@ -304,6 +305,8 @@ export function useBoardBluetooth({
     const connectedAt = connectedAtRef.current;
     connectedAtRef.current = null;
     configuredBoardKeyRef.current = null;
+    // A fresh connection re-arms the incompatible-climb toast, even for a climb already flagged before this drop.
+    lastIncompatibleToastUuidRef.current = null;
     if (connectedAt !== null) {
       const connectionDurationSec = Math.max(0, Math.round((Date.now() - connectedAt) / 1000));
       track('Bluetooth Disconnected', {
@@ -833,6 +836,8 @@ export function useBoardBluetooth({
     // later genuine drop can prompt again, and forget the board so a later tap
     // opens the picker rather than silently grabbing this board back.
     boardTakenPromptShownRef.current = false;
+    // Symmetric with the take-back guard above: re-arm the incompatible-climb toast for the next connection.
+    lastIncompatibleToastUuidRef.current = null;
     setLastConnectedBoard(null);
     setIsConnected(false);
     onConnectionChange?.(false);
