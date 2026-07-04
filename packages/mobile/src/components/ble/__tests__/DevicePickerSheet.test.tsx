@@ -143,6 +143,19 @@ describe('DevicePickerSheet', () => {
     expect(container.querySelector('[data-list]')).not.toBeNull();
   });
 
+  it('still shows tips mid-scan once devices are present but none match', () => {
+    // The type-mismatch path is intentionally independent of isScanning: once
+    // devices are showing, a "none of these are your board" hint is useful even
+    // while more may still arrive. Distinct from the zero-device path, which
+    // waits for the scan to finish (the bug fixed here).
+    stats.noneMatchedSelectedType = true;
+    const { container } = render(
+      <DevicePickerSheet {...makeProps({ isScanning: true, devices: [device('a')] })} />,
+    );
+    expect(hasText(container, 'ble.differentBoardType')).toBe(true);
+    expect(hasText(container, 'ble.troubleshootTitle')).toBe(true);
+  });
+
   it('hides the type hint and troubleshoot tips when a matching device is listed', () => {
     stats.noneMatchedSelectedType = false;
     const { container } = render(<DevicePickerSheet {...makeProps({ devices: [device('a'), device('b')] })} />);
