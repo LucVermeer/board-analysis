@@ -84,6 +84,38 @@ describe('reportHandledError', () => {
     });
   });
 
+  it('downgrades a RATE_LIMITED GraphQL rejection to a warning and tags it (expected backpressure — #3285)', () => {
+    const rateLimited = Object.assign(new Error('Rate limit exceeded. Try again in 7 seconds.'), {
+      response: {
+        status: 200,
+        errors: [
+          {
+            message: 'Rate limit exceeded. Try again in 7 seconds.',
+            extensions: { code: 'RATE_LIMITED', operation: 'searchBoards', retryAfterSeconds: 7 },
+          },
+        ],
+      },
+    });
+    reportHandledError(rateLimited, { tags: { source: 'react-query', kind: 'query' } });
+    expect(mockedCaptureToSentry).toHaveBeenCalledWith(rateLimited, {
+      level: 'warning',
+      tags: { source: 'react-query', kind: 'query', rate_limited: true },
+    });
+  });
+
+  it('catches a RATE_LIMITED error via direct extensions before the network check', () => {
+    // No `response` at all here, so if the rate-limit guard didn't run first this
+    // would otherwise fall into isNetworkError's "no numeric status" branch.
+    const rateLimited = Object.assign(new Error('Rate limit exceeded. Try again in 3 seconds.'), {
+      extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 3 },
+    });
+    reportHandledError(rateLimited, { tags: { source: 'react-query' } });
+    expect(mockedCaptureToSentry).toHaveBeenCalledWith(rateLimited, {
+      level: 'warning',
+      tags: { source: 'react-query', rate_limited: true },
+    });
+  });
+
   it('downgrades offline fetch failures to a warning and tags them network', () => {
     const offline = new TypeError('Network request failed');
     reportHandledError(offline, { tags: { source: 'react-query' } });

@@ -9,7 +9,7 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-import { reportMutationFailure, reportQueryFailure } from '../query-provider';
+import { createQueryClient, reportMutationFailure, reportQueryFailure } from '../query-provider';
 import { reportHandledError } from '../../lib/error-reporting';
 
 // The global caches are the whole point — a query/mutation failure anywhere in
@@ -54,5 +54,31 @@ describe('reportMutationFailure', () => {
       tags: { source: 'react-query', kind: 'mutation' },
       extra: { mutationKey: null },
     });
+  });
+});
+
+describe('createQueryClient default retry', () => {
+  // Retrying a RATE_LIMITED response only hammers the already-throttled
+  // endpoint harder (#3285), so it must never retry regardless of failureCount;
+  // everything else keeps the previous retry-up-to-2-times behavior.
+  it('never retries a RATE_LIMITED GraphQL rejection', () => {
+    const retry = createQueryClient().getDefaultOptions().queries?.retry;
+    if (typeof retry !== 'function') throw new Error('expected retry to be a function');
+    const rateLimited = Object.assign(new Error('Rate limit exceeded. Try again in 7 seconds.'), {
+      response: {
+        status: 200,
+        errors: [{ message: 'Rate limit exceeded.', extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 7 } }],
+      },
+    });
+    expect(retry(0, rateLimited)).toBe(false);
+  });
+
+  it('retries an ordinary error up to 2 times, matching the previous retry: 2 behavior', () => {
+    const retry = createQueryClient().getDefaultOptions().queries?.retry;
+    if (typeof retry !== 'function') throw new Error('expected retry to be a function');
+    const plainError = new Error('boom');
+    expect(retry(0, plainError)).toBe(true);
+    expect(retry(1, plainError)).toBe(true);
+    expect(retry(2, plainError)).toBe(false);
   });
 });
