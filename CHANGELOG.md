@@ -10,6 +10,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### Fixed
+
+- The board picker no longer flashes "Don't see your board?" tips while it's still scanning — they wait until the scan comes up empty. ([#3444](https://github.com/boardsesh/boardsesh/pull/3444))
+
 ## 2026-07-03
 
 ### New

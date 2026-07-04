@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-03T23:59:37.187Z",
+  "generatedAt": "2026-07-04T00:41:40.086Z",
   "entries": [
+    {
+      "prNumber": 3444,
+      "category": "fixed",
+      "title": "The board picker no longer flashes \"Don't see your board?\" tips while it's still scanning — they wait until the scan comes up empty.",
+      "mergedAt": "2026-07-04T00:41:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3444"
+    },
     {
       "prNumber": 3433,
       "category": "fixed",
@@ -836,6 +843,28 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T09:55:35+10:00",
+      "sha": "1247fec7ecfecc4ca3a3003614a913f1763e280a",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "46f4a5fead2ed704f26b47d0dc6a1f35de0b5f1f"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T09:51:21+10:00",
+      "sha": "b14e2ca4fc9cd41843a57ee9b3a653b455f70551",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "5b25426ffe841b4c1d85ed03c272d068fa91f8c8"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-04T08:03:22+10:00",
