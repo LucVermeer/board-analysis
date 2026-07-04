@@ -47,6 +47,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@boardsesh/graphql/operations/playlists', () => ({ GET_PLAYLISTS_FOR_CLIMB: 'GET_PLAYLISTS_FOR_CLIMB' }));
 vi.mock('@boardsesh/climb-actions', () => ({ playlistMembershipStore: membershipStore }));
+// The store-seed hook — the picker uses it as an instant fallback for checkmarks.
+vi.mock('../../../hooks/use-climb-playlist-memberships', () => ({
+  useClimbPlaylistMemberships: () => new Set<string>(),
+}));
 vi.mock('../../../lib/graphql/client', () => ({ getHttpClient: () => ({ request: vi.fn() }) }));
 
 vi.mock('../../../providers/playlists-provider', () => ({

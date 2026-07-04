@@ -11,6 +11,7 @@ import { playlistMembershipStore } from '@boardsesh/climb-actions';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ListRow } from '../ListRow';
+import { useClimbPlaylistMemberships } from '../../hooks/use-climb-playlist-memberships';
 import { getHttpClient } from '../../lib/graphql/client';
 import { usePlaylistsContext, type Playlist } from '../../providers/playlists-provider';
 import { useTheme } from '../../providers/theme-provider';
@@ -82,7 +83,7 @@ export function InlinePlaylistPicker({
     () => ['playlistsForClimb', boardName, layoutId, climb.uuid] as const,
     [boardName, layoutId, climb.uuid],
   );
-  const { data: memberUuids, isLoading: membershipLoading } = useQuery({
+  const { data: memberUuids } = useQuery({
     queryKey: membershipKey,
     queryFn: async (): Promise<string[]> => {
       const response = await getHttpClient().request<GetPlaylistsForClimbQueryResponse>(GET_PLAYLISTS_FOR_CLIMB, {
@@ -94,7 +95,11 @@ export function InlinePlaylistPicker({
     staleTime: 30 * 1000,
   });
 
-  const members = useMemo(() => new Set(memberUuids ?? []), [memberUuids]);
+  // Seed checkmarks from the shared membership store (the climb list populates it
+  // when playlist tags are on) so they show instantly; the per-climb query then
+  // confirms. The list itself never waits on this fetch — no membership spinner.
+  const seededMembers = useClimbPlaylistMemberships(climb.uuid);
+  const members = useMemo(() => new Set(memberUuids ?? seededMembers), [memberUuids, seededMembers]);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -110,12 +115,14 @@ export function InlinePlaylistPicker({
     [queryClient, membershipKey, climb.uuid],
   );
 
-  // Toggle one playlist's membership. Rows are gated behind the membership load
-  // below, so the initial fetch has resolved before any toggle. Reads and writes
-  // are surgical — computed against the *latest* cache each time — so overlapping
-  // toggles (or a failure while another is in flight) never clobber each other.
+  // Toggle one playlist's membership. Reads and writes are surgical — computed
+  // against the *latest* cache each time — so overlapping toggles (or a failure
+  // while another is in flight) never clobber each other. Rows are tappable before
+  // the membership fetch resolves, so cancel it first: a late response must not
+  // overwrite the optimistic checkmark.
   const handleToggle = useCallback(
     async (playlist: Playlist) => {
+      await queryClient.cancelQueries({ queryKey: membershipKey });
       const before = queryClient.getQueryData<string[]>(membershipKey) ?? [...members];
       const willBeMember = !before.includes(playlist.uuid);
       setError(null);
@@ -403,7 +410,9 @@ export function InlinePlaylistPicker({
               {t('actions.playlist.popover.signInBlurb')}
             </Text>
           </View>
-        ) : isLoading || membershipLoading ? (
+        ) : isLoading && sortedPlaylists.length === 0 ? (
+          // Spinner only before the user's playlists are cached at all; once
+          // they're available we render immediately and checkmarks fill in.
           <View style={styles.message}>
             <ActivityIndicator />
           </View>
