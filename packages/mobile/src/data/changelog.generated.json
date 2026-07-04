@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-04T23:07:23.344Z",
+  "generatedAt": "2026-07-04T23:18:01.897Z",
   "entries": [
+    {
+      "prNumber": 3457,
+      "category": "new",
+      "title": "Mount an iPad on the wall and the On the Wall tab now shows what's lit, big and readable from across the gym",
+      "mergedAt": "2026-07-04T23:16:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3457",
+      "body": "Step back and forward through the wall's history and tap Light this climb to put an accidental change right"
+    },
     {
       "prNumber": 3453,
       "category": "new",
