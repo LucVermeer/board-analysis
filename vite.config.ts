@@ -214,6 +214,21 @@ export default defineConfig({
         dependsOn: ['db:up'],
         cache: false,
       },
+      // Regenerates the committed MoonBoard cell->set map from the per-set board
+      // art. No DB needed (reads images, writes a TS file). Pass `-- --check` for
+      // a drift check that fails instead of writing.
+      'db:generate-moonboard-cell-sets': {
+        command:
+          'bun run --filter=@boardsesh/db db:generate-moonboard-cell-sets && vp fmt packages/shared/board-config/src/generated/moonboard-cell-sets.ts',
+        cache: false,
+      },
+      // Recomputes required_set_ids for every MoonBoard climb from its frames +
+      // the cell->set map. No db:up dependency: run by hand against DB_URL (prod)
+      // or after db:up locally, same pattern as db:dedupe-gyms.
+      'db:backfill-moonboard-set-ids': {
+        command: 'bun run --filter=@boardsesh/db db:backfill-moonboard-set-ids',
+        cache: false,
+      },
 
       // --- Codegen (GraphQL types for client + backend resolvers) ---
       // Direct binary invocation — no `bunx` (won't touch the lockfile).

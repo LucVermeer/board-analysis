@@ -6,6 +6,7 @@ import {
   type ParsedBoardRouteParameters,
   type ClimbSearchParams,
 } from '../db/queries/climbs/index';
+import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 import { db } from '../db/client';
 import { sql } from 'drizzle-orm';
 
@@ -299,6 +300,19 @@ describe('Climb Query Functions', () => {
         ON CONFLICT DO NOTHING
       `);
 
+      // MoonBoard climbs (layout 3 = MoonBoard 2024). MoonBoard derives
+      // required_set_ids from the grid cell -> set map, not board_placements, so
+      // we seed the column directly. Set 5 = Hold Set D (base), set 8 = Wooden
+      // Holds. The size filter is skipped for MoonBoard, so edges/sizes are nominal.
+      await db.execute(sql`
+        INSERT INTO board_climbs (uuid, board_type, layout_id, setter_username, name, frames, frames_count, is_draft, is_listed, edge_left, edge_right, edge_bottom, edge_top, created_at, required_set_ids, compatible_size_ids)
+        VALUES
+          (${SET_IDS_TEST_PREFIX + 'mb-base'}, 'moonboard', 3, 'test-setter', 'MB Base Only', 'p1r42p9r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', ARRAY[5], ARRAY[1]),
+          (${SET_IDS_TEST_PREFIX + 'mb-wooden'}, 'moonboard', 3, 'test-setter', 'MB Needs Wooden', 'p1r42p2r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', ARRAY[5, 8], ARRAY[1]),
+          (${SET_IDS_TEST_PREFIX + 'mb-null'}, 'moonboard', 3, 'test-setter', 'MB Not Backfilled', 'p1r42p9r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL, ARRAY[1])
+        ON CONFLICT DO NOTHING
+      `);
+
       // Insert climb holds matching the frames
       await db.execute(sql`
         INSERT INTO board_climb_holds (board_type, climb_uuid, hold_id, frame_number, hold_state)
@@ -365,19 +379,40 @@ describe('Climb Query Functions', () => {
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mixed');
     });
 
-    it('should skip set_ids filter for moonboard', async () => {
+    it('excludes moonboard climbs that need a hold set the user has not selected', async () => {
       const params: ParsedBoardRouteParameters = {
         board_name: 'moonboard',
-        layout_id: 1,
+        layout_id: 3,
         size_id: 1,
-        set_ids: [1],
+        set_ids: [5, 6, 7], // base hold sets only — no wooden holds (8/9/10)
         angle: 40,
       };
 
-      // Should not throw (the filter is skipped for moonboard)
-      const result = await searchClimbs(params, { page: 0, pageSize: 10 });
-      expect(result).toBeDefined();
-      expect(result.climbs).toBeInstanceOf(Array);
+      const result = await searchClimbs(params, { page: 0, pageSize: 100 });
+      const uuids = result.climbs.map((c) => c.uuid);
+
+      // Base-only climb shows; the wooden-holds climb is filtered out.
+      expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mb-base');
+      expect(uuids).not.toContain(SET_IDS_TEST_PREFIX + 'mb-wooden');
+      // A climb without a backfilled required_set_ids still shows (NULL-tolerant).
+      expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mb-null');
+    });
+
+    it('includes moonboard wooden-holds climbs once the wooden sets are selected', async () => {
+      const params: ParsedBoardRouteParameters = {
+        board_name: 'moonboard',
+        layout_id: 3,
+        size_id: 1,
+        set_ids: [5, 6, 7, 8, 9, 10], // base + wooden holds
+        angle: 40,
+      };
+
+      const result = await searchClimbs(params, { page: 0, pageSize: 100 });
+      const uuids = result.climbs.map((c) => c.uuid);
+
+      expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mb-base');
+      expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mb-wooden');
+      expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mb-null');
     });
 
     it('should skip set_ids filter when set_ids is empty', async () => {
@@ -402,6 +437,51 @@ describe('Climb Query Functions', () => {
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mainline');
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'fullride');
       expect(uuids).toContain(SET_IDS_TEST_PREFIX + 'mixed');
+    });
+  });
+
+  describe('moonboard required_set_ids population', () => {
+    // Directly exercises populateMoonBoardRequiredSetIds (the regexp_matches +
+    // cell->set CTE that the prod backfill also runs), so a regex or SQL typo is
+    // caught here rather than only at backfill time.
+    const POP_PREFIX = 'mb-populate-test-';
+
+    beforeAll(async () => {
+      // layout 3 (MoonBoard 2024): cell 1->set 5 (base), cell 2->set 8 (wooden),
+      // cell 9->set 5 (base), cell 999 uncovered. required_set_ids starts NULL.
+      await db.execute(sql`
+        INSERT INTO board_climbs (uuid, board_type, layout_id, setter_username, name, frames, frames_count, is_draft, is_listed, edge_left, edge_right, edge_bottom, edge_top, created_at, required_set_ids)
+        VALUES
+          (${POP_PREFIX + 'base'}, 'moonboard', 3, 's', 'Base', 'p1r42p9r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL),
+          (${POP_PREFIX + 'wooden'}, 'moonboard', 3, 's', 'Wooden', 'p1r42p2r43', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL),
+          (${POP_PREFIX + 'uncovered'}, 'moonboard', 3, 's', 'Uncovered', 'p999r42', 1, false, true, 0, 11, 0, 18, '2024-01-01', NULL)
+        ON CONFLICT DO NOTHING
+      `);
+    });
+
+    afterAll(async () => {
+      await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${POP_PREFIX + '%'}`);
+    });
+
+    async function requiredSetIds(uuid: string): Promise<number[] | null> {
+      const rows = (await db.execute(
+        sql`SELECT required_set_ids FROM board_climbs WHERE uuid = ${uuid}`,
+      )) as unknown as { required_set_ids: number[] | null }[];
+      return rows[0].required_set_ids;
+    }
+
+    it('derives required_set_ids from the climb frames and cell->set map', async () => {
+      await populateDenormalizedColumns(db, 'moonboard', [
+        POP_PREFIX + 'base',
+        POP_PREFIX + 'wooden',
+        POP_PREFIX + 'uncovered',
+      ]);
+
+      expect(await requiredSetIds(POP_PREFIX + 'base')).toEqual([5]);
+      // Uses a wooden-holds cell, so the wooden set (8) is required.
+      expect(await requiredSetIds(POP_PREFIX + 'wooden')).toEqual([5, 8]);
+      // All holds on uncovered cells -> empty array (always shown), not NULL.
+      expect(await requiredSetIds(POP_PREFIX + 'uncovered')).toEqual([]);
     });
   });
 

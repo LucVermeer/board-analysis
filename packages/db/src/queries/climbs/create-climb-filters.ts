@@ -431,17 +431,18 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
   }
 
   // Set membership filter: exclude climbs that use holds from sets the user doesn't own.
-  // Uses denormalized required_set_ids array (pre-computed from climb_holds -> placements).
-  // The <@ operator checks that all required sets are in the user's selected sets.
-  // MoonBoard has no set data, so skip.
+  // The <@ operator checks that every set a climb requires is in the user's selected sets.
   //
-  // For draft queries, allow NULL required_set_ids — denormalized columns are populated
-  // asynchronously and may be NULL for freshly saved drafts, so we must not exclude them.
+  // required_set_ids is denormalized: Aurora derives it from placements, MoonBoard from
+  // the grid cell -> set map (see populateMoonBoardRequiredSetIds). It can be NULL for
+  // freshly saved drafts (populated asynchronously) and for MoonBoard climbs not yet
+  // backfilled, so allow NULL in those cases — better to show a climb than hide it.
+  const allowNullRequiredSets = isOnlyDrafts || params.board_name === 'moonboard';
   const setIdsConditions: SQL[] =
-    params.board_name === 'moonboard' || params.set_ids.length === 0
+    params.set_ids.length === 0
       ? []
       : [
-          isOnlyDrafts
+          allowNullRequiredSets
             ? sql`(${boardClimbs.requiredSetIds} IS NULL OR ${boardClimbs.requiredSetIds} <@ ARRAY[${sql.join(
                 params.set_ids.map((id) => sql`${id}`),
                 sql`, `,

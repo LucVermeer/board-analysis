@@ -62,6 +62,8 @@
     "db:import-moonboard-2024": "tsx scripts/import-moonboard-2024.ts",
     "db:import-moonboard-catalog": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/import-moonboard-catalog.ts",
     "db:import-aurora-unified": "tsx scripts/import-aurora-board-unified.ts",
+    "db:generate-moonboard-cell-sets": "tsx scripts/generate-moonboard-cell-sets.ts",
+    "db:backfill-moonboard-set-ids": "tsx scripts/backfill-moonboard-set-ids.ts",
     "db:dedupe-gyms": "tsx scripts/dedupe-gym-locations.ts",
     "db:dedupe-beta-links": "tsx scripts/dedupe-beta-links.ts",
     "db:seed-social": "tsx scripts/seed-social.ts",
@@ -69,6 +71,7 @@
     "db:seed-beta-links": "tsx scripts/seed-dev-beta-links.ts"
   },
   "dependencies": {
+    "@boardsesh/board-config": "*",
     "@boardsesh/board-constants": "*",
     "@boardsesh/shared-schema": "*",
     "drizzle-orm": "^0.45.1",
@@ -79,6 +82,7 @@
     "@types/node": "^25",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.10",
+    "sharp": "^0.34.5",
     "tsx": "^4.21.0",
     "typescript": "~6.0.3"
   },
