@@ -10,6 +10,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### New
+
+- MoonBoard search now hides climbs set on holds you don't have — deselect the wooden holds (or any set) you don't own and those climbs drop out of your results. ([#3320](https://github.com/boardsesh/boardsesh/pull/3320))
+
 ### Fixed
 
 - On iPad, the sidebar highlight no longer flickers off when you move the pointer away from a tab you're navigating with the keyboard. ([#3446](https://github.com/boardsesh/boardsesh/pull/3446))

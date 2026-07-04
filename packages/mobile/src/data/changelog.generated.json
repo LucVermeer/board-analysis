@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-04T01:00:04.364Z",
+  "generatedAt": "2026-07-04T01:10:24.025Z",
   "entries": [
+    {
+      "prNumber": 3320,
+      "category": "new",
+      "title": "MoonBoard search now hides climbs set on holds you don't have — deselect the wooden holds (or any set) you don't own and those climbs drop out of your results.",
+      "mergedAt": "2026-07-04T01:02:37Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3320"
+    },
     {
       "prNumber": 3446,
       "category": "fixed",
