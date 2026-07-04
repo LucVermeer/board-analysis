@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-04T11:30:29.746Z",
+  "generatedAt": "2026-07-04T23:07:23.344Z",
   "entries": [
+    {
+      "prNumber": 3453,
+      "category": "new",
+      "title": "See what's lit on the wall from your iPad — a new On the Wall tab with the current climb, who's crushing it, the session's hardest send, and recent history, in portrait or landscape",
+      "mergedAt": "2026-07-04T23:05:52Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3453",
+      "body": "Smaller iPads now open the board history as a sheet, so the browse list keeps the full screen"
+    },
     {
       "prNumber": 3455,
       "category": "fixed",
@@ -900,6 +908,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-04T21:29:33+10:00",
+      "sha": "bbd9bbf7b09f5264f45a6bc8bd6740169318776c",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "8494f04d6121c448110dbad340d9721791395939"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-04T18:47:53+10:00",

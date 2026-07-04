@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- See what's lit on the wall from your iPad — a new On the Wall tab with the current climb, who's crushing it, the session's hardest send, and recent history, in portrait or landscape ([#3453](https://github.com/boardsesh/boardsesh/pull/3453))
+  Smaller iPads now open the board history as a sheet, so the browse list keeps the full screen
 - MoonBoard search now hides climbs set on holds you don't have — deselect the wooden holds (or any set) you don't own and those climbs drop out of your results. ([#3320](https://github.com/boardsesh/boardsesh/pull/3320))
 
 ### Fixed
