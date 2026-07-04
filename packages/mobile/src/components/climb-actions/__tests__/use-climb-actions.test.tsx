@@ -143,6 +143,19 @@ describe('useClimbActions colours and dispatch', () => {
     expect(openers.openAddToPlaylist).toHaveBeenCalledWith(climb, kilterBoard);
   });
 
+  it('playlist.run calls onSelectPlaylist (inline) instead of opening the sheet when provided', () => {
+    const onSelectPlaylist = vi.fn();
+    const onAfterAction = vi.fn();
+    const { result } = renderHook(() =>
+      useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false, onSelectPlaylist, onAfterAction }),
+    );
+    result.current.find((action) => action.id === 'playlist')?.run();
+    expect(onSelectPlaylist).toHaveBeenCalledTimes(1);
+    // Inline host keeps the overlay up — no sheet, no dismiss.
+    expect(openers.openAddToPlaylist).not.toHaveBeenCalled();
+    expect(onAfterAction).not.toHaveBeenCalled();
+  });
+
   it('share.run opens the native share sheet', () => {
     const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
     result.current.find((action) => action.id === 'share')?.run();

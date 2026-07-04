@@ -1,15 +1,23 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
   useWindowDimensions,
   type ViewStyle,
 } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedKeyboard,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from '@react-native-community/blur';
 import { FullWindowOverlay } from 'react-native-screens';
@@ -22,6 +30,7 @@ import { ListRow } from '../ListRow';
 import { GlassSurface } from '../GlassSurface';
 import { BoardImageNative } from '../BoardImageNative';
 import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
+import { InlinePlaylistPicker } from '../playlist/InlinePlaylistPicker';
 import { getBoardRenderData } from '../../lib/board-details';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { useGradeFormat } from '../../hooks/use-grade-format';
@@ -88,6 +97,9 @@ export function ClimbReactionMenu({
   const { formatGrade } = useGradeFormat();
 
   const progress = useSharedValue(0);
+  // 'menu' shows the action list; 'playlist' swaps the card to the inline
+  // playlist picker (no second sheet — that's the #3294 fix).
+  const [view, setView] = useState<'menu' | 'playlist'>('menu');
 
   const finishClose = useCallback(() => onClose(), [onClose]);
 
@@ -105,6 +117,18 @@ export function ClimbReactionMenu({
     });
   }, [progress, reduceMotion, finishClose]);
 
+  const backToMenu = useCallback(() => setView('menu'), []);
+
+  // Hardware back (Android) / VoiceOver escape: pop the playlist view first,
+  // dismiss the whole overlay only from the top-level menu.
+  const handleRequestClose = useCallback(() => {
+    if (view === 'playlist') {
+      backToMenu();
+      return;
+    }
+    dismiss();
+  }, [view, backToMenu, dismiss]);
+
   const actions = useClimbActions({
     climb,
     boardConfig,
@@ -112,6 +136,7 @@ export function ClimbReactionMenu({
     isAuthenticated,
     onEditEntry,
     onAfterAction: dismiss,
+    onSelectPlaylist: () => setView('playlist'),
   });
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
@@ -165,12 +190,22 @@ export function ClimbReactionMenu({
     transform: [{ translateY: (1 - progress.value) * 18 }, { scale: 0.96 + progress.value * 0.04 }],
   }));
 
+  // The inline create form's TextInput lives in this FullWindowOverlay. Re-centre
+  // the floating content in the space left above the keyboard (shifting centered
+  // content up by half the keyboard height keeps it centred in the visible band).
+  const keyboard = useAnimatedKeyboard();
+  const contentKeyboardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -keyboard.height.value / 2 }],
+  }));
+
   const scrimColor = colorScheme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.35)';
 
   return (
-    <OverlayPortal onRequestClose={dismiss}>
+    <OverlayPortal onRequestClose={handleRequestClose}>
       <View style={StyleSheet.absoluteFill}>
-        {/* Blurred / dimmed backdrop, tap to dismiss. */}
+        {/* Blurred / dimmed backdrop. Tapping it pops the playlist view back to
+            the menu first (matching the back button), and dismisses from the menu
+            — so a stray tap can't tear down a half-typed create form. */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
           {Platform.OS === 'ios' ? (
             <BlurView
@@ -183,7 +218,7 @@ export function ClimbReactionMenu({
           <View style={[StyleSheet.absoluteFill, { backgroundColor: scrimColor }]} />
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={dismiss}
+            onPress={handleRequestClose}
             accessibilityRole="button"
             accessibilityLabel={climb.name}
           />
@@ -191,52 +226,58 @@ export function ClimbReactionMenu({
 
         {/* Floating content: enlarged climb + action menu. box-none so empty space
             falls through to the backdrop Pressable. */}
-        <View
+        <Animated.View
           pointerEvents="box-none"
           // Contain VoiceOver focus to the floating content (don't let it wander into
-          // the screen behind), and let the VO escape gesture dismiss the overlay.
+          // the screen behind), and let the VO escape gesture pop the view / dismiss.
           accessibilityViewIsModal={Platform.OS === 'ios'}
-          onAccessibilityEscape={dismiss}
-          style={[styles.content, { paddingTop: insets.top + spacing[5], paddingBottom: insets.bottom + spacing[5] }]}
+          onAccessibilityEscape={handleRequestClose}
+          style={[
+            styles.content,
+            { paddingTop: insets.top + spacing[5], paddingBottom: insets.bottom + spacing[5] },
+            contentKeyboardStyle,
+          ]}
         >
-          <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
-            {boardRenderData && artStyle ? (
-              <BoardImageNative
-                frames={climb.frames}
-                boardName={boardConfig.boardName as BoardName}
-                layoutId={boardConfig.layoutId}
-                sizeId={boardConfig.sizeId}
-                setIds={boardConfig.setIds}
-                boardWidth={boardRenderData.boardWidth}
-                boardHeight={boardRenderData.boardHeight}
-                mirrored={climb.mirrored === true}
-                filledStyle
-                renderWidth={400}
-                style={artStyle}
-              />
-            ) : null}
-            <View style={styles.previewText}>
-              <View style={styles.nameRow}>
-                <Text variant="headline" numberOfLines={1} style={styles.name}>
-                  {climb.name}
-                </Text>
-                <ClimbAttributeIcons
-                  benchmarkDifficulty={climb.benchmark_difficulty}
-                  characteristics={climb.characteristics}
+          {view === 'menu' ? (
+            <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
+              {boardRenderData && artStyle ? (
+                <BoardImageNative
+                  frames={climb.frames}
+                  boardName={boardConfig.boardName as BoardName}
+                  layoutId={boardConfig.layoutId}
+                  sizeId={boardConfig.sizeId}
+                  setIds={boardConfig.setIds}
+                  boardWidth={boardRenderData.boardWidth}
+                  boardHeight={boardRenderData.boardHeight}
+                  mirrored={climb.mirrored === true}
+                  filledStyle
+                  renderWidth={400}
+                  style={artStyle}
                 />
-                {formattedGrade || climb.difficulty ? (
-                  <Text variant="headline" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
-                    {formattedGrade ?? climb.difficulty}
+              ) : null}
+              <View style={styles.previewText}>
+                <View style={styles.nameRow}>
+                  <Text variant="headline" numberOfLines={1} style={styles.name}>
+                    {climb.name}
+                  </Text>
+                  <ClimbAttributeIcons
+                    benchmarkDifficulty={climb.benchmark_difficulty}
+                    characteristics={climb.characteristics}
+                  />
+                  {formattedGrade || climb.difficulty ? (
+                    <Text variant="headline" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
+                      {formattedGrade ?? climb.difficulty}
+                    </Text>
+                  ) : null}
+                </View>
+                {byline ? (
+                  <Text variant="footnote" numberOfLines={1} style={styles.byline}>
+                    {byline}
                   </Text>
                 ) : null}
               </View>
-              {byline ? (
-                <Text variant="footnote" numberOfLines={1} style={styles.byline}>
-                  {byline}
-                </Text>
-              ) : null}
-            </View>
-          </Animated.View>
+            </Animated.View>
+          ) : null}
 
           <Animated.View style={[styles.menuWrap, menuStyle]}>
             <GlassSurface role="base" level="level2" borderRadius={borderRadius.xl} style={styles.menuCard}>
@@ -244,22 +285,34 @@ export function ClimbReactionMenu({
                 style={{ maxHeight: menuMaxHeight }}
                 bounces={false}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
                 contentContainerStyle={styles.menuContent}
               >
-                {actions.map((action, index) => (
-                  <ListRow
-                    key={action.id}
-                    title={action.title}
-                    leading={<Icon name={action.icon} size={22} color={action.color} />}
-                    onPress={action.run}
-                    showSeparator={index < actions.length - 1}
-                    separatorInset={56}
+                {view === 'playlist' ? (
+                  <InlinePlaylistPicker
+                    climb={climb}
+                    angle={boardConfig.angle}
+                    boardName={boardConfig.boardName as BoardName}
+                    layoutId={boardConfig.layoutId}
+                    TextInputComponent={TextInput}
+                    onBack={backToMenu}
                   />
-                ))}
+                ) : (
+                  actions.map((action, index) => (
+                    <ListRow
+                      key={action.id}
+                      title={action.title}
+                      leading={<Icon name={action.icon} size={22} color={action.color} />}
+                      onPress={action.run}
+                      showSeparator={index < actions.length - 1}
+                      separatorInset={56}
+                    />
+                  ))
+                )}
               </ScrollView>
             </GlassSurface>
           </Animated.View>
-        </View>
+        </Animated.View>
       </View>
     </OverlayPortal>
   );
