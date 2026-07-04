@@ -5,7 +5,7 @@ description: >
   the base — the PR-side mirror of how main skips the native build for JS-only
   merges. Runs on ubuntu for both platforms (the fingerprint resolve is
   file-hash based; it needs neither Xcode nor the Android SDK). See
-  docs/android-pr-build-speed-spec.md.
+  docs/android-pr-build-speed-spec.md (added in #3445).
 
 # Why a fingerprint diff and not main's fingerprint-tag lookup: main resolves the
 # fingerprint WITH Production-environment secrets (GOOGLE_MAPS_API_KEY perturbs
@@ -87,15 +87,16 @@ runs:
         # Resolve the Expo fingerprint at head and base and skip when identical.
         # Fail open: any resolve/checkout trouble builds.
         resolve_fp() {
-          ( cd packages/mobile \
+          # $1 = repo root to resolve the fingerprint in.
+          ( cd "$1/packages/mobile" \
             && TAILSCALE_HOSTS='' bunx expo-updates runtimeversion:resolve --platform "$PLATFORM" 2>/dev/null ) \
             | jq -r '.runtimeVersion // empty' 2>/dev/null || true
         }
 
-        bun install --frozen-lockfile
-        # The .env is hashed into the fingerprint, so both resolves must see the
-        # same one. It's untracked, so it survives the base checkout below.
-        cat > packages/mobile/.env <<EOF
+        write_env() {
+          # $1 = repo root. The .env is hashed into the fingerprint, so head and
+          # base must resolve against a byte-identical one.
+          cat > "$1/packages/mobile/.env" <<EOF
         EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
         EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
         EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
@@ -103,23 +104,30 @@ runs:
         EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
         EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
         EOF
+        }
 
-        HEAD_FP="$(resolve_fp)"
+        bun install --frozen-lockfile
+        write_env .
+        HEAD_FP="$(resolve_fp .)"
 
-        # Resolve the base fingerprint in-place. Checking out base rewrites the
-        # working tree to main, which doesn't have this action's files yet — safe
-        # because `decide` is the composite's LAST step (nothing re-reads
-        # action.yml after this) and $GITHUB_OUTPUT lives in RUNNER_TEMP, outside
-        # the workspace, so the write below still lands. The untracked .env
-        # survives the checkout, so both resolves hash the same one.
+        # Resolve the base fingerprint in an ISOLATED worktree so the primary
+        # checkout is never mutated: head files (incl. this action) stay in place,
+        # so there's no ordering footgun for any future step, and the base's node
+        # tree can't collide with head's. bun's global cache (~/.bun) is shared,
+        # so the base install reuses already-downloaded packages.
+        BASE_DIR="${RUNNER_TEMP:-/tmp}/mobile-native-gate-base-$RANDOM"
+        rm -rf "$BASE_DIR"
         if ! git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null \
-          || ! git checkout --quiet --force "$BASE_SHA" 2>/dev/null; then
+          || ! git worktree add --detach --force "$BASE_DIR" "$BASE_SHA" 2>/dev/null; then
+          rm -rf "$BASE_DIR"
           echo "should_build=true" >> "$GITHUB_OUTPUT"
-          echo "::warning::Could not check out base $BASE_SHA to diff the fingerprint — building to be safe."
+          echo "::warning::Could not materialise base $BASE_SHA to diff the fingerprint — building to be safe."
           exit 0
         fi
-        bun install --frozen-lockfile
-        BASE_FP="$(resolve_fp)"
+        write_env "$BASE_DIR"
+        ( cd "$BASE_DIR" && bun install --frozen-lockfile )
+        BASE_FP="$(resolve_fp "$BASE_DIR")"
+        git worktree remove --force "$BASE_DIR" 2>/dev/null || rm -rf "$BASE_DIR"
 
         echo "platform=$PLATFORM head=$HEAD_FP base=$BASE_FP"
         if [ -n "$HEAD_FP" ] && [ -n "$BASE_FP" ] && [ "$HEAD_FP" = "$BASE_FP" ]; then
