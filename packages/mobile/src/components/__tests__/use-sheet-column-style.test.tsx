@@ -2,8 +2,8 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
-// Mutable so a test can flip the platform; reset to ios in beforeEach.
-const platformMock = vi.hoisted(() => ({ OS: 'ios' as 'ios' | 'android' }));
+// Mutable so a test can flip the platform / iOS version; reset in beforeEach.
+const platformMock = vi.hoisted(() => ({ OS: 'ios' as 'ios' | 'android', Version: '26.1' as string }));
 
 vi.mock('react-native', () => ({
   Platform: platformMock,
@@ -17,12 +17,14 @@ vi.mock('react-native-safe-area-context', () => ({
 
 import { useSheetColumnStyle } from '../use-sheet-column-style';
 
-// window 844 − top inset 44 − 24pt card gap = 776 usable base for a % detent;
-// then × fraction, minus the 20pt chrome margin. A px detent skips the gap.
+// window 844 − top inset 44 − 24pt card gap = 776 usable base for a % detent
+// on iOS 26+; then × fraction, minus the 20pt chrome margin. A px detent skips
+// the gap. Pre-26 iOS drops the card gap (776 → 800 usable).
 const FILL = { flex: 1 };
 
 beforeEach(() => {
   platformMock.OS = 'ios';
+  platformMock.Version = '26.1';
 });
 
 describe('useSheetColumnStyle', () => {
@@ -30,6 +32,13 @@ describe('useSheetColumnStyle', () => {
     const { result } = renderHook(() => useSheetColumnStyle(['90%']));
     // round(776 × 0.9) − 20 = 678
     expect(result.current).toEqual({ height: 678 });
+  });
+
+  it('drops the card gap on pre-26 iOS (no Liquid-Glass chrome to correct for)', () => {
+    platformMock.Version = '18.4';
+    const { result } = renderHook(() => useSheetColumnStyle(['90%']));
+    // No 24pt gap: round((844 − 44) × 0.9) − 20 = round(720) − 20 = 700
+    expect(result.current).toEqual({ height: 700 });
   });
 
   it('bounds an iOS px detent to the literal height − chrome', () => {
