@@ -10,6 +10,7 @@ import {
   onlineManager,
 } from '@tanstack/react-query';
 import { reportHandledError } from '../lib/error-reporting';
+import { isGraphqlRateLimitedError } from '../lib/graphql/extract-error-message';
 
 // React Query keys `refetchOnReconnect` / `refetchOnWindowFocus` off a browser's
 // `navigator.onLine` and window-focus events, neither of which exists on React
@@ -98,7 +99,13 @@ export function createQueryClient(): QueryClient {
         networkMode: 'offlineFirst',
         staleTime: 5 * 60 * 1000,
         gcTime: 30 * 60 * 1000,
-        retry: 2,
+        // Never retry a RATE_LIMITED rejection — retrying only hammers the
+        // already-throttled endpoint harder (#3285). Everything else keeps
+        // the previous retry-up-to-2-times behavior.
+        retry: (failureCount, error) => {
+          if (isGraphqlRateLimitedError(error)) return false;
+          return failureCount < 2;
+        },
       },
       mutations: {
         networkMode: 'offlineFirst',

@@ -1,6 +1,10 @@
 import { isBleWriteTimeoutError } from '@boardsesh/ble-protocol/connection-error';
 import { captureToSentry, type ErrorReportContext } from './sentry';
-import { isExpectedAuthError, isExpectedBetaValidationError } from './graphql/extract-error-message';
+import {
+  isExpectedAuthError,
+  isExpectedBetaValidationError,
+  isGraphqlRateLimitedError,
+} from './graphql/extract-error-message';
 
 // Re-exported so the public reporting surface (`{ ErrorReportContext }` from
 // './error-reporting') is unchanged; the type itself lives in './sentry' to keep
@@ -54,6 +58,9 @@ function isNetworkError(error: unknown): boolean {
  *   - cancellations are dropped entirely,
  *   - expected auth-required GraphQL failures are dropped entirely,
  *   - expected beta-attach validation rejections are dropped entirely,
+ *   - GraphQL rate-limit rejections (RATE_LIMITED) are downgraded to `warning`
+ *     and tagged `rate_limited` — expected backpressure from typing/panning
+ *     discovery searches too fast, not a bug (#3285),
  *   - offline/network failures are downgraded to `warning` and tagged `network`,
  *   - BLE write-resume timeouts are downgraded to `warning` and tagged
  *     `ble_write_timeout` (the native layer auto-recovers them by cycling the
@@ -66,6 +73,14 @@ export function reportHandledError(error: unknown, context?: ErrorReportContext)
   if (isCancellation(error)) return;
   if (isExpectedAuthError(error)) return;
   if (isExpectedBetaValidationError(error)) return;
+  if (isGraphqlRateLimitedError(error)) {
+    reportError(error, {
+      ...context,
+      level: 'warning',
+      tags: { ...context?.tags, rate_limited: true },
+    });
+    return;
+  }
   if (isNetworkError(error)) {
     reportError(error, {
       ...context,
