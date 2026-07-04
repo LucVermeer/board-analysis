@@ -238,46 +238,46 @@ export function ClimbReactionMenu({
             contentKeyboardStyle,
           ]}
         >
-          {view === 'menu' ? (
-            <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
-              {boardRenderData && artStyle ? (
-                <BoardImageNative
-                  frames={climb.frames}
-                  boardName={boardConfig.boardName as BoardName}
-                  layoutId={boardConfig.layoutId}
-                  sizeId={boardConfig.sizeId}
-                  setIds={boardConfig.setIds}
-                  boardWidth={boardRenderData.boardWidth}
-                  boardHeight={boardRenderData.boardHeight}
-                  mirrored={climb.mirrored === true}
-                  filledStyle
-                  renderWidth={400}
-                  style={artStyle}
+          {/* The enlarged climb stays visible in both views — the playlist picker
+              replaces the action list below it, not the climb itself. */}
+          <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
+            {boardRenderData && artStyle ? (
+              <BoardImageNative
+                frames={climb.frames}
+                boardName={boardConfig.boardName as BoardName}
+                layoutId={boardConfig.layoutId}
+                sizeId={boardConfig.sizeId}
+                setIds={boardConfig.setIds}
+                boardWidth={boardRenderData.boardWidth}
+                boardHeight={boardRenderData.boardHeight}
+                mirrored={climb.mirrored === true}
+                filledStyle
+                renderWidth={400}
+                style={artStyle}
+              />
+            ) : null}
+            <View style={styles.previewText}>
+              <View style={styles.nameRow}>
+                <Text variant="headline" numberOfLines={1} style={styles.name}>
+                  {climb.name}
+                </Text>
+                <ClimbAttributeIcons
+                  benchmarkDifficulty={climb.benchmark_difficulty}
+                  characteristics={climb.characteristics}
                 />
-              ) : null}
-              <View style={styles.previewText}>
-                <View style={styles.nameRow}>
-                  <Text variant="headline" numberOfLines={1} style={styles.name}>
-                    {climb.name}
-                  </Text>
-                  <ClimbAttributeIcons
-                    benchmarkDifficulty={climb.benchmark_difficulty}
-                    characteristics={climb.characteristics}
-                  />
-                  {formattedGrade || climb.difficulty ? (
-                    <Text variant="headline" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
-                      {formattedGrade ?? climb.difficulty}
-                    </Text>
-                  ) : null}
-                </View>
-                {byline ? (
-                  <Text variant="footnote" numberOfLines={1} style={styles.byline}>
-                    {byline}
+                {formattedGrade || climb.difficulty ? (
+                  <Text variant="headline" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
+                    {formattedGrade ?? climb.difficulty}
                   </Text>
                 ) : null}
               </View>
-            </Animated.View>
-          ) : null}
+              {byline ? (
+                <Text variant="footnote" numberOfLines={1} style={styles.byline}>
+                  {byline}
+                </Text>
+              ) : null}
+            </View>
+          </Animated.View>
 
           <Animated.View style={[styles.menuWrap, menuStyle]}>
             <GlassSurface role="base" level="level2" borderRadius={borderRadius.xl} style={styles.menuCard}>
