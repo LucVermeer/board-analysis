@@ -115,11 +115,13 @@ runs:
         # so there's no ordering footgun for any future step, and the base's node
         # tree can't collide with head's. bun's global cache (~/.bun) is shared,
         # so the base install reuses already-downloaded packages.
-        BASE_DIR="${RUNNER_TEMP:-/tmp}/mobile-native-gate-base-$RANDOM"
-        rm -rf "$BASE_DIR"
+        # mktemp -d is collision-proof; the `wt` subdir doesn't exist yet, which
+        # is what `git worktree add` wants.
+        BASE_PARENT="$(mktemp -d)"
+        BASE_DIR="$BASE_PARENT/wt"
         if ! git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null \
           || ! git worktree add --detach --force "$BASE_DIR" "$BASE_SHA" 2>/dev/null; then
-          rm -rf "$BASE_DIR"
+          rm -rf "$BASE_PARENT"
           echo "should_build=true" >> "$GITHUB_OUTPUT"
           echo "::warning::Could not materialise base $BASE_SHA to diff the fingerprint — building to be safe."
           exit 0
@@ -127,7 +129,8 @@ runs:
         write_env "$BASE_DIR"
         ( cd "$BASE_DIR" && bun install --frozen-lockfile )
         BASE_FP="$(resolve_fp "$BASE_DIR")"
-        git worktree remove --force "$BASE_DIR" 2>/dev/null || rm -rf "$BASE_DIR"
+        git worktree remove --force "$BASE_DIR" 2>/dev/null || true
+        rm -rf "$BASE_PARENT"
 
         echo "platform=$PLATFORM head=$HEAD_FP base=$BASE_FP"
         if [ -n "$HEAD_FP" ] && [ -n "$BASE_FP" ] && [ "$HEAD_FP" = "$BASE_FP" ]; then
