@@ -11,6 +11,7 @@ const stats = vi.hoisted(() => ({ noneMatchedSelectedType: false }));
 
 type ViewMockProps = { children?: ReactNode };
 vi.mock('react-native', () => ({
+  Platform: { OS: 'ios', Version: '26.1' },
   View: ({ children }: ViewMockProps) => createElement('div', {}, children),
   ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
