@@ -108,6 +108,11 @@ const toast = vi.hoisted(() => ({
   showToast: vi.fn(),
 }));
 
+const errorReporter = vi.hoisted(() => ({
+  reportError: vi.fn(),
+  reportHandledError: vi.fn(),
+}));
+
 const queueMutations = vi.hoisted(() => ({
   addQueueItem: vi.fn(async () => {}),
   removeQueueItem: vi.fn(async () => {}),
@@ -179,6 +184,11 @@ vi.mock('../toast-provider', () => ({
 
 vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }),
+}));
+
+vi.mock('../../lib/error-reporting', () => ({
+  reportError: errorReporter.reportError,
+  reportHandledError: errorReporter.reportHandledError,
 }));
 
 import { QueueProvider, useQueue } from '../queue-provider';
@@ -344,6 +354,8 @@ describe('QueueProvider queue sync gate', () => {
     activeBoard.setActiveBoard.mockClear();
     toast.showToast.mockClear();
     analytics.track.mockClear();
+    errorReporter.reportError.mockClear();
+    errorReporter.reportHandledError.mockClear();
     for (const mutation of Object.values(queueMutations) as Array<ReturnType<typeof vi.fn>>) {
       mutation.mockReset();
       mutation.mockResolvedValue(undefined);
@@ -548,6 +560,139 @@ describe('QueueProvider queue sync gate', () => {
     });
     // Exactly one fetch: the restart never chains into another HTTP resync.
     expect(queueStateCalls).toBe(1);
+  });
+
+  it('restarts the WS subscriptions when the resync request itself throws', async () => {
+    const snapshots: Snapshot[] = [];
+    let queueStateCalls = 0;
+    // A rejected resync fetch (transport failure, 5xx, etc.) can't reconcile
+    // anything on its own — but a resubscribe's guaranteed initial FullSync
+    // can. The catch block must take the same restart path as the null-snapshot
+    // case and must not silently give up, leaving gap/drift recovery stuck.
+    http.request.mockImplementation(async (operation: string) => {
+      if (operation.includes('GetSessionQueueState')) {
+        queueStateCalls += 1;
+        throw new Error('resync boom');
+      }
+      if (operation.includes('SessionStatus')) {
+        return statusResponse();
+      }
+      return { endSession: { sessionId: 'session-1' } };
+    });
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(ws.getQueueUpdatesSink()).not.toBeNull();
+    });
+    // Initial mount: queueUpdates + sessionUpdates.
+    expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+    const queueUpdatesSink = ws.getQueueUpdatesSink();
+    if (!queueUpdatesSink) throw new Error('queue updates sink was not captured');
+
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wireFullSync(1, 'hash-1') } });
+    });
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wireQueueItemAdded(5, 'hash-5', wireItem('q-gap')) } });
+    });
+
+    // The gap resync fetched once, the request threw, and the catch restarted
+    // the joined subscriptions — both re-subscribed (2 + 2 = 4).
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalledTimes(4);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Exactly one fetch: the errored restart never chains into another resync.
+    expect(queueStateCalls).toBe(1);
+    // The failure was reported as a handled error tagged to the resync op, not
+    // swallowed — and via the handled reporter only. A regression that also
+    // escalated to the unhandled `reportError` must fail this test.
+    expect(errorReporter.reportHandledError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { source: 'queue-sync', op: 'resync' } }),
+    );
+    expect(errorReporter.reportError).not.toHaveBeenCalled();
+  });
+
+  it('skips a stale resync snapshot that resolves after a mid-flight FullSync re-baselined the gate', async () => {
+    const snapshots: Snapshot[] = [];
+    let queueStateCalls = 0;
+    // Hold the resync fetch open so a rejoin FullSync can land while it is in
+    // flight. The snapshot it eventually resolves to reports sequence 5 — older
+    // than the sequence the FullSync re-baselines the gate to (100) — so
+    // applying it would regress both the queue and the gate backwards.
+    // Definite-assignment assertion: the Promise executor runs synchronously, so
+    // resolveFetch is always set before use (TS can't see that through the
+    // closure).
+    let resolveFetch!: (payload: unknown) => void;
+    const pendingFetch = new Promise<unknown>((resolve) => {
+      resolveFetch = resolve;
+    });
+    http.request.mockImplementation(async (operation: string) => {
+      if (operation.includes('GetSessionQueueState')) {
+        queueStateCalls += 1;
+        return pendingFetch;
+      }
+      if (operation.includes('SessionStatus')) {
+        return statusResponse();
+      }
+      return { endSession: { sessionId: 'session-1' } };
+    });
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(ws.getQueueUpdatesSink()).not.toBeNull();
+    });
+    const queueUpdatesSink = ws.getQueueUpdatesSink();
+    if (!queueUpdatesSink) throw new Error('queue updates sink was not captured');
+
+    // Baseline at sequence 1, then a gap event (sequence 5 ≫ 1) starts the
+    // resync fetch — which now suspends on `pendingFetch`.
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wireFullSync(1, 'hash-1') } });
+    });
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wireQueueItemAdded(5, 'hash-5', wireItem('q-gap')) } });
+    });
+    await waitFor(() => {
+      expect(queueStateCalls).toBe(1);
+    });
+
+    // A rejoin FullSync lands mid-flight, replacing the queue with its own
+    // authoritative state and re-baselining the gate's lastSequence to 100.
+    act(() => {
+      queueUpdatesSink.next({
+        data: { queueUpdates: wireFullSync(100, 'hash-100', [wireItem('fullsync-item')]) },
+      });
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toEqual(['fullsync-item']);
+    });
+
+    // Now the slow fetch resolves to the OLDER snapshot (sequence 5). The guard
+    // must skip it: the queue keeps the FullSync's state, not the stale server
+    // snapshot's `server-item`.
+    await act(async () => {
+      resolveFetch(queueStateResponse([makeQueueItem('server-item')], null, 5, 'resync-hash-5'));
+      await Promise.resolve();
+    });
+    expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toEqual(['fullsync-item']);
+
+    // The re-baseline was left intact at 100 (not regressed to 5): a stale delta
+    // at 100 is dropped, and the next contiguous delta at 101 applies cleanly.
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wireQueueItemAdded(100, 'hash-100b', wireItem('q-stale')) } });
+    });
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wireQueueItemAdded(101, 'hash-101', wireItem('q-101')) } });
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toEqual(['fullsync-item', 'q-101']);
+    });
   });
 
   it('lets PlaybackStateChanged bypass the gate and still reach transient listeners', async () => {
