@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-04T07:22:43.665Z",
+  "generatedAt": "2026-07-04T08:52:12.499Z",
   "entries": [
+    {
+      "prNumber": 3454,
+      "category": "fixed",
+      "title": "Queued climbs from a different board no longer flash your wall dark — Boardsesh skips them, tells you, and lights the next climb that fits your setup",
+      "mergedAt": "2026-07-04T08:47:05Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3454",
+      "body": "In a party session, a mate on a different wall can no longer knock your whole crew's queue off the current climb"
+    },
+    {
+      "prNumber": 3450,
+      "category": "fixed",
+      "title": "Original (first-generation) MoonBoard LED boxes are easier to find in the board picker",
+      "mergedAt": "2026-07-04T08:46:07Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3450"
+    },
     {
       "prNumber": 3449,
       "category": "fixed",

@@ -16,6 +16,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Queued climbs from a different board no longer flash your wall dark — Boardsesh skips them, tells you, and lights the next climb that fits your setup ([#3454](https://github.com/boardsesh/boardsesh/pull/3454))
+  In a party session, a mate on a different wall can no longer knock your whole crew's queue off the current climb
+- Original (first-generation) MoonBoard LED boxes are easier to find in the board picker ([#3450](https://github.com/boardsesh/boardsesh/pull/3450))
 - Gyms with a single board now say "1 board", not "1 boards" — fixed in English, Spanish, and French ([#3449](https://github.com/boardsesh/boardsesh/pull/3449))
 - The About, Acknowledgements, Licenses, and gym-edit screens no longer flash a black background when opened from the side menu in light mode ([#3426](https://github.com/boardsesh/boardsesh/pull/3426))
 - On iPad, the sidebar highlight no longer flickers off when you move the pointer away from a tab you're navigating with the keyboard. ([#3446](https://github.com/boardsesh/boardsesh/pull/3446))
