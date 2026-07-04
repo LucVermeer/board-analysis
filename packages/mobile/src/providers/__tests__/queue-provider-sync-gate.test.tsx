@@ -608,11 +608,13 @@ describe('QueueProvider queue sync gate', () => {
     // Exactly one fetch: the errored restart never chains into another resync.
     expect(queueStateCalls).toBe(1);
     // The failure was reported as a handled error tagged to the resync op, not
-    // swallowed.
+    // swallowed — and via the handled reporter only. A regression that also
+    // escalated to the unhandled `reportError` must fail this test.
     expect(errorReporter.reportHandledError).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({ tags: { source: 'queue-sync', op: 'resync' } }),
     );
+    expect(errorReporter.reportError).not.toHaveBeenCalled();
   });
 
   it('skips a stale resync snapshot that resolves after a mid-flight FullSync re-baselined the gate', async () => {
