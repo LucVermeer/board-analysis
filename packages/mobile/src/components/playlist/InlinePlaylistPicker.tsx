@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState, type ComponentType } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View, type TextInputProps } from 'react-native';
+import { useCallback, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type TextInputProps } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -45,7 +45,28 @@ type InlinePlaylistPickerProps = {
   /** Rendered on the left of the header when the host wants a back affordance
    *  (the reaction overlay returns to its action list; the sheet omits it). */
   onBack?: () => void;
+  /** When set, the header (with the back button) is pinned and the body scrolls
+   *  within this height — so scrolling a long playlist list never hides "back".
+   *  Omit in a sheet host, whose own scroll view already scrolls the whole body. */
+  maxHeight?: number;
 };
+
+// Pins the header: when a maxHeight is given the body scrolls inside it, otherwise
+// the body renders inline (a sheet host provides the scroll). `flexShrink` bounds
+// the ScrollView to the space left under the pinned header within maxHeight.
+function ScrollableBody({ maxHeight, children }: { maxHeight?: number; children: ReactNode }) {
+  if (maxHeight == null) return <>{children}</>;
+  return (
+    <ScrollView
+      style={styles.scrollBody}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      {children}
+    </ScrollView>
+  );
+}
 
 /**
  * Membership-aware "add to playlist" body: a toggle list (checkmark = the climb
@@ -65,6 +86,7 @@ export function InlinePlaylistPicker({
   layoutId,
   TextInputComponent,
   onBack,
+  maxHeight,
 }: InlinePlaylistPickerProps) {
   const { t } = useTranslation('climbs');
   const { t: tc } = useTranslation('common');
@@ -264,7 +286,7 @@ export function InlinePlaylistPicker({
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, maxHeight != null ? { maxHeight } : null]}>
       <View style={styles.header}>
         {onBack ? (
           <Pressable
@@ -295,154 +317,156 @@ export function InlinePlaylistPicker({
         ) : null}
       </View>
 
-      {createOpen ? (
-        <View style={styles.createForm}>
-          <TextInputComponent
-            value={name}
-            onChangeText={(text) => {
-              setCreateError(null);
-              setName(text);
-            }}
-            placeholder={t('actions.playlist.create.namePlaceholder')}
-            placeholderTextColor={systemColors.tertiaryLabel}
-            maxLength={NAME_MAX}
-            style={inputStyle}
-            returnKeyType="done"
-            autoFocus
-            onSubmitEditing={() => {
-              void handleSubmitCreate();
-            }}
-          />
-          <View style={styles.swatchRow}>
-            {PLAYLIST_COLORS.map((swatch) => {
-              const selected = color === swatch;
-              return (
-                <Pressable
-                  key={swatch}
-                  onPress={() => setColor(selected ? undefined : swatch)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  style={[
-                    styles.swatch,
-                    { backgroundColor: swatch, borderColor: systemColors.separator },
-                    selected && styles.swatchSelected,
-                  ]}
-                >
-                  {selected ? <Icon name="check.small" size={14} color={iosSystemColors.white} /> : null}
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={styles.emojiRow}>
-            {QUICK_EMOJI.map((preset) => {
-              const selected = icon === preset;
-              return (
-                <Pressable
-                  key={preset}
-                  onPress={() => setIcon(selected ? undefined : preset)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  style={[
-                    styles.emojiChip,
-                    { backgroundColor: systemColors.fill },
-                    selected && [styles.emojiChipSelected, { borderColor: brandColors.primary }],
-                  ]}
-                >
-                  <Text style={styles.emoji} allowFontScaling={false}>
-                    {preset}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {createError ? (
-            <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
-              {createError}
-            </Text>
-          ) : null}
-          <View style={styles.createActions}>
-            <Pressable
-              onPress={handleCloseCreate}
-              accessibilityRole="button"
-              accessibilityLabel={tc('actions.cancel')}
-              hitSlop={8}
-              style={styles.cancelButton}
-              disabled={submitting}
-            >
-              <Text variant="body" color={systemColors.secondaryLabel}>
-                {tc('actions.cancel')}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
+      <ScrollableBody maxHeight={maxHeight}>
+        {createOpen ? (
+          <View style={styles.createForm}>
+            <TextInputComponent
+              value={name}
+              onChangeText={(text) => {
+                setCreateError(null);
+                setName(text);
+              }}
+              placeholder={t('actions.playlist.create.namePlaceholder')}
+              placeholderTextColor={systemColors.tertiaryLabel}
+              maxLength={NAME_MAX}
+              style={inputStyle}
+              returnKeyType="done"
+              autoFocus
+              onSubmitEditing={() => {
                 void handleSubmitCreate();
               }}
-              accessibilityRole="button"
-              accessibilityLabel={t('actions.playlist.create.submit')}
-              hitSlop={8}
-              style={[styles.submitButton, { backgroundColor: brandColors.primary }]}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color={iosSystemColors.white} />
-              ) : (
-                <Text variant="body" color={iosSystemColors.white} style={styles.submitLabel}>
-                  {t('actions.playlist.create.submit')}
+            />
+            <View style={styles.swatchRow}>
+              {PLAYLIST_COLORS.map((swatch) => {
+                const selected = color === swatch;
+                return (
+                  <Pressable
+                    key={swatch}
+                    onPress={() => setColor(selected ? undefined : swatch)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: swatch, borderColor: systemColors.separator },
+                      selected && styles.swatchSelected,
+                    ]}
+                  >
+                    {selected ? <Icon name="check.small" size={14} color={iosSystemColors.white} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.emojiRow}>
+              {QUICK_EMOJI.map((preset) => {
+                const selected = icon === preset;
+                return (
+                  <Pressable
+                    key={preset}
+                    onPress={() => setIcon(selected ? undefined : preset)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[
+                      styles.emojiChip,
+                      { backgroundColor: systemColors.fill },
+                      selected && [styles.emojiChipSelected, { borderColor: brandColors.primary }],
+                    ]}
+                  >
+                    <Text style={styles.emoji} allowFontScaling={false}>
+                      {preset}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {createError ? (
+              <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
+                {createError}
+              </Text>
+            ) : null}
+            <View style={styles.createActions}>
+              <Pressable
+                onPress={handleCloseCreate}
+                accessibilityRole="button"
+                accessibilityLabel={tc('actions.cancel')}
+                hitSlop={8}
+                style={styles.cancelButton}
+                disabled={submitting}
+              >
+                <Text variant="body" color={systemColors.secondaryLabel}>
+                  {tc('actions.cancel')}
                 </Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
-
-      {error ? (
-        <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
-          {error}
-        </Text>
-      ) : null}
-
-      {/* Hide the playlist list while the create form is open — the form takes
-          over the body rather than stacking above the existing playlists. */}
-      {!createOpen &&
-        (!isAuthenticated ? (
-          <View style={styles.message}>
-            <Text variant="subheadline" color={iosSystemColors.systemGray}>
-              {t('actions.playlist.popover.signInBlurb')}
-            </Text>
-          </View>
-        ) : isLoading && sortedPlaylists.length === 0 ? (
-          // Spinner only before the user's playlists are cached at all; once
-          // they're available we render immediately and checkmarks fill in.
-          <View style={styles.message}>
-            <ActivityIndicator />
-          </View>
-        ) : sortedPlaylists.length === 0 ? (
-          <View style={styles.message}>
-            <Text variant="subheadline" color={iosSystemColors.systemGray}>
-              {t('actions.playlist.popover.empty')}
-            </Text>
-          </View>
-        ) : (
-          sortedPlaylists.map((playlist, index) => {
-            const accent = playlist.color && isValidHexColor(playlist.color) ? playlist.color : brandColors.primary;
-            const member = members.has(playlist.uuid);
-            return (
-              <ListRow
-                key={playlist.id}
-                title={playlist.name}
-                subtitle={t('multiboardList.count', { count: playlist.climbCount })}
-                leading={<Icon name="playlist" size={22} color={accent} />}
-                trailing={member ? <Icon name="check.small" size={18} color={brandColors.primary} /> : undefined}
+              </Pressable>
+              <Pressable
                 onPress={() => {
-                  void handleToggle(playlist);
+                  void handleSubmitCreate();
                 }}
-                accessibilityLabel={playlist.name}
-                accessibilityHint={member ? t('actions.playlist.toast.removed') : t('actions.playlist.toast.added')}
-                showSeparator={index < sortedPlaylists.length - 1}
-              />
-            );
-          })
-        ))}
+                accessibilityRole="button"
+                accessibilityLabel={t('actions.playlist.create.submit')}
+                hitSlop={8}
+                style={[styles.submitButton, { backgroundColor: brandColors.primary }]}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={iosSystemColors.white} />
+                ) : (
+                  <Text variant="body" color={iosSystemColors.white} style={styles.submitLabel}>
+                    {t('actions.playlist.create.submit')}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {error ? (
+          <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
+            {error}
+          </Text>
+        ) : null}
+
+        {/* Hide the playlist list while the create form is open — the form takes
+          over the body rather than stacking above the existing playlists. */}
+        {!createOpen &&
+          (!isAuthenticated ? (
+            <View style={styles.message}>
+              <Text variant="subheadline" color={iosSystemColors.systemGray}>
+                {t('actions.playlist.popover.signInBlurb')}
+              </Text>
+            </View>
+          ) : isLoading && sortedPlaylists.length === 0 ? (
+            // Spinner only before the user's playlists are cached at all; once
+            // they're available we render immediately and checkmarks fill in.
+            <View style={styles.message}>
+              <ActivityIndicator />
+            </View>
+          ) : sortedPlaylists.length === 0 ? (
+            <View style={styles.message}>
+              <Text variant="subheadline" color={iosSystemColors.systemGray}>
+                {t('actions.playlist.popover.empty')}
+              </Text>
+            </View>
+          ) : (
+            sortedPlaylists.map((playlist, index) => {
+              const accent = playlist.color && isValidHexColor(playlist.color) ? playlist.color : brandColors.primary;
+              const member = members.has(playlist.uuid);
+              return (
+                <ListRow
+                  key={playlist.id}
+                  title={playlist.name}
+                  subtitle={t('multiboardList.count', { count: playlist.climbCount })}
+                  leading={<Icon name="playlist" size={22} color={accent} />}
+                  trailing={member ? <Icon name="check.small" size={18} color={brandColors.primary} /> : undefined}
+                  onPress={() => {
+                    void handleToggle(playlist);
+                  }}
+                  accessibilityLabel={playlist.name}
+                  accessibilityHint={member ? t('actions.playlist.toast.removed') : t('actions.playlist.toast.added')}
+                  showSeparator={index < sortedPlaylists.length - 1}
+                />
+              );
+            })
+          ))}
+      </ScrollableBody>
     </View>
   );
 }
@@ -450,6 +474,11 @@ export function InlinePlaylistPicker({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+  },
+  // Bounded by the container's maxHeight (minus the pinned header) so the list
+  // scrolls under the header rather than pushing it off-screen.
+  scrollBody: {
+    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',

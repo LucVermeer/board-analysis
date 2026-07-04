@@ -289,24 +289,27 @@ export function ClimbReactionMenu({
 
           <Animated.View style={[styles.menuWrap, menuStyle]}>
             <GlassSurface role="base" level="level2" borderRadius={borderRadius.xl} style={styles.menuCard}>
-              <ScrollView
-                style={{ maxHeight: menuMaxHeight }}
-                bounces={false}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.menuContent}
-              >
-                {view === 'playlist' ? (
-                  <InlinePlaylistPicker
-                    climb={climb}
-                    angle={boardConfig.angle}
-                    boardName={boardConfig.boardName as BoardName}
-                    layoutId={boardConfig.layoutId}
-                    TextInputComponent={TextInput}
-                    onBack={backToMenu}
-                  />
-                ) : (
-                  actions.map((action, index) => (
+              {view === 'playlist' ? (
+                // The picker pins its own header and scrolls the list within
+                // menuMaxHeight, so "back" stays put however far you scroll.
+                <InlinePlaylistPicker
+                  climb={climb}
+                  angle={boardConfig.angle}
+                  boardName={boardConfig.boardName as BoardName}
+                  layoutId={boardConfig.layoutId}
+                  TextInputComponent={TextInput}
+                  onBack={backToMenu}
+                  maxHeight={menuMaxHeight}
+                />
+              ) : (
+                <ScrollView
+                  style={{ maxHeight: menuMaxHeight }}
+                  bounces={false}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.menuContent}
+                >
+                  {actions.map((action, index) => (
                     <ListRow
                       key={action.id}
                       title={action.title}
@@ -315,9 +318,9 @@ export function ClimbReactionMenu({
                       showSeparator={index < actions.length - 1}
                       separatorInset={56}
                     />
-                  ))
-                )}
-              </ScrollView>
+                  ))}
+                </ScrollView>
+              )}
             </GlassSurface>
           </Animated.View>
         </Animated.View>
