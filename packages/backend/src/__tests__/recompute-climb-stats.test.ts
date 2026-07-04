@@ -129,7 +129,7 @@ describe('recomputeClimbStats', () => {
     // or replaces it. This is the invariant that stops a Boardsesh tick from
     // wiping a MoonBoard climb's imported community repeats.
     expect(sql).toMatch(
-      /ascensionist_count\s*=\s*COALESCE\(s\.upstream_ascensionist_count, 0\)[\s\S]*?\+ COALESCE\(agg\.distinct_senders, 0\)/,
+      /ascensionist_count\s*=\s*COALESCE\(s\.upstream_ascensionist_count, 0\)\s*\+\s*COALESCE\(agg\.distinct_senders, 0\)/,
     );
     expect(sql).not.toContain('kilter_ascensionist_count');
     expect(sql).not.toContain('aurora_ascensionist_count');
