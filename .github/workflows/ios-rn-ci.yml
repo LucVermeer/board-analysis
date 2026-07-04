@@ -50,15 +50,15 @@ env:
 jobs:
   gate:
     # Cheap ubuntu gate deciding whether the (expensive, macOS) build-and-test
-    # job runs. Skips it on a JS-only PR — no native-input change, or an Expo
-    # fingerprint unchanged vs base — mirroring main's native-skip for JS-only
-    # merges. Runs on ubuntu: the fingerprint resolve is file-hash based and
-    # needs no Xcode, so this spends no macOS minutes.
+    # job runs. Skips it on a JS-only PR OR branch push — no native-input change,
+    # or an Expo fingerprint unchanged vs main — mirroring main's native-skip for
+    # JS-only merges. The push-triggered build predates OTA and no longer needs to
+    # run for JS-only branches. Runs on ubuntu: the fingerprint resolve is
+    # file-hash based and needs no Xcode, so this spends no macOS minutes.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read # dorny/paths-filter lists PR files via the API
     outputs:
       should_build: ${{ steps.gate.outputs.should_build }}
     steps:
