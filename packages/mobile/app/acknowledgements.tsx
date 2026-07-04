@@ -119,7 +119,9 @@ export default function AcknowledgementsScreen() {
   return (
     <>
       <Stack.Screen options={{ ...screenOptions, title: t('mobile.acknowledgements.title'), headerShown: true }} />
+      {/* Glass contentStyle is transparent: unpainted, this scene shows the user-drawer's scrim (see changelog.tsx). */}
       <ScrollView
+        style={{ backgroundColor: systemColors.groupedBackground }}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}
       >

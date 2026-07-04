@@ -89,7 +89,8 @@ export default function LicensesScreen() {
   return (
     <>
       <Stack.Screen options={{ ...screenOptions, title: t('mobile.licenses.title'), headerShown: true }} />
-      <View style={styles.flex}>
+      {/* Glass contentStyle is transparent: unpainted, this scene shows the user-drawer's scrim (see changelog.tsx). */}
+      <View style={[styles.flex, { backgroundColor: systemColors.groupedBackground }]}>
         {licenses === null ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" />
