@@ -394,45 +394,46 @@ export function InlinePlaylistPicker({
         </Text>
       ) : null}
 
-      {!isAuthenticated ? (
-        <View style={styles.message}>
-          <Text variant="subheadline" color={iosSystemColors.systemGray}>
-            {t('actions.playlist.popover.signInBlurb')}
-          </Text>
-        </View>
-      ) : isLoading || membershipLoading ? (
-        <View style={styles.message}>
-          <ActivityIndicator />
-        </View>
-      ) : sortedPlaylists.length === 0 ? (
-        !createOpen ? (
+      {/* Hide the playlist list while the create form is open — the form takes
+          over the body rather than stacking above the existing playlists. */}
+      {!createOpen &&
+        (!isAuthenticated ? (
+          <View style={styles.message}>
+            <Text variant="subheadline" color={iosSystemColors.systemGray}>
+              {t('actions.playlist.popover.signInBlurb')}
+            </Text>
+          </View>
+        ) : isLoading || membershipLoading ? (
+          <View style={styles.message}>
+            <ActivityIndicator />
+          </View>
+        ) : sortedPlaylists.length === 0 ? (
           <View style={styles.message}>
             <Text variant="subheadline" color={iosSystemColors.systemGray}>
               {t('actions.playlist.popover.empty')}
             </Text>
           </View>
-        ) : null
-      ) : (
-        sortedPlaylists.map((playlist, index) => {
-          const accent = playlist.color && isValidHexColor(playlist.color) ? playlist.color : brandColors.primary;
-          const member = members.has(playlist.uuid);
-          return (
-            <ListRow
-              key={playlist.id}
-              title={playlist.name}
-              subtitle={t('multiboardList.count', { count: playlist.climbCount })}
-              leading={<Icon name="playlist" size={22} color={accent} />}
-              trailing={member ? <Icon name="check.small" size={18} color={brandColors.primary} /> : undefined}
-              onPress={() => {
-                void handleToggle(playlist);
-              }}
-              accessibilityLabel={playlist.name}
-              accessibilityHint={member ? t('actions.playlist.toast.removed') : t('actions.playlist.toast.added')}
-              showSeparator={index < sortedPlaylists.length - 1}
-            />
-          );
-        })
-      )}
+        ) : (
+          sortedPlaylists.map((playlist, index) => {
+            const accent = playlist.color && isValidHexColor(playlist.color) ? playlist.color : brandColors.primary;
+            const member = members.has(playlist.uuid);
+            return (
+              <ListRow
+                key={playlist.id}
+                title={playlist.name}
+                subtitle={t('multiboardList.count', { count: playlist.climbCount })}
+                leading={<Icon name="playlist" size={22} color={accent} />}
+                trailing={member ? <Icon name="check.small" size={18} color={brandColors.primary} /> : undefined}
+                onPress={() => {
+                  void handleToggle(playlist);
+                }}
+                accessibilityLabel={playlist.name}
+                accessibilityHint={member ? t('actions.playlist.toast.removed') : t('actions.playlist.toast.added')}
+                showSeparator={index < sortedPlaylists.length - 1}
+              />
+            );
+          })
+        ))}
     </View>
   );
 }

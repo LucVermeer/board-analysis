@@ -176,9 +176,17 @@ export function ClimbReactionMenu({
     return { width: fitted.width, height: fitted.height, borderRadius: borderRadius.lg, overflow: 'hidden' };
   }, [boardRenderData, artMaxSize]);
 
+  // Top offset for the floating content — anchors the preview at a fixed position
+  // (see styles.content). Shared with the menu cap so the card can't run past the
+  // bottom safe area now that the content is top-aligned rather than centered.
+  const contentTopOffset = Math.round(windowHeight * 0.06);
+
   // Cap the menu so preview + menu always fit; it scrolls internally if the action
   // list is long on a short screen.
-  const menuMaxHeight = Math.max(180, windowHeight - insets.top - insets.bottom - artMaxSize - 140 - spacing[5] * 2);
+  const menuMaxHeight = Math.max(
+    180,
+    windowHeight - insets.top - insets.bottom - contentTopOffset - artMaxSize - 140 - spacing[5],
+  );
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
   const previewStyle = useAnimatedStyle(() => ({
@@ -234,7 +242,7 @@ export function ClimbReactionMenu({
           onAccessibilityEscape={handleRequestClose}
           style={[
             styles.content,
-            { paddingTop: insets.top + spacing[5], paddingBottom: insets.bottom + spacing[5] },
+            { paddingTop: insets.top + contentTopOffset, paddingBottom: insets.bottom + spacing[5] },
             contentKeyboardStyle,
           ]}
         >
@@ -326,7 +334,10 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
-    justifyContent: 'center',
+    // Anchor from the top, not centered: the climb preview keeps a fixed position
+    // whether the action list or the (shorter/taller) playlist picker sits below
+    // it, so switching views never shifts the climb up or down.
+    justifyContent: 'flex-start',
     paddingHorizontal: spacing[6],
     gap: spacing[5],
   },
