@@ -152,7 +152,7 @@ program
   .description('Repair Kilter catalog stats after deduping repeated Grips layout stat rows')
   .requiredOption('--user <userId>', 'use this linked user’s stored Kilter credential (refresh grant)')
   .option('--layouts <uuids>', 'comma-separated product_layout_uuids to repair (default: all listed)')
-  .option('--apply', 'write repaired kilter_ascensionist_count and ascensionist_count values (default: dry-run)')
+  .option('--apply', 'write repaired upstream_ascensionist_count and ascensionist_count values (default: dry-run)')
   .action(async (opts: { user: string; layouts?: string; apply?: boolean }) => {
     const runner = new SyncRunner({ onLog: (message) => console.info(message) });
     try {

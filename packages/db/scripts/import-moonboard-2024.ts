@@ -139,6 +139,9 @@ async function importMoonBoard2024() {
         // null for ungraded problems.
         displayDifficulty: mapped.difficultyId ?? null,
         benchmarkDifficulty: mapped.isBenchmark && mapped.difficultyId !== undefined ? mapped.difficultyId : null,
+        // Degraded export carries no ascent data; seed both the upstream source
+        // and the total at 0 so the tick recompute has a sensible baseline.
+        upstreamAscensionistCount: 0,
         ascensionistCount: 0,
         difficultyAverage: mapped.difficultyId ?? null,
         // No quality data in the export. Mark normalized so the 1-3→1-5 quality

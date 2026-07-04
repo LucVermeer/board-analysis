@@ -421,6 +421,10 @@ function createImportConfigs(): ImportConfig[] {
         angle: toNumber(row.angle, 'climb_stats.angle'),
         displayDifficulty: toNullableNumber(row.display_difficulty),
         benchmarkDifficulty: toNullableNumber(row.benchmark_difficulty),
+        // Aurora's count is this board's upstream source. Seed it alongside the
+        // total so a later tick recompute (upstream + boardsesh) adds to it
+        // instead of collapsing the row to just its Boardsesh ticks.
+        upstreamAscensionistCount: toNullableNumber(row.ascensionist_count),
         ascensionistCount: toNullableNumber(row.ascensionist_count),
         difficultyAverage: toNullableNumber(row.difficulty_average),
         // Aurora quality is 1-3; normalise to the canonical 1-5 on import and

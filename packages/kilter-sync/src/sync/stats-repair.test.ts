@@ -156,7 +156,7 @@ describe('repairKilterCatalogStats', () => {
         boardType: 'kilter',
         climbUuid: 'canon',
         angle: 40,
-        kilterAscensionistCount: 17,
+        upstreamAscensionistCount: 17,
         ascensionistCount: 17,
       },
     ]);

@@ -233,6 +233,10 @@ async function importMoonBoardCatalog() {
             angle: mapped.angle,
             displayDifficulty: mapped.difficultyId ?? null,
             benchmarkDifficulty: mapped.isBenchmark && mapped.difficultyId !== undefined ? mapped.difficultyId : null,
+            // MoonBoard's community-repeat count is this board's upstream source.
+            // Seed the total too (a fresh row has no Boardsesh ticks yet); the tick
+            // recompute later adds boardsesh_ascensionist_count on top of upstream.
+            upstreamAscensionistCount: mapped.ascensionistCount,
             ascensionistCount: mapped.ascensionistCount,
             difficultyAverage: mapped.difficultyId ?? null,
             qualityAverage: mapped.qualityAverage,
@@ -284,7 +288,10 @@ async function importMoonBoardCatalog() {
         }
 
         // Stats — monotonic merge: take the new grade/benchmark, but never null
-        // out an existing grade/quality or shrink an ascent count.
+        // out an existing grade/quality or shrink the upstream count. The total is
+        // rebuilt as upstream + existing Boardsesh, so re-running the import repairs
+        // any climb whose count was previously clobbered by a tick recompute without
+        // dropping the ticks it has since accrued.
         for (let i = 0; i < statsRecords.length; i += BATCH_SIZE) {
           await tx
             .insert(boardClimbStats)
@@ -297,7 +304,8 @@ async function importMoonBoardCatalog() {
                 displayDifficulty: sql`coalesce(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
                 benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
                 difficultyAverage: sql`coalesce(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
-                ascensionistCount: sql`greatest(coalesce(excluded.ascensionist_count, 0), coalesce(${boardClimbStats.ascensionistCount}, 0))`,
+                upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
+                ascensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0)) + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
                 qualityAverage: sql`coalesce(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
                 qualityNormalized: sql`true`,
               },

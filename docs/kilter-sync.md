@@ -145,7 +145,7 @@ Implemented in [`packages/kilter-sync/src/sync/catalog-sync.ts`](../packages/kil
 3. **Catalog REST pull**, grouped by resolved `board_layouts.id` so the existing catalog loads once per board layout: `GET /api/climbs/all/{productLayoutUuid}` (full per-layout array, no pagination) + `GET /api/climb-stat/all/{productLayoutUuid}`.
 4. **Parse + remap** (`sync/catalog-parse.ts`): Grips `climb_concat` is `h{holeId}p{code}`; the legacy catalog stores `frames` as `p{placementId}r{code}`. `board_placements(layout_id, hole_id) → id` (unique per layout) bridges the two, so `climb_concat` is rewritten to the canonical Aurora frames format and routed through the existing `convertLitUpHoldsStringToMap`. This guarantees byte-identical `board_climb_holds` / `hold_fingerprint` to the legacy data (verified 366/366 in Phase 0).
 5. **Dedup** (see [Climb dedup](#climb-dedup)) — **UUID-first** (Grips inherited Aurora's climb UUIDs, so ~80% of climbs already exist as their own canonical), then hold-fingerprint for new UUIDs.
-6. **Upsert** `board_climbs` (new canonicals only) + `board_climb_holds` + `board_climb_aliases`, then `board_climb_stats` with the three-writer `kilter_ascensionist_count` (see below). Setter notifications fire for newly-inserted canonicals (`sync/notifications.ts`, ported from aurora-sync).
+6. **Upsert** `board_climbs` (new canonicals only) + `board_climb_holds` + `board_climb_aliases`, then `board_climb_stats`, writing the Grips count into `upstream_ascensionist_count` (see below). Setter notifications fire for newly-inserted canonicals (`sync/notifications.ts`, ported from aurora-sync).
 7. **Deletion reconciliation** (`sync/deletions.ts`) via `GET /api/climbs/delteduuids` — gated, report-only by default.
 
 ### Verified REST/PowerSync contract (Phase 0, 2026-06-02)
@@ -216,24 +216,26 @@ Kilter's catalog has duplicate climbs at different UUIDs with identical hold lay
 2. **Fingerprint hit** — a new UUID whose `(layout_id, fingerprint)` matches an existing or already-seen-this-run canonical becomes an alias (`board_climb_aliases`), not a new row.
 3. **Miss** — insert a new canonical row + a self-alias.
 
-**Stats accumulation (worked example).** Two listed climbs `A` (count 18) and `B` (count 5) with identical holds collapse onto one canonical: `A` is canonical with `kilter_ascensionist_count = 18`, `B` aliases to `A` and its 5 ascents accumulate → 23. The accumulation is computed **in memory per `(canonical, angle)` and written as an overwrite** (not `+=`), so re-running recomputes the same 23 — idempotent. If the same source climb stat appears through multiple Grips `product_layout_uuid`s that collapse to one Boardsesh layout, it is counted once by `(source climb UUID, angle)`. Display fields (`difficulty/quality/fa`) come only from the canonical climb's own stat row.
+**Stats accumulation (worked example).** Two listed climbs `A` (count 18) and `B` (count 5) with identical holds collapse onto one canonical: `A` is canonical with `upstream_ascensionist_count = 18`, `B` aliases to `A` and its 5 ascents accumulate → 23. The accumulation is computed **in memory per `(canonical, angle)` and written as an overwrite** (not `+=`), so re-running recomputes the same 23 — idempotent. If the same source climb stat appears through multiple Grips `product_layout_uuid`s that collapse to one Boardsesh layout, it is counted once by `(source climb UUID, angle)`. Display fields (`difficulty/quality/fa`) come only from the canonical climb's own stat row.
 
-### `ascensionist_count` — aurora/kilter are aliased, not summed
+### `ascensionist_count` — one upstream column plus Boardsesh
 
-`board_climb_stats.ascensionist_count` is the materialized count the search hot path reads. There are three owned columns (`aurora_`, `kilter_`, `boardsesh_`), but for the **Kilter board `aurora_` and `kilter_` are the SAME ascents**: the legacy column was filled from the pre-split `kilterboardapp.com` and `kilter_` is filled from `kiltergrips.com`, which Kilter migrated the same logs into. They match within snapshot noise (median ratio 1.0). **Summing them double-counts** — every Kilter benchmark would read ~2× its real ascents — so the formula takes the higher upstream count, then adds the independent Boardsesh contribution:
+`board_climb_stats.ascensionist_count` is the materialized count the search hot path reads. It sums two owned columns: `upstream_ascensionist_count` — the board's single manufacturer/upstream count — and `boardsesh_ascensionist_count`, the independent Boardsesh-native contribution:
 
 ```
-ascensionist_count = GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0))
+ascensionist_count = COALESCE(upstream_ascensionist_count, 0)
                    + COALESCE(boardsesh_ascensionist_count, 0)
 ```
 
-For boards with only one catalog source (e.g. Tension, `kilter_` is NULL) this collapses to `aurora_ + boardsesh_` — behaviour unchanged. The same formula is used at all three writers: the catalog sync (`catalog-sync.ts`), aurora-sync (`shared-sync.ts`), and the Boardsesh-tick recompute (`recompute-climb-stats.ts`). `boardsesh_ascensionist_count` stays additive because Boardsesh-native ticks aren't (yet) pushed to Kilter; revisit when push-back lands.
+The Kilter board's upstream count comes from the Grips catalog sync (`catalog-sync.ts`); Tension's from aurora-sync (`shared-sync.ts`); MoonBoard's from the app-catalog import. The same formula runs at every writer, including the Boardsesh-tick recompute (`recompute-climb-stats.ts`). `boardsesh_ascensionist_count` stays additive because Boardsesh-native ticks aren't (yet) pushed upstream; revisit when push-back lands.
+
+Historical note: there used to be two upstream columns — `aurora_` (from the pre-split `kilterboardapp.com`) and `kilter_` (from `kiltergrips.com`), holding the same logs Kilter migrated between the two backends — and the materialized total took `GREATEST(kilter_, aurora_)` to avoid double-counting the Kilter board. Migration `0141` folded them into the single `upstream_ascensionist_count` via `GREATEST(aurora_, kilter_)`. Neither snapshot dominated (in prod 90,262 Kilter rows had `kilter_ > aurora_`, 36,710 the other way), so the fold preserved every row's higher count.
 
 ### Stats repair
 
-A single Boardsesh layout maps to several Grips `product_layout_uuid`s (size variants). Before the `(source climb UUID, angle)` dedup landed, the catalog sync folded each repeated source stat once per variant, so `kilter_ascensionist_count` (and thus `ascensionist_count`) was inflated by the number of variants a climb appeared in. The fix prevents new inflation; existing rows need a one-time `repair-stats` pass (`stats-repair.ts`).
+A single Boardsesh layout maps to several Grips `product_layout_uuid`s (size variants). Before the `(source climb UUID, angle)` dedup landed, the catalog sync folded each repeated source stat once per variant, so `upstream_ascensionist_count` (and thus `ascensionist_count`) was inflated by the number of variants a climb appeared in. The fix prevents new inflation; existing rows need a one-time `repair-stats` pass (`stats-repair.ts`).
 
-`repair-stats` re-fetches every listed Grips layout, dedupes stats the same way the live sync now does, and **overwrites** `kilter_ascensionist_count` from the deduped value (also re-asserting Grips `display_difficulty / difficulty_average / quality_average` on canonical rows). It is idempotent — re-running converges and the second run is a no-op.
+`repair-stats` re-fetches every listed Grips layout, dedupes stats the same way the live sync now does, and **overwrites** `upstream_ascensionist_count` from the deduped value (also re-asserting Grips `display_difficulty / difficulty_average / quality_average` on canonical rows). Unlike the live catalog sync — which writes `upstream_ascensionist_count = GREATEST(existing, incoming)` so a stale or partial snapshot can never lower a climb — `repair-stats` is authoritative and may correct a count downward. It is idempotent — re-running converges and the second run is a no-op.
 
 - **Dry-run is the default and is read-only.** It reports `changedKilterRows`, `maxKilterDrop` / `maxKilterRise` (largest per-row decrease/increase), `statsDeduped`, `statsUnresolved`, and a `topBefore` list. Review these before applying — a large `maxKilterDrop` can also signal a partial Grips fetch (delisted climbs, rate-limit truncation), so treat it as a stop-and-investigate signal rather than blindly applying.
 - **`--apply` writes inside a single transaction** (overwrite + materialized-total recompute are atomic) and prints `topAfter`. A fetch error aborts before any write, since writes only run after the full fetch loop completes.
@@ -245,7 +247,7 @@ Kilter Grips reports `quality_average` on a 1–5 scale (MoonBoard too), but Aur
 
 Existing rows synced **before** that change are still on 1–3 (this is why the app showed 1–3 stars). A new boolean **`board_climb_stats.quality_normalized`** tracks whether a row is on the canonical 1–5 scale; migration `0116_backfill_quality_scale_1to5` does the one-time conversion idempotently:
 
-- Scales `×5/3` and sets `quality_normalized = true` for Aurora-sourced 1–3 rows on the Aurora-scale boards (`kilter, tension, decoy, soill, touchstone, grasshopper`), **excluding** Kilter Grips-touched rows (`kilter_ascensionist_count > 0`) and Boardsesh-owned climbs (both already 1–5).
+- Scales `×5/3` and sets `quality_normalized = true` for Aurora-sourced 1–3 rows on the Aurora-scale boards (`kilter, tension, decoy, soill, touchstone, grasshopper`), **excluding** Kilter Grips-touched rows (`upstream_ascensionist_count > 0`, the proxy for a Grips-written count) and Boardsesh-owned climbs (both already 1–5).
 - Marks every remaining row `quality_normalized = true` without changing it (MoonBoard, Grips-native, Boardsesh-owned, null quality).
 
 Every write path (`aurora-sync` upsert, kilter `catalog-sync`, the tick `recompute`) sets `quality_normalized`, so rows touched after the migration are never re-scaled, and re-running the migration is a no-op. (Transitional column — drop it in follow-up work once the whole table is normalized.)
@@ -263,7 +265,7 @@ Every write path (`aurora-sync` upsert, kilter `catalog-sync`, the tick `recompu
 
 ## Schema changes
 
-The catalog-relevant schema (`board_climbs.hold_fingerprint` + index, `board_climb_aliases`, `board_climb_stats.kilter_ascensionist_count` + the three-writer recompute) already shipped with Flow B. Flow A adds:
+The catalog-relevant schema (`board_climbs.hold_fingerprint` + index, `board_climb_aliases`, `board_climb_stats.upstream_ascensionist_count` + the multi-writer recompute) already shipped with Flow B. Flow A adds:
 
 | Change | Object                                                                                                      | Notes                                                                                                                                           |
 | ------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -24,7 +24,7 @@ describe('recomputeClimbStats', () => {
     vi.clearAllMocks();
   });
 
-  it('seeds the stats row with explicit aurora=0 and boardsesh=0', async () => {
+  it('seeds the stats row with explicit upstream=0 and boardsesh=0', async () => {
     let capturedSeedValues: unknown = null;
     mockDb.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => {
       const insertChain = {
@@ -49,7 +49,7 @@ describe('recomputeClimbStats', () => {
       climbUuid: 'CLIMB-1',
       angle: 40,
       ascensionistCount: 0,
-      auroraAscensionistCount: 0,
+      upstreamAscensionistCount: 0,
       boardseshAscensionistCount: 0,
     });
   });
@@ -121,13 +121,18 @@ describe('recomputeClimbStats', () => {
     // Hard invariants the delete-last-tick path depends on:
     // 1. boardsesh_ascensionist_count defaults to 0 when no senders remain.
     expect(sql).toMatch(/boardsesh_ascensionist_count\s*=\s*COALESCE\(agg\.distinct_senders,\s*0\)/);
-    // 2. ascensionist_count is the higher upstream count plus Boardsesh's.
-    //    Aurora and Kilter are the SAME upstream Kilter ascents pulled from
-    //    two backends, so they must NOT be summed.
-    expect(sql).toContain(
-      'GREATEST(COALESCE(s.kilter_ascensionist_count, 0), COALESCE(s.aurora_ascensionist_count, 0))',
-    );
+    // 2. ascensionist_count is the board's single upstream count plus Boardsesh's.
+    //    Boardsesh ticks ADD to upstream; they never replace it.
+    expect(sql).toContain('COALESCE(s.upstream_ascensionist_count, 0)');
     expect(sql).toContain('COALESCE(agg.distinct_senders, 0)');
+    // The total ADDS Boardsesh senders to the upstream count — it never GREATESTs
+    // or replaces it. This is the invariant that stops a Boardsesh tick from
+    // wiping a MoonBoard climb's imported community repeats.
+    expect(sql).toMatch(
+      /ascensionist_count\s*=\s*COALESCE\(s\.upstream_ascensionist_count, 0\)[\s\S]*?\+ COALESCE\(agg\.distinct_senders, 0\)/,
+    );
+    expect(sql).not.toContain('kilter_ascensionist_count');
+    expect(sql).not.toContain('aurora_ascensionist_count');
     // 3. The ticks filter is sargable — predicate on WHERE, not FILTER.
     expect(sql).toMatch(/WHERE[\s\S]*bt\.status IN \('flash','send'\)/);
     // 4. Ownership-aware FA: Boardsesh climbs re-derive every pass.

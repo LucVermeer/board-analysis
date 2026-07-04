@@ -10,18 +10,18 @@ import { logger } from '../../../utils/logger';
  *
  * What this writes:
  *   - boardsesh_ascensionist_count = COUNT(DISTINCT user_id) over flash/send ticks
- *   - ascensionist_count = GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0))
+ *   - ascensionist_count = COALESCE(upstream_ascensionist_count, 0)
  *                         + COALESCE(boardsesh_ascensionist_count, 0)
  *     (the materialized count the search hot path reads through the covering
  *     index from migration 0067)
  *
- *     aurora_ and kilter_ are NOT summed: for the Kilter board they are the
- *     SAME ascents from two backends (the pre-split kilterboardapp.com vs
- *     kiltergrips.com — Kilter migrated the logs, so the counts match within
- *     snapshot noise; summing would double them). The higher upstream count
- *     wins so one stale snapshot does not lower a climb.
- *     For boards with only one source (e.g. Tension) the other column is NULL
- *     so COALESCE collapses to that single value — behaviour is unchanged.
+ *     upstream_ascensionist_count is the single manufacturer/upstream count for
+ *     the board — Tension via the Aurora API sync, Kilter via the Kilter Grips
+ *     catalog sync, MoonBoard via the app-catalog repeat count. Boardsesh ticks
+ *     ADD to it; they never replace it. This recompute owns only the boardsesh
+ *     term and leaves upstream untouched. (Migration 0141 folded the former
+ *     aurora_/kilter_ pair — two snapshots of the same Kilter ascents — into a
+ *     single upstream column via GREATEST.)
  *   - fa_username / fa_at:
  *       For Boardsesh-originated climbs (board_climbs.user_id IS NOT NULL),
  *       Boardsesh owns the FA — we re-derive it from the current ticks so a
@@ -84,10 +84,10 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
   let diff: DiffRow | undefined;
 
   await db.transaction(async (tx) => {
-    // Defensive seed: set aurora_/kilter_ascensionist_count to 0 explicitly so
-    // the subsequent recompute (GREATEST(kilter, aurora) + boardsesh) and any
-    // later Aurora/Kilter upsert both see a sensible baseline. Without it,
-    // freshly seeded rows would carry NULL counts until those syncs first ran.
+    // Defensive seed: set upstream_ascensionist_count to 0 explicitly so the
+    // subsequent recompute (COALESCE(upstream, 0) + boardsesh) and any later
+    // upstream sync both see a sensible baseline. Without it, freshly seeded
+    // rows would carry NULL counts until those syncs first ran.
     await tx
       .insert(dbSchema.boardClimbStats)
       .values({
@@ -95,8 +95,7 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
         climbUuid,
         angle,
         ascensionistCount: 0,
-        auroraAscensionistCount: 0,
-        kilterAscensionistCount: 0,
+        upstreamAscensionistCount: 0,
         boardseshAscensionistCount: 0,
       })
       .onConflictDoNothing({
@@ -148,7 +147,7 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
       updated AS (
         UPDATE board_climb_stats s
            SET boardsesh_ascensionist_count = COALESCE(agg.distinct_senders, 0),
-               ascensionist_count           = GREATEST(COALESCE(s.kilter_ascensionist_count, 0), COALESCE(s.aurora_ascensionist_count, 0))
+               ascensionist_count           = COALESCE(s.upstream_ascensionist_count, 0)
                                             + COALESCE(agg.distinct_senders, 0),
                fa_username = CASE
                  WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
