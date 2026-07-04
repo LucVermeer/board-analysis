@@ -28,6 +28,10 @@ outputs:
 runs:
   using: composite
   steps:
+    # Self-contained (like android-rn-setup): a caller only has to `checkout`
+    # first, not also remember to set up bun.
+    - uses: oven-sh/setup-bun@v2
+
     - name: Decide whether to build
       id: decide
       shell: bash
@@ -35,6 +39,10 @@ runs:
         PLATFORM: ${{ inputs.platform }}
         EVENT: ${{ github.event_name }}
       run: |
+        # No `set -e`: this gate is deliberately fail-OPEN (an unexpected error
+        # should build, never block a PR), and every decision path exits via
+        # build() or skip() below — so should_build is always written. Keep that
+        # invariant if you edit this.
         set -uo pipefail
 
         build() { echo "should_build=true"  >> "$GITHUB_OUTPUT"; echo "::notice::$1 — running the $PLATFORM native build."; exit 0; }
@@ -101,7 +109,7 @@ runs:
         # is collision-proof; the `wt` subdir doesn't exist yet, which git wants.
         BASE_PARENT="$(mktemp -d)"
         BASE_DIR="$BASE_PARENT/wt"
-        git worktree add --detach --force "$BASE_DIR" "$BASE_SHA" 2>/dev/null || {
+        git worktree add --detach "$BASE_DIR" "$BASE_SHA" 2>/dev/null || {
           rm -rf "$BASE_PARENT"; build "could not materialise main to diff the fingerprint"; }
         write_env "$BASE_DIR"
         if ! ( cd "$BASE_DIR" && bun install --frozen-lockfile ); then
