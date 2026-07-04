@@ -152,8 +152,10 @@ export function DevicePickerSheet({
       )}
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
-        {/* Only when the board they want may be missing — not when it's clearly listed. */}
-        {(devices.length === 0 || noneMatchedSelectedType) && (
+        {/* Only when the board they want may be missing — not when it's clearly
+            listed, and not while the initial scan is still running (showEmptyState
+            gates the zero-device path on the scan having finished empty). */}
+        {(showEmptyState || noneMatchedSelectedType) && (
           <View style={styles.troubleshoot}>
             <Text variant="footnote" color={systemColors.secondaryLabel}>
               {t('ble.troubleshootTitle')}

@@ -8,17 +8,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // column bound.
 export const SHEET_TOP_CHROME_PT = 20;
 
-// The gap an iOS large-sheet card leaves BELOW the top safe area. SwiftUI's
+// The gap an iOS 26 large-sheet card leaves BELOW the top safe area. SwiftUI's
 // `.fraction(f)` detent measures against the sheet's own maximum (`.large`)
-// height, which starts a card-inset (and, on iOS 26, Liquid-Glass/grabber
-// chrome) below the top safe area — not at `windowHeight − topInset`. Omitting
-// it made the `%` estimate run LONG on short screens (iPhone 13 mini / iOS
-// 26.1), pushing the pinned footer off the bottom. Folded into the base before
-// the fraction so the correction scales with the detent. Calibrated for the
-// grabber card presentation every sheet in this app uses (the default
-// `BottomSheetModal`); a non-card `.pageSheet`/`.formSheet` has no such gap and
-// would just be bounded a touch short — safe, since erring short beats a
-// clipped footer. Tunable on-device.
+// height, which on iOS 26 starts a card-inset (Liquid-Glass/grabber chrome)
+// below the top safe area — not at `windowHeight − topInset`. Omitting it made
+// the `%` estimate run LONG on short screens (iPhone 13 mini / iOS 26.1),
+// pushing the pinned footer off the bottom. Folded into the base before the
+// fraction so the correction scales with the detent. Calibrated for the grabber
+// card presentation every sheet in this app uses (the default
+// `BottomSheetModal`). Applied only on iOS 26+ (`Platform.Version >= 26`), where
+// that chrome exists; pre-26 iOS has no such card gap, so the correction is `0`
+// there — otherwise the column comes out ~8–14 pt short. A non-card
+// `.pageSheet`/`.formSheet` has no such gap and would just be bounded a touch
+// short — safe, since erring short beats a clipped footer. Tunable on-device.
 export const SHEET_TOP_GAP_PT = 24;
 
 const fillStyle = StyleSheet.create({ fill: { flex: 1 } }).fill;
@@ -59,12 +61,20 @@ export function useSheetColumnStyle(
       return fillStyle;
     }
     const index = Math.min(Math.max(activeIndex, 0), snapPoints.length - 1);
-    const height = detentColumnHeight(snapPoints[index], windowHeight, insets.top);
+    // Reached only on iOS (early return above), so `Platform.Version` is the iOS
+    // version string (e.g. "26.1"). The card gap exists only from iOS 26.
+    const topGapPt = parseInt(String(Platform.Version), 10) >= 26 ? SHEET_TOP_GAP_PT : 0;
+    const height = detentColumnHeight(snapPoints[index], windowHeight, insets.top, topGapPt);
     return height == null ? fillStyle : { height };
   }, [snapPoints, enableDynamicSizing, activeIndex, windowHeight, insets.top]);
 }
 
-function detentColumnHeight(snapPoint: string | number, windowHeight: number, topInset: number): number | null {
+function detentColumnHeight(
+  snapPoint: string | number,
+  windowHeight: number,
+  topInset: number,
+  topGapPt: number,
+): number | null {
   if (typeof snapPoint === 'number') {
     return Math.round(snapPoint) - SHEET_TOP_CHROME_PT;
   }
@@ -72,5 +82,5 @@ function detentColumnHeight(snapPoint: string | number, windowHeight: number, to
   if (!trimmed.endsWith('%')) return null;
   const fraction = parseFloat(trimmed) / 100;
   if (!Number.isFinite(fraction)) return null;
-  return Math.round((windowHeight - topInset - SHEET_TOP_GAP_PT) * fraction) - SHEET_TOP_CHROME_PT;
+  return Math.round((windowHeight - topInset - topGapPt) * fraction) - SHEET_TOP_CHROME_PT;
 }

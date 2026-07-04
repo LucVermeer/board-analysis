@@ -38,7 +38,8 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
 }));
 
 vi.mock('react-native', () => ({
-  Platform: { OS: 'ios', select: (options: { ios?: unknown; android?: unknown }) => options.ios },
+  // Version drives the iOS 26+ card-gap correction in useSheetColumnStyle.
+  Platform: { OS: 'ios', Version: '26.1', select: (options: { ios?: unknown; android?: unknown }) => options.ios },
   View: ({ children }: ViewMockProps) => createElement('div', null, children),
   KeyboardAvoidingView: ({ children, behavior }: ViewMockProps & { behavior?: string }) => {
     captures.kavBehavior = behavior;
