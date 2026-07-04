@@ -17,6 +17,7 @@ import type { DiscoverablePlaylist, Playlist, SmartPlaylistType } from '@boardse
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
+import { Button } from '../../../src/components/Button';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { HorizontalScrollSection } from '../../../src/components/HorizontalScrollSection';
 import { PlaylistCard, PlaylistFormSheet, type PlaylistFormValues } from '../../../src/components/playlist';
@@ -616,6 +617,9 @@ export default function DiscoverLibrary() {
             <Text variant="subheadline" style={styles.emptySubtitle}>
               {t('library.empty.description')}
             </Text>
+            <View style={styles.emptyCta}>
+              <Button title={t('library.empty.createCta')} icon="plus" size="large" onPress={handleCreatePress} />
+            </View>
           </View>
         ) : null}
 
@@ -740,6 +744,9 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     opacity: 0.4,
     textAlign: 'center',
+  },
+  emptyCta: {
+    marginTop: spacing[4],
   },
   retryCta: {
     marginTop: spacing[3],

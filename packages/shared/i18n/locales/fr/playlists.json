@@ -88,7 +88,8 @@
     },
     "empty": {
       "title": "Aucune playlist pour l'instant",
-      "description": "Appuyez sur le bouton + pour créer votre première playlist."
+      "description": "Enregistre tes projets et tes voies préférées dans une playlist pour les retrouver vite.",
+      "createCta": "Créer une playlist"
     },
     "createFab": {
       "ariaLabel": "Créer une playlist"
