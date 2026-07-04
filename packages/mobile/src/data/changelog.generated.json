@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-04T00:41:40.086Z",
+  "generatedAt": "2026-07-04T01:00:04.364Z",
   "entries": [
+    {
+      "prNumber": 3446,
+      "category": "fixed",
+      "title": "On iPad, the sidebar highlight no longer flickers off when you move the pointer away from a tab you're navigating with the keyboard.",
+      "mergedAt": "2026-07-04T00:49:04Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3446"
+    },
+    {
+      "prNumber": 3440,
+      "category": "fixed",
+      "title": "French UI now calls your board « la board » everywhere — no more « panneau » or « planche »",
+      "mergedAt": "2026-07-04T00:48:47Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3440"
+    },
     {
       "prNumber": 3444,
       "category": "fixed",
