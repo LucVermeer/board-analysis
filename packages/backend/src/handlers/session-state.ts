@@ -3,6 +3,7 @@ import { parseBoardPath } from '@boardsesh/board-config';
 import { applyCorsHeaders } from './cors';
 import { authenticateSessionRequest } from './session-auth';
 import { verifyWidgetSession } from './widget-session-guard';
+import { checkSessionReadRateLimit, ensureSessionReadRateLimitPruner } from './session-read-rate-limit';
 import { roomManager } from '../services/room-manager';
 import { logger } from '../utils/logger';
 
@@ -22,11 +23,17 @@ import { logger } from '../utils/logger';
  */
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
   res.end(JSON.stringify(body));
 }
 
 export async function handleSessionState(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  ensureSessionReadRateLimitPruner();
+
   if (!applyCorsHeaders(req, res)) return;
 
   if (req.method !== 'GET') {
@@ -43,6 +50,13 @@ export async function handleSessionState(req: IncomingMessage, res: ServerRespon
   const sessionId = url.searchParams.get('sessionId');
   if (!sessionId) {
     sendJson(res, 400, { error: 'sessionId query parameter is required' });
+    return;
+  }
+
+  // Per-user read limiter BEFORE the guard's DB reads, so a client hammering the
+  // 3s poll can't drive unbounded getQueueState/verifyWidgetSession load.
+  if (!checkSessionReadRateLimit(auth.userId)) {
+    sendJson(res, 429, { error: 'Too many requests' });
     return;
   }
 

@@ -55,6 +55,7 @@ vi.mock('../services/room-manager', () => ({
 }));
 
 const { handleSessionState } = await import('../handlers/session-state');
+const { __resetSessionReadRateLimitForTests } = await import('../handlers/session-read-rate-limit');
 
 const SESSION_ID = 'session-state-test';
 const USER_ID = 'user-state-test';
@@ -134,6 +135,7 @@ async function run(opts: { method: string; authHeader?: string; sessionId?: stri
 describe('handleSessionState', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetSessionReadRateLimitForTests();
     validateTokenMock.mockResolvedValue({ userId: USER_ID, isAuthenticated: true });
     verifyWidgetSessionMock.mockResolvedValue({ ok: true, session: SESSION_ROW });
     getQueueStateMock.mockResolvedValue(makeQueueState());
@@ -234,5 +236,14 @@ describe('handleSessionState', () => {
     const res = await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID });
     expect(res.statusCode).toBe(500);
     expect(JSON.parse(res.body)).toMatchObject({ error: 'Internal server error' });
+  });
+
+  it('rate-limits a hammering poller (429) once the per-user read bucket drains', async () => {
+    // Read bucket capacity is 4; a 5th rapid poll from the same user is throttled.
+    for (let i = 0; i < 4; i++) {
+      expect((await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID })).statusCode).toBe(200);
+    }
+    const throttled = await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID });
+    expect(throttled.statusCode).toBe(429);
   });
 });

@@ -60,7 +60,13 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    // Per-user session responses must never be cached, and nosniff avoids
+    // content-type confusion — matching the native-auth handler's shape.
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -84,6 +90,16 @@ export async function handleSessionNavigate(req: IncomingMessage, res: ServerRes
     return;
   }
 
+  // Authenticate before reading the body. The mobile JWT is body-independent
+  // (unlike the widget's session-bound auth, which must parse sessionId first),
+  // so an unauthenticated caller is rejected before we spend the body read +
+  // JSON parse.
+  const auth = await authenticateSessionRequest(req);
+  if (!auth.ok) {
+    sendJson(res, auth.status, { success: false, error: auth.error });
+    return;
+  }
+
   let body: unknown;
   try {
     const raw = await readBody(req);
@@ -102,12 +118,6 @@ export async function handleSessionNavigate(req: IncomingMessage, res: ServerRes
   }
 
   const { sessionId, action } = body;
-
-  const auth = await authenticateSessionRequest(req);
-  if (!auth.ok) {
-    sendJson(res, auth.status, { success: false, error: auth.error });
-    return;
-  }
 
   // Membership guard BEFORE the rate limiter. Unlike the iOS widget — whose
   // APNs token is bound to one session, so only a participant ever reaches the
@@ -166,6 +176,13 @@ export async function handleSessionTakeControl(req: IncomingMessage, res: Server
     return;
   }
 
+  // Authenticate before reading the body (see handleSessionNavigate).
+  const auth = await authenticateSessionRequest(req);
+  if (!auth.ok) {
+    sendJson(res, auth.status, { success: false, error: auth.error });
+    return;
+  }
+
   let body: unknown;
   try {
     const raw = await readBody(req);
@@ -181,12 +198,6 @@ export async function handleSessionTakeControl(req: IncomingMessage, res: Server
   }
 
   const { sessionId } = body;
-
-  const auth = await authenticateSessionRequest(req);
-  if (!auth.ok) {
-    sendJson(res, auth.status, { success: false, error: auth.error });
-    return;
-  }
 
   // Membership guard BEFORE the rate limiter — see handleSessionNavigate for
   // why (a mobile JWT isn't session-bound, so a non-participant must be 403'd
