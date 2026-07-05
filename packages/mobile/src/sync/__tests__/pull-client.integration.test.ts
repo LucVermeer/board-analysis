@@ -15,13 +15,17 @@
 //      by packages/backend/.../sync/queries.ts.
 //   3. SELECT-ing the rows back out to prove they landed with the right values.
 //
-// `INSERT OR REPLACE INTO <table> (<Object.keys(doc)>)` means a resolver key that
-// isn't a real DDL column raises `SQLITE_ERROR: table X has no column named Y`,
-// which propagates out of `pullSync` and fails the test. That is exactly the
-// drift the reviewer worried about. (Proven by the `wrong-key` sanity test below.)
+// Unknown document keys are skipped (forward compat with newer backends) and
+// reported to telemetry, so additive drift never bricks the sync loop; a
+// resolver MISNAMING a required column still fails loudly because the row then
+// violates the DDL's NOT NULL. (Both proven by the drift tests below.)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { QueryClient } from '@tanstack/react-query';
+
+// Capture schema-drift telemetry (and keep Sentry out of this test's graph).
+const reportHandledError = vi.hoisted(() => vi.fn());
+vi.mock('../../lib/error-reporting', () => ({ reportHandledError }));
 
 import { pullSync } from '../pull-client';
 import { enqueue } from '../../mutation-queue/queue';
@@ -295,12 +299,43 @@ describe('sync layer — real-DDL integration', () => {
       expect(await readCheckpoint(db, 'checkpoint:board_climb_stats:kilter:1:5')).toEqual(cursor);
     });
 
-    it('SANITY: a document with a column the DDL does not have makes pullSync throw (catches resolver↔DDL drift)', async () => {
-      // This is the very failure the reviewer's I19 gap is about: if a backend
-      // resolver emitted, say, `board_type` for favorites (the DDL column is
-      // `board_name`), INSERT OR REPLACE references a non-existent column and
-      // SQLite raises an error that propagates out of pullSync. The SQL-recording
-      // mock in pull-client.test.ts would NOT catch this. Here it must.
+    it('skips an unknown server column (forward compat), lands the row, and reports the drift once', async () => {
+      // A backend deploy can add a column before an OTA client update lands, so
+      // an unknown key must never brick the sync loop. It is dropped from the
+      // upsert (the SQL column list is allowlist-derived) and surfaced to
+      // telemetry once per table+column.
+      const favoriteWithNewServerColumn = {
+        board_name: 'tension',
+        climb_uuid: 'climb-forward-compat',
+        angle: 25,
+        shiny_new_column: 'from a newer backend',
+      };
+
+      await expect(
+        pullSync(
+          db,
+          queryClient,
+          makeSingleTableFetch({ queryName: 'syncFavorites', documents: [favoriteWithNewServerColumn] }),
+        ),
+      ).resolves.toBeUndefined();
+
+      const row = await db.getFirstAsync<Record<string, unknown>>(
+        'SELECT board_name, climb_uuid, angle FROM user_favorites WHERE climb_uuid = ?',
+        ['climb-forward-compat'],
+      );
+      expect(row).toMatchObject({ board_name: 'tension', climb_uuid: 'climb-forward-compat', angle: 25 });
+      const driftReports = reportHandledError.mock.calls.filter(
+        ([, context]) => (context as { extra?: { column?: string } })?.extra?.column === 'shiny_new_column',
+      );
+      expect(driftReports).toHaveLength(1);
+    });
+
+    it('SANITY: a resolver emitting a misnamed key still fails loudly on the DDL NOT NULL (catches resolver↔DDL drift)', async () => {
+      // If a backend resolver emitted `board_type` for favorites (the DDL column
+      // is `board_name`), the unknown key is skipped and the row arrives without
+      // its NOT NULL primary-key component — SQLite rejects it and the error
+      // propagates out of pullSync. Required-column drift stays a loud failure;
+      // only additive drift (new server columns) is tolerated.
       const driftedFavorite = {
         board_type: 'tension', // WRONG: DDL column is board_name
         climb_uuid: 'climb-drift',
@@ -309,7 +344,7 @@ describe('sync layer — real-DDL integration', () => {
 
       await expect(
         pullSync(db, queryClient, makeSingleTableFetch({ queryName: 'syncFavorites', documents: [driftedFavorite] })),
-      ).rejects.toThrow(/unknown columns: board_type/i);
+      ).rejects.toThrow(/NOT NULL|board_name/i);
 
       // And the correctly-keyed document (board_name) does NOT throw — proving the
       // failure above is specifically the wrong column, not a harness artifact.

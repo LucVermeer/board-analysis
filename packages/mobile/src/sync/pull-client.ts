@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { QueryClient } from '@tanstack/react-query';
 import type { SyncCursorInput, SyncResult, SyncDeletionsResult } from '../lib/graphql/operations';
+import { reportHandledError } from '../lib/error-reporting';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from './table-config';
 import { getCheckpoint, setCheckpoint, getCheckpointKey } from './checkpoints';
 import { parseOfflineBoardKey, type OfflineBoardScope } from '../settings/offline-board-key';
@@ -27,6 +28,10 @@ type BoardScope = OfflineBoardScope & { scopeKey: string };
 
 const PAGE_LIMIT = 500;
 const UPSERT_BATCH_SIZE = 50;
+
+// One schema-drift report per (table, column) per app launch — a 500-row page
+// must not emit 500 identical telemetry events.
+const reportedUnknownSyncColumns = new Set<string>();
 
 function chunk<T>(items: T[], size: number): T[][] {
   const batches: T[][] = [];
@@ -81,11 +86,23 @@ async function upsertDocuments(
 ): Promise<void> {
   if (documents.length === 0) return;
 
+  // Unknown columns are SKIPPED, not fatal: the backend deploys before OTA
+  // clients update, so a newly-added server column must not brick every older
+  // client's sync loop. SQL safety is unaffected — the statement's column list
+  // below is derived from the allowlist intersection, never from document keys.
+  // Drift still surfaces in telemetry (once per table+column per app launch),
+  // so a resolver emitting a misnamed column stays observable.
   const allowedColumnSet = new Set(allowedColumns);
   for (const document of documents) {
     const unknownColumns = Object.keys(document).filter((column) => !allowedColumnSet.has(column));
-    if (unknownColumns.length > 0) {
-      throw new Error(`Sync document for ${tableName} contains unknown columns: ${unknownColumns.join(', ')}`);
+    for (const unknownColumn of unknownColumns) {
+      const driftKey = `${tableName}.${unknownColumn}`;
+      if (reportedUnknownSyncColumns.has(driftKey)) continue;
+      reportedUnknownSyncColumns.add(driftKey);
+      reportHandledError(new Error(`Sync document for ${tableName} contains unknown column: ${unknownColumn}`), {
+        tags: { source: 'offline-sync', kind: 'schema-drift' },
+        extra: { tableName, column: unknownColumn },
+      });
     }
   }
 

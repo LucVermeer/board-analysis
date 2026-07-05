@@ -15,6 +15,7 @@ import { parseSizeParam } from './lib/image-resize';
 import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
+import { pruneSyncDeletions } from './services/sync-deletions-prune';
 import { handleAuroraCredentials, handleAuroraCredentialsUnsynced } from './handlers/aurora-credentials';
 import { handleAuroraImport } from './handlers/aurora-import';
 import {
@@ -693,6 +694,24 @@ export async function startServer(): Promise<ServerResources> {
     }
   }, 120000); // 2 minutes
   intervals.push(ttlRefreshInterval);
+
+  // Prune sync-deletion tombstones past their retention window (see
+  // sync-deletions-prune.ts). Every delete of a tick/favorite/playlist writes a
+  // tombstone via DB trigger, so without this the table grows forever. Daily
+  // cadence, plus one run shortly after boot so frequently-redeployed instances
+  // still prune; the job is idempotent and safe to run from every instance.
+  const runSyncDeletionsPrune = async () => {
+    try {
+      const prunedCount = await pruneSyncDeletions();
+      if (prunedCount > 0) logger.info(`[Sync] Pruned ${prunedCount} expired sync_deletions tombstones`);
+    } catch (error) {
+      logger.error('[Sync] sync_deletions prune failed:', error);
+    }
+  };
+  const initialPruneDelay = setTimeout(() => void runSyncDeletionsPrune(), 5 * 60 * 1000);
+  if (typeof initialPruneDelay.unref === 'function') initialPruneDelay.unref();
+  const syncDeletionsPruneInterval = setInterval(() => void runSyncDeletionsPrune(), 24 * 60 * 60 * 1000);
+  intervals.push(syncDeletionsPruneInterval);
 
   return { wss, httpServer, cleanupIntervals, shutdownServices };
 }
