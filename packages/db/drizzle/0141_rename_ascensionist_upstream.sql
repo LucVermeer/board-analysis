@@ -20,11 +20,15 @@
 --     (2) FOLD the kilter snapshot into upstream via GREATEST so no Kilter row
 --         loses its higher count, then DROP the now-redundant kilter column.
 --
--- Note: MoonBoard rows keep their (possibly already-wiped) ascensionist_count as
---   is here; they are repaired out-of-band by re-running db:import-moonboard-catalog
---   after deploy, which populates upstream from the app catalog and rebuilds the
---   total. This migration deliberately does NOT rewrite ascensionist_count:
---   Kilter/Tension totals already satisfy GREATEST(k,a)+boardsesh == upstream+boardsesh.
+-- Note: rows whose source column was NULL after the rename (MoonBoard, and any
+--   direct-Aurora rows bulk-seeded without an aurora count) had their external
+--   count written straight into ascensionist_count by the old importer. Step (3)
+--   recovers it into upstream so a later tick recompute (upstream + boardsesh)
+--   ADDS to it instead of wiping it — this closes the wipe permanently for climbs
+--   the post-deploy re-import can't reach (e.g. MoonBoard problems delisted from
+--   the app catalog). Already-wiped rows (ascensionist == boardsesh) recover to 0
+--   and are raised by the re-import. ascensionist_count itself is left unchanged:
+--   Kilter/Tension totals already satisfy upstream + boardsesh after the fold.
 --
 -- Safety: runs in the migrator's single transaction. RENAME and DROP COLUMN are
 --   metadata-only; the fold UPDATE is the only row work and is idempotent (it only
@@ -46,6 +50,25 @@ BEGIN
      AND kilter_ascensionist_count > COALESCE(upstream_ascensionist_count, 0);
   GET DIAGNOSTICS folded = ROW_COUNT;
   RAISE NOTICE '0141 upstream fold: raised % Kilter row(s) from their kilter snapshot', folded;
+END $$;--> statement-breakpoint
+
+-- Recover directly-written external counts into upstream. Any row still lacking
+-- an upstream value (NULL) had its manufacturer count written straight into
+-- ascensionist_count with no source column — MoonBoard, plus direct-Aurora rows
+-- bulk-seeded without an aurora count. Move it into upstream so the tick recompute
+-- adds to it. Folded Kilter/Tension rows have a non-NULL upstream and are skipped;
+-- Boardsesh-native climbs (ascensionist == boardsesh) recover to 0, which is a
+-- no-op. Idempotent: re-running finds no NULL-upstream rows left.
+DO $$
+DECLARE recovered integer;
+BEGIN
+  UPDATE board_climb_stats
+     SET upstream_ascensionist_count =
+         GREATEST(ascensionist_count - COALESCE(boardsesh_ascensionist_count, 0), 0)
+   WHERE upstream_ascensionist_count IS NULL
+     AND ascensionist_count IS NOT NULL;
+  GET DIAGNOSTICS recovered = ROW_COUNT;
+  RAISE NOTICE '0141 upstream recover: seeded upstream for % source-less row(s)', recovered;
 END $$;--> statement-breakpoint
 
 ALTER TABLE "board_climb_stats" DROP COLUMN "kilter_ascensionist_count";
