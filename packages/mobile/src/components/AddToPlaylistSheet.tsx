@@ -1,6 +1,8 @@
 import { useMemo, type ComponentType } from 'react';
-import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
+import { type FlatListProps } from 'react-native';
+import { BottomSheetTextInput, BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import { ModalSheet } from './ModalSheet';
 import { ClimbPreviewCard } from './ClimbPreviewCard';
 import { InlinePlaylistPicker, type PickerTextInputProps } from './playlist/InlinePlaylistPicker';
@@ -25,6 +27,10 @@ type AddToPlaylistSheetProps = {
 // picker's narrowed text-input contract — a single, honest cast (BottomSheetTextInput
 // carries extra bottom-sheet-only props but accepts everything the picker drives).
 const SheetTextInput = BottomSheetTextInput as ComponentType<PickerTextInputProps>;
+// The bottom-sheet-aware list scrolls within the native sheet detent (its
+// virtualization plugs into the sheet's gesture handling); the reaction overlay
+// uses the picker's default RN FlatList.
+const SheetFlatList = BottomSheetFlatList as ComponentType<FlatListProps<Playlist>>;
 
 /**
  * The swipe/ellipsis "Add to playlist" surface. Since #3167 native sheets can't
@@ -52,7 +58,6 @@ function AddToPlaylistSheet({
       onClose={onClose}
       onFullyDismissed={onFullyDismissed}
       enablePanDownToClose
-      scrollable
     >
       {climb && (
         <>
@@ -64,12 +69,15 @@ function AddToPlaylistSheet({
             setIds={setIds}
             angle={angle}
           />
+          {/* The picker's own BottomSheetFlatList scrolls with the sheet, so the
+              sheet itself isn't `scrollable` (no nested scroll views). */}
           <InlinePlaylistPicker
             climb={climb}
             angle={angle}
             boardName={boardName}
             layoutId={layoutId}
             TextInputComponent={SheetTextInput}
+            ListComponent={SheetFlatList}
           />
         </>
       )}

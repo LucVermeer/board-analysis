@@ -14,6 +14,9 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
   BottomSheetTextInput: function BottomSheetTextInput() {
     return null;
   },
+  BottomSheetFlatList: function BottomSheetFlatList() {
+    return null;
+  },
 }));
 
 vi.mock('../ModalSheet', () => ({
@@ -79,8 +82,10 @@ describe('AddToPlaylistSheet', () => {
       boardName: 'kilter',
       layoutId: 1,
     });
-    // The sheet injects the native bottom-sheet text input (keyboard pushes the sheet).
+    // The sheet injects the native bottom-sheet text input + list so they scroll
+    // with the sheet.
     expect(typeof captured.pickerProps?.TextInputComponent).toBe('function');
+    expect(typeof captured.pickerProps?.ListComponent).toBe('function');
     // No back affordance in the sheet host.
     expect(captured.pickerProps?.onBack).toBeUndefined();
   });

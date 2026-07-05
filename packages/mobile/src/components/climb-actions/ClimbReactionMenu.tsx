@@ -112,6 +112,8 @@ export function ClimbReactionMenu({
   }, [progress, reduceMotion, finishClose]);
 
   const backToMenu = useCallback(() => setView('menu'), []);
+  // Stable so useClimbActions' memo doesn't rebuild the action list every render.
+  const openPlaylist = useCallback(() => setView('playlist'), []);
 
   // Hardware back (Android) / VoiceOver escape: pop the playlist view first,
   // dismiss the whole overlay only from the top-level menu.
@@ -130,7 +132,7 @@ export function ClimbReactionMenu({
     isAuthenticated,
     onEditEntry,
     onAfterAction: dismiss,
-    onSelectPlaylist: () => setView('playlist'),
+    onSelectPlaylist: openPlaylist,
   });
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;

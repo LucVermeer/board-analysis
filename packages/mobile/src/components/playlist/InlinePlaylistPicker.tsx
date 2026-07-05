@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type TextInputProps } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type FlatListProps,
+  type LayoutChangeEvent,
+  type ListRenderItem,
+  type TextInputProps,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -61,29 +72,17 @@ type InlinePlaylistPickerProps = {
   /** Rendered on the left of the header when the host wants a back affordance
    *  (the reaction overlay returns to its action list; the sheet omits it). */
   onBack?: () => void;
-  /** When set, the header (with the back button) is pinned and the body scrolls
+  /** When set, the header (with the back button) is pinned and the list scrolls
    *  within this height — so scrolling a long playlist list never hides "back".
-   *  Omit in a sheet host, whose own scroll view already scrolls the whole body. */
+   *  Omit in a sheet host, whose own scroll already scrolls the body. */
   maxHeight?: number;
+  /** Virtualized list host for the playlist rows: the RN `FlatList` in the reaction
+   *  overlay (default), `BottomSheetFlatList` inside a `ModalSheet` so it scrolls
+   *  with the sheet. Injected rather than `.map`-ing rows in a ScrollView. */
+  ListComponent?: ComponentType<FlatListProps<Playlist>>;
 };
 
-// Pins the header: when a scroll height is given the body scrolls inside a
-// ScrollView capped at that explicit maxHeight (flexShrink alone doesn't bound a
-// ScrollView under a maxHeight-only parent — it would clip). Otherwise the body
-// renders inline and a sheet host provides the scroll.
-function ScrollableBody({ maxHeight, children }: { maxHeight?: number; children: ReactNode }) {
-  if (maxHeight == null) return <>{children}</>;
-  return (
-    <ScrollView
-      style={{ maxHeight }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      bounces={false}
-    >
-      {children}
-    </ScrollView>
-  );
-}
+const playlistKey = (playlist: Playlist) => playlist.id;
 
 /**
  * Membership-aware "add to playlist" body: a toggle list (checkmark = the climb
@@ -104,6 +103,7 @@ export function InlinePlaylistPicker({
   TextInputComponent,
   onBack,
   maxHeight,
+  ListComponent = FlatList,
 }: InlinePlaylistPickerProps) {
   const { t } = useTranslation('climbs');
   const { t: tc } = useTranslation('common');
@@ -338,10 +338,34 @@ export function InlinePlaylistPicker({
   // the list scrolls (not clips) whatever the header's height.
   const [headerHeight, setHeaderHeight] = useState(0);
   const scrollMaxHeight = maxHeight != null ? Math.max(120, maxHeight - headerHeight) : undefined;
+  const onHeaderLayout = useCallback(
+    (event: LayoutChangeEvent) => setHeaderHeight(event.nativeEvent.layout.height),
+    [],
+  );
+
+  const renderPlaylistRow = useCallback<ListRenderItem<Playlist>>(
+    ({ item, index }) => {
+      const accent = item.color && isValidHexColor(item.color) ? item.color : brandColors.primary;
+      const member = members.has(item.uuid);
+      return (
+        <ListRow
+          title={item.name}
+          subtitle={t('multiboardList.count', { count: item.climbCount })}
+          leading={<Icon name="playlist" size={22} color={accent} />}
+          trailing={member ? <Icon name="check.small" size={18} color={brandColors.primary} /> : undefined}
+          onPress={() => void handleToggle(item)}
+          accessibilityLabel={item.name}
+          accessibilityHint={member ? t('actions.playlist.toast.removed') : t('actions.playlist.toast.added')}
+          showSeparator={index < sortedPlaylists.length - 1}
+        />
+      );
+    },
+    [sortedPlaylists, members, handleToggle, brandColors, t],
+  );
 
   return (
     <View style={[styles.container, maxHeight != null ? { maxHeight } : null]}>
-      <View style={styles.header} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+      <View style={styles.header} onLayout={onHeaderLayout}>
         {onBack ? (
           <Pressable
             onPress={onBack}
@@ -371,8 +395,13 @@ export function InlinePlaylistPicker({
         ) : null}
       </View>
 
-      <ScrollableBody maxHeight={scrollMaxHeight}>
-        {createOpen ? (
+      {createOpen ? (
+        <ScrollView
+          style={scrollMaxHeight != null ? { maxHeight: scrollMaxHeight } : undefined}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
           <View style={styles.createForm}>
             <TextInputComponent
               value={name}
@@ -470,57 +499,46 @@ export function InlinePlaylistPicker({
               </Pressable>
             </View>
           </View>
-        ) : null}
-
-        {error ? (
-          <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
-            {error}
+        </ScrollView>
+      ) : !isAuthenticated ? (
+        <View style={styles.message}>
+          <Text variant="subheadline" color={iosSystemColors.systemGray}>
+            {t('actions.playlist.popover.signInBlurb')}
           </Text>
-        ) : null}
-
-        {/* Hide the playlist list while the create form is open — the form takes
-          over the body rather than stacking above the existing playlists. */}
-        {!createOpen &&
-          (!isAuthenticated ? (
-            <View style={styles.message}>
-              <Text variant="subheadline" color={iosSystemColors.systemGray}>
-                {t('actions.playlist.popover.signInBlurb')}
+        </View>
+      ) : isLoading && sortedPlaylists.length === 0 ? (
+        // Spinner only before the user's playlists are cached at all; once they're
+        // available we render immediately and checkmarks fill in.
+        <View style={styles.message}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+        // Virtualized (FlatList in the overlay, BottomSheetFlatList in a sheet) — a
+        // toggle-failure line rides in the header, the empty state in ListEmpty.
+        <ListComponent
+          data={sortedPlaylists}
+          keyExtractor={playlistKey}
+          renderItem={renderPlaylistRow}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          style={scrollMaxHeight != null ? { maxHeight: scrollMaxHeight } : undefined}
+          ListHeaderComponent={
+            error ? (
+              <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
+                {error}
               </Text>
-            </View>
-          ) : isLoading && sortedPlaylists.length === 0 ? (
-            // Spinner only before the user's playlists are cached at all; once
-            // they're available we render immediately and checkmarks fill in.
-            <View style={styles.message}>
-              <ActivityIndicator />
-            </View>
-          ) : sortedPlaylists.length === 0 ? (
+            ) : null
+          }
+          ListEmptyComponent={
             <View style={styles.message}>
               <Text variant="subheadline" color={iosSystemColors.systemGray}>
                 {t('actions.playlist.popover.empty')}
               </Text>
             </View>
-          ) : (
-            sortedPlaylists.map((playlist, index) => {
-              const accent = playlist.color && isValidHexColor(playlist.color) ? playlist.color : brandColors.primary;
-              const member = members.has(playlist.uuid);
-              return (
-                <ListRow
-                  key={playlist.id}
-                  title={playlist.name}
-                  subtitle={t('multiboardList.count', { count: playlist.climbCount })}
-                  leading={<Icon name="playlist" size={22} color={accent} />}
-                  trailing={member ? <Icon name="check.small" size={18} color={brandColors.primary} /> : undefined}
-                  onPress={() => {
-                    void handleToggle(playlist);
-                  }}
-                  accessibilityLabel={playlist.name}
-                  accessibilityHint={member ? t('actions.playlist.toast.removed') : t('actions.playlist.toast.added')}
-                  showSeparator={index < sortedPlaylists.length - 1}
-                />
-              );
-            })
-          ))}
-      </ScrollableBody>
+          }
+        />
+      )}
     </View>
   );
 }

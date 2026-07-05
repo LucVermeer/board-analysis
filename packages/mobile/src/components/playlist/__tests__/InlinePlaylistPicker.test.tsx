@@ -33,6 +33,34 @@ vi.mock('react-native', () => ({
     accessibilityLabel?: string;
   }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  FlatList: ({
+    data,
+    renderItem,
+    keyExtractor,
+    ListHeaderComponent,
+    ListEmptyComponent,
+  }: {
+    data?: readonly Playlist[];
+    renderItem?: (info: { item: Playlist; index: number }) => ReactNode;
+    keyExtractor?: (item: Playlist, index: number) => string;
+    ListHeaderComponent?: ReactNode;
+    ListEmptyComponent?: ReactNode;
+  }) =>
+    createElement(
+      'div',
+      null,
+      ListHeaderComponent,
+      data && data.length > 0
+        ? data.map((item, index) =>
+            createElement(
+              'div',
+              { key: keyExtractor ? keyExtractor(item, index) : index },
+              renderItem?.({ item, index }),
+            ),
+          )
+        : ListEmptyComponent,
+    ),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
