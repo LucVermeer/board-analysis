@@ -109,19 +109,21 @@ export async function handleSessionNavigate(req: IncomingMessage, res: ServerRes
     return;
   }
 
-  // Rate limit after auth so an unauthenticated caller can't poison a member's
-  // bucket. Shared per-session bucket with the iOS widget (capacity 2, refill
-  // 1 / 1.5s).
-  if (!checkWidgetRateLimit(sessionId)) {
-    sendJson(res, 429, { success: false, error: 'Too many requests' });
-    return;
-  }
-
-  // Reject stale requests whose session has ended or whose user isn't a
-  // participant, before any queue read/mutation.
+  // Membership guard BEFORE the rate limiter. Unlike the iOS widget — whose
+  // APNs token is bound to one session, so only a participant ever reaches the
+  // shared bucket — a mobile JWT authenticates ANY user for ANY sessionId. If
+  // we rate-limited first, an authenticated non-participant who learns a session
+  // id could drain that session's bucket (shared with the widget) and 429 real
+  // members. So reject non-participants / ended sessions before spending a token.
   const guard = await verifyWidgetSession(sessionId, auth.userId);
   if (!guard.ok) {
     sendJson(res, guard.status, { success: false, error: guard.error });
+    return;
+  }
+
+  // Shared per-session bucket with the iOS widget (capacity 2, refill 1 / 1.5s).
+  if (!checkWidgetRateLimit(sessionId)) {
+    sendJson(res, 429, { success: false, error: 'Too many requests' });
     return;
   }
 
@@ -186,14 +188,17 @@ export async function handleSessionTakeControl(req: IncomingMessage, res: Server
     return;
   }
 
-  if (!checkWidgetRateLimit(sessionId)) {
-    sendJson(res, 429, { success: false, error: 'Too many requests' });
-    return;
-  }
-
+  // Membership guard BEFORE the rate limiter — see handleSessionNavigate for
+  // why (a mobile JWT isn't session-bound, so a non-participant must be 403'd
+  // without draining the session's shared rate-limit bucket).
   const guard = await verifyWidgetSession(sessionId, auth.userId);
   if (!guard.ok) {
     sendJson(res, guard.status, { success: false, error: guard.error });
+    return;
+  }
+
+  if (!checkWidgetRateLimit(sessionId)) {
+    sendJson(res, 429, { success: false, error: 'Too many requests' });
     return;
   }
 

@@ -12,8 +12,12 @@ import { EventEmitter } from 'node:events';
 const validateTokenMock = vi.fn<(token: string) => Promise<{ userId: string; isAuthenticated: true } | null>>(
   async () => ({ userId: USER_ID, isAuthenticated: true }),
 );
-type GuardResult = { ok: true } | { ok: false; status: 410 | 403; error: string };
-const verifyWidgetSessionMock = vi.fn<() => Promise<GuardResult>>(async () => ({ ok: true }));
+// The guard now returns the loaded session row on the ok path so the handler
+// reads boardPath without a second getSessionById round-trip.
+type SessionRow = { boardPath: string; status: string; endedAt: Date | null };
+const SESSION_ROW: SessionRow = { boardPath: 'kilter/8/17/20,21/40', status: 'active', endedAt: null };
+type GuardResult = { ok: true; session: SessionRow } | { ok: false; status: 410 | 403; error: string };
+const verifyWidgetSessionMock = vi.fn<() => Promise<GuardResult>>(async () => ({ ok: true, session: SESSION_ROW }));
 
 type MockClimb = {
   uuid: string;
@@ -30,9 +34,6 @@ type MockQueueState = {
   sequence: number;
   stateHash: string;
 };
-const getSessionByIdMock = vi.fn<() => Promise<{ boardPath: string; status: string; endedAt: Date | null } | null>>(
-  async () => ({ boardPath: 'kilter/8/17/20,21/40', status: 'active', endedAt: null }),
-);
 const getQueueStateMock = vi.fn<() => Promise<MockQueueState>>(async () => makeQueueState());
 
 vi.mock('../handlers/cors', () => ({
@@ -49,7 +50,6 @@ vi.mock('../handlers/widget-session-guard', () => ({
 
 vi.mock('../services/room-manager', () => ({
   roomManager: {
-    getSessionById: getSessionByIdMock,
     getQueueState: getQueueStateMock,
   },
 }));
@@ -135,8 +135,7 @@ describe('handleSessionState', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     validateTokenMock.mockResolvedValue({ userId: USER_ID, isAuthenticated: true });
-    verifyWidgetSessionMock.mockResolvedValue({ ok: true });
-    getSessionByIdMock.mockResolvedValue({ boardPath: 'kilter/8/17/20,21/40', status: 'active', endedAt: null });
+    verifyWidgetSessionMock.mockResolvedValue({ ok: true, session: SESSION_ROW });
     getQueueStateMock.mockResolvedValue(makeQueueState());
   });
 
@@ -224,8 +223,8 @@ describe('handleSessionState', () => {
     expect(parsed.climb.isBenchmark).toBe(false);
   });
 
-  it('returns 410 when the session disappeared between the guard and the read', async () => {
-    getSessionByIdMock.mockResolvedValue(null);
+  it('passes through the guard 410 when the session has ended', async () => {
+    verifyWidgetSessionMock.mockResolvedValue({ ok: false, status: 410, error: 'Session has ended; re-register' });
     const res = await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID });
     expect(res.statusCode).toBe(410);
   });

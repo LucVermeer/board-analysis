@@ -233,6 +233,21 @@ describe('handleSessionNavigate', () => {
     const third = await runNavigate({ method: 'POST', authHeader: bearer, body: navBody });
     expect(third.statusCode).toBe(429);
   });
+
+  it('does not consume the rate-limit bucket for a non-participant (no bucket poisoning)', async () => {
+    // The guard runs BEFORE the rate limiter, so a non-participant hammering a
+    // session id they know but aren't a member of gets 403 without spending a
+    // token — a real member's bucket (shared with the iOS widget) stays intact.
+    verifyWidgetSessionMock.mockResolvedValue({ ok: false, status: 403, error: 'Not a participant in this session' });
+    for (let i = 0; i < 5; i++) {
+      expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(403);
+    }
+    // The bucket was never drained: a genuine participant still gets its full
+    // capacity-2 of navigations.
+    verifyWidgetSessionMock.mockResolvedValue({ ok: true });
+    expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(200);
+    expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(200);
+  });
 });
 
 describe('handleSessionTakeControl', () => {

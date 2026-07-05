@@ -53,17 +53,10 @@ export async function handleSessionState(req: IncomingMessage, res: ServerRespon
   }
 
   try {
-    // verifyWidgetSession already confirmed the session exists and is active;
-    // re-fetch here to read its boardPath for board resolution.
-    const session = await roomManager.getSessionById(sessionId);
-    if (!session) {
-      // Raced with session end between the guard and here.
-      sendJson(res, 410, { error: 'Session has ended; re-register' });
-      return;
-    }
-
+    // Reuse the session row the guard already loaded — no second getSessionById
+    // round-trip, since the watch polls this endpoint continuously.
     const queueState = await roomManager.getQueueState(sessionId);
-    const parsedBoard = parseBoardPath(session.boardPath);
+    const parsedBoard = parseBoardPath(guard.session.boardPath);
 
     const currentItem = queueState.currentClimbQueueItem;
     const currentIndex = currentItem ? queueState.queue.findIndex((q) => q.uuid === currentItem.uuid) : -1;
