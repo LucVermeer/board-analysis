@@ -132,6 +132,10 @@ export function InlinePlaylistPicker({
     },
     enabled: isAuthenticated,
     staleTime: 30 * 1000,
+    // Optimistic toggle writes are the source of truth while the picker is open;
+    // don't let a focus/reconnect refetch land a stale response over a checkmark.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   // Seed checkmarks from the shared membership store (the climb list populates it
