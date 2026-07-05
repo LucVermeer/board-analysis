@@ -64,6 +64,14 @@ export function isNetworkError(error: unknown): boolean {
     const message = error.message.toLowerCase();
     return message.includes('network') || message.includes('fetch');
   }
+  // A cancelled request (app backgrounded mid-drain, AbortController timeout)
+  // surfaces as an error NAMED AbortError — not a TypeError, and not reliably a
+  // DOMException instance across RN runtimes, so match by name. The request
+  // never completed against the server, so replaying is safe; without this
+  // branch an aborted write would resolve no status and dead-letter.
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true;
+  }
   return false;
 }
 
@@ -83,6 +91,10 @@ export function isRetryable(error: unknown): boolean {
     return false;
   }
 
+  // 401 is retryable because the drainer's fetch is authenticatedFetch
+  // (lib/auth-interceptor): it refreshes the token and retries once BEFORE the
+  // error reaches classification, and a failed refresh forces sign-out — which
+  // wipes the pending queue — so a retried 401 can't loop against a dead session.
   if (status === 401) return true;
   if (status === 429) return true;
   if (status >= 500) return true;

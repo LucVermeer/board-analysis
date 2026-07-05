@@ -27,19 +27,10 @@ export type SyncOptions = {
 type BoardScope = OfflineBoardScope & { scopeKey: string };
 
 const PAGE_LIMIT = 500;
-const UPSERT_BATCH_SIZE = 50;
 
 // One schema-drift report per (table, column) per app launch — a 500-row page
 // must not emit 500 identical telemetry events.
 const reportedUnknownSyncColumns = new Set<string>();
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const batches: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    batches.push(items.slice(index, index + size));
-  }
-  return batches;
-}
 
 function buildSyncQuery(queryName: string, isPerBoard: boolean): string {
   // Per-board pulls carry the board type plus optional layout/size scope so a
@@ -117,20 +108,22 @@ async function upsertDocuments(
   const columnList = columns.join(', ');
   const sql = `INSERT OR REPLACE INTO ${tableName} (${columnList}) VALUES (${placeholders})`;
 
-  for (const batch of chunk(documents, UPSERT_BATCH_SIZE)) {
-    await db.withExclusiveTransactionAsync(async (transaction) => {
-      for (const document of batch) {
-        const values = columns.map((col) => {
-          const value = document[col];
-          if (value === null || value === undefined) return null;
-          if (typeof value === 'boolean') return value ? 1 : 0;
-          if (typeof value === 'object') return JSON.stringify(value);
-          return value;
-        });
-        await transaction.runAsync(sql, values as (string | number | null)[]);
-      }
-    });
-  }
+  // One exclusive transaction per page (≤ PAGE_LIMIT rows): a big board pull is
+  // thousands of pages, and a per-50-row transaction multiplied every page's
+  // commit overhead by 10 while giving the drainer no meaningful extra window —
+  // it can interleave between pages either way.
+  await db.withExclusiveTransactionAsync(async (transaction) => {
+    for (const document of documents) {
+      const values = columns.map((col) => {
+        const value = document[col];
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'boolean') return value ? 1 : 0;
+        if (typeof value === 'object') return JSON.stringify(value);
+        return value;
+      });
+      await transaction.runAsync(sql, values as (string | number | null)[]);
+    }
+  });
 }
 
 async function syncTable(

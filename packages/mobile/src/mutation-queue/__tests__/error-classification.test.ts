@@ -80,6 +80,12 @@ describe('isRetryable', () => {
     expect(isRetryable(new TypeError('Cannot read property'))).toBe(false);
   });
 
+  it('an aborted request (AbortError by name) is retryable — it never completed against the server', () => {
+    const abortError = new Error('Aborted');
+    abortError.name = 'AbortError';
+    expect(isRetryable(abortError)).toBe(true);
+  });
+
   it('401 is retryable', () => {
     expect(isRetryable({ status: 401 })).toBe(true);
   });

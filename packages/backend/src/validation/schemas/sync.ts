@@ -3,13 +3,14 @@ import { z } from 'zod';
 /**
  * Composite sync cursor input. Both components are optional (null on the first
  * pull). `updatedAt` is an ISO-8601 string; `syncSeq` is a stringified bigint.
- * They are passed straight into a parameterized row-value comparison, so we only
- * need light shape validation here.
+ * Enforced here so a malformed cursor is a client-visible validation error
+ * instead of an unhandled Postgres exception when the resolver casts it with
+ * `::timestamp` / `::bigint`.
  */
 export const SyncCursorInputSchema = z
   .object({
-    updatedAt: z.string().optional().nullable(),
-    syncSeq: z.string().optional().nullable(),
+    updatedAt: z.string().datetime({ offset: true }).optional().nullable(),
+    syncSeq: z.string().regex(/^\d+$/, 'syncSeq must be a stringified integer').optional().nullable(),
   })
   .optional()
   .nullable();

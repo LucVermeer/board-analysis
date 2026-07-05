@@ -159,7 +159,7 @@ describe('pullSync', () => {
     );
   });
 
-  it('upserts documents in batches of 50', async () => {
+  it('upserts a whole page inside one exclusive transaction', async () => {
     const documents = Array.from({ length: 120 }, (_, index) => ({
       uuid: `tick-${index}`,
       attempt_count: index,
@@ -185,18 +185,10 @@ describe('pullSync', () => {
     const ticksInsertCalls = sqlCalls.filter((call) => call.sql.includes('INSERT OR REPLACE INTO boardsesh_ticks'));
     expect(ticksInsertCalls).toHaveLength(120);
 
+    // One transaction for the 120-row page — per-batch transactions multiplied
+    // commit overhead ~10× across a big board download.
     const transactionCalls = (db.withExclusiveTransactionAsync as ReturnType<typeof vi.fn>).mock.calls;
-    const transactionInsertCounts: number[] = [];
-    let currentBatchCount = 0;
-    for (const call of ticksInsertCalls) {
-      currentBatchCount++;
-      if (currentBatchCount === 50 || call === ticksInsertCalls[ticksInsertCalls.length - 1]) {
-        transactionInsertCounts.push(currentBatchCount);
-        currentBatchCount = 0;
-      }
-    }
-
-    expect(transactionCalls.length).toBe(3);
+    expect(transactionCalls.length).toBe(1);
     expect(mockTxn.runAsync).toHaveBeenCalledTimes(120);
   });
 
