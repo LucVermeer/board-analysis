@@ -151,10 +151,14 @@ export function ClimbReactionMenu({
   // climb art shrinks so the preview + form still fit above it on shorter phones.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
-    const onShow = Keyboard.addListener('keyboardWillChangeFrame', (event) =>
+    // iOS `will*` events fire before the animation (and don't exist on Android);
+    // Android only fires the `did*` pair. Pick the right ones per platform.
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvent, (event) =>
       setKeyboardHeight(Math.max(0, windowHeight - event.endCoordinates.screenY)),
     );
-    const onHide = Keyboard.addListener('keyboardWillHide', () => setKeyboardHeight(0));
+    const onHide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
     return () => {
       onShow.remove();
       onHide.remove();
@@ -245,8 +249,9 @@ export function ClimbReactionMenu({
         </Animated.View>
 
         {/* Floating content: enlarged climb + action menu. box-none so empty space
-            falls through to the backdrop Pressable. */}
-        <Animated.View
+            falls through to the backdrop Pressable. Plain View — the animated nodes
+            are the inner preview and menu wrap. */}
+        <View
           pointerEvents="box-none"
           // Contain VoiceOver focus to the floating content (don't let it wander into
           // the screen behind), and let the VO escape gesture pop the view / dismiss.
@@ -339,7 +344,7 @@ export function ClimbReactionMenu({
               )}
             </GlassSurface>
           </Animated.View>
-        </Animated.View>
+        </View>
       </View>
     </OverlayPortal>
   );
