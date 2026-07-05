@@ -7,6 +7,7 @@ import { mobileRefreshTokens, users, userCredentials, accounts, userProfiles } f
 import { db } from '../db/client';
 import { redisClientManager } from '../redis/client';
 import { applyCorsHeaders } from './cors';
+import { validateToken } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
 /**
@@ -1166,6 +1167,212 @@ export async function handleNativeAuthRevoke(req: IncomingMessage, res: ServerRe
     sendJson(res, 200, { revoked: true });
   } catch (error) {
     logger.error('[NativeAuth] Token revocation failed:', error);
+    sendJson(res, 500, { error: 'Internal server error' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Watch pairing — POST /api/watch/pair-code (authed) + POST /api/watch/pair
+//
+// A Garmin watch (Connect IQ) can only make plain HTTPS requests and has no
+// good text entry, so it can't run the web OAuth transfer-token dance. Instead:
+//   1. The already-logged-in phone/web app calls POST /api/watch/pair-code and
+//      shows the returned short code to the user.
+//   2. The user types the code on the watch, which POSTs /api/watch/pair to
+//      exchange it for the same { jwt, refreshToken, expiresAt } mobile token
+//      pair every other native client uses (generateTokenPair).
+//
+// The code lives in Redis with a short TTL and is single-use (GETDEL on
+// consume). It must be cross-instance (the phone and watch may hit different
+// backend instances), so pairing requires Redis — no in-memory fallback.
+// ---------------------------------------------------------------------------
+
+/** Pairing-code lifetime — long enough to read off a phone and type on a watch. */
+const WATCH_PAIR_CODE_TTL_SECONDS = 300;
+
+/** Pairing-code length in characters. */
+const WATCH_PAIR_CODE_LENGTH = 8;
+
+/**
+ * Unambiguous alphabet for hand entry on a watch: A–Z minus I/L/O/U and digits
+ * 2–9 (no 0/1). 30^8 ≈ 2^39 combinations — with the 300s TTL, single-use
+ * consume, and the IP rate limit, brute-forcing a live code is infeasible.
+ */
+const WATCH_PAIR_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+
+/** Redis key prefix for live pairing codes. */
+const WATCH_PAIR_CODE_REDIS_PREFIX = 'boardsesh:watch:pair:';
+
+/** How many times to retry on the (astronomically unlikely) code collision. */
+const WATCH_PAIR_CODE_MAX_ATTEMPTS = 5;
+
+function generatePairingCode(): string {
+  let code = '';
+  for (let i = 0; i < WATCH_PAIR_CODE_LENGTH; i++) {
+    code += WATCH_PAIR_CODE_ALPHABET[crypto.randomInt(WATCH_PAIR_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+/**
+ * POST /api/watch/pair-code
+ * Headers: Authorization: Bearer <token>  (web NextAuth JWE or mobile JWS)
+ * Body: none
+ *
+ * Mints a short, single-use pairing code bound to the authenticated user and
+ * returns { code, expiresAt }. Called by the phone/web "Pair a Garmin watch"
+ * UI, so it accepts either token family via validateToken.
+ */
+export async function handleWatchPairCode(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
+  const authHeader = req.headers['authorization'];
+  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  if (!headerValue || !headerValue.startsWith('Bearer ')) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+  const token = headerValue.slice(7).trim();
+  const auth = token ? await validateToken(token) : null;
+  if (!auth) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+
+  if (!redisClientManager.isRedisConnected()) {
+    // Pairing codes must be readable across instances; without Redis a code
+    // minted on one instance couldn't be consumed on another.
+    logger.error('[WatchPair] Redis unavailable — cannot mint pairing code');
+    sendJson(res, 503, { error: 'Service temporarily unavailable' });
+    return;
+  }
+
+  try {
+    const { publisher } = redisClientManager.getClients();
+    let code: string | null = null;
+    for (let attempt = 0; attempt < WATCH_PAIR_CODE_MAX_ATTEMPTS; attempt++) {
+      const candidate = generatePairingCode();
+      // SET NX so a rare collision with a live code doesn't overwrite it.
+      const stored = await publisher.set(
+        `${WATCH_PAIR_CODE_REDIS_PREFIX}${candidate}`,
+        auth.userId,
+        'EX',
+        WATCH_PAIR_CODE_TTL_SECONDS,
+        'NX',
+      );
+      if (stored === 'OK') {
+        code = candidate;
+        break;
+      }
+    }
+
+    if (!code) {
+      logger.error('[WatchPair] Failed to allocate a unique pairing code after retries');
+      sendJson(res, 503, { error: 'Service temporarily overloaded' });
+      return;
+    }
+
+    const expiresAt = new Date(Date.now() + WATCH_PAIR_CODE_TTL_SECONDS * 1000).toISOString();
+    logger.info(`[WatchPair] Issued pairing code for user ${auth.userId}`);
+    sendJson(res, 200, { code, expiresAt });
+  } catch (error) {
+    logger.error('[WatchPair] Failed to issue pairing code:', error);
+    sendJson(res, 500, { error: 'Internal server error' });
+  }
+}
+
+/**
+ * POST /api/watch/pair
+ * Body: { code: string }
+ *
+ * Consumes a pairing code (single-use) and returns a mobile token pair for the
+ * user the code was minted for. Unauthenticated — the code is the credential.
+ */
+export async function handleWatchPair(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    const raw = await readBody(req);
+    body = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON body' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    sendJson(res, 400, { error: 'Request body must be a JSON object' });
+    return;
+  }
+
+  const { code } = body as Record<string, unknown>;
+  if (typeof code !== 'string' || code.length === 0) {
+    sendJson(res, 400, { error: 'code is required' });
+    return;
+  }
+
+  // Normalize hand entry: strip separators/whitespace, uppercase. A correct
+  // code is exactly WATCH_PAIR_CODE_LENGTH alphanumerics after normalization.
+  const normalized = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (normalized.length !== WATCH_PAIR_CODE_LENGTH) {
+    sendJson(res, 400, { error: 'Invalid pairing code' });
+    return;
+  }
+
+  if (!redisClientManager.isRedisConnected()) {
+    logger.error('[WatchPair] Redis unavailable — cannot consume pairing code');
+    sendJson(res, 503, { error: 'Service temporarily unavailable' });
+    return;
+  }
+
+  try {
+    const { publisher } = redisClientManager.getClients();
+    // GETDEL: atomic read-and-delete so a code can only be redeemed once.
+    const userId = await publisher.getdel(`${WATCH_PAIR_CODE_REDIS_PREFIX}${normalized}`);
+    if (!userId) {
+      sendJson(res, 401, { error: 'Invalid or expired pairing code' });
+      return;
+    }
+
+    const tokenPair = await generateTokenPair(userId);
+    logger.info(`[WatchPair] Pairing successful for user ${userId}`);
+    sendJson(res, 200, tokenPair);
+  } catch (error) {
+    logger.error('[WatchPair] Pairing failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
   }
 }

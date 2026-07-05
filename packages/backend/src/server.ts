@@ -26,6 +26,8 @@ import {
 } from './handlers/kilter-credentials-oauth';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
 import { handleWidgetTakeControl } from './handlers/widget-take-control';
+import { handleSessionNavigate, handleSessionTakeControl } from './handlers/session-actions';
+import { handleSessionState } from './handlers/session-state';
 import {
   handleNativeAuthCredentials,
   handleNativeAuthExchange,
@@ -33,6 +35,8 @@ import {
   handleNativeAuthRefresh,
   handleNativeAuthRegister,
   handleNativeAuthRevoke,
+  handleWatchPair,
+  handleWatchPairCode,
   startRefreshTokenCleanup,
   stopRefreshTokenCleanup,
 } from './handlers/native-auth';
@@ -426,6 +430,22 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      // JWT-authed session control for non-WebSocket clients (the Garmin watch).
+      // Same server-authoritative navigation as the iOS widget, authed by a
+      // mobile JWT instead of an APNs push token.
+      if (pathname === '/api/session/navigate' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleSessionNavigate(req, res);
+        return;
+      }
+      if (pathname === '/api/session/take-control' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleSessionTakeControl(req, res);
+        return;
+      }
+      if (pathname === '/api/session/state' && (req.method === 'GET' || req.method === 'OPTIONS')) {
+        await handleSessionState(req, res, url);
+        return;
+      }
+
       // APNs metrics (debugging aid, gated on APNS_STATS_SECRET)
       if (pathname === '/api/internal/apns-stats' && (req.method === 'GET' || req.method === 'OPTIONS')) {
         await handleApnsStats(req, res);
@@ -460,6 +480,18 @@ export async function startServer(): Promise<ServerResources> {
 
       if (pathname === '/auth/native/revoke' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleNativeAuthRevoke(req, res);
+        return;
+      }
+
+      // Garmin watch pairing: the phone/web app mints a short code
+      // (/api/watch/pair-code), the watch exchanges it for a mobile token pair
+      // (/api/watch/pair).
+      if (pathname === '/api/watch/pair-code' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleWatchPairCode(req, res);
+        return;
+      }
+      if (pathname === '/api/watch/pair' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleWatchPair(req, res);
         return;
       }
 

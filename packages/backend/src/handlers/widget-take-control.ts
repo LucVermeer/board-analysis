@@ -1,9 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { applyCorsHeaders } from './cors';
 import { authenticateWidget } from './widget-auth';
-import { roomManager } from '../services/room-manager';
-import { pubsub } from '../pubsub/index';
-import { setCurrentClimbAndPublish } from '../services/queue-navigation';
+import { reassertSessionCurrentClimb } from './session-queue-actions';
 import { checkWidgetRateLimit, ensureWidgetRateLimitPruner } from './widget-rate-limit';
 import { verifyWidgetSession } from './widget-session-guard';
 import { logger } from '../utils/logger';
@@ -140,23 +138,10 @@ export async function handleWidgetTakeControl(req: IncomingMessage, res: ServerR
   }
 
   try {
-    // Re-assert the session's current climb so a BLE phone re-sends it. The
-    // climb is already in the queue, so shouldAddToQueue=false — this just
-    // re-publishes CurrentClimbChanged to every member. No current climb is a
-    // successful no-op (nothing to re-send).
-    const queueState = await roomManager.getQueueState(sessionId);
-    const currentItem = queueState.currentClimbQueueItem;
-    if (currentItem) {
-      await setCurrentClimbAndPublish(
-        sessionId,
-        currentItem,
-        false,
-        roomManager,
-        pubsub,
-        undefined,
-        'widget-take-control',
-      );
-    }
+    // Re-assert the session's current climb so a BLE phone re-sends it to the
+    // wall. Shared with /api/session/take-control via reassertSessionCurrentClimb.
+    // No current climb is a successful no-op (nothing to re-send).
+    await reassertSessionCurrentClimb(sessionId, 'widget-take-control');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true }));
   } catch (error) {
