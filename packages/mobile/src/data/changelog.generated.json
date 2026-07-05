@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-05T06:44:47.137Z",
+  "generatedAt": "2026-07-05T06:59:43.284Z",
   "entries": [
+    {
+      "prNumber": 3469,
+      "category": "new",
+      "title": "The home screen now points you straight to the app in the App Store or Google Play.",
+      "mergedAt": "2026-07-05T06:58:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3469"
+    },
     {
       "prNumber": 3461,
       "category": "fixed",
