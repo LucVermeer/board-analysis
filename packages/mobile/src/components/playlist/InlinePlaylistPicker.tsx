@@ -210,10 +210,8 @@ export function InlinePlaylistPicker({
       setCreateError(t('actions.playlist.validation.nameRequired'));
       return;
     }
-    if (trimmed.length > NAME_MAX) {
-      setCreateError(t('actions.playlist.validation.nameTooLong'));
-      return;
-    }
+    // No length check needed: the input caps at NAME_MAX (maxLength) and trim only
+    // shortens, so the name can't exceed it.
     setSubmitting(true);
     setCreateError(null);
     // Create and add are separate operations with separate failure handling: if

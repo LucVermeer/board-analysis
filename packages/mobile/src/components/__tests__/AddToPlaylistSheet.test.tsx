@@ -6,6 +6,7 @@ import type { Climb } from '@boardsesh/shared-schema';
 
 const captured = vi.hoisted(() => ({
   sheetVisible: undefined as boolean | undefined,
+  sheetProps: null as Record<string, unknown> | null,
   pickerProps: null as Record<string, unknown> | null,
 }));
 
@@ -16,8 +17,9 @@ vi.mock('@expo/ui/community/bottom-sheet', () => ({
 }));
 
 vi.mock('../ModalSheet', () => ({
-  ModalSheet: ({ visible, children }: { visible?: boolean; children?: ReactNode }) => {
+  ModalSheet: ({ visible, children, ...rest }: { visible?: boolean; children?: ReactNode }) => {
     captured.sheetVisible = visible;
+    captured.sheetProps = rest;
     return createElement('div', { 'data-modal-sheet': 'true' }, children);
   },
 }));
@@ -38,23 +40,31 @@ import { AddToPlaylistSheet } from '../AddToPlaylistSheet';
 const climb = { uuid: 'climb-1', name: 'Big Move', frames: '' } as Climb;
 
 function renderSheet(climbArg: Climb | null) {
-  return render(
-    <AddToPlaylistSheet
-      visible
-      climb={climbArg}
-      boardName="kilter"
-      layoutId={1}
-      sizeId={10}
-      setIds="1,2"
-      angle={40}
-      onClose={vi.fn()}
-    />,
-  );
+  const onClose = vi.fn();
+  const onFullyDismissed = vi.fn();
+  return {
+    onClose,
+    onFullyDismissed,
+    ...render(
+      <AddToPlaylistSheet
+        visible
+        climb={climbArg}
+        boardName="kilter"
+        layoutId={1}
+        sizeId={10}
+        setIds="1,2"
+        angle={40}
+        onClose={onClose}
+        onFullyDismissed={onFullyDismissed}
+      />,
+    ),
+  };
 }
 
 describe('AddToPlaylistSheet', () => {
   beforeEach(() => {
     captured.sheetVisible = undefined;
+    captured.sheetProps = null;
     captured.pickerProps = null;
   });
 
@@ -79,5 +89,13 @@ describe('AddToPlaylistSheet', () => {
     const { container } = renderSheet(null);
     expect(captured.sheetVisible).toBe(false);
     expect(container.querySelector('[data-inline-picker="true"]')).toBeNull();
+  });
+
+  it('forwards the close + fully-dismissed lifecycle callbacks to ModalSheet', () => {
+    const { onClose, onFullyDismissed } = renderSheet(climb);
+    // The host clears its deferred sheet state on onFullyDismissed, so it must
+    // reach the ModalSheet rather than being swallowed by the wrapper.
+    expect(captured.sheetProps?.onClose).toBe(onClose);
+    expect(captured.sheetProps?.onFullyDismissed).toBe(onFullyDismissed);
   });
 });

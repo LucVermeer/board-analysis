@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -10,14 +11,7 @@ import {
   useWindowDimensions,
   type ViewStyle,
 } from 'react-native';
-import Animated, {
-  runOnJS,
-  useAnimatedKeyboard,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from '@react-native-community/blur';
 import { FullWindowOverlay } from 'react-native-screens';
@@ -152,10 +146,30 @@ export function ClimbReactionMenu({
     return parts.join(' · ');
   }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
 
+  // Track the keyboard height (the inline create form focuses a TextInput). When it's
+  // up, the card's bottom must sit at the keyboard's top (not the screen's), and the
+  // climb art shrinks so the preview + form still fit above it on shorter phones.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const onShow = Keyboard.addListener('keyboardWillChangeFrame', (event) =>
+      setKeyboardHeight(Math.max(0, windowHeight - event.endCoordinates.screenY)),
+    );
+    const onHide = Keyboard.addListener('keyboardWillHide', () => setKeyboardHeight(0));
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [windowHeight]);
+
   // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
   // 400) so no new render is needed. Sized to the screen so it stays "blown up" but
-  // leaves room for the menu (~20% larger than the first pass).
-  const artMaxSize = Math.min(235, Math.round(windowHeight * 0.31), Math.round(windowWidth * 0.66));
+  // leaves room for the menu (~20% larger than the first pass); shrunk while the
+  // keyboard is up so the create form clears it.
+  const artMaxSize = Math.min(
+    keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
+    Math.round(windowHeight * 0.31),
+    Math.round(windowWidth * 0.66),
+  );
   const boardRenderData = useMemo(() => {
     const setIdValues = boardConfig.setIds
       .split(',')
@@ -181,15 +195,17 @@ export function ClimbReactionMenu({
   // bottom safe area now that the content is top-aligned rather than centered.
   const contentTopOffset = Math.round(windowHeight * 0.06);
 
-  // Cap the menu/picker so it fills all the way down to the bottom safe area — no
-  // taller (it would clip past it), no shorter (wasting vertical space). Measure
-  // the preview's real height rather than reserving a fixed guess; fall back to an
-  // estimate until the first layout. The card scrolls internally past this cap.
+  // Cap the menu/picker so it fills down to the bottom safe area — no taller (it
+  // would clip past it), no shorter (wasting vertical space) — and no lower than
+  // the keyboard when one is up. Measure the preview's real height rather than
+  // reserving a fixed guess; fall back to an estimate until the first layout. The
+  // card scrolls internally past this cap.
   const [previewHeight, setPreviewHeight] = useState(0);
   const reservedForPreview = previewHeight > 0 ? previewHeight : artMaxSize + spacing[5] * 4;
+  const bottomReserve = keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing[5];
   const menuMaxHeight = Math.max(
     180,
-    windowHeight - insets.top - insets.bottom - contentTopOffset - spacing[5] * 2 - reservedForPreview,
+    windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
@@ -200,14 +216,6 @@ export function ClimbReactionMenu({
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ translateY: (1 - progress.value) * 18 }, { scale: 0.96 + progress.value * 0.04 }],
-  }));
-
-  // The inline create form's TextInput lives in this FullWindowOverlay. Re-centre
-  // the floating content in the space left above the keyboard (shifting centered
-  // content up by half the keyboard height keeps it centred in the visible band).
-  const keyboard = useAnimatedKeyboard();
-  const contentKeyboardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -keyboard.height.value / 2 }],
   }));
 
   const scrimColor = colorScheme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.35)';
@@ -247,7 +255,6 @@ export function ClimbReactionMenu({
           style={[
             styles.content,
             { paddingTop: insets.top + contentTopOffset, paddingBottom: insets.bottom + spacing[5] },
-            contentKeyboardStyle,
           ]}
         >
           {/* The enlarged climb stays visible in both views — the playlist picker
