@@ -167,6 +167,17 @@ vi.mock('@expo/vector-icons/MaterialCommunityIcons', () => ({
   default: () => createElement('span', { 'data-icon': 'mci' }),
 }));
 
+// The wall tab holds a keep-awake lock (kiosk stays lit); mock the native module
+// so the wall-segment render doesn't reach for it, and assert the lock engages.
+const keepAwake = vi.hoisted(() => ({
+  activate: vi.fn().mockResolvedValue(undefined),
+  deactivate: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('expo-keep-awake', () => ({
+  activateKeepAwakeAsync: keepAwake.activate,
+  deactivateKeepAwake: keepAwake.deactivate,
+}));
+
 vi.mock('expo-router/unstable-native-tabs', () => {
   const Trigger = Object.assign(
     ({ name, hidden, children }: { name: string; hidden?: boolean; children?: ReactNode }) =>
@@ -235,6 +246,8 @@ describe('TabLayout', () => {
     cfg.wallDeviceClass = 'panel-capable';
     cfg.segments = ['(tabs)', 'home'];
     cfg.materialScreens = [];
+    keepAwake.activate.mockClear();
+    keepAwake.deactivate.mockClear();
   });
 
   it('lands on the home tab by default', () => {
@@ -412,6 +425,17 @@ describe('TabLayout', () => {
     // The surface still EXISTS for this layout, so the sidebar cell stays hidden — it
     // doesn't pop back in merely because the wall tab is open.
     expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    // Kiosk stays lit while the wall tab is focused.
+    expect(keepAwake.activate).toHaveBeenCalledWith('wall');
+  });
+
+  it('does not hold the wall keep-awake lock off the "On the Wall" tab', () => {
+    cfg.segments = ['(tabs)', 'home'];
+
+    render(<TabLayout />);
+
+    expect(keepAwake.activate).not.toHaveBeenCalled();
+    expect(keepAwake.deactivate).toHaveBeenCalledWith('wall');
   });
 
   it('hides the sidebar wall cell when the portrait play-pane strip owns the wall surface', () => {
