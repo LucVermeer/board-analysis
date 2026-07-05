@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-05T03:30:52.523Z",
+  "generatedAt": "2026-07-05T06:44:47.137Z",
   "entries": [
+    {
+      "prNumber": 3461,
+      "category": "fixed",
+      "title": "MoonBoard sends now add to a climb's community repeat count instead of wiping it — so popular benchmarks like Birthday Cake Trail Mix show their real numbers and sort back to the top of the list.",
+      "mergedAt": "2026-07-05T04:21:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3461"
+    },
     {
       "prNumber": 3452,
       "category": "fixed",

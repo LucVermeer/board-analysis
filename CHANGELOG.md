@@ -12,6 +12,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- MoonBoard sends now add to a climb's community repeat count instead of wiping it — so popular benchmarks like Birthday Cake Trail Mix show their real numbers and sort back to the top of the list. ([#3461](https://github.com/boardsesh/boardsesh/pull/3461))
 - Adding a climb to a playlist works again — press and hold a climb to add or remove it from your playlists right there, no disappearing sheet. ([#3452](https://github.com/boardsesh/boardsesh/pull/3452))
   Spin up a brand-new playlist in the same spot without it vanishing mid-name.
 
