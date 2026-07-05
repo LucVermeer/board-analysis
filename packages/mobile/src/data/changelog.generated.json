@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-04T23:18:01.897Z",
+  "generatedAt": "2026-07-05T02:51:54.198Z",
   "entries": [
+    {
+      "prNumber": 3465,
+      "category": "new",
+      "title": "On iPad, the On the Wall view now keeps the screen from dimming so the board stays visible for your whole session.",
+      "mergedAt": "2026-07-05T02:50:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3465"
+    },
     {
       "prNumber": 3457,
       "category": "new",
