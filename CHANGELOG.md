@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Pair your gym's workout timer to your board — while you're lit up on the wall, every send starts the clock. ([#3473](https://github.com/boardsesh/boardsesh/pull/3473))
 - The home screen now points you straight to the app in the App Store or Google Play. ([#3469](https://github.com/boardsesh/boardsesh/pull/3469))
 - On iPad, the On the Wall view now keeps the screen from dimming so the board stays visible for your whole session. ([#3465](https://github.com/boardsesh/boardsesh/pull/3465))
 

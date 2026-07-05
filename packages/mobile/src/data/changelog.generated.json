@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-05T06:59:43.284Z",
+  "generatedAt": "2026-07-05T07:45:39.483Z",
   "entries": [
+    {
+      "prNumber": 3473,
+      "category": "new",
+      "title": "Pair your gym's workout timer to your board — while you're lit up on the wall, every send starts the clock.",
+      "mergedAt": "2026-07-05T07:44:39Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3473"
+    },
     {
       "prNumber": 3469,
       "category": "new",
