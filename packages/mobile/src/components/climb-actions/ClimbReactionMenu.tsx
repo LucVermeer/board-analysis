@@ -152,18 +152,19 @@ export function ClimbReactionMenu({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
     // iOS `will*` events fire before the animation (and don't exist on Android);
-    // Android only fires the `did*` pair. Pick the right ones per platform.
+    // Android only fires the `did*` pair. Read the keyboard height straight off the
+    // event (absolute — no windowHeight), so empty deps: on Android `adjustResize`
+    // the keyboard shrinks windowHeight, and a windowHeight dep would tear down and
+    // re-register this listener mid-event and miss it.
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const onShow = Keyboard.addListener(showEvent, (event) =>
-      setKeyboardHeight(Math.max(0, windowHeight - event.endCoordinates.screenY)),
-    );
+    const onShow = Keyboard.addListener(showEvent, (event) => setKeyboardHeight(event.endCoordinates?.height ?? 0));
     const onHide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
     return () => {
       onShow.remove();
       onHide.remove();
     };
-  }, [windowHeight]);
+  }, []);
 
   // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
   // 400) so no new render is needed. Sized to the screen so it stays "blown up" but

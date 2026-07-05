@@ -1,10 +1,9 @@
 import { useMemo, type ComponentType } from 'react';
-import { type TextInputProps } from 'react-native';
 import { BottomSheetTextInput } from '@expo/ui/community/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { ModalSheet } from './ModalSheet';
 import { ClimbPreviewCard } from './ClimbPreviewCard';
-import { InlinePlaylistPicker } from './playlist/InlinePlaylistPicker';
+import { InlinePlaylistPicker, type PickerTextInputProps } from './playlist/InlinePlaylistPicker';
 
 type AddToPlaylistSheetProps = {
   visible: boolean;
@@ -23,8 +22,9 @@ type AddToPlaylistSheetProps = {
 
 // The native bottom-sheet text input pushes the sheet up for the keyboard; the
 // reaction overlay injects the plain RN TextInput instead. Both satisfy the
-// picker's TextInputProps contract.
-const SheetTextInput = BottomSheetTextInput as unknown as ComponentType<TextInputProps>;
+// picker's narrowed text-input contract — a single, honest cast (BottomSheetTextInput
+// carries extra bottom-sheet-only props but accepts everything the picker drives).
+const SheetTextInput = BottomSheetTextInput as ComponentType<PickerTextInputProps>;
 
 /**
  * The swipe/ellipsis "Add to playlist" surface. Since #3167 native sheets can't

@@ -27,6 +27,22 @@ import { NAME_MAX } from './playlist-form-values';
 // floating card.
 const QUICK_EMOJI = ['🔥', '💪', '🎯', '⭐', '🧗', '🪨', '🏆'] as const;
 
+// The subset of TextInput props the create form actually drives. Typing the
+// injected component against this (not full TextInputProps) lets both the RN
+// `TextInput` and @expo/ui's `BottomSheetTextInput` satisfy it without a cast.
+export type PickerTextInputProps = Pick<
+  TextInputProps,
+  | 'value'
+  | 'onChangeText'
+  | 'placeholder'
+  | 'placeholderTextColor'
+  | 'maxLength'
+  | 'style'
+  | 'returnKeyType'
+  | 'autoFocus'
+  | 'onSubmitEditing'
+>;
+
 type InlinePlaylistPickerProps = {
   climb: Climb;
   /** Angle the membership add targets (the climb's board config angle). */
@@ -41,7 +57,7 @@ type InlinePlaylistPickerProps = {
    * which is the whole point (#3294: stacking a second native sheet dismisses
    * the first).
    */
-  TextInputComponent: ComponentType<TextInputProps>;
+  TextInputComponent: ComponentType<PickerTextInputProps>;
   /** Rendered on the left of the header when the host wants a back affordance
    *  (the reaction overlay returns to its action list; the sheet omits it). */
   onBack?: () => void;
@@ -51,14 +67,15 @@ type InlinePlaylistPickerProps = {
   maxHeight?: number;
 };
 
-// Pins the header: when a maxHeight is given the body scrolls inside it, otherwise
-// the body renders inline (a sheet host provides the scroll). `flexShrink` bounds
-// the ScrollView to the space left under the pinned header within maxHeight.
+// Pins the header: when a scroll height is given the body scrolls inside a
+// ScrollView capped at that explicit maxHeight (flexShrink alone doesn't bound a
+// ScrollView under a maxHeight-only parent — it would clip). Otherwise the body
+// renders inline and a sheet host provides the scroll.
 function ScrollableBody({ maxHeight, children }: { maxHeight?: number; children: ReactNode }) {
   if (maxHeight == null) return <>{children}</>;
   return (
     <ScrollView
-      style={styles.scrollBody}
+      style={{ maxHeight }}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       bounces={false}
@@ -313,9 +330,14 @@ export function InlinePlaylistPicker({
     [systemColors],
   );
 
+  // Bound the scroll area to the space left under the pinned header, measured so
+  // the list scrolls (not clips) whatever the header's height.
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const scrollMaxHeight = maxHeight != null ? Math.max(120, maxHeight - headerHeight) : undefined;
+
   return (
     <View style={[styles.container, maxHeight != null ? { maxHeight } : null]}>
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
         {onBack ? (
           <Pressable
             onPress={onBack}
@@ -345,7 +367,7 @@ export function InlinePlaylistPicker({
         ) : null}
       </View>
 
-      <ScrollableBody maxHeight={maxHeight}>
+      <ScrollableBody maxHeight={scrollMaxHeight}>
         {createOpen ? (
           <View style={styles.createForm}>
             <TextInputComponent
@@ -502,11 +524,6 @@ export function InlinePlaylistPicker({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-  },
-  // Bounded by the container's maxHeight (minus the pinned header) so the list
-  // scrolls under the header rather than pushing it off-screen.
-  scrollBody: {
-    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',
