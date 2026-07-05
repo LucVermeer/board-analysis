@@ -4,6 +4,7 @@ import { applyCorsHeaders } from './cors';
 import { authenticateSessionRequest } from './session-auth';
 import { verifyWidgetSession } from './widget-session-guard';
 import { checkSessionReadRateLimit, ensureSessionReadRateLimitPruner } from './session-read-rate-limit';
+import { sendJson } from './http-utils';
 import { roomManager } from '../services/room-manager';
 import { logger } from '../utils/logger';
 
@@ -21,15 +22,6 @@ import { logger } from '../utils/logger';
  * `sequence` / `stateHash` let the watch skip a re-render when nothing changed
  * between polls. 401 (auth) / 403 (not a participant) / 410 (session ended).
  */
-
-function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-  });
-  res.end(JSON.stringify(body));
-}
 
 export async function handleSessionState(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   ensureSessionReadRateLimitPruner();
@@ -71,6 +63,13 @@ export async function handleSessionState(req: IncomingMessage, res: ServerRespon
     // round-trip, since the watch polls this endpoint continuously.
     const queueState = await roomManager.getQueueState(sessionId);
     const parsedBoard = parseBoardPath(guard.session.boardPath);
+    if (parsedBoard === null) {
+      // A malformed boardPath means the watch gets null board fields and can't
+      // build a saveTick — surface it so it's diagnosable rather than silent.
+      logger.warn(
+        `[SessionState] Could not parse boardPath for session ${sessionId}: ${JSON.stringify(guard.session.boardPath)}`,
+      );
+    }
 
     const currentItem = queueState.currentClimbQueueItem;
     const currentIndex = currentItem ? queueState.queue.findIndex((q) => q.uuid === currentItem.uuid) : -1;

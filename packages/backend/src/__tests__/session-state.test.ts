@@ -225,6 +225,40 @@ describe('handleSessionState', () => {
     expect(parsed.climb.isBenchmark).toBe(false);
   });
 
+  it('treats an empty-string benchmark_difficulty as not a benchmark', async () => {
+    const emptyBenchmark = { uuid: 'q1', climb: makeClimb({ benchmark_difficulty: '' }) };
+    getQueueStateMock.mockResolvedValue({
+      queue: [emptyBenchmark],
+      currentClimbQueueItem: emptyBenchmark,
+      sequence: 3,
+      stateHash: 'hash-3',
+    });
+    const res = await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID });
+    const parsed = JSON.parse(res.body) as { climb: { isBenchmark: boolean } };
+    expect(parsed.climb.isBenchmark).toBe(false);
+  });
+
+  it('returns null board fields when the session boardPath is malformed', async () => {
+    verifyWidgetSessionMock.mockResolvedValue({
+      ok: true,
+      session: { boardPath: 'not-a-board-path', status: 'active', endedAt: null },
+    });
+    const res = await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID });
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body) as {
+      boardType: unknown;
+      layoutId: unknown;
+      sizeId: unknown;
+      setIds: unknown;
+      angle: unknown;
+    };
+    expect(parsed.boardType).toBeNull();
+    expect(parsed.layoutId).toBeNull();
+    expect(parsed.sizeId).toBeNull();
+    expect(parsed.setIds).toBeNull();
+    expect(parsed.angle).toBeNull();
+  });
+
   it('passes through the guard 410 when the session has ended', async () => {
     verifyWidgetSessionMock.mockResolvedValue({ ok: false, status: 410, error: 'Session has ended; re-register' });
     const res = await run({ method: 'GET', authHeader: bearer, sessionId: SESSION_ID });

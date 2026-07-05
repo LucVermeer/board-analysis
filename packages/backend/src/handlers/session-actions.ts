@@ -4,7 +4,11 @@ import { authenticateSessionRequest } from './session-auth';
 import { verifyWidgetSession } from './widget-session-guard';
 import { checkWidgetRateLimit, ensureWidgetRateLimitPruner } from './widget-rate-limit';
 import { navigateSessionQueue, reassertSessionCurrentClimb, type NavigateAction } from './session-queue-actions';
+import { readJsonBody, sendJson } from './http-utils';
 import { logger } from '../utils/logger';
+
+/** Max session-control request body — these payloads are a sessionId + action. */
+const MAX_BODY_BYTES = 2048;
 
 /**
  * JWT-authenticated session control for non-WebSocket clients (the Garmin
@@ -39,37 +43,6 @@ function isValidTakeControlBody(body: unknown): body is SessionTakeControlBody {
   return typeof candidate.sessionId === 'string' && candidate.sessionId.length > 0;
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let totalLength = 0;
-    const MAX_BODY = 2048;
-
-    req.on('data', (chunk: Buffer) => {
-      totalLength += chunk.length;
-      if (totalLength > MAX_BODY) {
-        req.destroy();
-        reject(new Error('Request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', reject);
-  });
-}
-
-function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    // Per-user session responses must never be cached, and nosniff avoids
-    // content-type confusion — matching the native-auth handler's shape.
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-  });
-  res.end(JSON.stringify(body));
-}
-
 /**
  * POST /api/session/navigate
  * Headers: Authorization: Bearer <mobile JWT>
@@ -102,7 +75,7 @@ export async function handleSessionNavigate(req: IncomingMessage, res: ServerRes
 
   let body: unknown;
   try {
-    const raw = await readBody(req);
+    const raw = await readJsonBody(req, MAX_BODY_BYTES);
     body = JSON.parse(raw);
   } catch {
     sendJson(res, 400, { success: false, error: 'Invalid JSON body' });
@@ -185,7 +158,7 @@ export async function handleSessionTakeControl(req: IncomingMessage, res: Server
 
   let body: unknown;
   try {
-    const raw = await readBody(req);
+    const raw = await readJsonBody(req, MAX_BODY_BYTES);
     body = JSON.parse(raw);
   } catch {
     sendJson(res, 400, { success: false, error: 'Invalid JSON body' });
