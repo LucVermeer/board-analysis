@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type TextInputProps } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -137,42 +137,53 @@ export function InlinePlaylistPicker({
     [queryClient, membershipKey, climb.uuid],
   );
 
+  // Serialize toggles per playlist: a row stays tappable while its mutation is in
+  // flight, so ignore repeat taps on the same row until it settles — otherwise a
+  // fast add-then-remove could reorder on the backend and leave the cache/UI out
+  // of sync with the row's real membership.
+  const togglingRef = useRef<Set<string>>(new Set());
+
   // Toggle one playlist's membership. Reads and writes are surgical — computed
-  // against the *latest* cache each time — so overlapping toggles (or a failure
-  // while another is in flight) never clobber each other. Rows are tappable before
-  // the membership fetch resolves, so cancel it first: a late response must not
-  // overwrite the optimistic checkmark.
+  // against the *latest* cache each time — so overlapping toggles of DIFFERENT rows
+  // never clobber each other. Rows are tappable before the membership fetch
+  // resolves, so cancel it first: a late response must not overwrite the checkmark.
   const handleToggle = useCallback(
     async (playlist: Playlist) => {
-      await queryClient.cancelQueries({ queryKey: membershipKey });
-      const before = queryClient.getQueryData<string[]>(membershipKey) ?? [...members];
-      const willBeMember = !before.includes(playlist.uuid);
-      setError(null);
-      writeMembership(willBeMember ? [...before, playlist.uuid] : before.filter((uuid) => uuid !== playlist.uuid));
+      if (togglingRef.current.has(playlist.uuid)) return;
+      togglingRef.current.add(playlist.uuid);
       try {
-        if (willBeMember) {
-          // The backend resolvers key on playlists.uuid, so the uuid (not the
-          // bigserial id) goes on the wire.
-          await addToPlaylist(playlist.uuid, climb.uuid, angle);
-        } else {
-          await removeFromPlaylist(playlist.uuid, climb.uuid);
+        await queryClient.cancelQueries({ queryKey: membershipKey });
+        const before = queryClient.getQueryData<string[]>(membershipKey) ?? [...members];
+        const willBeMember = !before.includes(playlist.uuid);
+        setError(null);
+        writeMembership(willBeMember ? [...before, playlist.uuid] : before.filter((uuid) => uuid !== playlist.uuid));
+        try {
+          if (willBeMember) {
+            // The backend resolvers key on playlists.uuid, so the uuid (not the
+            // bigserial id) goes on the wire.
+            await addToPlaylist(playlist.uuid, climb.uuid, angle);
+          } else {
+            await removeFromPlaylist(playlist.uuid, climb.uuid);
+          }
+        } catch (toggleError) {
+          // Undo ONLY this row's change against the current cache — not a stale
+          // snapshot — so a sibling toggle that succeeded meanwhile is preserved.
+          const current = queryClient.getQueryData<string[]>(membershipKey) ?? [];
+          writeMembership(
+            willBeMember ? current.filter((uuid) => uuid !== playlist.uuid) : [...new Set([...current, playlist.uuid])],
+          );
+          setError(t(willBeMember ? 'actions.playlist.toast.addFailed' : 'actions.playlist.toast.removeFailed'));
+          if (__DEV__) {
+            console.warn('[playlist] toggle membership failed', {
+              playlistUuid: playlist.uuid,
+              climbUuid: climb.uuid,
+              add: willBeMember,
+              error: toggleError,
+            });
+          }
         }
-      } catch (toggleError) {
-        // Undo ONLY this row's change against the current cache — not a stale
-        // snapshot — so a sibling toggle that succeeded meanwhile is preserved.
-        const current = queryClient.getQueryData<string[]>(membershipKey) ?? [];
-        writeMembership(
-          willBeMember ? current.filter((uuid) => uuid !== playlist.uuid) : [...new Set([...current, playlist.uuid])],
-        );
-        setError(t(willBeMember ? 'actions.playlist.toast.addFailed' : 'actions.playlist.toast.removeFailed'));
-        if (__DEV__) {
-          console.warn('[playlist] toggle membership failed', {
-            playlistUuid: playlist.uuid,
-            climbUuid: climb.uuid,
-            add: willBeMember,
-            error: toggleError,
-          });
-        }
+      } finally {
+        togglingRef.current.delete(playlist.uuid);
       }
     },
     [queryClient, membershipKey, members, writeMembership, addToPlaylist, removeFromPlaylist, climb.uuid, angle, t],
@@ -186,6 +197,13 @@ export function InlinePlaylistPicker({
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  // Guards the async create flow against cancel/unmount: each submit takes a token;
+  // cancelling the form or unmounting the picker bumps it, so an in-flight create's
+  // continuation (add + UI updates) aborts instead of adding the climb after the
+  // user backed out.
+  const createRequestIdRef = useRef(0);
+  useEffect(() => () => void (createRequestIdRef.current += 1), []);
+
   const resetCreate = useCallback(() => {
     setName('');
     setColor(undefined);
@@ -196,11 +214,15 @@ export function InlinePlaylistPicker({
   const handleOpenCreate = useCallback(() => {
     setError(null);
     resetCreate();
+    setSubmitting(false);
     setCreateOpen(true);
   }, [resetCreate]);
 
   const handleCloseCreate = useCallback(() => {
+    // Bump the token so an in-flight create's continuation aborts, then reset.
+    createRequestIdRef.current += 1;
     resetCreate();
+    setSubmitting(false);
     setCreateOpen(false);
   }, [resetCreate]);
 
@@ -212,6 +234,8 @@ export function InlinePlaylistPicker({
     }
     // No length check needed: the input caps at NAME_MAX (maxLength) and trim only
     // shortens, so the name can't exceed it.
+    const requestId = (createRequestIdRef.current += 1);
+    const isCurrent = () => createRequestIdRef.current === requestId;
     setSubmitting(true);
     setCreateError(null);
     // Create and add are separate operations with separate failure handling: if
@@ -222,8 +246,10 @@ export function InlinePlaylistPicker({
       created = await createPlaylist(trimmed, undefined, color, icon, { boardType: boardName, layoutId });
     } catch (submitError) {
       // Inline, not a toast — the picker (and its host overlay/sheet) stays up.
-      setCreateError(t('actions.playlist.toast.createFailed'));
-      setSubmitting(false);
+      if (isCurrent()) {
+        setCreateError(t('actions.playlist.toast.createFailed'));
+        setSubmitting(false);
+      }
       if (__DEV__) {
         console.warn('[playlist] inline create failed', {
           climbUuid: climb.uuid,
@@ -234,19 +260,23 @@ export function InlinePlaylistPicker({
       }
       return;
     }
+    // If the user cancelled / dismissed while the playlist was being created, stop:
+    // don't add the climb or touch UI they've left (the empty playlist may persist).
+    if (!isCurrent()) return;
     // Playlist exists now; close the form so a retry can't duplicate it. The new
     // (still-unchecked) playlist is already in the list to tap if the add fails.
     setCreateOpen(false);
     resetCreate();
     try {
       await addToPlaylist(created.uuid, climb.uuid, angle);
+      if (!isCurrent()) return;
       // Cancel any in-flight membership fetch (it was sent before this playlist
       // existed) so it can't overwrite the new checkmark, then optimistically add.
       await queryClient.cancelQueries({ queryKey: membershipKey });
       const current = queryClient.getQueryData<string[]>(membershipKey) ?? [...members];
       writeMembership([...new Set([...current, created.uuid])]);
     } catch (addError) {
-      setError(t('actions.playlist.toast.addFailed'));
+      if (isCurrent()) setError(t('actions.playlist.toast.addFailed'));
       if (__DEV__) {
         console.warn('[playlist] created playlist but failed to add climb', {
           playlistUuid: created.uuid,
@@ -255,7 +285,7 @@ export function InlinePlaylistPicker({
         });
       }
     } finally {
-      setSubmitting(false);
+      if (isCurrent()) setSubmitting(false);
     }
   }, [
     name,

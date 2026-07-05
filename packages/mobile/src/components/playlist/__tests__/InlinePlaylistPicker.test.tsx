@@ -152,6 +152,14 @@ function hasCheck(button: HTMLElement): boolean {
   return !!button.querySelector('[data-icon="check.small"]');
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('InlinePlaylistPicker', () => {
   beforeEach(() => {
     playlistContext.playlists = [];
@@ -299,5 +307,40 @@ describe('InlinePlaylistPicker', () => {
     fireEvent.click(getByLabelText('actions.playlist.create.submit'));
     expect(getByText('actions.playlist.validation.nameRequired')).not.toBeNull();
     expect(playlistContext.createPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('ignores repeat taps on a playlist row while its toggle is in flight', async () => {
+    playlistContext.playlists = [makePlaylist('p-1', 'Hard Crimps')];
+    qstate.data = [];
+    const addDeferred = deferred<void>();
+    playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(addDeferred.promise);
+    const { getByLabelText } = renderPicker();
+
+    fireEvent.click(getByLabelText('Hard Crimps')); // add — in flight
+    fireEvent.click(getByLabelText('Hard Crimps')); // ignored while the first settles
+
+    await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalledTimes(1));
+    expect(playlistContext.removeFromPlaylist).not.toHaveBeenCalled();
+    addDeferred.resolve();
+  });
+
+  it('aborts the create continuation when the picker unmounts mid-create', async () => {
+    const createDeferred = deferred<Playlist>();
+    playlistContext.createPlaylist.mockReturnValueOnce(createDeferred.promise);
+    const { getByLabelText, unmount } = renderPicker();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    fireEvent.change(getByLabelText('name-input'), { target: { value: 'Projects' } });
+    fireEvent.click(getByLabelText('actions.playlist.create.submit'));
+    await waitFor(() => expect(playlistContext.createPlaylist).toHaveBeenCalled());
+
+    // Dismiss the overlay (back / backdrop) → picker unmounts → in-flight create's
+    // continuation must abort rather than add the climb the user backed out of.
+    unmount();
+    createDeferred.resolve(makePlaylist('p-new', 'Projects'));
+    await createDeferred.promise;
+    await Promise.resolve();
+
+    expect(playlistContext.addToPlaylist).not.toHaveBeenCalled();
   });
 });
