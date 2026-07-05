@@ -52,6 +52,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     label: 'Garmin watch',
     description: 'Show the "Pair a Garmin watch" row in More. Off until the Connect IQ watch app ships.',
   },
+  {
+    key: 'offline-board-downloads',
+    label: 'Offline board downloads',
+    description:
+      'Download toggle on My Boards: pull a board’s climbs into local SQLite for offline browsing. Off hides the toggle; already-enabled boards keep syncing.',
+  },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 // The literal key union (e.g. `'strava-integration'`), preserved via the
