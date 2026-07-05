@@ -54,6 +54,7 @@ vi.mock('../handlers/session-queue-actions', () => ({
 
 const { handleSessionNavigate, handleSessionTakeControl } = await import('../handlers/session-actions');
 const { __resetWidgetRateLimitForTests } = await import('../handlers/widget-rate-limit');
+const { __resetSessionUserRateLimitForTests } = await import('../handlers/session-user-rate-limit');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,6 +139,7 @@ describe('handleSessionNavigate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetWidgetRateLimitForTests();
+    __resetSessionUserRateLimitForTests();
     validateTokenMock.mockResolvedValue({ userId: USER_ID, isAuthenticated: true });
     verifyWidgetSessionMock.mockResolvedValue({ ok: true });
     navigateSessionQueueMock.mockResolvedValue({
@@ -234,19 +236,33 @@ describe('handleSessionNavigate', () => {
     expect(third.statusCode).toBe(429);
   });
 
-  it('does not consume the rate-limit bucket for a non-participant (no bucket poisoning)', async () => {
-    // The guard runs BEFORE the rate limiter, so a non-participant hammering a
-    // session id they know but aren't a member of gets 403 without spending a
-    // token — a real member's bucket (shared with the iOS widget) stays intact.
+  it('does not let a non-participant drain the per-session write bucket (no poisoning)', async () => {
+    // Attacker: a valid JWT for a DIFFERENT user who isn't a participant. The
+    // guard 403s them, so they never reach the per-session (widget) write bucket;
+    // their own per-user bucket absorbs the spam.
+    validateTokenMock.mockResolvedValue({ userId: 'attacker', isAuthenticated: true });
     verifyWidgetSessionMock.mockResolvedValue({ ok: false, status: 403, error: 'Not a participant in this session' });
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(403);
     }
-    // The bucket was never drained: a genuine participant still gets its full
-    // capacity-2 of navigations.
+    // A genuine participant (a different user, fresh per-user bucket) still gets
+    // the full capacity-2 of navigations — the session's write bucket was never
+    // touched.
+    validateTokenMock.mockResolvedValue({ userId: 'victim', isAuthenticated: true });
     verifyWidgetSessionMock.mockResolvedValue({ ok: true });
     expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(200);
     expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(200);
+  });
+
+  it('throttles a hammering non-participant via the per-user bucket (bounds guard DB load)', async () => {
+    // A non-participant 403s at the guard on every request, never reaching the
+    // per-session bucket — so the per-user bucket (capacity 4) is what bounds the
+    // guard's DB queries. The 5th rapid request is throttled before the guard.
+    verifyWidgetSessionMock.mockResolvedValue({ ok: false, status: 403, error: 'Not a participant in this session' });
+    for (let i = 0; i < 4; i++) {
+      expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(403);
+    }
+    expect((await runNavigate({ method: 'POST', authHeader: bearer, body: navBody })).statusCode).toBe(429);
   });
 });
 
@@ -254,6 +270,7 @@ describe('handleSessionTakeControl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetWidgetRateLimitForTests();
+    __resetSessionUserRateLimitForTests();
     validateTokenMock.mockResolvedValue({ userId: USER_ID, isAuthenticated: true });
     verifyWidgetSessionMock.mockResolvedValue({ ok: true });
     reassertSessionCurrentClimbMock.mockResolvedValue(undefined);

@@ -3,6 +3,7 @@ import { applyCorsHeaders } from './cors';
 import { authenticateSessionRequest } from './session-auth';
 import { verifyWidgetSession } from './widget-session-guard';
 import { checkWidgetRateLimit, ensureWidgetRateLimitPruner } from './widget-rate-limit';
+import { checkSessionUserRateLimit, ensureSessionUserRateLimitPruner } from './session-user-rate-limit';
 import { navigateSessionQueue, reassertSessionCurrentClimb, type NavigateAction } from './session-queue-actions';
 import { readJsonBody, sendJson } from './http-utils';
 import { logger } from '../utils/logger';
@@ -55,6 +56,7 @@ function isValidTakeControlBody(body: unknown): body is SessionTakeControlBody {
  */
 export async function handleSessionNavigate(req: IncomingMessage, res: ServerResponse): Promise<void> {
   ensureWidgetRateLimitPruner();
+  ensureSessionUserRateLimitPruner();
 
   if (!applyCorsHeaders(req, res)) return;
 
@@ -70,6 +72,15 @@ export async function handleSessionNavigate(req: IncomingMessage, res: ServerRes
   const auth = await authenticateSessionRequest(req);
   if (!auth.ok) {
     sendJson(res, auth.status, { success: false, error: auth.error });
+    return;
+  }
+
+  // Per-user throttle BEFORE the body read + the guard's DB queries: a mobile JWT
+  // authenticates any user for any sessionId, so a non-participant would
+  // otherwise 403 at the guard on every request (never reaching the per-session
+  // write bucket) and could spin the guard's queries unbounded.
+  if (!checkSessionUserRateLimit(auth.userId)) {
+    sendJson(res, 429, { success: false, error: 'Too many requests' });
     return;
   }
 
@@ -141,6 +152,7 @@ export async function handleSessionNavigate(req: IncomingMessage, res: ServerRes
  */
 export async function handleSessionTakeControl(req: IncomingMessage, res: ServerResponse): Promise<void> {
   ensureWidgetRateLimitPruner();
+  ensureSessionUserRateLimitPruner();
 
   if (!applyCorsHeaders(req, res)) return;
 
@@ -153,6 +165,15 @@ export async function handleSessionTakeControl(req: IncomingMessage, res: Server
   const auth = await authenticateSessionRequest(req);
   if (!auth.ok) {
     sendJson(res, auth.status, { success: false, error: auth.error });
+    return;
+  }
+
+  // Per-user throttle BEFORE the body read + the guard's DB queries: a mobile JWT
+  // authenticates any user for any sessionId, so a non-participant would
+  // otherwise 403 at the guard on every request (never reaching the per-session
+  // write bucket) and could spin the guard's queries unbounded.
+  if (!checkSessionUserRateLimit(auth.userId)) {
+    sendJson(res, 429, { success: false, error: 'Too many requests' });
     return;
   }
 

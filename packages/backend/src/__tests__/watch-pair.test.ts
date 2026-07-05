@@ -188,6 +188,17 @@ describe('handleWatchPairCode', () => {
     const res = await runPairCode({ method: 'POST', authHeader: bearer });
     expect(res.statusCode).toBe(503);
   });
+
+  it('rate-limits by IP: the 11th request in a window returns 429 with Retry-After', async () => {
+    // checkAuthRateLimit allows 10/min per IP (shared with the native-auth
+    // endpoints). The 11th request in the window is throttled before any work.
+    for (let i = 0; i < 10; i++) {
+      expect((await runPairCode({ method: 'POST', authHeader: bearer })).statusCode).toBe(200);
+    }
+    const res = await runPairCode({ method: 'POST', authHeader: bearer });
+    expect(res.statusCode).toBe(429);
+    expect(res.headers['Retry-After']).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -248,5 +259,18 @@ describe('handleWatchPair', () => {
     const res = await runPair({ method: 'POST', body: { code: 'abcd-2345' } });
     expect(res.statusCode).toBe(200);
     expect(String(redisGetdelMock.mock.calls[0][0])).toBe('boardsesh:watch:pair:ABCD2345');
+  });
+
+  it('mints the token pair for the user the code was bound to', async () => {
+    // The code maps (in Redis) to a specific userId; the JWT must be minted for
+    // exactly that user, not the fixture default.
+    redisGetdelMock.mockResolvedValue('bound-user-xyz');
+    const res = await runPair({ method: 'POST', body: { code: 'ABCD2345' } });
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body);
+    // Decode the JWS payload (2nd segment) and confirm sub === the bound user.
+    const payload = JSON.parse(Buffer.from(parsed.jwt.split('.')[1], 'base64url').toString('utf8'));
+    expect(payload.sub).toBe('bound-user-xyz');
+    expect(payload.aud).toBe('boardsesh-mobile');
   });
 });

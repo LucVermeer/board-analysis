@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseBoardPath } from '@boardsesh/board-config';
+import { parseBoardPath, parseNamedBoardPath } from '@boardsesh/board-config';
 import { applyCorsHeaders } from './cors';
 import { authenticateSessionRequest } from './session-auth';
 import { verifyWidgetSession } from './widget-session-guard';
-import { checkSessionReadRateLimit, ensureSessionReadRateLimitPruner } from './session-read-rate-limit';
+import { checkSessionUserRateLimit, ensureSessionUserRateLimitPruner } from './session-user-rate-limit';
 import { sendJson } from './http-utils';
 import { roomManager } from '../services/room-manager';
 import { logger } from '../utils/logger';
@@ -24,7 +24,7 @@ import { logger } from '../utils/logger';
  */
 
 export async function handleSessionState(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-  ensureSessionReadRateLimitPruner();
+  ensureSessionUserRateLimitPruner();
 
   if (!applyCorsHeaders(req, res)) return;
 
@@ -47,7 +47,7 @@ export async function handleSessionState(req: IncomingMessage, res: ServerRespon
 
   // Per-user read limiter BEFORE the guard's DB reads, so a client hammering the
   // 3s poll can't drive unbounded getQueueState/verifyWidgetSession load.
-  if (!checkSessionReadRateLimit(auth.userId)) {
+  if (!checkSessionUserRateLimit(auth.userId)) {
     sendJson(res, 429, { error: 'Too many requests' });
     return;
   }
@@ -63,9 +63,12 @@ export async function handleSessionState(req: IncomingMessage, res: ServerRespon
     // round-trip, since the watch polls this endpoint continuously.
     const queueState = await roomManager.getQueueState(sessionId);
     const parsedBoard = parseBoardPath(guard.session.boardPath);
-    if (parsedBoard === null) {
-      // A malformed boardPath means the watch gets null board fields and can't
-      // build a saveTick — surface it so it's diagnosable rather than silent.
+    if (parsedBoard === null && parseNamedBoardPath(guard.session.boardPath) === null) {
+      // Neither a positional board path nor a named-board (/b/{slug}) path — a
+      // genuinely malformed value. The watch gets null board fields and can't
+      // build a saveTick, so surface it. (Named boards intentionally resolve to
+      // null board fields here — the watch can't yet build a saveTick for them —
+      // and must NOT warn on every ~3s poll.)
       logger.warn(
         `[SessionState] Could not parse boardPath for session ${sessionId}: ${JSON.stringify(guard.session.boardPath)}`,
       );

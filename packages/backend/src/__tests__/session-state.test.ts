@@ -55,7 +55,7 @@ vi.mock('../services/room-manager', () => ({
 }));
 
 const { handleSessionState } = await import('../handlers/session-state');
-const { __resetSessionReadRateLimitForTests } = await import('../handlers/session-read-rate-limit');
+const { __resetSessionUserRateLimitForTests } = await import('../handlers/session-user-rate-limit');
 
 const SESSION_ID = 'session-state-test';
 const USER_ID = 'user-state-test';
@@ -135,7 +135,7 @@ async function run(opts: { method: string; authHeader?: string; sessionId?: stri
 describe('handleSessionState', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetSessionReadRateLimitForTests();
+    __resetSessionUserRateLimitForTests();
     validateTokenMock.mockResolvedValue({ userId: USER_ID, isAuthenticated: true });
     verifyWidgetSessionMock.mockResolvedValue({ ok: true, session: SESSION_ROW });
     getQueueStateMock.mockResolvedValue(makeQueueState());
