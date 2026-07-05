@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Keyboard,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
   useWindowDimensions,
   type ViewStyle,
@@ -22,6 +24,7 @@ import { ListRow } from '../ListRow';
 import { GlassSurface } from '../GlassSurface';
 import { BoardImageNative } from '../BoardImageNative';
 import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
+import { InlinePlaylistPicker } from '../playlist/InlinePlaylistPicker';
 import { getBoardRenderData } from '../../lib/board-details';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { useGradeFormat } from '../../hooks/use-grade-format';
@@ -88,6 +91,9 @@ export function ClimbReactionMenu({
   const { formatGrade } = useGradeFormat();
 
   const progress = useSharedValue(0);
+  // 'menu' shows the action list; 'playlist' swaps the card to the inline
+  // playlist picker (no second sheet — that's the #3294 fix).
+  const [view, setView] = useState<'menu' | 'playlist'>('menu');
 
   const finishClose = useCallback(() => onClose(), [onClose]);
 
@@ -105,6 +111,20 @@ export function ClimbReactionMenu({
     });
   }, [progress, reduceMotion, finishClose]);
 
+  const backToMenu = useCallback(() => setView('menu'), []);
+  // Stable so useClimbActions' memo doesn't rebuild the action list every render.
+  const openPlaylist = useCallback(() => setView('playlist'), []);
+
+  // Hardware back (Android) / VoiceOver escape: pop the playlist view first,
+  // dismiss the whole overlay only from the top-level menu.
+  const handleRequestClose = useCallback(() => {
+    if (view === 'playlist') {
+      backToMenu();
+      return;
+    }
+    dismiss();
+  }, [view, backToMenu, dismiss]);
+
   const actions = useClimbActions({
     climb,
     boardConfig,
@@ -112,6 +132,7 @@ export function ClimbReactionMenu({
     isAuthenticated,
     onEditEntry,
     onAfterAction: dismiss,
+    onSelectPlaylist: openPlaylist,
   });
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
@@ -127,10 +148,35 @@ export function ClimbReactionMenu({
     return parts.join(' · ');
   }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
 
+  // Track the keyboard height (the inline create form focuses a TextInput). When it's
+  // up, the card's bottom must sit at the keyboard's top (not the screen's), and the
+  // climb art shrinks so the preview + form still fit above it on shorter phones.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    // iOS `will*` events fire before the animation (and don't exist on Android);
+    // Android only fires the `did*` pair. Read the keyboard height straight off the
+    // event (absolute — no windowHeight), so empty deps: on Android `adjustResize`
+    // the keyboard shrinks windowHeight, and a windowHeight dep would tear down and
+    // re-register this listener mid-event and miss it.
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvent, (event) => setKeyboardHeight(event.endCoordinates?.height ?? 0));
+    const onHide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
   // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
   // 400) so no new render is needed. Sized to the screen so it stays "blown up" but
-  // leaves room for the menu (~20% larger than the first pass).
-  const artMaxSize = Math.min(235, Math.round(windowHeight * 0.31), Math.round(windowWidth * 0.66));
+  // leaves room for the menu (~20% larger than the first pass); shrunk while the
+  // keyboard is up so the create form clears it.
+  const artMaxSize = Math.min(
+    keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
+    Math.round(windowHeight * 0.31),
+    Math.round(windowWidth * 0.66),
+  );
   const boardRenderData = useMemo(() => {
     const setIdValues = boardConfig.setIds
       .split(',')
@@ -151,9 +197,23 @@ export function ClimbReactionMenu({
     return { width: fitted.width, height: fitted.height, borderRadius: borderRadius.lg, overflow: 'hidden' };
   }, [boardRenderData, artMaxSize]);
 
-  // Cap the menu so preview + menu always fit; it scrolls internally if the action
-  // list is long on a short screen.
-  const menuMaxHeight = Math.max(180, windowHeight - insets.top - insets.bottom - artMaxSize - 140 - spacing[5] * 2);
+  // Top offset for the floating content — anchors the preview at a fixed position
+  // (see styles.content). Shared with the menu cap so the card can't run past the
+  // bottom safe area now that the content is top-aligned rather than centered.
+  const contentTopOffset = Math.round(windowHeight * 0.06);
+
+  // Cap the menu/picker so it fills down to the bottom safe area — no taller (it
+  // would clip past it), no shorter (wasting vertical space) — and no lower than
+  // the keyboard when one is up. Measure the preview's real height rather than
+  // reserving a fixed guess; fall back to an estimate until the first layout. The
+  // card scrolls internally past this cap.
+  const [previewHeight, setPreviewHeight] = useState(0);
+  const reservedForPreview = previewHeight > 0 ? previewHeight : artMaxSize + spacing[5] * 4;
+  const bottomReserve = keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing[5];
+  const menuMaxHeight = Math.max(
+    180,
+    windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
+  );
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
   const previewStyle = useAnimatedStyle(() => ({
@@ -168,9 +228,11 @@ export function ClimbReactionMenu({
   const scrimColor = colorScheme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.35)';
 
   return (
-    <OverlayPortal onRequestClose={dismiss}>
+    <OverlayPortal onRequestClose={handleRequestClose}>
       <View style={StyleSheet.absoluteFill}>
-        {/* Blurred / dimmed backdrop, tap to dismiss. */}
+        {/* Blurred / dimmed backdrop. Tapping it pops the playlist view back to
+            the menu first (matching the back button), and dismisses from the menu
+            — so a stray tap can't tear down a half-typed create form. */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
           {Platform.OS === 'ios' ? (
             <BlurView
@@ -183,23 +245,34 @@ export function ClimbReactionMenu({
           <View style={[StyleSheet.absoluteFill, { backgroundColor: scrimColor }]} />
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={dismiss}
+            onPress={handleRequestClose}
             accessibilityRole="button"
             accessibilityLabel={climb.name}
           />
         </Animated.View>
 
         {/* Floating content: enlarged climb + action menu. box-none so empty space
-            falls through to the backdrop Pressable. */}
+            falls through to the backdrop Pressable. Plain View — the animated nodes
+            are the inner preview and menu wrap. */}
         <View
           pointerEvents="box-none"
           // Contain VoiceOver focus to the floating content (don't let it wander into
-          // the screen behind), and let the VO escape gesture dismiss the overlay.
+          // the screen behind), and let the VO escape gesture pop the view / dismiss.
           accessibilityViewIsModal={Platform.OS === 'ios'}
-          onAccessibilityEscape={dismiss}
-          style={[styles.content, { paddingTop: insets.top + spacing[5], paddingBottom: insets.bottom + spacing[5] }]}
+          onAccessibilityEscape={handleRequestClose}
+          style={[
+            styles.content,
+            { paddingTop: insets.top + contentTopOffset, paddingBottom: insets.bottom + spacing[5] },
+          ]}
         >
-          <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
+          {/* The enlarged climb stays visible in both views — the playlist picker
+              replaces the action list below it, not the climb itself. onLayout
+              feeds the real preview height into the menu/picker cap. */}
+          <Animated.View
+            pointerEvents="box-none"
+            onLayout={(event) => setPreviewHeight(event.nativeEvent.layout.height)}
+            style={[styles.preview, previewStyle]}
+          >
             {boardRenderData && artStyle ? (
               <BoardImageNative
                 frames={climb.frames}
@@ -240,23 +313,38 @@ export function ClimbReactionMenu({
 
           <Animated.View style={[styles.menuWrap, menuStyle]}>
             <GlassSurface role="base" level="level2" borderRadius={borderRadius.xl} style={styles.menuCard}>
-              <ScrollView
-                style={{ maxHeight: menuMaxHeight }}
-                bounces={false}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.menuContent}
-              >
-                {actions.map((action, index) => (
-                  <ListRow
-                    key={action.id}
-                    title={action.title}
-                    leading={<Icon name={action.icon} size={22} color={action.color} />}
-                    onPress={action.run}
-                    showSeparator={index < actions.length - 1}
-                    separatorInset={56}
-                  />
-                ))}
-              </ScrollView>
+              {view === 'playlist' ? (
+                // The picker pins its own header and scrolls the list within
+                // menuMaxHeight, so "back" stays put however far you scroll.
+                <InlinePlaylistPicker
+                  climb={climb}
+                  angle={boardConfig.angle}
+                  boardName={boardConfig.boardName as BoardName}
+                  layoutId={boardConfig.layoutId}
+                  TextInputComponent={TextInput}
+                  onBack={backToMenu}
+                  maxHeight={menuMaxHeight}
+                />
+              ) : (
+                <ScrollView
+                  style={{ maxHeight: menuMaxHeight }}
+                  bounces={false}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.menuContent}
+                >
+                  {actions.map((action, index) => (
+                    <ListRow
+                      key={action.id}
+                      title={action.title}
+                      leading={<Icon name={action.icon} size={22} color={action.color} />}
+                      onPress={action.run}
+                      showSeparator={index < actions.length - 1}
+                      separatorInset={56}
+                    />
+                  ))}
+                </ScrollView>
+              )}
             </GlassSurface>
           </Animated.View>
         </View>
@@ -273,7 +361,10 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
-    justifyContent: 'center',
+    // Anchor from the top, not centered: the climb preview keeps a fixed position
+    // whether the action list or the (shorter/taller) playlist picker sits below
+    // it, so switching views never shifts the climb up or down.
+    justifyContent: 'flex-start',
     paddingHorizontal: spacing[6],
     gap: spacing[5],
   },

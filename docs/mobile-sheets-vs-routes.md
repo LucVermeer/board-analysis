@@ -44,6 +44,14 @@ instead stack via their own SwiftUI hosts — that's how `HoldRoleSheet` shows o
 drawer (they're siblings in the create-climb route, not one nested in the other). There is **no**
 `fullWindowOverlay` prop on `Sheet`; it was an inert no-op and has been removed.
 
+**Inline body instead of a nested sheet:** when a surface needs a secondary picker/form but a
+second native sheet can't stack (rule 1), extract the body as a **presentation-agnostic component**
+that mounts no sheet/overlay of its own and takes its text input by injection, then render it inline
+in both hosts. `InlinePlaylistPicker` (the "add to playlist" list + create form) is the reference:
+it renders inline in `ClimbReactionMenu`'s `FullWindowOverlay` (plain `TextInput`) and inside
+`AddToPlaylistSheet`'s `ModalSheet` (`BottomSheetTextInput`), so add-to-playlist never stacks a
+second sheet. Feedback is inline, not a toast (a toast renders behind the overlay/sheet).
+
 **Every native sheet must go through the presentation coordinator.** `@expo/ui`
 sheets all present off the **same** root-window view controller, and the library
 does no serialization — overlapping a present with another sheet's dismiss

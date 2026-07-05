@@ -65,6 +65,13 @@ type UseClimbActionsArgs = {
   onEditEntry?: () => void;
   /** Run after any action fires. The sheet passes its `onClose`; the native menu omits it. */
   onAfterAction?: () => void;
+  /**
+   * When provided, the "Add to playlist" action runs this INSTEAD of opening the
+   * `AddToPlaylistSheet` (and does NOT dismiss). The reaction overlay passes a
+   * view-switcher so it can host the picker inline — stacking a second native
+   * sheet dismisses the first (#3294). Omit it and playlist opens the sheet.
+   */
+  onSelectPlaylist?: () => void;
 };
 
 // Mirrors web's constructClimbInfoUrl: Kilter no longer has a public app URL.
@@ -81,6 +88,7 @@ export function useClimbActions({
   isAuthenticated,
   onEditEntry,
   onAfterAction,
+  onSelectPlaylist,
 }: UseClimbActionsArgs): ClimbActionItem[] {
   const { t } = useTranslation('climbs');
   const router = useRouter();
@@ -177,6 +185,12 @@ export function useClimbActions({
       icon: 'playlist',
       color: accentColor,
       run: () => {
+        // Inline host (reaction overlay) keeps the overlay up and swaps to its
+        // playlist view; otherwise fall back to the bottom sheet.
+        if (onSelectPlaylist) {
+          onSelectPlaylist();
+          return;
+        }
         openAddToPlaylist(climb, boardConfig);
         after();
       },
@@ -331,6 +345,7 @@ export function useClimbActions({
     currentUserId,
     isAuthenticated,
     onEditEntry,
+    onSelectPlaylist,
     after,
     t,
     actionColors,
