@@ -6,10 +6,23 @@ import { z } from 'zod';
  * Enforced here so a malformed cursor is a client-visible validation error
  * instead of an unhandled Postgres exception when the resolver casts it with
  * `::timestamp` / `::bigint`.
+ *
+ * Besides strict ISO-8601, the legacy 'YYYY-MM-DD HH:MM:SS[.ffffff]' shape is
+ * accepted: pre-normalization servers emitted postgres.js timestamp strings
+ * verbatim, and clients replay stored checkpoints, so rejecting that form
+ * would permanently brick sync for anyone holding an old cursor. Both shapes
+ * cast cleanly with `::timestamp`.
  */
+const LEGACY_PG_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/;
+
 export const SyncCursorInputSchema = z
   .object({
-    updatedAt: z.string().datetime({ offset: true }).optional().nullable(),
+    updatedAt: z
+      .string()
+      .datetime({ offset: true })
+      .or(z.string().regex(LEGACY_PG_TIMESTAMP_PATTERN))
+      .optional()
+      .nullable(),
     syncSeq: z.string().regex(/^\d+$/, 'syncSeq must be a stringified integer').optional().nullable(),
   })
   .optional()

@@ -47,7 +47,17 @@ function normalizeRow(row: RawRow): RawRow {
 }
 
 function toIso(value: unknown): string {
-  return value instanceof Date ? value.toISOString() : String(value);
+  if (value instanceof Date) return value.toISOString();
+  // postgres.js returns `timestamp` (without time zone) columns as
+  // 'YYYY-MM-DD HH:MM:SS[.ffffff]' strings. Normalize textually to ISO-8601
+  // UTC ('T' separator, trailing 'Z') — these columns are written by now() in
+  // UTC — instead of round-tripping through Date, which would apply the
+  // process timezone and clamp microsecond precision. The `::timestamp` cast
+  // on cursor replay ignores the 'Z', so the value round-trips losslessly.
+  const stringValue = String(value);
+  const timestampMatch = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(stringValue);
+  if (timestampMatch) return `${timestampMatch[1]}T${timestampMatch[2]}Z`;
+  return stringValue;
 }
 
 /**
