@@ -221,6 +221,8 @@ async function importMoonBoardProblems() {
           angle: fileConfig.angle,
           displayDifficulty: difficultyId,
           benchmarkDifficulty: problem.isBenchmark ? difficultyId : null,
+          // MoonBoard repeats are this board's upstream count; seed the total too.
+          upstreamAscensionistCount: problem.repeats,
           ascensionistCount: problem.repeats,
           difficultyAverage: difficultyId,
           // MoonBoard userRating is already on the 1-5 scale — mark normalized
@@ -279,7 +281,10 @@ async function importMoonBoardProblems() {
             set: {
               displayDifficulty: sql`excluded.display_difficulty`,
               benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
-              ascensionistCount: sql`excluded.ascensionist_count`,
+              // Upstream is monotonic; the total is rebuilt as upstream + existing
+              // Boardsesh so a re-run never clobbers accrued tick counts.
+              upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
+              ascensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0)) + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
               difficultyAverage: sql`excluded.difficulty_average`,
               qualityAverage: sql`excluded.quality_average`,
               qualityNormalized: sql`true`,

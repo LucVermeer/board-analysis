@@ -453,7 +453,7 @@ async function syncBoardLayoutGroup(
     qualityNormalized: true,
     faUsername: accum.faUsername,
     faAt: accum.faAt,
-    kilterAscensionistCount: accum.kilterCount,
+    upstreamAscensionistCount: accum.kilterCount,
     ascensionistCount: accum.kilterCount,
   }));
   if (statValues.length > 0) {
@@ -464,11 +464,12 @@ async function syncBoardLayoutGroup(
         .onConflictDoUpdate({
           target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
           set: {
-            kilterAscensionistCount: sql`excluded.kilter_ascensionist_count`,
-            // Kilter and Aurora are alternate upstream snapshots of the same
-            // Kilter ascents, so take the higher upstream count and add the
-            // independent Boardsesh count.
-            ascensionistCount: sql`GREATEST(COALESCE(excluded.kilter_ascensionist_count, 0), COALESCE(${boardClimbStats.auroraAscensionistCount}, 0)) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+            // upstream_ is the board's single manufacturer count (Kilter Grips
+            // here). Keep the higher of the stored and incoming snapshot so a
+            // stale/partial sync can never lower a climb.
+            upstreamAscensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+            // Total = upstream + the independent Boardsesh count.
+            ascensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0)) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
             // Kilter-origin canonicals: clobber with Grips values. Aurora-origin
             // canonicals (no Grips display row): excluded is null → keep existing.
             displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,

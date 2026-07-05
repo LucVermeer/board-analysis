@@ -32,8 +32,7 @@ export type KilterStatsRepairTopRow = {
   climbUuid: string;
   angle: number;
   ascensionistCount: number;
-  auroraAscensionistCount: number | null;
-  kilterAscensionistCount: number | null;
+  upstreamAscensionistCount: number | null;
   boardseshAscensionistCount: number | null;
 };
 
@@ -63,7 +62,7 @@ type RepairStatValue = {
   qualityNormalized: boolean;
   faUsername: string | null;
   faAt: string | null;
-  kilterAscensionistCount: number;
+  upstreamAscensionistCount: number;
   ascensionistCount: number;
 };
 
@@ -82,8 +81,7 @@ type TopRow = {
   climb_uuid: string;
   angle: number | string;
   ascensionist_count: number | string | null;
-  aurora_ascensionist_count: number | string | null;
-  kilter_ascensionist_count: number | string | null;
+  upstream_ascensionist_count: number | string | null;
   boardsesh_ascensionist_count: number | string | null;
 };
 
@@ -111,8 +109,8 @@ function mapTopRow(row: TopRow): KilterStatsRepairTopRow {
     climbUuid: row.climb_uuid,
     angle: Number(row.angle),
     ascensionistCount: Number(row.ascensionist_count ?? 0),
-    auroraAscensionistCount: row.aurora_ascensionist_count === null ? null : Number(row.aurora_ascensionist_count),
-    kilterAscensionistCount: row.kilter_ascensionist_count === null ? null : Number(row.kilter_ascensionist_count),
+    upstreamAscensionistCount:
+      row.upstream_ascensionist_count === null ? null : Number(row.upstream_ascensionist_count),
     boardseshAscensionistCount:
       row.boardsesh_ascensionist_count === null ? null : Number(row.boardsesh_ascensionist_count),
   };
@@ -125,8 +123,7 @@ async function loadTopStats(db: DrizzleDb): Promise<KilterStatsRepairTopRow[]> {
              bcs.climb_uuid,
              bcs.angle,
              bcs.ascensionist_count,
-             bcs.aurora_ascensionist_count,
-             bcs.kilter_ascensionist_count,
+             bcs.upstream_ascensionist_count,
              bcs.boardsesh_ascensionist_count
         FROM board_climb_stats bcs
         JOIN board_climbs bc
@@ -189,7 +186,7 @@ function statValueFromAccum(accum: StatAccum): RepairStatValue {
     qualityNormalized: true,
     faUsername: accum.faUsername,
     faAt: accum.faAt,
-    kilterAscensionistCount: accum.kilterCount,
+    upstreamAscensionistCount: accum.kilterCount,
     ascensionistCount: accum.kilterCount,
   };
 }
@@ -206,23 +203,23 @@ async function compareExistingStats(
     const incoming = chunk.map((statValue) => ({
       climb_uuid: statValue.climbUuid,
       angle: statValue.angle,
-      kilter_count: statValue.kilterAscensionistCount,
+      upstream_count: statValue.upstreamAscensionistCount,
     }));
     const rows = rowsFromResult<CompareRow>(
       await db.execute(sql`
         WITH incoming AS (
           SELECT *
             FROM jsonb_to_recordset(${JSON.stringify(incoming)}::jsonb)
-              AS i(climb_uuid text, angle integer, kilter_count bigint)
+              AS i(climb_uuid text, angle integer, upstream_count bigint)
         )
         SELECT COUNT(*) FILTER (
-                 WHERE s.kilter_ascensionist_count IS DISTINCT FROM i.kilter_count
+                 WHERE s.upstream_ascensionist_count IS DISTINCT FROM i.upstream_count
                ) AS changed_rows,
-               MAX(COALESCE(s.kilter_ascensionist_count, 0) - i.kilter_count) FILTER (
-                 WHERE COALESCE(s.kilter_ascensionist_count, 0) > i.kilter_count
+               MAX(COALESCE(s.upstream_ascensionist_count, 0) - i.upstream_count) FILTER (
+                 WHERE COALESCE(s.upstream_ascensionist_count, 0) > i.upstream_count
                ) AS max_drop,
-               MAX(i.kilter_count - COALESCE(s.kilter_ascensionist_count, 0)) FILTER (
-                 WHERE i.kilter_count > COALESCE(s.kilter_ascensionist_count, 0)
+               MAX(i.upstream_count - COALESCE(s.upstream_ascensionist_count, 0)) FILTER (
+                 WHERE i.upstream_count > COALESCE(s.upstream_ascensionist_count, 0)
                ) AS max_rise
           FROM incoming i
      LEFT JOIN board_climb_stats s
@@ -247,7 +244,7 @@ async function countFormulaMismatches(db: DrizzleDb): Promise<number> {
         FROM board_climb_stats
        WHERE board_type = ${KILTER}
          AND ascensionist_count IS DISTINCT FROM (
-           GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0))
+           COALESCE(upstream_ascensionist_count, 0)
            + COALESCE(boardsesh_ascensionist_count, 0)
          )
     `),
@@ -263,8 +260,11 @@ async function upsertRepairedStats(db: DrizzleDb, statValues: RepairStatValue[])
       .onConflictDoUpdate({
         target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
         set: {
-          kilterAscensionistCount: sql`excluded.kilter_ascensionist_count`,
-          ascensionistCount: sql`GREATEST(COALESCE(excluded.kilter_ascensionist_count, 0), COALESCE(${boardClimbStats.auroraAscensionistCount}, 0)) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+          // Repair is the authoritative reconciliation to the live Grips catalog,
+          // so it overwrites upstream (it may correct a count downward), unlike the
+          // routine catalog sync which only ever raises it.
+          upstreamAscensionistCount: sql`excluded.upstream_ascensionist_count`,
+          ascensionistCount: sql`COALESCE(excluded.upstream_ascensionist_count, 0) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
           displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
           difficultyAverage: sql`COALESCE(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
           qualityAverage: sql`COALESCE(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
@@ -280,12 +280,12 @@ async function recomputeMaterializedTotals(db: DrizzleDb): Promise<number> {
   const result = await db.execute(sql`
     UPDATE board_climb_stats
        SET ascensionist_count = (
-         GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0))
+         COALESCE(upstream_ascensionist_count, 0)
          + COALESCE(boardsesh_ascensionist_count, 0)
        )
      WHERE board_type = ${KILTER}
        AND ascensionist_count IS DISTINCT FROM (
-         GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0))
+         COALESCE(upstream_ascensionist_count, 0)
          + COALESCE(boardsesh_ascensionist_count, 0)
        )
   `);

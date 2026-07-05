@@ -567,19 +567,24 @@ export const boardClimbStats = pgTable(
     angle: integer('angle').notNull(),
     displayDifficulty: doublePrecision('display_difficulty'),
     benchmarkDifficulty: doublePrecision('benchmark_difficulty'),
-    // ascensionistCount is the materialized total kept in sync by three writers:
-    // Aurora sync updates aurora_ascensionist_count + ascensionist_count in one
-    // statement; Kilter sync updates kilter_ascensionist_count +
-    // ascensionist_count in one statement; the Boardsesh tick recompute updates
-    // boardsesh_ascensionist_count + ascensionist_count in one statement. Kilter
-    // and Aurora are alternate upstream snapshots, so totals use the higher of
-    // those two plus Boardsesh, not their sum.
+    // ascensionistCount is the materialized total = one upstream source per board
+    // plus Boardsesh: upstream_ascensionist_count + boardsesh_ascensionist_count.
+    // Each board has exactly one upstream (the manufacturer's own count): Tension
+    // via the Aurora API sync, Kilter via the Kilter Grips catalog sync, MoonBoard
+    // via the community-repeat count in the app catalog import. Every upstream
+    // writer sets upstream_ascensionist_count (GREATEST of the existing and the
+    // incoming snapshot, so a stale/partial sync can never lower a climb) and
+    // rewrites the total in the same statement; the Boardsesh tick recompute owns
+    // boardsesh_ascensionist_count and adds it on top. Boardsesh ascents ADD to the
+    // upstream number — they never replace it.
+    // (Historically upstream was split into aurora_/kilter_ columns for the two
+    // Kilter backends; migration 0141 folded them into GREATEST(aurora, kilter) and
+    // dropped the kilter column.)
     // Keep it as a regular column (not GENERATED) so the custom covering indexes
     // (board_climb_stats_ascents_covering_idx, migration 0068; the v2 variant with
     // climb_uuid as a trailing key column, migration 0122) keep working.
     ascensionistCount: bigint('ascensionist_count', { mode: 'number' }),
-    auroraAscensionistCount: bigint('aurora_ascensionist_count', { mode: 'number' }),
-    kilterAscensionistCount: bigint('kilter_ascensionist_count', { mode: 'number' }),
+    upstreamAscensionistCount: bigint('upstream_ascensionist_count', { mode: 'number' }),
     boardseshAscensionistCount: bigint('boardsesh_ascensionist_count', { mode: 'number' }),
     difficultyAverage: doublePrecision('difficulty_average'),
     qualityAverage: doublePrecision('quality_average'),

@@ -435,7 +435,7 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         displayDifficulty: Number(item.display_difficulty || item.difficulty_average),
         benchmarkDifficulty: item.benchmark_difficulty != null ? Number(item.benchmark_difficulty) : null,
         ascensionistCount: auroraCount,
-        auroraAscensionistCount: auroraCount,
+        upstreamAscensionistCount: auroraCount,
         difficultyAverage: Number(item.difficulty_average),
         // Aurora reports quality on a 1–3 scale; Kilter Grips and MoonBoard use
         // 1–5. Normalise every board to 1–5 (×5/3) so board_climb_stats.quality_average
@@ -458,11 +458,12 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         set: {
           displayDifficulty: sql`excluded.display_difficulty`,
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
-          auroraAscensionistCount: sql`excluded.aurora_ascensionist_count`,
-          // aurora_ and kilter_ are alternate upstream snapshots for Kilter,
-          // not independent sources. Use the higher upstream count so stale
-          // snapshots do not lower a climb, then add Boardsesh's local count.
-          ascensionistCount: sql`GREATEST(COALESCE(${climbStatsSchema.kilterAscensionistCount}, 0), COALESCE(excluded.aurora_ascensionist_count, 0)) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
+          // upstream_ is the board's single manufacturer count (Tension/Aurora
+          // here). Keep the higher of the stored and incoming snapshot so a
+          // stale/partial sync can never lower a climb.
+          upstreamAscensionistCount: sql`GREATEST(COALESCE(${climbStatsSchema.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+          // Total = upstream + Boardsesh's local count.
+          ascensionistCount: sql`GREATEST(COALESCE(${climbStatsSchema.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0)) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
           qualityNormalized: sql`true`,
