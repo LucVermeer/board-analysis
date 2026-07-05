@@ -1,0 +1,128 @@
+name: Mobile native-build gate
+description: >
+  Decide whether a PR or branch push needs a native build. Skips when nothing
+  that can move the Expo fingerprint changed vs main, or when the fingerprint
+  itself is unchanged vs main — the PR/branch mirror of how main skips the native
+  build for JS-only merges. Branch pushes are gated too: the push-triggered build
+  predates OTA and no longer needs to run for JS-only changes. Runs on ubuntu for
+  both platforms (the fingerprint resolve is file-hash based; it needs neither
+  Xcode nor the Android SDK). See docs/android-pr-build-speed-spec.md (added in
+  #3445).
+
+# Why a fingerprint diff and not main's fingerprint-tag lookup: main resolves the
+# fingerprint WITH Production-environment secrets (GOOGLE_MAPS_API_KEY perturbs
+# it) and skips when a `fingerprint-<platform>-<hash>` tag already shipped. A PR
+# run — a fork PR especially — can't read those secrets, so its resolve would
+# never match the shipped tags. Resolving head and main with this workflow's own
+# (identical) env instead makes the env cancel out, leaving only real native-input
+# changes to move the comparison. Everything diffs against main (fetched below),
+# which is base.sha for a PR's merge ref and the merge target for a branch push.
+inputs:
+  platform:
+    description: 'Expo platform to resolve the fingerprint for (android | ios).'
+    required: true
+outputs:
+  should_build:
+    description: 'true when the native build must run; false to skip it.'
+    value: ${{ steps.decide.outputs.should_build }}
+runs:
+  using: composite
+  steps:
+    # Self-contained (like android-rn-setup): a caller only has to `checkout`
+    # first, not also remember to set up bun.
+    - uses: oven-sh/setup-bun@v2
+
+    - name: Decide whether to build
+      id: decide
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+        EVENT: ${{ github.event_name }}
+      run: |
+        # No `set -e`: this gate is deliberately fail-OPEN (an unexpected error
+        # should build, never block a PR), and every decision path exits via
+        # build() or skip() below — so should_build is always written. Keep that
+        # invariant if you edit this.
+        set -uo pipefail
+
+        build() { echo "should_build=true"  >> "$GITHUB_OUTPUT"; echo "::notice::$1 — running the $PLATFORM native build."; exit 0; }
+        skip()  { echo "should_build=false" >> "$GITHUB_OUTPUT"; echo "::notice::$1 — skipping the $PLATFORM native build (JS rides OTA)."; exit 0; }
+
+        # Manual dispatch has no base to diff against.
+        [ "$EVENT" = "workflow_dispatch" ] && build "manual dispatch"
+
+        # Diff against main — base.sha for a PR merge ref, the merge target for a
+        # branch push. A shallow tip is enough: `git diff A B` compares the two
+        # trees directly (no merge-base needed).
+        git fetch --no-tags --depth=1 origin main 2>/dev/null || build "could not fetch main to diff against"
+        BASE_SHA="$(git rev-parse FETCH_HEAD)"
+
+        changed() { git diff --name-only "$BASE_SHA" HEAD -- "$@" 2>/dev/null; }
+
+        # A change to the workflow/action plumbing can't move the fingerprint, so
+        # it would be skipped by the diff below — force a build so it's exercised.
+        if [ -n "$(changed \
+              .github/workflows/android-pr-rn.yml .github/workflows/ios-rn-ci.yml \
+              .github/actions/android-rn-setup .github/actions/mobile-native-gate)" ]; then
+          build "CI plumbing changed"
+        fi
+
+        # Path screen: nothing in the canonical native-input set (mirrors the
+        # ios-rn-ci Pods cache key) changed → skip without paying for a resolve.
+        if [ -z "$(changed \
+              packages/mobile/package.json bun.lock packages/mobile/app.config.ts \
+              packages/mobile/plugins packages/mobile/modules patches)" ]; then
+          skip "no native-input files changed vs main"
+        fi
+
+        # A candidate changed, but that set includes bun.lock — which any
+        # web/backend dep bump churns without touching the mobile native shape.
+        # Resolve the Expo fingerprint at HEAD and at main and skip when identical.
+        # Fail open: any resolve/install/worktree trouble builds.
+        resolve_fp() {
+          # $1 = repo root to resolve the fingerprint in.
+          ( cd "$1/packages/mobile" \
+            && TAILSCALE_HOSTS='' bunx expo-updates runtimeversion:resolve --platform "$PLATFORM" 2>/dev/null ) \
+            | jq -r '.runtimeVersion // empty' 2>/dev/null || true
+        }
+        write_env() {
+          # $1 = repo root. The .env is hashed into the fingerprint, so head and
+          # main must resolve against a byte-identical one.
+          cat > "$1/packages/mobile/.env" <<EOF
+        EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+        EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
+        EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
+        EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+        EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+        EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        EOF
+        }
+
+        bun install --frozen-lockfile || build "head bun install failed"
+        write_env .
+        HEAD_FP="$(resolve_fp .)"
+
+        # Resolve the main fingerprint in an ISOLATED worktree so the primary
+        # checkout is never mutated (head files, incl. this action, stay in place —
+        # no ordering footgun for any later step). bun's global cache (~/.bun) is
+        # shared, so the base install re-uses already-downloaded packages. mktemp -d
+        # is collision-proof; the `wt` subdir doesn't exist yet, which git wants.
+        BASE_PARENT="$(mktemp -d)"
+        BASE_DIR="$BASE_PARENT/wt"
+        git worktree add --detach "$BASE_DIR" "$BASE_SHA" 2>/dev/null || {
+          rm -rf "$BASE_PARENT"; build "could not materialise main to diff the fingerprint"; }
+        write_env "$BASE_DIR"
+        if ! ( cd "$BASE_DIR" && bun install --frozen-lockfile ); then
+          git worktree remove --force "$BASE_DIR" 2>/dev/null || true; rm -rf "$BASE_PARENT"
+          build "base bun install failed"
+        fi
+        BASE_FP="$(resolve_fp "$BASE_DIR")"
+        git worktree remove --force "$BASE_DIR" 2>/dev/null || true
+        rm -rf "$BASE_PARENT"
+
+        echo "platform=$PLATFORM head=$HEAD_FP base=$BASE_FP"
+        if [ -n "$HEAD_FP" ] && [ -n "$BASE_FP" ] && [ "$HEAD_FP" = "$BASE_FP" ]; then
+          skip "$PLATFORM fingerprint unchanged vs main ($HEAD_FP)"
+        else
+          build "$PLATFORM fingerprint changed (base=$BASE_FP head=$HEAD_FP)"
+        fi
