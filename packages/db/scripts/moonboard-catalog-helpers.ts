@@ -213,3 +213,24 @@ export function catalogProblemToClimbs(problem: MoonBoardCatalogProblem, layoutI
   }
   return climbs;
 }
+
+/**
+ * Two distinct catalog problems can share the exact same holds at the same
+ * layout+angle (e.g. the real "birthday cake trail mix", 38,683 repeats, and a
+ * junk duplicate literally named "name" with 19 repeats). They collapse onto one
+ * Boardsesh climb (same hold fingerprint → same merged UUID), so the importer must
+ * decide which one's stats win instead of taking whichever it processed last.
+ *
+ * Prefer the stronger community signal: more ascents (repeats) wins; on a tie a
+ * benchmark beats a non-benchmark; otherwise keep the incumbent (stable, so a
+ * re-run is deterministic). Returns true if `candidate` should replace `incumbent`.
+ */
+export function isBetterCatalogClimb(candidate: MappedCatalogClimb, incumbent: MappedCatalogClimb): boolean {
+  if (candidate.ascensionistCount !== incumbent.ascensionistCount) {
+    return candidate.ascensionistCount > incumbent.ascensionistCount;
+  }
+  if (candidate.isBenchmark !== incumbent.isBenchmark) {
+    return candidate.isBenchmark;
+  }
+  return false;
+}

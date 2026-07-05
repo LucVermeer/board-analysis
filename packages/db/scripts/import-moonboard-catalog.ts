@@ -9,6 +9,7 @@ import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
 import {
   HOLDSETUP_TO_LAYOUT,
   catalogProblemToClimbs,
+  isBetterCatalogClimb,
   type MoonBoardCatalogFile,
   type MappedCatalogClimb,
 } from './moonboard-catalog-helpers.js';
@@ -178,9 +179,13 @@ async function importMoonBoardCatalog() {
 
       console.info(`\n📖 ${file} — holdsetup ${dump.holdsetup} → layout ${layoutId}, ${dump.problems.length} problems`);
 
-      // Dedupe in memory (last wins) keyed per conflict target so a single batch
-      // never proposes the same target twice ("ON CONFLICT cannot affect row a
-      // second time").
+      // Dedupe in memory keyed per conflict target so a single batch never
+      // proposes the same target twice ("ON CONFLICT cannot affect row a second
+      // time"). When two problems share the same holds+angle (so they resolve to
+      // one target UUID) we keep the STRONGER problem (isBetterCatalogClimb: more
+      // repeats, then benchmark) instead of last-wins — otherwise a junk duplicate
+      // can clobber a real benchmark's ascent count and benchmark flag.
+      const bestByUuid = new Map<string, MappedCatalogClimb>();
       const climbByUuid = new Map<string, typeof boardClimbs.$inferInsert>();
       const statsByUuid = new Map<string, typeof boardClimbStats.$inferInsert>();
       const holdsByKey = new Map<string, typeof boardClimbHolds.$inferInsert>();
@@ -197,8 +202,16 @@ async function importMoonBoardCatalog() {
         }
         for (const mapped of climbs) {
           const { uuid, matched: matchedExisting } = resolveUuid(mapped, existingIndex);
-          if (matchedExisting) matched++;
-          else inserted++;
+          const incumbent = bestByUuid.get(uuid);
+          if (incumbent) {
+            // Same holds+angle as an already-seen problem — keep the stronger one.
+            if (!isBetterCatalogClimb(mapped, incumbent)) continue;
+          } else if (matchedExisting) {
+            matched++;
+          } else {
+            inserted++;
+          }
+          bestByUuid.set(uuid, mapped);
 
           climbByUuid.set(uuid, {
             uuid,
