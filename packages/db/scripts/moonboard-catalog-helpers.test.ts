@@ -13,6 +13,7 @@ import {
   isImportableConfig,
   mapCatalogConfig,
   catalogProblemToClimbs,
+  isBetterCatalogClimb,
   type MoonBoardCatalogProblem,
 } from './moonboard-catalog-helpers.js';
 
@@ -171,4 +172,33 @@ void test('unmappable grades map to undefined difficulty', () => {
     { layoutId: 3, angle: 40 },
   );
   assert.equal(mapped.difficultyId, undefined);
+});
+
+void test('isBetterCatalogClimb keeps the stronger of two same-holds problems', () => {
+  const cfg = PORRIDGE.configurations![1];
+  // Mirrors the real "birthday cake trail mix" (38,683 repeats, benchmark) vs the
+  // junk duplicate "name" (19 repeats, not a benchmark) — identical holds+angle.
+  const real = mapCatalogConfig(
+    { ...PORRIDGE, name: 'birthday cake trail mix' },
+    { ...cfg, repeats: 38683, isBenchmark: true },
+    { layoutId: 3, angle: 40 },
+  );
+  const junk = mapCatalogConfig(
+    { ...PORRIDGE, name: 'name' },
+    { ...cfg, repeats: 19, isBenchmark: false },
+    { layoutId: 3, angle: 40 },
+  );
+
+  // More repeats wins, regardless of processing order.
+  assert.equal(isBetterCatalogClimb(real, junk), true);
+  assert.equal(isBetterCatalogClimb(junk, real), false);
+
+  // Tie on repeats → benchmark wins.
+  const benchTie = mapCatalogConfig(PORRIDGE, { ...cfg, repeats: 100, isBenchmark: true }, { layoutId: 3, angle: 40 });
+  const plainTie = mapCatalogConfig(PORRIDGE, { ...cfg, repeats: 100, isBenchmark: false }, { layoutId: 3, angle: 40 });
+  assert.equal(isBetterCatalogClimb(benchTie, plainTie), true);
+  assert.equal(isBetterCatalogClimb(plainTie, benchTie), false);
+
+  // Fully equal → keep incumbent (stable, deterministic re-runs).
+  assert.equal(isBetterCatalogClimb(plainTie, plainTie), false);
 });
