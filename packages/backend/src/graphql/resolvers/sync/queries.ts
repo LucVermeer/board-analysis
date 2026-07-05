@@ -9,6 +9,7 @@ import {
   SyncCursorInputSchema,
   SyncLimitSchema,
   SyncBoardScopeIdSchema,
+  BoardNameSchema,
 } from '../../../validation/schemas';
 
 /**
@@ -149,15 +150,20 @@ function prepareBoardSync(
   ctx: ConnectionContext,
   cursor: SyncCursorInput | null | undefined,
   limit: number,
+  boardType: string,
   layoutId?: number | null,
   sizeId?: number | null,
-): { limit: number; layoutId: number | null; sizeId: number | null } {
+): { limit: number; boardType: string; layoutId: number | null; sizeId: number | null } {
   requireAuthenticated(ctx);
   validateInput(SyncCursorInputSchema, cursor, 'cursor');
+  // Allowlist the board type like the tick/favorite resolvers do — a junk value
+  // is only a harmless empty scan (parameterized bind), but rejecting it makes
+  // client bugs visible instead of silently syncing nothing.
+  const validatedBoardType = validateInput(BoardNameSchema, boardType, 'boardType');
   const validatedLimit = validateInput(SyncLimitSchema, limit, 'limit');
   const validatedLayoutId = validateInput(SyncBoardScopeIdSchema, layoutId, 'layoutId') ?? null;
   const validatedSizeId = validateInput(SyncBoardScopeIdSchema, sizeId, 'sizeId') ?? null;
-  return { limit: validatedLimit, layoutId: validatedLayoutId, sizeId: validatedSizeId };
+  return { limit: validatedLimit, boardType: validatedBoardType, layoutId: validatedLayoutId, sizeId: validatedSizeId };
 }
 
 /**
@@ -375,14 +381,19 @@ export const syncQueries = {
     },
     ctx: ConnectionContext,
   ): Promise<SyncResult> => {
-    const { limit: lim, layoutId: lid, sizeId: sid } = prepareBoardSync(ctx, cursor, limit, layoutId, sizeId);
+    const {
+      limit: lim,
+      boardType: validBoardType,
+      layoutId: lid,
+      sizeId: sid,
+    } = prepareBoardSync(ctx, cursor, limit, boardType, layoutId, sizeId);
     return runSyncPage({
       selectList: sql`uuid, board_type, layout_id, setter_id, setter_username, name, description,
         hsm, edge_left, edge_right, edge_bottom, edge_top, angle, frames_count, frames_pace, frames,
         is_draft, is_listed, created_at, published_at, user_id, required_set_ids, compatible_size_ids,
         characteristics, hold_fingerprint, updated_at, sync_seq`,
       fromClause: sql`board_climbs`,
-      scope: boardClimbsScope(boardType, lid, sid),
+      scope: boardClimbsScope(validBoardType, lid, sid),
       updatedAtColumn: sql`updated_at`,
       seqColumn: sql`sync_seq`,
       cursor,
@@ -414,12 +425,17 @@ export const syncQueries = {
     },
     ctx: ConnectionContext,
   ): Promise<SyncResult> => {
-    const { limit: lim, layoutId: lid, sizeId: sid } = prepareBoardSync(ctx, cursor, limit, layoutId, sizeId);
+    const {
+      limit: lim,
+      boardType: validBoardType,
+      layoutId: lid,
+      sizeId: sid,
+    } = prepareBoardSync(ctx, cursor, limit, boardType, layoutId, sizeId);
 
     // Stats have no layout_id, so scope them to the climbs of that (layout, size)
     // via a correlated EXISTS on board_climbs, reusing the same shared conditions
     // syncClimbs uses (bc.-qualified here). No scope → plain board_type filter.
-    const scopeConditions = boardClimbsLayoutSizeConditions(boardType, lid, sid, sql`bc.`);
+    const scopeConditions = boardClimbsLayoutSizeConditions(validBoardType, lid, sid, sql`bc.`);
     let scope: SQL = sql`board_type = ${boardType}`;
     if (scopeConditions.length > 0) {
       const sub = sql.join(

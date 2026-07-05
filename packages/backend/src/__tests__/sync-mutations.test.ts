@@ -223,3 +223,25 @@ describe('deletePlaylist with climbs (cascade deletion trigger)', () => {
     expect(Number(climbTombstones[0].count)).toBe(0);
   });
 });
+
+describe('board_climbs deletion tombstone (reference data)', () => {
+  const climbUuid = '44444444-4444-4444-8444-444444444444';
+
+  it('deleting a board climb logs a tombstone with user_id NULL (reference-data scope)', async () => {
+    // Raw insert/delete: there is no climb-deletion mutation — catalog rows are
+    // removed by ingest jobs — but the trigger must still tombstone them so
+    // offline clients drop the row on their next deletions pull.
+    await db.execute(sql`
+      INSERT INTO board_climbs (uuid, board_type, layout_id, name)
+      VALUES (${climbUuid}, 'kilter', 1, 'Trigger Fixture')
+    `);
+    await db.execute(sql`DELETE FROM board_climbs WHERE uuid = ${climbUuid}`);
+
+    const tombstones = (await db.execute(sql`
+      SELECT record_id, user_id FROM sync_deletions WHERE table_name = 'board_climbs'
+    `)) as unknown as Array<{ record_id: string; user_id: string | null }>;
+    expect(tombstones.length).toBe(1);
+    expect(tombstones[0].record_id).toBe(climbUuid);
+    expect(tombstones[0].user_id).toBeNull();
+  });
+});

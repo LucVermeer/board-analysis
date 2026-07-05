@@ -729,6 +729,7 @@ export const schemaSQL = `
   END;
   $$ LANGUAGE plpgsql;
 
+  DROP TRIGGER IF EXISTS trg_playlists_delete ON playlists;
   CREATE TRIGGER trg_playlists_delete BEFORE DELETE ON playlists
     FOR EACH ROW EXECUTE FUNCTION log_deletion_playlists();
 
@@ -754,6 +755,7 @@ export const schemaSQL = `
   END;
   $$ LANGUAGE plpgsql;
 
+  DROP TRIGGER IF EXISTS trg_playlist_climbs_delete ON playlist_climbs;
   CREATE TRIGGER trg_playlist_climbs_delete AFTER DELETE ON playlist_climbs
     FOR EACH ROW EXECUTE FUNCTION log_deletion_playlist_climbs();
 
@@ -765,6 +767,7 @@ export const schemaSQL = `
   END;
   $$ LANGUAGE plpgsql;
 
+  DROP TRIGGER IF EXISTS trg_favorites_delete ON user_favorites;
   CREATE TRIGGER trg_favorites_delete AFTER DELETE ON user_favorites
     FOR EACH ROW EXECUTE FUNCTION log_deletion_favorites();
 
@@ -776,6 +779,31 @@ export const schemaSQL = `
   END;
   $$ LANGUAGE plpgsql;
 
+  DROP TRIGGER IF EXISTS trg_board_climb_stats_delete ON board_climb_stats;
   CREATE TRIGGER trg_board_climb_stats_delete AFTER DELETE ON board_climb_stats
     FOR EACH ROW EXECUTE FUNCTION log_deletion_board_climb_stats();
+
+  CREATE OR REPLACE FUNCTION log_deletion_ticks() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO sync_deletions (table_name, record_id, user_id)
+    VALUES (TG_TABLE_NAME, OLD.uuid, OLD.user_id);
+    RETURN OLD;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS trg_ticks_delete ON boardsesh_ticks;
+  CREATE TRIGGER trg_ticks_delete AFTER DELETE ON boardsesh_ticks
+    FOR EACH ROW EXECUTE FUNCTION log_deletion_ticks();
+
+  CREATE OR REPLACE FUNCTION log_deletion_board_climbs() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO sync_deletions (table_name, record_id, user_id)
+    VALUES (TG_TABLE_NAME, OLD.uuid, NULL);
+    RETURN OLD;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS trg_board_climbs_delete ON board_climbs;
+  CREATE TRIGGER trg_board_climbs_delete AFTER DELETE ON board_climbs
+    FOR EACH ROW EXECUTE FUNCTION log_deletion_board_climbs();
 `;
