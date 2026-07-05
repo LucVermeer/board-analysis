@@ -26,6 +26,7 @@ import {
   WALL_COLUMN_WIDTH,
 } from '../../src/theme/size-class';
 import { tabsActiveSegment } from '../../src/lib/route-segments';
+import { useKeepAwakeWhile } from '../../src/hooks/use-keep-awake-while';
 import { SIDEBAR_WIDTH } from '../../src/theme/layout';
 
 // Cold-start on Home: the leftmost tab carries the beta shelf and followed
@@ -103,6 +104,10 @@ export default function TabLayout() {
   // route-typed tuple (see route-segments.ts).
   const segments = useSegments();
   const onWallTab = tabsActiveSegment(segments) === 'wall';
+  // Kiosk stays lit: hold the screen awake while the "On the Wall" tab is the
+  // focused destination (iPad-only — /wall is unreachable elsewhere). Released
+  // on navigate-away and unmount so other tabs don't hold the lock.
+  useKeepAwakeWhile(onWallTab, 'wall');
   // The live wall gets a dedicated column in landscape (room for sidebar + browse
   // list + detail pane + wall) and falls back to a strip atop the pane in portrait
   // (see resolveWallSurface). Gated on a bound board so an empty column never sits
