@@ -1917,6 +1917,21 @@ The take-control handler re-publishes the session's current climb (re-asserting 
 
 A GraphQL mutation would require either the JS GraphQL client (not available in the widget process) or hand-rolled GraphQL-over-HTTP in Swift. The REST handlers are simpler, cheaper, and let us keep the widget extension free of GraphQL tooling. The downside — a second endpoint surface to keep in sync — is small for two operations.
 
+### Garmin watch (JWT) REST surface
+
+The Garmin Connect IQ watch app is another non-WebSocket client (Garmin has no WebSocket transport), so it drives a session over the same kind of stateless REST surface as the widget — but authenticated by a **mobile JWT** instead of an APNs push token. The watch never touches the board; it mutates the shared session and a phone in that session repaints the wall.
+
+```
+POST /api/session/navigate      { "sessionId", "action": "next" | "previous" }  -> { "success", "currentIndex" }
+POST /api/session/take-control   { "sessionId" }                                 -> { "success" }
+GET  /api/session/state?sessionId=<id>                                           -> slim current-climb snapshot
+POST /api/watch/pair             { "code" }   (no auth)                           -> { "jwt", "refreshToken", "expiresAt" }
+```
+
+All except `/api/watch/pair` take `Authorization: Bearer <mobile JWT>`. `navigate` / `take-control` reuse the widget's server-authoritative `navigateToQueueItem` / `setCurrentClimbAndPublish` core and the same durable-participant guard (`verifyWidgetSession`); the only difference is auth — `authenticateSessionRequest` (`session-auth.ts`) validates the JWT via `validateToken` (accepting both the web NextAuth JWE and the mobile JWS). Because a JWT authenticates _any_ user for _any_ sessionId (unlike the widget's session-bound APNs token), the participant guard runs **before** the shared write rate-limit bucket, so a non-participant who learns a sessionId can't drain a real member's bucket.
+
+**Polling contract** (`GET /api/session/state`): the watch cannot subscribe, so it **polls** this endpoint (~3s while foregrounded). The payload is deliberately slim — no `queue` array, no per-climb `frames` string — carrying only the current climb (name, grade, angle, mirrored, isBenchmark), the queue position, board resolution parsed server-side from `boardPath` (so the watch can build a `saveTick` without a second call), and `sequence` / `stateHash` so the client can skip a re-render when nothing changed between polls. It has its own generous **per-user** read rate-limit bucket (capacity 4, refill 1/s in `session-read-rate-limit.ts`) — kept separate from the write bucket so read polling can't throttle navigation. Ascent logging reuses the existing `saveTick` GraphQL mutation over HTTP; pairing codes are minted by the phone/web app and exchanged at `/api/watch/pair`.
+
 ## Related Files
 
 ### Backend

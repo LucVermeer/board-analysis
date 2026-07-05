@@ -1,8 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { applyCorsHeaders } from './cors';
-import { roomManager } from '../services/room-manager';
-import { pubsub } from '../pubsub/index';
-import { navigateToQueueItem } from '../services/queue-navigation';
+import { navigateSessionQueue } from './session-queue-actions';
 import { authenticateWidget, type WidgetAuthResult } from './widget-auth';
 import {
   trackLiveActivityWidgetNavigation,
@@ -222,11 +220,13 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       return;
     }
 
-    // Determine target index based on action and current queue state
-    const queueState = await roomManager.getQueueState(sessionId);
-    const queueLength = queueState.queue.length;
+    // Compute the target index from the authoritative queue and publish the
+    // change. Shared with /api/session/navigate (the Garmin watch) via
+    // navigateSessionQueue so the server-authoritative index math lives in one
+    // place. `currentIndex` in the request body is validated but ignored.
+    const outcome = await navigateSessionQueue(sessionId, action, 'widget-navigate');
 
-    if (queueLength === 0) {
+    if (outcome.kind === 'queue_empty') {
       // Return 4xx so the widget's status-code check fires its Darwin-notification
       // fallback and the user sees a real error path rather than a silent no-op.
       trackWidgetNavigation(authResult.userId, {
@@ -234,55 +234,14 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
         action,
         outcome: 'queue_empty',
         statusCode: 409,
-        queueLength,
+        queueLength: 0,
       });
       res.writeHead(409, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Queue is empty' }));
       return;
     }
 
-    // Use the server's authoritative current index, not the client-supplied
-    // one which may be stale (e.g., another user changed the climb while
-    // the widget's local state was out of date).
-    const currentItem = queueState.currentClimbQueueItem;
-    const serverCurrentIndex = currentItem ? queueState.queue.findIndex((q) => q.uuid === currentItem.uuid) : 0;
-    const baseIndex = serverCurrentIndex >= 0 ? serverCurrentIndex : 0;
-
-    let targetIndex: number;
-    if (action === 'next') {
-      targetIndex = baseIndex + 1;
-      if (targetIndex >= queueLength) {
-        targetIndex = 0;
-      }
-    } else {
-      targetIndex = baseIndex - 1;
-      if (targetIndex < 0) {
-        targetIndex = queueLength - 1;
-      }
-    }
-
-    const result = await navigateToQueueItem(
-      sessionId,
-      targetIndex,
-      roomManager,
-      pubsub,
-      undefined, // no clientId for widget
-      'widget-navigate',
-    );
-
-    if (result) {
-      trackWidgetNavigation(authResult.userId, {
-        sessionId,
-        action,
-        outcome: 'success',
-        statusCode: 200,
-        queueLength,
-        serverCurrentIndex,
-        targetIndex,
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, currentIndex: targetIndex }));
-    } else {
+    if (outcome.kind === 'out_of_bounds') {
       // Same reasoning as the queue-empty branch: 4xx surfaces the failure
       // to the widget's HTTP fallback path.
       trackWidgetNavigation(authResult.userId, {
@@ -290,13 +249,26 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
         action,
         outcome: 'target_out_of_bounds',
         statusCode: 409,
-        queueLength,
-        serverCurrentIndex,
-        targetIndex,
+        queueLength: outcome.queueLength,
+        serverCurrentIndex: outcome.serverCurrentIndex,
+        targetIndex: outcome.targetIndex,
       });
       res.writeHead(409, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Target index out of bounds' }));
+      return;
     }
+
+    trackWidgetNavigation(authResult.userId, {
+      sessionId,
+      action,
+      outcome: 'success',
+      statusCode: 200,
+      queueLength: outcome.queueLength,
+      serverCurrentIndex: outcome.serverCurrentIndex,
+      targetIndex: outcome.targetIndex,
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, currentIndex: outcome.currentIndex }));
   } catch (error) {
     // Detail (DB connection strings, stack traces, schema hints) stays in
     // server logs; the iOS widget receives only a generic message so we don't
