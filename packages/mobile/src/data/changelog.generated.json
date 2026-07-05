@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-05T02:51:54.198Z",
+  "generatedAt": "2026-07-05T03:30:52.523Z",
   "entries": [
+    {
+      "prNumber": 3452,
+      "category": "fixed",
+      "title": "Adding a climb to a playlist works again — press and hold a climb to add or remove it from your playlists right there, no disappearing sheet.",
+      "mergedAt": "2026-07-05T03:29:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3452",
+      "body": "Spin up a brand-new playlist in the same spot without it vanishing mid-name."
+    },
     {
       "prNumber": 3465,
       "category": "new",

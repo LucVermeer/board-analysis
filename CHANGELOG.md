@@ -10,6 +10,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 - On iPad, the On the Wall view now keeps the screen from dimming so the board stays visible for your whole session. ([#3465](https://github.com/boardsesh/boardsesh/pull/3465))
 
+### Fixed
+
+- Adding a climb to a playlist works again — press and hold a climb to add or remove it from your playlists right there, no disappearing sheet. ([#3452](https://github.com/boardsesh/boardsesh/pull/3452))
+  Spin up a brand-new playlist in the same spot without it vanishing mid-name.
+
 ## 2026-07-04
 
 ### App update
