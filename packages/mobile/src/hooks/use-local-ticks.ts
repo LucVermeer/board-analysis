@@ -30,12 +30,16 @@ export function useLocalPendingTicks(climbUuid: string, boardType: string) {
       if (!db) return 0;
 
       const row = await db.getFirstAsync<{ count: number }>(
+        // status = 'pending' only: a dead-lettered tick is no longer "waiting to
+        // sync" — it's surfaced by the More screen's Sync issues retry instead,
+        // so it must not pin the per-climb badge forever.
         `SELECT COUNT(*) AS count
          FROM boardsesh_ticks t
          JOIN pending_mutations m ON m.idempotency_key = t.uuid
          WHERE t.climb_uuid = ?
            AND t.board_type = ?
-           AND m.table_name = 'boardsesh_ticks'`,
+           AND m.table_name = 'boardsesh_ticks'
+           AND m.status = 'pending'`,
         [climbUuid, boardType],
       );
 

@@ -137,12 +137,16 @@ export async function drainMutationQueue(
             // max_retries, flips to dead_letter — no window where the row is
             // exhausted-but-still-pending.
             await recordFailure(db, mutation.id, errorMessage);
+            // The row may have just flipped to dead_letter; refresh the pending
+            // badges either way (an extra COUNT requery is harmless).
+            invalidateForTable(queryClient, mutation.table_name);
             retryableHit = true;
             break;
           } else {
             // Non-retryable (validation / 4xx): retrying can't help, so
             // dead-letter immediately regardless of retry_count.
             await markDeadLetter(db, mutation.id, errorMessage);
+            invalidateForTable(queryClient, mutation.table_name);
           }
         }
       }

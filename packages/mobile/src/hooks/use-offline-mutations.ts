@@ -89,12 +89,12 @@ export async function removeFavoriteLocal(db: SQLiteDatabase, input: FavoriteInp
       input.angle,
     ]);
 
-    const canceledAdd = (await txn.runAsync(
+    const canceledAdd = await txn.runAsync(
       `DELETE FROM pending_mutations WHERE idempotency_key = ? AND status = 'pending'`,
       [favoriteAddKey(input)],
-    )) as { changes?: number };
+    );
 
-    if ((canceledAdd.changes ?? 0) === 0) {
+    if (canceledAdd.changes === 0) {
       await enqueue(txn, 'user_favorites', 'delete', input, favoriteRemoveKey(input));
     }
   });
