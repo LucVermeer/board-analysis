@@ -387,6 +387,104 @@ void test_clear_last_sent_hash(void) {
 }
 
 // =============================================================================
+// Aurora Frame → LED Strip Tests
+// =============================================================================
+
+// Build a complete Aurora V3 single-packet frame ('T') lighting the given
+// (position, packed RRRGGGBB color) pairs. An empty list produces a valid
+// zero-LED frame (the app's "clear board" command).
+static std::vector<uint8_t> buildV3Frame(const std::vector<std::pair<uint16_t, uint8_t>>& ledsToLight) {
+    std::vector<uint8_t> data;
+    data.push_back('T');  // CMD_V3_PACKET_ONLY
+    for (const auto& led : ledsToLight) {
+        data.push_back(led.first & 0xFF);
+        data.push_back((led.first >> 8) & 0xFF);
+        data.push_back(led.second);
+    }
+
+    uint8_t checksum = 0;
+    for (uint8_t byte : data) {
+        checksum = (checksum + byte) & 0xFF;
+    }
+    checksum ^= 0xFF;
+
+    std::vector<uint8_t> frame;
+    frame.push_back(0x01);  // SOH
+    frame.push_back((uint8_t)data.size());
+    frame.push_back(checksum);
+    frame.push_back(0x02);  // STX
+    frame.insert(frame.end(), data.begin(), data.end());
+    frame.push_back(0x03);  // ETX
+    return frame;
+}
+
+static NimBLECharacteristic* connectAndGetRxCharacteristic() {
+    ble_gap_conn_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.conn_handle = 1;
+    NimBLEDevice::getServer()->mockConnect(&desc);
+
+    NimBLEService* service = NimBLEDevice::getServer()->getServiceByUUID(NUS_SERVICE_UUID);
+    return service ? service->getCharacteristic(NUS_RX_CHARACTERISTIC) : nullptr;
+}
+
+// Regression test: each complete Aurora frame is the FULL LED state for a
+// climb, so switching climbs must clear the previous climb's holds instead of
+// accumulating them on the strip.
+void test_new_climb_frame_clears_previous_climb_leds(void) {
+    LEDs.begin(5, 50);
+    ble->setLedDataCallback(testLedDataCallback);
+    ble->begin("Test Device");
+
+    NimBLECharacteristic* rxChar = connectAndGetRxCharacteristic();
+    TEST_ASSERT_NOT_NULL(rxChar);
+
+    CRGB* strip = CFastLED::getLeds();
+    TEST_ASSERT_NOT_NULL(strip);
+
+    // Climb A lights LEDs 1 and 2 (0xE0 = full red in RRRGGGBB)
+    std::vector<uint8_t> climbA = buildV3Frame({{1, 0xE0}, {2, 0xE0}});
+    rxChar->mockWrite(climbA.data(), climbA.size());
+
+    TEST_ASSERT_TRUE(strip[1] != CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(strip[2] != CRGB(0, 0, 0));
+    TEST_ASSERT_EQUAL(1, ledDataCallbackCount);
+    TEST_ASSERT_EQUAL(2, lastLedCommands.size());
+
+    // Climb B lights LED 3 only — LEDs 1 and 2 must turn off
+    std::vector<uint8_t> climbB = buildV3Frame({{3, 0xE0}});
+    rxChar->mockWrite(climbB.data(), climbB.size());
+
+    TEST_ASSERT_TRUE(strip[3] != CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(strip[1] == CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(strip[2] == CRGB(0, 0, 0));
+    TEST_ASSERT_EQUAL(2, ledDataCallbackCount);
+}
+
+void test_empty_frame_clears_all_leds(void) {
+    LEDs.begin(5, 50);
+    ble->setLedDataCallback(testLedDataCallback);
+    ble->begin("Test Device");
+
+    NimBLECharacteristic* rxChar = connectAndGetRxCharacteristic();
+    TEST_ASSERT_NOT_NULL(rxChar);
+
+    CRGB* strip = CFastLED::getLeds();
+
+    std::vector<uint8_t> climb = buildV3Frame({{4, 0xE0}});
+    rxChar->mockWrite(climb.data(), climb.size());
+    TEST_ASSERT_TRUE(strip[4] != CRGB(0, 0, 0));
+
+    // Zero-LED frame = "clear board" from the app
+    std::vector<uint8_t> clearFrame = buildV3Frame({});
+    rxChar->mockWrite(clearFrame.data(), clearFrame.size());
+
+    TEST_ASSERT_TRUE(strip[4] == CRGB(0, 0, 0));
+    // The clear is not forwarded to the backend (only non-empty climbs are)
+    TEST_ASSERT_EQUAL(1, ledDataCallbackCount);
+}
+
+// =============================================================================
 // Disconnect Client Tests
 // =============================================================================
 
@@ -596,6 +694,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_should_send_led_data_true_for_different_hash);
     RUN_TEST(test_should_send_led_data_true_when_no_device);
     RUN_TEST(test_clear_last_sent_hash);
+
+    RUN_TEST(test_new_climb_frame_clears_previous_climb_leds);
+    RUN_TEST(test_empty_frame_clears_all_leds);
 
     // Disconnect client tests
     RUN_TEST(test_disconnect_client_when_connected);

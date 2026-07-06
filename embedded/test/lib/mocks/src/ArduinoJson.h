@@ -120,8 +120,11 @@ class JsonVariant {
     }
     JsonVariant& operator=(const JsonDocument& doc);  // Forward declaration, defined after JsonDocument
 
-    // Object/Array accessors
-    JsonVariant operator[](const char* key);
+    // Object/Array accessors. The non-const key accessor returns a reference
+    // into the object map (like real ArduinoJson) so wrappers built from the
+    // result (JsonObject/JsonArray hold a pointer) stay valid while the
+    // document is alive.
+    JsonVariant& operator[](const char* key);
     JsonVariant operator[](int index);
     const JsonVariant operator[](const char* key) const;
     const JsonVariant operator[](int index) const;
@@ -154,15 +157,24 @@ class JsonObject {
             v->type_ = JsonVariant::TypeObject;
     }
 
-    JsonVariant operator[](const char* key) {
-        if (!variant_)
-            return JsonVariant();
+    JsonVariant& operator[](const char* key) {
+        if (!variant_) {
+            nullVariant() = JsonVariant();
+            return nullVariant();
+        }
         variant_->objectVal_[key].parent_ = variant_;
         return variant_->objectVal_[key];
     }
 
     bool isNull() const { return variant_ == nullptr; }
     operator bool() const { return variant_ != nullptr; }
+
+    // Fallback storage so operator[] on a null JsonObject still has something
+    // to reference (reset on each access; mirrors reading a missing value).
+    static JsonVariant& nullVariant() {
+        static JsonVariant nullSlot;
+        return nullSlot;
+    }
 
     // Iterator support for range-based for loops
     class iterator {
@@ -303,7 +315,7 @@ template <> inline JsonObject JsonVariant::add<JsonObject>() {
 }
 
 // JsonVariant implementations
-inline JsonVariant JsonVariant::operator[](const char* key) {
+inline JsonVariant& JsonVariant::operator[](const char* key) {
     if (type_ != TypeObject)
         type_ = TypeObject;
     objectVal_[key].parent_ = this;
@@ -342,7 +354,7 @@ class JsonDocument {
   public:
     JsonDocument() {}
 
-    JsonVariant operator[](const char* key) {
+    JsonVariant& operator[](const char* key) {
         root_.type_ = JsonVariant::TypeObject;
         root_.objectVal_[key].parent_ = &root_;
         return root_.objectVal_[key];

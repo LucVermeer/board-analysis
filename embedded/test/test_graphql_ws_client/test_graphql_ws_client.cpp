@@ -10,6 +10,7 @@
 #include <WebSocketsClient.h>
 #include <cstring>
 #include <graphql_ws_client.h>
+#include <led_controller.h>
 #include <unity.h>
 
 // Access the global WebSocket mock through GraphQL client
@@ -137,6 +138,69 @@ void test_display_hash_unchanged_by_send(void) {
     client->sendLedPositions(commands, 2, 40);
 
     // Display hash should remain 0 since it's only updated from backend
+    TEST_ASSERT_EQUAL_UINT32(0, client->getCurrentDisplayHash());
+}
+
+// =============================================================================
+// LED Update Tests
+// =============================================================================
+
+// Append one LED command object to the update's "commands" array. Set fields
+// immediately per element (the mock's vector can reallocate on the next add).
+static void addLedCommand(JsonArray commands, int position, int r, int g, int b) {
+    JsonObject command = commands.add<JsonObject>();
+    command["position"] = position;
+    command["r"] = r;
+    command["g"] = g;
+    command["b"] = b;
+}
+
+// Regression test: each LedUpdate carries the FULL LED state for a climb, so
+// switching climbs from the web queue must clear the previous climb's holds
+// instead of accumulating them on the strip (same contract as the BLE path).
+void test_led_update_clears_previous_climb_leds(void) {
+    LEDs.begin(5, 50);
+    CRGB* strip = CFastLED::getLeds();
+    TEST_ASSERT_NOT_NULL(strip);
+
+    JsonDocument climbA;
+    JsonArray commandsA = climbA["commands"].to<JsonArray>();
+    addLedCommand(commandsA, 1, 255, 0, 0);
+    addLedCommand(commandsA, 2, 0, 255, 0);
+    JsonObject climbAData = climbA.as<JsonObject>();
+    client->handleLedUpdate(climbAData);
+
+    TEST_ASSERT_TRUE(strip[1] != CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(strip[2] != CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(client->getCurrentDisplayHash() != 0);
+
+    JsonDocument climbB;
+    JsonArray commandsB = climbB["commands"].to<JsonArray>();
+    addLedCommand(commandsB, 3, 0, 0, 255);
+    JsonObject climbBData = climbB.as<JsonObject>();
+    client->handleLedUpdate(climbBData);
+
+    TEST_ASSERT_TRUE(strip[3] != CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(strip[1] == CRGB(0, 0, 0));
+    TEST_ASSERT_TRUE(strip[2] == CRGB(0, 0, 0));
+}
+
+void test_led_update_without_commands_clears_all_leds(void) {
+    LEDs.begin(5, 50);
+    CRGB* strip = CFastLED::getLeds();
+
+    JsonDocument climb;
+    JsonArray commands = climb["commands"].to<JsonArray>();
+    addLedCommand(commands, 4, 255, 255, 255);
+    JsonObject climbData = climb.as<JsonObject>();
+    client->handleLedUpdate(climbData);
+    TEST_ASSERT_TRUE(strip[4] != CRGB(0, 0, 0));
+
+    JsonDocument clearUpdate;
+    JsonObject clearData = clearUpdate.as<JsonObject>();
+    client->handleLedUpdate(clearData);
+
+    TEST_ASSERT_TRUE(strip[4] == CRGB(0, 0, 0));
     TEST_ASSERT_EQUAL_UINT32(0, client->getCurrentDisplayHash());
 }
 
@@ -366,6 +430,10 @@ int main(int argc, char** argv) {
     // Display hash tests
     RUN_TEST(test_initial_display_hash_zero);
     RUN_TEST(test_display_hash_unchanged_by_send);
+
+    // LED update tests
+    RUN_TEST(test_led_update_clears_previous_climb_leds);
+    RUN_TEST(test_led_update_without_commands_clears_all_leds);
 
     // Message callback tests
     RUN_TEST(test_set_message_callback_stores_callback);

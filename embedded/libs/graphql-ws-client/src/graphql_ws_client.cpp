@@ -395,7 +395,11 @@ void GraphQLWSClient::handleLedUpdate(JsonObject& data) {
         }
     }
 
-    // Always render LEDs (it's imperceptible to users)
+    // Each LedUpdate carries the FULL LED state for a climb, so clear the
+    // previous climb before applying the new one (same contract as the BLE
+    // path in nordic_uart_ble.cpp). Without this, switching climbs from the
+    // web queue accumulates holds from the previous climb on the strip.
+    LEDs.clear();
     LEDs.setLeds(ledCommands, count);
     LEDs.show();
 
