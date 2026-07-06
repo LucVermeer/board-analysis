@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-06
 
+### App update
+
+A new version shipped to the App Store.
+
 ### New
 
 - Own a gym? Claim your listing and keep it accurate — verify with a work email or ask us to review. ([#3409](https://github.com/boardsesh/boardsesh/pull/3409))
@@ -13,6 +17,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Empty playlists screen now has a clear "Create playlist" button instead of pointing at a hard-to-spot + ([#3451](https://github.com/boardsesh/boardsesh/pull/3451))
 - Fixed a rare crash that could close the app while it was loading climbs. ([#3488](https://github.com/boardsesh/boardsesh/pull/3488))
 - Fixed a crash where the app could be killed for using too much memory while browsing boards — most noticeable on older iPhones. ([#3482](https://github.com/boardsesh/boardsesh/pull/3482))
 

@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-06T06:42:50.056Z",
+  "generatedAt": "2026-07-06T08:20:12.850Z",
   "entries": [
+    {
+      "prNumber": 3451,
+      "category": "fixed",
+      "title": "Empty playlists screen now has a clear \"Create playlist\" button instead of pointing at a hard-to-spot +",
+      "mergedAt": "2026-07-06T08:19:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3451"
+    },
     {
       "prNumber": 3488,
       "category": "fixed",
@@ -974,6 +981,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-06T17:10:04+10:00",
+      "sha": "12c16623e66dd9d273aac6fce6f4e34df17999c6",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "33bcb31e5fe70794ce7825bb1e1cf081aa0e53f9"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-04T21:29:33+10:00",
