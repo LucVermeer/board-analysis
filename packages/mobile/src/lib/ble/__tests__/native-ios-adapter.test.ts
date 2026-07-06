@@ -657,13 +657,15 @@ describe('NativeIosBleAdapter connect diagnostics (#3480)', () => {
 
     // First attempt fails and stashes diagnostics.
     nativeMock.connect.mockRejectedValueOnce(new Error('UART service was not found'));
+    const firstAttempt = driveConnect(adapter, 'A1B2C3');
     await vi.runAllTimersAsync();
-    await driveConnect(adapter, 'A1B2C3');
+    await firstAttempt;
     await expect(adapter.getLastConnectDiagnostics()).resolves.toEqual({ discoveredServices: [] });
 
     // Second attempt succeeds — the stale diagnostics must be dropped.
-    await driveConnect(adapter, 'A1B2C3');
+    const secondAttempt = driveConnect(adapter, 'A1B2C3');
     await vi.runAllTimersAsync();
+    await secondAttempt;
     await expect(adapter.getLastConnectDiagnostics()).resolves.toBeNull();
   });
 });
