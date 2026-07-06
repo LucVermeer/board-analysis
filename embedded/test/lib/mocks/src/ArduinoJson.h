@@ -159,8 +159,8 @@ class JsonObject {
 
     JsonVariant& operator[](const char* key) {
         if (!variant_) {
-            nullVariant() = JsonVariant();
-            return nullVariant();
+            sharedNullSlot() = JsonVariant();
+            return sharedNullSlot();
         }
         variant_->objectVal_[key].parent_ = variant_;
         return variant_->objectVal_[key];
@@ -174,7 +174,7 @@ class JsonObject {
     // The slot is a single static shared by every null subscript: do NOT hold
     // the returned reference across another null-JsonObject access — the next
     // access resets it and the held reference silently aliases the new read.
-    static JsonVariant& nullVariant() {
+    static JsonVariant& sharedNullSlot() {
         static JsonVariant nullSlot;
         return nullSlot;
     }
