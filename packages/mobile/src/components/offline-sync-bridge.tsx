@@ -9,6 +9,7 @@ import { getSetting } from '../settings';
 import { setupNotificationHandlers } from '../notifications';
 import { getHttpClient } from '../lib/graphql/client';
 import { setOfflineEngineEnabled } from '../lib/offline-engine';
+import { useAuth } from '../providers/auth-provider';
 import { useOfflineDownloadsEnabled } from '../providers/feature-flags-provider';
 
 /**
@@ -30,14 +31,15 @@ export function OfflineEngineFlagSync() {
 
 /**
  * Headless bridge that turns the offline machinery on while the user is signed
- * in. It lives in the authenticated subtree (next to PersistentQueueBar), so it
- * mounts only after auth + the SQLiteProvider are ready and unmounts on
- * sign-out, which tears the scheduler and notification listeners back down.
+ * in. It is mounted unconditionally at the root (next to PersistentQueueBar) —
+ * NOT in an auth-gated subtree — so the sync effect gates on `isAuthenticated`
+ * itself: a signed-out user must not fire doomed authed sync queries, and
+ * sign-out must tear the scheduler down via the effect cleanup.
  *
- * The sync scheduler runs only when the `offline-board-downloads` flag is on.
- * Flag-off users get one leftover-queue check instead: writes queued while the
- * flag was on (or before a rollback) must still flush — the flag gates NEW
- * offline work, never the draining of existing work.
+ * The sync scheduler additionally runs only when the `offline-board-downloads`
+ * flag is on. Flag-off users get one leftover-queue check instead: writes
+ * queued while the flag was on (or before a rollback) must still flush — the
+ * flag gates NEW offline work, never the draining of existing work.
  *
  * Renders nothing. Every effect is wrapped so a failure here (a bad sync
  * trigger, a listener that can't attach) is logged in dev but never crashes the
@@ -46,6 +48,7 @@ export function OfflineEngineFlagSync() {
 export function OfflineSyncBridge() {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
   const offlineEnabled = useOfflineDownloadsEnabled();
 
   // getHttpClient() already carries auth + endpoint; binding .request keeps the
@@ -61,14 +64,17 @@ export function OfflineSyncBridge() {
     previousOfflineEnabledRef.current = offlineEnabled;
     if (wasEnabled === true && !offlineEnabled) {
       void queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+      void queryClient.invalidateQueries({ queryKey: ['infiniteSearchClimbs'] });
       void queryClient.invalidateQueries({ queryKey: ['searchClimbsCount'] });
       void queryClient.invalidateQueries({ queryKey: ['climb'] });
     }
   }, [offlineEnabled, queryClient]);
 
   // Push-then-pull sync loop (foreground + reconnect triggers). Returns its own
-  // teardown, so React calls it on unmount / dependency change.
+  // teardown, so React calls it on unmount / dependency change — including the
+  // isAuthenticated flip on sign-out, which stops the scheduler.
   useEffect(() => {
+    if (!isAuthenticated) return undefined;
     if (offlineEnabled) {
       try {
         const stop = startSyncScheduler(
@@ -110,7 +116,7 @@ export function OfflineSyncBridge() {
     return () => {
       cancelled = true;
     };
-  }, [db, queryClient, graphqlFetch, offlineEnabled]);
+  }, [db, queryClient, graphqlFetch, offlineEnabled, isAuthenticated]);
 
   // Deep-link routing for tapped push notifications. Deliberately independent
   // of the offline flag — notifications ship inert for everyone today.

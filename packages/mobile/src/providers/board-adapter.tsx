@@ -69,6 +69,10 @@ export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
               reportHandledError(error, { tags: { source: 'offline-sync', kind: 'tick-local-write' } });
               return null;
             }
+            // Wake the "waiting to sync" badge immediately: its query caches with
+            // staleTime Infinity and the drainer (its usual invalidator) no-ops
+            // while offline — without this, an offline tick looks lost.
+            void queryClient.invalidateQueries({ queryKey: ['localTicks', variables.input.climbUuid] });
             void drainMutationQueue(db, queryClient, executeHttp).catch((error: unknown) => {
               if (__DEV__) {
                 console.warn('[BoardAdapter] tick queue drain failed:', error);

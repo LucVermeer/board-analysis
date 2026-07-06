@@ -200,9 +200,12 @@ function buildJoinAndWhere(input: ClimbSearchInput): JoinAndWhere {
     push('s.quality_average >= ?', input.minRating);
   }
 
-  // Grade accuracy: |rounded display - difficulty_average| <= accuracy. Number()
-  // (not parseFloat) so a non-numeric string is NaN → skipped, not silently 1.5.
-  const gradeAccuracy = input.gradeAccuracy ? Number(input.gradeAccuracy) : NaN;
+  // Grade accuracy: |rounded display - difficulty_average| <= accuracy.
+  // parseFloat (not Number) to MATCH THE SERVER (types.ts parseGradeAccuracy):
+  // '1.5abc' filters at 1.5 there, so it must here too — local-first search
+  // must return the same rows the network would for the same input, even for
+  // malformed deep-link values.
+  const gradeAccuracy = input.gradeAccuracy ? parseFloat(String(input.gradeAccuracy)) : NaN;
   if (Number.isFinite(gradeAccuracy)) {
     push(`ABS(${roundedGrade} - s.difficulty_average) <= ?`, gradeAccuracy);
   }
@@ -242,7 +245,10 @@ function sortColumnSql(sortBy: string): string {
     case 'difficulty':
       return 'CAST(ROUND(s.display_difficulty) AS INTEGER)';
     case 'name':
-      return 'c.name';
+      // NOCASE so 'apple' sorts before 'Zebra', matching Postgres's locale
+      // collation (SQLite's default BINARY puts all uppercase first). ASCII
+      // names dominate the catalogs, so ASCII-only NOCASE is close enough.
+      return 'c.name COLLATE NOCASE';
     case 'quality':
       return 's.quality_average';
     case 'popular':

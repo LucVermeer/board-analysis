@@ -45,6 +45,13 @@ vi.mock('expo-router', () => ({
   router: { push: vi.fn(), navigate: vi.fn() },
 }));
 
+// The bridge gates its sync effect on auth itself (it is mounted outside any
+// auth-gated subtree). Mutable so the signed-out test can flip it.
+let isAuthenticated = true;
+vi.mock('../../providers/auth-provider', () => ({
+  useAuth: () => ({ isAuthenticated }),
+}));
+
 // feature-flag-overrides persists through AsyncStorage; give it an in-memory stub.
 vi.mock('@react-native-async-storage/async-storage', () => {
   let storage: Record<string, string> = {};
@@ -90,6 +97,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   startSyncSchedulerMock.mockReturnValue(startSyncSchedulerStop);
   getPendingCountMock.mockResolvedValue(0);
+  isAuthenticated = true;
 });
 
 afterEach(() => {
@@ -138,6 +146,18 @@ describe('OfflineSyncBridge — flag OFF', () => {
   });
 });
 
+describe('OfflineSyncBridge — auth gating', () => {
+  it('signed out: no scheduler, no leftover drain, no sync traffic at all', async () => {
+    isAuthenticated = false;
+    render(<Harness flags={FLAG_ON} queryClient={makeQueryClient()} />);
+    // Notifications still set up — they are the only auth-independent effect.
+    await waitFor(() => expect(setupNotificationHandlersMock).toHaveBeenCalledTimes(1));
+    expect(startSyncSchedulerMock).not.toHaveBeenCalled();
+    expect(getPendingCountMock).not.toHaveBeenCalled();
+    expect(drainMutationQueueMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('OfflineSyncBridge — mid-session flag flips', () => {
   it('ON→OFF stops the scheduler and invalidates the local-first read caches', async () => {
     const queryClient = makeQueryClient();
@@ -149,6 +169,7 @@ describe('OfflineSyncBridge — mid-session flag flips', () => {
 
     await waitFor(() => expect(startSyncSchedulerStop).toHaveBeenCalledTimes(1));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['searchClimbs'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['infiniteSearchClimbs'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['searchClimbsCount'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['climb'] });
   });

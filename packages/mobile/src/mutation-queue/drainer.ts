@@ -16,7 +16,16 @@ let _isDraining = false;
 // itself performs runs BEFORE the flag is set, so it isn't blocked.
 let _isSigningOut = false;
 
+// Monotonic wipe generation. The boolean above is true only for the
+// milliseconds clearUserData takes, so an async operation whose network await
+// was in flight during that window sees `false` on both sides of it and would
+// happily write the old user's data back after the wipe (or, in a drain, post
+// the old user's queued writes under the NEXT user's token). Long-running
+// operations capture the epoch at start and abort when it has moved.
+let _wipeEpoch = 0;
+
 export function setSigningOut(value: boolean): void {
+  if (value && !_isSigningOut) _wipeEpoch += 1;
   _isSigningOut = value;
 }
 
@@ -25,6 +34,10 @@ export function setSigningOut(value: boolean): void {
 // clearUserData resurrects data the next signed-in account could briefly see.
 export function isSigningOut(): boolean {
   return _isSigningOut;
+}
+
+export function getWipeEpoch(): number {
+  return _wipeEpoch;
 }
 
 // Bounded exponential backoff between drain attempts within a single cycle
@@ -68,7 +81,10 @@ function invalidateForTable(queryClient: QueryClient, tableName: string): void {
     // ['climb'] + ['localTicks'] so the climb detail's server counts refetch and
     // the "waiting to sync" badge clears once a tick actually reaches the server.
     boardsesh_ticks: [['ticks'], ['logbook'], ['climb'], ['localTicks']],
-    user_favorites: [['favorites'], ['searchClimbs']],
+    // ['favoriteStatus'] so the per-climb heart refetches AFTER the queued
+    // favorite lands — the optimistic write at enqueue time can be overwritten
+    // by a network refetch that raced the drain.
+    user_favorites: [['favorites'], ['searchClimbs'], ['infiniteSearchClimbs'], ['favoriteStatus']],
     playlists: [['playlists']],
     playlist_climbs: [['playlists']],
     user_follows: [['followers'], ['following']],
@@ -77,8 +93,8 @@ function invalidateForTable(queryClient: QueryClient, tableName: string): void {
     user_playlist_pins: [['playlists']],
     // Board tables aren't mutation-driven today, but if a board-table write ever
     // drains, point it at the keys real readers use (mirrors table-config.ts).
-    board_climbs: [['searchClimbs'], ['searchClimbsCount'], ['climb']],
-    board_climb_stats: [['searchClimbs'], ['searchClimbsCount'], ['climb']],
+    board_climbs: [['searchClimbs'], ['infiniteSearchClimbs'], ['searchClimbsCount'], ['climb']],
+    board_climb_stats: [['searchClimbs'], ['infiniteSearchClimbs'], ['searchClimbsCount'], ['climb']],
   };
   for (const key of keyMap[tableName] ?? []) {
     queryClient.invalidateQueries({ queryKey: key });
@@ -114,8 +130,15 @@ export async function drainMutationQueue(
   // it, so a long healthy queue never exhausts the budget.
   let retryAttempts = 0;
 
+  // Abort the moment a sign-out wipe starts (or completes) mid-drain: the rows
+  // being replayed belong to the signing-out user, and graphqlFetch resolves
+  // the CURRENT token per request — a drain tail that outlives the account
+  // switch would post the old user's writes into the new user's account.
+  const startEpoch = _wipeEpoch;
+
   try {
     while (true) {
+      if (_isSigningOut || _wipeEpoch !== startEpoch) break;
       const batch = await peekPending(db, 10);
       if (batch.length === 0) break;
 
@@ -123,6 +146,10 @@ export async function drainMutationQueue(
       let networkStop = false;
 
       for (const mutation of batch) {
+        if (_isSigningOut || _wipeEpoch !== startEpoch) {
+          networkStop = true; // reuse the "end cycle now" path
+          break;
+        }
         try {
           await processMutation(mutation, graphqlFetch);
           await markCompleted(db, mutation.id);

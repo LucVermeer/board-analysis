@@ -27,22 +27,48 @@ import {
  * comparison. (The lint ban on importing `sql` is web-only.)
  */
 
-// Start of time for the first pull, when the client sends no cursor.
-const EPOCH_TS = 'epoch';
+// Start of time for the first pull, when the client sends no cursor. Must be a
+// value SyncCursorInputSchema accepts, because an empty first page echoes it
+// back as the next cursor and clients replay stored cursors verbatim ('epoch'
+// casts fine in Postgres but would be rejected by our own validator).
+const EPOCH_TS = '1970-01-01T00:00:00.000Z';
 const EPOCH_SEQ = '0';
+
+// Rows younger than this are left for the NEXT pull. `updated_at` is stamped at
+// transaction start (or earlier — saveTick computes it before a network-bound
+// beta-link enrich; a bulk JSON logbook import stamps thousands of rows at a
+// transaction start that commits tens of seconds later), so a row can become
+// visible with a timestamp that is already behind another device's cursor and
+// be skipped forever. Excluding rows younger than the longest realistic write
+// transaction bounds that race: a skip is unrecoverable, a re-pull is a free
+// upsert. Tests set SYNC_STABILITY_WINDOW_SECONDS=0 to pull their own writes.
+const STABILITY_WINDOW_SECONDS = Number(process.env.SYNC_STABILITY_WINDOW_SECONDS ?? 30);
+
+const PG_TIMESTAMP_TEXT = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
 
 type RawRow = Record<string, unknown>;
 
 /**
- * Convert a raw postgres-js row into a sync document: timestamp columns come back
- * as JS Date objects, but the mobile SQLite stores ISO-8601 TEXT, so every Date
- * is serialised to an ISO string. int[] columns stay as JS arrays (the mobile
+ * Convert a raw postgres-js row into a sync document. The manifest pins every
+ * timestamp to ISO-8601 TEXT on the client, but drizzle's postgres-js driver
+ * returns `timestamp` columns as 'YYYY-MM-DD HH:MM:SS[.ffffff]' STRINGS (it
+ * registers passthrough parsers for OIDs 1114/1184), so both shapes are
+ * normalized here — a Date via toISOString, a pg-text timestamp via toIso.
+ * Without the string branch, pulled rows and offline-written local rows would
+ * mix formats in the same SQLite TEXT column, breaking ordering and the
+ * tombstone resurrection guard. int[] columns stay as JS arrays (the mobile
  * upsert JSON-stringifies them); bigint columns stay as-is.
  */
 function normalizeRow(row: RawRow): RawRow {
   const out: RawRow = {};
   for (const [key, value] of Object.entries(row)) {
-    out[key] = value instanceof Date ? value.toISOString() : value;
+    if (value instanceof Date) {
+      out[key] = value.toISOString();
+    } else if (typeof value === 'string' && PG_TIMESTAMP_TEXT.test(value)) {
+      out[key] = toIso(value);
+    } else {
+      out[key] = value;
+    }
   }
   return out;
 }
@@ -56,7 +82,7 @@ function toIso(value: unknown): string {
   // process timezone and clamp microsecond precision. The `::timestamp` cast
   // on cursor replay ignores the 'Z', so the value round-trips losslessly.
   const stringValue = String(value);
-  const timestampMatch = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(stringValue);
+  const timestampMatch = PG_TIMESTAMP_TEXT.exec(stringValue);
   if (timestampMatch) return `${timestampMatch[1]}T${timestampMatch[2]}Z`;
   return stringValue;
 }
@@ -98,6 +124,7 @@ async function runSyncPage(params: {
     FROM ${fromClause}
     WHERE ${scope}
       AND (${updatedAtColumn}, ${seqColumn}) > (${ts}::timestamp, ${seq}::bigint)
+      AND ${updatedAtColumn} < now() - make_interval(secs => ${STABILITY_WINDOW_SECONDS})
     ORDER BY ${updatedAtColumn} ASC, ${seqColumn} ASC
     LIMIT ${limit}
   `);
@@ -475,6 +502,7 @@ export const syncQueries = {
       FROM sync_deletions
       WHERE (user_id = ${userId} OR user_id IS NULL)
         AND (deleted_at, id) > (${ts}::timestamp, ${seq}::bigint)
+        AND deleted_at < now() - make_interval(secs => ${STABILITY_WINDOW_SECONDS})
       ORDER BY deleted_at ASC, id ASC
       LIMIT ${lim}
     `);

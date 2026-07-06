@@ -7,9 +7,17 @@ const storage = createMMKV({ id: 'boardsesh-settings' });
 
 const listeners = new Set<() => void>();
 let cachedSettings: AppSettings | null = null;
+// Per-key snapshot cache for useSyncExternalStore. getSnapshot must return a
+// REFERENCE-STABLE value between writes: re-parsing JSON per call hands React a
+// fresh array/object every time, which reads as "store changed on every
+// commit" and loops render → forceStoreRerender until the update-depth crash.
+// All writes go through writeSetting/resetAllSettings, so clearing on
+// emitChange keeps this coherent.
+const snapshotCache = new Map<SettingsKey, unknown>();
 
 function emitChange() {
   cachedSettings = null;
+  snapshotCache.clear();
   for (const listener of listeners) {
     listener();
   }
@@ -29,6 +37,13 @@ function readSetting<K extends SettingsKey>(key: K): AppSettings[K] {
   } catch {
     return DEFAULT_SETTINGS[key];
   }
+}
+
+function readSettingSnapshot<K extends SettingsKey>(key: K): AppSettings[K] {
+  if (snapshotCache.has(key)) return snapshotCache.get(key) as AppSettings[K];
+  const value = readSetting(key);
+  snapshotCache.set(key, value);
+  return value;
 }
 
 function writeSetting<K extends SettingsKey>(key: K, value: AppSettings[K]): void {
@@ -63,7 +78,7 @@ export function resetAllSettings(): void {
 export function useSetting<K extends SettingsKey>(key: K): [AppSettings[K], (value: AppSettings[K]) => void] {
   const value = useSyncExternalStore(
     subscribe,
-    () => readSetting(key),
+    () => readSettingSnapshot(key),
     () => DEFAULT_SETTINGS[key],
   );
 

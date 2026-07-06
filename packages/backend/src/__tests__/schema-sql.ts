@@ -773,6 +773,10 @@ export const schemaSQL = `
 
   CREATE OR REPLACE FUNCTION log_deletion_board_climb_stats() RETURNS TRIGGER AS $$
   BEGIN
+    -- Mirrors 0144: see log_deletion_board_climbs.
+    IF current_setting('boardsesh.suppress_sync_tombstones', true) = 'on' THEN
+      RETURN OLD;
+    END IF;
     INSERT INTO sync_deletions (table_name, record_id, user_id)
     VALUES (TG_TABLE_NAME, OLD.board_type || ':' || OLD.climb_uuid || ':' || OLD.angle::text, NULL);
     RETURN OLD;
@@ -797,6 +801,11 @@ export const schemaSQL = `
 
   CREATE OR REPLACE FUNCTION log_deletion_board_climbs() RETURNS TRIGGER AS $$
   BEGIN
+    -- Mirrors 0144: bulk board re-imports set this transaction-local GUC so
+    -- delete-then-recreate cycles don't tombstone the whole board.
+    IF current_setting('boardsesh.suppress_sync_tombstones', true) = 'on' THEN
+      RETURN OLD;
+    END IF;
     INSERT INTO sync_deletions (table_name, record_id, user_id)
     VALUES (TG_TABLE_NAME, OLD.uuid, NULL);
     RETURN OLD;

@@ -8,6 +8,7 @@ vi.mock('../checkpoints', () => ({
   getCheckpointKey: vi.fn((tableName: string, boardType?: string) =>
     boardType ? `checkpoint:${tableName}:${boardType}` : `checkpoint:${tableName}`,
   ),
+  markScopeDownloadComplete: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../table-config', async () => {
@@ -17,7 +18,7 @@ vi.mock('../table-config', async () => {
 
 import { pullSync } from '../pull-client';
 import { setSigningOut } from '../../mutation-queue';
-import { getCheckpoint, setCheckpoint, getCheckpointKey } from '../checkpoints';
+import { getCheckpoint, setCheckpoint, getCheckpointKey, markScopeDownloadComplete } from '../checkpoints';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from '../table-config';
 
 type SqlCall = { sql: string; params: unknown[] };
@@ -100,7 +101,12 @@ describe('pullSync', () => {
     });
   }
 
-  it('syncs user data tables first, then board data, then deletions', async () => {
+  it('applies deletions FIRST, then user data tables, then board data', async () => {
+    // Deletions-first is what makes a server-side delete-then-recreate
+    // converge: the tombstone removes the old local row before the same
+    // cycle's table pull upserts the recreated one. Applied last, a tombstone
+    // sharing the recreated row's timestamp would delete rows this cycle just
+    // wrote — and the strict > cursor would never re-fetch them.
     setupGraphqlFetchForAllTables();
 
     await pullSync(db, queryClient, graphqlFetch, { enabledBoards: ['kilter:1:5'] });
@@ -110,7 +116,10 @@ describe('pullSync', () => {
     const userTableQueryNames = USER_DATA_TABLES.map((t) => TABLE_CONFIGS[t].queryName);
     const boardTableQueryNames = BOARD_DATA_TABLES.map((t) => TABLE_CONFIGS[t].queryName);
 
-    let lastUserIndex = -1;
+    const deletionsIndex = callQueries.findIndex((q: string) => q.includes('syncDeletions'));
+    expect(deletionsIndex).toBe(0);
+
+    let lastUserIndex = deletionsIndex;
     for (const queryName of userTableQueryNames) {
       const index = callQueries.findIndex((q: string) => q.includes(queryName));
       expect(index).toBeGreaterThan(lastUserIndex);
@@ -124,8 +133,9 @@ describe('pullSync', () => {
       lastBoardIndex = index;
     }
 
-    const deletionsIndex = callQueries.findIndex((q: string) => q.includes('syncDeletions'));
-    expect(deletionsIndex).toBeGreaterThan(lastBoardIndex);
+    // Both board tables pulled to their tail → the scope's "initial download
+    // complete" marker is written (the gate for local-first reads).
+    expect(markScopeDownloadComplete).toHaveBeenCalledWith(db, 'kilter:1:5');
   });
 
   it('paginates correctly with cursor updates', async () => {
@@ -330,8 +340,12 @@ describe('pullSync', () => {
 
     const deleteCalls = sqlCalls.filter((call) => call.sql.includes('DELETE FROM boardsesh_ticks'));
     expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0].sql).toBe('DELETE FROM boardsesh_ticks WHERE uuid = ?');
-    expect(deleteCalls[0].params).toEqual(['uuid-123']);
+    // The trailing guard is the resurrection protection: a tombstone must not
+    // delete a local row NEWER than the deletion itself.
+    expect(deleteCalls[0].sql).toBe(
+      'DELETE FROM boardsesh_ticks WHERE uuid = ? AND (updated_at IS NULL OR updated_at <= ?)',
+    );
+    expect(deleteCalls[0].params).toEqual(['uuid-123', '2024-06-01T00:00:00Z']);
   });
 
   it('processes composite-PK deletions', async () => {
@@ -355,9 +369,9 @@ describe('pullSync', () => {
     const deleteCalls = sqlCalls.filter((call) => call.sql.includes('DELETE FROM board_climb_stats'));
     expect(deleteCalls).toHaveLength(1);
     expect(deleteCalls[0].sql).toBe(
-      'DELETE FROM board_climb_stats WHERE board_type = ? AND climb_uuid = ? AND angle = ?',
+      'DELETE FROM board_climb_stats WHERE board_type = ? AND climb_uuid = ? AND angle = ? AND (updated_at IS NULL OR updated_at <= ?)',
     );
-    expect(deleteCalls[0].params).toEqual(['kilter', 'climb-uuid', '40']);
+    expect(deleteCalls[0].params).toEqual(['kilter', 'climb-uuid', '40', '2024-06-01T00:00:00Z']);
   });
 
   it('skips deletion when PK part count mismatches', async () => {
@@ -443,8 +457,10 @@ describe('pullSync', () => {
     expect(userDataUpdates.length).toBeGreaterThan(0);
     expect(userDataUpdates[0].currentTable).toBe('boardsesh_ticks');
 
+    // Deletions run FIRST now, so the running total the ticks table finishes at
+    // is 1 (the deletion) + 2 (the ticks).
     const ticksComplete = userDataUpdates.find(
-      (p) => p.currentTable === 'boardsesh_ticks' && p.documentsProcessed === 2,
+      (p) => p.currentTable === 'boardsesh_ticks' && p.documentsProcessed === 3,
     );
     expect(ticksComplete).toBeDefined();
 
@@ -656,5 +672,41 @@ describe('pullSync', () => {
     } finally {
       setSigningOut(false);
     }
+  });
+
+  it('discards a page whose fetch was in flight while a wipe started AND finished (epoch guard)', async () => {
+    // The old-boolean hole: sign-out sets the flag only for the milliseconds
+    // clearUserData takes. A page fetch awaiting the network across that window
+    // sees `false` on both sides and would write the signed-out user's rows —
+    // and their checkpoints — back into the wiped DB. The monotonic wipe epoch
+    // catches it: this fetch simulates a complete wipe cycle mid-flight.
+    graphqlFetch.mockImplementation(async (query: string) => {
+      if (query.includes('syncDeletions')) {
+        return makeDeletionsResult([], false);
+      }
+      if (query.includes('syncTicks')) {
+        // Wipe starts and finishes while this page is "on the wire".
+        setSigningOut(true);
+        setSigningOut(false);
+        return makeSyncResult('syncTicks', [{ uuid: 'old-user-tick' }], false);
+      }
+      for (const config of Object.values(TABLE_CONFIGS)) {
+        if (query.includes(config.queryName)) {
+          return makeSyncResult(config.queryName, [], false);
+        }
+      }
+      throw new Error(`Unexpected query: ${query}`);
+    });
+
+    await pullSync(db, queryClient, graphqlFetch);
+
+    // The old user's tick page must NOT have been upserted, and the ticks
+    // checkpoint must NOT have been re-created after the wipe reset it.
+    const tickWrites = sqlCalls.filter((call) => call.params?.some((value) => value === 'old-user-tick'));
+    expect(tickWrites).toHaveLength(0);
+    const tickCheckpointWrites = (setCheckpoint as ReturnType<typeof vi.fn>).mock.calls.filter((args: unknown[]) =>
+      String(args[1]).includes('boardsesh_ticks'),
+    );
+    expect(tickCheckpointWrites).toHaveLength(0);
   });
 });

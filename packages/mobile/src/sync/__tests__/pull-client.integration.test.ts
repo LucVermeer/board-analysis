@@ -492,8 +492,9 @@ describe('sync layer — real-DDL integration', () => {
         { tableName: 'board_climb_stats', recordId: 'kilter:stat-climb:40', deletedAt: '2024-06-01T00:00:02Z' },
       ];
 
-      // syncDeletions runs at the end of pullSync, after all table pulls. Serve the
-      // tombstones there; every sync query returns an empty page.
+      // syncDeletions runs FIRST in pullSync, before the table pulls (so a
+      // delete-then-recreate converges). Serve the tombstones there; every
+      // sync query returns an empty page.
       await pullSync(db, queryClient, makeSingleTableFetch({ queryName: 'syncTicks', documents: [], deletions }));
 
       // Each targeted row is gone.
@@ -542,6 +543,38 @@ describe('sync layer — real-DDL integration', () => {
         expect.stringContaining('Skipping deletion: expected 3 PK parts for board_climb_stats, got 2'),
       );
       warnSpy.mockRestore();
+    });
+
+    it('a stale tombstone must NOT delete a local row newer than the deletion (resurrection guard)', async () => {
+      // Delete-then-re-add on another device: the tombstone (t2) and the
+      // re-added row (t3 > t2) can arrive in the same pull. Without the
+      // updated_at <= deletedAt guard, the tombstone would delete the newer
+      // row and the strict > cursor would never fetch it again — the favorite
+      // silently vanishes on this device forever.
+      await db.runAsync(
+        `INSERT INTO user_favorites (board_name, climb_uuid, angle, user_id, updated_at)
+         VALUES ('kilter', 'refav-climb', 40, 'u1', '2024-06-02T00:00:00Z')`,
+      );
+      // An OLD row the same-shaped tombstone SHOULD delete (updated_at pre-dates it).
+      await db.runAsync(
+        `INSERT INTO user_favorites (board_name, climb_uuid, angle, user_id, updated_at)
+         VALUES ('kilter', 'oldfav-climb', 40, 'u1', '2024-05-01T00:00:00Z')`,
+      );
+
+      const deletions: DeletionRecord[] = [
+        { tableName: 'user_favorites', recordId: 'kilter:refav-climb:40', deletedAt: '2024-06-01T00:00:00Z' },
+        { tableName: 'user_favorites', recordId: 'kilter:oldfav-climb:40', deletedAt: '2024-06-01T00:00:00Z' },
+      ];
+
+      await pullSync(db, queryClient, makeSingleTableFetch({ queryName: 'syncTicks', documents: [], deletions }));
+
+      // Newer-than-tombstone row survives; older one is tombstoned away.
+      expect(
+        await db.getFirstAsync('SELECT climb_uuid FROM user_favorites WHERE climb_uuid = ?', ['refav-climb']),
+      ).not.toBeNull();
+      expect(
+        await db.getFirstAsync('SELECT climb_uuid FROM user_favorites WHERE climb_uuid = ?', ['oldfav-climb']),
+      ).toBeNull();
     });
   });
 

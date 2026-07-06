@@ -226,6 +226,30 @@ describe('drainMutationQueue', () => {
     expect(mockProcessMutation).toHaveBeenCalledTimes(1);
   });
 
+  it('aborts mid-batch when a sign-out wipe starts (and even completes) during a mutation send', async () => {
+    // The drain tail hazard: graphqlFetch resolves the CURRENT auth token per
+    // request, so a drain that keeps replaying after the account switch would
+    // post the old user's queued writes into the NEW user's account. The
+    // epoch check at the top of the per-mutation loop must stop the batch even
+    // though the boolean flag is already false again by then.
+    const first = makeMutation({ id: 1, idempotency_key: 'key-1' });
+    const second = makeMutation({ id: 2, idempotency_key: 'key-2' });
+    mockPeekPending.mockResolvedValue([first, second]);
+
+    mockProcessMutation.mockImplementationOnce(async () => {
+      // Wipe starts AND finishes while mutation #1 is on the wire.
+      setSigningOut(true);
+      setSigningOut(false);
+    });
+
+    const queryClient = createMockQueryClient();
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+
+    // Mutation #2 must never have been sent.
+    expect(mockProcessMutation).toHaveBeenCalledTimes(1);
+    expect(mockPeekPending).toHaveBeenCalledTimes(1);
+  });
+
   it('invalidates correct query keys for boardsesh_ticks', async () => {
     const mutation = makeMutation({ id: 1, table_name: 'boardsesh_ticks' });
 

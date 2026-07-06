@@ -65,7 +65,7 @@ export const TABLE_CONFIGS: Record<string, TableSyncConfig> = {
     queryName: 'syncFavorites',
     operationKey: 'SYNC_FAVORITES',
     isPerBoard: false,
-    invalidateKeys: [['favorites'], ['searchClimbs']],
+    invalidateKeys: [['favorites'], ['searchClimbs'], ['infiniteSearchClimbs']],
     primaryKeyColumns: ['board_name', 'climb_uuid', 'angle'],
     localColumns: ['board_name', 'climb_uuid', 'angle', 'user_id', 'created_at', 'updated_at'],
   },
@@ -100,7 +100,7 @@ export const TABLE_CONFIGS: Record<string, TableSyncConfig> = {
     // Match the keys real readers use: the climb list reads ['searchClimbs', input]
     // + ['searchClimbsCount', input], the detail reads ['climb', variables]. The
     // old ['climb-search'] key had no reader, so a board pull never refreshed the UI.
-    invalidateKeys: [['searchClimbs'], ['searchClimbsCount'], ['climb']],
+    invalidateKeys: [['searchClimbs'], ['infiniteSearchClimbs'], ['searchClimbsCount'], ['climb']],
     primaryKeyColumns: ['uuid'],
     localColumns: [
       'uuid',
@@ -136,7 +136,7 @@ export const TABLE_CONFIGS: Record<string, TableSyncConfig> = {
     queryName: 'syncClimbStats',
     operationKey: 'SYNC_CLIMB_STATS',
     isPerBoard: true,
-    invalidateKeys: [['searchClimbs'], ['searchClimbsCount'], ['climb']],
+    invalidateKeys: [['searchClimbs'], ['infiniteSearchClimbs'], ['searchClimbsCount'], ['climb']],
     primaryKeyColumns: ['board_type', 'climb_uuid', 'angle'],
     localColumns: [
       'board_type',

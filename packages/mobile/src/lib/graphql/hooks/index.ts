@@ -753,22 +753,38 @@ export function useToggleFavorite() {
           await addFavoriteLocal(db, variables.input);
         }
 
+        const favorited = !variables.currentlyFavorited;
+        // Pin the per-climb heart optimistically instead of refetching: a
+        // network refetch here races the queued mutation and can cache the
+        // PRE-toggle state for 5 minutes. The drainer invalidates
+        // ['favoriteStatus'] once the queued write actually lands. The cached
+        // shape is the RAW GET_FAVORITES response (select runs on read).
+        queryClient.setQueryData(
+          ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
+          { favorites: favorited ? [variables.input.climbUuid] : [] },
+        );
+
         scheduleDrain(db, queryClient);
 
-        return { toggleFavorite: { favorited: !variables.currentlyFavorited } };
+        return { toggleFavorite: { favorited }, viaLocalQueue: true as const };
       }
 
       return getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, {
         input: variables.input,
       });
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
       // Bust the per-climb favorite-status cache so a re-open reflects the new
-      // state from the server, not a stale 5-min-cached value.
-      void queryClient.invalidateQueries({
-        queryKey: ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
-      });
+      // state from the server, not a stale 5-min-cached value. Skipped on the
+      // local-queue path, where the server does not know about the toggle yet —
+      // the optimistic setQueryData above holds until the drainer's
+      // post-landing invalidation.
+      if (!('viaLocalQueue' in data)) {
+        void queryClient.invalidateQueries({
+          queryKey: ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
+        });
+      }
     },
   });
 }

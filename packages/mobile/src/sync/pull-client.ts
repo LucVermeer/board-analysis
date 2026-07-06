@@ -3,8 +3,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { SyncCursorInput, SyncResult, SyncDeletionsResult } from '../lib/graphql/operations';
 import { reportHandledError } from '../lib/error-reporting';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from './table-config';
-import { getCheckpoint, setCheckpoint, getCheckpointKey } from './checkpoints';
-import { isSigningOut } from '../mutation-queue';
+import { getCheckpoint, setCheckpoint, getCheckpointKey, markScopeDownloadComplete } from './checkpoints';
+import { isSigningOut, getWipeEpoch } from '../mutation-queue';
 import { parseOfflineBoardKey, type OfflineBoardScope } from '../settings/offline-board-key';
 
 export type SyncProgress = {
@@ -134,7 +134,7 @@ async function syncTable(
   tableName: string,
   boardScope?: BoardScope,
   onProgress?: (documentsProcessed: number) => void,
-): Promise<void> {
+): Promise<{ reachedTail: boolean }> {
   const config = TABLE_CONFIGS[tableName];
   if (!config) throw new Error(`No sync config for table: ${tableName}`);
 
@@ -147,11 +147,19 @@ async function syncTable(
     : undefined;
   let totalProcessed = 0;
 
+  // The signing-out boolean is only true for the milliseconds the wipe takes;
+  // a page fetch in flight across that window sees `false` on both sides and
+  // would write the old user's rows (and checkpoints!) back into the wiped DB
+  // — a cross-account leak, plus checkpoints past the new user's data. The
+  // epoch is monotonic, so comparing it catches a wipe that started AND
+  // finished while we were awaiting the network.
+  const startEpoch = getWipeEpoch();
+
   let hasMore = true;
   while (hasMore) {
     // Sign-out is wiping local data: stop before this page writes the old
     // user's rows back (mirrors the drainer's guard).
-    if (isSigningOut()) return;
+    if (isSigningOut() || getWipeEpoch() !== startEpoch) return { reachedTail: false };
     const variables: Record<string, unknown> = { cursor, limit: PAGE_LIMIT };
     if (config.isPerBoard && boardScope) {
       variables.boardType = boardScope.boardType;
@@ -161,6 +169,10 @@ async function syncTable(
 
     const response = await graphqlFetch<Record<string, SyncResult>>(query, variables);
     const result = response[config.queryName];
+
+    // Re-check after the await: the wipe may have started (or fully completed)
+    // while this page was on the wire.
+    if (isSigningOut() || getWipeEpoch() !== startEpoch) return { reachedTail: false };
 
     // An empty page would not advance the cursor; if the backend ever returns
     // documents:[] with hasMore:true we'd spin forever. Stop here (I2).
@@ -176,9 +188,19 @@ async function syncTable(
     hasMore = result.hasMore;
   }
 
-  for (const key of config.invalidateKeys) {
-    queryClient.invalidateQueries({ queryKey: key });
+  // Only bust caches when this table actually changed. Sync runs on every
+  // foreground + reconnect, and an unconditional invalidation here refetches
+  // every active climb/logbook/playlist query over the network even when zero
+  // rows moved (matching processDeletions, which only invalidates on arrivals).
+  if (totalProcessed > 0) {
+    for (const key of config.invalidateKeys) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
   }
+
+  // Both loop exits here mean the server has nothing more for this cursor:
+  // hasMore === false, or an empty page (the tail). Aborts return early above.
+  return { reachedTail: true };
 }
 
 async function processDeletions(
@@ -196,16 +218,21 @@ async function processDeletions(
   let totalProcessed = 0;
   const invalidatedKeys = new Set<string>();
 
+  // See syncTable: catch a wipe that ran while a page was on the wire.
+  const startEpoch = getWipeEpoch();
+
   let hasMore = true;
   while (hasMore) {
     // Sign-out is wiping local data: stop before this page writes the old
     // user's rows back (mirrors the drainer's guard).
-    if (isSigningOut()) return;
+    if (isSigningOut() || getWipeEpoch() !== startEpoch) return;
     const response = await graphqlFetch<{ syncDeletions: SyncDeletionsResult }>(SYNC_DELETIONS_QUERY, {
       cursor,
       limit: PAGE_LIMIT,
     });
     const result = response.syncDeletions;
+
+    if (isSigningOut() || getWipeEpoch() !== startEpoch) return;
 
     // Empty page can't advance the cursor; break to avoid an infinite loop if
     // the backend returns deletions:[] with hasMore:true (I2).
@@ -217,8 +244,20 @@ async function processDeletions(
 
       const pkColumns = config.primaryKeyColumns;
 
+      // Resurrection guard: a tombstone must not delete a row NEWER than the
+      // deletion (delete-then-re-add on another device — the re-added row and
+      // the stale tombstone can arrive in the same pull). Rows the tombstone
+      // post-dates are deleted; ties delete too (same-transaction recreate),
+      // which converges because deletions are applied BEFORE the table pulls.
+      const hasUpdatedAt = config.localColumns.includes('updated_at');
+      const guardClause = hasUpdatedAt ? ' AND (updated_at IS NULL OR updated_at <= ?)' : '';
+      const guardParams = hasUpdatedAt ? [deletion.deletedAt] : [];
+
       if (pkColumns.length === 1) {
-        await db.runAsync(`DELETE FROM ${deletion.tableName} WHERE ${pkColumns[0]} = ?`, [deletion.recordId]);
+        await db.runAsync(`DELETE FROM ${deletion.tableName} WHERE ${pkColumns[0]} = ?${guardClause}`, [
+          deletion.recordId,
+          ...guardParams,
+        ]);
       } else {
         // Backend encodes composite PKs as exactly N colon-separated segments
         // matching primaryKeyColumns order (e.g. "kilter:uuid:40" for
@@ -233,7 +272,10 @@ async function processDeletions(
           continue;
         }
         const whereClause = pkColumns.map((col) => `${col} = ?`).join(' AND ');
-        await db.runAsync(`DELETE FROM ${deletion.tableName} WHERE ${whereClause}`, recordIdParts);
+        await db.runAsync(`DELETE FROM ${deletion.tableName} WHERE ${whereClause}${guardClause}`, [
+          ...recordIdParts,
+          ...guardParams,
+        ]);
       }
 
       for (const key of config.invalidateKeys) {
@@ -264,6 +306,18 @@ export async function pullSync(
   const onProgress = options?.onProgress;
   let totalDocuments = 0;
 
+  // Deletions FIRST, table pulls second. This ordering is what makes a
+  // delete-then-recreate on the server converge: the tombstone removes the old
+  // local row, then the same cycle's table pull upserts the recreated one.
+  // Applied after the pulls, a tombstone sharing the recreated row's timestamp
+  // would delete data this cycle just wrote, and the strict > cursor would
+  // never fetch it again.
+  onProgress?.({ phase: 'deletions', currentTable: null, documentsProcessed: 0 });
+  await processDeletions(db, queryClient, graphqlFetch, (deletionsProcessed) => {
+    totalDocuments = deletionsProcessed;
+    onProgress?.({ phase: 'deletions', currentTable: null, documentsProcessed: totalDocuments });
+  });
+
   for (const tableName of USER_DATA_TABLES) {
     onProgress?.({ phase: 'user_data', currentTable: tableName, documentsProcessed: totalDocuments });
     const baseCount = totalDocuments;
@@ -280,6 +334,7 @@ export async function pullSync(
     const scope = parseOfflineBoardKey(scopeKey);
     if (!scope) continue;
     const boardScope: BoardScope = { ...scope, scopeKey };
+    let allTablesReachedTail = true;
     for (const tableName of BOARD_DATA_TABLES) {
       const tableLabel = `${tableName}:${scopeKey}`;
       onProgress?.({
@@ -289,24 +344,31 @@ export async function pullSync(
         currentTableProcessed: 0,
       });
       const baseCount = totalDocuments;
-      await syncTable(db, queryClient, graphqlFetch, tableName, boardScope, (tableProcessed) => {
-        totalDocuments = baseCount + tableProcessed;
-        onProgress?.({
-          phase: 'board_data',
-          currentTable: tableLabel,
-          documentsProcessed: totalDocuments,
-          currentTableProcessed: tableProcessed,
-        });
-      });
+      const { reachedTail } = await syncTable(
+        db,
+        queryClient,
+        graphqlFetch,
+        tableName,
+        boardScope,
+        (tableProcessed) => {
+          totalDocuments = baseCount + tableProcessed;
+          onProgress?.({
+            phase: 'board_data',
+            currentTable: tableLabel,
+            documentsProcessed: totalDocuments,
+            currentTableProcessed: tableProcessed,
+          });
+        },
+      );
+      if (!reachedTail) allTablesReachedTail = false;
+    }
+    // Gate for local-first reads: only a scope whose climbs AND stats have both
+    // pulled to the tail may serve searches — a first-page checkpoint would
+    // otherwise serve a sliver of the catalog as if it were everything.
+    if (allTablesReachedTail) {
+      await markScopeDownloadComplete(db, scopeKey);
     }
   }
-
-  onProgress?.({ phase: 'deletions', currentTable: null, documentsProcessed: totalDocuments });
-  const baseCount = totalDocuments;
-  await processDeletions(db, queryClient, graphqlFetch, (deletionsProcessed) => {
-    totalDocuments = baseCount + deletionsProcessed;
-    onProgress?.({ phase: 'deletions', currentTable: null, documentsProcessed: totalDocuments });
-  });
 
   onProgress?.({ phase: 'idle', currentTable: null, documentsProcessed: totalDocuments });
 }

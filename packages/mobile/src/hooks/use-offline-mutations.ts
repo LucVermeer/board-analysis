@@ -117,6 +117,13 @@ export function useOfflineFollowUser(db: SQLiteDatabase, graphqlFetch: GraphQLFe
           [followingId, now, now],
         );
 
+        // Cancel a not-yet-drained unfollow (mirrors the favorites pair):
+        // without this, offline follow→unfollow→follow leaves [add, del] in
+        // the queue (the second add is INSERT OR IGNOREd away) and drains to
+        // UNFOLLOWED — the opposite of the user's last action.
+        await txn.runAsync(`DELETE FROM pending_mutations WHERE idempotency_key = ? AND status = 'pending'`, [
+          `del:user_follows:${followingId}`,
+        ]);
         await enqueue(txn, 'user_follows', 'create', { followingId }, idempotencyKey);
       });
 
@@ -139,6 +146,12 @@ export function useOfflineUnfollowUser(db: SQLiteDatabase, graphqlFetch: GraphQL
       await db.withExclusiveTransactionAsync(async (txn) => {
         await txn.runAsync(`DELETE FROM user_follows WHERE following_id = ?`, [followingId]);
 
+        // Cancel a not-yet-drained follow, but ALWAYS enqueue the unfollow —
+        // same TOCTOU reasoning as removeFavoriteLocal: the canceled add may
+        // already be in flight, and the server unfollow is an idempotent no-op.
+        await txn.runAsync(`DELETE FROM pending_mutations WHERE idempotency_key = ? AND status = 'pending'`, [
+          `add:user_follows:${followingId}`,
+        ]);
         await enqueue(txn, 'user_follows', 'delete', { followingId }, idempotencyKey);
       });
 

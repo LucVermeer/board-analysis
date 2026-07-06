@@ -339,6 +339,15 @@ CREATE TRIGGER trg_playlist_follows_delete AFTER DELETE ON "playlist_follows"
 
 CREATE OR REPLACE FUNCTION log_deletion_board_climbs() RETURNS TRIGGER AS $$
 BEGIN
+  -- Bulk board re-imports (clearBoardData) delete and recreate every row of a
+  -- board in one transaction. Tombstoning those deletes would flood
+  -- sync_deletions with hundreds of thousands of NULL-scoped rows AND make
+  -- every offline client delete its just-repulled copy of the board (the
+  -- recreated rows share the tombstones' timestamp). The importer sets this
+  -- transaction-local GUC to declare "rows are coming right back".
+  IF current_setting('boardsesh.suppress_sync_tombstones', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
   INSERT INTO sync_deletions (table_name, record_id, user_id)
   VALUES (TG_TABLE_NAME, OLD.uuid, NULL);
   RETURN OLD;
@@ -351,6 +360,10 @@ CREATE TRIGGER trg_board_climbs_delete AFTER DELETE ON "board_climbs"
 
 CREATE OR REPLACE FUNCTION log_deletion_board_climb_stats() RETURNS TRIGGER AS $$
 BEGIN
+  -- Same bulk re-import guard as log_deletion_board_climbs.
+  IF current_setting('boardsesh.suppress_sync_tombstones', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
   INSERT INTO sync_deletions (table_name, record_id, user_id)
   VALUES (TG_TABLE_NAME,
           OLD.board_type || ':' || OLD.climb_uuid || ':' || OLD.angle::text,

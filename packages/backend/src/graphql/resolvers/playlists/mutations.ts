@@ -74,25 +74,42 @@ export const playlistMutations = {
       }
     }
 
-    // Create playlist
-    const [playlist] = await db
-      .insert(dbSchema.playlists)
-      .values({
-        uuid,
-        boardType: validatedInput.boardType,
-        layoutId: validatedInput.layoutId,
-        name: validatedInput.name,
-        description: validatedInput.description || null,
-        isPublic: false, // Always private initially
-        color: validatedInput.color || null,
-        icon: validatedInput.icon || null,
+    // Create playlist + ownership atomically: a playlist row without its
+    // ownership row is invisible to every read (all queries join ownership)
+    // yet permanently holds the uuid, so an idempotent replay of the same
+    // client uuid would recover nothing and throw forever. One transaction
+    // makes the crash window disappear.
+    const playlist = await db.transaction(async (tx) => {
+      const [insertedPlaylist] = await tx
+        .insert(dbSchema.playlists)
+        .values({
+          uuid,
+          boardType: validatedInput.boardType,
+          layoutId: validatedInput.layoutId,
+          name: validatedInput.name,
+          description: validatedInput.description || null,
+          isPublic: false, // Always private initially
+          color: validatedInput.color || null,
+          icon: validatedInput.icon || null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({
+          target: dbSchema.playlists.uuid,
+        })
+        .returning();
+
+      if (!insertedPlaylist) return undefined;
+
+      await tx.insert(dbSchema.playlistOwnership).values({
+        playlistId: insertedPlaylist.id,
+        userId,
+        role: 'owner',
         createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoNothing({
-        target: dbSchema.playlists.uuid,
-      })
-      .returning();
+      });
+
+      return insertedPlaylist;
+    });
 
     if (!playlist) {
       const [existingOwnedPlaylist] = await db
@@ -119,14 +136,6 @@ export const playlistMutations = {
         .limit(1);
       return playlistResult(existingOwnedPlaylist.playlist, climbCount?.count ?? 0);
     }
-
-    // Create ownership
-    await db.insert(dbSchema.playlistOwnership).values({
-      playlistId: playlist.id,
-      userId,
-      role: 'owner',
-      createdAt: now,
-    });
 
     return playlistResult(playlist, 0);
   },

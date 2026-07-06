@@ -1,6 +1,11 @@
 // worker-db must be imported first: it rewrites DATABASE_URL at module-load
 // time, before any other import can materialise db/client against the template DB.
 import { getWorkerDatabaseUrl, setupWorkerDatabase } from './worker-db';
+
+// Sync tests write rows and pull them back immediately; the production
+// stability window (rows younger than N seconds are deferred to the next pull)
+// would hide every fixture. Must be set before sync/queries.ts is imported.
+process.env.SYNC_STABILITY_WINDOW_SECONDS = '0';
 import { beforeAll, beforeEach, afterAll } from 'vite-plus/test';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';

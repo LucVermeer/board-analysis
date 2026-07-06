@@ -15,15 +15,36 @@ import { z } from 'zod';
  */
 const LEGACY_PG_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/;
 
+// Both accepted shapes must also be REAL timestamps: the resolver feeds the
+// value to `::timestamp`, where '2026-13-45 25:61:61' (regex-valid) raises
+// 22008 as an opaque 500 instead of a validation error. Date.parse returns NaN
+// for out-of-range components in ISO-shaped strings, so it is the arbiter.
+function isRealTimestamp(value: string): boolean {
+  const isoShaped = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  return !Number.isNaN(Date.parse(isoShaped));
+}
+
 export const SyncCursorInputSchema = z
   .object({
+    // UTC-only on purpose (no `offset: true`): the server only ever emits 'Z'
+    // timestamps, and the resolver's `::timestamp` cast silently DROPS an
+    // offset — accepting '+05:30' here would shift the cursor by the offset
+    // and skip rows. Better to reject what the query would corrupt.
     updatedAt: z
       .string()
-      .datetime({ offset: true })
+      .datetime()
       .or(z.string().regex(LEGACY_PG_TIMESTAMP_PATTERN))
+      .refine(isRealTimestamp, 'updatedAt must be a real timestamp')
       .optional()
       .nullable(),
-    syncSeq: z.string().regex(/^\d+$/, 'syncSeq must be a stringified integer').optional().nullable(),
+    // Bounded at 19 digits so the value fits ::bigint (max 9223372036854775807
+    // is 19 digits) — an unbounded digit string passes a bare \d+ regex and
+    // then raises 22003 in Postgres as a 500.
+    syncSeq: z
+      .string()
+      .regex(/^\d{1,19}$/, 'syncSeq must be a stringified integer')
+      .optional()
+      .nullable(),
   })
   .optional()
   .nullable();

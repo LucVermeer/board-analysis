@@ -115,14 +115,12 @@ export default function MoreScreen() {
   };
 
   // Sign-out wipes the local queue, so warn before dropping any not-yet-synced
-  // writes. No pending writes → sign out straight away (unchanged behaviour).
-  // Flag off → skip the count read and dialog entirely (pre-offline sign-out);
-  // leftover queued writes are still best-effort flushed by the auth provider.
+  // writes. No pending writes → sign out straight away (pre-offline behaviour
+  // for everyone whose queue is empty, i.e. every normal flag-off user).
+  // Deliberately NOT gated on the offline flag: after a kill-switch rollback a
+  // flag-off user can still hold queued writes, and those deserve the same
+  // warning — the count is one local SQLite read.
   const handleSignOut = async () => {
-    if (!offlineEnabled) {
-      void signOut();
-      return;
-    }
     let pending = 0;
     try {
       pending = await getPendingCount(db);
