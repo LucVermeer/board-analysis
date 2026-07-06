@@ -1275,7 +1275,10 @@ export function startReadinessServer(): ChildProcess {
   // Verify the child actually bound. Its stdio is 'ignore', so a bind failure
   // (port already taken, child crash) would otherwise be silent and reach-home
   // would quietly degrade to the Metro marker alone — the exact single-signal
-  // fragility this server exists to remove.
+  // fragility this server exists to remove. The up-to-5s wait blocks
+  // synchronously ON PURPOSE: this orchestrator is fully synchronous
+  // (spawnSync everywhere), and nothing useful can happen before the second
+  // reach-home signal is known to be live.
   let bound = false;
   for (let attempt = 0; attempt < 10 && !bound; attempt += 1) {
     sleepSeconds(0.5);

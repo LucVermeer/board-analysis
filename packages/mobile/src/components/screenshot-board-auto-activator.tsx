@@ -8,6 +8,21 @@ import {
 import { useMyBoards, useSearchClimbs } from '../lib/graphql/hooks';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { useAuth } from '../providers/auth-provider';
+import type { ClimbSearchInput } from '@boardsesh/shared-schema';
+
+// Query-key placeholder for the frames before the active board resolves. The
+// paired `enabled: false` means React Query never runs the fetch — the object
+// is only hashed into the key — so the zero board values are never sent
+// anywhere. Hoisted so every disabled render hashes the identical key.
+const WALL_SEED_SEARCH_DISABLED_INPUT: ClimbSearchInput = {
+  boardName: '',
+  layoutId: 0,
+  sizeId: 0,
+  setIds: '',
+  angle: 0,
+  page: 0,
+  pageSize: 0,
+};
 
 /**
  * Screenshot builds only: make the signed-in user's first saved board (Marco's
@@ -67,7 +82,7 @@ export function ScreenshotBoardAutoActivator(): null {
     );
   }, [activeBoard]);
   const { data: wallSeedSearch } = useSearchClimbs(
-    wallSeedSearchInput ?? { boardName: '', layoutId: 0, sizeId: 0, setIds: '', angle: 0, page: 0, pageSize: 0 },
+    wallSeedSearchInput ?? WALL_SEED_SEARCH_DISABLED_INPUT,
     wallSeedSearchInput !== null,
   );
 
