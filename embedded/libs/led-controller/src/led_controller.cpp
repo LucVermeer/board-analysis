@@ -1,27 +1,7 @@
 #include "led_controller.h"
 
-// FastLED needs the chipset, data pin, and color order as compile-time tokens,
-// so they are resolved from build flags here rather than passed at runtime.
-// Defaults match the original Aurora/Kilter wiring; per-board build variants
-// override them (e.g. the GLEDOPTO GL-C-015WL-D drives WS2811 nodes on GPIO16).
-#ifndef LED_CHIPSET
-#define LED_CHIPSET WS2812B
-#endif
-#ifndef LED_COLOR_ORDER
-#define LED_COLOR_ORDER GRB
-#endif
-
-#if defined(TDISPLAY_LED_PIN)
-#define LED_DATA_PIN TDISPLAY_LED_PIN
-#elif defined(WAVESHARE_LED_PIN)
-#define LED_DATA_PIN WAVESHARE_LED_PIN
-#elif defined(WAVESHARE_AMOLED_LED_PIN)
-#define LED_DATA_PIN WAVESHARE_AMOLED_LED_PIN
-#elif defined(GLEDOPTO_LED_PIN)
-#define LED_DATA_PIN GLEDOPTO_LED_PIN
-#else
-#define LED_DATA_PIN 5
-#endif
+// LED_CHIPSET / LED_DATA_PIN / LED_COLOR_ORDER are resolved from build flags in
+// led_controller.h (the single source of truth).
 
 LedController LEDs;
 

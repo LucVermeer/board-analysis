@@ -6,39 +6,17 @@
 // Device identification
 #define DEVICE_NAME "Boardsesh Controller"
 
-// LED configuration
-// Note: GPIO 5 conflicts with LCD_RST on T-Display-S3.
-// Use TDISPLAY_LED_PIN, WAVESHARE_LED_PIN, WAVESHARE_AMOLED_LED_PIN, or
-// GLEDOPTO_LED_PIN build flags to override the data pin per board variant.
-// Keep this cascade in sync with led_controller.cpp's LED_DATA_PIN cascade.
-#ifdef TDISPLAY_LED_PIN
-#define LED_PIN TDISPLAY_LED_PIN
-#elif defined(WAVESHARE_LED_PIN)
-#define LED_PIN WAVESHARE_LED_PIN
-#elif defined(WAVESHARE_AMOLED_LED_PIN)
-#define LED_PIN WAVESHARE_AMOLED_LED_PIN
-#elif defined(GLEDOPTO_LED_PIN)
-#define LED_PIN GLEDOPTO_LED_PIN
-#else
-#define LED_PIN 5  // GPIO pin for LED data (default for non-display builds)
-#endif
+// LED configuration.
+// The data pin, chipset, and color order are single-sourced from the
+// led-controller library (LED_DATA_PIN / LED_CHIPSET / LED_COLOR_ORDER in
+// led_controller.h, resolved from build flags per board variant — see the
+// *_LED_PIN / LED_CHIPSET / LED_COLOR_ORDER flags there). Consumers include
+// led_controller.h and read LED_DATA_PIN directly.
 
 // Number of LEDs on the string. Override per variant with -D NUM_LEDS=<n>.
 #ifndef NUM_LEDS
 #define NUM_LEDS 200
 #endif
-
-// LED chipset + color order. The actual FastLED driver in led_controller.cpp
-// consumes the LED_CHIPSET / LED_COLOR_ORDER build flags; these mirror them so
-// the declarative config and the driver stay in agreement.
-#ifndef LED_CHIPSET
-#define LED_CHIPSET WS2812B
-#endif
-#ifndef LED_COLOR_ORDER
-#define LED_COLOR_ORDER GRB
-#endif
-#define LED_TYPE LED_CHIPSET         // LED strip type
-#define COLOR_ORDER LED_COLOR_ORDER  // Color order
 
 // Default brightness (0-255)
 #define DEFAULT_BRIGHTNESS 128

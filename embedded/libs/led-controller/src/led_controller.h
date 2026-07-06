@@ -4,6 +4,31 @@
 #include <Arduino.h>
 #include <FastLED.h>
 
+// LED hardware configuration — the single source of truth, resolved from build
+// flags at compile time. FastLED needs chipset, data pin, and color order as
+// compile-time tokens, so they live here: led_controller.cpp's addLeds<> call
+// consumes them, and the project's board_config.h aliases LED_PIN/LED_TYPE/
+// COLOR_ORDER to them for logging and declarative config. Override per board
+// variant with -D LED_CHIPSET / -D LED_COLOR_ORDER / a *_LED_PIN flag.
+#ifndef LED_CHIPSET
+#define LED_CHIPSET WS2812B
+#endif
+#ifndef LED_COLOR_ORDER
+#define LED_COLOR_ORDER GRB
+#endif
+
+#if defined(TDISPLAY_LED_PIN)
+#define LED_DATA_PIN TDISPLAY_LED_PIN
+#elif defined(WAVESHARE_LED_PIN)
+#define LED_DATA_PIN WAVESHARE_LED_PIN
+#elif defined(WAVESHARE_AMOLED_LED_PIN)
+#define LED_DATA_PIN WAVESHARE_AMOLED_LED_PIN
+#elif defined(GLEDOPTO_LED_PIN)
+#define LED_DATA_PIN GLEDOPTO_LED_PIN
+#else
+#define LED_DATA_PIN 5
+#endif
+
 #define MAX_LEDS 500
 
 /**
