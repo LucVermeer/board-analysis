@@ -87,6 +87,44 @@ Main firmware for controlling Kilter/Tension climbing board LEDs. Features:
 - **GraphQL-WS Client**: Real-time sync with Boardsesh backend
 - **Web Config**: HTTP server for WiFi and device setup
 
+#### Build variants
+
+`board-controller` builds for several boards via PlatformIO envs (see
+`projects/board-controller/platformio.ini`): `esp32s3dev` (default),
+`esp32s3dev-proxy`, `tdisplay-s3`, `waveshare-7inch`, `waveshare-amoled-216`,
+`esp32dev` (legacy), and **`gledopto-c015`** (below).
+
+#### GLEDOPTO GL-C-015WL-D variant
+
+`gledopto-c015` targets the [GLEDOPTO GL-C-015WL-D](https://gledopto.com/h-pd-125.html) —
+a cheap WLED-style controller (classic ESP32, 4 MB flash, DC 5–24 V in) used as a
+standalone LED driver for a Kilter board. No display, no proxy; it decodes climbs
+over BLE (the board appears to the Kilter app as `Kilter Board#123456@3`) and via
+party-mode GraphQL, then lights the string.
+
+**Wiring** (Setter-Closet-style WS2811 pixel-node string — 3 wires: V+/GND/data):
+
+- Data → **GPIO16** (the controller's primary "D1" output).
+- V+ / GND → the controller's LED power output (the Kilter string is 5 V).
+
+**Chipset / color order** are build flags, defaulting to `WS2811` / `GRB`. They're
+consumed by `libs/led-controller/src/led_controller.cpp`. If the first flash looks
+wrong, adjust in `platformio.ini`:
+
+- Colors swapped (red shows as green/blue) → `-D LED_COLOR_ORDER=RGB`.
+- Nothing lights at all → `-D GLEDOPTO_LED_PIN=2` (the "D2" output).
+- Flicker / wrong pixels → `-D LED_CHIPSET=WS2812B`.
+- String length → `-D NUM_LEDS=<n>` (default 200, max 500).
+
+**Build & flash** (over the controller's USB/UART download port):
+
+```bash
+cd embedded/projects/board-controller
+pio run -e gledopto-c015              # build
+pio run -e gledopto-c015 -t upload   # flash
+pio device monitor                   # serial (confirms "LED_PIN = 16" + startup blink)
+```
+
 ### moonboard-dev-server
 
 Development firmware for MoonBoard BLE decoding and browser-based previewing. Features:
