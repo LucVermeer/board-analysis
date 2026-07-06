@@ -824,6 +824,14 @@ function captureIosDevice(
     }
     if (!reachedHome) {
       console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
+      // Diagnose which reach-home signal (if any) moved: a marker gain means the app
+      // reached home but the readiness ping never arrived; a readiness gain we somehow
+      // missed; neither means the app never loaded its JS at all.
+      console.error(
+        `${LOG} reach-home signals: marker ${homeReadyMarkerCount() - homeReadyBaseline} new, ` +
+          `readiness ${screenshotReadinessCount() - readinessBaseline} new ` +
+          `(server reachable from host: ${readinessServerReachable() ? 'yes' : 'NO'}).`,
+      );
       dumpMetroLogTail();
       return 1;
     }
@@ -1222,6 +1230,22 @@ export function screenshotReadinessCount(): number {
   return log.split('\n').filter((line) => line.length > 0).length;
 }
 
+// Diagnostic only: can the host itself hit the readiness server? If not, the child
+// process never bound (so the app's ping can't land either) and reach-home is relying
+// on the Metro marker alone.
+function readinessServerReachable(): boolean {
+  const probe = spawnSync('curl', [
+    '-s',
+    '-o',
+    '/dev/null',
+    '--max-time',
+    '3',
+    // /probe (not /ready) so this reachability check doesn't itself bump the counter.
+    `http://127.0.0.1:${SCREENSHOT_READY_PORT}/probe`,
+  ]);
+  return probe.status === 0;
+}
+
 /**
  * Start the readiness server as a SEPARATE detached process. The orchestrator
  * itself is fully synchronous (spawnSync for sleep/simctl/maestro), so an
@@ -1240,6 +1264,7 @@ export function startReadinessServer(): ChildProcess {
   const server = spawn(process.execPath, ['-e', serverCode], { stdio: 'ignore', detached: true });
   // Don't let the child keep the orchestrator's event loop alive at exit.
   server.unref();
+  console.log(`${LOG} Readiness server started (pid ${server.pid ?? '?'}) on port ${SCREENSHOT_READY_PORT}.`);
   return server;
 }
 
