@@ -16,6 +16,8 @@ import {
   SearchGymsInputSchema,
   GymMembersInputSchema,
   LinkBoardToGymInputSchema,
+  GrantGymWriteAccessInputSchema,
+  RevokeGymWriteAccessInputSchema,
   UUIDSchema,
 } from '../../../validation/schemas';
 
@@ -74,6 +76,7 @@ function mapRawGymRow(row: Record<string, unknown>): typeof dbSchema.gyms.$infer
     slug: (row.slug as string | null) ?? null,
     ownerId: row.owner_id as string,
     address: (row.address as string | null) ?? null,
+    website: (row.website as string | null) ?? null,
     contactEmail: (row.contact_email as string | null) ?? null,
     contactPhone: (row.contact_phone as string | null) ?? null,
     latitude: row.latitude != null ? Number(row.latitude) : null,
@@ -183,16 +186,30 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
   const isOwner = authenticatedUserId === gym.ownerId;
   const memberRow = (memberCheckResult as Array<{ role: string }>)[0];
   const isMember = isOwner || !!memberRow;
-  const myRole = isOwner ? 'admin' : ((memberRow?.role as 'admin' | 'member' | undefined) ?? null);
+  const myRole = isOwner ? 'admin' : ((memberRow?.role as 'admin' | 'editor' | 'member' | undefined) ?? null);
 
-  // Editable by gym owner/admin, or a community admin/leader whose role is
-  // global or scoped to one of the gym's board types.
+  // A community admin/leader whose role is global or scoped to one of the gym's
+  // board types. Drives both edit and grant permissions below.
   const viewerRoles = viewerRolesResult as Array<{ role: string; boardType: string | null }>;
-  const canEdit =
-    isOwner ||
-    memberRow?.role === 'admin' ||
+  const hasCommunityAccess =
     rolesGrantAdminOrLeader(viewerRoles, null) ||
     boardTypes.some((boardType) => rolesGrantAdminOrLeader(viewerRoles, boardType));
+
+  // Editable by gym owner/admin/editor, or a covering community admin/leader.
+  const canEdit = isOwner || memberRow?.role === 'admin' || memberRow?.role === 'editor' || hasCommunityAccess;
+  // Grantable (write-access grants) by owner/gym-admin or a covering community
+  // admin/leader — NOT plain editors. Mirrors requireGymGrantAccess.
+  const canGrantAccess = isOwner || memberRow?.role === 'admin' || hasCommunityAccess;
+  // A signed-in viewer who has no edit access can start a claim. Owners, gym
+  // admins/editors, and covering community leaders are excluded — they can
+  // already edit the gym, so the self-service claim path isn't for them (and the
+  // domain path would reject them anyway).
+  const canClaim =
+    !!authenticatedUserId &&
+    !isOwner &&
+    memberRow?.role !== 'admin' &&
+    memberRow?.role !== 'editor' &&
+    !hasCommunityAccess;
 
   return {
     uuid: gym.uuid,
@@ -203,6 +220,7 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     name: gym.name,
     description: gym.description,
     address: gym.address,
+    website: gym.website,
     contactEmail: gym.contactEmail,
     contactPhone: gym.contactPhone,
     latitude: gym.latitude,
@@ -219,17 +237,21 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     isMember,
     myRole,
     canEdit,
+    canGrantAccess,
+    canClaim,
   };
 }
 
+type GymMemberRole = 'admin' | 'editor' | 'member';
+
 /**
- * Load a gym and report whether the user is its owner or an admin member. Shared
- * building block for the two gym gates below.
+ * Load a gym and the caller's per-gym role (null if not owner/member). Shared
+ * building block for the gym gates below.
  */
-async function loadGymWithOwnerOrAdmin(
+async function loadGymWithMemberRole(
   gymUuid: string,
   userId: string,
-): Promise<{ gym: typeof dbSchema.gyms.$inferSelect; isOwnerOrGymAdmin: boolean }> {
+): Promise<{ gym: typeof dbSchema.gyms.$inferSelect; isOwner: boolean; memberRole: GymMemberRole | null }> {
   const [gym] = await db
     .select()
     .from(dbSchema.gyms)
@@ -241,23 +263,53 @@ async function loadGymWithOwnerOrAdmin(
   }
 
   if (gym.ownerId === userId) {
-    return { gym, isOwnerOrGymAdmin: true };
+    return { gym, isOwner: true, memberRole: null };
   }
 
-  // Check if user is a gym admin member
   const [member] = await db
     .select({ role: dbSchema.gymMembers.role })
     .from(dbSchema.gymMembers)
-    .where(
-      and(
-        eq(dbSchema.gymMembers.gymId, gym.id),
-        eq(dbSchema.gymMembers.userId, userId),
-        eq(dbSchema.gymMembers.role, 'admin'),
-      ),
-    )
+    .where(and(eq(dbSchema.gymMembers.gymId, gym.id), eq(dbSchema.gymMembers.userId, userId)))
     .limit(1);
 
-  return { gym, isOwnerOrGymAdmin: !!member };
+  return { gym, isOwner: false, memberRole: (member?.role as GymMemberRole | undefined) ?? null };
+}
+
+/**
+ * Whether a user holds a community admin/leader role that covers this gym —
+ * global (boardType null) or scoped to one of the gym's board types. Shared by
+ * the edit + grant gates and mirrored read-side in enrichGym.
+ */
+async function hasGymCommunityAccess(gym: typeof dbSchema.gyms.$inferSelect, userId: string): Promise<boolean> {
+  const [roles, gymBoardTypeRows] = await Promise.all([
+    getUserCommunityRoles(userId),
+    db
+      .selectDistinct({ boardType: dbSchema.userBoards.boardType })
+      .from(dbSchema.userBoards)
+      .where(and(eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt))),
+  ]);
+  const gymBoardTypes = gymBoardTypeRows.map((row) => row.boardType);
+  return (
+    rolesGrantAdminOrLeader(roles, null) || gymBoardTypes.some((boardType) => rolesGrantAdminOrLeader(roles, boardType))
+  );
+}
+
+/**
+ * Whether a user already has edit access to a gym (owner, gym admin/editor
+ * member, or a covering community admin/leader). Exported so the claim flow can
+ * refuse the self-service domain path to anyone who can already edit the gym's
+ * `website` — otherwise they could rewrite it and self-verify into ownership.
+ */
+export async function userCanEditGym(gym: typeof dbSchema.gyms.$inferSelect, userId: string): Promise<boolean> {
+  if (gym.ownerId === userId) return true;
+  const [member] = await db
+    .select({ role: dbSchema.gymMembers.role })
+    .from(dbSchema.gymMembers)
+    .where(and(eq(dbSchema.gymMembers.gymId, gym.id), eq(dbSchema.gymMembers.userId, userId)))
+    .limit(1);
+  const role = member?.role as GymMemberRole | undefined;
+  if (role === 'admin' || role === 'editor') return true;
+  return hasGymCommunityAccess(gym, userId);
 }
 
 /**
@@ -267,45 +319,44 @@ async function loadGymWithOwnerOrAdmin(
  * gym_members row that outlives the community role) or evict other admins.
  */
 async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
-  const { gym, isOwnerOrGymAdmin } = await loadGymWithOwnerOrAdmin(gymUuid, userId);
-  if (!isOwnerOrGymAdmin) {
+  const { gym, isOwner, memberRole } = await loadGymWithMemberRole(gymUuid, userId);
+  if (!isOwner && memberRole !== 'admin') {
     throw new Error('Not authorized: must be gym owner or admin');
   }
   return gym;
 }
 
 /**
- * Gate for EDITING a gym's own details (updateGym): owner, gym admin member, or
- * a community admin/leader whose role is global or scoped to one of the gym's
- * board types. Mirrors the `canEdit` computation in enrichGym so the edit UI and
- * the mutation agree. Editing details only — never membership (see above).
+ * Gate for EDITING a gym's own details (updateGym): owner, gym admin member, gym
+ * editor member, or a community admin/leader whose role is global or scoped to
+ * one of the gym's board types. Mirrors the `canEdit` computation in enrichGym
+ * so the edit UI and the mutation agree. Editing details only — never membership.
  */
 async function requireGymEditAccess(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
-  const { gym, isOwnerOrGymAdmin } = await loadGymWithOwnerOrAdmin(gymUuid, userId);
-  if (isOwnerOrGymAdmin) {
+  const { gym, isOwner, memberRole } = await loadGymWithMemberRole(gymUuid, userId);
+  if (isOwner || memberRole === 'admin' || memberRole === 'editor') {
     return gym;
   }
-
-  // A community admin/leader may also edit. A gym spans multiple board types, so
-  // allow a global role (boardType null) or any role matching one of the gym's
-  // board types (same set enrichGym computes).
-  const [roles, gymBoardTypeRows] = await Promise.all([
-    getUserCommunityRoles(userId),
-    db
-      .selectDistinct({ boardType: dbSchema.userBoards.boardType })
-      .from(dbSchema.userBoards)
-      .where(and(eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt))),
-  ]);
-  const gymBoardTypes = gymBoardTypeRows.map((row) => row.boardType);
-  const hasCommunityAccess =
-    rolesGrantAdminOrLeader(roles, null) ||
-    gymBoardTypes.some((boardType) => rolesGrantAdminOrLeader(roles, boardType));
-
-  if (hasCommunityAccess) {
+  if (await hasGymCommunityAccess(gym, userId)) {
     return gym;
   }
-
   throw new Error('Not authorized to edit this gym');
+}
+
+/**
+ * Gate for GRANTING/REVOKING write access (grant/revokeGymWriteAccess): owner,
+ * gym admin member, or a community admin/leader covering the gym. Editors are
+ * intentionally NOT grantors — write access can't spread itself.
+ */
+async function requireGymGrantAccess(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
+  const { gym, isOwner, memberRole } = await loadGymWithMemberRole(gymUuid, userId);
+  if (isOwner || memberRole === 'admin') {
+    return gym;
+  }
+  if (await hasGymCommunityAccess(gym, userId)) {
+    return gym;
+  }
+  throw new Error('Not authorized to grant write access for this gym');
 }
 
 // ============================================
@@ -603,6 +654,7 @@ export const socialGymMutations = {
         name: validatedInput.name,
         description: validatedInput.description ?? null,
         address: validatedInput.address ?? null,
+        website: validatedInput.website ?? null,
         contactEmail: validatedInput.contactEmail ?? null,
         contactPhone: validatedInput.contactPhone ?? null,
         latitude: validatedInput.latitude ?? null,
@@ -651,6 +703,7 @@ export const socialGymMutations = {
     if (validatedInput.name !== undefined) updateValues.name = validatedInput.name;
     if (validatedInput.description !== undefined) updateValues.description = validatedInput.description;
     if (validatedInput.address !== undefined) updateValues.address = validatedInput.address;
+    if (validatedInput.website !== undefined) updateValues.website = validatedInput.website;
     if (validatedInput.contactEmail !== undefined) updateValues.contactEmail = validatedInput.contactEmail;
     if (validatedInput.contactPhone !== undefined) updateValues.contactPhone = validatedInput.contactPhone;
     if (validatedInput.latitude !== undefined) updateValues.latitude = validatedInput.latitude;
@@ -775,6 +828,73 @@ export const socialGymMutations = {
     await db
       .delete(dbSchema.gymMembers)
       .where(and(eq(dbSchema.gymMembers.gymId, gym.id), eq(dbSchema.gymMembers.userId, validatedInput.userId)));
+
+    return true;
+  },
+
+  grantGymWriteAccess: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 20, 'grantGymWriteAccess');
+
+    const validatedInput = validateInput(GrantGymWriteAccessInputSchema, input, 'input');
+    const userId = ctx.userId!;
+
+    const gym = await requireGymGrantAccess(validatedInput.gymUuid, userId);
+
+    // Verify target user exists
+    const [targetUser] = await db
+      .select({ id: dbSchema.users.id })
+      .from(dbSchema.users)
+      .where(eq(dbSchema.users.id, validatedInput.userId))
+      .limit(1);
+
+    if (!targetUser) {
+      throw new Error('User not found');
+    }
+
+    // The owner already has full access; granting them "editor" would plant a
+    // stale member row that a later ownership change could misread.
+    if (validatedInput.userId === gym.ownerId) {
+      throw new Error('The gym owner already has full access');
+    }
+
+    // Upsert an editor row. Never downgrade an existing admin — only promote a
+    // plain member (or a no-op re-grant of an editor) to editor.
+    await db
+      .insert(dbSchema.gymMembers)
+      .values({
+        gymId: gym.id,
+        userId: validatedInput.userId,
+        role: 'editor',
+      })
+      .onConflictDoUpdate({
+        target: [dbSchema.gymMembers.gymId, dbSchema.gymMembers.userId],
+        set: { role: 'editor' },
+        setWhere: sql`${dbSchema.gymMembers.role} <> 'admin'`,
+      });
+
+    return true;
+  },
+
+  revokeGymWriteAccess: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 20, 'revokeGymWriteAccess');
+
+    const validatedInput = validateInput(RevokeGymWriteAccessInputSchema, input, 'input');
+    const userId = ctx.userId!;
+
+    const gym = await requireGymGrantAccess(validatedInput.gymUuid, userId);
+
+    // Only remove editor rows — never a gym admin or plain member.
+    await db
+      .delete(dbSchema.gymMembers)
+      .where(
+        and(
+          eq(dbSchema.gymMembers.gymId, gym.id),
+          eq(dbSchema.gymMembers.userId, validatedInput.userId),
+          eq(dbSchema.gymMembers.role, 'editor'),
+        ),
+      );
 
     return true;
   },

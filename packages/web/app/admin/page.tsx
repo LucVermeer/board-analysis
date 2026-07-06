@@ -68,7 +68,7 @@ export default function AdminPage() {
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: themeTokens.neutral[800] }}>
         {t('title')}
       </Typography>
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 3, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
         <MuiLink
           component={LocaleLink}
           href="/admin/retention"
@@ -76,6 +76,14 @@ export default function AdminPage() {
           sx={{ color: themeTokens.colors.primary }}
         >
           {t('nav.retention')}
+        </MuiLink>
+        <MuiLink
+          component={LocaleLink}
+          href="/admin/gym-claims"
+          underline="hover"
+          sx={{ color: themeTokens.colors.primary }}
+        >
+          {t('nav.gymClaims')}
         </MuiLink>
       </Box>
 
