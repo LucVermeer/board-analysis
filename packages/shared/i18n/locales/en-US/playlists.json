@@ -88,7 +88,8 @@
     },
     "empty": {
       "title": "No playlists yet",
-      "description": "Tap the + button to create your first playlist."
+      "description": "Save your projects and go-to sends into a playlist so they're easy to find.",
+      "createCta": "Create playlist"
     },
     "createFab": {
       "ariaLabel": "Create playlist"

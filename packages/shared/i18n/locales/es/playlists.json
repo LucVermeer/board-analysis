@@ -88,7 +88,8 @@
     },
     "empty": {
       "title": "Aún no tienes playlists",
-      "description": "Toca el botón + para crear tu primera playlist."
+      "description": "Guarda tus proyectos y tus bloques favoritos en una playlist para tenerlos a mano.",
+      "createCta": "Crear playlist"
     },
     "createFab": {
       "ariaLabel": "Crear playlist"
