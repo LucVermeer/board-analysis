@@ -710,6 +710,10 @@ export async function startServer(): Promise<ServerResources> {
   };
   const initialPruneDelay = setTimeout(() => void runSyncDeletionsPrune(), 5 * 60 * 1000);
   if (typeof initialPruneDelay.unref === 'function') initialPruneDelay.unref();
+  // Node Timeouts clear with clearInterval too, so the one-shot delay joins the
+  // same cleanup list — a shutdown inside the 5-minute window must not fire the
+  // prune against a closing DB pool.
+  intervals.push(initialPruneDelay);
   const syncDeletionsPruneInterval = setInterval(() => void runSyncDeletionsPrune(), 24 * 60 * 60 * 1000);
   intervals.push(syncDeletionsPruneInterval);
 

@@ -436,13 +436,13 @@ export const syncQueries = {
     // via a correlated EXISTS on board_climbs, reusing the same shared conditions
     // syncClimbs uses (bc.-qualified here). No scope → plain board_type filter.
     const scopeConditions = boardClimbsLayoutSizeConditions(validBoardType, lid, sid, sql`bc.`);
-    let scope: SQL = sql`board_type = ${boardType}`;
+    let scope: SQL = sql`board_type = ${validBoardType}`;
     if (scopeConditions.length > 0) {
       const sub = sql.join(
-        [sql`bc.uuid = board_climb_stats.climb_uuid`, sql`bc.board_type = ${boardType}`, ...scopeConditions],
+        [sql`bc.uuid = board_climb_stats.climb_uuid`, sql`bc.board_type = ${validBoardType}`, ...scopeConditions],
         sql` AND `,
       );
-      scope = sql`board_type = ${boardType} AND EXISTS (SELECT 1 FROM board_climbs bc WHERE ${sub})`;
+      scope = sql`board_type = ${validBoardType} AND EXISTS (SELECT 1 FROM board_climbs bc WHERE ${sub})`;
     }
 
     return runSyncPage({
