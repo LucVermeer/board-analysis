@@ -61,6 +61,12 @@ const SHARED_ENV_KEYS = [
   'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
   'EXPO_PUBLIC_SENTRY_DSN',
   'EXPO_PUBLIC_POSTHOG_KEY',
+  // Bundle-only (never enters the resolved config, so it doesn't move the
+  // fingerprint) but must stay in lockstep: it pins RN's fetch as the global
+  // `fetch` instead of expo/fetch, whose NativeResponse tears down JSI promises
+  // off-thread and crashes Hermes (Sentry 7595562195). If it drifts out of one
+  // workflow, that channel silently reverts to the crashing expo/fetch.
+  'EXPO_PUBLIC_USE_RN_FETCH',
   'EXPO_UPDATES_CHANNEL',
   'EXPO_UPDATES_URL',
 ] as const;

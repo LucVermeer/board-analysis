@@ -72,6 +72,10 @@ jobs:
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
+      # Pin RN's fetch as the global `fetch` (not expo/fetch, which crashes Hermes
+      # by tearing down JSI promises off-thread — Sentry 7595562195). The screenshot
+      # APK bundles JS and makes network calls during capture, so match production.
+      EXPO_PUBLIC_USE_RN_FETCH: '1'
       EXPO_PUBLIC_SCREENSHOT_MODE: '1'
       EXPO_PUBLIC_SCREENSHOT_THEME: dark
       EXPO_PUBLIC_SCREENSHOT_WORKOUT: volume
@@ -164,6 +168,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
           EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+          EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EXPO_PUBLIC_SCREENSHOT_MODE=$EXPO_PUBLIC_SCREENSHOT_MODE
           EXPO_PUBLIC_SCREENSHOT_THEME=$EXPO_PUBLIC_SCREENSHOT_THEME
           EXPO_PUBLIC_SCREENSHOT_WORKOUT=$EXPO_PUBLIC_SCREENSHOT_WORKOUT
