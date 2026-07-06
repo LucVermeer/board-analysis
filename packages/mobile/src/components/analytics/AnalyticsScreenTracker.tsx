@@ -33,7 +33,9 @@ export function AnalyticsScreenTracker(): null {
             } catch {
               // Retry below.
             }
-            await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000));
+            if (attempt < 2) {
+              await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000));
+            }
           }
         };
         void pingUntilDelivered();
