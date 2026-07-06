@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-05T07:45:39.483Z",
+  "generatedAt": "2026-07-06T04:11:16.623Z",
   "entries": [
+    {
+      "prNumber": 3482,
+      "category": "fixed",
+      "title": "Fixed a crash where the app could be killed for using too much memory while browsing boards — most noticeable on older iPhones.",
+      "mergedAt": "2026-07-06T04:10:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3482"
+    },
     {
       "prNumber": 3473,
       "category": "new",
