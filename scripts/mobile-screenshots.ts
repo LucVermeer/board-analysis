@@ -72,32 +72,6 @@ const APP_ID = 'com.boardsesh.app';
 const DEV_CLIENT_URL_SCHEME = 'exp+boardsesh';
 const MAESTRO_DEVICE_ORIENTATION_PLACEHOLDER = '${MAESTRO_DEVICE_ORIENTATION}';
 
-// The iPad tap flow (app-store-ipad.yaml) navigates via the left SIDEBAR with
-// coordinate taps. The sidebar is laid out in LOGICAL POINTS (identical on every
-// iPad), but Maestro `point:` taps are percentages of the CURRENT screen — and the
-// 13" and 11" iPad have different landscape pixel heights, so the same item sits at
-// a different percentage on each. So the flow carries a `${TAP_*}` placeholder per
-// item and the orchestrator substitutes the concrete `x%,y%` computed from the
-// item's logical anchor and THIS device's pixel height. (All iPad simulators are
-// @2x, so logical points → pixels is ×2.)
-const IPAD_SIDEBAR_TAP_X_PERCENT = 3;
-// Vertical anchor of each top-anchored sidebar item, in logical points from the top.
-const IPAD_SIDEBAR_TOP_ITEM_PT: Record<string, number> = {
-  TAP_HOME: 72,
-  TAP_CLIMBS: 144,
-  TAP_RECORD: 206,
-  TAP_WALL: 278,
-  TAP_DISCOVER: 361,
-};
-// Profile is pinned to the BOTTOM of the sidebar, this many logical points up from
-// the bottom screen edge.
-const IPAD_SIDEBAR_PROFILE_FROM_BOTTOM_PT = 62;
-// Landscape pixel height per iPad, keyed by device slug (matches the sizes the
-// screenshot dimension gate accepts).
-const IPAD_LANDSCAPE_HEIGHT_PX: Record<string, number> = {
-  'ipad-pro-13-inch-m5': 2064,
-  'ipad-pro-11-inch-m5': 1668,
-};
 const DEFAULT_ANDROID_DEVICE = 'Pixel 2';
 const DEFAULT_ANDROID_APK = resolve(
   MOBILE_DIR,
@@ -691,37 +665,12 @@ export function iosSourceFlowFile(options: ScreenshotOptions, screenshotDevice: 
   return flowFileForPlatform(options, 'ios');
 }
 
-/**
- * The `x%,y%` Maestro tap point for an iPad sidebar item, computed from its logical
- * anchor and the device's landscape pixel height (iPad simulators are @2x, so
- * `logicalPt × 2` = pixels). Top items are anchored from the top; Profile from the
- * bottom. Returns null for a non-iPad device or an unknown iPad height.
- */
-export function ipadSidebarTapPoint(placeholder: string, screenshotDevice: IosScreenshotDevice): string | null {
-  const heightPx = IPAD_LANDSCAPE_HEIGHT_PX[deviceSlug(screenshotDevice.name)];
-  if (heightPx === undefined) return null;
-  const topAnchorPt = IPAD_SIDEBAR_TOP_ITEM_PT[placeholder];
-  const yPercent =
-    topAnchorPt !== undefined
-      ? ((topAnchorPt * 2) / heightPx) * 100
-      : placeholder === 'TAP_PROFILE'
-        ? ((heightPx - IPAD_SIDEBAR_PROFILE_FROM_BOTTOM_PT * 2) / heightPx) * 100
-        : null;
-  if (yPercent === null) return null;
-  // Maestro `point:` percentages must be whole numbers (it throws on a decimal). The
-  // sidebar touch targets are ~44pt (~5%), so rounding is well within tolerance.
-  return `${IPAD_SIDEBAR_TAP_X_PERCENT}%,${Math.round(yPercent)}%`;
-}
-
+// The iPad flow taps sidebar items by their locale-independent testID
+// (`ipad-sidebar-<segment>`, see IpadSidebar) and verifies each navigation via
+// the item's `selected` accessibility state — no per-device coordinate math.
+// Only the orientation placeholder needs substituting per device.
 export function renderMaestroFlowForIosDevice(flowSource: string, screenshotDevice: IosScreenshotDevice): string {
-  let rendered = flowSource.replaceAll(MAESTRO_DEVICE_ORIENTATION_PLACEHOLDER, screenshotDevice.orientation);
-  for (const placeholder of [...Object.keys(IPAD_SIDEBAR_TOP_ITEM_PT), 'TAP_PROFILE']) {
-    const point = ipadSidebarTapPoint(placeholder, screenshotDevice);
-    if (point !== null) {
-      rendered = rendered.replaceAll(`\${${placeholder}}`, point);
-    }
-  }
-  return rendered;
+  return flowSource.replaceAll(MAESTRO_DEVICE_ORIENTATION_PLACEHOLDER, screenshotDevice.orientation);
 }
 
 export function rotationDegreesForIosOrientation(orientation: IosDeviceOrientation): number | null {

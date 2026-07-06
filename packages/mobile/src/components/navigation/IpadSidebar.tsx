@@ -80,6 +80,10 @@ function SidebarItem({
       accessibilityRole="tab"
       accessibilityState={{ selected: focused }}
       accessibilityLabel={destination.label}
+      // Locale-independent handle for the App Store screenshot flow
+      // (.maestro/app-store-ipad.yaml): it taps `id: ipad-sidebar-<segment>` and
+      // then waits for `selected: true` as proof the navigation took effect.
+      testID={`ipad-sidebar-${destination.segment}`}
       style={styles.item}
     >
       <View style={[styles.iconPill, active ? { backgroundColor: systemColors.fill } : null]}>

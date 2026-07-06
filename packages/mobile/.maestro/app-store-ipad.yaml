@@ -6,67 +6,118 @@ name: app-store screenshots (iPad)
 # Why this differs from the iPhone flow (app-store.yaml): the iPad CANNOT be driven
 # by deep links. On the iPad simulator every `openurl com.boardsesh.app://…` pops the
 # "Open in 'Boardsesh'?" scheme-confirm dialog and the URL is never delivered to the
-# app's router — navigation just never happens (verified: an all-deep-link run on
-# iPad produced 11 byte-identical "stuck on home + dialog" frames, while the same
-# flow on iPhone navigated 10 distinct screens). iPhone remembers the confirm after
+# app's router — navigation just never happens. iPhone remembers the confirm after
 # the first prime; iPad does not.
 #
-# So the iPad navigates via the persistent left SIDEBAR using coordinate taps — the
-# same gesture-tap mechanism the rest of this RN/Fabric build needs (the accessibility
-# tree doesn't expose plain RN views, only native inputs + system dialogs). No
-# `openurl`, so no dialog. The orchestrator selects this flow for iPad devices (see
-# iosSourceFlowFile in scripts/mobile-screenshots.ts).
+# So the iPad navigates via the persistent left SIDEBAR. Each item is a real
+# accessibility element (IpadSidebar sets accessibilityLabel, a locale-independent
+# `testID` of ipad-sidebar-<segment>, and accessibilityState.selected on the active
+# item), so every step taps by id and then waits for `selected: true` — PROOF the
+# navigation took effect, wrapped in a retry that re-taps if it didn't. The previous
+# coordinate-tap flow had no such proof: on the 11" iPad the first tap after the
+# rotation relayout was silently swallowed, and 02-climbs shipped byte-identical to
+# 01-home with a dark wall hero (the orchestrator now also fails the run on
+# byte-identical captures).
 #
-# The ${TAP_*} points are substituted per device by the orchestrator
-# (renderMaestroFlowForIosDevice): the sidebar is laid out in fixed logical points,
-# but Maestro taps are a percentage of the current screen, and the 13" and 11" iPad
-# have different landscape heights — so each item's percentage is computed from its
-# logical anchor and the device's pixel height. Do NOT hardcode percentages here.
-#
-# The wall kiosk is seeded from the active board's REAL climbs when the Climbs list
-# mounts (src/lib/board-presence/screenshot-wall-seed.ts), so Climbs is visited BEFORE
-# On the Wall. The active board is auto-activated on boot (ScreenshotBoardAutoActivator),
-# and the build auto-signs-in and lands on home — the orchestrator gates on
-# `$screen /home` before running this flow.
+# The wall kiosk seed (the active board's real climbs) is published at the root by
+# ScreenshotBoardAutoActivator as soon as the board activates, so the wall shot no
+# longer depends on the Climbs screen mounting first. Climbs is still visited first:
+# it re-publishes the same seed (idempotent) and gives the wall panel time to render.
+# The build auto-signs-in and lands on home — the orchestrator gates on reach-home
+# before running this flow.
 - setOrientation: ${MAESTRO_DEVICE_ORIENTATION}
 - waitForAnimationToEnd
+# The sidebar must be mounted and interactive before the first tap — the first tap
+# after the rotation relayout is the one that got swallowed in CI.
+- extendedWaitUntil:
+    visible:
+      id: "ipad-sidebar-climbs"
+    timeout: 15000
 
-# Climbs — the browse list. Visited FIRST because mounting it seeds the wall kiosk.
-- tapOn:
-    point: ${TAP_CLIMBS}
+# Climbs — the browse list.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "ipad-sidebar-climbs"
+      - extendedWaitUntil:
+          visible:
+            id: "ipad-sidebar-climbs"
+            selected: true
+          timeout: 5000
 - waitForAnimationToEnd
 - waitForAnimationToEnd
 - takeScreenshot: 02-climbs
 
-# Home — the "Everyone" feed, with the persistent wall rail now showing the lit climb.
-- tapOn:
-    point: ${TAP_HOME}
+# Home — the "Everyone" feed, with the persistent wall rail showing the lit climb.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "ipad-sidebar-home"
+      - extendedWaitUntil:
+          visible:
+            id: "ipad-sidebar-home"
+            selected: true
+          timeout: 5000
 - waitForAnimationToEnd
 - takeScreenshot: 01-home
 
-# On the Wall — the wall-mounted kiosk HERO: the lit board + the current climb big and
-# readable from across the gym. The board-presence feed is seeded above.
-- tapOn:
-    point: ${TAP_WALL}
+# On the Wall — the wall-mounted kiosk HERO: the lit board + the current climb big
+# and readable from across the gym.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "ipad-sidebar-wall"
+      - extendedWaitUntil:
+          visible:
+            id: "ipad-sidebar-wall"
+            selected: true
+          timeout: 5000
 - waitForAnimationToEnd
 - waitForAnimationToEnd
 - takeScreenshot: 00-wall
 
 # Record — the workout generator (a workout is pre-selected in screenshot mode via
 # EXPO_PUBLIC_SCREENSHOT_WORKOUT).
-- tapOn:
-    point: ${TAP_RECORD}
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "ipad-sidebar-record"
+      - extendedWaitUntil:
+          visible:
+            id: "ipad-sidebar-record"
+            selected: true
+          timeout: 5000
 - waitForAnimationToEnd
 - takeScreenshot: 03-workout-generator
 
 # Discover — the playlist library (smart "Your Picks" + saved playlists).
-- tapOn:
-    point: ${TAP_DISCOVER}
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "ipad-sidebar-discover"
+      - extendedWaitUntil:
+          visible:
+            id: "ipad-sidebar-discover"
+            selected: true
+          timeout: 5000
 - waitForAnimationToEnd
 - takeScreenshot: 04-discover
 
 # Profile — progress / stats (charts).
-- tapOn:
-    point: ${TAP_PROFILE}
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "ipad-sidebar-profile"
+      - extendedWaitUntil:
+          visible:
+            id: "ipad-sidebar-profile"
+            selected: true
+          timeout: 5000
 - waitForAnimationToEnd
 - takeScreenshot: 05-profile

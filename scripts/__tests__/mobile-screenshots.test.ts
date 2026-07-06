@@ -9,7 +9,6 @@ import {
   deviceSlug,
   findDuplicateScreenshotGroups,
   iosSourceFlowFile,
-  ipadSidebarTapPoint,
   isIpadScreenshotDevice,
   metroDevClientUrl,
   parseArgs,
@@ -362,49 +361,21 @@ describe('renderMaestroFlowForIosDevice', () => {
     }
   });
 
-  it('resolves iPad sidebar tap points from each device landscape height', () => {
-    const ipad13: IosScreenshotDevice = {
-      name: 'iPad Pro 13-inch (M5)',
-      typeId: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB',
-      orientation: 'LANDSCAPE_LEFT',
-    };
-    const ipad11: IosScreenshotDevice = {
-      name: 'iPad Pro 11-inch (M5)',
-      typeId: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB',
-      orientation: 'LANDSCAPE_LEFT',
-    };
-    const flow = '- tapOn:\n    point: ${TAP_CLIMBS}\n- tapOn:\n    point: ${TAP_PROFILE}\n';
-
-    // Climbs anchors at logical 144pt (=288px @2x): 288/2064 ≈ 14% on the 13",
-    // 288/1668 ≈ 17% on the shorter 11". Same item, different percentage per device.
-    // Maestro needs whole-number percentages, so the point is rounded.
-    const rendered13 = renderMaestroFlowForIosDevice(flow, ipad13);
-    const rendered11 = renderMaestroFlowForIosDevice(flow, ipad11);
-    expect(rendered13).toContain('point: 3%,14%');
-    expect(rendered11).toContain('point: 3%,17%');
-    // Profile is bottom-anchored — near the bottom on both, but not identical.
-    expect(rendered13).toContain('point: 3%,94%');
-    expect(rendered11).toContain('point: 3%,93%');
-    expect(rendered13).not.toContain('${TAP_');
-    expect(rendered11).not.toContain('${TAP_');
-  });
-
-  it('leaves iPad tap placeholders unresolved on a non-iPad device (the flow never runs there)', () => {
-    const phoneDevice: IosScreenshotDevice = {
-      name: 'iPhone 16 Pro Max',
-      typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max',
-      orientation: 'PORTRAIT',
-    };
-    expect(ipadSidebarTapPoint('TAP_CLIMBS', phoneDevice)).toBeNull();
-    expect(renderMaestroFlowForIosDevice('point: ${TAP_CLIMBS}', phoneDevice)).toContain('${TAP_CLIMBS}');
-  });
-
-  it('the iPad flow uses only ${TAP_*} placeholders, never hardcoded percentages', () => {
+  it('the iPad flow taps sidebar items by testID and verifies the selected state — no coordinate taps', () => {
     const ipadFlow = readFileSync('packages/mobile/.maestro/app-store-ipad.yaml', 'utf8');
-    expect(ipadFlow).toContain('point: ${TAP_CLIMBS}');
-    expect(ipadFlow).toContain('point: ${TAP_WALL}');
-    // No literal "N%,M%" tap points — those wouldn't transfer between iPad sizes.
-    expect(ipadFlow).not.toMatch(/point:\s*'?\d/);
+    // Every destination is tapped via its locale-independent id (IpadSidebar's
+    // `ipad-sidebar-<segment>` testID)...
+    for (const segment of ['home', 'climbs', 'record', 'wall', 'discover', 'profile']) {
+      expect(ipadFlow).toContain(`id: "ipad-sidebar-${segment}"`);
+    }
+    // ...and each navigation is verified via the item's selected accessibility
+    // state, so a silently-swallowed tap (the 11" dark-wall failure) re-taps
+    // instead of screenshotting the wrong screen.
+    expect(ipadFlow).toContain('selected: true');
+    expect(ipadFlow).toContain('retry:');
+    // No blind coordinate taps — they carried no proof the navigation happened.
+    expect(ipadFlow).not.toContain('point:');
+    expect(ipadFlow).not.toContain('${TAP_');
   });
 });
 
@@ -434,7 +405,7 @@ describe('iosSourceFlowFile', () => {
   it('the iPad flow is tap-driven (no openurl) and captures the wall kiosk; iPhone stays deep-link driven', () => {
     const ipadFlow = readFileSync('packages/mobile/.maestro/app-store-ipad.yaml', 'utf8');
     expect(ipadFlow).toContain('takeScreenshot: 00-wall');
-    expect(ipadFlow).toContain('point:');
+    expect(ipadFlow).toContain('tapOn:');
     expect(ipadFlow).not.toContain('openLink:');
 
     const phoneFlow = readFileSync('packages/mobile/.maestro/app-store.yaml', 'utf8');
