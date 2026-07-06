@@ -391,6 +391,7 @@ function screenshotEnvOptions(options: ShotsOptions): ScreenshotOptions {
     workout: null,
     appPath: options.appPath,
     shutdown: false,
+    orientation: null,
   };
 }
 
@@ -552,7 +553,7 @@ async function runFullPipeline(options: ShotsOptions): Promise<number> {
     if (launch.status !== 0) throw new Error(`simctl launch exited ${launch.status}`);
 
     if (options.screenshotMode) {
-      if (waitForHomeReady(baseline, 240)) {
+      if (waitForHomeReady(baseline, 0, 240)) {
         console.log(`${LOG} App reached home.`);
       } else {
         console.warn(

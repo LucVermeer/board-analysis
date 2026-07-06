@@ -58,7 +58,10 @@ import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
-import { publishScreenshotWallClimbs } from '../../../src/lib/board-presence/screenshot-wall-seed';
+import {
+  buildScreenshotWallSeed,
+  publishScreenshotWallClimbs,
+} from '../../../src/lib/board-presence/screenshot-wall-seed';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { OnboardingTipBanner } from '../../../src/components/onboarding/OnboardingTipBanner';
@@ -157,7 +160,7 @@ function ClimbListInner() {
   }>();
   const { t } = useTranslation('climbs');
   const { t: tCommon } = useTranslation('common');
-  const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
+  const { openClimbActions, openAddToPlaylist, openBoardSheet, usesDetailPane } = useDrawerHost();
   // One-time board-history reveal: armed when the user binds a board from the
   // onboarding hand-off and consumed on focus (see the useFocusEffect below).
   // Declared here so handleOpenBoardDetail can clear it — tapping the board
@@ -775,6 +778,24 @@ function ClimbListInner() {
     handleClimbPress(firstClimb);
   }, [screenshotOpenFirst, searchReady, visibleClimbs, handleClimbPress, screenshotTargetBoard, activeBoard]);
 
+  // Screenshot mode, iPad master-detail only: the plain `/climbs` list shot must
+  // also LIGHT the detail pane — with nothing selected it reads as a dead black
+  // column in the App Store shot. Activating the first climb fills the pane
+  // beside the list (and it stays lit for the later Home/Discover shots). Gated
+  // on `usesDetailPane` because on iPhone the same activation opens the play
+  // drawer OVER the list; `screenshotOpenFirst` runs its own activation, so this
+  // yields to it. Dead-strips in normal builds.
+  const screenshotPaneLitRef = useRef(false);
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1') return;
+    if (screenshotOpenFirst || !usesDetailPane || screenshotPaneLitRef.current) return;
+    if (!activeBoard || !searchReady) return;
+    const firstClimb = visibleClimbs[0];
+    if (!firstClimb) return;
+    screenshotPaneLitRef.current = true;
+    handleClimbPress(firstClimb);
+  }, [screenshotOpenFirst, usesDetailPane, activeBoard, searchReady, visibleClimbs, handleClimbPress]);
+
   // Screenshot mode: deterministically open the board-presence "now on the wall"
   // sheet (the onboarding hero shot) once the active board resolves, instead of a
   // coordinate tap. Gated on the deep-link param so normal `/climbs` is untouched;
@@ -797,24 +818,7 @@ function ClimbListInner() {
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1') return;
     if (!activeBoard || !searchReady || visibleClimbs.length === 0) return;
-    const nowMs = Date.now();
-    const seeded = visibleClimbs.slice(0, 6).map((climb, index) => ({
-      climbUuid: climb.uuid,
-      name: climb.name,
-      grade: climb.difficulty,
-      gradeColor: null,
-      frames: climb.frames,
-      angle: activeBoard.angle ?? climb.angle,
-      setter: climb.setter_username,
-      sentByDisplayName: null,
-      sentByAvatarUrl: null,
-      sentByUserId: null,
-      // Stagger the timestamps a few minutes apart so the history reads like a
-      // real session rather than a burst.
-      sentAt: new Date(nowMs - index * 4 * 60_000).toISOString(),
-      seq: 100 - index,
-    }));
-    publishScreenshotWallClimbs(seeded, null);
+    publishScreenshotWallClimbs(buildScreenshotWallSeed(visibleClimbs, activeBoard.angle ?? null), null);
   }, [activeBoard, searchReady, visibleClimbs]);
 
   const handleAddToQueue = useCallback(

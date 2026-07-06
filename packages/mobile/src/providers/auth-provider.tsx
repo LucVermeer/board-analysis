@@ -133,16 +133,28 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
           // Diagnostics land in Metro's stdout (which the capture orchestrator tees to
           // a log it polls), so a silent sign-in failure is no longer invisible in CI.
           if (SCREENSHOT_USER_EMAIL && SCREENSHOT_USER_PASSWORD) {
-            const screenshotSignIn = await authSignInWithCredentials(SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD);
-            if (screenshotSignIn.success) {
-              console.info('[screenshot] auto sign-in succeeded; rendering straight into home');
-              setIsAuthenticated(true);
-              return;
+            // Retried in-app because a transient network failure here (seen in CI as
+            // `status=null error=network`) otherwise burns one of the orchestrator's
+            // full 120-second relaunch cycles just to attempt the same call again.
+            for (let attempt = 1; attempt <= 3; attempt += 1) {
+              const screenshotSignIn = await authSignInWithCredentials(SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD);
+              if (screenshotSignIn.success) {
+                console.info('[screenshot] auto sign-in succeeded; rendering straight into home');
+                setIsAuthenticated(true);
+                return;
+              }
+              console.warn(
+                `[screenshot] auto sign-in FAILED (attempt ${attempt}/3) — ` +
+                  `status=${screenshotSignIn.status ?? 'null'} error=${screenshotSignIn.error}` +
+                  ` (emailLen=${SCREENSHOT_USER_EMAIL.length} passwordLen=${SCREENSHOT_USER_PASSWORD.length})`,
+              );
+              // Bad credentials (4xx) will not get better; only retry what can
+              // heal — network failures (status null) and transient 5xx.
+              if (screenshotSignIn.status !== null && screenshotSignIn.status < 500) break;
+              if (attempt < 3) {
+                await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 2000));
+              }
             }
-            console.warn(
-              `[screenshot] auto sign-in FAILED — status=${screenshotSignIn.status ?? 'null'} error=${screenshotSignIn.error}` +
-                ` (emailLen=${SCREENSHOT_USER_EMAIL.length} passwordLen=${SCREENSHOT_USER_PASSWORD.length})`,
-            );
           } else {
             console.warn(
               `[screenshot] auto sign-in SKIPPED — credentials not inlined into the bundle` +
