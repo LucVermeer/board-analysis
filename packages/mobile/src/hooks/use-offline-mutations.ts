@@ -89,14 +89,16 @@ export async function removeFavoriteLocal(db: SQLiteDatabase, input: FavoriteInp
       input.angle,
     ]);
 
-    const canceledAdd = await txn.runAsync(
-      `DELETE FROM pending_mutations WHERE idempotency_key = ? AND status = 'pending'`,
-      [favoriteAddKey(input)],
-    );
-
-    if (canceledAdd.changes === 0) {
-      await enqueue(txn, 'user_favorites', 'delete', input, favoriteRemoveKey(input));
-    }
+    // Cancel a not-yet-drained add so an offline add->remove nets to no server
+    // call — but ALWAYS enqueue the remove: the drainer doesn't mark rows
+    // in-flight, so a cancel can "succeed" on a row whose mutation was already
+    // sent (TOCTOU between peekPending and markCompleted). The server's
+    // removeFavorite is an idempotent no-op when nothing exists, so the extra
+    // remove is harmless in the truly-canceled case and corrective in the race.
+    await txn.runAsync(`DELETE FROM pending_mutations WHERE idempotency_key = ? AND status = 'pending'`, [
+      favoriteAddKey(input),
+    ]);
+    await enqueue(txn, 'user_favorites', 'delete', input, favoriteRemoveKey(input));
   });
 }
 

@@ -160,12 +160,18 @@ describe('removeFavoriteLocal', () => {
 });
 
 describe('favorite queue coalescing', () => {
-  it('collapses add -> remove into no pending favorite mutation', async () => {
+  it('add -> remove cancels the pending add but still enqueues the remove (in-flight-add race guard)', async () => {
     await addFavoriteLocal(db, { boardName: 'kilter', climbUuid: 'climb-9', angle: 40 });
     await removeFavoriteLocal(db, { boardName: 'kilter', climbUuid: 'climb-9', angle: 40 });
 
+    // The drainer doesn't mark rows in-flight, so the cancel can hit a row whose
+    // mutation was already sent. The remove is enqueued unconditionally — the
+    // server treats removing a nonexistent favorite as an idempotent no-op, so
+    // this is free when the cancel was real and corrective when it raced.
     const queued = await db.getAllAsync<Row>('SELECT * FROM pending_mutations');
-    expect(queued).toHaveLength(0);
+    expect(queued).toHaveLength(1);
+    expect(queued[0].operation).toBe('delete');
+    expect(queued[0].idempotency_key).toBe('del:user_favorites:kilter:climb-9:40');
   });
 
   it('collapses add -> remove -> add into one final add mutation', async () => {

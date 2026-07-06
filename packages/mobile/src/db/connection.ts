@@ -11,6 +11,7 @@ import { runMigrations } from './migrations';
 import { deleteUserCheckpoints, setCheckpoint, getCheckpointKey } from '../sync/checkpoints';
 import { BOARD_DATA_TABLES } from '../sync/table-config';
 import { resolveSeedAssetModuleId } from './seed-asset';
+import { reportError } from '../lib/error-reporting';
 
 export const DATABASE_NAME = 'boardsesh.db';
 
@@ -189,6 +190,9 @@ export async function initializeDatabase(db: SQLiteDatabase): Promise<void> {
     if (__DEV__) {
       console.warn('[SQLite] initializeDatabase failed; offline storage disabled this session:', error);
     }
+    // In production a silent null handle just switches every offline feature
+    // off with no trace — report it so a spike is diagnosable from telemetry.
+    reportError(error, { tags: { source: 'offline-sync', kind: 'sqlite-init' } });
   }
 }
 
