@@ -56,12 +56,19 @@ name: app-store screenshots
 # real openLink below navigates cleanly (it's also why Discover needs no special handling
 # any more). The first openurl always pops it (wait + tap); the repeat mops up any
 # re-prompts (optional, after a settle so the dialog has appeared). iOS then remembers it.
+#
+# Both prime steps are OPTIONAL: on a fresh simulator (every CI run) the first openurl
+# always pops the dialog, but a reused local simulator may already remember the confirm
+# from an earlier run and never pop it — a hard wait here failed the whole flow on
+# exactly that (the repeat below still mops up any late re-prompts).
 - openLink: com.boardsesh.app://home
 - extendedWaitUntil:
     visible: 'Open'
     timeout: 12000
+    optional: true
 - tapOn:
     text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - repeat:
     times: 3
