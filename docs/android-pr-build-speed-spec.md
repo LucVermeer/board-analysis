@@ -16,7 +16,7 @@ problem, and most of it is avoidable with three config-only changes:
 
 1. **Restore-only Gradle cache, warmed by `main`.** Today every PR run saves its own
    3.4 GB cache under a PR-only key prefix. Those saves blow the repo's 10 GB cache
-   budget, evict each other *and* `main`'s caches, and a new PR can never inherit a warm
+   budget, evict each other _and_ `main`'s caches, and a new PR can never inherit a warm
    cache — so cold builds are the norm. Meanwhile `main` already builds a perfectly good
    cache on every mobile merge; PR runs just can't reach it.
 2. **Robolectric tests in a parallel job.** They currently run serially before the APK
@@ -37,13 +37,13 @@ all — the PR tail becomes CI's ~7.5 min. Native-input PRs go from ~21 min typi
 For one sampled mobile PR commit (`e5f07c5`, PR #3436), every PR workflow was created at
 the same second (23:27:48Z) and finished:
 
-| Workflow                 | Duration                                 |
-| ------------------------ | ---------------------------------------- |
-| Mobile OTA Compatibility | 1m 23s                                   |
-| iOS CI (React Native)    | 4m 31s                                   |
-| Mobile OTA Preview       | 5m 53s                                   |
-| CI                       | 7m 23s                                   |
-| **Android PR Build**     | **15m 12s** (a *warm-cache* run — its best case) |
+| Workflow                 | Duration                                         |
+| ------------------------ | ------------------------------------------------ |
+| Mobile OTA Compatibility | 1m 23s                                           |
+| iOS CI (React Native)    | 4m 31s                                           |
+| Mobile OTA Preview       | 5m 53s                                           |
+| CI                       | 7m 23s                                           |
+| **Android PR Build**     | **15m 12s** (a _warm-cache_ run — its best case) |
 
 Across the last 15 successful runs: **11 took 20–23 min, 4 took 14–15 min**, median
 ≈ 21 min. So the Android build is what we wait for after the last push to a mobile PR,
@@ -59,16 +59,17 @@ every push restarts that 21-min clock.
 - **A cache miss costs ~7.5 min.** Step timing, warm (run `28687742590`, 15m12s) vs cold
   (run `28687558115`, 22m46s):
 
-  | Step                              | Warm    | Cold                 |
-  | --------------------------------- | ------- | -------------------- |
-  | checkout → SDK setup → prebuild   | ~1m 30s | ~1m 00s              |
-  | Gradle cache restore              | 31s     | 0s (nothing found)   |
-  | Robolectric module tests          | 2m 35s  | 7m 32s               |
-  | `assembleRelease` (arm64-only)    | 10m 43s | 13m 03s              |
-  | cache save (post step)            | ~1s (hit, skipped) | 40s       |
+  | Step                            | Warm               | Cold               |
+  | ------------------------------- | ------------------ | ------------------ |
+  | checkout → SDK setup → prebuild | ~1m 30s            | ~1m 00s            |
+  | Gradle cache restore            | 31s                | 0s (nothing found) |
+  | Robolectric module tests        | 2m 35s             | 7m 32s             |
+  | `assembleRelease` (arm64-only)  | 10m 43s            | 13m 03s            |
+  | cache save (post step)          | ~1s (hit, skipped) | 40s                |
 
   The delta is dependency downloads, the Gradle distribution, and artifact transforms,
   paid inside both Gradle steps.
+
 - **The PR cache key prefix can never exist on `main`.** The job caches
   `~/.gradle/caches` + `~/.gradle/wrapper` under
   `${{ runner.os }}-gradle-rn-pr-${{ hashFiles('packages/mobile/package.json', 'bun.lock') }}`,
@@ -126,11 +127,11 @@ Replace `actions/cache@v4` with `actions/cache/restore@v4` and adopt the release
 prefixes are separate "so a debug-signed cache never masks a release-build regression
 (and vice versa)". Both directions are covered:
 
-- *PR (debug-signed) cache masking a release regression:* impossible after this change —
+- _PR (debug-signed) cache masking a release regression:_ impossible after this change —
   PR runs never write a cache, so nothing debug-signed is ever stored. (It was already
   impossible before, for a different reason: caches created on a PR ref are invisible to
   `main` runs.)
-- *Release cache masking a PR regression:* `~/.gradle/caches` + `~/.gradle/wrapper` hold
+- _Release cache masking a PR regression:_ `~/.gradle/caches` + `~/.gradle/wrapper` hold
   dependency jars, artifact transforms, and the Gradle distribution — no task outputs, no
   signing state (`org.gradle.caching` is not enabled in this project). Restoring them
   can't change what the PR build compiles or verifies, only how fast dependencies
@@ -279,11 +280,11 @@ Rows split by what the fix-3 gate decides (JS-only vs native-input); within nati
 PRs, by cache state — the real effect of fix 1 is flipping which cache state is the norm,
 so "typical" and "best" converge there:
 
-| PR type / cache state       | Today                                               | After 1 + 2 + 3                                                                |
-| --------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
-| JS-only PR (the majority)   | ~21 min — **the norm**                               | **skipped** (~30 s gate) — the PR tail becomes CI's ~7.5 min                    |
-| Native-input PR, warm cache | ~15 min — rare (same-PR repush, if not yet evicted)  | **~14–15 min — the norm** (~12.5 min build restored from `main` + ~2 min gate; exact vs prefix cache hit differ by well under a minute) |
-| Native-input PR, cold cache | ~21–23 min                                           | ~17–18 min — rare (`main`'s cache evicted or stale)                             |
+| PR type / cache state       | Today                                               | After 1 + 2 + 3                                                                                                                         |
+| --------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| JS-only PR (the majority)   | ~21 min — **the norm**                              | **skipped** (~30 s gate) — the PR tail becomes CI's ~7.5 min                                                                            |
+| Native-input PR, warm cache | ~15 min — rare (same-PR repush, if not yet evicted) | **~14–15 min — the norm** (~12.5 min build restored from `main` + ~2 min gate; exact vs prefix cache hit differ by well under a minute) |
+| Native-input PR, cold cache | ~21–23 min                                          | ~17–18 min — rare (`main`'s cache evicted or stale)                                                                                     |
 
 For the majority of mobile PRs the Android build stops being the tail entirely. On
 native-input PRs it stays the longest check but drops ~6–8 min, and the wait after the
