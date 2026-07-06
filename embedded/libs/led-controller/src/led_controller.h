@@ -7,9 +7,9 @@
 // LED hardware configuration — the single source of truth, resolved from build
 // flags at compile time. FastLED needs chipset, data pin, and color order as
 // compile-time tokens, so they live here: led_controller.cpp's addLeds<> call
-// consumes them, and the project's board_config.h aliases LED_PIN/LED_TYPE/
-// COLOR_ORDER to them for logging and declarative config. Override per board
-// variant with -D LED_CHIPSET / -D LED_COLOR_ORDER / a *_LED_PIN flag.
+// consumes them, and consumers (e.g. main.cpp logging) include this header and
+// read LED_DATA_PIN directly. Override per board variant with -D LED_CHIPSET /
+// -D LED_COLOR_ORDER / a *_LED_PIN flag.
 #ifndef LED_CHIPSET
 #define LED_CHIPSET WS2812B
 #endif
