@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-06T08:20:12.850Z",
+  "generatedAt": "2026-07-06T20:32:30.878Z",
   "entries": [
+    {
+      "prNumber": 3493,
+      "category": "new",
+      "title": "The board angle now sits with your other filters at the top of the climb list instead of taking up its own line — one less row between you and the climbs.",
+      "mergedAt": "2026-07-06T20:27:13Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3493"
+    },
     {
       "prNumber": 3451,
       "category": "fixed",

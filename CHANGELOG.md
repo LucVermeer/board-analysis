@@ -12,6 +12,7 @@ A new version shipped to the App Store.
 
 ### New
 
+- The board angle now sits with your other filters at the top of the climb list instead of taking up its own line — one less row between you and the climbs. ([#3493](https://github.com/boardsesh/boardsesh/pull/3493))
 - Own a gym? Claim your listing and keep it accurate — verify with a work email or ask us to review. ([#3409](https://github.com/boardsesh/boardsesh/pull/3409))
   Gym owners and community leaders can now hand a crew member write access to keep a gym's details up to date.
 
