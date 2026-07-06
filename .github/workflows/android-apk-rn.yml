@@ -81,6 +81,11 @@ env:
   # build time; without this, analytics.ts sees no key and isAnalyticsEnabled is
   # false, so every track() silently no-ops (the app shipped zero events before).
   EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+  # Pin RN's fetch as the global `fetch` (not expo/fetch), which crashes Hermes by
+  # tearing down JSI promises off-thread (Sentry 7595562195). Bundle-only flag — it
+  # doesn't enter the resolved config, so it never moves the fingerprint. Kept in
+  # lockstep with the other mobile fingerprint workflows. See docs/mobile-ota-updates.md.
+  EXPO_PUBLIC_USE_RN_FETCH: '1'
   # Android Google Maps key, baked into the resolved android.config at prebuild
   # time when present (the build succeeds without it; the board-search map just
   # stays blank). It changes the Android fingerprint, so both the gate's resolve
@@ -139,6 +144,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EOF
 
       - name: Resolve fingerprint and check for an existing native build
@@ -248,6 +254,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EOF
 
       # @sentry/react-native's Gradle upload task currently calls an API that is

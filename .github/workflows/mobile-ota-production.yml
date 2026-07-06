@@ -81,6 +81,13 @@ env:
   # same-named branch. Part of the resolved config, so it's fingerprint-relevant.
   EXPO_UPDATES_CHANNEL: production
   EXPO_UPDATES_URL: ${{ vars.EXPO_UPDATES_URL }}
+  # Pin React Native's fetch as the global `fetch` instead of expo/fetch. Expo 57's
+  # WinterCG runtime installs expo/fetch as the global unless this is '1'; expo/fetch's
+  # NativeResponse tears down JSI promise objects on a background queue, crashing Hermes
+  # (EXC_BAD_ACCESS, Sentry 7595562195). Bundle-only flag — it never enters the resolved
+  # Expo config, so it doesn't move the fingerprint (verified) and rides OTA to shipped
+  # binaries. See docs/mobile-ota-updates.md.
+  EXPO_PUBLIC_USE_RN_FETCH: '1'
 
 jobs:
   publish:
@@ -158,6 +165,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EOF
 
       # This workflow is the SOLE OWNER of packages/mobile/src/data/changelog.generated.json.

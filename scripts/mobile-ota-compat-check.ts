@@ -70,10 +70,12 @@ export const PLATFORMS: readonly Platform[] = ['ios', 'android'];
 export const STICKY_MARKER = '<!-- mobile-ota-check -->';
 
 /**
- * The .env keys whose values are hashed into the fingerprint (via the written
- * .env file) — byte-identical to the heredoc the native build / gate jobs write.
- * The script owns writing this into BOTH the PR and baseline trees so they can
- * never diverge (a divergence would make every PR falsely read "native change").
+ * The .env keys the native build / gate jobs write, byte-identical to their
+ * heredoc. The script owns writing this into BOTH the PR and baseline trees so
+ * they can never diverge (a divergence would make every PR falsely read "native
+ * change"). Most feed the fingerprint via the resolved Expo config; the flags
+ * below are bundle-only (never enter the config), so they don't move it but must
+ * still be inlined so the preview publish ships the same JS behaviour as production.
  */
 export const ENV_KEYS: readonly string[] = [
   'EXPO_PUBLIC_BACKEND_URL',
@@ -84,6 +86,8 @@ export const ENV_KEYS: readonly string[] = [
   'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
   'EXPO_PUBLIC_SENTRY_DSN',
   'EXPO_PUBLIC_POSTHOG_KEY',
+  // Pins RN's fetch as the global `fetch` instead of expo/fetch (Sentry 7595562195).
+  'EXPO_PUBLIC_USE_RN_FETCH',
 ];
 
 /** Same shape the native gates accept: a lowercase hex hash, ≥8 chars. */
@@ -289,7 +293,7 @@ export function parseRuntimeVersion(stdout: string): string | null {
   return null;
 }
 
-/** Write the byte-identical `.env` (the 8 EXPO_PUBLIC_* vars) into a mobile dir. */
+/** Write the byte-identical `.env` (the EXPO_PUBLIC_* vars in ENV_KEYS) into a mobile dir. */
 function writeEnv(mobileDir: string): void {
   const body = ENV_KEYS.map((key) => `${key}=${process.env[key] ?? ''}`).join('\n');
   writeFileSync(resolve(mobileDir, '.env'), `${body}\n`);

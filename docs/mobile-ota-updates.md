@@ -119,6 +119,18 @@ bug, not a delivery failure. Mechanisms, all enforced/handled in CI:
   the workflow publishes iOS **without** the key and Android **with** it, in separate steps. A single
   `--platform all` publish with one env could only ever match one side.
 
+**`EXPO_PUBLIC_USE_RN_FETCH=1` — pin RN's fetch, not expo/fetch.** Expo 57's WinterCG runtime installs
+`expo/fetch` as the global `fetch` unless this flag is `'1'`. `expo/fetch`'s native `NativeResponse`
+clears its state-change listeners on a background dispatch queue, which releases the captured
+`JavaScriptPromise` JSI objects **off the JS thread** — destroying Hermes-owned pointers on the wrong
+thread and crashing with `EXC_BAD_ACCESS` (Sentry `7595562195`). Since every GraphQL HTTP POST goes
+through the global `fetch`, this hit production hard. The flag is **bundle-only** — it's referenced
+only in Expo's JS runtime, never in `app.config.ts`, so it never enters the resolved config and does
+**not** move the fingerprint (verified by resolving with/without it). That's why the fix shipped as a
+plain OTA to already-installed binaries. It's part of the `mobile-ci-env-parity.test.ts` shared set so
+it can't silently drop out of one channel (which would revert that channel to the crashing
+`expo/fetch`), and `scripts/mobile-ota-compat-check.ts` writes it into the preview/`.env` too.
+
 ## Native-build gating (OTA-only when the fingerprint is unchanged)
 
 The OTA publish is cheap and runs on every push, but the native builds (`ios-testflight-rn`,

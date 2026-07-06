@@ -55,6 +55,9 @@ jobs:
       # signed-in user's activity resolves to one person. Repo-level variable, so
       # no Production environment scoping is needed.
       EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+      # Pin RN's fetch as the global `fetch` (not expo/fetch), which crashes Hermes by
+      # tearing down JSI promises off-thread (Sentry 7595562195). See docs/mobile-ota-updates.md.
+      EXPO_PUBLIC_USE_RN_FETCH: '1'
       # Switches app.config.ts to the "Boardsesh Dev" identity + reddish icons.
       BOARDSESH_APP_VARIANT: dev
 
@@ -105,6 +108,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EOF
 
       - name: Expo prebuild (generate android/)
