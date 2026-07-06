@@ -171,6 +171,9 @@ class JsonObject {
 
     // Fallback storage so operator[] on a null JsonObject still has something
     // to reference (reset on each access; mirrors reading a missing value).
+    // The slot is a single static shared by every null subscript: do NOT hold
+    // the returned reference across another null-JsonObject access — the next
+    // access resets it and the held reference silently aliases the new read.
     static JsonVariant& nullVariant() {
         static JsonVariant nullSlot;
         return nullSlot;

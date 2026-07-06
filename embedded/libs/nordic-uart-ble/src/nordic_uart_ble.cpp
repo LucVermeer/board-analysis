@@ -225,7 +225,9 @@ void NordicUartBLE::onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo
         }
         LEDs.show();
 
-        // If callback is set, forward to backend
+        // Forward to the backend only for non-empty climbs: the callback's job
+        // is climb matching, and an empty clear-board frame has nothing to
+        // match (the backend has no clear event to publish either).
         if (ledDataCallback && commands.size() > 0) {
             ledDataCallback(commands.data(), commands.size(), protocol.getAngle());
         }

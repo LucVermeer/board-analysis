@@ -185,6 +185,27 @@ void test_led_update_clears_previous_climb_leds(void) {
     TEST_ASSERT_TRUE(strip[2] == CRGB(0, 0, 0));
 }
 
+void test_led_update_with_empty_commands_array_clears_all_leds(void) {
+    LEDs.begin(50);
+    CRGB* strip = CFastLED::getLeds();
+
+    JsonDocument climb;
+    JsonArray commands = climb["commands"].to<JsonArray>();
+    addLedCommand(commands, 6, 255, 0, 0);
+    JsonObject climbData = climb.as<JsonObject>();
+    client->handleLedUpdate(climbData);
+    TEST_ASSERT_TRUE(strip[6] != CRGB(0, 0, 0));
+
+    // Explicit "commands": [] (as opposed to the key being absent)
+    JsonDocument clearUpdate;
+    clearUpdate["commands"].to<JsonArray>();
+    JsonObject clearData = clearUpdate.as<JsonObject>();
+    client->handleLedUpdate(clearData);
+
+    TEST_ASSERT_TRUE(strip[6] == CRGB(0, 0, 0));
+    TEST_ASSERT_EQUAL_UINT32(0, client->getCurrentDisplayHash());
+}
+
 void test_led_update_without_commands_clears_all_leds(void) {
     LEDs.begin(50);
     CRGB* strip = CFastLED::getLeds();
@@ -433,6 +454,7 @@ int main(int argc, char** argv) {
 
     // LED update tests
     RUN_TEST(test_led_update_clears_previous_climb_leds);
+    RUN_TEST(test_led_update_with_empty_commands_array_clears_all_leds);
     RUN_TEST(test_led_update_without_commands_clears_all_leds);
 
     // Message callback tests
