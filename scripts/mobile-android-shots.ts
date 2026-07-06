@@ -318,6 +318,7 @@ function screenshotEnvOptions(options: ShotsOptions): ScreenshotOptions {
     workout: null,
     appPath: null,
     shutdown: false,
+    orientation: null,
   };
 }
 

@@ -28,11 +28,12 @@ export function AnalyticsScreenTracker(): null {
         const pingUntilDelivered = async () => {
           for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
-              await fetch(readyUrl);
-              return;
+              const readinessResponse = await fetch(readyUrl);
+              if (readinessResponse.ok) return;
             } catch {
-              await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000));
+              // Retry below.
             }
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000));
           }
         };
         void pingUntilDelivered();
