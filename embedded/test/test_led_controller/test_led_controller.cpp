@@ -30,17 +30,17 @@ void test_initial_state(void) {
 }
 
 void test_begin_sets_num_leds(void) {
-    controller->begin(5, 100);
+    controller->begin(100);
     TEST_ASSERT_EQUAL(100, controller->getNumLeds());
 }
 
 void test_begin_caps_at_max_leds(void) {
-    controller->begin(5, 600);  // More than MAX_LEDS (500)
+    controller->begin(600);  // More than MAX_LEDS (500)
     TEST_ASSERT_EQUAL(MAX_LEDS, controller->getNumLeds());
 }
 
 void test_begin_with_zero_leds(void) {
-    controller->begin(5, 0);
+    controller->begin(0);
     TEST_ASSERT_EQUAL(0, controller->getNumLeds());
 }
 
@@ -49,32 +49,32 @@ void test_begin_with_zero_leds(void) {
 // =============================================================================
 
 void test_setLed_with_crgb(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setLed(0, CRGB(255, 128, 64));
     // No crash means success - we can't directly inspect internal state
     TEST_ASSERT_TRUE(true);
 }
 
 void test_setLed_with_rgb_values(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setLed(5, 100, 150, 200);
     TEST_ASSERT_TRUE(true);
 }
 
 void test_setLed_negative_index_ignored(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setLed(-1, CRGB(255, 0, 0));  // Should not crash
     TEST_ASSERT_TRUE(true);
 }
 
 void test_setLed_index_at_boundary(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setLed(9, CRGB(255, 0, 0));  // Last valid index
     TEST_ASSERT_TRUE(true);
 }
 
 void test_setLed_index_beyond_boundary_ignored(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setLed(10, CRGB(255, 0, 0));   // Beyond boundary
     controller->setLed(100, CRGB(255, 0, 0));  // Way beyond boundary
     TEST_ASSERT_TRUE(true);
@@ -85,7 +85,7 @@ void test_setLed_index_beyond_boundary_ignored(void) {
 // =============================================================================
 
 void test_setLeds_single_command(void) {
-    controller->begin(5, 100);
+    controller->begin(100);
 
     LedCommand commands[1] = {{10, 255, 128, 64}};
 
@@ -94,7 +94,7 @@ void test_setLeds_single_command(void) {
 }
 
 void test_setLeds_multiple_commands(void) {
-    controller->begin(5, 100);
+    controller->begin(100);
 
     LedCommand commands[5] = {{0, 255, 0, 0}, {1, 0, 255, 0}, {2, 0, 0, 255}, {3, 255, 255, 0}, {4, 0, 255, 255}};
 
@@ -103,7 +103,7 @@ void test_setLeds_multiple_commands(void) {
 }
 
 void test_setLeds_with_out_of_bounds_positions(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
 
     LedCommand commands[3] = {
         {5, 255, 0, 0},   // Valid
@@ -116,7 +116,7 @@ void test_setLeds_with_out_of_bounds_positions(void) {
 }
 
 void test_setLeds_empty_array(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
 
     LedCommand commands[1] = {{0, 0, 0, 0}};
     controller->setLeds(commands, 0);  // Count is 0
@@ -124,7 +124,7 @@ void test_setLeds_empty_array(void) {
 }
 
 void test_setLeds_large_batch(void) {
-    controller->begin(5, 200);
+    controller->begin(200);
 
     LedCommand commands[100];
     for (int i = 0; i < 100; i++) {
@@ -143,19 +143,19 @@ void test_setLeds_large_batch(void) {
 // =============================================================================
 
 void test_setBrightness(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setBrightness(200);
     TEST_ASSERT_EQUAL(200, controller->getBrightness());
 }
 
 void test_setBrightness_min_value(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setBrightness(0);
     TEST_ASSERT_EQUAL(0, controller->getBrightness());
 }
 
 void test_setBrightness_max_value(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->setBrightness(255);
     TEST_ASSERT_EQUAL(255, controller->getBrightness());
 }
@@ -169,21 +169,21 @@ void test_getBrightness_default(void) {
 // =============================================================================
 
 void test_clear_does_not_crash(void) {
-    controller->begin(5, 50);
+    controller->begin(50);
     controller->setLed(0, CRGB(255, 255, 255));
     controller->clear();
     TEST_ASSERT_TRUE(true);
 }
 
 void test_show_does_not_crash(void) {
-    controller->begin(5, 50);
+    controller->begin(50);
     controller->setLed(0, CRGB(255, 255, 255));
     controller->show();
     TEST_ASSERT_TRUE(true);
 }
 
 void test_clear_show_sequence(void) {
-    controller->begin(5, 50);
+    controller->begin(50);
     controller->setLed(0, CRGB(255, 0, 0));
     controller->show();
     controller->clear();
@@ -196,31 +196,31 @@ void test_clear_show_sequence(void) {
 // =============================================================================
 
 void test_blink_default_parameters(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->blink(255, 0, 0);  // 3 blinks, 100ms delay by default
     TEST_ASSERT_TRUE(true);
 }
 
 void test_blink_custom_count(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->blink(0, 255, 0, 5);  // 5 blinks
     TEST_ASSERT_TRUE(true);
 }
 
 void test_blink_custom_delay(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->blink(0, 0, 255, 2, 50);  // 2 blinks, 50ms delay
     TEST_ASSERT_TRUE(true);
 }
 
 void test_blink_zero_leds(void) {
-    controller->begin(5, 0);           // No LEDs
+    controller->begin(0);           // No LEDs
     controller->blink(255, 255, 255);  // Should not crash
     TEST_ASSERT_TRUE(true);
 }
 
 void test_blink_zero_count(void) {
-    controller->begin(5, 10);
+    controller->begin(10);
     controller->blink(255, 255, 255, 0);  // 0 blinks
     TEST_ASSERT_TRUE(true);
 }
@@ -239,9 +239,9 @@ void test_operations_before_begin(void) {
 }
 
 void test_multiple_begin_calls(void) {
-    controller->begin(5, 50);
+    controller->begin(50);
     controller->setLed(0, CRGB(255, 0, 0));
-    controller->begin(6, 100);  // Reinitialize
+    controller->begin(100);  // Reinitialize
     TEST_ASSERT_EQUAL(100, controller->getNumLeds());
 }
 

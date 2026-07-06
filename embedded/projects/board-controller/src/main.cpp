@@ -545,7 +545,7 @@ void setup() {
 
     // Initialize LEDs
     Logger.logln("Initializing LEDs on pin %d...", LED_DATA_PIN);
-    LEDs.begin(LED_DATA_PIN, NUM_LEDS);
+    LEDs.begin(NUM_LEDS);
     LEDs.setBrightness(Config.getInt("brightness", DEFAULT_BRIGHTNESS));
 
     // Startup animation (brief to confirm LEDs working)

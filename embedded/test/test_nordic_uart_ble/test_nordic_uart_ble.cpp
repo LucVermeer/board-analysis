@@ -432,7 +432,7 @@ static NimBLECharacteristic* connectAndGetRxCharacteristic() {
 // climb, so switching climbs must clear the previous climb's holds instead of
 // accumulating them on the strip.
 void test_new_climb_frame_clears_previous_climb_leds(void) {
-    LEDs.begin(5, 50);
+    LEDs.begin(50);
     ble->setLedDataCallback(testLedDataCallback);
     ble->begin("Test Device");
 
@@ -462,7 +462,7 @@ void test_new_climb_frame_clears_previous_climb_leds(void) {
 }
 
 void test_empty_frame_clears_all_leds(void) {
-    LEDs.begin(5, 50);
+    LEDs.begin(50);
     ble->setLedDataCallback(testLedDataCallback);
     ble->begin("Test Device");
 

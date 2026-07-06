@@ -636,7 +636,7 @@ void setup() {
 
     Config.begin();
 
-    LEDs.begin(LED_PIN, NUM_LEDS);
+    LEDs.begin(NUM_LEDS);
     LEDs.setBrightness(Config.getInt("brightness", DEFAULT_BRIGHTNESS));
     LEDs.clear();
     LEDs.show();

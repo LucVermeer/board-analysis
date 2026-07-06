@@ -67,7 +67,9 @@ class LedController {
   public:
     LedController();
 
-    void begin(uint8_t pin, uint16_t numLeds);
+    // The data pin is the compile-time LED_DATA_PIN (FastLED templates it);
+    // begin() only takes the strip length.
+    void begin(uint16_t numLeds);
 
     void setLed(int index, CRGB color);
     void setLed(int index, uint8_t r, uint8_t g, uint8_t b);

@@ -159,7 +159,7 @@ static void addLedCommand(JsonArray commands, int position, int r, int g, int b)
 // switching climbs from the web queue must clear the previous climb's holds
 // instead of accumulating them on the strip (same contract as the BLE path).
 void test_led_update_clears_previous_climb_leds(void) {
-    LEDs.begin(5, 50);
+    LEDs.begin(50);
     CRGB* strip = CFastLED::getLeds();
     TEST_ASSERT_NOT_NULL(strip);
 
@@ -186,7 +186,7 @@ void test_led_update_clears_previous_climb_leds(void) {
 }
 
 void test_led_update_without_commands_clears_all_leds(void) {
-    LEDs.begin(5, 50);
+    LEDs.begin(50);
     CRGB* strip = CFastLED::getLeds();
 
     JsonDocument climb;

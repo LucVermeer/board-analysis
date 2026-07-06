@@ -219,10 +219,11 @@ void NordicUartBLE::onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo
         LEDs.clear();
         if (commands.size() > 0) {
             LEDs.setLeds(commands.data(), commands.size());
+            Logger.logln("BLE: Updated %zu LEDs from Bluetooth", commands.size());
+        } else {
+            Logger.logln("BLE: Cleared board from Bluetooth");
         }
         LEDs.show();
-
-        Logger.logln("BLE: Updated %zu LEDs from Bluetooth", commands.size());
 
         // If callback is set, forward to backend
         if (ledDataCallback && commands.size() > 0) {

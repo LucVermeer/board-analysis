@@ -9,7 +9,7 @@ LedController::LedController() : numLeds(0), brightness(128), initialized(false)
     memset(leds, 0, sizeof(leds));
 }
 
-void LedController::begin(uint8_t pin, uint16_t count) {
+void LedController::begin(uint16_t count) {
     numLeds = min(count, (uint16_t)MAX_LEDS);
 
 #ifdef LED_POWER_ENABLE_PIN
@@ -19,9 +19,7 @@ void LedController::begin(uint8_t pin, uint16_t count) {
 #endif
 
     // FastLED.addLeds requires compile-time constants; chipset, pin, and color
-    // order are resolved from build flags at the top of this file. The runtime
-    // `pin` argument is retained for API compatibility but does not select the
-    // pin (FastLED templates it).
+    // order are resolved from build flags in led_controller.h.
     FastLED.addLeds<LED_CHIPSET, LED_DATA_PIN, LED_COLOR_ORDER>(leds, numLeds);
 
     FastLED.setBrightness(brightness);
