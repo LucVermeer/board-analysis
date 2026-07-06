@@ -509,7 +509,7 @@ void setup() {
 
     Logger.logln("=================================");
     Logger.logln("%s v%s", DEVICE_NAME, FIRMWARE_VERSION);
-    Logger.logln("LED_PIN = %d", LED_PIN);
+    Logger.logln("LED_PIN = %d", LED_DATA_PIN);
 #ifdef ENABLE_BLE_PROXY
     Logger.logln("BLE Proxy: Enabled");
 #endif
@@ -544,8 +544,8 @@ void setup() {
 #endif
 
     // Initialize LEDs
-    Logger.logln("Initializing LEDs on pin %d...", LED_PIN);
-    LEDs.begin(LED_PIN, NUM_LEDS);
+    Logger.logln("Initializing LEDs on pin %d...", LED_DATA_PIN);
+    LEDs.begin(NUM_LEDS);
     LEDs.setBrightness(Config.getInt("brightness", DEFAULT_BRIGHTNESS));
 
     // Startup animation (brief to confirm LEDs working)

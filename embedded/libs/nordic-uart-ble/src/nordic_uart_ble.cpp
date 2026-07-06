@@ -209,20 +209,27 @@ void NordicUartBLE::onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo
     bool complete = protocol.processPacket((const uint8_t*)value.data(), value.length());
 
     if (complete) {
-        // Get decoded LED commands
+        // Each complete Aurora frame is the FULL LED state for a climb, so clear
+        // the previous climb before applying the new one. Without this, swiping
+        // between climbs accumulates LEDs on the strip and they never turn off.
+        // (An empty frame therefore clears the board, which is the correct
+        // behaviour for a "clear board" command.)
         const std::vector<LedCommand>& commands = protocol.getLedCommands();
 
+        LEDs.clear();
         if (commands.size() > 0) {
-            // Update LEDs directly
             LEDs.setLeds(commands.data(), commands.size());
-            LEDs.show();
-
             Logger.logln("BLE: Updated %zu LEDs from Bluetooth", commands.size());
+        } else {
+            Logger.logln("BLE: Cleared board from Bluetooth");
+        }
+        LEDs.show();
 
-            // If callback is set, forward to backend
-            if (ledDataCallback) {
-                ledDataCallback(commands.data(), commands.size(), protocol.getAngle());
-            }
+        // Forward to the backend only for non-empty climbs: the callback's job
+        // is climb matching, and an empty clear-board frame has nothing to
+        // match (the backend has no clear event to publish either).
+        if (ledDataCallback && commands.size() > 0) {
+            ledDataCallback(commands.data(), commands.size(), protocol.getAngle());
         }
     }
 

@@ -87,6 +87,64 @@ Main firmware for controlling Kilter/Tension climbing board LEDs. Features:
 - **GraphQL-WS Client**: Real-time sync with Boardsesh backend
 - **Web Config**: HTTP server for WiFi and device setup
 
+#### Build variants
+
+`board-controller` builds for several boards via PlatformIO envs (see
+`projects/board-controller/platformio.ini`): `esp32s3dev` (default),
+`esp32s3dev-proxy`, `tdisplay-s3`, `waveshare-7inch`, `waveshare-amoled-216`,
+`esp32dev` (legacy), and **`gledopto-c015`** (below).
+
+#### GLEDOPTO GL-C-015WL-D variant
+
+`gledopto-c015` targets the [GLEDOPTO GL-C-015WL-D](https://gledopto.com/h-pd-125.html) —
+a cheap WLED-style controller (classic ESP32, 4 MB flash, DC 5–24 V in) used as a
+standalone LED driver for a Kilter board. No display, no proxy; it decodes climbs
+over BLE (the board appears to the Kilter app as `Kilter Board#123456@3`) and via
+party-mode GraphQL, then lights the string.
+
+**Wiring** (verified with a 12 V WS2811 pixel string; 3 wires: V+/GND/data):
+
+- **Data** → the controller's **`IO16`** output terminal (the middle pin of output
+  group 1 — order is `V+ | IO16 | GND`). This is GPIO16, which the firmware drives.
+- **Power**: the strip's V+/GND can run off the controller's output terminals
+  (rated 10 A per channel / 15 A total). The output `V+` is **gated behind a
+  high-side MOSFET on GPIO18** (active high — found by a pin sweep on real
+  hardware; GLEDOPTO's manual documents GPIO12 for other revisions of the
+  family). The firmware drives both high at boot (`-D LED_POWER_ENABLE_PIN=18`,
+  `-D LED_POWER_ENABLE_PIN_2=12`), so the terminal carries the input voltage
+  once the controller has started. Older firmware builds never drove the enable
+  pin and the output `V+` read ~0 V — reflash if you see that. For strings that
+  draw more than the terminal rating, run V+/GND straight from the PSU to the
+  strip instead.
+- **Tie all grounds common** — PSU `−` ↔ controller `GND` ↔ strip `GND`. The data
+  line needs a shared ground reference or nothing lights, even with power present.
+  (Automatic when the strip is powered from the controller's own terminals.)
+- USB-C powers only the ESP32 (flashing/serial); it never powers the LED rail.
+
+**Chipset / color order** are build flags, defaulting to `WS2811` / `RGB` (both
+verified on the Setter-Closet 12 V string). They're consumed by
+`libs/led-controller/src/led_controller.cpp`. If a different string looks wrong,
+adjust in `platformio.ini`:
+
+- Red/green swapped → `-D LED_COLOR_ORDER=GRB`.
+- Nothing lights (and power/ground are confirmed good) → try `-D GLEDOPTO_LED_PIN=2`
+  (the "D2"/`IO2` output).
+- Flicker / wrong pixels → `-D LED_CHIPSET=WS2812B`.
+- String length → `-D NUM_LEDS=<n>` (default 200, max 500).
+
+**Bench-supply tip:** if the supply reads its set voltage at the input but the LEDs
+are dead, check the current limit isn't clamped near 0 A (that collapses the output
+to ~0.2 V), and that barrel polarity is center-positive.
+
+**Build & flash** (over the controller's USB/UART download port):
+
+```bash
+cd embedded/projects/board-controller
+pio run -e gledopto-c015              # build
+pio run -e gledopto-c015 -t upload   # flash
+pio device monitor                   # serial (confirms "LED_PIN = 16" + startup blink)
+```
+
 ### moonboard-dev-server
 
 Development firmware for MoonBoard BLE decoding and browser-based previewing. Features:

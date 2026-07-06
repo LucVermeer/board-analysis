@@ -6,21 +6,17 @@
 // Device identification
 #define DEVICE_NAME "Boardsesh Controller"
 
-// LED configuration
-// Note: GPIO 5 conflicts with LCD_RST on T-Display-S3
-// Use TDISPLAY_LED_PIN, WAVESHARE_LED_PIN, or WAVESHARE_AMOLED_LED_PIN build flag to override for display builds
-#ifdef TDISPLAY_LED_PIN
-#define LED_PIN TDISPLAY_LED_PIN
-#elif defined(WAVESHARE_LED_PIN)
-#define LED_PIN WAVESHARE_LED_PIN
-#elif defined(WAVESHARE_AMOLED_LED_PIN)
-#define LED_PIN WAVESHARE_AMOLED_LED_PIN
-#else
-#define LED_PIN 5  // GPIO pin for LED data (default for non-display builds)
+// LED configuration.
+// The data pin, chipset, and color order are single-sourced from the
+// led-controller library (LED_DATA_PIN / LED_CHIPSET / LED_COLOR_ORDER in
+// led_controller.h, resolved from build flags per board variant — see the
+// *_LED_PIN / LED_CHIPSET / LED_COLOR_ORDER flags there). Consumers include
+// led_controller.h and read LED_DATA_PIN directly.
+
+// Number of LEDs on the string. Override per variant with -D NUM_LEDS=<n>.
+#ifndef NUM_LEDS
+#define NUM_LEDS 200
 #endif
-#define NUM_LEDS 200      // Total number of LEDs
-#define LED_TYPE WS2812B  // LED strip type
-#define COLOR_ORDER GRB   // Color order
 
 // Default brightness (0-255)
 #define DEFAULT_BRIGHTNESS 128

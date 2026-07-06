@@ -1,23 +1,30 @@
 #include "led_controller.h"
 
+// LED_CHIPSET / LED_DATA_PIN / LED_COLOR_ORDER are resolved from build flags in
+// led_controller.h (the single source of truth).
+
 LedController LEDs;
 
 LedController::LedController() : numLeds(0), brightness(128), initialized(false) {
     memset(leds, 0, sizeof(leds));
 }
 
-void LedController::begin(uint8_t pin, uint16_t count) {
+void LedController::begin(uint16_t count) {
     numLeds = min(count, (uint16_t)MAX_LEDS);
 
-    // FastLED.addLeds requires compile-time pin constant
-    // Use conditional compilation for different board configurations
-#ifdef TDISPLAY_LED_PIN
-    // T-Display-S3: Use GPIO 43 (avoids LCD_RST on GPIO 5)
-    FastLED.addLeds<WS2812B, TDISPLAY_LED_PIN, GRB>(leds, numLeds);
-#else
-    // Default: Use GPIO 5
-    FastLED.addLeds<WS2812B, 5, GRB>(leds, numLeds);
+#ifdef LED_POWER_ENABLE_PIN
+    // Energize the gated LED output V+ terminal (see led_controller.h).
+    pinMode(LED_POWER_ENABLE_PIN, OUTPUT);
+    digitalWrite(LED_POWER_ENABLE_PIN, HIGH);
 #endif
+#ifdef LED_POWER_ENABLE_PIN_2
+    pinMode(LED_POWER_ENABLE_PIN_2, OUTPUT);
+    digitalWrite(LED_POWER_ENABLE_PIN_2, HIGH);
+#endif
+
+    // FastLED.addLeds requires compile-time constants; chipset, pin, and color
+    // order are resolved from build flags in led_controller.h.
+    FastLED.addLeds<LED_CHIPSET, LED_DATA_PIN, LED_COLOR_ORDER>(leds, numLeds);
 
     FastLED.setBrightness(brightness);
 
