@@ -1124,7 +1124,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     /// logic is unit-testable without a real `CBPeripheral` (#3480). Prefers the
     /// Nordic UART service, falling back to the original RedBearLab one, matching
     /// `writeServiceUuids()` ordering.
-    func serviceDiscoveryDecision(
+    private func serviceDiscoveryDecision(
         discoveredServiceUuids: [CBUUID],
         hasRetriedFullDiscovery: Bool
     ) -> ServiceDiscoveryDecision {
@@ -1161,6 +1161,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             hasRetriedFullDiscovery: retriedFullServiceDiscovery.contains(peripheral.identifier)
         ) {
         case .select(let serviceUuid):
+            // Discovery resolved for this connection — drop any retry marker so it
+            // doesn't linger for the peripheral's lifetime (symmetry with the
+            // didConnect / failConnectionSetup cleanups).
+            retriedFullServiceDiscovery.remove(peripheral.identifier)
             guard let service = peripheral.services?.first(where: { $0.uuid == serviceUuid }) else {
                 // The decision was computed from this same services list, so the
                 // service should still be here; treat a race as a plain miss.
