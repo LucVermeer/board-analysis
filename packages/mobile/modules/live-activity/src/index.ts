@@ -78,6 +78,18 @@ export type NativeBleWriteDiagnostics = {
   durationMs: number;
 };
 
+/**
+ * Diagnostics for a connect that failed during GATT service/characteristic
+ * discovery (#3480). Fetched via `getLastConnectDiagnostics` right after a
+ * rejected `connect`, so a `service_missing` report can distinguish "the board
+ * exposed nothing" (stale iOS cache / decoy peripheral → empty array) from an
+ * unknown third controller generation (unfamiliar service UUIDs).
+ */
+export type NativeBleConnectDiagnostics = {
+  /** Service UUIDs actually discovered on the peripheral before it failed. */
+  discoveredServices: string[];
+};
+
 export type NativeBleConfigureBoardOptions = {
   boardName: string;
   layoutId: number;
@@ -123,6 +135,14 @@ type BoardBleNativeModule = {
    * (an OTA JS update can run against an older binary).
    */
   getLastWriteDiagnostics?(): Promise<NativeBleWriteDiagnostics | null>;
+  /**
+   * Diagnostics of the most recent failed JS connect, for tagging a
+   * `service_missing` failure with the services the board actually exposed (a
+   * rejected promise can't carry them). Only present on newer binaries — gate
+   * on `typeof getLastConnectDiagnostics === 'function'` (an OTA JS update can
+   * run against an older binary). See #3480.
+   */
+  getLastConnectDiagnostics?(): Promise<NativeBleConnectDiagnostics | null>;
   addListener(event: 'scanResult', listener: (payload: NativeBleScanEvent) => void): EventSubscription;
   addListener(event: 'disconnected', listener: (payload: NativeBleDisconnectEvent) => void): EventSubscription;
   addListener(event: 'connected', listener: (payload: NativeBleConnectedEvent) => void): EventSubscription;

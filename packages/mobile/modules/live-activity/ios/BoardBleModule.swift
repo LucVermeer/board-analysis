@@ -168,6 +168,17 @@ public class BoardBleModule: Module {
             }
         }
 
+        // Diagnostics for the most recent failed JS connect (#3480). Read right
+        // after a `connect` rejection so the JS layer can attach the services the
+        // board actually exposed to the Sentry `service_missing` report. Clear-on-
+        // read (the manager clears its stash), mirroring getLastWriteDiagnostics.
+        AsyncFunction("getLastConnectDiagnostics") { () -> [String: Any]? in
+            guard let discoveredServices = BoardBleManager.shared.takeLastConnectFailureDiagnostics() else {
+                return nil
+            }
+            return ["discoveredServices": discoveredServices]
+        }
+
         AsyncFunction("cancelWrites") { () -> Void in
             BoardBleManager.shared.cancelWrites()
         }

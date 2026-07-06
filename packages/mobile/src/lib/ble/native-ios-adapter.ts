@@ -13,6 +13,7 @@ import {
 import type {
   BluetoothAdapter,
   BleConnection,
+  BleConnectDiagnostics,
   BleDisconnectInfo,
   BleWriteDiagnostics,
   BoardScanFamily,
@@ -71,6 +72,12 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
   // Transport diagnostics of the most recently settled write (#3230): the
   // resolved value on success, the native module's stash after a reject.
   private lastWriteDiagnostics: BleWriteDiagnostics | null = null;
+  // Diagnostics of the most recent failed connect (#3480): the services the
+  // board actually exposed, fetched from the native module's stash after a
+  // rejected connect (an Expo reject can't carry them). Held until the next
+  // connect attempt so both the failure analytics event and the Sentry report
+  // can read it.
+  private lastConnectDiagnostics: BleConnectDiagnostics | null = null;
 
   constructor(
     private readonly devicePicker: DevicePickerFn,
@@ -225,7 +232,21 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       }
     }
 
-    await native.connect(selectedDeviceId);
+    // Fresh attempt: drop any stale connect diagnostics so a later read can't
+    // re-attribute a previous failure to this connect.
+    this.lastConnectDiagnostics = null;
+    try {
+      await native.connect(selectedDeviceId);
+    } catch (error) {
+      // A rejected connect can't carry structured data (Expo), so on failure
+      // fetch the services the board actually exposed from the module stash for
+      // the service_missing report (#3480). Absent on older binaries (OTA JS can
+      // outrun the native build) — then there's simply nothing to fetch.
+      if (typeof native.getLastConnectDiagnostics === 'function') {
+        this.lastConnectDiagnostics = await native.getLastConnectDiagnostics().catch(() => null);
+      }
+      throw error;
+    }
 
     this.trackConnectedDevice(selectedDeviceId);
 
@@ -337,6 +358,13 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
   // analytics event and the Sentry report), so reads must not consume it.
   async getLastWriteDiagnostics(): Promise<BleWriteDiagnostics | null> {
     return this.lastWriteDiagnostics;
+  }
+
+  // Diagnostics of the most recent failed connect (#3480), held until the next
+  // connect attempt so the failure can feed several consumers (analytics event,
+  // Sentry report) without a read consuming it.
+  async getLastConnectDiagnostics(): Promise<BleConnectDiagnostics | null> {
+    return this.lastConnectDiagnostics;
   }
 
   onDisconnect(callback: (info?: BleDisconnectInfo) => void): () => void {

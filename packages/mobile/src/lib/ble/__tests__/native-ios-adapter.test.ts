@@ -601,3 +601,71 @@ describe('NativeIosBleAdapter write diagnostics', () => {
     await expect(adapter.getLastWriteDiagnostics()).resolves.toBeNull();
   });
 });
+
+describe('NativeIosBleAdapter connect diagnostics (#3480)', () => {
+  afterEach(() => {
+    delete (nativeMock as Record<string, unknown>).getLastConnectDiagnostics;
+  });
+
+  // Drive requestAndConnect to the point native.connect is invoked by
+  // auto-selecting a device advertising the target serial.
+  const driveConnect = (adapter: NativeIosBleAdapter, serial: string): Promise<unknown> => {
+    const promise = adapter.requestAndConnect(serial).catch((error: Error) => error);
+    void Promise.resolve().then(() => {
+      scanListeners[0]?.({
+        device: { deviceId: 'dev-1', name: `Kilter Board#${serial}@3` },
+        localName: `Kilter Board#${serial}@3`,
+        rssi: -55,
+      });
+    });
+    return promise;
+  };
+
+  it('fetches the native stash and rethrows when a connect rejects on a newer binary', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+    const connectError = new Error('UART service was not found');
+    nativeMock.connect.mockRejectedValueOnce(connectError);
+    const getStash = vi.fn().mockResolvedValue({ discoveredServices: ['AURORA-UUID'] });
+    (nativeMock as Record<string, unknown>).getLastConnectDiagnostics = getStash;
+
+    const connectPromise = driveConnect(adapter, 'A1B2C3');
+    await vi.runAllTimersAsync();
+
+    expect(await connectPromise).toBe(connectError);
+    expect(getStash).toHaveBeenCalledOnce();
+    await expect(adapter.getLastConnectDiagnostics()).resolves.toEqual({ discoveredServices: ['AURORA-UUID'] });
+  });
+
+  it('rethrows without a stash fetch when a connect rejects on an old binary', async () => {
+    // Default native mock has no getLastConnectDiagnostics — the old-binary case
+    // where the reject path must not attempt (or throw from) a fetch.
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+    const connectError = new Error('UART service was not found');
+    nativeMock.connect.mockRejectedValueOnce(connectError);
+
+    const connectPromise = driveConnect(adapter, 'A1B2C3');
+    await vi.runAllTimersAsync();
+
+    expect(await connectPromise).toBe(connectError);
+    await expect(adapter.getLastConnectDiagnostics()).resolves.toBeNull();
+  });
+
+  it('clears stale connect diagnostics on a subsequent successful connect', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+    const getStash = vi.fn().mockResolvedValue({ discoveredServices: [] });
+    (nativeMock as Record<string, unknown>).getLastConnectDiagnostics = getStash;
+
+    // First attempt fails and stashes diagnostics.
+    nativeMock.connect.mockRejectedValueOnce(new Error('UART service was not found'));
+    const firstAttempt = driveConnect(adapter, 'A1B2C3');
+    await vi.runAllTimersAsync();
+    await firstAttempt;
+    await expect(adapter.getLastConnectDiagnostics()).resolves.toEqual({ discoveredServices: [] });
+
+    // Second attempt succeeds — the stale diagnostics must be dropped.
+    const secondAttempt = driveConnect(adapter, 'A1B2C3');
+    await vi.runAllTimersAsync();
+    await secondAttempt;
+    await expect(adapter.getLastConnectDiagnostics()).resolves.toBeNull();
+  });
+});

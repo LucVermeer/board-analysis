@@ -92,6 +92,13 @@ vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));
 
+// Spy on reportHandledError (keep the real noise-policy/other exports) so a
+// connect failure's Sentry tags can be asserted (#3480).
+vi.mock('../../error-reporting', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../error-reporting')>();
+  return { ...actual, reportHandledError: vi.fn() };
+});
+
 // adapter-factory pulls in modules/live-activity/src/index, which pulls in
 // expo-modules-core, which references the React Native `__DEV__` global at
 // import time. Short-circuiting the factory here avoids that chain — the
@@ -121,6 +128,7 @@ import {
   useBoardBluetooth,
 } from '../use-board-bluetooth';
 import type { BleWriteDiagnostics } from '../types';
+import { reportHandledError } from '../../error-reporting';
 
 // ── Factory helpers ────────────────────────────────────────────────────────
 
@@ -262,6 +270,85 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(Alert.alert).toHaveBeenCalledWith('ble.connectionFailedTitle', 'bluetooth.connectFailed');
+  });
+
+  it('tags a service_missing failure with the services the board exposed (#3480)', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockRejectedValue(new Error('UART service was not found')),
+    });
+    // Newer binary: the adapter can report what the board actually exposed.
+    (fakeAdapter as Record<string, unknown>).getLastConnectDiagnostics = vi
+      .fn()
+      .mockResolvedValue({ discoveredServices: ['180a', '180f'] });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith('ble.connectionFailedTitle', 'bluetooth.serviceMissing');
+    expect(reportHandledError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: {
+          source: 'ble-connect',
+          failure_category: 'service_missing',
+          ble_discovered_services: '180a,180f',
+        },
+      }),
+    );
+  });
+
+  it('tags service_missing with "none" when the board exposed no services (#3480)', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockRejectedValue(new Error('UART service was not found')),
+    });
+    (fakeAdapter as Record<string, unknown>).getLastConnectDiagnostics = vi
+      .fn()
+      .mockResolvedValue({ discoveredServices: [] });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(reportHandledError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ ble_discovered_services: 'none' }),
+      }),
+    );
+  });
+
+  it('omits the discovered-services tag on an old binary without the accessor (#3480)', async () => {
+    // No getLastConnectDiagnostics on the adapter → no tag, but still reports.
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockRejectedValue(new Error('UART service was not found')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(reportHandledError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { source: 'ble-connect', failure_category: 'service_missing' },
+      }),
+    );
   });
 
   it('serialises overlapping sendFramesToBoard calls so chunks never interleave', async () => {
