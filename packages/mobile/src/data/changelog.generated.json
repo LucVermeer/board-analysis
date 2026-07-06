@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-06T04:11:16.623Z",
+  "generatedAt": "2026-07-06T04:32:18.944Z",
   "entries": [
+    {
+      "prNumber": 3409,
+      "category": "new",
+      "title": "Own a gym? Claim your listing and keep it accurate — verify with a work email or ask us to review.",
+      "mergedAt": "2026-07-06T04:31:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3409",
+      "body": "Gym owners and community leaders can now hand a crew member write access to keep a gym's details up to date."
+    },
     {
       "prNumber": 3482,
       "category": "fixed",

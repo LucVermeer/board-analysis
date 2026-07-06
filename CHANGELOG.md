@@ -6,6 +6,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-06
 
+### New
+
+- Own a gym? Claim your listing and keep it accurate — verify with a work email or ask us to review. ([#3409](https://github.com/boardsesh/boardsesh/pull/3409))
+  Gym owners and community leaders can now hand a crew member write access to keep a gym's details up to date.
+
 ### Fixed
 
 - Fixed a crash where the app could be killed for using too much memory while browsing boards — most noticeable on older iPhones. ([#3482](https://github.com/boardsesh/boardsesh/pull/3482))
