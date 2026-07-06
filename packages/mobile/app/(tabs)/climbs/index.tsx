@@ -58,7 +58,10 @@ import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
-import { publishScreenshotWallClimbs } from '../../../src/lib/board-presence/screenshot-wall-seed';
+import {
+  buildScreenshotWallSeed,
+  publishScreenshotWallClimbs,
+} from '../../../src/lib/board-presence/screenshot-wall-seed';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { OnboardingTipBanner } from '../../../src/components/onboarding/OnboardingTipBanner';
@@ -797,24 +800,7 @@ function ClimbListInner() {
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1') return;
     if (!activeBoard || !searchReady || visibleClimbs.length === 0) return;
-    const nowMs = Date.now();
-    const seeded = visibleClimbs.slice(0, 6).map((climb, index) => ({
-      climbUuid: climb.uuid,
-      name: climb.name,
-      grade: climb.difficulty,
-      gradeColor: null,
-      frames: climb.frames,
-      angle: activeBoard.angle ?? climb.angle,
-      setter: climb.setter_username,
-      sentByDisplayName: null,
-      sentByAvatarUrl: null,
-      sentByUserId: null,
-      // Stagger the timestamps a few minutes apart so the history reads like a
-      // real session rather than a burst.
-      sentAt: new Date(nowMs - index * 4 * 60_000).toISOString(),
-      seq: 100 - index,
-    }));
-    publishScreenshotWallClimbs(seeded, null);
+    publishScreenshotWallClimbs(buildScreenshotWallSeed(visibleClimbs, activeBoard.angle ?? null), null);
   }, [activeBoard, searchReady, visibleClimbs]);
 
   const handleAddToQueue = useCallback(

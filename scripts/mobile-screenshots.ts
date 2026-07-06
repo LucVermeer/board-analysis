@@ -36,6 +36,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -594,6 +595,35 @@ export function clearStatusBar(udid: string): void {
   runCapture('xcrun', ['simctl', 'status_bar', udid, 'clear']);
 }
 
+/**
+ * Group the captured PNGs by content hash and return every group with more than
+ * one file. Two byte-identical captures mean a navigation step silently failed
+ * and the flow screenshotted the same screen twice — seen on the iPad 11",
+ * where the Climbs sidebar tap missed and `02-climbs.png` shipped as a
+ * pixel-perfect copy of `01-home.png`. Distinct screens never hash equal (the
+ * status bar is frozen at 9:41, but screen content always differs), so any
+ * duplicate is a real capture failure and the shard should fail loudly instead
+ * of uploading a duplicate to the store.
+ */
+export function findDuplicateScreenshotGroups(captureDir: string): string[][] {
+  const pngs = readdirSync(captureDir)
+    .filter((file) => file.toLowerCase().endsWith('.png'))
+    .sort();
+  const filesByHash = new Map<string, string[]>();
+  for (const png of pngs) {
+    const digest = createHash('sha256')
+      .update(readFileSync(join(captureDir, png)))
+      .digest('hex');
+    const group = filesByHash.get(digest);
+    if (group) {
+      group.push(png);
+    } else {
+      filesByHash.set(digest, [png]);
+    }
+  }
+  return [...filesByHash.values()].filter((group) => group.length > 1);
+}
+
 function collectScreenshots(
   captureDir: string,
   platform: 'ios' | 'android',
@@ -878,6 +908,16 @@ function captureIosDevice(
     const normalizeStatus = normalizeCapturedIosScreenshots(captureDir, screenshotDevice);
     if (normalizeStatus !== 0) return normalizeStatus;
 
+    const duplicateGroups = findDuplicateScreenshotGroups(captureDir);
+    if (duplicateGroups.length > 0) {
+      for (const group of duplicateGroups) {
+        console.error(
+          `${LOG} FAILED: byte-identical captures ${group.join(' = ')} — a navigation step did not take effect.`,
+        );
+      }
+      return 1;
+    }
+
     const saved = collectScreenshots(captureDir, 'ios', device.name, localeTarget.appStoreLocales);
     if (saved.length === 0) {
       console.error(`${LOG} WARNING: flow completed but no PNGs were captured.`);
@@ -962,6 +1002,16 @@ function runAndroid(options: ScreenshotOptions): number {
     if (maestroStatus !== 0) {
       console.error(`${LOG} FAILED: Maestro exited with ${maestroStatus}.`);
       return maestroStatus;
+    }
+
+    const duplicateGroups = findDuplicateScreenshotGroups(captureDir);
+    if (duplicateGroups.length > 0) {
+      for (const group of duplicateGroups) {
+        console.error(
+          `${LOG} FAILED: byte-identical captures ${group.join(' = ')} — a navigation step did not take effect.`,
+        );
+      }
+      return 1;
     }
 
     const saved = collectScreenshots(captureDir, 'android', deviceName);
@@ -1225,8 +1275,10 @@ export function portInUse(port: number): boolean {
 // home. The reach-home wait counts new lines alongside the Metro `$screen /home`
 // marker — a signal that survives Metro's log forwarding dying.
 export const READINESS_LOG_PATH = join(tmpdir(), 'boardsesh-screenshot-ready.log');
-export function screenshotReadinessCount(): number {
-  const log = existsSync(READINESS_LOG_PATH) ? readFileSync(READINESS_LOG_PATH, 'utf8') : '';
+// `logPath` is parameterized for tests only, so they never touch the real log a
+// concurrent capture run might be counting.
+export function screenshotReadinessCount(logPath: string = READINESS_LOG_PATH): number {
+  const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
   return log.split('\n').filter((line) => line.length > 0).length;
 }
 
@@ -1257,14 +1309,37 @@ function readinessServerReachable(): boolean {
  */
 export function startReadinessServer(): ChildProcess {
   writeFileSync(READINESS_LOG_PATH, '');
-  const serverCode =
-    `const h=require('http'),f=require('fs');` +
-    `h.createServer((q,s)=>{if(q.url&&q.url.indexOf('/ready')===0){f.appendFileSync(${JSON.stringify(READINESS_LOG_PATH)},'x\\n');}s.statusCode=204;s.end();})` +
-    `.listen(${SCREENSHOT_READY_PORT},'0.0.0.0');`;
+  const serverCode = [
+    `const http = require('http');`,
+    `const fs = require('fs');`,
+    `http.createServer((request, response) => {`,
+    `  if (request.url && request.url.indexOf('/ready') === 0) {`,
+    `    fs.appendFileSync(${JSON.stringify(READINESS_LOG_PATH)}, 'x\\n');`,
+    `  }`,
+    `  response.statusCode = 204;`,
+    `  response.end();`,
+    `}).listen(${SCREENSHOT_READY_PORT}, '0.0.0.0');`,
+  ].join('\n');
   const server = spawn(process.execPath, ['-e', serverCode], { stdio: 'ignore', detached: true });
   // Don't let the child keep the orchestrator's event loop alive at exit.
   server.unref();
-  console.log(`${LOG} Readiness server started (pid ${server.pid ?? '?'}) on port ${SCREENSHOT_READY_PORT}.`);
+  // Verify the child actually bound. Its stdio is 'ignore', so a bind failure
+  // (port already taken, child crash) would otherwise be silent and reach-home
+  // would quietly degrade to the Metro marker alone — the exact single-signal
+  // fragility this server exists to remove.
+  let bound = false;
+  for (let attempt = 0; attempt < 10 && !bound; attempt += 1) {
+    sleepSeconds(0.5);
+    bound = readinessServerReachable();
+  }
+  if (bound) {
+    console.log(`${LOG} Readiness server started (pid ${server.pid ?? '?'}) on port ${SCREENSHOT_READY_PORT}.`);
+  } else {
+    console.warn(
+      `${LOG} WARNING: readiness server never responded on port ${SCREENSHOT_READY_PORT} — is the port in use? ` +
+        `Reach-home will rely on the Metro '$screen /home' marker alone.`,
+    );
+  }
   return server;
 }
 

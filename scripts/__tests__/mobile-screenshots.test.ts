@@ -7,12 +7,12 @@ import { join } from 'node:path';
 import {
   buildScreenshotEnv,
   deviceSlug,
+  findDuplicateScreenshotGroups,
   iosSourceFlowFile,
   ipadSidebarTapPoint,
   isIpadScreenshotDevice,
   metroDevClientUrl,
   parseArgs,
-  READINESS_LOG_PATH,
   renderMaestroFlowForIosDevice,
   resolveAppStoreLocaleTargets,
   resolveIosScreenshotDevices,
@@ -231,13 +231,50 @@ describe('buildScreenshotEnv', () => {
 
 describe('screenshotReadinessCount', () => {
   it('counts each home-reached ping line the readiness server appended', () => {
-    writeFileSync(READINESS_LOG_PATH, '');
-    expect(screenshotReadinessCount()).toBe(0);
-    writeFileSync(READINESS_LOG_PATH, 'x\n');
-    expect(screenshotReadinessCount()).toBe(1);
-    // Blank trailing lines don't inflate the count (the wait compares against a baseline).
-    writeFileSync(READINESS_LOG_PATH, 'x\nx\n');
-    expect(screenshotReadinessCount()).toBe(2);
+    // A private temp log — writing the real READINESS_LOG_PATH could poison a
+    // capture run happening on the same machine.
+    const tempDir = mkdtempSync(join(tmpdir(), 'boardsesh-readiness-'));
+    const logPath = join(tempDir, 'ready.log');
+    try {
+      expect(screenshotReadinessCount(logPath)).toBe(0);
+      writeFileSync(logPath, '');
+      expect(screenshotReadinessCount(logPath)).toBe(0);
+      writeFileSync(logPath, 'x\n');
+      expect(screenshotReadinessCount(logPath)).toBe(1);
+      // Blank trailing lines don't inflate the count (the wait compares against a baseline).
+      writeFileSync(logPath, 'x\nx\n');
+      expect(screenshotReadinessCount(logPath)).toBe(2);
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+});
+
+describe('findDuplicateScreenshotGroups', () => {
+  it('flags byte-identical captures and leaves distinct ones alone', () => {
+    const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-dup-shots-'));
+    try {
+      // The iPad 11" failure shape: the Climbs tap never navigated, so
+      // 02-climbs came out as a pixel-perfect copy of 01-home.
+      writeFileSync(join(captureDir, '01-home.png'), 'home-frame-bytes');
+      writeFileSync(join(captureDir, '02-climbs.png'), 'home-frame-bytes');
+      writeFileSync(join(captureDir, '00-wall.png'), 'wall-frame-bytes');
+      writeFileSync(join(captureDir, 'notes.txt'), 'home-frame-bytes');
+      expect(findDuplicateScreenshotGroups(captureDir)).toEqual([['01-home.png', '02-climbs.png']]);
+    } finally {
+      rmSync(captureDir, { force: true, recursive: true });
+    }
+  });
+
+  it('returns no groups when every capture is distinct', () => {
+    const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-dup-shots-'));
+    try {
+      writeFileSync(join(captureDir, '01-home.png'), 'home-frame-bytes');
+      writeFileSync(join(captureDir, '02-climbs.png'), 'climbs-frame-bytes');
+      expect(findDuplicateScreenshotGroups(captureDir)).toEqual([]);
+    } finally {
+      rmSync(captureDir, { force: true, recursive: true });
+    }
   });
 });
 

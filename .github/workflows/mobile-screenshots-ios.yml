@@ -252,7 +252,7 @@ jobs:
         run: |
           set -euo pipefail
           url="https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
-          curl -fsSL "$url" -o maestro.zip
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o maestro.zip
           echo "${MAESTRO_SHA256}  maestro.zip" | shasum -a 256 -c -
           unzip -q maestro.zip -d "$HOME/.maestro-dist"
           echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"

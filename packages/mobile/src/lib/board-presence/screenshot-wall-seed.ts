@@ -10,7 +10,8 @@
 // the seed client below when `EXPO_PUBLIC_SCREENSHOT_MODE === '1'`.
 //
 // The seed climbs are REAL climbs from the active board's list, published by the
-// Climbs screen (see `app/(tabs)/climbs/index.tsx`). Because they carry the real
+// root ScreenshotBoardAutoActivator as soon as the board activates (and
+// re-published by the Climbs screen when it mounts). Because they carry the real
 // `frames` for whatever board the capture user follows, the kiosk lights the real
 // holds — no hardcoded, board-specific frame string that would render dark on a
 // different board (the known lit-climb gotcha).
@@ -18,8 +19,39 @@
 // Everything here is reached only from inlined `EXPO_PUBLIC_SCREENSHOT_MODE === '1'`
 // branches, so babel/terser dead-strips the whole module from normal builds.
 
-import type { BoardConnectionHolder, BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
+import type { BoardConnectionHolder, BoardPresenceClimb, BoardPresenceStats, Climb } from '@boardsesh/shared-schema';
 import type { MobileBoardPresenceClient } from './board-presence-client';
+
+/** How many of the active board's climbs the wall kiosk history is seeded with. */
+export const SCREENSHOT_WALL_SEED_COUNT = 6;
+
+/**
+ * Map the active board's real climbs (the first page of the default search) to
+ * the wall-seed shape. Shared by the Climbs screen and the root
+ * ScreenshotBoardAutoActivator so the kiosk lights the same holds no matter
+ * which publisher runs first — the iPad capture must not depend on the Climbs
+ * screen ever mounting (its sidebar tap has missed on the 11" iPad, shipping a
+ * "WALL IS DARK" hero shot).
+ */
+export function buildScreenshotWallSeed(climbs: Climb[], boardAngle: number | null): BoardPresenceClimb[] {
+  const nowMs = Date.now();
+  return climbs.slice(0, SCREENSHOT_WALL_SEED_COUNT).map((climb, index) => ({
+    climbUuid: climb.uuid,
+    name: climb.name,
+    grade: climb.difficulty,
+    gradeColor: null,
+    frames: climb.frames,
+    angle: boardAngle ?? climb.angle,
+    setter: climb.setter_username,
+    sentByDisplayName: null,
+    sentByAvatarUrl: null,
+    sentByUserId: null,
+    // Stagger the timestamps a few minutes apart so the history reads like a
+    // real session rather than a burst.
+    sentAt: new Date(nowMs - index * 4 * 60_000).toISOString(),
+    seq: 100 - index,
+  }));
+}
 
 /**
  * Sentinel `boardId` that flips the wall "live" (`WallScreen`'s `isWallLive`
@@ -36,9 +68,9 @@ const listeners = new Set<SeedListener>();
 
 /**
  * Publish the climbs to show on the wall (newest first — index 0 is the lit
- * climb). Called from the Climbs screen with the active board's real climbs. The
- * seed persists at module scope, so it survives the Climbs screen unmounting when
- * the flow deep-links to the wall tab.
+ * climb). Called from ScreenshotBoardAutoActivator (root) and the Climbs screen
+ * with the active board's real climbs. The seed persists at module scope, so it
+ * survives any screen unmounting before the flow reaches the wall tab.
  */
 export function publishScreenshotWallClimbs(climbs: BoardPresenceClimb[], holder: BoardConnectionHolder | null): void {
   seedClimbs = climbs;
