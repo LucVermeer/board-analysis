@@ -102,19 +102,33 @@ standalone LED driver for a Kilter board. No display, no proxy; it decodes climb
 over BLE (the board appears to the Kilter app as `Kilter Board#123456@3`) and via
 party-mode GraphQL, then lights the string.
 
-**Wiring** (Setter-Closet-style WS2811 pixel-node string — 3 wires: V+/GND/data):
+**Wiring** (verified with a 12 V WS2811 pixel string; 3 wires: V+/GND/data):
 
-- Data → **GPIO16** (the controller's primary "D1" output).
-- V+ / GND → the controller's LED power output (the Kilter string is 5 V).
+- **Data** → the controller's **`IO16`** output terminal (the middle pin of output
+  group 1 — order is `V+ | IO16 | GND`). This is GPIO16, which the firmware drives.
+- **Power the strip's V+/GND directly from the LED power supply** — at the strip's
+  own voltage (this string is 12 V). ⚠️ **Do NOT rely on the controller's output
+  `V+` terminal**: on this board the barrel/input V+ reads a correct 12 V but the
+  output `V+` stays dead (~0 V — it's gated behind an enable/relay pin the firmware
+  doesn't drive). Run V+/GND straight from the PSU to the strip.
+- **Tie all grounds common** — PSU `−` ↔ controller `GND` ↔ strip `GND`. The data
+  line needs a shared ground reference or nothing lights, even with power present.
+- USB-C powers only the ESP32 (flashing/serial); it never powers the LED rail.
 
-**Chipset / color order** are build flags, defaulting to `WS2811` / `GRB`. They're
-consumed by `libs/led-controller/src/led_controller.cpp`. If the first flash looks
-wrong, adjust in `platformio.ini`:
+**Chipset / color order** are build flags, defaulting to `WS2811` / `RGB` (both
+verified on the Setter-Closet 12 V string). They're consumed by
+`libs/led-controller/src/led_controller.cpp`. If a different string looks wrong,
+adjust in `platformio.ini`:
 
-- Colors swapped (red shows as green/blue) → `-D LED_COLOR_ORDER=RGB`.
-- Nothing lights at all → `-D GLEDOPTO_LED_PIN=2` (the "D2" output).
+- Red/green swapped → `-D LED_COLOR_ORDER=GRB`.
+- Nothing lights (and power/ground are confirmed good) → try `-D GLEDOPTO_LED_PIN=2`
+  (the "D2"/`IO2` output).
 - Flicker / wrong pixels → `-D LED_CHIPSET=WS2812B`.
 - String length → `-D NUM_LEDS=<n>` (default 200, max 500).
+
+**Bench-supply tip:** if the supply reads its set voltage at the input but the LEDs
+are dead, check the current limit isn't clamped near 0 A (that collapses the output
+to ~0.2 V), and that barrel polarity is center-positive.
 
 **Build & flash** (over the controller's USB/UART download port):
 
