@@ -16,6 +16,7 @@ vi.mock('../table-config', async () => {
 });
 
 import { pullSync } from '../pull-client';
+import { setSigningOut } from '../../mutation-queue';
 import { getCheckpoint, setCheckpoint, getCheckpointKey } from '../checkpoints';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from '../table-config';
 
@@ -640,5 +641,20 @@ describe('pullSync', () => {
     expect(getCheckpointKey).toHaveBeenCalledWith('board_climbs', 'kilter:1:5');
     expect(getCheckpointKey).toHaveBeenCalledWith('board_climb_stats', 'kilter:1:5');
     expect(getCheckpointKey).toHaveBeenCalledWith('boardsesh_ticks', undefined);
+  });
+
+  it('stops pulling while sign-out is wiping local data (no fetches, no writes, no checkpoint advance)', async () => {
+    // Mirrors the drainer's sign-out guard: an in-flight pull page landing after
+    // clearUserData would resurrect the old user's rows for the next account.
+    setupGraphqlFetchForAllTables();
+    setSigningOut(true);
+    try {
+      await pullSync(db, queryClient, graphqlFetch);
+      expect(graphqlFetch).not.toHaveBeenCalled();
+      expect(sqlCalls.filter((call) => call.sql.startsWith('INSERT OR REPLACE'))).toHaveLength(0);
+      expect(setCheckpoint).not.toHaveBeenCalled();
+    } finally {
+      setSigningOut(false);
+    }
   });
 });

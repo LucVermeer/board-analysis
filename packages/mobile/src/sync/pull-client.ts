@@ -4,6 +4,7 @@ import type { SyncCursorInput, SyncResult, SyncDeletionsResult } from '../lib/gr
 import { reportHandledError } from '../lib/error-reporting';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from './table-config';
 import { getCheckpoint, setCheckpoint, getCheckpointKey } from './checkpoints';
+import { isSigningOut } from '../mutation-queue';
 import { parseOfflineBoardKey, type OfflineBoardScope } from '../settings/offline-board-key';
 
 export type SyncProgress = {
@@ -148,6 +149,9 @@ async function syncTable(
 
   let hasMore = true;
   while (hasMore) {
+    // Sign-out is wiping local data: stop before this page writes the old
+    // user's rows back (mirrors the drainer's guard).
+    if (isSigningOut()) return;
     const variables: Record<string, unknown> = { cursor, limit: PAGE_LIMIT };
     if (config.isPerBoard && boardScope) {
       variables.boardType = boardScope.boardType;
@@ -194,6 +198,9 @@ async function processDeletions(
 
   let hasMore = true;
   while (hasMore) {
+    // Sign-out is wiping local data: stop before this page writes the old
+    // user's rows back (mirrors the drainer's guard).
+    if (isSigningOut()) return;
     const response = await graphqlFetch<{ syncDeletions: SyncDeletionsResult }>(SYNC_DELETIONS_QUERY, {
       cursor,
       limit: PAGE_LIMIT,

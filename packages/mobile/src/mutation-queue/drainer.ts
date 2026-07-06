@@ -20,6 +20,13 @@ export function setSigningOut(value: boolean): void {
   _isSigningOut = value;
 }
 
+// Read by the pull client too: an in-flight pullSync page must stop writing the
+// old user's rows once sign-out starts wiping — otherwise a page landing after
+// clearUserData resurrects data the next signed-in account could briefly see.
+export function isSigningOut(): boolean {
+  return _isSigningOut;
+}
+
 // Bounded exponential backoff between drain attempts within a single cycle
 // (I7). A transient failure (network blip, 5xx) recovers on its own instead of
 // stalling until the next external trigger. Capped so we never busy-loop or
