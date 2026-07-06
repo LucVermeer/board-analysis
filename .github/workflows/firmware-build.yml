@@ -26,6 +26,8 @@ jobs:
             name: waveshare-7inch
           - env: esp32dev
             name: esp32-legacy
+          - env: gledopto-c015
+            name: gledopto-c015
 
     steps:
       - name: Checkout repository
@@ -104,6 +106,7 @@ jobs:
           | firmware-tdisplay-s3.bin | LilyGo T-Display S3 |
           | firmware-waveshare-7inch.bin | Waveshare 7" touch display |
           | firmware-esp32-legacy.bin | Legacy ESP32 |
+          | firmware-gledopto-c015.bin | GLEDOPTO GL-C-015WL-D (WLED-style ESP32) |
 
           ### How to Flash via OTA
           1. Download the .bin file matching your hardware
