@@ -169,6 +169,10 @@ type DrawerHostValue = {
   /** Props for the iPad "Now on the wall" column (regular landscape); null while
    *  no board is resolved. Consumed by `IpadWallColumn` in the shell. */
   boardPanelProps: NowOnTheWallColumnProps | null;
+  /** True when `openPlayDrawer` lands in the iPad shell's persistent right-column
+   *  pane (regular-width master-detail) rather than the `/play` route / bottom
+   *  sheet — a selection fills the pane beside the list instead of covering it. */
+  usesDetailPane: boolean;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -767,6 +771,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openBoardSheet,
       playDrawerPaneProps,
       boardPanelProps,
+      usesDetailPane,
     }),
     [
       storedActiveBoardConfig,
@@ -780,6 +785,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openBoardSheet,
       playDrawerPaneProps,
       boardPanelProps,
+      usesDetailPane,
     ],
   );
 
