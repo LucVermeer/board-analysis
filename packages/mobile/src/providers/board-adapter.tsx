@@ -13,6 +13,7 @@ import { useQueueSessionId } from './queue-provider';
 import { useToast } from './toast-provider';
 import { getDatabaseHandle } from '../db';
 import { getHttpClient } from '../lib/graphql/client';
+import { reportHandledError } from '../lib/error-reporting';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { drainMutationQueue } from '../mutation-queue';
 import { writeTickLocal } from '../hooks/use-offline-mutations';
@@ -52,7 +53,16 @@ export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
         if (!db) return null;
 
         const tickUuid = randomUUID();
-        await writeTickLocal(db, variables.input, tickUuid);
+        try {
+          await writeTickLocal(db, variables.input, tickUuid);
+        } catch (error) {
+          // A broken local DB (disk full, corruption) must not block the tick:
+          // returning null falls through to the direct network save in
+          // useSaveTick. Offline, that network attempt fails visibly — same
+          // outcome as today — but online the send still lands.
+          reportHandledError(error, { tags: { source: 'offline-sync', kind: 'tick-local-write' } });
+          return null;
+        }
         void drainMutationQueue(db, queryClient, executeHttp).catch((error: unknown) => {
           if (__DEV__) {
             console.warn('[BoardAdapter] tick queue drain failed:', error);

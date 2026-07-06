@@ -22,7 +22,7 @@ export function getCheckpointKey(tableName: string, scope?: string): string {
  */
 export async function getDownloadedScopeKeys(db: SQLiteDatabase): Promise<string[]> {
   const prefix = 'checkpoint:board_climbs:';
-  const rows = await db.getAllAsync<{ key: string }>(`SELECT key FROM sync_meta WHERE key LIKE '${prefix}%'`);
+  const rows = await db.getAllAsync<{ key: string }>('SELECT key FROM sync_meta WHERE key LIKE ?', [`${prefix}%`]);
   return rows.map((row) => row.key.slice(prefix.length));
 }
 
