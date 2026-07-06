@@ -55,7 +55,7 @@ import { BoardProvider } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
 import { UserDrawerProvider } from '../src/components/user-drawer/UserDrawerProvider';
-import { OfflineSyncBridge } from '../src/components/offline-sync-bridge';
+import { OfflineSyncBridge, OfflineEngineFlagSync } from '../src/components/offline-sync-bridge';
 import { useMobileClimbActionsData } from '../src/lib/graphql/hooks';
 import { useActiveBoard } from '../src/lib/graphql/use-active-board';
 import { ScreenshotBoardAutoActivator } from '../src/components/screenshot-board-auto-activator';
@@ -337,6 +337,9 @@ function RootLayout() {
                     provider that may call useConfirm (incl. Bluetooth). */}
                   <DialogProvider>
                     <FeatureFlagsProvider flags={STATIC_FEATURE_FLAGS}>
+                      {/* First child on purpose: publishes the offline-engine flag to the
+                          non-React store before any later sibling's query effects run. */}
+                      <OfflineEngineFlagSync />
                       <AuthProvider onReady={onAuthReady}>
                         <PartyProfileProvider>
                           {/* Needs auth + query, both in scope here. Null render. */}

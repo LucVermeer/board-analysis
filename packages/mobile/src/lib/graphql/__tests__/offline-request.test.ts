@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { onlineManager } from '@tanstack/react-query';
 import type { ClimbSearchInput } from '@boardsesh/shared-schema';
 
@@ -6,6 +6,9 @@ import type { ClimbSearchInput } from '@boardsesh/shared-schema';
 // SQLite when the board is downloaded + filters supported (even online), to the
 // network otherwise (online), and to a per-op empty/null fallback when offline
 // with no local data. Any unregistered document is a straight network passthrough.
+// The whole interception is gated on the offline-engine flag (default OFF), so
+// every suite below runs with the engine explicitly enabled except the gating
+// describe at the end.
 
 const {
   getDatabaseHandle,
@@ -38,6 +41,7 @@ vi.mock('../client', () => ({ getHttpClient: () => ({ request }) }));
 const fakeDb = { tag: 'db' };
 
 import { offlineAwareRequest } from '../offline-request';
+import { setOfflineEngineEnabled, __resetOfflineEngineForTests } from '../../offline-engine';
 import {
   SEARCH_CLIMBS,
   SEARCH_CLIMBS_COUNT,
@@ -62,8 +66,13 @@ function setOnline(online: boolean) {
   vi.spyOn(onlineManager, 'isOnline').mockReturnValue(online);
 }
 
+afterEach(() => {
+  __resetOfflineEngineForTests();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  setOfflineEngineEnabled(true);
   getDatabaseHandle.mockReturnValue(fakeDb);
   isOfflineSearchSupported.mockReturnValue(true);
   searchClimbsLocal.mockResolvedValue({ climbs: [{ uuid: 'local' }], hasMore: false });
@@ -254,5 +263,50 @@ describe('offlineAwareRequest — unregistered document', () => {
     expect(getDatabaseHandle).not.toHaveBeenCalled();
     expect(isBoardDownloadedLocally).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledWith('query Ping { ping }', {});
+  });
+});
+
+describe('offlineAwareRequest — offline-engine flag OFF (pre-offline behavior)', () => {
+  beforeEach(() => {
+    setOfflineEngineEnabled(false);
+  });
+
+  it('hits the network for a registered document even when the board is downloaded (online)', async () => {
+    setOnline(true);
+    isBoardDownloadedLocally.mockResolvedValue(true);
+    const result = await offlineAwareRequest<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input: searchInput });
+    expect(result.searchClimbs.climbs[0].uuid).toBe('net');
+    expect(searchClimbsLocal).not.toHaveBeenCalled();
+    expect(isBoardDownloadedLocally).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith(SEARCH_CLIMBS, { input: searchInput });
+  });
+
+  it('surfaces the network error offline instead of the empty fallback', async () => {
+    setOnline(false);
+    request.mockRejectedValue(new Error('Network request failed'));
+    await expect(offlineAwareRequest<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input: searchInput })).rejects.toThrow(
+      'Network request failed',
+    );
+    expect(searchClimbsLocal).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the network error offline for climb detail too (no { climb: null } fallback)', async () => {
+    setOnline(false);
+    request.mockRejectedValue(new Error('Network request failed'));
+    await expect(offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, climbVars)).rejects.toThrow(
+      'Network request failed',
+    );
+    expect(getClimbLocal).not.toHaveBeenCalled();
+  });
+
+  it('is the default state: without an explicit enable, interception never engages', async () => {
+    __resetOfflineEngineForTests();
+    setOnline(true);
+    isBoardDownloadedLocally.mockResolvedValue(true);
+    const result = await offlineAwareRequest<SearchClimbsCountQueryResponse>(SEARCH_CLIMBS_COUNT, {
+      input: searchInput,
+    });
+    expect(result.searchClimbs.totalCount).toBe(99);
+    expect(countClimbsLocal).not.toHaveBeenCalled();
   });
 });

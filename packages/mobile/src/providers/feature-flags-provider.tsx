@@ -56,7 +56,7 @@ export const FEATURE_FLAG_DEFINITIONS = [
     key: 'offline-board-downloads',
     label: 'Offline board downloads',
     description:
-      'Download toggle on My Boards: pull a board’s climbs into local SQLite for offline browsing. Off hides the toggle; already-enabled boards keep syncing.',
+      'The whole offline engine: board downloads, local-first climb reads, queued offline ticks/favorites, background sync. Off fully disables it (previously-queued writes still flush).',
   },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
@@ -116,6 +116,15 @@ export function useFeatureFlags(): FeatureFlags {
 
 export function useFeatureFlag<K extends keyof FeatureFlags>(key: K): FeatureFlags[K] {
   return useFeatureFlags()[key];
+}
+
+/**
+ * The one expression every offline-engine gate shares. Missing/undefined
+ * (flags not loaded yet) deliberately reads as OFF — pre-offline behavior is
+ * the safe default while PostHog resolves.
+ */
+export function useOfflineDownloadsEnabled(): boolean {
+  return useFeatureFlag('offline-board-downloads') === true;
 }
 
 function featureFlagsEqual(leftFlags: FeatureFlags, rightFlags: FeatureFlags): boolean {

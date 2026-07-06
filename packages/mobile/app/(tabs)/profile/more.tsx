@@ -35,7 +35,7 @@ import { useSessionRecordingPreference } from '../../../src/lib/session-recordin
 import { setSessionRecordingEnabled } from '../../../src/lib/analytics';
 import { useShowPlaylistTagsPreference } from '../../../src/lib/show-playlist-tags-preference';
 import { useToast } from '../../../src/providers/toast-provider';
-import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
+import { useFeatureFlag, useOfflineDownloadsEnabled } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
 
@@ -66,6 +66,7 @@ export default function MoreScreen() {
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
   // Off until the Connect IQ watch app ships — nothing to pair to before then.
   const garminWatchEnabled = useFeatureFlag('garmin-watch') === true;
+  const offlineEnabled = useOfflineDownloadsEnabled();
   const confirm = useConfirm();
 
   // Offline sync-issues surface. Poll the dead-letter count only while online (the
@@ -80,8 +81,10 @@ export default function MoreScreen() {
     queryFn: () => getDeadLetterCount(db),
     enabled: !isOffline,
     // Dead letters are sticky (they don't resolve without a user Retry), so a slow
-    // poll is plenty — no need to wake every 5s.
-    refetchInterval: 30000,
+    // poll is plenty — no need to wake every 5s. With the offline flag off there
+    // is still ONE initial fetch (never a recurring poll): legacy dead letters
+    // queued while the flag was on must stay reachable via Retry.
+    refetchInterval: offlineEnabled ? 30000 : false,
   });
 
   // Guard against a rapid double-tap spawning overlapping retries (the drain is
@@ -113,7 +116,13 @@ export default function MoreScreen() {
 
   // Sign-out wipes the local queue, so warn before dropping any not-yet-synced
   // writes. No pending writes → sign out straight away (unchanged behaviour).
+  // Flag off → skip the count read and dialog entirely (pre-offline sign-out);
+  // leftover queued writes are still best-effort flushed by the auth provider.
   const handleSignOut = async () => {
+    if (!offlineEnabled) {
+      void signOut();
+      return;
+    }
     let pending = 0;
     try {
       pending = await getPendingCount(db);

@@ -34,6 +34,32 @@ vi.mock('../../use-active-board', () => ({
   useActiveBoard: vi.fn(),
 }));
 
+// The favorite dual-write path is gated on BOTH the offline-engine feature
+// flag and a live DB handle. Default both off/null so every pre-existing test
+// keeps exercising the plain network toggle; the gating describe below flips
+// them per test.
+let offlineEnabled = false;
+vi.mock('../../../../providers/feature-flags-provider', () => ({
+  useOfflineDownloadsEnabled: () => offlineEnabled,
+}));
+
+const getDatabaseHandleMock = vi.fn((): unknown => null);
+vi.mock('../../../../db', () => ({
+  getDatabaseHandle: () => getDatabaseHandleMock(),
+}));
+
+const addFavoriteLocalMock = vi.fn(async (..._args: unknown[]) => {});
+const removeFavoriteLocalMock = vi.fn(async (..._args: unknown[]) => {});
+vi.mock('../../../../hooks/use-offline-mutations', () => ({
+  addFavoriteLocal: (...args: unknown[]) => addFavoriteLocalMock(...args),
+  removeFavoriteLocal: (...args: unknown[]) => removeFavoriteLocalMock(...args),
+}));
+
+const drainMutationQueueMock = vi.fn(async (..._args: unknown[]) => {});
+vi.mock('../../../../mutation-queue', () => ({
+  drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
+}));
+
 import { useMobileClimbActionsData } from '../use-mobile-climb-actions-data';
 import { useAuth } from '../../../../providers/auth-provider';
 import { useActiveBoard } from '../../use-active-board';
@@ -120,6 +146,12 @@ describe('useMobileClimbActionsData', () => {
     requestMock.mockReset();
     useAuthMock.mockReset();
     useActiveBoardMock.mockReset();
+    getDatabaseHandleMock.mockReset();
+    getDatabaseHandleMock.mockReturnValue(null);
+    addFavoriteLocalMock.mockClear();
+    removeFavoriteLocalMock.mockClear();
+    drainMutationQueueMock.mockClear();
+    offlineEnabled = false;
     signedIn();
     withActiveBoard(kilterBoard);
   });
@@ -195,6 +227,39 @@ describe('useMobileClimbActionsData', () => {
         TOGGLE_FAVORITE,
         expect.objectContaining({ input: expect.objectContaining({ angle: 0 }) }),
       );
+    });
+
+    it('offline flag ON + DB handle: writes locally and schedules a drain, no network toggle', async () => {
+      offlineEnabled = true;
+      getDatabaseHandleMock.mockReturnValue({ tag: 'db' });
+      requestMock.mockResolvedValueOnce({ allUserPlaylists: { playlists: [] } });
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+
+      await expect(result.current.favoritesProviderProps.toggleFavorite('climb-x')).resolves.toBe(true);
+      expect(addFavoriteLocalMock).toHaveBeenCalledTimes(1);
+      expect(drainMutationQueueMock).toHaveBeenCalledTimes(1);
+      expect(requestMock).not.toHaveBeenCalledWith(TOGGLE_FAVORITE, expect.anything());
+    });
+
+    it('offline flag OFF + DB handle: hits the network toggle, never the local write (pre-offline behavior)', async () => {
+      offlineEnabled = false;
+      getDatabaseHandleMock.mockReturnValue({ tag: 'db' });
+      requestMock.mockResolvedValueOnce({ allUserPlaylists: { playlists: [] } });
+      requestMock.mockResolvedValueOnce({ toggleFavorite: { favorited: true } });
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(requestMock).toHaveBeenCalledWith(GET_ALL_USER_PLAYLISTS, expect.anything()));
+
+      await expect(result.current.favoritesProviderProps.toggleFavorite('climb-x')).resolves.toBe(true);
+      expect(requestMock).toHaveBeenCalledWith(TOGGLE_FAVORITE, {
+        input: { boardName: 'kilter', climbUuid: 'climb-x', angle: 40 },
+      });
+      expect(addFavoriteLocalMock).not.toHaveBeenCalled();
+      expect(removeFavoriteLocalMock).not.toHaveBeenCalled();
+      expect(drainMutationQueueMock).not.toHaveBeenCalled();
     });
   });
 

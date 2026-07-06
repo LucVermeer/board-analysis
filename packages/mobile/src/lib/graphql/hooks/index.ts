@@ -37,6 +37,7 @@ import {
 import { BOULDER_GRADES } from '@boardsesh/board-config';
 import { getDatabaseHandle } from '../../../db';
 import { offlineAwareRequest } from '../offline-request';
+import { useOfflineDownloadsEnabled } from '../../../providers/feature-flags-provider';
 import { addFavoriteLocal, removeFavoriteLocal } from '../../../hooks/use-offline-mutations';
 import { drainMutationQueue } from '../../../mutation-queue';
 import type { GraphQLFetch } from '../../../mutation-queue/handlers';
@@ -738,11 +739,14 @@ export function useEndSession() {
 
 export function useToggleFavorite() {
   const queryClient = useQueryClient();
+  const offlineEnabled = useOfflineDownloadsEnabled();
 
   return useMutation({
     mutationFn: async (variables: ToggleFavoriteVariables) => {
       const db = getDatabaseHandle();
-      if (db && typeof variables.currentlyFavorited === 'boolean') {
+      // Local-first only with the offline flag on; otherwise the plain network
+      // toggle below — pre-offline behavior.
+      if (offlineEnabled && db && typeof variables.currentlyFavorited === 'boolean') {
         if (variables.currentlyFavorited) {
           await removeFavoriteLocal(db, variables.input);
         } else {

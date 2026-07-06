@@ -25,6 +25,14 @@ vi.mock('../../../db', () => ({
   getDatabaseHandle: () => handle,
 }));
 
+// The dual-write branch is additionally gated on the offline-engine feature
+// flag; keep it ON by default so the local-write flow stays exercised, with a
+// dedicated flag-off test asserting the network-only path.
+let offlineEnabled = true;
+vi.mock('../../../providers/feature-flags-provider', () => ({
+  useOfflineDownloadsEnabled: () => offlineEnabled,
+}));
+
 vi.mock('react-native', () => ({}));
 vi.mock('../hooks/use-infinite-search-climbs', () => ({ useInfiniteSearchClimbs: vi.fn() }));
 vi.mock('../hooks/use-beta-link-preview', () => ({ useBetaLinkPreview: vi.fn() }));
@@ -69,6 +77,7 @@ beforeEach(async () => {
   db = createTestDatabase();
   await runMigrations(db);
   handle = db;
+  offlineEnabled = true;
 });
 
 afterEach(() => {
@@ -151,6 +160,22 @@ describe('useToggleFavorite dual-write', () => {
     expect(request.mock.calls[0][1]).toEqual({
       input: { boardName: 'kilter', climbUuid: 'climb-online-toggle', angle: 40 },
     });
+    expect(await db.getAllAsync<Row>('SELECT * FROM pending_mutations')).toHaveLength(0);
+  });
+
+  it('offline flag OFF: goes straight to the network even with a DB handle (pre-offline behavior)', async () => {
+    offlineEnabled = false;
+    request.mockResolvedValue({ toggleFavorite: { favorited: true } });
+    const { mutationFn } = asConfig<ToggleVariables>(useToggleFavorite());
+
+    await mutationFn({
+      input: { boardName: 'kilter', climbUuid: 'climb-gated-fav', angle: 40 },
+      currentlyFavorited: false,
+    });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    const localWrites = await db.getAllAsync<Row>('SELECT * FROM user_favorites');
+    expect(localWrites).toHaveLength(0);
     expect(await db.getAllAsync<Row>('SELECT * FROM pending_mutations')).toHaveLength(0);
   });
 });

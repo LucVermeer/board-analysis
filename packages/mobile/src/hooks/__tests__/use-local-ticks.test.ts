@@ -17,6 +17,13 @@ vi.mock('../../db', () => ({
   getDatabaseHandle: () => db,
 }));
 
+// The hook gates its query on the offline-engine flag; default it ON here so
+// the SQL behavior stays exercised, with a dedicated flag-off test below.
+let offlineEnabled = true;
+vi.mock('../../providers/feature-flags-provider', () => ({
+  useOfflineDownloadsEnabled: () => offlineEnabled,
+}));
+
 // useQuery shim: invoke queryFn synchronously-ish and surface the resolved value.
 // Returns a thenable-free object with `data` once the promise settles; tests await
 // the call result explicitly via the exposed runner.
@@ -44,6 +51,7 @@ beforeEach(async () => {
   db = createTestDatabase();
   await runMigrations(db);
   lastResult.value = undefined;
+  offlineEnabled = true;
 });
 
 async function insertTick(uuid: string, climbUuid: string, boardType: string): Promise<void> {
@@ -101,5 +109,15 @@ describe('useLocalPendingTicks', () => {
     const result = await runHook('climb-1', 'kilter');
     db = original;
     expect(result).toBe(0);
+  });
+
+  it('never queries when the offline flag is off — data stays undefined so badges hide', async () => {
+    await insertTick('tick-1', 'climb-1', 'kilter');
+    await enqueue(db, 'boardsesh_ticks', 'create', { climbUuid: 'climb-1' }, 'tick-1');
+
+    offlineEnabled = false;
+    // enabled:false short-circuits inside the useQuery shim, so the queryFn
+    // (and its SQL) never runs even though a pending tick exists.
+    expect(await runHook('climb-1', 'kilter')).toBeUndefined();
   });
 });

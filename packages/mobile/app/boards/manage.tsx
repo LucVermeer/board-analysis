@@ -12,7 +12,7 @@ import { useAuth } from '../../src/providers/auth-provider';
 import { useToast } from '../../src/providers/toast-provider';
 import { useConfirm } from '../../src/providers/dialog-provider';
 import { useTheme } from '../../src/providers/theme-provider';
-import { useFeatureFlag } from '../../src/providers/feature-flags-provider';
+import { useOfflineDownloadsEnabled } from '../../src/providers/feature-flags-provider';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { useSyncStatus, triggerSync, setSyncProgress, getDownloadedScopeKeys } from '../../src/sync';
 import { drainMutationQueue } from '../../src/mutation-queue';
@@ -77,12 +77,13 @@ export default function ManageBoards() {
   // ONCE here (not per row) and derive a primitive state per row, so a download's
   // frequent progress frames only re-render the one row that's changing.
   //
-  // The whole surface is behind the offline-board-downloads flag: off (or absent)
-  // hides the per-row toggle + status caption — this screen is the only writer of
-  // syncEnabledBoards, and the sync/read machinery already no-ops while that
-  // setting is empty, so flag-off reproduces pre-offline behavior. Boards enabled
-  // while the flag was on keep syncing; only the UI to change them is gated.
-  const offlineDownloadsEnabled = useFeatureFlag('offline-board-downloads') === true;
+  // This surface is behind the offline-board-downloads flag: off (or absent)
+  // hides the per-row toggle + status caption. The flag gates the entire offline
+  // engine, not just this screen — with it off the sync scheduler never starts,
+  // reads/writes stay network-only, and only previously-queued writes still
+  // flush (see OfflineSyncBridge). This screen stays the only writer of
+  // syncEnabledBoards.
+  const offlineDownloadsEnabled = useOfflineDownloadsEnabled();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const syncStatus = useSyncStatus();

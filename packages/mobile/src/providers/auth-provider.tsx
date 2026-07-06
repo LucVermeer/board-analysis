@@ -26,7 +26,7 @@ import { clearStoredActiveBoard } from '../lib/active-board-store';
 import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 import { clearUserData, getDatabaseHandle } from '../db';
 import { setSetting } from '../settings';
-import { drainMutationQueue, setSigningOut } from '../mutation-queue';
+import { drainMutationQueue, getPendingCount, setSigningOut } from '../mutation-queue';
 import { stopTokenManagement } from '../notifications';
 
 type AuthState = {
@@ -89,6 +89,13 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     if (!localDb) return;
 
     try {
+      // Gated on the queue being non-empty, NOT on the offline feature flag:
+      // writes queued while the flag was on must still flush after a rollback.
+      // With an empty queue (every flag-off user) this is one local COUNT and
+      // sign-out proceeds immediately, as pre-offline.
+      const pendingCount = await getPendingCount(localDb);
+      if (pendingCount === 0) return;
+
       const graphqlFetch = (query: string, variables?: Record<string, unknown>) =>
         getHttpClient().request(query, variables);
       await Promise.race([

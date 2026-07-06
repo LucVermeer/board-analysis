@@ -36,6 +36,7 @@ import {
 } from '@boardsesh/graphql/operations/playlists';
 import { getHttpClient } from '../client';
 import { useAuth } from '../../../providers/auth-provider';
+import { useOfflineDownloadsEnabled } from '../../../providers/feature-flags-provider';
 import { useActiveBoard } from '../use-active-board';
 import type { PlaylistCreateBoard } from '../../../providers/playlists-provider';
 import { getDatabaseHandle } from '../../../db';
@@ -110,6 +111,7 @@ type MobileClimbActionsData = {
 
 export function useMobileClimbActionsData(): MobileClimbActionsData {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const offlineEnabled = useOfflineDownloadsEnabled();
   const { data: activeBoard } = useActiveBoard();
   const queryClient = useQueryClient();
 
@@ -136,12 +138,13 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
     activeBoard,
     queryClient,
     isAuthenticated,
+    offlineEnabled,
   });
-  mutationDepsRef.current = { activeBoard, queryClient, isAuthenticated };
+  mutationDepsRef.current = { activeBoard, queryClient, isAuthenticated, offlineEnabled };
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async (climbUuid: string): Promise<{ uuid: string; favorited: boolean }> => {
-      const { activeBoard: board, queryClient: client } = mutationDepsRef.current;
+      const { activeBoard: board, queryClient: client, offlineEnabled: offline } = mutationDepsRef.current;
       if (!board) throw new Error('Cannot toggle favorite: no active board selected.');
       // The favorite key is (userId, boardName, climbUuid, angle) on the
       // backend today. Defaulting a missing angle to 0 would silently file
@@ -153,7 +156,9 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
       const currentlyFavorited = favoritesStore.getIsFavorited(climbUuid);
       const db = getDatabaseHandle();
 
-      if (db) {
+      // Local-first only with the offline flag on; otherwise the plain
+      // network toggle below — pre-offline behavior.
+      if (offline && db) {
         if (currentlyFavorited) {
           await removeFavoriteLocal(db, input);
         } else {

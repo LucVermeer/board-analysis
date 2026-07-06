@@ -2,6 +2,7 @@ import { onlineManager } from '@tanstack/react-query';
 import type { Variables } from 'graphql-request';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDatabaseHandle } from '../../db';
+import { isOfflineEngineEnabled } from '../offline-engine';
 import { searchClimbsLocal, countClimbsLocal, isOfflineSearchSupported } from '../../db/queries/search-climbs-local';
 import { getClimbLocal } from '../../db/queries/get-climb-local';
 import { isBoardDownloadedLocally } from '../../db/queries/board-download-status';
@@ -99,7 +100,10 @@ registerOfflineOperation<GetClimbQueryVariables, GetClimbQueryResponse>({
  * `getHttpClient().request`.
  */
 export async function offlineAwareRequest<TResponse>(document: string, variables?: Variables): Promise<TResponse> {
-  const operation = OFFLINE_OPERATIONS.get(document);
+  // Feature-flag gate: with `offline-board-downloads` off, every registered
+  // document degrades to plain HTTP — no local-first read, and no offline
+  // empty-result fallback (an offline request errors, exactly as pre-offline).
+  const operation = isOfflineEngineEnabled() ? OFFLINE_OPERATIONS.get(document) : undefined;
   if (operation) {
     const db = getDatabaseHandle();
     // The `variables !== undefined` guard makes a registered document called

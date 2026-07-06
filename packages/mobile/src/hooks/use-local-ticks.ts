@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getDatabaseHandle } from '../db';
+import { useOfflineDownloadsEnabled } from '../providers/feature-flags-provider';
 
 /**
  * Counts this device's ticks for a climb that have NOT yet reached the server —
@@ -19,12 +20,16 @@ import { getDatabaseHandle } from '../db';
  * it would without local data.
  */
 export function useLocalPendingTicks(climbUuid: string, boardType: string) {
+  // Flag off → query disabled → data undefined → callers' `?? 0` defaults hide
+  // the badge, matching pre-offline rendering (dual-writes are gated too, so a
+  // flag-off user can't accumulate pending ticks in the first place).
+  const offlineEnabled = useOfflineDownloadsEnabled();
   return useQuery({
     queryKey: ['localTicks', climbUuid, boardType],
     // Never refetch on its own; the mutation drainer invalidates ['localTicks']
     // explicitly once a tick reaches the server (see drainer.ts invalidateForTable).
     staleTime: Infinity,
-    enabled: climbUuid.length > 0 && boardType.length > 0,
+    enabled: offlineEnabled && climbUuid.length > 0 && boardType.length > 0,
     queryFn: async (): Promise<number> => {
       const db = getDatabaseHandle();
       if (!db) return 0;
