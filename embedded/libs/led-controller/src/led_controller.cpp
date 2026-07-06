@@ -17,6 +17,10 @@ void LedController::begin(uint16_t count) {
     pinMode(LED_POWER_ENABLE_PIN, OUTPUT);
     digitalWrite(LED_POWER_ENABLE_PIN, HIGH);
 #endif
+#ifdef LED_POWER_ENABLE_PIN_2
+    pinMode(LED_POWER_ENABLE_PIN_2, OUTPUT);
+    digitalWrite(LED_POWER_ENABLE_PIN_2, HIGH);
+#endif
 
     // FastLED.addLeds requires compile-time constants; chipset, pin, and color
     // order are resolved from build flags in led_controller.h.
