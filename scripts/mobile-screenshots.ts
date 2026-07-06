@@ -803,24 +803,24 @@ function captureIosDevice(
     // load app" error) instead of loading the JS. When that happens, re-launch and try
     // again; each fresh launch re-attempts the connect, and a shard that never recovers
     // fails hard (rather than capturing the launcher) so it can be re-run.
-    // iPad cold-boots slower, so give the first launch more time.
-    const isIpad = isIpadScreenshotDevice(screenshotDevice);
-    let reachedHome = waitForHomeReady(homeReadyBaseline, readinessBaseline, isIpad ? 90 : 45);
+    //
+    // Re-launch PLAINLY on BOTH devices — never `openurl`. A plain `simctl launch`
+    // re-triggers the dev-client's DEV_CLIENT_DEFAULT_LAUNCHER_URL auto-connect with no
+    // dialog. An openurl raises the "Open in 'Boardsesh'?" confirm which, undismissed
+    // here (this is BEFORE the flow's prime block), blocks the app from ever loading —
+    // that's exactly why the iPhone shards hung through every retry in CI while the iPad
+    // (already plain-relaunch) passed. The readiness ping + `$screen /home` marker then
+    // both register once the app actually reaches home.
+    //
+    // Generous per-wait budget: a CI cold bundle build alone is ~35-60s, on top of a
+    // slow simulator boot + auto-sign-in, so 45s (the old iPhone value) timed out before
+    // the app could ever get home.
+    let reachedHome = waitForHomeReady(homeReadyBaseline, readinessBaseline, 120);
     for (let attempt = 1; attempt <= 3 && !reachedHome; attempt += 1) {
-      if (isIpad) {
-        // iPad: re-launch PLAINLY — never `openurl`. The "Open in 'Boardsesh'?" confirm
-        // an openurl raises is never delivered/dismissed on iPad and then blocks the
-        // whole sidebar-tap flow. A fresh launch re-triggers auto-connect, no dialog.
-        console.log(`${LOG} Not home yet; terminating and re-launching (iPad attempt ${attempt}/3)...`);
-        runCapture('xcrun', ['simctl', 'terminate', device.udid, APP_ID]);
-        runCapture('xcrun', ['simctl', 'launch', device.udid, APP_ID]);
-      } else {
-        // iPhone: force the connect with the explicit dev-client URL (its deep-link
-        // confirm is dismissed + remembered on iPhone, so it's safe and more reliable).
-        console.log(`${LOG} Not home yet; forcing the dev-client URL (iPhone attempt ${attempt}/3)...`);
-        runCapture('xcrun', ['simctl', 'openurl', device.udid, metroDevClientUrl()]);
-      }
-      reachedHome = waitForHomeReady(homeReadyBaseline, readinessBaseline, 75);
+      console.log(`${LOG} Not home yet; terminating and re-launching (attempt ${attempt}/3)...`);
+      runCapture('xcrun', ['simctl', 'terminate', device.udid, APP_ID]);
+      runCapture('xcrun', ['simctl', 'launch', device.udid, APP_ID]);
+      reachedHome = waitForHomeReady(homeReadyBaseline, readinessBaseline, 120);
     }
     if (!reachedHome) {
       console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
