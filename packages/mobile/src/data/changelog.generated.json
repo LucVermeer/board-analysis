@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-06T04:32:18.944Z",
+  "generatedAt": "2026-07-06T06:42:50.056Z",
   "entries": [
+    {
+      "prNumber": 3488,
+      "category": "fixed",
+      "title": "Fixed a rare crash that could close the app while it was loading climbs.",
+      "mergedAt": "2026-07-06T06:41:56Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3488"
+    },
     {
       "prNumber": 3409,
       "category": "new",

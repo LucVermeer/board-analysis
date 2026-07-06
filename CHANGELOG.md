@@ -13,6 +13,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed a rare crash that could close the app while it was loading climbs. ([#3488](https://github.com/boardsesh/boardsesh/pull/3488))
 - Fixed a crash where the app could be killed for using too much memory while browsing boards — most noticeable on older iPhones. ([#3482](https://github.com/boardsesh/boardsesh/pull/3482))
 
 ## 2026-07-05
