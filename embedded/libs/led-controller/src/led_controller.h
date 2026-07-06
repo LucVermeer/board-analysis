@@ -29,6 +29,15 @@
 #define LED_DATA_PIN 5
 #endif
 
+// Some WLED-style controllers gate the LED output V+ terminal behind a
+// high-side MOSFET "relay" on a GPIO (WLED's "Relay GPIO"). Define
+// LED_POWER_ENABLE_PIN to drive that pin HIGH in begin() so the output
+// terminal is energized; without it the strip's V+ terminal stays at ~0V.
+// On the GLEDOPTO GL-C-015WL-D/016WL-D this is GPIO12 (active high, per the
+// official manual's "Relay GPIO 12, uncheck Invert"). GPIO12 is the ESP32
+// MTDI strapping pin, so it must only be driven high AFTER boot — begin()
+// runs from setup(), which is safe; never strap it high in hardware.
+
 #define MAX_LEDS 500
 
 /**

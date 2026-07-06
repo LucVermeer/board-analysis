@@ -12,6 +12,12 @@ LedController::LedController() : numLeds(0), brightness(128), initialized(false)
 void LedController::begin(uint8_t pin, uint16_t count) {
     numLeds = min(count, (uint16_t)MAX_LEDS);
 
+#ifdef LED_POWER_ENABLE_PIN
+    // Energize the gated LED output V+ terminal (see led_controller.h).
+    pinMode(LED_POWER_ENABLE_PIN, OUTPUT);
+    digitalWrite(LED_POWER_ENABLE_PIN, HIGH);
+#endif
+
     // FastLED.addLeds requires compile-time constants; chipset, pin, and color
     // order are resolved from build flags at the top of this file. The runtime
     // `pin` argument is retained for API compatibility but does not select the

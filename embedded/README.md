@@ -106,13 +106,17 @@ party-mode GraphQL, then lights the string.
 
 - **Data** → the controller's **`IO16`** output terminal (the middle pin of output
   group 1 — order is `V+ | IO16 | GND`). This is GPIO16, which the firmware drives.
-- **Power the strip's V+/GND directly from the LED power supply** — at the strip's
-  own voltage (this string is 12 V). ⚠️ **Do NOT rely on the controller's output
-  `V+` terminal**: on this board the barrel/input V+ reads a correct 12 V but the
-  output `V+` stays dead (~0 V — it's gated behind an enable/relay pin the firmware
-  doesn't drive). Run V+/GND straight from the PSU to the strip.
+- **Power**: the strip's V+/GND can run off the controller's output terminals
+  (rated 10 A per channel / 15 A total). The output `V+` is **gated behind a
+  high-side MOSFET on GPIO12** (WLED's "Relay GPIO 12"); the firmware drives it
+  high at boot (`-D LED_POWER_ENABLE_PIN=12`), so the terminal carries the input
+  voltage once the controller has started. Older firmware builds never drove
+  GPIO12 and the output `V+` read ~0 V — reflash if you see that. For strings
+  that draw more than the terminal rating, run V+/GND straight from the PSU to
+  the strip instead.
 - **Tie all grounds common** — PSU `−` ↔ controller `GND` ↔ strip `GND`. The data
   line needs a shared ground reference or nothing lights, even with power present.
+  (Automatic when the strip is powered from the controller's own terminals.)
 - USB-C powers only the ESP32 (flashing/serial); it never powers the LED rail.
 
 **Chipset / color order** are build flags, defaulting to `WS2811` / `RGB` (both
