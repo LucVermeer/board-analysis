@@ -12,10 +12,13 @@ import {
   isIpadScreenshotDevice,
   metroDevClientUrl,
   parseArgs,
+  READINESS_LOG_PATH,
   renderMaestroFlowForIosDevice,
   resolveAppStoreLocaleTargets,
   resolveIosScreenshotDevices,
   rotationDegreesForIosOrientation,
+  SCREENSHOT_READY_PORT,
+  screenshotReadinessCount,
   validateIosAppLauncherUrl,
   type IosScreenshotDevice,
   type ScreenshotOptions,
@@ -170,6 +173,11 @@ describe('buildScreenshotEnv', () => {
     expect(env.EXPO_PUBLIC_SCREENSHOT_LOCALE).toBe('fr');
   });
 
+  it('bakes the readiness URL the app pings when it reaches home', () => {
+    const env = buildScreenshotEnv(makeOptions(), baseEnv());
+    expect(env.EXPO_PUBLIC_SCREENSHOT_READY_URL).toBe(`http://localhost:${SCREENSHOT_READY_PORT}/ready`);
+  });
+
   it('points a local build at the local backend defaults', () => {
     const env = buildScreenshotEnv(makeOptions({ backend: 'local' }), baseEnv());
     expect(env.EXPO_PUBLIC_BACKEND_URL).toBe('http://localhost:8080');
@@ -218,6 +226,18 @@ describe('buildScreenshotEnv', () => {
     );
     expect(overridden.EXPO_PUBLIC_SCREENSHOT_USER_EMAIL).toBe('shots@boardsesh.com');
     expect(overridden.EXPO_PUBLIC_SCREENSHOT_USER_PASSWORD).toBe('secret');
+  });
+});
+
+describe('screenshotReadinessCount', () => {
+  it('counts each home-reached ping line the readiness server appended', () => {
+    writeFileSync(READINESS_LOG_PATH, '');
+    expect(screenshotReadinessCount()).toBe(0);
+    writeFileSync(READINESS_LOG_PATH, 'x\n');
+    expect(screenshotReadinessCount()).toBe(1);
+    // Blank trailing lines don't inflate the count (the wait compares against a baseline).
+    writeFileSync(READINESS_LOG_PATH, 'x\nx\n');
+    expect(screenshotReadinessCount()).toBe(2);
   });
 });
 

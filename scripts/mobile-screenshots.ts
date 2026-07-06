@@ -57,6 +57,12 @@ export const METRO_LOG_PATH = join(tmpdir(), 'boardsesh-screenshot-metro.log');
 // Metro per worktree). The orchestrator passes the matching dev-client URL to
 // Maestro via `-e MAESTRO_DEV_CLIENT_URL`, so the flows never hard-code a port.
 export const METRO_PORT = Number.parseInt(process.env.BOARDSESH_METRO_PORT ?? '', 10) || 8081;
+// The app pings this local port (from the sim, which shares the host loopback)
+// once it reaches home, so reach-home detection doesn't depend on Metro forwarding
+// the `$screen /home` marker to its stdout — that forwarding intermittently dies
+// with ERR_STREAM_UNABLE_TO_PIPE after a slow bundle build (esp. on the iPhone
+// shards), dropping the marker even though the app DID reach home.
+export const SCREENSHOT_READY_PORT = Number.parseInt(process.env.BOARDSESH_SCREENSHOT_READY_PORT ?? '', 10) || 19870;
 // Output is grouped by store (the directory name), not by platform id.
 const STORE_BY_PLATFORM: Record<'ios' | 'android', string> = { ios: 'apple', android: 'google' };
 const LOG = '[mobile:screenshots]';
@@ -369,6 +375,10 @@ export function buildScreenshotEnv(
     // "Save Password?" dialog over every shot and blocks the board picker.
     EXPO_PUBLIC_SCREENSHOT_USER_EMAIL: baseEnv.SCREENSHOT_USER_EMAIL ?? DEFAULT_USER_EMAIL,
     EXPO_PUBLIC_SCREENSHOT_USER_PASSWORD: baseEnv.SCREENSHOT_USER_PASSWORD ?? DEFAULT_USER_PASSWORD,
+    // The app GETs this once it reaches home (AnalyticsScreenTracker), so the
+    // orchestrator's readiness server sees it directly — a reach-home signal that
+    // survives Metro's log-forwarding dying mid-run.
+    EXPO_PUBLIC_SCREENSHOT_READY_URL: `http://localhost:${SCREENSHOT_READY_PORT}/ready`,
   };
   if (appLocale) {
     env.EXPO_PUBLIC_SCREENSHOT_LOCALE = appLocale;
@@ -770,6 +780,7 @@ function captureIosDevice(
     // INCREASE (not merely be present), or device 2+ would skip the readiness wait
     // on a stale marker and capture a blank/loading frame.
     const homeReadyBaseline = homeReadyMarkerCount();
+    const readinessBaseline = screenshotReadinessCount();
 
     // First try a plain launch — no `simctl openurl`. The screenshots build bakes
     // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:${METRO_PORT} into
@@ -794,7 +805,7 @@ function captureIosDevice(
     // fails hard (rather than capturing the launcher) so it can be re-run.
     // iPad cold-boots slower, so give the first launch more time.
     const isIpad = isIpadScreenshotDevice(screenshotDevice);
-    let reachedHome = waitForHomeReady(homeReadyBaseline, isIpad ? 90 : 45);
+    let reachedHome = waitForHomeReady(homeReadyBaseline, readinessBaseline, isIpad ? 90 : 45);
     for (let attempt = 1; attempt <= 3 && !reachedHome; attempt += 1) {
       if (isIpad) {
         // iPad: re-launch PLAINLY — never `openurl`. The "Open in 'Boardsesh'?" confirm
@@ -809,7 +820,7 @@ function captureIosDevice(
         console.log(`${LOG} Not home yet; forcing the dev-client URL (iPhone attempt ${attempt}/3)...`);
         runCapture('xcrun', ['simctl', 'openurl', device.udid, metroDevClientUrl()]);
       }
-      reachedHome = waitForHomeReady(homeReadyBaseline, 75);
+      reachedHome = waitForHomeReady(homeReadyBaseline, readinessBaseline, 75);
     }
     if (!reachedHome) {
       console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
@@ -1122,6 +1133,20 @@ function runIos(options: ScreenshotOptions): number {
   const screenshotDevices = resolveIosScreenshotDevices(options.devices, options.orientation);
   const localeTargets = resolveAppStoreLocaleTargets(options.appLocales);
 
+  const readinessServer = startReadinessServer();
+  try {
+    return runIosLocales(options, appPath, screenshotDevices, localeTargets);
+  } finally {
+    stopReadinessServer(readinessServer);
+  }
+}
+
+function runIosLocales(
+  options: ScreenshotOptions,
+  appPath: string,
+  screenshotDevices: readonly IosScreenshotDevice[],
+  localeTargets: readonly AppStoreLocaleTarget[],
+): number {
   for (let localeIndex = 0; localeIndex < localeTargets.length; localeIndex++) {
     if (localeIndex > 0 && !waitForPortToClose(METRO_PORT)) {
       console.error(`${LOG} FAILED: Metro port ${METRO_PORT} did not close after the previous locale run.`);
@@ -1188,6 +1213,49 @@ export function portInUse(port: number): boolean {
  * Start Metro in the background. `detached` so cleanup can kill the whole process
  * group; `CI=1` keeps expo non-interactive (no keypress menu / TTY expectations).
  */
+// The app appends one line here (via the readiness server) each time it reaches
+// home. The reach-home wait counts new lines alongside the Metro `$screen /home`
+// marker — a signal that survives Metro's log forwarding dying.
+export const READINESS_LOG_PATH = join(tmpdir(), 'boardsesh-screenshot-ready.log');
+export function screenshotReadinessCount(): number {
+  const log = existsSync(READINESS_LOG_PATH) ? readFileSync(READINESS_LOG_PATH, 'utf8') : '';
+  return log.split('\n').filter((line) => line.length > 0).length;
+}
+
+/**
+ * Start the readiness server as a SEPARATE detached process. The orchestrator
+ * itself is fully synchronous (spawnSync for sleep/simctl/maestro), so an
+ * in-process HTTP server's event loop would be starved and never bind or accept.
+ * A child process has its own event loop; it appends a line to READINESS_LOG_PATH
+ * on every `/ready` GET, and the sync orchestrator just reads that file. Bound to
+ * 0.0.0.0 so the simulator reaches it over IPv4 the same way it reaches Metro.
+ * Truncates the log first; kill the returned process in a finally.
+ */
+export function startReadinessServer(): ChildProcess {
+  writeFileSync(READINESS_LOG_PATH, '');
+  const serverCode =
+    `const h=require('http'),f=require('fs');` +
+    `h.createServer((q,s)=>{if(q.url&&q.url.indexOf('/ready')===0){f.appendFileSync(${JSON.stringify(READINESS_LOG_PATH)},'x\\n');}s.statusCode=204;s.end();})` +
+    `.listen(${SCREENSHOT_READY_PORT},'0.0.0.0');`;
+  const server = spawn(process.execPath, ['-e', serverCode], { stdio: 'ignore', detached: true });
+  // Don't let the child keep the orchestrator's event loop alive at exit.
+  server.unref();
+  return server;
+}
+
+function stopReadinessServer(server: ChildProcess): void {
+  if (server.pid === undefined) return;
+  try {
+    process.kill(-server.pid, 'SIGTERM');
+  } catch {
+    try {
+      server.kill('SIGTERM');
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
 export function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
   // Pipe Metro's output through `tee` to METRO_LOG_PATH so waitForHomeReady can poll
   // it for the app's "$screen /home" marker — the JS console logs land in Metro's
@@ -1343,15 +1411,18 @@ export function homeReadyMarkerCount(): number {
 /**
  * After launch, wait until the app reaches the home screen, so the first
  * screenshot isn't a blank/loading frame. The screenshot build auto-signs-in and
- * boots straight to home (no login screen), so this replaces the old Maestro
- * login.yaml readiness gate. Several devices share one Metro log within a locale,
- * so wait for a NEW marker past `baselineCount` rather than any marker — the log
- * still holds the previous device's `$screen /home`.
+ * boots straight to home (no login screen). Two independent signals, either one
+ * counts (both a shared Metro log and a shared readiness counter carry the
+ * previous device's hit, so wait for a NEW hit past each baseline):
+ *   - the Metro `$screen /home` marker (fast, but lost when Metro's log forwarding
+ *     dies mid-run with ERR_STREAM_UNABLE_TO_PIPE), and
+ *   - a direct GET from the app to the readiness server (survives that).
  */
-export function waitForHomeReady(baselineCount = 0, timeoutSeconds = 180): boolean {
+export function waitForHomeReady(markerBaseline = 0, readyBaseline = 0, timeoutSeconds = 180): boolean {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
-    if (homeReadyMarkerCount() > baselineCount) return true;
+    if (homeReadyMarkerCount() > markerBaseline) return true;
+    if (screenshotReadinessCount() > readyBaseline) return true;
     sleepSeconds(2);
   }
   return false;
