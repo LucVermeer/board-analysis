@@ -1239,36 +1239,48 @@ function dumpMetroLogTail(lines = 80): void {
  * so Metro caches the right variant. Best-effort: a miss just falls back to
  * Maestro cold-loading the bundle (its wait is generous).
  */
-export function prewarmMetroBundle(platform: 'ios' | 'android' = 'ios'): void {
-  const manifest = runCapture('curl', [
-    '-fsS',
-    '--max-time',
-    '30',
-    `http://localhost:${METRO_PORT}/`,
-    '-H',
-    `expo-platform: ${platform}`,
-    '-H',
-    'Accept: application/expo+json,application/json',
-  ]);
-  let bundleUrl: string | undefined;
-  if (manifest.status === 0) {
-    try {
-      bundleUrl = (JSON.parse(manifest.stdout) as { launchAsset?: { url?: string } }).launchAsset?.url;
-    } catch {
-      // Non-JSON manifest — fall through to skip.
-    }
-  }
-  if (!bundleUrl) {
-    console.log(`${LOG} Metro pre-warm skipped (no bundle URL); Maestro will cold-load the bundle.`);
-    return;
-  }
+export function prewarmMetroBundle(platform: 'ios' | 'android' = 'ios'): boolean {
+  // This is load-bearing for reach-home: the dev-client requests this exact bundle
+  // on launch, and if it isn't already cached the cold build (30s+, 4600+ modules)
+  // overruns the dev-client's load timeout — the app then shows the "Searching for
+  // development servers" launcher / "Failed to load app" error and never reaches
+  // home. So retry until the bundle actually caches (the manifest can 404 for a beat
+  // right after Metro starts, and a build can transiently 500). Idempotent: once
+  // Metro has built + cached the bundle, later requests are instant hits.
   console.log(`${LOG} Pre-warming the Metro bundle...`);
-  const warmed = runCapture('curl', ['-fsS', '-o', '/dev/null', '--max-time', '300', bundleUrl]);
-  console.log(
-    warmed.status === 0
-      ? `${LOG} Metro bundle pre-warmed.`
-      : `${LOG} Metro pre-warm did not finish (non-fatal); Maestro will load the bundle.`,
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    const manifest = runCapture('curl', [
+      '-fsS',
+      '--max-time',
+      '30',
+      `http://localhost:${METRO_PORT}/`,
+      '-H',
+      `expo-platform: ${platform}`,
+      '-H',
+      'Accept: application/expo+json,application/json',
+    ]);
+    let bundleUrl: string | undefined;
+    if (manifest.status === 0) {
+      try {
+        bundleUrl = (JSON.parse(manifest.stdout) as { launchAsset?: { url?: string } }).launchAsset?.url;
+      } catch {
+        // Non-JSON manifest — retry.
+      }
+    }
+    if (bundleUrl) {
+      const warmed = runCapture('curl', ['-fsS', '-o', '/dev/null', '--max-time', '300', bundleUrl]);
+      if (warmed.status === 0) {
+        console.log(`${LOG} Metro bundle pre-warmed (attempt ${attempt}).`);
+        return true;
+      }
+    }
+    console.log(`${LOG} Metro not ready to serve the bundle yet (attempt ${attempt}/6); retrying...`);
+    sleepSeconds(5);
+  }
+  console.warn(
+    `${LOG} Metro pre-warm did not succeed after retries; the app will cold-load the bundle and reach-home may fail.`,
   );
+  return false;
 }
 
 /** Poll Metro's /status until it answers (or ~120s elapse). */
