@@ -730,6 +730,11 @@ export function useBoardBluetooth({
 
       setLoading(true);
 
+      // Hoisted so the catch can read the adapter's post-mortem connect
+      // diagnostics (which services the board exposed) for a service_missing
+      // report (#3480); `adapter` itself is block-scoped to the try.
+      let connectAdapter: BluetoothAdapter | null = null;
+
       try {
         const permissionsGranted = await requestBleRuntimePermissions({ requestNotificationPermission: true });
         if (!permissionsGranted) {
@@ -738,6 +743,7 @@ export function useBoardBluetooth({
         }
 
         const adapter = createBluetoothAdapter(devicePicker, scanFamilyForBoard(boardName));
+        connectAdapter = adapter;
 
         const available = await adapter.isAvailable();
         if (!available) {
@@ -893,9 +899,25 @@ export function useBoardBluetooth({
           console.warn('Bluetooth device selection cancelled by user');
         } else {
           console.error('Error connecting to Bluetooth:', error);
+          // For service_missing, tag the report with the services the board
+          // actually exposed so the next occurrence is diagnosable: empty means
+          // nothing was discovered (stale iOS GATT cache or a decoy peripheral),
+          // unfamiliar UUIDs point at an unhandled controller generation (#3480).
+          let discoveredServicesTag: string | undefined;
+          if (failureCategory === 'service_missing') {
+            const connectDiagnostics = await connectAdapter?.getLastConnectDiagnostics?.().catch(() => null);
+            const discoveredServices = connectDiagnostics?.discoveredServices;
+            if (discoveredServices) {
+              discoveredServicesTag = discoveredServices.length > 0 ? discoveredServices.join(',') : 'none';
+            }
+          }
           reportHandledError(error, {
             level: reportLevel,
-            tags: { source: 'ble-connect', failure_category: failureCategory },
+            tags: {
+              source: 'ble-connect',
+              failure_category: failureCategory,
+              ...(discoveredServicesTag ? { ble_discovered_services: discoveredServicesTag } : {}),
+            },
           });
         }
         setIsConnected(false);

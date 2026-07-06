@@ -64,6 +64,18 @@ export type BleWriteDiagnostics = {
   durationMs?: number;
 };
 
+// Diagnostics for a connect that failed during GATT discovery (#3480), for
+// tagging the `service_missing` failure. Populated only by native iOS; a
+// rejected connect promise can't carry it, so the adapter stashes it and the
+// hook reads it right after the failure.
+export type BleConnectDiagnostics = {
+  // Service UUIDs the peripheral actually exposed before discovery failed.
+  // Empty means the board advertised no known write service (stale iOS GATT
+  // cache or a decoy peripheral matched by name); unfamiliar UUIDs point at a
+  // controller generation we don't handle yet.
+  discoveredServices?: string[];
+};
+
 export type BluetoothAdapter = {
   isAvailable(): Promise<boolean>;
   requestAndConnect(targetSerial?: string): Promise<BleConnection>;
@@ -74,4 +86,7 @@ export type BluetoothAdapter = {
   // (success or failure), for analytics tagging. Optional: web-era adapters
   // and old binaries don't report any.
   getLastWriteDiagnostics?(): Promise<BleWriteDiagnostics | null>;
+  // Diagnostics of the adapter's most recent failed connect, for tagging a
+  // service_missing report. Optional: only native iOS reports it.
+  getLastConnectDiagnostics?(): Promise<BleConnectDiagnostics | null>;
 };

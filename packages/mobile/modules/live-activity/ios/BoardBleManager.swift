@@ -206,6 +206,22 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var intentionalDisconnectGenerations: [UUID: UInt64] = [:]
     private var peripheralGenerations: [UUID: UInt64] = [:]
     private var connectionGeneration: UInt64 = 0
+    // Peripherals whose targeted service probe (discoverServices([uart,
+    // redBearLab])) found neither write service and for which we've already
+    // retried once with a full (nil) discovery. iOS can serve a stale/partial
+    // GATT cache for a targeted probe, reporting a service absent that the board
+    // actually exposes; a full re-read defeats that. The set bounds the retry to
+    // ONE attempt so a board that genuinely exposes neither service still fails
+    // instead of looping. Reset at the start of each fresh targeted discovery
+    // (didConnect / state restoration) and on teardown. See #3480.
+    private var retriedFullServiceDiscovery: Set<UUID> = []
+    // Service UUIDs actually discovered on the peripheral when a connect failed
+    // during service/characteristic discovery. Stashed so JS can attach it to
+    // the Sentry `service_missing` report (getLastConnectDiagnostics) — the
+    // failure alone can't say whether the board exposed NOTHING (stale cache /
+    // decoy peripheral) or an unknown third controller generation. Clear-on-read
+    // via takeLastConnectFailureDiagnostics(). See #3480.
+    private var lastConnectFailureDiscoveredServices: [String]?
     private var writeQueue: [WriteRequest] = []
     private var writeGeneration: UInt64 = 0
     private var isWriting = false
@@ -328,6 +344,18 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             let deviceId = peripheral.identifier.uuidString
             let diagnostics = connectionDiagnosticsOnBleQueue(peripheral: peripheral, characteristic: characteristic)
             return (deviceId, discoveredNames[deviceId] ?? peripheral.name, diagnostics)
+        }
+    }
+
+    /// Service UUIDs discovered on the peripheral for the most recent connect
+    /// that failed in service/characteristic discovery, or nil if there is no
+    /// such failure to report. Clear-on-read so a single failure is attributed
+    /// to a single analytics event. Exposed to JS as `getLastConnectDiagnostics`
+    /// (read right after a `connect` rejection). See #3480.
+    func takeLastConnectFailureDiagnostics() -> [String]? {
+        runOnBleQueueSync {
+            defer { lastConnectFailureDiscoveredServices = nil }
+            return lastConnectFailureDiscoveredServices
         }
     }
 
@@ -925,6 +953,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             peripheralGenerations[peripheral.identifier] = connectionGeneration
             connectedPeripheral = peripheral
             logger.info("Restored BLE peripheral \(deviceId, privacy: .public)")
+            retriedFullServiceDiscovery.remove(peripheral.identifier)
             peripheral.discoverServices(writeServiceUuids())
         case .connecting:
             // The restored connect request is still pending; didConnect will
@@ -987,6 +1016,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
         peripheral.delegate = self
+        retriedFullServiceDiscovery.remove(peripheral.identifier)
         peripheral.discoverServices(writeServiceUuids())
     }
 
@@ -1079,6 +1109,31 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         [uartServiceUuid, redBearLabServiceUuid]
     }
 
+    /// Outcome of a `didDiscoverServices` callback.
+    enum ServiceDiscoveryDecision: Equatable {
+        /// A known write service is present — discover its write characteristic.
+        case select(CBUUID)
+        /// Neither write service present on a targeted probe; re-read the whole
+        /// GATT table once (defeats a stale/partial iOS cache) before giving up.
+        case retryFullDiscovery
+        /// Neither write service present even after a full re-discovery — fail.
+        case fail
+    }
+
+    /// Pure decision for `didDiscoverServices`, split out so the retry/fallback
+    /// logic is unit-testable without a real `CBPeripheral` (#3480). Prefers the
+    /// Nordic UART service, falling back to the original RedBearLab one, matching
+    /// `writeServiceUuids()` ordering.
+    func serviceDiscoveryDecision(
+        discoveredServiceUuids: [CBUUID],
+        hasRetriedFullDiscovery: Bool
+    ) -> ServiceDiscoveryDecision {
+        if let match = writeServiceUuids().first(where: { discoveredServiceUuids.contains($0) }) {
+            return .select(match)
+        }
+        return hasRetriedFullDiscovery ? .fail : .retryFullDiscovery
+    }
+
     /// The write characteristic UUID paired with a discovered service UUID.
     private func writeCharacteristicUuid(for serviceUuid: CBUUID) -> CBUUID {
         serviceUuid == redBearLabServiceUuid ? redBearLabWriteCharacteristicUuid : uartWriteCharacteristicUuid
@@ -1097,16 +1152,29 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
 
         // Prefer the Nordic UART service; fall back to RedBearLab for the
-        // original MoonBoard LED box. writeServiceUuids() is ordered, so the
-        // compactMap keeps that preference.
-        guard let service = writeServiceUuids().compactMap({ uuid in
-            peripheral.services?.first(where: { $0.uuid == uuid })
-        }).first else {
+        // original MoonBoard LED box. If a targeted probe finds neither, iOS may
+        // be serving a stale/partial GATT cache — re-read the whole table once
+        // before failing (#3480).
+        let discoveredUuids = (peripheral.services ?? []).map { $0.uuid }
+        switch serviceDiscoveryDecision(
+            discoveredServiceUuids: discoveredUuids,
+            hasRetriedFullDiscovery: retriedFullServiceDiscovery.contains(peripheral.identifier)
+        ) {
+        case .select(let serviceUuid):
+            guard let service = peripheral.services?.first(where: { $0.uuid == serviceUuid }) else {
+                // The decision was computed from this same services list, so the
+                // service should still be here; treat a race as a plain miss.
+                failConnectionSetup(peripheral, error: BoardBleError.uartServiceMissing)
+                return
+            }
+            peripheral.discoverCharacteristics([writeCharacteristicUuid(for: service.uuid)], for: service)
+        case .retryFullDiscovery:
+            retriedFullServiceDiscovery.insert(peripheral.identifier)
+            logger.info("BLE service probe found neither UART nor RedBearLab for \(peripheral.identifier.uuidString, privacy: .public); retrying full GATT discovery")
+            peripheral.discoverServices(nil)
+        case .fail:
             failConnectionSetup(peripheral, error: BoardBleError.uartServiceMissing)
-            return
         }
-
-        peripheral.discoverCharacteristics([writeCharacteristicUuid(for: service.uuid)], for: service)
     }
 
     /// A connection that reached service discovery but can't become
@@ -1116,7 +1184,14 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     /// (picker connect / widget reconnect); during state restoration there is
     /// no pending completion and the teardown itself is the fix.
     private func failConnectionSetup(_ peripheral: CBPeripheral, error: Error) {
-        logger.error("BLE connection setup failed for \(peripheral.identifier.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        // Record what the board DID expose so a service_missing report can tell
+        // "nothing discovered" (stale cache / decoy peripheral) apart from an
+        // unknown third controller generation (#3480). Read by JS via
+        // getLastConnectDiagnostics right after the connect rejection.
+        let discoveredServices = (peripheral.services ?? []).map { $0.uuid.uuidString }
+        lastConnectFailureDiscoveredServices = discoveredServices
+        logger.error("BLE connection setup failed for \(peripheral.identifier.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public) discoveredServices=[\(discoveredServices.joined(separator: ","), privacy: .public)]")
+        retriedFullServiceDiscovery.remove(peripheral.identifier)
         peripheralGenerations.removeValue(forKey: peripheral.identifier)
         if connectedPeripheral?.identifier == peripheral.identifier {
             connectedPeripheral = nil
@@ -1794,6 +1869,22 @@ extension BoardBleManager {
         func fireWriteAck(error: Error?) {
             manager.runOnBleQueueSync { manager.handleDidWriteValueOnBleQueue(error: error) }
         }
+
+        /// Exercise the pure service-discovery decision (retry-then-fail
+        /// fallback) without a real `CBPeripheral` (#3480).
+        func serviceDiscoveryDecision(
+            discoveredServiceUuids: [CBUUID],
+            hasRetriedFullDiscovery: Bool
+        ) -> BoardBleManager.ServiceDiscoveryDecision {
+            manager.serviceDiscoveryDecision(
+                discoveredServiceUuids: discoveredServiceUuids,
+                hasRetriedFullDiscovery: hasRetriedFullDiscovery
+            )
+        }
+
+        /// The Nordic UART and RedBearLab write-service UUIDs, in probe order,
+        /// so tests can assert the decision without hardcoding them.
+        var writeServiceUuidsForTesting: [CBUUID] { manager.writeServiceUuids() }
 
         var hasPendingWriteResume: Bool { manager.pendingWriteResume != nil }
         var capturedPendingWriteResume: (() -> Void)? { manager.pendingWriteResume }
