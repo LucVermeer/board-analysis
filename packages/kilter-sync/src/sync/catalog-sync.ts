@@ -162,6 +162,10 @@ export function foldCatalogStat(
   accumByKey: Map<string, StatAccum>,
   stat: KilterCatalogStat,
   canonicalUuid: string,
+  // Era fallback for the quality-scale correction when the stat row has no
+  // fa_at (~2.6k rated kilter rows, ~64% pre-cutover): the climb's creation
+  // timestamp. Null when the caller doesn't know it → unknown-era passthrough.
+  climbCreatedAt: string | null = null,
 ): void {
   const key = `${canonicalUuid}|${stat.angle}`;
   let accum = accumByKey.get(key);
@@ -182,9 +186,10 @@ export function foldCatalogStat(
   accum.kilterCount += stat.ascentCount;
   // Kilter Grips reports a MIXED-scale quality average (Aurora-era 1-3 blended
   // with Grips-era 1-5). correctGripsQualityAverage puts it on the canonical 1-5
-  // scale using the climb's era (fa_at) and is self-contained on range: unrated
+  // scale using the climb's era (fa_at, falling back to the climb's creation
+  // time when the stat row has no FA) and is self-contained on range: unrated
   // (≤0) and garbage (>5) both come back null, so no further guard is needed.
-  const incomingQuality = correctGripsQualityAverage(stat.qualityAverage, stat.faAt);
+  const incomingQuality = correctGripsQualityAverage(stat.qualityAverage, stat.faAt ?? climbCreatedAt);
   // Difficulty ingest guard: id 1 doesn't exist and 0 is a "no data" sentinel
   // (valid grade ids are ~10-33), so treat anything ≤ 1 as "no grade" → null.
   const incomingDisplayDifficulty = guardDifficulty(stat.currentDifficultyId ?? stat.difficultyAverage);
@@ -224,13 +229,14 @@ export function foldCatalogStatOnce(
   seenSourceStats: Set<string>,
   stat: KilterCatalogStat,
   canonicalUuid: string,
+  climbCreatedAt: string | null = null,
 ): boolean {
   const sourceKey = catalogStatSourceKey(stat);
   if (seenSourceStats.has(sourceKey)) {
     return false;
   }
   seenSourceStats.add(sourceKey);
-  foldCatalogStat(accumByKey, stat, canonicalUuid);
+  foldCatalogStat(accumByKey, stat, canonicalUuid, climbCreatedAt);
   return true;
 }
 
@@ -275,6 +281,9 @@ async function syncBoardLayoutGroup(
 
   // lower(sourceUuid) → canonicalUuid, for routing stats. Spans the whole group.
   const climbUuidToCanonical = new Map<string, string>();
+  // Source-uuid → climb creation timestamp, the era fallback for stats rows
+  // that carry no fa_at (see foldCatalogStat).
+  const createdAtBySourceUuid = new Map<string, string>();
 
   for (const gripsLayoutUuid of gripsLayoutUuids) {
     const climbs = await withToken(state, (token) => fetchLayoutClimbs(token, gripsLayoutUuid));
@@ -293,6 +302,7 @@ async function syncBoardLayoutGroup(
       if (!climb.isListed || climb.isDraft || climb.isDeleted) continue;
       result.climbsSeen += 1;
       const lowerUuid = climb.climbUuid.toLowerCase();
+      if (climb.createdAt) createdAtBySourceUuid.set(lowerUuid, climb.createdAt);
 
       // 1. UUID identity — the Grips catalog inherited Aurora's climb UUIDs, so
       //    most incoming climbs already exist as their own canonical. Match on
@@ -452,7 +462,13 @@ async function syncBoardLayoutGroup(
     for (const stat of stats) {
       const canonicalUuid = climbUuidToCanonical.get(stat.climbUuid.toLowerCase());
       if (!canonicalUuid) continue; // stat for a filtered/unknown climb
-      foldCatalogStatOnce(statsByCanonicalAngle, seenSourceStats, stat, canonicalUuid);
+      foldCatalogStatOnce(
+        statsByCanonicalAngle,
+        seenSourceStats,
+        stat,
+        canonicalUuid,
+        createdAtBySourceUuid.get(stat.climbUuid.toLowerCase()) ?? null,
+      );
     }
   }
 

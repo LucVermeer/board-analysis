@@ -14,7 +14,8 @@
 --   We can't tell a single rating's scale from the aggregate, so we use the
 --   climb's era (fa_at on the stat row) as the discriminator:
 --     * fa_at < 2025-09-01 (Aurora era) → clamp(2·raw − 1, 1, 5).
---     * fa_at >= cutover, or fa_at NULL (unknown era) → leave as-is (native 1-5).
+--     * fa_at ≥ cutover → leave as-is (native 1-5). fa_at NULL falls back to
+--       the climb's created_at; only both-NULL rows stay untouched.
 --     * quality_average <= 0 / NULL → left for the sentinel migration (0151) / skip.
 --
 -- Known imprecision (best-effort, documented; see PR description)
@@ -27,9 +28,11 @@
 --   on the 2·avg − 1 grid already, exactly as 0149 excludes owned aurora rows).
 --
 -- Prod scope verified read-only (2026-07-07): 312,155 non-owned pre-cutover rated
--- kilter rows are rewritten (the NOT EXISTS scope keeps 45 orphan stat rows with no
--- board_climbs row); post-cutover / unknown-era / unrated rows are untouched. Of
--- these, 134,990 are the classics pinned at exactly 3.00 that become 5.00.
+-- kilter rows by fa_at, plus 488 rows whose era comes from the created_at
+-- fallback (fa_at NULL) = 312,643 rewritten (the NOT EXISTS scope keeps 45
+-- orphan stat rows with no board_climbs row); post-cutover / unknown-era /
+-- unrated rows are untouched. Of these, 134,990 are the classics pinned at
+-- exactly 3.00 that become 5.00.
 --
 -- Batching: monotonic key cursor over (climb_uuid, angle) — every kilter row is
 -- visited once, so the (non value-idempotent) 2q − 1 update is single-pass safe.
@@ -78,8 +81,16 @@ BEGIN
         AND t.angle = p.angle
         AND t.quality_average IS NOT NULL
         AND t.quality_average > 0
-        AND t.fa_at IS NOT NULL
-        AND t.fa_at < TIMESTAMP '2025-09-01'
+        -- Era discriminator: fa_at, falling back to the climb's creation time
+        -- when the stat row has no FA (~2.6k rated rows, ~64% pre-cutover;
+        -- format verified uniform 'YYYY-MM-DD HH24:MI:SS.US' on all 403k prod
+        -- rows so the cast is safe). Both NULL → unknown era → left as-is,
+        -- mirroring correctGripsQualityAverage.
+        AND COALESCE(
+              t.fa_at,
+              (SELECT bc2.created_at::timestamp FROM board_climbs bc2
+                WHERE bc2.board_type = 'kilter' AND bc2.uuid = t.climb_uuid)
+            ) < TIMESTAMP '2025-09-01'
         AND NOT EXISTS (
           SELECT 1 FROM board_climbs bc
           WHERE bc.board_type = 'kilter'

@@ -272,3 +272,46 @@ describe('foldCatalogStat — kilter catalog stat accumulation', () => {
     expect(map.size).toBe(2);
   });
 });
+
+describe('foldCatalogStat — created_at era fallback', () => {
+  const CANON = 'canon-uuid';
+  it('uses the climb creation time when the stat row has no fa_at', () => {
+    const accumByKey = new Map<string, StatAccum>();
+    foldCatalogStat(
+      accumByKey,
+      {
+        climbUuid: CANON,
+        angle: 40,
+        ascentCount: 10,
+        currentDifficultyId: 15,
+        difficultyAverage: 15.2,
+        qualityAverage: 3.0,
+        faUsername: null,
+        faAt: null,
+      },
+      CANON,
+      '2020-05-01 12:00:00', // pre-cutover creation → legacy 1-3 → rescaled
+    );
+    expect(accumByKey.get(`${CANON}|40`)?.qualityAverage).toBe(5.0);
+  });
+
+  it('stays passthrough when both fa_at and created_at are unknown', () => {
+    const accumByKey = new Map<string, StatAccum>();
+    foldCatalogStat(
+      accumByKey,
+      {
+        climbUuid: CANON,
+        angle: 40,
+        ascentCount: 10,
+        currentDifficultyId: 15,
+        difficultyAverage: 15.2,
+        qualityAverage: 3.0,
+        faUsername: null,
+        faAt: null,
+      },
+      CANON,
+      null,
+    );
+    expect(accumByKey.get(`${CANON}|40`)?.qualityAverage).toBe(3.0);
+  });
+});
