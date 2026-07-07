@@ -14,13 +14,17 @@ import { useEffect, useState } from 'react';
  * swiping between climbs once the drawer is open).
  */
 export function useDeferredUntilFrame(active: boolean): boolean {
-  const [ready, setReady] = useState(false);
+  // Screenshot mode: seed `ready` true on the FIRST render (lazy init, before any
+  // effect commits) so the heavy content is present in the very first frame — the
+  // rAF defer otherwise leaves the surface blank when Android's `adb screencap`
+  // (Maestro) captures the open animation. The effect below keeps it in sync on
+  // re-activation. Folds out of normal builds.
+  const [ready, setReady] = useState(() => process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && active);
 
   useEffect(() => {
-    // Screenshot mode: mount heavy content synchronously (no defer) so it
-    // composites in the same frames as the open animation — Android's `adb
-    // screencap` (Maestro) otherwise captures the deferred surface blank. Folds
-    // out of normal builds.
+    // Screenshot mode: no defer — mirror `active` straight into `ready` so a
+    // re-activation (or reset) tracks it. The first render is already handled by
+    // the lazy initializer above.
     if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1') {
       setReady(active);
       return;

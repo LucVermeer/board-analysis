@@ -62,9 +62,13 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
   // Tracks whether the sheet is currently presented so the list only
   // auto-scrolls to the current item on a real open (not on background mounts).
   const [isPresented, setIsPresented] = useState(false);
-  // Set synchronously in present() (before the native animation starts) and
-  // cleared once the dismiss settles. OR'd with the native isPresented so the
-  // imperative-open path and the coordinator's re-present path both read active.
+  // Flipped true in present() and cleared once the dismiss settles. present()
+  // calls managed.handle.present() first, so the native sheet begins animating
+  // one render before this setState commits — but that same re-render refreshes
+  // the frozen snapshot below (activeOrPresented turns true), so the live queue
+  // lands before any stale frame is user-visible. OR'd with the native
+  // isPresented so the imperative-open path and the coordinator's re-present
+  // path both read active.
   const [isActive, setIsActive] = useState(false);
 
   const snapPoints = useMemo(() => ['70%', '95%'], []);
