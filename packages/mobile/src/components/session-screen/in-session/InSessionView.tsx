@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { type NativeScrollEvent, type NativeSyntheticEvent, StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
@@ -574,6 +574,9 @@ export function InSessionView({
       keyExtractor={historyKeyExtractor}
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
+      // Tab mode only: RNGH must see this scroll to arbitrate against RecordTopChrome's opaque Material container; native host kept in overlay so the dismiss pan wins.
+      renderScrollComponent={showChrome ? GestureScrollView : undefined}
+      nestedScrollEnabled={showChrome}
       // The floating chrome owns the top inset (tab mode), so pad manually by the
       // measured chrome height and never auto-inset under the (absent) header.
       contentInsetAdjustmentBehavior="never"
