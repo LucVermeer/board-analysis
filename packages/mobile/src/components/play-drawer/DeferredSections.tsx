@@ -8,8 +8,10 @@ import { Icon } from '../Icon';
 import { LogbookSection } from './LogbookSection';
 import { SimilarClimbsSection } from './SimilarClimbsSection';
 import { CommunitySection } from './CommunitySection';
+import { BoardseshGradeSection } from './BoardseshGradeSection';
 import { BetaVideosSection } from './BetaVideosSection';
 import { useAuth } from '../../providers/auth-provider';
+import { useBoardseshGradeEnabled } from '../../providers/feature-flags-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
@@ -51,8 +53,10 @@ export const DeferredSections = memo(function DeferredSections({
   onAddBetaVideo,
 }: DeferredSectionsProps) {
   const { t } = useTranslation('session');
+  const { t: tClimbs } = useTranslation('climbs');
   const { isAuthenticated } = useAuth();
   const { brandColors } = useTheme();
+  const boardseshGradeEnabled = useBoardseshGradeEnabled();
 
   const handleAddBetaVideoPress = useCallback(() => {
     void Haptics.selectionAsync();
@@ -127,6 +131,12 @@ export const DeferredSections = memo(function DeferredSections({
               ascensionistCount={climb.ascensionist_count}
             />
           </CollapsibleSection>
+
+          {boardseshGradeEnabled && (
+            <CollapsibleSection title={tClimbs('boardseshGrade.title')} defaultExpanded persistKey="boardseshGrade">
+              <BoardseshGradeSection climbUuid={climb.uuid} boardName={boardName} angle={angle} />
+            </CollapsibleSection>
+          )}
 
           <CollapsibleSection title={t('mobile.similarClimbs.title')} persistKey="similarClimbs">
             <SimilarClimbsSection

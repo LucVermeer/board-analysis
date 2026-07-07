@@ -2,20 +2,16 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData, onlineManager 
 import type {
   BoardName,
   UserBoard,
-  UserBoardConnection,
   ClimbSearchInput,
   Grade,
-  Angle,
   MyBoardsInput,
   SearchBoardsInput,
   PopularBoardConfigsInput,
   CreateBoardInput,
   UpdateBoardInput,
   SetterStatsInput,
-  UserProfile,
   PublicUserProfile,
   UpdateProfileInput,
-  SessionSummary,
   SessionHealthExport,
   UpdateGymInput,
   GrantGymWriteAccessInput,
@@ -28,6 +24,9 @@ import {
   type SimilarClimbsResponse,
   CLIMB_STATS_HISTORY,
   type ClimbStatsHistoryResponse,
+  BOARDSESH_GRADE,
+  type BoardseshGradeResponse,
+  type BoardseshGradeVariables,
 } from '@boardsesh/graphql/operations';
 import {
   GET_FAVORITES,
@@ -1084,6 +1083,31 @@ export function useClimbStatsHistory(boardName: string, climbUuid: string | null
       }),
     select: (data) => data.climbStatsHistory,
     enabled: !!climbUuid,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * The nightly data-science Boardsesh grade for a climb at a given angle. Nullable
+ * — the resolver returns null until the job has computed a row. `climbUuid` null
+ * disables the query. Scoped by angle: the grade at 40° differs from 25°.
+ */
+export function useBoardseshGrade(
+  boardName: string,
+  climbUuid: string | null,
+  angle: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['boardseshGrade', boardName, climbUuid, angle],
+    queryFn: () =>
+      getHttpClient().request<BoardseshGradeResponse, BoardseshGradeVariables>(BOARDSESH_GRADE, {
+        boardName,
+        climbUuid: climbUuid!,
+        angle,
+      }),
+    select: (data) => data.boardseshGrade,
+    enabled: (options?.enabled ?? true) && !!climbUuid,
     staleTime: 5 * 60 * 1000,
   });
 }

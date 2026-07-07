@@ -610,6 +610,31 @@ export type BoardStatsUpdated = {
   stats: BoardPresenceStats;
 };
 
+/**
+ * The Boardsesh grade for a climb at one angle: the data-science-backed grade
+ * produced by the nightly refresh job. Null query result means no grade has been
+ * computed for that climb+angle (e.g. MoonBoard, or too few ascents).
+ */
+export type BoardseshGrade = {
+  __typename?: 'BoardseshGrade';
+  /** Ascent count that produced this row */
+  ascensionistCount: Scalars['Int']['output'];
+  /** When this grade was computed (ISO timestamp) */
+  computedAt: Scalars['String']['output'];
+  /** Confidence tier: confirmed | provisional | setter_only */
+  confidence: Scalars['String']['output'];
+  /** High end of the 95% band on the surfaced grade */
+  gradeHigh?: Maybe<Scalars['Float']['output']>;
+  /** Low end of the 95% band on the surfaced grade */
+  gradeLow?: Maybe<Scalars['Float']['output']>;
+  /** Within-board shrunk grade on the shared difficulty scale (null when unavailable) */
+  localGrade?: Maybe<Scalars['Float']['output']>;
+  /** Model version that produced this row */
+  modelVersion: Scalars['String']['output'];
+  /** Cross-board standardized grade (Tension-anchored); null when unanchorable */
+  universalGrade?: Maybe<Scalars['Float']['output']>;
+};
+
 export type BrowseProposalsInput = {
   boardType?: InputMaybe<Scalars['String']['input']>;
   /** Filter by board UUID (resolves to boardType internally) */
@@ -3723,6 +3748,12 @@ export type Query = {
    * error rather than silently truncating, so callers must cap on their end.
    */
   boardsBySerialNumbers: Array<UserBoard>;
+  /**
+   * Get the Boardsesh grade for a climb at a specific angle.
+   * Returns null when no grade has been computed for that climb+angle
+   * (e.g. MoonBoard, or too few ascents).
+   */
+  boardseshGrade?: Maybe<BoardseshGrade>;
   /** Browse proposals across all climbs with filters. */
   browseProposals: ProposalConnection;
   /** Get community status for multiple climbs (batch). */
@@ -4172,6 +4203,13 @@ export type QueryBoardRecentClimbsArgs = {
 /** Root query type for all read operations. */
 export type QueryBoardsBySerialNumbersArgs = {
   serialNumbers: Array<Scalars['String']['input']>;
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardseshGradeArgs = {
+  angle: Scalars['Int']['input'];
+  boardName: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -6657,6 +6695,27 @@ export type InstagramBetaScanQuery = {
       reason: string;
     }>;
   };
+};
+
+export type BoardseshGradeQueryVariables = Exact<{
+  boardName: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  angle: Scalars['Int']['input'];
+}>;
+
+export type BoardseshGradeQuery = {
+  __typename?: 'Query';
+  boardseshGrade?: {
+    __typename?: 'BoardseshGrade';
+    localGrade?: number | null;
+    universalGrade?: number | null;
+    gradeLow?: number | null;
+    gradeHigh?: number | null;
+    confidence: string;
+    ascensionistCount: number;
+    modelVersion: string;
+    computedAt: string;
+  } | null;
 };
 
 export type ClimbStatsForAnglesQueryVariables = Exact<{
@@ -9335,6 +9394,72 @@ export const InstagramBetaScanDocument = {
     },
   ],
 } as unknown as DocumentNode<InstagramBetaScanQuery, InstagramBetaScanQueryVariables>;
+export const BoardseshGradeDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'BoardseshGrade' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardName' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'angle' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'boardseshGrade' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardName' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardName' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuid' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'angle' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'angle' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'localGrade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'universalGrade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'gradeLow' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'gradeHigh' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'confidence' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'modelVersion' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'computedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<BoardseshGradeQuery, BoardseshGradeQueryVariables>;
 export const ClimbStatsForAnglesDocument = {
   kind: 'Document',
   definitions: [

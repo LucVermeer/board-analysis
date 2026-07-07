@@ -384,4 +384,46 @@ export const climbQueries = {
       difficulty: row.displayDifficulty == null ? null : getGradeLabel(Math.round(row.displayDifficulty)),
     }));
   },
+
+  /**
+   * Get the Boardsesh grade for a climb at one angle from board_climb_grades
+   * (written by the nightly refresh-climb-grades job). Returns null when no row
+   * exists for that climb+angle (e.g. MoonBoard, or too few ascents).
+   */
+  boardseshGrade: async (
+    _: unknown,
+    { boardName, climbUuid, angle }: { boardName: string; climbUuid: string; angle: number },
+    ctx: ConnectionContext,
+  ) => {
+    await applyRateLimit(ctx, 60, 'boardsesh-grade');
+    validateInput(BoardNameSchema, boardName, 'boardName');
+    validateInput(ExternalUUIDSchema, climbUuid, 'climbUuid');
+
+    if (!isValidBoardName(boardName)) {
+      throw new Error(`Invalid board name: ${boardName}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
+    }
+
+    const [row] = await dbRead
+      .select({
+        localGrade: dbSchema.boardClimbGrades.localGrade,
+        universalGrade: dbSchema.boardClimbGrades.universalGrade,
+        gradeLow: dbSchema.boardClimbGrades.gradeLow,
+        gradeHigh: dbSchema.boardClimbGrades.gradeHigh,
+        confidence: dbSchema.boardClimbGrades.confidence,
+        ascensionistCount: dbSchema.boardClimbGrades.ascensionistCount,
+        modelVersion: dbSchema.boardClimbGrades.modelVersion,
+        computedAt: dbSchema.boardClimbGrades.computedAt,
+      })
+      .from(dbSchema.boardClimbGrades)
+      .where(
+        and(
+          eq(dbSchema.boardClimbGrades.boardType, boardName),
+          eq(dbSchema.boardClimbGrades.climbUuid, climbUuid),
+          eq(dbSchema.boardClimbGrades.angle, angle),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
+  },
 };

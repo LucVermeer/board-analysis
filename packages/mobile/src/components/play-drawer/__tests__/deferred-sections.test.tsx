@@ -9,6 +9,8 @@ const deferred = vi.hoisted(() => ({
   calls: [] as Array<{ active: boolean; resetKey: string | number | undefined }>,
 }));
 
+const flags = vi.hoisted(() => ({ boardseshGrade: false }));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
@@ -61,6 +63,14 @@ vi.mock('../SimilarClimbsSection', () => ({
   SimilarClimbsSection: () => createElement('div', { 'data-testid': 'similar-climbs' }),
 }));
 
+vi.mock('../BoardseshGradeSection', () => ({
+  BoardseshGradeSection: () => createElement('div', { 'data-testid': 'boardsesh-grade' }),
+}));
+
+vi.mock('../../../providers/feature-flags-provider', () => ({
+  useBoardseshGradeEnabled: () => flags.boardseshGrade,
+}));
+
 import { DeferredSections } from '../DeferredSections';
 
 const climb = {
@@ -91,6 +101,7 @@ describe('DeferredSections', () => {
   beforeEach(() => {
     deferred.ready = false;
     deferred.calls = [];
+    flags.boardseshGrade = false;
   });
 
   it('keeps Beta videos eager while heavier sections wait for scroll and interaction readiness', () => {
@@ -119,6 +130,22 @@ describe('DeferredSections', () => {
     expect(screen.getByTestId('logbook')).not.toBeNull();
     expect(screen.getByTestId('community')).not.toBeNull();
     expect(screen.getByTestId('similar-climbs')).not.toBeNull();
+  });
+
+  it('hides the Boardsesh grade section when the flag is off', () => {
+    deferred.ready = true;
+    flags.boardseshGrade = false;
+    renderSections({ contentEnabled: true });
+
+    expect(screen.queryByTestId('boardsesh-grade')).toBeNull();
+  });
+
+  it('shows the Boardsesh grade section when the flag is on', () => {
+    deferred.ready = true;
+    flags.boardseshGrade = true;
+    renderSections({ contentEnabled: true });
+
+    expect(screen.getByTestId('boardsesh-grade')).not.toBeNull();
   });
 
   it('renders nothing while disabled', () => {

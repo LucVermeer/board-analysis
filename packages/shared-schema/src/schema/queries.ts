@@ -114,6 +114,13 @@ export const queriesTypeDefs = /* GraphQL */ `
     """
     climbStatsForAngles(boardName: String!, climbUuid: ID!): [ClimbStatsForAngle!]!
 
+    """
+    Get the Boardsesh grade for a climb at a specific angle.
+    Returns null when no grade has been computed for that climb+angle
+    (e.g. MoonBoard, or too few ascents).
+    """
+    boardseshGrade(boardName: String!, climbUuid: String!, angle: Int!): BoardseshGrade
+
     # ============================================
     # User Management Queries (require auth)
     # ============================================
