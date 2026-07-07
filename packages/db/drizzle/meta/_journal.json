@@ -1044,6 +1044,48 @@
       "when": 1783420483539,
       "tag": "0148_public_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1783456378250,
+      "tag": "0149_backfill_quality_scale_affine_aurora",
+      "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1783456494086,
+      "tag": "0150_correct_kilter_grips_quality_blend",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1783456558996,
+      "tag": "0151_cleanup_quality_difficulty_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1783456608085,
+      "tag": "0152_repair_old_formula_tick_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1783456675053,
+      "tag": "0153_add_boardsesh_ticks_quality_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1783456746336,
+      "tag": "0154_rescale_climb_stats_history_quality",
+      "breakpoints": true
     }
   ]
 }

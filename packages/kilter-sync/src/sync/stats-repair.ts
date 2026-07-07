@@ -142,15 +142,22 @@ async function loadTopStats(db: DrizzleDb): Promise<KilterStatsRepairTopRow[]> {
 // run after a catalog sync has persisted this run's fingerprint aliases — the repair
 // reads only persisted aliases, it does not re-derive fingerprints. A source UUID
 // with no mapping here is counted in summary.statsUnresolved (observable, not silent).
-async function loadCanonicalMap(db: DrizzleDb, layoutId: number): Promise<Map<string, string>> {
+async function loadCanonicalMap(
+  db: DrizzleDb,
+  layoutId: number,
+): Promise<{ canonicalBySource: Map<string, string>; createdAtByCanonical: Map<string, string> }> {
   const map = new Map<string, string>();
+  // Canonical uuid → climb creation timestamp: the era fallback for the
+  // quality-scale correction on stat rows without fa_at (see foldCatalogStat).
+  const createdAtByCanonical = new Map<string, string>();
   const climbRows = await db
-    .select({ uuid: boardClimbs.uuid })
+    .select({ uuid: boardClimbs.uuid, createdAt: boardClimbs.createdAt })
     .from(boardClimbs)
     .where(and(eq(boardClimbs.boardType, KILTER), eq(boardClimbs.layoutId, layoutId)));
 
   for (const row of climbRows) {
     map.set(row.uuid.toLowerCase(), row.uuid);
+    if (row.createdAt) createdAtByCanonical.set(row.uuid, row.createdAt);
   }
 
   const aliasRows = await db
@@ -172,7 +179,7 @@ async function loadCanonicalMap(db: DrizzleDb, layoutId: number): Promise<Map<st
     map.set(row.aliasUuid.toLowerCase(), row.canonicalUuid);
   }
 
-  return map;
+  return { canonicalBySource: map, createdAtByCanonical };
 }
 
 function statValueFromAccum(accum: StatAccum): RepairStatValue {
@@ -182,6 +189,9 @@ function statValueFromAccum(accum: StatAccum): RepairStatValue {
     angle: accum.angle,
     displayDifficulty: accum.displayDifficulty,
     difficultyAverage: accum.difficultyAverage,
+    // qualityAverage / difficulty were already put on the canonical 1-5 scale and
+    // guarded by foldCatalogStat (correctGripsQualityAverage) when this repair
+    // accumulated the stat rows — the repair reads them straight from the accum.
     qualityAverage: accum.qualityAverage,
     qualityNormalized: true,
     faUsername: accum.faUsername,
@@ -323,7 +333,10 @@ export async function repairKilterCatalogStats(args: KilterStatsRepairArgs): Pro
   let gripsLayoutsProcessed = 0;
 
   for (const [boardLayoutId, gripsLayoutUuids] of byBoardLayout) {
-    const canonicalBySourceUuid = await loadCanonicalMap(args.db, boardLayoutId);
+    const { canonicalBySource: canonicalBySourceUuid, createdAtByCanonical } = await loadCanonicalMap(
+      args.db,
+      boardLayoutId,
+    );
     gripsLayoutsProcessed += gripsLayoutUuids.length;
     for (const gripsLayoutUuid of gripsLayoutUuids) {
       const stats = await withToken(state, (token) => fetchLayoutClimbStats(token, gripsLayoutUuid));
@@ -341,7 +354,7 @@ export async function repairKilterCatalogStats(args: KilterStatsRepairArgs): Pro
           statsUnresolved += 1;
           continue;
         }
-        foldCatalogStat(statsByCanonicalAngle, stat, canonicalUuid);
+        foldCatalogStat(statsByCanonicalAngle, stat, canonicalUuid, createdAtByCanonical.get(canonicalUuid) ?? null);
       }
     }
   }

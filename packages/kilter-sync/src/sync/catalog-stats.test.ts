@@ -183,7 +183,7 @@ describe('foldCatalogStat — kilter catalog stat accumulation', () => {
     expect(accum.kilterCount).toBe(17);
   });
 
-  it('#3: quality 0 or negative is stored as NULL (never a literal 0 rating); Grips 1-5 kept as-is', () => {
+  it('#3: quality 0 or negative is stored as NULL (never a literal 0 rating); unknown-era kept as-is', () => {
     expect(
       fold({ stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, qualityAverage: 0 }), canonical: CANON })
         .qualityAverage,
@@ -192,11 +192,70 @@ describe('foldCatalogStat — kilter catalog stat accumulation', () => {
       fold({ stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, qualityAverage: null }), canonical: CANON })
         .qualityAverage,
     ).toBeNull();
-    // Grips quality is already 1-5 — NOT rescaled (no ×5/3)
+    // No faAt → unknown era → passthrough (assumed native 1-5).
     expect(
       fold({ stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, qualityAverage: 5 }), canonical: CANON })
         .qualityAverage,
     ).toBe(5);
+  });
+
+  it('#star-scale: an Aurora-era (pre-cutover fa_at) blend is corrected 1-3 → 1-5', () => {
+    // A 3-of-3 classic first ascended before the Grips cutover → 5-of-5.
+    expect(
+      fold({
+        stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 8, qualityAverage: 3.0, faAt: '2021-06-01 10:00:00' }),
+        canonical: CANON,
+      }).qualityAverage,
+    ).toBe(5.0);
+    // A Grips-era (post-cutover) climb stays on its native 1-5 value.
+    expect(
+      fold({
+        stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 8, qualityAverage: 3.0, faAt: '2026-02-01 10:00:00' }),
+        canonical: CANON,
+      }).qualityAverage,
+    ).toBe(3.0);
+  });
+
+  it('#star-scale: quality above 5 is rejected → null (ingest guard)', () => {
+    // Post-cutover passthrough can't exceed the domain; a bogus > 5 is dropped.
+    expect(
+      fold({
+        stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, qualityAverage: 6.1, faAt: '2026-02-01 10:00:00' }),
+        canonical: CANON,
+      }).qualityAverage,
+    ).toBeNull();
+  });
+
+  it('#star-scale: placeholder difficulty ≤ 1 is rejected → null (ingest guard)', () => {
+    const accum = fold({
+      stat: stat({
+        climbUuid: CANON,
+        angle: 40,
+        ascentCount: 1,
+        currentDifficultyId: 1,
+        difficultyAverage: 1,
+      }),
+      canonical: CANON,
+    });
+    expect(accum.displayDifficulty).toBeNull();
+    expect(accum.difficultyAverage).toBeNull();
+
+    // A real grade id is kept.
+    const real = fold({
+      stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, currentDifficultyId: 12, difficultyAverage: 12.3 }),
+      canonical: CANON,
+    });
+    expect(real.displayDifficulty).toBe(12);
+    expect(real.difficultyAverage).toBe(12.3);
+
+    // Mixed: a real display grade with a sentinel average — each field is
+    // guarded independently.
+    const mixed = fold({
+      stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, currentDifficultyId: 12, difficultyAverage: 1 }),
+      canonical: CANON,
+    });
+    expect(mixed.displayDifficulty).toBe(12);
+    expect(mixed.difficultyAverage).toBeNull();
   });
 
   it('falls back to difficultyAverage when currentDifficultyId is null; separates by angle', () => {
@@ -211,5 +270,48 @@ describe('foldCatalogStat — kilter catalog stat accumulation', () => {
     foldCatalogStat(map, stat({ climbUuid: CANON, angle: 40, ascentCount: 2 }), CANON);
     foldCatalogStat(map, stat({ climbUuid: CANON, angle: 30, ascentCount: 3 }), CANON);
     expect(map.size).toBe(2);
+  });
+});
+
+describe('foldCatalogStat — created_at era fallback', () => {
+  const CANON = 'canon-uuid';
+  it('uses the climb creation time when the stat row has no fa_at', () => {
+    const accumByKey = new Map<string, StatAccum>();
+    foldCatalogStat(
+      accumByKey,
+      {
+        climbUuid: CANON,
+        angle: 40,
+        ascentCount: 10,
+        currentDifficultyId: 15,
+        difficultyAverage: 15.2,
+        qualityAverage: 3.0,
+        faUsername: null,
+        faAt: null,
+      },
+      CANON,
+      '2020-05-01 12:00:00', // pre-cutover creation → legacy 1-3 → rescaled
+    );
+    expect(accumByKey.get(`${CANON}|40`)?.qualityAverage).toBe(5.0);
+  });
+
+  it('stays passthrough when both fa_at and created_at are unknown', () => {
+    const accumByKey = new Map<string, StatAccum>();
+    foldCatalogStat(
+      accumByKey,
+      {
+        climbUuid: CANON,
+        angle: 40,
+        ascentCount: 10,
+        currentDifficultyId: 15,
+        difficultyAverage: 15.2,
+        qualityAverage: 3.0,
+        faUsername: null,
+        faAt: null,
+      },
+      CANON,
+      null,
+    );
+    expect(accumByKey.get(`${CANON}|40`)?.qualityAverage).toBe(3.0);
   });
 });

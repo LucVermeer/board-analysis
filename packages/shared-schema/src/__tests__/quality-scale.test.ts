@@ -3,10 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { convertQuality, convertQualityToAurora, normalizeQualityTo5 } from '../utils';
 
 void describe('normalizeQualityTo5', () => {
-  it('scales a 1-3 average onto 1-5 (×5/3, continuous)', () => {
-    expect(normalizeQualityTo5(3)).toBeCloseTo(5);
-    expect(normalizeQualityTo5(1)).toBeCloseTo(5 / 3);
-    expect(normalizeQualityTo5(2.79)).toBeCloseTo(4.65, 2); // a real averaged value
+  it('scales a 1-3 average onto 1-5 with the affine map 2q−1 (endpoints + midpoint)', () => {
+    expect(normalizeQualityTo5(3)).toBeCloseTo(5); // 2·3−1
+    expect(normalizeQualityTo5(2)).toBeCloseTo(3); // 2·2−1
+    expect(normalizeQualityTo5(1)).toBeCloseTo(1); // 2·1−1 (was 1.67 under the old ×5/3)
+    expect(normalizeQualityTo5(2.79)).toBeCloseTo(4.58, 2); // a real averaged value: 2·2.79−1
+  });
+
+  it('agrees with convertQuality at every integer rating (both are 2q−1)', () => {
+    expect(normalizeQualityTo5(1)).toBe(convertQuality(1));
+    expect(normalizeQualityTo5(2)).toBe(convertQuality(2));
+    expect(normalizeQualityTo5(3)).toBe(convertQuality(3));
   });
 
   it('treats unrated (null/≤0) as null, never 0', () => {
@@ -15,10 +22,15 @@ void describe('normalizeQualityTo5', () => {
     expect(normalizeQualityTo5(0)).toBeNull();
   });
 
+  it('clamps out-of-range input to the 1-3 domain', () => {
+    expect(normalizeQualityTo5(4)).toBeCloseTo(5); // clamped to 3 → 5
+    expect(normalizeQualityTo5(0.5)).toBeCloseTo(1); // clamped to 1 → 1
+  });
+
   it('does not round — averages stay continuous (unlike convertQuality)', () => {
-    expect(normalizeQualityTo5(1.5)).toBeCloseTo(2.5);
-    expect(convertQuality(1.5)).toBe(2); // convertQuality rounds a single rating
-    expect(normalizeQualityTo5(1.5)).not.toBe(convertQuality(1.5));
+    expect(normalizeQualityTo5(1.6)).toBeCloseTo(2.2); // 2·1.6−1, continuous
+    expect(convertQuality(1.6)).toBe(2); // convertQuality rounds a single rating
+    expect(normalizeQualityTo5(1.6)).not.toBe(convertQuality(1.6));
   });
 });
 
