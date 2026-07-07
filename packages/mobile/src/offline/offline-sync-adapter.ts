@@ -67,9 +67,12 @@ export function drainMutationQueue(
   db: OfflineDatabase,
   queryClient: QueryClient,
   graphqlFetch: GraphQLFetch,
-  options?: DrainOptions,
+  options?: Partial<DrainOptions>,
 ): Promise<void> {
-  return drainMutationQueueCore(db, queryClient, graphqlFetch, { isOnline, ...options });
+  return drainMutationQueueCore(db, queryClient, graphqlFetch, {
+    ...options,
+    isOnline: options?.isOnline ?? isOnline,
+  });
 }
 
 export function startSyncScheduler(

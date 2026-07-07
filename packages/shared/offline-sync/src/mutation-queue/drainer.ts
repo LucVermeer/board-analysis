@@ -62,11 +62,13 @@ export type DrainOptions = {
   /**
    * Connectivity probe. When it reports offline the drain is skipped entirely
    * so a queued write never burns retry attempts while there's no connection.
-   * The package default assumes online; the APP ADAPTER must inject the real
-   * probe (mobile passes React Query's onlineManager, wired to NetInfo) — see
-   * packages/mobile/src/offline/offline-sync-adapter.ts.
+   * REQUIRED (no default): "assume online" silently burns retries offline and
+   * "assume offline" silently never syncs, so the caller must decide. The app
+   * adapter binds the real probe once (mobile passes React Query's
+   * onlineManager, wired to NetInfo) — see
+   * packages/mobile/src/offline/offline-sync-adapter.ts; tests pass a literal.
    */
-  isOnline?: () => boolean;
+  isOnline: () => boolean;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -126,21 +128,20 @@ export async function drainMutationQueue(
   db: OfflineDatabase,
   queryClient: QueryInvalidator,
   graphqlFetch: GraphQLFetch,
-  options?: DrainOptions,
+  options: DrainOptions,
 ): Promise<void> {
   // Don't start (or re-enter) a drain while sign-out is wiping local data.
   if (_isSigningOut) return;
   if (_isDraining) return;
   // Offline: nothing can be pushed, and attempting would only churn retry counts
   // and burn backoff sleeps. Skip; the reconnect/foreground trigger drains later.
-  const isOnline = options?.isOnline ?? (() => true);
-  if (!isOnline()) return;
+  if (!options.isOnline()) return;
   _isDraining = true;
 
-  const sleep = options?.sleep ?? defaultSleep;
-  const maxCycleAttempts = options?.maxCycleAttempts ?? DEFAULT_MAX_CYCLE_ATTEMPTS;
-  const baseDelayMs = options?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-  const maxDelayMs = options?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+  const sleep = options.sleep ?? defaultSleep;
+  const maxCycleAttempts = options.maxCycleAttempts ?? DEFAULT_MAX_CYCLE_ATTEMPTS;
+  const baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+  const maxDelayMs = options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
 
   // Counts only retryable failures within this cycle. A successful batch resets
   // it, so a long healthy queue never exhausts the budget.
