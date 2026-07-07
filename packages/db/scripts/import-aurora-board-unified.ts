@@ -526,6 +526,12 @@ async function insertBatches(
 }
 
 async function clearBoardData(tx: PgDatabase<PgQueryResultHKT>, boardName: DirectAuroraBoard) {
+  // The rows deleted here are recreated in this same transaction; tell the
+  // sync tombstone triggers (log_deletion_board_climbs / _stats) to stand
+  // down, or the re-import floods sync_deletions with one NULL-scoped row per
+  // climb and every offline client deletes its just-repulled board copy.
+  // SET LOCAL scopes the GUC to this transaction only.
+  await tx.execute(sql`SET LOCAL boardsesh.suppress_sync_tombstones = 'on'`);
   await tx.delete(boardTags).where(eq(boardTags.boardType, boardName));
   await tx.delete(boardCircuitsClimbs).where(eq(boardCircuitsClimbs.boardType, boardName));
   await tx.delete(boardBetaLinks).where(eq(boardBetaLinks.boardType, boardName));

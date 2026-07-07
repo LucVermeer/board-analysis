@@ -67,6 +67,31 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
   ACTIVE_BOARD_QUERY_KEY: ['activeBoard'] as const,
 }));
 
+const getDatabaseHandleMock = vi.fn((): unknown => null);
+vi.mock('../../db', () => ({
+  getDatabaseHandle: () => getDatabaseHandleMock(),
+  clearUserData: vi.fn(),
+}));
+
+const drainMutationQueueMock = vi.fn(async (..._args: unknown[]) => {});
+const getPendingCountMock = vi.fn(async (..._args: unknown[]) => 0);
+vi.mock('../../mutation-queue', () => ({
+  drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
+  getPendingCount: (...args: unknown[]) => getPendingCountMock(...args),
+  setSigningOut: vi.fn(),
+}));
+
+vi.mock('../../notifications', () => ({
+  stopTokenManagement: vi.fn(async () => {}),
+}));
+
+// The provider clears the per-user offline-boards setting on sign-out. Stub the
+// settings barrel so the test's static graph never pulls react-native-mmkv (→ the
+// react-native Flow entry, which Rolldown's collection scan can't parse under RN 0.86).
+vi.mock('../../settings', () => ({
+  setSetting: vi.fn(),
+}));
+
 // The provider registers its forced-sign-out cleanup against this lib-layer hook
 // (and lazily imports ensureFreshToken in checkAuth). Record the register/clear
 // calls so the lifecycle test can assert the contract.
@@ -156,6 +181,78 @@ describe('AuthProvider.signOut', () => {
     // Active board cache was wiped — both the targeted removeQueries and the
     // subsequent clear() do this; verifying the end state is enough.
     expect(queryClient.getQueryData(['activeBoard'])).toBeUndefined();
+  });
+});
+
+describe('AuthProvider.signOut mutation-queue drain gating', () => {
+  beforeEach(() => {
+    getAuthTokenMock.mockReset();
+    isTokenExpiringSoonMock.mockReset();
+    authSignOutMock.mockReset();
+    getDatabaseHandleMock.mockReset();
+    drainMutationQueueMock.mockReset();
+    getPendingCountMock.mockReset();
+    getAuthTokenMock.mockResolvedValue('jwt-token');
+    isTokenExpiringSoonMock.mockResolvedValue(false);
+    authSignOutMock.mockResolvedValue(undefined);
+    clearStoredSessionIdMock.mockResolvedValue(undefined);
+    clearStoredActiveBoardMock.mockResolvedValue(undefined);
+    drainMutationQueueMock.mockResolvedValue(undefined);
+  });
+
+  async function signOutWithQueueState(pendingCount: number) {
+    getDatabaseHandleMock.mockReturnValue({ tag: 'db' });
+    getPendingCountMock.mockResolvedValue(pendingCount);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    );
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+  }
+
+  // The best-effort drain is gated on the queue being NON-EMPTY, not on the
+  // offline feature flag: leftover writes queued while the flag was on must
+  // still flush after a rollback, while the (vastly more common) empty-queue
+  // sign-out pays one local COUNT and proceeds immediately — pre-offline
+  // latency for every flag-off user.
+  it('drains the queue during sign-out when writes are pending', async () => {
+    await signOutWithQueueState(3);
+    expect(getPendingCountMock).toHaveBeenCalled();
+    expect(drainMutationQueueMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the drain entirely when the queue is empty', async () => {
+    await signOutWithQueueState(0);
+    expect(getPendingCountMock).toHaveBeenCalled();
+    expect(drainMutationQueueMock).not.toHaveBeenCalled();
+  });
+
+  it('skips both the count and the drain when there is no local database', async () => {
+    getDatabaseHandleMock.mockReturnValue(null);
+    getPendingCountMock.mockResolvedValue(5);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    );
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(getPendingCountMock).not.toHaveBeenCalled();
+    expect(drainMutationQueueMock).not.toHaveBeenCalled();
   });
 });
 

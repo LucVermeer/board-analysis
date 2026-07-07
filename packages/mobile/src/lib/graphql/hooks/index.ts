@@ -1,9 +1,8 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData, onlineManager } from '@tanstack/react-query';
 import type {
   BoardName,
   UserBoard,
   UserBoardConnection,
-  Climb,
   ClimbSearchInput,
   Grade,
   Angle,
@@ -35,6 +34,13 @@ import {
   type FavoritesQueryVariables,
   type FavoritesQueryResponse,
 } from '@boardsesh/graphql/operations/favorites';
+import { BOULDER_GRADES } from '@boardsesh/board-config';
+import { getDatabaseHandle } from '../../../db';
+import { offlineAwareRequest } from '../offline-request';
+import { useOfflineDownloadsEnabled } from '../../../providers/feature-flags-provider';
+import { addFavoriteLocal, removeFavoriteLocal } from '../../../hooks/use-offline-mutations';
+import { drainMutationQueue } from '../../../mutation-queue';
+import type { GraphQLFetch } from '../../../mutation-queue/handlers';
 import {
   DELETE_DRAFT_CLIMB_MUTATION,
   type DeleteDraftClimbMutationVariables,
@@ -78,10 +84,13 @@ import {
   CREATE_BOARD,
   GET_GRADES,
   GET_ANGLES,
+  GET_SETTER_STATS,
   SEARCH_CLIMBS,
   SEARCH_CLIMBS_COUNT,
-  GET_SETTER_STATS,
   GET_CLIMB,
+  type SearchClimbsQueryResponse,
+  type SearchClimbsCountQueryResponse,
+  type GetClimbQueryResponse,
   GET_SESSION_SUMMARY,
   GET_SESSION_HEALTH_EXPORT,
   GET_OTA_PREVIEW_CHANNELS,
@@ -98,10 +107,7 @@ import {
   type CreateBoardMutationResponse,
   type GetGradesQueryResponse,
   type GetAnglesQueryResponse,
-  type SearchClimbsQueryResponse,
-  type SearchClimbsCountQueryResponse,
   type GetSetterStatsQueryResponse,
-  type GetClimbQueryResponse,
   type GetClimbQueryVariables,
   type GetSessionSummaryQueryResponse,
   type GetSessionSummaryQueryVariables,
@@ -112,6 +118,25 @@ import {
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
 } from '../operations';
+
+type ToggleFavoriteVariables = ToggleFavoriteMutationVariables & {
+  currentlyFavorited?: boolean;
+};
+
+function graphqlFetchFromClient(): GraphQLFetch {
+  return (query, variables) => getHttpClient().request(query, variables);
+}
+
+function scheduleDrain(
+  db: NonNullable<ReturnType<typeof getDatabaseHandle>>,
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  void drainMutationQueue(db, queryClient, graphqlFetchFromClient()).catch((error: unknown) => {
+    if (__DEV__) {
+      console.warn('[MutationQueue] drain failed after local write:', error);
+    }
+  });
+}
 
 // ============================================
 // User Profile
@@ -556,12 +581,28 @@ export function useUnfollowBoard() {
 // Board Configuration
 // ============================================
 
+// Bundled grade taxonomy (ids 10-33) for the cold-offline case: grades are static
+// V↔Font data, so the grade-range rail works with no signal even if the network
+// grades were never fetched. Online refetches the board's real list.
+const OFFLINE_GRADES: Grade[] = BOULDER_GRADES.map((grade) => ({
+  difficultyId: grade.difficulty_id,
+  name: grade.difficulty_name,
+}));
+
 export function useGrades(boardName: string, enabled = true) {
   return useQuery({
     queryKey: ['grades', boardName],
-    queryFn: () => getHttpClient().request<GetGradesQueryResponse>(GET_GRADES, { boardName }),
+    queryFn: () => {
+      // Grades are the same static data online/offline, so (unlike search) the
+      // offline flag stays OUT of the key — no cache miss / refetch on every flip.
+      if (!onlineManager.isOnline()) return { grades: OFFLINE_GRADES };
+      return getHttpClient().request<GetGradesQueryResponse>(GET_GRADES, { boardName });
+    },
     select: (data) => data.grades,
     staleTime: 24 * 60 * 60 * 1000,
+    // Bundled grades render immediately (and cover a cold-offline start); the
+    // network refines the board's real list when online.
+    placeholderData: { grades: OFFLINE_GRADES },
     enabled: enabled && boardName.length > 0,
   });
 }
@@ -584,9 +625,11 @@ export function useSearchClimbs(
   enabled = true,
   options?: { staleTime?: number; gcTime?: number },
 ) {
+  // Keyed on input only — offlineAwareRequest is local-first and picks the source
+  // live; a completed board sync invalidates ['searchClimbs'] to refresh it.
   return useQuery({
     queryKey: ['searchClimbs', input],
-    queryFn: () => getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input }),
+    queryFn: () => offlineAwareRequest<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input }),
     select: (data) => data.searchClimbs,
     enabled,
     // undefined → React Query's defaults.
@@ -598,7 +641,7 @@ export function useSearchClimbs(
 export function useSearchClimbsCount(input: ClimbSearchInput, enabled = true) {
   return useQuery({
     queryKey: ['searchClimbsCount', input],
-    queryFn: () => getHttpClient().request<SearchClimbsCountQueryResponse>(SEARCH_CLIMBS_COUNT, { input }),
+    queryFn: () => offlineAwareRequest<SearchClimbsCountQueryResponse>(SEARCH_CLIMBS_COUNT, { input }),
     select: (data) => data.searchClimbs.totalCount,
     enabled,
     // Hold the last count while a new filter set is in flight so the bar /
@@ -620,7 +663,7 @@ export function useSetterStats(input: SetterStatsInput, enabled = true) {
 export function useClimb(variables: GetClimbQueryVariables | null) {
   return useQuery({
     queryKey: ['climb', variables],
-    queryFn: () => getHttpClient().request<GetClimbQueryResponse>(GET_CLIMB, variables!),
+    queryFn: () => offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, variables!),
     select: (data) => data.climb,
     enabled: !!variables,
   });
@@ -696,17 +739,52 @@ export function useEndSession() {
 
 export function useToggleFavorite() {
   const queryClient = useQueryClient();
+  const offlineEnabled = useOfflineDownloadsEnabled();
 
   return useMutation({
-    mutationFn: (variables: ToggleFavoriteMutationVariables) =>
-      getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, variables),
-    onSuccess: (_data, variables) => {
+    mutationFn: async (variables: ToggleFavoriteVariables) => {
+      const db = getDatabaseHandle();
+      // Local-first only with the offline flag on; otherwise the plain network
+      // toggle below — pre-offline behavior.
+      if (offlineEnabled && db && typeof variables.currentlyFavorited === 'boolean') {
+        if (variables.currentlyFavorited) {
+          await removeFavoriteLocal(db, variables.input);
+        } else {
+          await addFavoriteLocal(db, variables.input);
+        }
+
+        const favorited = !variables.currentlyFavorited;
+        // Pin the per-climb heart optimistically instead of refetching: a
+        // network refetch here races the queued mutation and can cache the
+        // PRE-toggle state for 5 minutes. The drainer invalidates
+        // ['favoriteStatus'] once the queued write actually lands. The cached
+        // shape is the RAW GET_FAVORITES response (select runs on read).
+        queryClient.setQueryData(
+          ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
+          { favorites: favorited ? [variables.input.climbUuid] : [] },
+        );
+
+        scheduleDrain(db, queryClient);
+
+        return { toggleFavorite: { favorited }, viaLocalQueue: true as const };
+      }
+
+      return getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, {
+        input: variables.input,
+      });
+    },
+    onSuccess: (data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
       // Bust the per-climb favorite-status cache so a re-open reflects the new
-      // state from the server, not a stale 5-min-cached value.
-      void queryClient.invalidateQueries({
-        queryKey: ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
-      });
+      // state from the server, not a stale 5-min-cached value. Skipped on the
+      // local-queue path, where the server does not know about the toggle yet —
+      // the optimistic setQueryData above holds until the drainer's
+      // post-landing invalidation.
+      if (!('viaLocalQueue' in data)) {
+        void queryClient.invalidateQueries({
+          queryKey: ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
+        });
+      }
     },
   });
 }
@@ -737,9 +815,6 @@ export function useFavoriteStatus(
     staleTime: 5 * 60 * 1000,
   });
 }
-
-// `useSaveTick` moved to `@boardsesh/board-react` — call sites import the
-// shared hook (with optimistic updates + stats invalidations) directly.
 
 // ============================================
 // Beta Videos (Instagram + TikTok per climb)

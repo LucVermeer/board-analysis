@@ -5,16 +5,23 @@
 
 import { useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { randomUUID } from 'expo-crypto';
 import { BoardAdapterProvider, type BoardAdapter } from '@boardsesh/board-react';
 import { execute } from '@boardsesh/graphql-client';
 import { useAuth } from './auth-provider';
+import { useOfflineDownloadsEnabled } from './feature-flags-provider';
 import { useQueueSessionId } from './queue-provider';
 import { useToast } from './toast-provider';
+import { getDatabaseHandle } from '../db';
 import { getHttpClient } from '../lib/graphql/client';
+import { reportHandledError } from '../lib/error-reporting';
 import { getWsClient } from '../lib/graphql/ws-client';
+import { drainMutationQueue } from '../mutation-queue';
+import { writeTickLocal } from '../hooks/use-offline-mutations';
 
 export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
+  const offlineEnabled = useOfflineDownloadsEnabled();
   const { sessionId } = useQueueSessionId();
   const { showToast } = useToast();
   const { t } = useTranslation('climbs');
@@ -43,10 +50,52 @@ export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
       executeHttp: (query, variables) => getHttpClient().request(query, variables),
       executeWs: ({ query, variables }) => execute(getWsClient(), { query, variables }),
       resolveActiveSessionId: () => sessionIdRef.current,
+      // Undefined when the offline flag is off: useSaveTick optional-chains it
+      // and falls through to the direct network save — pre-offline behavior.
+      saveTickOffline: !offlineEnabled
+        ? undefined
+        : async (variables, { queryClient, executeHttp }) => {
+            const db = getDatabaseHandle();
+            if (!db) return null;
+
+            const tickUuid = randomUUID();
+            try {
+              await writeTickLocal(db, variables.input, tickUuid);
+            } catch (error) {
+              // A broken local DB (disk full, corruption) must not block the tick:
+              // returning null falls through to the direct network save in
+              // useSaveTick. Offline, that network attempt fails visibly — same
+              // outcome as today — but online the send still lands.
+              reportHandledError(error, { tags: { source: 'offline-sync', kind: 'tick-local-write' } });
+              return null;
+            }
+            // Wake the "waiting to sync" badge immediately: its query caches with
+            // staleTime Infinity and the drainer (its usual invalidator) no-ops
+            // while offline — without this, an offline tick looks lost.
+            void queryClient.invalidateQueries({ queryKey: ['localTicks', variables.input.climbUuid] });
+            void drainMutationQueue(db, queryClient, executeHttp).catch((error: unknown) => {
+              if (__DEV__) {
+                console.warn('[BoardAdapter] tick queue drain failed:', error);
+              }
+            });
+
+            return {
+              uuid: tickUuid,
+              climbUuid: variables.input.climbUuid,
+              angle: variables.input.angle,
+              isMirror: variables.input.isMirror,
+              status: variables.input.status,
+              attemptCount: variables.input.attemptCount,
+              quality: variables.input.quality ?? null,
+              difficulty: variables.input.difficulty ?? null,
+              comment: variables.input.comment,
+              climbedAt: variables.input.climbedAt,
+            };
+          },
       // Mobile has no IndexedDB tick-draft store, so onTickSaved is omitted.
       showError: (reason) => showErrorRef.current?.(reason),
     }),
-    [isAuthenticated, isLoading],
+    [isAuthenticated, isLoading, offlineEnabled],
   );
 
   return <BoardAdapterProvider value={adapter}>{children}</BoardAdapterProvider>;

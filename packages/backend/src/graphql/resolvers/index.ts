@@ -56,6 +56,7 @@ import { integrationMutations } from './integrations/mutations';
 import { betaLinkQueries } from './beta-videos/queries';
 import { instagramBetaImportQueries } from './beta-videos/instagram-beta-import';
 import { otaQueries } from './ota/queries';
+import { syncQueries } from './sync/queries';
 import { isNoMatchClimb, isNoMatch } from './shared/helpers';
 
 export const resolvers = {
@@ -94,6 +95,7 @@ export const resolvers = {
     ...boardPresenceResolvers.Query,
     ...integrationQueries,
     ...otaQueries,
+    ...syncQueries,
   },
 
   Mutation: {

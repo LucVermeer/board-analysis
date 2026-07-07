@@ -15,3 +15,7 @@ CHANGELOG.md
 # config (the CI PR-lint already skips `embedded/`).
 embedded/
 docs/embedded-architecture.md
+# Maestro flow yamls are consumed by the Maestro CLI and asserted VERBATIM by
+# scripts/__tests__/mobile-screenshots.test.ts (exact quote style included) —
+# a formatting pass that rewrites quotes breaks those tests.
+packages/mobile/.maestro/

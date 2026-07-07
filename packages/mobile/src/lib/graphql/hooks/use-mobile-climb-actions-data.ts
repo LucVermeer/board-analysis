@@ -22,6 +22,7 @@
 
 import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { favoritesStore } from '@boardsesh/climb-actions';
 import { TOGGLE_FAVORITE, type ToggleFavoriteMutationResponse } from '@boardsesh/graphql/operations/favorites';
 import {
   GET_ALL_USER_PLAYLISTS,
@@ -35,10 +36,27 @@ import {
 } from '@boardsesh/graphql/operations/playlists';
 import { getHttpClient } from '../client';
 import { useAuth } from '../../../providers/auth-provider';
+import { useOfflineDownloadsEnabled } from '../../../providers/feature-flags-provider';
 import { useActiveBoard } from '../use-active-board';
 import type { PlaylistCreateBoard } from '../../../providers/playlists-provider';
+import { getDatabaseHandle } from '../../../db';
+import { addFavoriteLocal, removeFavoriteLocal } from '../../../hooks/use-offline-mutations';
+import { drainMutationQueue } from '../../../mutation-queue';
+import type { GraphQLFetch } from '../../../mutation-queue/handlers';
 
 const PLAYLISTS_QUERY_KEY = ['userPlaylists'] as const;
+
+function graphqlFetchFromClient(): GraphQLFetch {
+  return (query, variables) => getHttpClient().request(query, variables);
+}
+
+function scheduleDrain(db: NonNullable<ReturnType<typeof getDatabaseHandle>>, queryClient: QueryClient) {
+  void drainMutationQueue(db, queryClient, graphqlFetchFromClient()).catch((error: unknown) => {
+    if (__DEV__) {
+      console.warn('[MutationQueue] drain failed after local write:', error);
+    }
+  });
+}
 
 // The play-drawer's Add-to-Playlist sheet adds/removes by playlist uuid (the
 // backend resolvers match playlists.uuid), so `playlistId` here is the uuid the
@@ -93,6 +111,7 @@ type MobileClimbActionsData = {
 
 export function useMobileClimbActionsData(): MobileClimbActionsData {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const offlineEnabled = useOfflineDownloadsEnabled();
   const { data: activeBoard } = useActiveBoard();
   const queryClient = useQueryClient();
 
@@ -119,12 +138,13 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
     activeBoard,
     queryClient,
     isAuthenticated,
+    offlineEnabled,
   });
-  mutationDepsRef.current = { activeBoard, queryClient, isAuthenticated };
+  mutationDepsRef.current = { activeBoard, queryClient, isAuthenticated, offlineEnabled };
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async (climbUuid: string): Promise<{ uuid: string; favorited: boolean }> => {
-      const { activeBoard: board } = mutationDepsRef.current;
+      const { activeBoard: board, queryClient: client, offlineEnabled: offline } = mutationDepsRef.current;
       if (!board) throw new Error('Cannot toggle favorite: no active board selected.');
       // The favorite key is (userId, boardName, climbUuid, angle) on the
       // backend today. Defaulting a missing angle to 0 would silently file
@@ -132,8 +152,24 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
       // problem at the call site than write bad data. Stops being relevant
       // once #2449 lands and the key collapses to (userId, climbUuid).
       if (board.angle == null) throw new Error('Cannot toggle favorite: active board has no angle.');
+      const input = { boardName: board.boardType, climbUuid, angle: board.angle };
+      const currentlyFavorited = favoritesStore.getIsFavorited(climbUuid);
+      const db = getDatabaseHandle();
+
+      // Local-first only with the offline flag on; otherwise the plain
+      // network toggle below — pre-offline behavior.
+      if (offline && db) {
+        if (currentlyFavorited) {
+          await removeFavoriteLocal(db, input);
+        } else {
+          await addFavoriteLocal(db, input);
+        }
+        scheduleDrain(db, client);
+        return { uuid: climbUuid, favorited: !currentlyFavorited };
+      }
+
       const response = await getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, {
-        input: { boardName: board.boardType, climbUuid, angle: board.angle },
+        input,
       });
       return { uuid: climbUuid, favorited: response.toggleFavorite.favorited };
     },

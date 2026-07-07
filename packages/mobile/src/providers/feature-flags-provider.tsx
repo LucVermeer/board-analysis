@@ -52,6 +52,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     label: 'Garmin watch',
     description: 'Show the "Pair a Garmin watch" row in More. Off until the Connect IQ watch app ships.',
   },
+  {
+    key: 'offline-board-downloads',
+    label: 'Offline board downloads',
+    description:
+      'The whole offline engine: board downloads, local-first climb reads, queued offline ticks/favorites, background sync. Off fully disables it (previously-queued writes still flush).',
+  },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 // The literal key union (e.g. `'strava-integration'`), preserved via the
@@ -110,6 +116,15 @@ export function useFeatureFlags(): FeatureFlags {
 
 export function useFeatureFlag<K extends keyof FeatureFlags>(key: K): FeatureFlags[K] {
   return useFeatureFlags()[key];
+}
+
+/**
+ * The one expression every offline-engine gate shares. Missing/undefined
+ * (flags not loaded yet) deliberately reads as OFF — pre-offline behavior is
+ * the safe default while PostHog resolves.
+ */
+export function useOfflineDownloadsEnabled(): boolean {
+  return useFeatureFlag('offline-board-downloads') === true;
 }
 
 function featureFlagsEqual(leftFlags: FeatureFlags, rightFlags: FeatureFlags): boolean {

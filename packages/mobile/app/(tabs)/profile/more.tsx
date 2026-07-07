@@ -1,6 +1,9 @@
+import { useRef } from 'react';
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import type { ThemeOverride } from '@boardsesh/key-value-storage';
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from '@boardsesh/i18n';
@@ -10,6 +13,17 @@ import { resolveLanguage, type LocaleOverride } from '../../../src/lib/i18n/loca
 import { openExternalUrl } from '../../../src/lib/open-url';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useProfile } from '../../../src/lib/graphql/hooks';
+import { useConfirm } from '../../../src/providers/dialog-provider';
+import { useIsOffline } from '../../../src/hooks/use-is-offline';
+import {
+  getDeadLetterCount,
+  getDeadLetters,
+  retryDeadLetter,
+  getPendingCount,
+  drainMutationQueue,
+} from '../../../src/mutation-queue';
+import type { GraphQLFetch } from '../../../src/mutation-queue/handlers';
+import { getHttpClient } from '../../../src/lib/graphql/client';
 import { hapticLight, hapticSelection } from '../../../src/lib/haptics';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { MoreForm } from '../../../src/components/MoreForm';
@@ -21,7 +35,7 @@ import { useSessionRecordingPreference } from '../../../src/lib/session-recordin
 import { setSessionRecordingEnabled } from '../../../src/lib/analytics';
 import { useShowPlaylistTagsPreference } from '../../../src/lib/show-playlist-tags-preference';
 import { useToast } from '../../../src/providers/toast-provider';
-import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
+import { useFeatureFlag, useOfflineDownloadsEnabled } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
 
@@ -52,6 +66,79 @@ export default function MoreScreen() {
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
   // Off until the Connect IQ watch app ships — nothing to pair to before then.
   const garminWatchEnabled = useFeatureFlag('garmin-watch') === true;
+  const offlineEnabled = useOfflineDownloadsEnabled();
+  const confirm = useConfirm();
+
+  // Offline sync-issues surface. Poll the dead-letter count only while online (the
+  // section is hidden offline — a pending write offline is expected, not a "stuck"
+  // problem). A dead-lettered write is one the server rejected or that failed past
+  // its retry budget while reachable: worth surfacing with a retry (never a discard).
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const isOffline = useIsOffline();
+  const { data: deadLetterCount = 0, refetch: refetchDeadLetters } = useQuery({
+    queryKey: ['deadLetters', 'count'],
+    queryFn: () => getDeadLetterCount(db),
+    enabled: !isOffline,
+    // Dead letters are sticky (they don't resolve without a user Retry), so a slow
+    // poll is plenty — no need to wake every 5s. With the offline flag off there
+    // is still ONE initial fetch (never a recurring poll): legacy dead letters
+    // queued while the flag was on must stay reachable via Retry.
+    refetchInterval: offlineEnabled ? 30000 : false,
+  });
+
+  // Guard against a rapid double-tap spawning overlapping retries (the drain is
+  // single-flight internally, but this avoids the wasted re-entrant work).
+  const retryingRef = useRef(false);
+  const handleRetrySync = async () => {
+    if (retryingRef.current) return;
+    retryingRef.current = true;
+    try {
+      const deadLetters = await getDeadLetters(db);
+      // Reset each dead letter independently — a single bad entry must not stop the
+      // rest from being retried (a shared try would abort the loop on first throw).
+      for (const deadLetter of deadLetters) {
+        try {
+          await retryDeadLetter(db, deadLetter.id);
+        } catch (error) {
+          reportError(error);
+        }
+      }
+      const graphqlFetch: GraphQLFetch = (query, variables) => getHttpClient().request(query, variables);
+      await drainMutationQueue(db, queryClient, graphqlFetch);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      retryingRef.current = false;
+      void refetchDeadLetters();
+    }
+  };
+
+  // Sign-out wipes the local queue, so warn before dropping any not-yet-synced
+  // writes. No pending writes → sign out straight away (pre-offline behaviour
+  // for everyone whose queue is empty, i.e. every normal flag-off user).
+  // Deliberately NOT gated on the offline flag: after a kill-switch rollback a
+  // flag-off user can still hold queued writes, and those deserve the same
+  // warning — the count is one local SQLite read.
+  const handleSignOut = async () => {
+    let pending = 0;
+    try {
+      pending = await getPendingCount(db);
+    } catch {
+      pending = 0;
+    }
+    if (pending > 0) {
+      const confirmed = await confirm({
+        title: t('mobile.more.signOut.pendingTitle'),
+        message: t('mobile.more.signOut.pendingMessage', { count: pending }),
+        confirmLabel: t('mobile.more.signOut.confirm'),
+        cancelLabel: t('mobile.more.signOut.cancel'),
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
+    void signOut();
+  };
 
   // Live Metro dev-server switching needs expo-dev-client's native launcher, which
   // is only linked into dev-client / Debug builds — never the App Store / TestFlight
@@ -133,7 +220,7 @@ export default function MoreScreen() {
       role: 'destructive',
       emphasis: 'primary',
       onPress: () => {
-        void signOut();
+        void handleSignOut();
       },
     },
     {
@@ -147,6 +234,29 @@ export default function MoreScreen() {
   ];
 
   const sections: MoreSection[] = [];
+
+  // Sync issues — surfaced high and only when online with writes stuck failing, so
+  // it's noticeable when it matters and invisible otherwise. Retry only; there is no
+  // discard — an unsynced write is never thrown away, it waits and re-sends.
+  if (!isOffline && deadLetterCount > 0) {
+    sections.push({
+      key: 'syncIssues',
+      title: t('mobile.more.syncIssues.title'),
+      footer: t('mobile.more.syncIssues.description', { count: deadLetterCount }),
+      rows: [
+        {
+          kind: 'button',
+          key: 'retrySync',
+          label: t('mobile.more.syncIssues.retry'),
+          emphasis: 'primary',
+          onPress: () => {
+            hapticLight();
+            void handleRetrySync();
+          },
+        },
+      ],
+    });
+  }
 
   // Library — only when signed in (all-playlists is a profile feature).
   if (profile?.id) {
