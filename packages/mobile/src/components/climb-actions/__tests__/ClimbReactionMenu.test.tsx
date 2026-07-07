@@ -102,7 +102,7 @@ import { ClimbReactionMenu } from '../ClimbReactionMenu';
 const climb = { uuid: 'climb-1', name: 'Big Move', frames: '', difficulty: 'V4', quality_average: '0' } as Climb;
 const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
 
-function renderMenu(onClose = vi.fn()) {
+function renderMenu(onClose = vi.fn(), extraProps: Record<string, unknown> = {}) {
   return {
     onClose,
     ...render(
@@ -112,6 +112,7 @@ function renderMenu(onClose = vi.fn()) {
         isAuthenticated
         reduceMotion
         onClose={onClose}
+        {...extraProps}
       />,
     ),
   };
@@ -136,6 +137,12 @@ describe('ClimbReactionMenu view switching', () => {
     });
     expect(container.querySelector('[data-picker="true"]')).not.toBeNull();
     expect(queryByLabelText('Add to Playlist')).toBeNull();
+  });
+
+  it('forwards the onAddBetaVideo override into useClimbActions', () => {
+    const onAddBetaVideo = vi.fn();
+    renderMenu(vi.fn(), { onAddBetaVideo });
+    expect(captured.actionArgs?.onAddBetaVideo).toBe(onAddBetaVideo);
   });
 
   it('returns to the action list when the picker calls onBack', () => {

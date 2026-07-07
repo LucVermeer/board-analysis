@@ -52,6 +52,19 @@ it renders inline in `ClimbReactionMenu`'s `FullWindowOverlay` (plain `TextInput
 `AddToPlaylistSheet`'s `ModalSheet` (`BottomSheetTextInput`), so add-to-playlist never stacks a
 second sheet. Feedback is inline, not a toast (a toast renders behind the overlay/sheet).
 
+**In-tree opener override — a root menu opening a sheet over a route.** `ClimbReactionMenu` is a
+`FullWindowOverlay` rendered at the **app root** (via `DrawerHostProvider`), but it floats over the
+player route too. If one of its actions opens a sheet through a **root-level** opener
+(`useDrawerHost().openAddBetaVideo` / `openLogAscent` → the sheets in `DrawerHostProvider`), that
+sheet presents off the root and lands **under** the `/play` fullScreenModal — so from the player it
+flashes open and vanishes (rule 1; #3505 was this, #3294 the playlist variant). The fix: when the
+menu is opened **from the player**, thread the player's **own in-tree opener** through
+`openClimbActions` → `ClimbReactionMenu` → `useClimbActions` (the `onAddBetaVideo` override, mirroring
+`onEditEntry` / `onSelectPlaylist`), so the action drives `PlayDrawer`'s local `AddBetaVideoSheet`
+(which presents inside the modal, above it) instead of the root one. Off the player (climb list,
+logbook, board sheet) the override is omitted and the root sheet is correct — nothing covers it.
+**Any new ellipsis action that opens a native sheet needs this override**, or it re-hits the bug.
+
 **Every native sheet must go through the presentation coordinator.** `@expo/ui`
 sheets all present off the **same** root-window view controller, and the library
 does no serialization — overlapping a present with another sheet's dismiss

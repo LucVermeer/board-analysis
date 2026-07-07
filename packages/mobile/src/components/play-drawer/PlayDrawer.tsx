@@ -57,6 +57,7 @@ import {
   useQueueSessionId,
 } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
+import type { OpenClimbActionsOptions } from '../../providers/drawer-host-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
@@ -146,8 +147,10 @@ type PlayDrawerProps = {
   /** Switch to the climb's board (one-tap if owned, else the board picker). */
   onSwitchBoard?: () => void;
   /** Opens the climb reaction menu (DrawerHostProvider's openClimbActions). On iOS
-   *  the ellipsis uses this instead of the in-drawer bottom sheet. */
-  onOpenClimbActions?: (climb: Climb) => void;
+   *  the ellipsis uses this instead of the in-drawer bottom sheet. The drawer passes
+   *  its own in-tree beta opener via `options.onAddBetaVideo` so the beta sheet
+   *  stacks above the `/play` modal (#3505). */
+  onOpenClimbActions?: (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => void;
   /** The climb to show; applied on mount and whenever `nonce` changes. */
   openTarget: PlayDrawerOpenTarget | null;
   /** Rendering context. `'route'` (default) is the full-screen `/play` modal — a
@@ -225,6 +228,9 @@ export function PlayDrawer({
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
+  // Pinned climb/board the reaction menu opened the beta sheet for; null falls back
+  // to the live displayedClimb (the "+" button path). See #3505.
+  const [betaVideoTarget, setBetaVideoTarget] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
@@ -628,23 +634,38 @@ export function PlayDrawer({
     setBleControlVisible(true);
   }, [bluetooth]);
 
+  // Beta Videos "+" button: null target → the sheet tracks the live displayedClimb.
+  const handleOpenAddBetaVideo = useCallback(() => {
+    setBetaVideoTarget(null);
+    setAddBetaVideoOpen(true);
+  }, []);
+
+  // Reaction-menu beta: pin the climb/board the menu was opened for so a party-session
+  // queue/angle change mid-menu can't retarget the sheet (#3505).
+  const handleOpenAddBetaVideoForClimb = useCallback((targetClimb: Climb, targetBoardConfig: BoardConfig) => {
+    setBetaVideoTarget({ climb: targetClimb, boardConfig: targetBoardConfig });
+    setAddBetaVideoOpen(true);
+  }, []);
+
+  // Don't clear betaVideoTarget here: the sheet is still animating out and reads
+  // from it, so nulling it mid-dismiss would swap the shown climb for a frame. The
+  // next open overwrites it (the "+" path to null, the reaction path to its snapshot).
+  const handleCloseAddBetaVideo = useCallback(() => {
+    setAddBetaVideoOpen(false);
+  }, []);
+
   const handleOpenActions = useCallback(() => {
     // iOS: open the floating reaction menu (over the drawer) instead of the in-drawer
     // bottom sheet. Android keeps the bottom sheet.
     if (Platform.OS === 'ios' && onOpenClimbActions && displayedClimb) {
-      onOpenClimbActions(displayedClimb);
+      // Hand the reaction menu the drawer's OWN beta opener so the share-your-beta
+      // sheet presents inside the `/play` modal (above it) rather than the root
+      // sheet, which can't stack over the fullScreenModal (#3505).
+      onOpenClimbActions(displayedClimb, undefined, { onAddBetaVideo: handleOpenAddBetaVideoForClimb });
       return;
     }
     setActiveSubDrawer('actions');
-  }, [onOpenClimbActions, displayedClimb]);
-
-  const handleOpenAddBetaVideo = useCallback(() => {
-    setAddBetaVideoOpen(true);
-  }, []);
-
-  const handleCloseAddBetaVideo = useCallback(() => {
-    setAddBetaVideoOpen(false);
-  }, []);
+  }, [onOpenClimbActions, displayedClimb, handleOpenAddBetaVideoForClimb]);
 
   const handleScrollTowardBelowFold = useCallback(() => {
     setBelowFoldContentRequested(true);
@@ -975,10 +996,10 @@ export function PlayDrawer({
       {mountAddBetaVideo && (
         <AddBetaVideoSheet
           visible={addBetaVideoOpen}
-          climb={displayedClimb ?? null}
-          boardName={boardName as BoardName}
-          layoutId={layoutId}
-          angle={angle}
+          climb={betaVideoTarget?.climb ?? displayedClimb ?? null}
+          boardName={(betaVideoTarget?.boardConfig.boardName ?? boardName) as BoardName}
+          layoutId={betaVideoTarget?.boardConfig.layoutId ?? layoutId}
+          angle={betaVideoTarget?.boardConfig.angle ?? angle}
           onClose={handleCloseAddBetaVideo}
         />
       )}
