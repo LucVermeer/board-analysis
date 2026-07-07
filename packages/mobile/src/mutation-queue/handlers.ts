@@ -29,7 +29,17 @@ type MutationDispatch = {
 };
 
 function buildDispatch(mutation: PendingMutation): MutationDispatch {
-  const payload = JSON.parse(mutation.payload) as Record<string, unknown>;
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(mutation.payload) as Record<string, unknown>;
+  } catch {
+    // A corrupt payload dead-letters (no status → non-retryable), so this
+    // message IS the dead-letter row's last_error — carry enough context to
+    // debug it without the row in hand.
+    throw new Error(
+      `Corrupt queued payload for ${mutation.table_name}/${mutation.operation} (id=${mutation.id}, key=${mutation.idempotency_key}): not valid JSON`,
+    );
+  }
 
   switch (mutation.table_name) {
     case 'boardsesh_ticks':
