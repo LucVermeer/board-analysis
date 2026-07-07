@@ -338,6 +338,22 @@
       "similarClimbsSummary": "Blocs partageant au moins 50 % de ces prises"
     }
   },
+  "boardseshGrade": {
+    "label": "Grade Boardsesh",
+    "title": "Grade Boardsesh",
+    "summary": "Sa vraie difficulté",
+    "universalLabel": "Grade Boardsesh",
+    "localLabel": "Sur cette board",
+    "localScopeNote": "Sur l'échelle de cette board — pas encore comparable d'une board à l'autre",
+    "confirmedSubline_one": "Confirmé par {{count}} croix",
+    "confirmedSubline_other": "Confirmé par {{count}} croix",
+    "provisionalSubline_one": "Encore en train de se caler — {{count}} croix enregistrée",
+    "provisionalSubline_other": "Encore en train de se caler — {{count}} croix enregistrées",
+    "setterOnly": "Avis de l'ouvreur — pas encore assez de croix.",
+    "moonboardTitle": "Pas encore standardisé",
+    "moonboardBody": "Nous n'avons pas encore de données de grade communautaires pour le MoonBoard. Enregistre tes croix Moon sur Boardsesh pour aider à le débloquer.",
+    "loadError": "Impossible de charger le grade pour le moment."
+  },
   "similarClimbs": {
     "loadError": "Impossible de charger les blocs similaires.",
     "emptyDefault": "Pas encore de blocs similaires.",

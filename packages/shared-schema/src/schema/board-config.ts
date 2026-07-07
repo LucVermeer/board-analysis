@@ -62,4 +62,28 @@ export const boardConfigTypeDefs = /* GraphQL */ `
     "When the first ascent was logged (ISO timestamp)"
     faAt: String
   }
+
+  """
+  The Boardsesh grade for a climb at one angle: the data-science-backed grade
+  produced by the nightly refresh job. Null query result means no grade has been
+  computed for that climb+angle (e.g. MoonBoard, or too few ascents).
+  """
+  type BoardseshGrade {
+    "Within-board shrunk grade on the shared difficulty scale (null when unavailable)"
+    localGrade: Float
+    "Cross-board standardized grade (Tension-anchored); null when unanchorable"
+    universalGrade: Float
+    "Low end of the 95% band on the surfaced grade"
+    gradeLow: Float
+    "High end of the 95% band on the surfaced grade"
+    gradeHigh: Float
+    "Confidence tier: confirmed | provisional | setter_only"
+    confidence: String!
+    "Ascent count that produced this row"
+    ascensionistCount: Int!
+    "Model version that produced this row"
+    modelVersion: String!
+    "When this grade was computed (ISO timestamp)"
+    computedAt: String!
+  }
 `;

@@ -338,6 +338,22 @@
       "similarClimbsSummary": "Climbs sharing 50%+ of these holds"
     }
   },
+  "boardseshGrade": {
+    "label": "Boardsesh grade",
+    "title": "Boardsesh grade",
+    "summary": "How hard it really climbs",
+    "universalLabel": "Boardsesh grade",
+    "localLabel": "On this board",
+    "localScopeNote": "On this board's scale — not comparable across boards yet",
+    "confirmedSubline_one": "Confirmed by {{count}} send",
+    "confirmedSubline_other": "Confirmed by {{count}} sends",
+    "provisionalSubline_one": "Still settling — {{count}} send in",
+    "provisionalSubline_other": "Still settling — {{count}} sends in",
+    "setterOnly": "Setter's call — not enough sends yet.",
+    "moonboardTitle": "Not standardized yet",
+    "moonboardBody": "We don't have community grade data for MoonBoard yet. Log your Moon sends on Boardsesh to help unlock it.",
+    "loadError": "Couldn't load the grade right now."
+  },
   "similarClimbs": {
     "loadError": "Couldn't load similar climbs.",
     "emptyDefault": "No similar climbs yet.",

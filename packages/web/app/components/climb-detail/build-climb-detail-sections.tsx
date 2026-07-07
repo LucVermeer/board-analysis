@@ -11,11 +11,14 @@ import { LogbookSection, useLogbookSummary } from '@/app/components/logbook/logb
 import { CrewLogbookView } from '@/app/components/logbook/crew-logbook-view';
 import ClimbSocialSection from '@/app/components/social/climb-social-section';
 import ClimbAnalytics from '@/app/components/charts/climb-analytics';
+import BoardseshGradeSection from '@/app/components/climb-detail/boardsesh-grade-section';
 import BoardseshBetaList from '@/app/components/beta-videos/boardsesh-beta-list';
 import BoardseshBetaAddPanel from '@/app/components/beta-videos/boardsesh-beta-add-panel';
 import BoardseshBetaAddButton from '@/app/components/beta-videos/boardsesh-beta-add-button';
 import SimilarClimbsList from '@/app/components/similar-climbs/similar-climbs-list';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
+import { useFeatureFlag } from '@/app/components/providers/feature-flags-provider';
+import { BOARDSESH_GRADE_FLAG } from '@/app/flags';
 import { GET_BETA_LINKS } from '@boardsesh/graphql/operations/beta-links';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
@@ -54,6 +57,7 @@ export function useBuildClimbDetailSections({
   enabled: enabledProp = true,
 }: BuildClimbDetailSectionsProps): CollapsibleSectionConfig[] {
   const { t } = useTranslation('climbs');
+  const boardseshGradeEnabled = useFeatureFlag(BOARDSESH_GRADE_FLAG) === true;
   const betaLabel = (
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
       <VideocamOutlined sx={{ fontSize: 16 }} />
@@ -175,6 +179,18 @@ export function useBuildClimbDetailSections({
         />
       ),
     },
+    ...(boardseshGradeEnabled
+      ? [
+          {
+            key: 'boardsesh-grade',
+            label: t('boardseshGrade.label'),
+            title: t('boardseshGrade.title'),
+            defaultSummary: t('boardseshGrade.summary'),
+            lazy: true,
+            content: <BoardseshGradeSection boardName={boardName} climbUuid={climbUuid} angle={angle} />,
+          },
+        ]
+      : []),
     {
       key: 'analytics',
       label: 'Analytics',

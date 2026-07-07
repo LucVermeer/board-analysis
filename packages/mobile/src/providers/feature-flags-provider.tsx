@@ -58,6 +58,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     description:
       'The whole offline engine: board downloads, local-first climb reads, queued offline ticks/favorites, background sync. Off fully disables it (previously-queued writes still flush).',
   },
+  {
+    key: 'boardsesh-grade',
+    label: 'Boardsesh grade',
+    description:
+      'Show the data-science "Boardsesh grade" section in the play drawer (cross-board grade, confidence tier, send counts). Off hides the section.',
+  },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 // The literal key union (e.g. `'strava-integration'`), preserved via the
@@ -125,6 +131,14 @@ export function useFeatureFlag<K extends keyof FeatureFlags>(key: K): FeatureFla
  */
 export function useOfflineDownloadsEnabled(): boolean {
   return useFeatureFlag('offline-board-downloads') === true;
+}
+
+/**
+ * Gate for the play drawer's "Boardsesh grade" section. Missing/undefined (flags
+ * not loaded yet) reads as OFF — the section stays hidden until PostHog resolves.
+ */
+export function useBoardseshGradeEnabled(): boolean {
+  return useFeatureFlag('boardsesh-grade') === true;
 }
 
 function featureFlagsEqual(leftFlags: FeatureFlags, rightFlags: FeatureFlags): boolean {

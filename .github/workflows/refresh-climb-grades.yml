@@ -1,0 +1,53 @@
+name: Refresh Climb Grades
+
+# Nightly: recompute the Boardsesh grade (empirical-Bayes blend of upstream
+# crowd means, angle surface, cross-board offset) into board_climb_grades.
+# Validation gates run first and abort the run — no grades are written on a
+# gate failure. Coefficients refit weekly, frozen in between. Idempotent.
+# Model spec: docs/boardsesh-grade.md.
+on:
+  schedule:
+    - cron: '30 6 * * *' # 06:30 UTC daily, after the recommendations refresh
+  workflow_dispatch:
+    inputs:
+      refit:
+        description: 'Force a coefficient refit'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Gates only, write no grades'
+        type: boolean
+        default: false
+
+concurrency:
+  group: refresh-climb-grades
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # DATABASE_URL must be a WRITABLE connection.
+    environment: Production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Refresh climb grades
+        working-directory: packages/db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: >-
+          node --import tsx scripts/refresh-climb-grades.ts
+          ${{ inputs.refit && '--refit-coefficients' || '' }}
+          ${{ inputs.dry_run && '--dry-run' || '' }}

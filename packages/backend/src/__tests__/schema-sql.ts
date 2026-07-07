@@ -213,6 +213,23 @@ export const schemaSQL = `
     PRIMARY KEY ("board_type", "climb_uuid", "angle")
   );
 
+  CREATE TABLE IF NOT EXISTS "board_climb_grades" (
+    "board_type" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "angle" integer NOT NULL,
+    "local_grade" double precision,
+    "universal_grade" double precision,
+    "grade_low" double precision,
+    "grade_high" double precision,
+    "confidence" text NOT NULL,
+    "ascensionist_count" bigint DEFAULT 0 NOT NULL,
+    "content_prior" double precision,
+    "model_version" text NOT NULL,
+    "coeff_version" text NOT NULL,
+    "computed_at" timestamp DEFAULT now() NOT NULL,
+    PRIMARY KEY ("board_type", "climb_uuid", "angle")
+  );
+
   DO $$ BEGIN
     CREATE TYPE tick_status AS ENUM ('flash', 'send', 'attempt');
   EXCEPTION WHEN duplicate_object THEN NULL;

@@ -613,6 +613,31 @@ export type BoardStatsUpdated = {
   stats: BoardPresenceStats;
 };
 
+/**
+ * The Boardsesh grade for a climb at one angle: the data-science-backed grade
+ * produced by the nightly refresh job. Null query result means no grade has been
+ * computed for that climb+angle (e.g. MoonBoard, or too few ascents).
+ */
+export type BoardseshGrade = {
+  __typename?: 'BoardseshGrade';
+  /** Ascent count that produced this row */
+  ascensionistCount: Scalars['Int']['output'];
+  /** When this grade was computed (ISO timestamp) */
+  computedAt: Scalars['String']['output'];
+  /** Confidence tier: confirmed | provisional | setter_only */
+  confidence: Scalars['String']['output'];
+  /** High end of the 95% band on the surfaced grade */
+  gradeHigh?: Maybe<Scalars['Float']['output']>;
+  /** Low end of the 95% band on the surfaced grade */
+  gradeLow?: Maybe<Scalars['Float']['output']>;
+  /** Within-board shrunk grade on the shared difficulty scale (null when unavailable) */
+  localGrade?: Maybe<Scalars['Float']['output']>;
+  /** Model version that produced this row */
+  modelVersion: Scalars['String']['output'];
+  /** Cross-board standardized grade (Tension-anchored); null when unanchorable */
+  universalGrade?: Maybe<Scalars['Float']['output']>;
+};
+
 export type BrowseProposalsInput = {
   boardType?: InputMaybe<Scalars['String']['input']>;
   /** Filter by board UUID (resolves to boardType internally) */
@@ -3726,6 +3751,12 @@ export type Query = {
    * error rather than silently truncating, so callers must cap on their end.
    */
   boardsBySerialNumbers: Array<UserBoard>;
+  /**
+   * Get the Boardsesh grade for a climb at a specific angle.
+   * Returns null when no grade has been computed for that climb+angle
+   * (e.g. MoonBoard, or too few ascents).
+   */
+  boardseshGrade?: Maybe<BoardseshGrade>;
   /** Browse proposals across all climbs with filters. */
   browseProposals: ProposalConnection;
   /** Get community status for multiple climbs (batch). */
@@ -4175,6 +4206,13 @@ export type QueryBoardRecentClimbsArgs = {
 /** Root query type for all read operations. */
 export type QueryBoardsBySerialNumbersArgs = {
   serialNumbers: Array<Scalars['String']['input']>;
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardseshGradeArgs = {
+  angle: Scalars['Int']['input'];
+  boardName: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -6633,6 +6671,7 @@ export type ResolversTypes = ResolversObject<{
   BoardPresenceStats: ResolverTypeWrapper<BoardPresenceStats>;
   BoardSerialConfig: ResolverTypeWrapper<BoardSerialConfig>;
   BoardStatsUpdated: ResolverTypeWrapper<BoardStatsUpdated>;
+  BoardseshGrade: ResolverTypeWrapper<BoardseshGrade>;
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   BrowseProposalsInput: BrowseProposalsInput;
   BulkVoteSummaryInput: BulkVoteSummaryInput;
@@ -6944,6 +6983,7 @@ export type ResolversParentTypes = ResolversObject<{
   BoardPresenceStats: BoardPresenceStats;
   BoardSerialConfig: BoardSerialConfig;
   BoardStatsUpdated: BoardStatsUpdated;
+  BoardseshGrade: BoardseshGrade;
   Boolean: Scalars['Boolean']['output'];
   BrowseProposalsInput: BrowseProposalsInput;
   BulkVoteSummaryInput: BulkVoteSummaryInput;
@@ -7522,6 +7562,21 @@ export type BoardStatsUpdatedResolvers<
 > = ResolversObject<{
   seq?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   stats?: Resolver<ResolversTypes['BoardPresenceStats'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardseshGradeResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardseshGrade'] = ResolversParentTypes['BoardseshGrade'],
+> = ResolversObject<{
+  ascensionistCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  computedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  confidence?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  gradeHigh?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  gradeLow?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  localGrade?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  modelVersion?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  universalGrade?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -9329,6 +9384,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryBoardsBySerialNumbersArgs, 'serialNumbers'>
   >;
+  boardseshGrade?: Resolver<
+    Maybe<ResolversTypes['BoardseshGrade']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardseshGradeArgs, 'angle' | 'boardName' | 'climbUuid'>
+  >;
   browseProposals?: Resolver<
     ResolversTypes['ProposalConnection'],
     ParentType,
@@ -10819,6 +10880,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   BoardPresenceStats?: BoardPresenceStatsResolvers<ContextType>;
   BoardSerialConfig?: BoardSerialConfigResolvers<ContextType>;
   BoardStatsUpdated?: BoardStatsUpdatedResolvers<ContextType>;
+  BoardseshGrade?: BoardseshGradeResolvers<ContextType>;
   Climb?: ClimbResolvers<ContextType>;
   ClimbClassicStatus?: ClimbClassicStatusResolvers<ContextType>;
   ClimbCommunityStatus?: ClimbCommunityStatusResolvers<ContextType>;

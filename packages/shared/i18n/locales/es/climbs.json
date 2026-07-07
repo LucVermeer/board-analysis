@@ -338,6 +338,22 @@
       "similarClimbsSummary": "Bloques que comparten el 50%+ de estas presas"
     }
   },
+  "boardseshGrade": {
+    "label": "Grado Boardsesh",
+    "title": "Grado Boardsesh",
+    "summary": "Lo que cuesta de verdad",
+    "universalLabel": "Grado Boardsesh",
+    "localLabel": "En este plafón",
+    "localScopeNote": "En la escala de este plafón — todavía no comparable entre plafones",
+    "confirmedSubline_one": "Confirmado con {{count}} encadene",
+    "confirmedSubline_other": "Confirmado con {{count}} encadenes",
+    "provisionalSubline_one": "Aún asentándose — {{count}} encadene registrado",
+    "provisionalSubline_other": "Aún asentándose — {{count}} encadenes registrados",
+    "setterOnly": "Criterio del setter — todavía no hay suficientes encadenes.",
+    "moonboardTitle": "Todavía sin estandarizar",
+    "moonboardBody": "Aún no tenemos datos de grado de la comunidad para MoonBoard. Registra tus encadenes en Moon con Boardsesh para ayudar a desbloquearlo.",
+    "loadError": "No se pudo cargar el grado ahora mismo."
+  },
   "multiboardList": {
     "noClimbsFound": "No se encontraron bloques",
     "popular": "Popular",
