@@ -1,29 +1,28 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
-// Controllable InteractionManager: capture every scheduled callback + its
-// cancel so a test can decide whether the deferred work runs (open settles) or
-// is cancelled (sheet closed / unmounted before it fires). Hoisted so the
-// (top-of-file-hoisted) vi.mock factory below can close over it.
-const { scheduledTasks, runAfterInteractions } = vi.hoisted(() => {
-  const tasks: Array<{ run: () => void; cancel: ReturnType<typeof vi.fn> }> = [];
-  return {
-    scheduledTasks: tasks,
-    runAfterInteractions: vi.fn((callback: () => void) => {
-      const cancel = vi.fn();
-      tasks.push({ run: callback, cancel });
-      return { cancel };
-    }),
-  };
+// Controllable requestAnimationFrame: capture every scheduled callback + its id
+// so a test can decide whether the deferred frame runs (open commits) or is
+// cancelled (sheet closed / unmounted before it fires). A rAF — unlike the old
+// InteractionManager gate — can't be starved, so there's no fallback timer.
+const rafTasks: Array<{ id: number; run: FrameRequestCallback }> = [];
+const cancelledIds = new Set<number>();
+let nextRafId = 1;
+const requestFrame = vi.fn((callback: FrameRequestCallback): number => {
+  const id = nextRafId++;
+  rafTasks.push({ id, run: callback });
+  return id;
+});
+const cancelFrame = vi.fn((id: number) => {
+  cancelledIds.add(id);
 });
 
 type ViewMockProps = { children?: ReactNode; testID?: string; style?: unknown };
 vi.mock('react-native', () => ({
   View: ({ children, testID }: ViewMockProps) => createElement('div', { 'data-testid': testID }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
-  InteractionManager: { runAfterInteractions },
 }));
 
 // The carousel is the expensive thing we're deferring — stand it in with a
@@ -52,41 +51,50 @@ const baseProps = {
   onSwipePrevious: vi.fn(),
 };
 
-function settleAllInteractions() {
+function flushFrame() {
   act(() => {
-    for (const task of scheduledTasks.splice(0)) {
-      task.run();
+    for (const task of rafTasks.splice(0)) {
+      if (!cancelledIds.has(task.id)) task.run(performance.now());
     }
   });
 }
 
 describe('DeferredBoard', () => {
   beforeEach(() => {
-    scheduledTasks.length = 0;
-    runAfterInteractions.mockClear();
+    rafTasks.length = 0;
+    cancelledIds.clear();
+    nextRafId = 1;
+    requestFrame.mockClear();
+    cancelFrame.mockClear();
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
+    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
   });
 
-  it('shows a board-sized placeholder before the present animation settles', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('shows a board-sized placeholder before the deferred frame fires', () => {
     const { container } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
 
     expect(container.querySelector('[data-testid="deferred-board-placeholder"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="swipe-board"]')).toBeNull();
-    expect(runAfterInteractions).toHaveBeenCalledTimes(1);
+    expect(requestFrame).toHaveBeenCalledTimes(1);
   });
 
-  it('mounts the carousel after interactions settle', () => {
+  it('mounts the carousel after the frame fires', () => {
     const { container } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
 
-    settleAllInteractions();
+    flushFrame();
 
     expect(container.querySelector('[data-testid="deferred-board-placeholder"]')).toBeNull();
     const board = container.querySelector('[data-testid="swipe-board"]');
     expect(board?.getAttribute('data-frames')).toBe('p1145r15');
   });
 
-  it('does NOT re-show the placeholder when the climb changes while open (no swipe flash)', () => {
+  it('does NOT re-defer when the climb changes while open (no swipe flash)', () => {
     const { container, rerender } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
-    settleAllInteractions();
+    flushFrame();
     expect(container.querySelector('[data-testid="swipe-board"]')).toBeTruthy();
 
     // Swipe to a different climb: same open transition, new frames. The gate is
@@ -96,27 +104,25 @@ describe('DeferredBoard', () => {
     expect(container.querySelector('[data-testid="deferred-board-placeholder"]')).toBeNull();
     expect(container.querySelector('[data-testid="swipe-board"]')?.getAttribute('data-frames')).toBe('p9r12');
     // No second schedule — the open transition didn't recur.
-    expect(runAfterInteractions).toHaveBeenCalledTimes(1);
+    expect(requestFrame).toHaveBeenCalledTimes(1);
   });
 
-  it('cancels the scheduled mount and drops the board when the sheet closes before it fires', () => {
+  it('cancels the pending frame and drops the board when the sheet closes before it fires', () => {
     const { container, rerender } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
-    const [scheduled] = scheduledTasks;
+    expect(requestFrame).toHaveBeenCalledTimes(1);
 
     rerender(createElement(DeferredBoard, { ...baseProps, open: false }));
 
-    // The pending mount is cancelled (no setState-after-the-fact leaking a board).
-    expect(scheduled.cancel).toHaveBeenCalledTimes(1);
-    // Closed → reset to "not ready": the carousel is gone, only the cheap
-    // placeholder remains (the parent unmounts the whole block once it clears
-    // the displayed climb on dismiss).
+    // The pending frame is cancelled (no setState-after-the-fact leaking a board).
+    expect(cancelFrame).toHaveBeenCalledTimes(1);
+    // Closed → reset to "not ready": only the cheap placeholder remains.
     expect(container.querySelector('[data-testid="swipe-board"]')).toBeNull();
     expect(container.querySelector('[data-testid="deferred-board-placeholder"]')).toBeTruthy();
   });
 
-  it('drops a mounted board back to the placeholder when the sheet closes (no stale board on reopen)', () => {
+  it('drops a mounted board back to the placeholder when the sheet closes', () => {
     const { container, rerender } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
-    settleAllInteractions();
+    flushFrame();
     expect(container.querySelector('[data-testid="swipe-board"]')).toBeTruthy();
 
     rerender(createElement(DeferredBoard, { ...baseProps, open: false }));
@@ -125,26 +131,26 @@ describe('DeferredBoard', () => {
     expect(container.querySelector('[data-testid="deferred-board-placeholder"]')).toBeTruthy();
   });
 
-  it('re-shows the placeholder on the next open and schedules a fresh mount', () => {
+  it('re-shows the placeholder on the next open and schedules a fresh frame', () => {
     const { container, rerender } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
-    settleAllInteractions();
+    flushFrame();
     rerender(createElement(DeferredBoard, { ...baseProps, open: false }));
 
     // Re-open a different climb: placeholder again, then the new climb's board.
     rerender(createElement(DeferredBoard, { ...baseProps, open: true, currentFrames: 'p77r15' }));
     expect(container.querySelector('[data-testid="deferred-board-placeholder"]')).toBeTruthy();
-    expect(runAfterInteractions).toHaveBeenCalledTimes(2);
+    expect(requestFrame).toHaveBeenCalledTimes(2);
 
-    settleAllInteractions();
+    flushFrame();
     expect(container.querySelector('[data-testid="swipe-board"]')?.getAttribute('data-frames')).toBe('p77r15');
   });
 
-  it('cancels the scheduled mount on unmount (no setState-after-unmount)', () => {
+  it('cancels the pending frame on unmount (no setState-after-unmount)', () => {
     const { unmount } = render(createElement(DeferredBoard, { ...baseProps, open: true }));
-    const [scheduled] = scheduledTasks;
+    expect(requestFrame).toHaveBeenCalledTimes(1);
 
     unmount();
 
-    expect(scheduled.cancel).toHaveBeenCalledTimes(1);
+    expect(cancelFrame).toHaveBeenCalledTimes(1);
   });
 });
