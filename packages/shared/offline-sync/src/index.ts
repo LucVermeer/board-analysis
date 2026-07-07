@@ -30,14 +30,7 @@ export {
   clearAll,
 } from './mutation-queue/queue';
 export type { PendingMutation } from './mutation-queue/queue';
-export {
-  drainMutationQueue,
-  isDraining,
-  setSigningOut,
-  isSigningOut,
-  getWipeEpoch,
-  __resetDrainerStateForTests,
-} from './mutation-queue/drainer';
+export { drainMutationQueue, isDraining, setSigningOut, isSigningOut, getWipeEpoch } from './mutation-queue/drainer';
 export type { DrainOptions } from './mutation-queue/drainer';
 export { ensureMutationQueueTable, MUTATION_QUEUE_SCHEMA } from './mutation-queue/schema';
 export { processMutation } from './mutation-queue/handlers';
@@ -47,7 +40,7 @@ export { isRetryable, isNetworkError, getErrorStatus } from './mutation-queue/er
 // --- Pull sync -----------------------------------------------------------------
 export { pullSync } from './sync/pull-client';
 export type { SyncProgress, SyncOptions, SchemaDriftReporter } from './sync/pull-client';
-export { startSyncScheduler, triggerSync, __resetSyncSchedulerStateForTests } from './sync/sync-scheduler';
+export { startSyncScheduler, triggerSync } from './sync/sync-scheduler';
 export type { SyncProgressSink, SchedulerTriggers, SchedulerOptions, DrainQueue } from './sync/sync-scheduler';
 export {
   getCheckpoint,

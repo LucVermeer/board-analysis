@@ -20,7 +20,6 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^25.3.3",
     "typescript": "~6.0.3"

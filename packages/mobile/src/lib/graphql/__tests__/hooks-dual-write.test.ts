@@ -54,8 +54,8 @@ vi.mock('../hooks/use-social', () => ({
 vi.mock('../hooks/use-session-detail', () => ({ useSessionDetail: vi.fn(), useSessionPreview: vi.fn() }));
 
 import { useToggleFavorite } from '../hooks';
-import { __resetDrainerStateForTests, runMigrations } from '@boardsesh/offline-sync';
-import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
+import { runMigrations } from '@boardsesh/offline-sync';
+import { createTestDatabase, __resetDrainerStateForTests, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 
 type Row = Record<string, unknown>;
 type ToggleVariables = { input: { boardName: string; climbUuid: string; angle: number }; currentlyFavorited?: boolean };

@@ -40,8 +40,8 @@ import {
   useOfflineUnfollowUser,
   type SaveTickInput,
 } from '../use-offline-mutations';
-import { __resetDrainerStateForTests, runMigrations, type GraphQLFetch } from '@boardsesh/offline-sync';
-import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
+import { runMigrations, type GraphQLFetch } from '@boardsesh/offline-sync';
+import { createTestDatabase, __resetDrainerStateForTests, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 
 type Row = Record<string, unknown>;
 
