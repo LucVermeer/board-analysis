@@ -47,15 +47,17 @@ export function getSyncStatusSnapshot(): SyncStatus {
 
 /**
  * Publish a progress frame from a running pull. Wire this as pullSync's
- * `onProgress`. The terminal `phase: 'idle'` frame flips `isSyncing` off and
- * stamps `lastSyncedAt`; every other frame keeps `isSyncing` true.
+ * `onProgress`. The terminal `phase: 'idle'` frame flips `isSyncing` off and —
+ * unless it is the scheduler's `failed` frame after a thrown cycle — stamps
+ * `lastSyncedAt`; every other frame keeps `isSyncing` true.
  */
 export function setSyncProgress(progress: SyncProgress): void {
   const reachedIdle = progress.phase === 'idle';
+  const completed = reachedIdle && !progress.failed;
   currentStatus = {
     progress,
     isSyncing: !reachedIdle,
-    lastSyncedAt: reachedIdle ? Date.now() : currentStatus.lastSyncedAt,
+    lastSyncedAt: completed ? Date.now() : currentStatus.lastSyncedAt,
   };
   emit();
 }

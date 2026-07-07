@@ -347,6 +347,38 @@ export const schemaSQL = `
     "updated_at" timestamp DEFAULT now() NOT NULL
   );
 
+  -- Follow tables (mirrors packages/db/src/schema/app/follows.ts) so the
+  -- sync*Follows resolvers' user scoping is exercisable in tests.
+  DROP TABLE IF EXISTS "user_follows" CASCADE;
+  CREATE TABLE IF NOT EXISTS "user_follows" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "follower_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "following_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_follow" ON "user_follows" ("follower_id", "following_id");
+
+  DROP TABLE IF EXISTS "setter_follows" CASCADE;
+  CREATE TABLE IF NOT EXISTS "setter_follows" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "follower_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "setter_username" text NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_setter_follow" ON "setter_follows" ("follower_id", "setter_username");
+
+  DROP TABLE IF EXISTS "playlist_follows" CASCADE;
+  CREATE TABLE IF NOT EXISTS "playlist_follows" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "follower_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "playlist_uuid" text NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_playlist_follow" ON "playlist_follows" ("follower_id", "playlist_uuid");
+
   DROP TABLE IF EXISTS "user_profiles" CASCADE;
   CREATE TABLE IF NOT EXISTS "user_profiles" (
     "user_id" text PRIMARY KEY NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,

@@ -36,7 +36,11 @@ beforeEach(async () => {
   // The shared setup only truncates session tables between tests; clear the
   // sync surface here so each case starts clean (no cross-test favorite/deletion
   // leakage, which would inflate the from-epoch pulls below).
-  await db.execute(sql`TRUNCATE TABLE user_favorites, sync_deletions, board_climb_stats RESTART IDENTITY CASCADE`);
+  await db.execute(sql`
+    TRUNCATE TABLE user_favorites, sync_deletions, board_climb_stats, boardsesh_ticks,
+      playlists, playlist_ownership, playlist_climbs, user_follows, setter_follows, playlist_follows
+    RESTART IDENTITY CASCADE
+  `);
   await insertUser(USER_ID);
   await insertUser(OTHER_USER_ID);
 });
@@ -165,5 +169,110 @@ describe('syncDeletions — record_id encoding', () => {
     const otherResult = await callSyncDeletions(null, 500, OTHER_USER_ID);
     const leaked = otherResult.deletions.find((d) => d.recordId === 'kilter:scoped-del:40');
     expect(leaked).toBeUndefined();
+  });
+});
+
+describe('cross-user isolation — every user-scoped sync resolver', () => {
+  // One seeded row per user per surface; each resolver pulled as USER_ID must
+  // return exactly the own row and never the other user's. Together with the
+  // syncFavorites/syncDeletions cases above this covers all 8 user-scoped
+  // resolvers (syncClimbs/syncClimbStats are public reference data by design).
+
+  const pullAs = (queryName: keyof typeof syncQueries, userId: string) =>
+    (
+      syncQueries[queryName] as (
+        parent: unknown,
+        args: { cursor: null; limit: number },
+        context: ConnectionContext,
+      ) => Promise<SyncResult>
+    )(undefined, { cursor: null, limit: 500 }, ctx(userId));
+
+  it('syncTicks returns only the authenticated user ticks', async () => {
+    await db.execute(sql`
+      INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, climbed_at)
+      VALUES ('tick-own', ${USER_ID}, 'kilter', 'c1', 40, 'send', now()),
+             ('tick-other', ${OTHER_USER_ID}, 'kilter', 'c2', 40, 'send', now())
+    `);
+
+    const result = await pullAs('syncTicks', USER_ID);
+    expect(result.documents.map((doc) => (doc as Record<string, unknown>).uuid)).toEqual(['tick-own']);
+  });
+
+  it('syncPlaylists returns only playlists the user OWNS (ownership join)', async () => {
+    await db.execute(sql`
+      INSERT INTO playlists (uuid, board_type, name) VALUES ('pl-own', 'kilter', 'Mine'), ('pl-other', 'kilter', 'Theirs')
+    `);
+    await db.execute(sql`
+      INSERT INTO playlist_ownership (playlist_id, user_id, role)
+      SELECT id, ${USER_ID}, 'owner' FROM playlists WHERE uuid = 'pl-own'
+    `);
+    await db.execute(sql`
+      INSERT INTO playlist_ownership (playlist_id, user_id, role)
+      SELECT id, ${OTHER_USER_ID}, 'owner' FROM playlists WHERE uuid = 'pl-other'
+    `);
+    // A non-owner role on the other playlist must not leak it either.
+    await db.execute(sql`
+      INSERT INTO playlist_ownership (playlist_id, user_id, role)
+      SELECT id, ${USER_ID}, 'editor' FROM playlists WHERE uuid = 'pl-other'
+    `);
+
+    const result = await pullAs('syncPlaylists', USER_ID);
+    expect(result.documents.map((doc) => (doc as Record<string, unknown>).uuid)).toEqual(['pl-own']);
+  });
+
+  it('syncPlaylistClimbs returns only climbs of playlists the user owns', async () => {
+    await db.execute(sql`
+      INSERT INTO playlists (uuid, board_type, name) VALUES ('plc-own', 'kilter', 'Mine'), ('plc-other', 'kilter', 'Theirs')
+    `);
+    await db.execute(sql`
+      INSERT INTO playlist_ownership (playlist_id, user_id, role)
+      SELECT id, ${USER_ID}, 'owner' FROM playlists WHERE uuid = 'plc-own'
+    `);
+    await db.execute(sql`
+      INSERT INTO playlist_ownership (playlist_id, user_id, role)
+      SELECT id, ${OTHER_USER_ID}, 'owner' FROM playlists WHERE uuid = 'plc-other'
+    `);
+    await db.execute(sql`
+      INSERT INTO playlist_climbs (playlist_id, climb_uuid)
+      SELECT id, 'climb-own' FROM playlists WHERE uuid = 'plc-own'
+    `);
+    await db.execute(sql`
+      INSERT INTO playlist_climbs (playlist_id, climb_uuid)
+      SELECT id, 'climb-other' FROM playlists WHERE uuid = 'plc-other'
+    `);
+
+    const result = await pullAs('syncPlaylistClimbs', USER_ID);
+    expect(result.documents.map((doc) => (doc as Record<string, unknown>).climb_uuid)).toEqual(['climb-own']);
+  });
+
+  it('syncUserFollows returns only the authenticated user follows', async () => {
+    await db.execute(sql`
+      INSERT INTO user_follows (follower_id, following_id)
+      VALUES (${USER_ID}, ${OTHER_USER_ID}), (${OTHER_USER_ID}, ${USER_ID})
+    `);
+
+    const result = await pullAs('syncUserFollows', USER_ID);
+    expect(result.documents).toHaveLength(1);
+    expect((result.documents[0] as Record<string, unknown>).follower_id).toBe(USER_ID);
+  });
+
+  it('syncSetterFollows returns only the authenticated user setter follows', async () => {
+    await db.execute(sql`
+      INSERT INTO setter_follows (follower_id, setter_username)
+      VALUES (${USER_ID}, 'setter-own'), (${OTHER_USER_ID}, 'setter-other')
+    `);
+
+    const result = await pullAs('syncSetterFollows', USER_ID);
+    expect(result.documents.map((doc) => (doc as Record<string, unknown>).setter_username)).toEqual(['setter-own']);
+  });
+
+  it('syncPlaylistFollows returns only the authenticated user playlist follows', async () => {
+    await db.execute(sql`
+      INSERT INTO playlist_follows (follower_id, playlist_uuid)
+      VALUES (${USER_ID}, 'plf-own'), (${OTHER_USER_ID}, 'plf-other')
+    `);
+
+    const result = await pullAs('syncPlaylistFollows', USER_ID);
+    expect(result.documents.map((doc) => (doc as Record<string, unknown>).playlist_uuid)).toEqual(['plf-own']);
   });
 });

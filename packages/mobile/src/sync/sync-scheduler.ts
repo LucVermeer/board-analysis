@@ -61,9 +61,9 @@ async function runSync(
     console.warn('[Sync] Sync cycle failed:', error instanceof Error ? error.message : 'unknown');
     // pullSync only emits its terminal `idle` frame on success, so a throw mid-pull
     // would leave the Settings status row stuck on "Downloading…". Emit idle here so
-    // the in-flight flag always clears (user-data tables sync before board tables, so
-    // a typical mid-pull failure is past the user data — "last synced" is still apt).
-    onProgress?.({ phase: 'idle', currentTable: null, documentsProcessed: 0 });
+    // the in-flight flag always clears — marked `failed` so the status store does
+    // NOT stamp lastSyncedAt for a cycle that never completed.
+    onProgress?.({ phase: 'idle', currentTable: null, documentsProcessed: 0, failed: true });
   } finally {
     isSyncing = false;
     // I1: a trigger that arrived mid-run must still produce exactly one

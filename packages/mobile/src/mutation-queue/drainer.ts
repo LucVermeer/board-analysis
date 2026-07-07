@@ -213,4 +213,7 @@ export function isDraining(): boolean {
 export function __resetDrainerStateForTests(): void {
   _isDraining = false;
   _isSigningOut = false;
+  // Epoch checks are relative (capture-then-compare), so a residual value is
+  // technically harmless — reset anyway so no test inherits another's wipes.
+  _wipeEpoch = 0;
 }

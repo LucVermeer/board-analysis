@@ -16,6 +16,12 @@ export type SyncProgress = {
    * download can show its own live count. Undefined for phases without a table.
    */
   currentTableProcessed?: number;
+  /**
+   * Set on the terminal idle frame the SCHEDULER emits after a cycle threw —
+   * it still clears the in-flight UI state, but must not stamp lastSyncedAt
+   * (the cycle did not complete). pullSync's own success idle omits it.
+   */
+  failed?: boolean;
 };
 
 export type SyncOptions = {
@@ -254,10 +260,20 @@ async function processDeletions(
       const guardParams = hasUpdatedAt ? [deletion.deletedAt] : [];
 
       if (pkColumns.length === 1) {
-        await db.runAsync(`DELETE FROM ${deletion.tableName} WHERE ${pkColumns[0]} = ?${guardClause}`, [
-          deletion.recordId,
-          ...guardParams,
-        ]);
+        const deleteResult = await db.runAsync(
+          `DELETE FROM ${deletion.tableName} WHERE ${pkColumns[0]} = ?${guardClause}`,
+          [deletion.recordId, ...guardParams],
+        );
+        // Local cascade: the server's whole-playlist delete cascades
+        // playlist_climbs in Postgres but deliberately emits NO child
+        // tombstones (see 0144's NULL-parent guard), and the local SQLite has
+        // no FK cascade — without this, a deleted playlist's climb rows would
+        // accumulate as invisible orphans forever. Gated on the parent delete
+        // actually removing a row so a resurrection-guarded (stale) playlist
+        // tombstone doesn't strip a live playlist's climbs.
+        if (deletion.tableName === 'playlists' && (deleteResult?.changes ?? 0) > 0) {
+          await db.runAsync(`DELETE FROM playlist_climbs WHERE playlist_uuid = ?`, [deletion.recordId]);
+        }
       } else {
         // Backend encodes composite PKs as exactly N colon-separated segments
         // matching primaryKeyColumns order (e.g. "kilter:uuid:40" for
