@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-07T20:09:13.284Z",
+  "generatedAt": "2026-07-07T21:14:56.088Z",
   "entries": [
+    {
+      "prNumber": 3546,
+      "category": "fixed",
+      "title": "Fixed over-the-air updates not reaching phones still on the current App Store build",
+      "mergedAt": "2026-07-07T21:14:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3546"
+    },
     {
       "prNumber": 3517,
       "category": "new",
@@ -1067,6 +1074,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-08T06:08:12+10:00",
+      "sha": "0a98eaf53adc496e7880382efe0257c6d51ac8a7",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "3cb54065c4b78095243dd96e257f5e0e9251e5a8",
+        "ios": "45e92b24ee83af7a2fa810fc2b326b4469851e2a"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-07T19:06:42+10:00",
