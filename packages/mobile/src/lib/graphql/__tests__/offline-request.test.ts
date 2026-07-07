@@ -252,6 +252,36 @@ describe('offlineAwareRequest — GET_CLIMB', () => {
     expect(result).toEqual({ climb: null });
     expect(request).not.toHaveBeenCalled();
   });
+
+  it('retries a local miss over the network while online (row not synced yet, e.g. a live presence climb)', async () => {
+    setOnline(true);
+    isBoardDownloadedLocally.mockResolvedValue(true);
+    getClimbLocal.mockResolvedValue(null);
+    const result = await offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, climbVars);
+    expect(result.climb?.uuid).toBe('net-detail');
+    expect(getClimbLocal).toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith(GET_CLIMB, climbVars);
+  });
+
+  it('lets a local miss stand while offline — { climb: null }, no doomed network call', async () => {
+    setOnline(false);
+    isBoardDownloadedLocally.mockResolvedValue(true);
+    getClimbLocal.mockResolvedValue(null);
+    const result = await offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, climbVars);
+    expect(result).toEqual({ climb: null });
+    expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe('offlineAwareRequest — empty search results are answers, not misses', () => {
+  it('does not retry an empty local SEARCH_CLIMBS result over the network', async () => {
+    setOnline(true);
+    isBoardDownloadedLocally.mockResolvedValue(true);
+    searchClimbsLocal.mockResolvedValue({ climbs: [], hasMore: false });
+    const result = await offlineAwareRequest<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input: searchInput });
+    expect(result).toEqual({ searchClimbs: { climbs: [], hasMore: false } });
+    expect(request).not.toHaveBeenCalled();
+  });
 });
 
 describe('offlineAwareRequest — unregistered document', () => {
