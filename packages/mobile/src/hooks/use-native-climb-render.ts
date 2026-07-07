@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Directory, Paths } from 'expo-file-system';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
@@ -510,17 +510,21 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // render — the function self-guards via `warmupRun`.
   warmupRenderedOverlaysOnce();
 
-  const currentCacheKey = buildCacheKey(
-    boardName,
-    layoutId,
-    sizeId,
-    setIds,
-    frames,
-    filledStyle,
-    renderWidth,
-    holdRenderSignature,
+  // Both keys feed cache lookups on every FlashList row recycle; buildCacheKey
+  // runs an fnv1a char-loop over the frames string. Memoize on exactly the
+  // builders' inputs — a stale key would collide two climbs' overlays.
+  const currentCacheKey = useMemo(
+    () => buildCacheKey(boardName, layoutId, sizeId, setIds, frames, filledStyle, renderWidth, holdRenderSignature),
+    [boardName, layoutId, sizeId, setIds, frames, filledStyle, renderWidth, holdRenderSignature],
   );
-  const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds, variant);
+  const currentBoardKey = useMemo(
+    () => buildBoardKey(boardName, layoutId, sizeId, setIds, variant),
+    [boardName, layoutId, sizeId, setIds, variant],
+  );
+
+  // Parsed set ids, reused by the lazy background initializer and the
+  // background-paths effect. Kept in sync with the strings that feed the keys.
+  const setIdsArray = useMemo(() => setIds.split(',').map(Number).filter(Boolean), [setIds]);
 
   // Seed both pieces of state synchronously so the first paint already
   // shows whatever's available. Backgrounds in production are usually
@@ -548,7 +552,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
       boardName,
       layoutId,
       sizeId,
-      setIds: setIds.split(',').map(Number).filter(Boolean),
+      setIds: setIdsArray,
       variant,
     });
     if (!sync) return null;
@@ -571,8 +575,6 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // the latest boardKey after await and discards stale results so a
   // slow resolve from a previous prop value can't clobber the current.
   useEffect(() => {
-    const setIdsArray = setIds.split(',').map(Number).filter(Boolean);
-
     // Try sync first when stored entry is missing or for a different
     // board: in production Asset.localUri is usually pre-populated, so
     // the sync result is the authoritative one.
@@ -638,7 +640,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     // successful resolve. The boardKey check inside the async block
     // covers staleness across prop changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardName, layoutId, sizeId, setIds, currentBoardKey]);
+  }, [boardName, layoutId, sizeId, setIdsArray, currentBoardKey]);
 
   // Overlay-render effect: kick off the native render if we don't already
   // have one for this cache key in the sync map.
