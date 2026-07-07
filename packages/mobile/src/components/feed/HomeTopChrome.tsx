@@ -75,7 +75,11 @@ function HomeTopChromeGlass({
       {/* Frost content scrolling under the chrome band, matching the other tabs. */}
       <ProgressiveBlur style={[styles.topBlur, { height: insets.top + TOP_ISLAND_BAND }]} />
       {/* Floating header: the user-avatar island (left) and the scope menu (a glass
-          title-menu pill, centred) over the blur — matching the other tabs. */}
+          title-menu pill, centred) over the blur — matching the other tabs.
+          Deliberately box-none (unlike the opaque Material band below): the glass
+          islands float over scrollable content, and the gaps between them must keep
+          passing touches through. The islands themselves carry backgrounds, so
+          RNGH's Android hit-test still targets them. */}
       <View
         pointerEvents="box-none"
         style={[styles.headerChrome, { paddingTop: insets.top + spacing[1] }]}
@@ -127,7 +131,8 @@ function HomeTopChromeMaterial({
 
   return (
     <View
-      pointerEvents="box-none"
+      // NOT box-none — the opaque Material band must swallow touches; see ClimbTopChrome for the RNGH mechanism.
+      pointerEvents="auto"
       style={[
         styles.materialContainer,
         {

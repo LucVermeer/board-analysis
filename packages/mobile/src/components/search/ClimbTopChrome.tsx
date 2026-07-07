@@ -163,7 +163,14 @@ function ClimbTopChromeComponent({
 
     return (
       <View
-        pointerEvents="box-none"
+        // NOT box-none: the Material band is an opaque strip and must swallow every
+        // touch in its bounds. RNGH's Android hit-test (GestureHandlerOrchestrator)
+        // sees straight through handler-less, background-less subtrees — box-none
+        // skips its background check entirely — so list-row Gesture.Tap handlers
+        // underneath steal Compose chip taps once the list has scrolled under the
+        // chrome. With `auto`, the container's background makes it the RNGH touch
+        // target and the full DOWN…UP reaches the Compose chips natively.
+        pointerEvents="auto"
         style={[
           styles.materialContainer,
           {
@@ -209,6 +216,11 @@ function ClimbTopChromeComponent({
           </View>
         ) : null}
 
+        {/* Inner wrappers stay box-none: once the outer `auto` container claims the
+            RNGH pointer, only RN's own hit-testing runs inside, where box-none just
+            means "let touches reach the controls". If an inner control ever adopts
+            an RNGH gesture it needs no change — the outer container already stops
+            the list's handlers from being recorded. */}
         {usesCustomSearch ? (
           <View pointerEvents="box-none" style={styles.materialSearchStack}>
             <View pointerEvents="box-none" style={styles.materialSearchRow}>

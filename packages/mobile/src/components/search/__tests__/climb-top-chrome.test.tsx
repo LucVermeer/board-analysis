@@ -29,16 +29,18 @@ const haptics = vi.hoisted(() => ({ light: vi.fn(), selection: vi.fn() }));
 type ViewMockProps = {
   children?: ReactNode;
   onLayout?: (event: { nativeEvent: { layout: { height: number } } }) => void;
+  pointerEvents?: string;
 };
 vi.mock('react-native', () => ({
   Keyboard: { dismiss: vi.fn() },
   Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
     createElement('button', { onClick: onPress, 'data-scrim': 'true' }, children),
-  View: ({ children, onLayout }: ViewMockProps) =>
+  View: ({ children, onLayout, pointerEvents }: ViewMockProps) =>
     createElement(
       'div',
       {
         'data-has-layout': onLayout ? 'true' : 'false',
+        'data-pointer': pointerEvents ?? '',
         onClick: onLayout ? () => onLayout({ nativeEvent: { layout: { height: 88 } } }) : undefined,
       },
       children,
@@ -552,6 +554,19 @@ describe('ClimbTopChrome', () => {
   // The Material angle control moved out of ClimbTopChrome into the persistent filter
   // chip row (FilterChipRow.android), which this component test doesn't render — the
   // angle chip is covered by the Android screenshot QA, not here.
+
+  // Regression guard for the Android tap-passthrough fix: the Material band must
+  // be pointerEvents="auto" (NOT box-none) so RNGH's Android hit-test treats the
+  // opaque chrome as a touch target — box-none let list-row Gesture.Tap handlers
+  // underneath steal Compose chip taps once the list scrolled under the chrome.
+  it('keeps the Material chrome container pointerEvents="auto" so it swallows touches over the list', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    const materialContainer = container.querySelector('[data-has-layout="true"]') as HTMLElement;
+    expect(materialContainer).not.toBeNull();
+    expect(materialContainer.getAttribute('data-pointer')).toBe('auto');
+  });
 
   it('reports its measured height through onHeightChange via onLayout', () => {
     const onHeightChange = vi.fn();
