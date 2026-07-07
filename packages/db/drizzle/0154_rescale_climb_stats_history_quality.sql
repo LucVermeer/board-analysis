@@ -45,6 +45,15 @@
 -- ⚠️ NEVER run this file manually via psql (e.g. during incident response):
 -- outside the migrator's transaction + __drizzle_migrations bookkeeping there
 -- is nothing to stop a second application from double-converting 5.4M rows.
+-- Belt-and-braces for exactly that scenario: a guard row in
+-- _bs_migration_guards makes even a manual re-application a no-op. The table
+-- is deliberately durable (plain Postgres, pg_dump-portable) so future
+-- non-idempotent backfills can reuse it.
+
+CREATE TABLE IF NOT EXISTS _bs_migration_guards (
+  tag text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
 
 DO $$
 DECLARE
@@ -54,6 +63,11 @@ DECLARE
   v_delta bigint;
   v_total bigint := 0;
 BEGIN
+  IF EXISTS (SELECT 1 FROM _bs_migration_guards WHERE tag = '0154_history_quality_rescale') THEN
+    RAISE NOTICE '0154 history rescale already applied — skipping (guard row present)';
+    RETURN;
+  END IF;
+
   SELECT COALESCE(max(id), 0) INTO v_max FROM board_climb_stats_history;
 
   WHILE v_lo <= v_max LOOP
@@ -95,6 +109,8 @@ BEGIN
     v_total := v_total + v_delta;
     v_lo := v_lo + v_batch;
   END LOOP;
+
+  INSERT INTO _bs_migration_guards (tag) VALUES ('0154_history_quality_rescale');
 
   RAISE NOTICE 'history quality rescale (best-effort): rewrote % row(s) onto 1-5', v_total;
 END $$;
