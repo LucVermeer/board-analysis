@@ -35,4 +35,10 @@ dependencies {
   // build/runtime risk here — keep this version in lockstep with expo-image's
   // GLIDE_VERSION whenever expo-image is upgraded.
   compileOnly 'com.github.bumptech.glide:glide:5.0.5'
+
+  // JVM unit tests for the trim-level policy (which onTrimMemory levels we
+  // full-clear vs leave to stock Glide). Run via :…:testDebugUnitTest in
+  // .github/workflows/android-pr-rn.yml; the repo's `vp` flow has no Kotlin
+  // test runner.
+  testImplementation 'junit:junit:4.13.2'
 }

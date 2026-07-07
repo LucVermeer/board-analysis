@@ -97,22 +97,25 @@ jobs:
 
       - uses: ./.github/actions/android-rn-setup
 
-      - name: Run live-activity module unit tests (Robolectric)
+      - name: Run local-module unit tests (Robolectric/JUnit)
         working-directory: packages/mobile/android
-        # Robolectric/JUnit tests for the session-presence lifecycle + the
-        # foreground-service retry path. The gradle project path for an Expo local
-        # module is autolinking-derived, so discover it rather than hardcode.
+        # Robolectric/JUnit tests for local Expo modules that ship them:
+        # live-activity (session-presence lifecycle + foreground-service retry)
+        # and memory-trim (Glide trim-level policy). The gradle project path for
+        # an Expo local module is autolinking-derived, so discover it rather
+        # than hardcode.
         run: |
           set -euo pipefail
-          mapfile -t PROJECTS < <(./gradlew --no-daemon -q projects | sed -n "s/.*Project '\(:[^']*live-activity[^']*\)'.*/\1/p")
-          if [ "${#PROJECTS[@]}" -ne 1 ]; then
-            echo "Expected exactly one live-activity Gradle project, found ${#PROJECTS[@]}:"
+          mapfile -t PROJECTS < <(./gradlew --no-daemon -q projects | sed -n "s/.*Project '\(:[^']*\(live-activity\|memory-trim\)[^']*\)'.*/\1/p")
+          if [ "${#PROJECTS[@]}" -ne 2 ]; then
+            echo "Expected exactly two tested module Gradle projects (live-activity, memory-trim), found ${#PROJECTS[@]}:"
             printf '  %s\n' "${PROJECTS[@]}"
             exit 1
           fi
-          PROJECT="${PROJECTS[0]}"
-          echo "Testing module project: $PROJECT"
-          ./gradlew "${PROJECT}:testDebugUnitTest" --no-daemon --console=plain --stacktrace
+          for PROJECT in "${PROJECTS[@]}"; do
+            echo "Testing module project: $PROJECT"
+            ./gradlew "${PROJECT}:testDebugUnitTest" --no-daemon --console=plain --stacktrace
+          done
 
   build-apk:
     needs: gate
