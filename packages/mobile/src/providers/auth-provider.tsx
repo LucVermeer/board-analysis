@@ -57,6 +57,11 @@ type AuthProviderProps = {
   onReady?: () => void;
 };
 
+// Cap on the best-effort queue flush before sign-out proceeds. Deliberately a
+// UX bound, not a delivery guarantee: sign-out must not hang on a slow/absent
+// connection, the user already confirmed the pending-writes dialog when the
+// queue was non-empty, and whatever the race leaves behind is wiped with the
+// rest of the local data (the account is leaving this device).
 const SIGN_OUT_DRAIN_TIMEOUT_MS = 3000;
 
 export function AuthProvider({ children, onReady }: AuthProviderProps) {
