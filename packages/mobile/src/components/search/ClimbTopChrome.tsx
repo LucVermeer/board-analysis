@@ -7,7 +7,7 @@
 // persistently in the centre. The Material variant keeps a dedicated
 // Appbar.Header with the board as its subtitle plus grade / filter quick chips.
 
-import { type ReactNode, type RefObject, useCallback } from 'react';
+import { memo, type ReactNode, type RefObject, useCallback } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,7 +85,7 @@ type ClimbTopChromeProps = {
   showPersistentChips?: boolean;
 };
 
-export function ClimbTopChrome({
+function ClimbTopChromeComponent({
   searchMode = 'custom',
   title,
   canCreate,
@@ -341,6 +341,11 @@ export function ClimbTopChrome({
     </CollapsingTopChrome>
   );
 }
+
+// Memoized so a climbs-list re-render (e.g. a per-keystroke state change) skips
+// the chrome when its props are unchanged. Callers must keep object/function
+// props stable (the screen memoizes filterSummary + hoists its callbacks).
+export const ClimbTopChrome = memo(ClimbTopChromeComponent);
 
 const styles = StyleSheet.create({
   searchStack: {

@@ -216,7 +216,11 @@ function ClimbListInner() {
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [searchTextLength, setSearchTextLength] = useState(0);
+  // Only the recent-filter pills read this, and they only ever show in native
+  // (iOS-26) search. A boolean lets React's same-value bailout swallow
+  // keystrokes 2..n; the setter is gated on `useNativeSearch` so Android — where
+  // the pills can never show — never re-renders the whole list per keystroke.
+  const [searchTextEmpty, setSearchTextEmpty] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [showGrade, setShowGrade] = useState(false);
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
@@ -247,31 +251,34 @@ function ClimbListInner() {
   }, [blurSearchInputs]);
   const handleDismissGrade = useCallback(() => setShowGrade(false), []);
 
-  const applyVisibleSearchText = useCallback((text: string) => {
-    setSearchTextLength(text.length);
-    const customSearch = searchHeaderRef.current;
-    const nativeSearch = nativeSearchRef.current;
-    // Seed the displayed text only — never re-enter onChangeText, which would
-    // re-arm the input debounce and redundantly re-commit the term. Callers
-    // commit `name` through the search provider (replaceSearch / setName); this
-    // just mirrors it into the field. (The native bar's setText likewise does
-    // not fire its change handler.)
-    customSearch?.setText(text, { silent: true });
-    nativeSearch?.setText(text);
-    return customSearch != null || nativeSearch != null;
-  }, []);
+  const applyVisibleSearchText = useCallback(
+    (text: string) => {
+      if (useNativeSearch) setSearchTextEmpty(text.length === 0);
+      const customSearch = searchHeaderRef.current;
+      const nativeSearch = nativeSearchRef.current;
+      // Seed the displayed text only — never re-enter onChangeText, which would
+      // re-arm the input debounce and redundantly re-commit the term. Callers
+      // commit `name` through the search provider (replaceSearch / setName); this
+      // just mirrors it into the field. (The native bar's setText likewise does
+      // not fire its change handler.)
+      customSearch?.setText(text, { silent: true });
+      nativeSearch?.setText(text);
+      return customSearch != null || nativeSearch != null;
+    },
+    [useNativeSearch],
+  );
 
   const handleSearchChange = useCallback(
     (text: string) => {
       const nextName = normalizeSearchName(text);
       visibleSearchTextRef.current = text;
-      setSearchTextLength(nextName.length);
+      if (useNativeSearch) setSearchTextEmpty(nextName.length === 0);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
         setName(nextName);
       }, SEARCH_DEBOUNCE_MS);
     },
-    [setName],
+    [setName, useNativeSearch],
   );
 
   const handleNativeSearchChange = useCallback(
@@ -285,7 +292,7 @@ function ClimbListInner() {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     setShowFilters(false);
     visibleSearchTextRef.current = '';
-    setSearchTextLength(0);
+    setSearchTextEmpty(true);
     setName('');
     nativeSearchRef.current?.clearText();
   }, [setName]);
@@ -956,7 +963,7 @@ function ClimbListInner() {
   // Recent-filter pills live in the list header on search focus — only meaningful
   // with native search (the custom in-chrome field sits behind a scrim/keyboard,
   // so the list header isn't reachable while typing).
-  const showRecentPills = useNativeSearch && isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
+  const showRecentPills = useNativeSearch && isSearchFocused && searchTextEmpty && recentFilters.length > 0;
   // Show the spinner (not a premature "no climbs" empty state) while a board is
   // resolving or its per-board restore hasn't landed yet.
   const isBoardResolving = isBoardLoading || (hasBoardConfig && !searchReady);
@@ -1003,6 +1010,13 @@ function ClimbListInner() {
   // The glass screen title: the active-filter summary, or "All climbs" when none.
   // Shown as the persistent centre title in the floating chrome.
   const searchTitle = filterSummary ?? t('mobile.search.allClimbs');
+  // Stable object for the memoized ClimbTopChrome's filterSummary prop — inline
+  // it would allocate every render and defeat the memo.
+  const filterSummaryProp = useMemo(
+    () =>
+      filterInTopChrome && filterSummary ? { text: filterSummary, onClear: handleClearNonGradeFilters } : undefined,
+    [filterInTopChrome, filterSummary, handleClearNonGradeFilters],
+  );
   const gradeFilterToken = useMemo(
     () => filterTokens.find((filterToken) => filterToken.key === 'grade'),
     [filterTokens],
@@ -1414,11 +1428,7 @@ function ClimbListInner() {
         onCloseGrade={handleDismissGrade}
         activeFilterCount={activeFilterCount}
         onOpenFilters={handleOpenFilters}
-        filterSummary={
-          features.filtersInTopChrome && filterSummary
-            ? { text: filterSummary, onClear: handleClearNonGradeFilters }
-            : undefined
-        }
+        filterSummary={filterSummaryProp}
         gradeBound={gradeBound}
         grades={grades}
         lastUsedGradeId={lastUsedGrade}
