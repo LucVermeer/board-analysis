@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-07T11:13:56.311Z",
+  "generatedAt": "2026-07-07T11:18:49.658Z",
   "entries": [
+    {
+      "prNumber": 3514,
+      "category": "fixed",
+      "title": "Adding a beta video from the player's \"...\" menu works again — the share sheet opens over the player instead of vanishing.",
+      "mergedAt": "2026-07-07T11:14:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3514"
+    },
     {
       "prNumber": 3516,
       "category": "fixed",

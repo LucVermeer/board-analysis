@@ -23,6 +23,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Adding a beta video from the player's "..." menu works again — the share sheet opens over the player instead of vanishing. ([#3514](https://github.com/boardsesh/boardsesh/pull/3514))
 - Your real name and avatar now show up when you start or join a session with your crew — no more `user-3f8a12`. ([#3516](https://github.com/boardsesh/boardsesh/pull/3516))
 - Scrolling the climb history list during a session is fixed on Android. ([#3515](https://github.com/boardsesh/boardsesh/pull/3515))
 - Downloaded boards now work fully offline: changing the queue angle keeps grades accurate, "plan my session" builds from your downloaded climbs, and wall-panel climbs load without a connection ([#3499](https://github.com/boardsesh/boardsesh/pull/3499))
