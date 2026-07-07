@@ -182,6 +182,9 @@ function statValueFromAccum(accum: StatAccum): RepairStatValue {
     angle: accum.angle,
     displayDifficulty: accum.displayDifficulty,
     difficultyAverage: accum.difficultyAverage,
+    // qualityAverage / difficulty were already put on the canonical 1-5 scale and
+    // guarded by foldCatalogStat (correctGripsQualityAverage) when this repair
+    // accumulated the stat rows — the repair reads them straight from the accum.
     qualityAverage: accum.qualityAverage,
     qualityNormalized: true,
     faUsername: accum.faUsername,

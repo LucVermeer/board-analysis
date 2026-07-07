@@ -21,6 +21,7 @@ import {
 } from '../api/kilter-rest';
 import { KilterApiError } from '../api/errors';
 import { pullKilterReference, type KilterReferencePull } from './reference-pull';
+import { correctGripsQualityAverage } from './quality-scale';
 import { buildLayoutResolver } from './layout-resolver';
 import { gripsClimbConcatToFrames, framesToHolds, firstUnplaceableHole } from './catalog-parse';
 import { fingerprintFromHolds } from './fingerprint';
@@ -179,16 +180,22 @@ export function foldCatalogStat(
     accumByKey.set(key, accum);
   }
   accum.kilterCount += stat.ascentCount;
-  // Grips quality is already on the 1-5 scale; only guard non-positive
-  // (unrated) → null so we never persist a literal 0 that sorts/averages as a
-  // real rating (do NOT run normalizeQualityTo5 here — that ×5/3 is for aurora's
-  // 1-3 source only).
-  const incomingQuality = stat.qualityAverage != null && stat.qualityAverage > 0 ? stat.qualityAverage : null;
+  // Kilter Grips reports a MIXED-scale quality average (Aurora-era 1-3 blended
+  // with Grips-era 1-5). correctGripsQualityAverage puts it on the canonical 1-5
+  // scale using the climb's era (fa_at), and drops unrated (≤0) → null. Then a
+  // final ingest guard rejects anything still outside (0, 5] so a bad upstream
+  // value can never land as a real star rating.
+  const correctedQuality = correctGripsQualityAverage(stat.qualityAverage, stat.faAt);
+  const incomingQuality = correctedQuality != null && correctedQuality <= 5 ? correctedQuality : null;
+  // Difficulty ingest guard: id 1 doesn't exist and 0 is a "no data" sentinel
+  // (valid grade ids are ~10-33), so treat anything ≤ 1 as "no grade" → null.
+  const incomingDisplayDifficulty = guardDifficulty(stat.currentDifficultyId ?? stat.difficultyAverage);
+  const incomingDifficultyAverage = guardDifficulty(stat.difficultyAverage);
   const isCanonicalOwnRow = stat.climbUuid.toLowerCase() === canonicalUuid.toLowerCase();
   if (isCanonicalOwnRow) {
     // The canonical's own Grips row is authoritative — overwrite.
-    accum.displayDifficulty = stat.currentDifficultyId ?? stat.difficultyAverage;
-    accum.difficultyAverage = stat.difficultyAverage;
+    accum.displayDifficulty = incomingDisplayDifficulty;
+    accum.difficultyAverage = incomingDifficultyAverage;
     accum.qualityAverage = incomingQuality;
     accum.faUsername = stat.faUsername;
     accum.faAt = stat.faAt;
@@ -197,12 +204,21 @@ export function foldCatalogStat(
     // Fingerprint-merged duplicate: fill only the fields the canonical hasn't
     // supplied yet, so a climb folded onto an aurora-origin canonical (no own
     // Grips row) still contributes a grade/quality instead of NULL.
-    if (accum.displayDifficulty == null) accum.displayDifficulty = stat.currentDifficultyId ?? stat.difficultyAverage;
-    if (accum.difficultyAverage == null) accum.difficultyAverage = stat.difficultyAverage;
+    if (accum.displayDifficulty == null) accum.displayDifficulty = incomingDisplayDifficulty;
+    if (accum.difficultyAverage == null) accum.difficultyAverage = incomingDifficultyAverage;
     if (accum.qualityAverage == null) accum.qualityAverage = incomingQuality;
     if (accum.faUsername == null) accum.faUsername = stat.faUsername;
     if (accum.faAt == null) accum.faAt = stat.faAt;
   }
+}
+
+/**
+ * Ingest guard for a Grips difficulty id/average: valid grade ids are ~10-33,
+ * so treat a missing value or a ≤ 1 placeholder (id 1 doesn't exist; 0 is
+ * `Number(null)`) as "no grade" → null.
+ */
+function guardDifficulty(difficulty: number | null | undefined): number | null {
+  return difficulty != null && difficulty > 1 ? difficulty : null;
 }
 
 export function foldCatalogStatOnce(
@@ -449,7 +465,8 @@ async function syncBoardLayoutGroup(
     displayDifficulty: accum.displayDifficulty,
     difficultyAverage: accum.difficultyAverage,
     qualityAverage: accum.qualityAverage,
-    // Grips quality is native 1-5, so the row is already on the canonical scale.
+    // qualityAverage was put on the canonical 1-5 scale by correctGripsQualityAverage
+    // in the fold above (Aurora-era 1-3 → 1-5, Grips-era passthrough).
     qualityNormalized: true,
     faUsername: accum.faUsername,
     faAt: accum.faAt,
@@ -475,7 +492,8 @@ async function syncBoardLayoutGroup(
             displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
             difficultyAverage: sql`COALESCE(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
             qualityAverage: sql`COALESCE(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
-            // Grips quality is 1-5; whenever we write it, the row is normalized.
+            // quality is corrected to the canonical 1-5 scale on the way in
+            // (correctGripsQualityAverage), so a written row is always normalized.
             qualityNormalized: sql`true`,
             faUsername: sql`COALESCE(excluded.fa_username, ${boardClimbStats.faUsername})`,
             faAt: sql`COALESCE(excluded.fa_at, ${boardClimbStats.faAt})`,
