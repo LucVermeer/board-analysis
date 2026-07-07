@@ -102,7 +102,7 @@ import { ClimbReactionMenu } from '../ClimbReactionMenu';
 const climb = { uuid: 'climb-1', name: 'Big Move', frames: '', difficulty: 'V4', quality_average: '0' } as Climb;
 const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
 
-function renderMenu(onClose = vi.fn()) {
+function renderMenu(onClose = vi.fn(), extraProps: Record<string, unknown> = {}) {
   return {
     onClose,
     ...render(
@@ -112,6 +112,7 @@ function renderMenu(onClose = vi.fn()) {
         isAuthenticated
         reduceMotion
         onClose={onClose}
+        {...extraProps}
       />,
     ),
   };
@@ -140,16 +141,7 @@ describe('ClimbReactionMenu view switching', () => {
 
   it('forwards the onAddBetaVideo override into useClimbActions', () => {
     const onAddBetaVideo = vi.fn();
-    render(
-      <ClimbReactionMenu
-        climb={climb}
-        boardConfig={boardConfig as never}
-        isAuthenticated
-        onAddBetaVideo={onAddBetaVideo}
-        reduceMotion
-        onClose={vi.fn()}
-      />,
-    );
+    renderMenu(vi.fn(), { onAddBetaVideo });
     expect(captured.actionArgs?.onAddBetaVideo).toBe(onAddBetaVideo);
   });
 

@@ -228,9 +228,8 @@ export function PlayDrawer({
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
-  // Non-null when the reaction menu opened the beta sheet for a specific climb
-  // snapshot (so a live queue/angle change can't retarget it); null when the Beta
-  // Videos "+" button opened it for the live displayedClimb. See #3505.
+  // Pinned climb/board the reaction menu opened the beta sheet for; null falls back
+  // to the live displayedClimb (the "+" button path). See #3505.
   const [betaVideoTarget, setBetaVideoTarget] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
@@ -635,22 +634,22 @@ export function PlayDrawer({
     setBleControlVisible(true);
   }, [bluetooth]);
 
-  // The "+" button in the Beta Videos section adds beta for the climb currently
-  // shown — clear any snapshot so the sheet reads the live displayedClimb.
+  // Beta Videos "+" button: null target → the sheet tracks the live displayedClimb.
   const handleOpenAddBetaVideo = useCallback(() => {
     setBetaVideoTarget(null);
     setAddBetaVideoOpen(true);
   }, []);
 
-  // The reaction menu's beta action passes the climb/board it was opened for.
-  // Snapshot it so a party-session queue/angle change while the menu is open can't
-  // retarget the sheet onto a different climb (the root-sheet fallback snapshots
-  // the same way — see #3505 review).
+  // Reaction-menu beta: pin the climb/board the menu was opened for so a party-session
+  // queue/angle change mid-menu can't retarget the sheet (#3505).
   const handleOpenAddBetaVideoForClimb = useCallback((targetClimb: Climb, targetBoardConfig: BoardConfig) => {
     setBetaVideoTarget({ climb: targetClimb, boardConfig: targetBoardConfig });
     setAddBetaVideoOpen(true);
   }, []);
 
+  // Don't clear betaVideoTarget here: the sheet is still animating out and reads
+  // from it, so nulling it mid-dismiss would swap the shown climb for a frame. The
+  // next open overwrites it (the "+" path to null, the reaction path to its snapshot).
   const handleCloseAddBetaVideo = useCallback(() => {
     setAddBetaVideoOpen(false);
   }, []);
@@ -997,8 +996,6 @@ export function PlayDrawer({
       {mountAddBetaVideo && (
         <AddBetaVideoSheet
           visible={addBetaVideoOpen}
-          // Snapshot when the reaction menu opened it for a specific climb;
-          // otherwise the live displayedClimb (the "+" button path). See #3505.
           climb={betaVideoTarget?.climb ?? displayedClimb ?? null}
           boardName={(betaVideoTarget?.boardConfig.boardName ?? boardName) as BoardName}
           layoutId={betaVideoTarget?.boardConfig.layoutId ?? layoutId}

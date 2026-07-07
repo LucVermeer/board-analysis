@@ -265,10 +265,9 @@ export function useClimbActions({
         icon: 'video',
         color: accentColor,
         run: () => {
-          // Play drawer passes its own in-tree opener so the beta sheet stacks
-          // above the `/play` modal; every other surface falls back to the root
-          // sheet (correct there — no covering modal). Both take the same
-          // climb/board snapshot so a live queue change can't retarget it. See #3505.
+          // In-tree override (play drawer) stacks the sheet above the `/play` modal;
+          // the root sheet can't. Both take the climb/board snapshot so a live queue
+          // change can't retarget it. See #3505.
           if (onAddBetaVideo) onAddBetaVideo(climb, boardConfig);
           else openAddBetaVideo(climb, boardConfig);
           after();
