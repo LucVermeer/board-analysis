@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-06T20:32:30.878Z",
+  "generatedAt": "2026-07-07T01:48:24.862Z",
   "entries": [
+    {
+      "prNumber": 2785,
+      "category": "new",
+      "title": "Early testers: download a board in My Boards and keep browsing, logging sends, and saving favorites with no signal — everything queues on your phone and syncs when you're back online. (Rolling out gradually behind a feature flag.)",
+      "mergedAt": "2026-07-07T01:47:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/2785"
+    },
     {
       "prNumber": 3493,
       "category": "new",
