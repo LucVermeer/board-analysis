@@ -565,12 +565,15 @@ describe('QueueProvider session update subscription', () => {
     renderProvider((snapshot) => snapshots.push(snapshot));
 
     await waitFor(() => {
-      expect(graph.execute).toHaveBeenCalled();
+      expect(ws.client.subscribe).toHaveBeenCalled();
     });
 
     expect(executeVariablesFor('joinSession')).toEqual(
       expect.objectContaining({ username: 'Marco', avatarUrl: 'https://example.com/marco.png' }),
     );
+    // JOIN already carried the identity, so the re-announce effect must not
+    // fire a redundant UPDATE_USERNAME (announcedIdentityRef is seeded at join).
+    expect(executeVariablesFor('updateUsername')).toBeUndefined();
   });
 
   it('re-announces identity with UPDATE_USERNAME when the profile resolves after joining', async () => {
