@@ -50,7 +50,12 @@ import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
 import { BleControlSheetHost } from '../ble/BleControlSheetHost';
 import { Icon } from '../Icon';
-import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
+import {
+  usePlaylistSuggestionSource,
+  useQueueData,
+  useQueueActions,
+  useQueueSessionId,
+} from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -304,7 +309,9 @@ export function PlayDrawer({
     setBetaHeaderHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
   }, []);
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
+  const { queue, currentClimbQueueItem } = useQueueData();
+  const { setCurrentClimb, nextClimb, previousClimb, addToQueue } = useQueueActions();
+  const { sessionId } = useQueueSessionId();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -335,7 +342,7 @@ export function PlayDrawer({
     });
   }, [boardName, layoutId, sizeId, setIds]);
 
-  const displayedQueueItem = drawerPreviewItem ?? state.currentClimbQueueItem;
+  const displayedQueueItem = drawerPreviewItem ?? currentClimbQueueItem;
   const displayedClimb = displayedQueueItem?.climb;
   // A view-only preview is showing (not the active/wall climb). Commit paths
   // never set `drawerPreviewItem`, so this is true only for genuine previews
@@ -369,8 +376,8 @@ export function PlayDrawer({
   });
   const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
   const navigationState = useMemo(
-    () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),
-    [state.queue, displayedQueueItem, navigationSuggestionSource],
+    () => computeNavigationStateWithSuggestions(queue, displayedQueueItem, navigationSuggestionSource),
+    [queue, displayedQueueItem, navigationSuggestionSource],
   );
 
   // The climb the header peek shows while swiping — the one being swiped toward.
@@ -482,13 +489,13 @@ export function PlayDrawer({
         // make it current unless it already is, so re-opening the current climb
         // doesn't re-append it. A fresh-uuid item on a genuinely new selection is
         // intentional (re-tapping starts a fresh pass — see queue setCurrentClimb).
-        const isAlreadyCurrent = state.currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
+        const isAlreadyCurrent = currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
         if (!isAlreadyCurrent) {
           setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
         }
       }
     },
-    [state.currentClimbQueueItem, setCurrentClimb],
+    [currentClimbQueueItem, setCurrentClimb],
   );
 
   // Apply the host's open target. A new target is a fresh object with a bumped
