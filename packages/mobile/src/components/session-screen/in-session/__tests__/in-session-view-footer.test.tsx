@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // in-session list clears the bottom chrome without an End action bar.
 const list = vi.hoisted(() => ({
   contentContainerStyle: null as Record<string, unknown> | null,
+  hasGestureScrollComponent: false,
+  nestedScrollEnabled: false,
 }));
 
 // Captures the device-local export handoff fired after a confirmed session end.
@@ -55,6 +57,7 @@ vi.mock('react-native-gesture-handler', () => ({
     }),
   },
   GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -71,12 +74,18 @@ vi.mock('@shopify/flash-list', () => ({
     ListHeaderComponent,
     ListFooterComponent,
     contentContainerStyle,
+    renderScrollComponent,
+    nestedScrollEnabled,
   }: {
     ListHeaderComponent?: ReactNode;
     ListFooterComponent?: ReactNode;
     contentContainerStyle?: Record<string, unknown>;
+    renderScrollComponent?: unknown;
+    nestedScrollEnabled?: boolean;
   }) => {
     list.contentContainerStyle = contentContainerStyle ?? null;
+    list.hasGestureScrollComponent = renderScrollComponent != null;
+    list.nestedScrollEnabled = nestedScrollEnabled ?? false;
     return createElement('div', null, ListHeaderComponent, ListFooterComponent);
   },
 }));
@@ -170,6 +179,8 @@ import { InSessionView } from '../InSessionView';
 describe('InSessionView footer', () => {
   beforeEach(() => {
     list.contentContainerStyle = null;
+    list.hasGestureScrollComponent = false;
+    list.nestedScrollEnabled = false;
     bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 0, tabBarBottom: 50, inSessionListBottom: 130 };
     theme.variant = 'liquidGlass';
     queue.endSession.mockReset();
@@ -211,6 +222,12 @@ describe('InSessionView footer', () => {
   it('renders no in-session bottom action bar', () => {
     const { queryByTestId } = render(createElement(InSessionView));
     expect(queryByTestId('in-session-footer')).toBeNull();
+  });
+
+  it('uses a RNGH scroll host so Android can arbitrate the scroll against the RecordTopChrome Material container', () => {
+    render(createElement(InSessionView));
+    expect(list.hasGestureScrollComponent).toBe(true);
+    expect(list.nestedScrollEnabled).toBe(true);
   });
 
   it('clears the ending spinner even when endSession rejects', async () => {
