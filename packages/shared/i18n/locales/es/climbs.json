@@ -559,6 +559,11 @@
       "noMatches": {
         "title": "Sin resultados",
         "description": "Nada coincide con \"{{query}}\""
+      },
+      "offlineFilter": {
+        "title": "Este filtro necesita conexión",
+        "subtitle": "Los borradores, las betas, las zonas y los filtros de presas solo funcionan con conexión. Bórralo para seguir explorando tu plafón descargado.",
+        "cta": "Borrar filtro"
       }
     },
     "detail": {

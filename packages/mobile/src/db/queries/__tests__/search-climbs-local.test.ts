@@ -258,16 +258,67 @@ describe('searchClimbsLocal', () => {
   });
 });
 
+describe('searchClimbsLocal: tall/wide (Kilter Homewall size grid)', () => {
+  let db: TestSqliteDb;
+
+  beforeEach(async () => {
+    db = createTestDatabase();
+    await ensureMutationQueueTable(db);
+    await runMigrations(db);
+    // Active size 25 (10x12): shorter sizes = {17,18,19,21,22,29}, narrower = {17,18,19,23,24}.
+    // Each climb is compatible with 25 so it passes the base size filter.
+    await insertClimb(db, { uuid: 'tall-wide', layoutId: 8, compatibleSizeIds: [25, 26] });
+    await insertClimb(db, { uuid: 'tall-only', layoutId: 8, compatibleSizeIds: [23, 24, 25, 26] });
+    await insertClimb(db, { uuid: 'wide-only', layoutId: 8, compatibleSizeIds: [21, 22, 25, 26] });
+    await insertClimb(db, { uuid: 'neither', layoutId: 8, compatibleSizeIds: [21, 24, 25] });
+  });
+
+  const homewall = (overrides: Partial<ClimbSearchInput> = {}) => makeInput({ layoutId: 8, sizeId: 25, ...overrides });
+
+  it('tall = climbs compatible with no shorter Homewall size', async () => {
+    const result = await searchClimbsLocal(db, homewall({ onlyTallClimbs: true }));
+    expect(uuids(result).sort()).toEqual(['tall-only', 'tall-wide']);
+  });
+
+  it('wide = climbs compatible with no narrower Homewall size', async () => {
+    const result = await searchClimbsLocal(db, homewall({ onlyWideClimbs: true }));
+    expect(uuids(result).sort()).toEqual(['tall-wide', 'wide-only']);
+  });
+
+  it('tall AND wide narrows to climbs that need the largest size', async () => {
+    const result = await searchClimbsLocal(db, homewall({ onlyTallClimbs: true, onlyWideClimbs: true }));
+    expect(uuids(result)).toEqual(['tall-wide']);
+  });
+
+  it('count mirrors the tall/wide search', async () => {
+    expect(await countClimbsLocal(db, homewall({ onlyTallClimbs: true }))).toBe(2);
+    expect(await countClimbsLocal(db, homewall({ onlyWideClimbs: true }))).toBe(2);
+  });
+
+  it('fails closed on the shortest/narrowest size (the filter has no option there)', async () => {
+    // A climb that fits the 7x10 size 17 (both shortest and narrowest).
+    await insertClimb(db, { uuid: 'small', layoutId: 8, compatibleSizeIds: [17, 18, 19, 21, 25] });
+    const base = await searchClimbsLocal(db, makeInput({ layoutId: 8, sizeId: 17 }));
+    expect(uuids(base)).toContain('small');
+    const tall = await searchClimbsLocal(db, makeInput({ layoutId: 8, sizeId: 17, onlyTallClimbs: true }));
+    const wide = await searchClimbsLocal(db, makeInput({ layoutId: 8, sizeId: 17, onlyWideClimbs: true }));
+    expect(tall.climbs).toHaveLength(0);
+    expect(wide.climbs).toHaveLength(0);
+  });
+});
+
 describe('isOfflineSearchSupported', () => {
   it('supports the core filters', () => {
     expect(isOfflineSearchSupported(makeInput({ minGrade: 16, name: 'x', boulders: true }))).toBe(true);
     expect(isOfflineSearchSupported(makeInput({ holdsFilter: { hold_5: { ANY: 'include' } } }))).toBe(true);
+    // Tall/wide are expressible against the synced compatible_size_ids.
+    expect(isOfflineSearchSupported(makeInput({ onlyTallClimbs: true }))).toBe(true);
+    expect(isOfflineSearchSupported(makeInput({ onlyWideClimbs: true }))).toBe(true);
   });
 
   it('falls back for filters that need un-synced tables or the drafts path', () => {
     expect(isOfflineSearchSupported(makeInput({ onlyDrafts: true }))).toBe(false);
     expect(isOfflineSearchSupported(makeInput({ onlyWithBetaVideos: true }))).toBe(false);
-    expect(isOfflineSearchSupported(makeInput({ onlyTallClimbs: true }))).toBe(false);
     expect(
       isOfflineSearchSupported(makeInput({ zoneBox: { edgeLeft: 0, edgeRight: 10, edgeBottom: 0, edgeTop: 10 } })),
     ).toBe(false);

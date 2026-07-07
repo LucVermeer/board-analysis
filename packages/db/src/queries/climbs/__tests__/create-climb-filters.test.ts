@@ -1,11 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SQL } from 'drizzle-orm';
-import {
-  createClimbFilters,
-  getKilterHomewallWideHoldIdsForSets,
-  resetKilterHomewallWideHoldIdsForTests,
-} from '../create-climb-filters';
+import { createClimbFilters } from '../create-climb-filters';
 import type { BoardRouteParams, ClimbSearchParams } from '../types';
 
 const params: BoardRouteParams = {
@@ -231,16 +227,23 @@ void describe('createClimbFilters: tall climbs', () => {
     angle: 40,
   };
 
-  void it('uses the climb bottom edge to find Kilter Homewall tall climbs', () => {
+  void it('excludes climbs compatible with any shorter Homewall size via compatible_size_ids', () => {
     const filters = createClimbFilters(homewallTallParams, { onlyTallClimbs: true });
 
     assert.equal(filters.tallClimbsConditions.length, 1);
     const rendered = sqlToString(filters.tallClimbsConditions[0]);
-    assert.match(rendered, /edge_bottom/);
-    assert.match(rendered, /SELECT MAX\(ps\.edge_bottom\)/);
-    assert.match(rendered, /FROM/);
-    assert.match(rendered, /MAX/);
-    assert.match(rendered, /product_id/);
+    // NOT (compatible_size_ids && ARRAY[<shorter size ids>]::int[])
+    assert.match(rendered, /NOT/);
+    assert.match(rendered, /compatible_size_ids/);
+    assert.match(rendered, /&&/);
+    assert.match(rendered, /ARRAY\[/);
+    assert.match(rendered, /::int\[\]/);
+    // The shorter (10-high) Homewall sizes: 7x10 (17,18,19) + 10x10 (21,22,29).
+    for (const shorterSizeId of [17, 18, 19, 21, 22, 29]) {
+      assert.match(rendered, new RegExp(`(^|\\D)${shorterSizeId}(\\D|$)`));
+    }
+    // No longer the old climb-bottom-edge subquery.
+    assert.doesNotMatch(rendered, /edge_bottom/);
   });
 
   void it('supports tall climbs on 8x12 Kilter Homewall sizes', () => {
@@ -248,15 +251,31 @@ void describe('createClimbFilters: tall climbs', () => {
       const filters = createClimbFilters({ ...homewallTallParams, size_id: sizeId }, { onlyTallClimbs: true });
       assert.equal(filters.tallClimbsConditions.length, 1);
       assert.notEqual(sqlToString(filters.tallClimbsConditions[0]), 'false');
-      assert.match(sqlToString(filters.tallClimbsConditions[0]), /edge_bottom/);
+      assert.match(sqlToString(filters.tallClimbsConditions[0]), /compatible_size_ids/);
     }
   });
 
-  void it('returns no results for tall climbs requests on unsupported boards or sizes', () => {
+  void it('generalizes tall climbs to other boards with a size grid (Tension Board 2)', () => {
+    // Tension Board 2 layout 11 -> product 5; size 6 = "12 high x 12 wide".
+    const filters = createClimbFilters(
+      { board_name: 'tension', layout_id: 11, size_id: 6, set_ids: [], angle: 40 },
+      { onlyTallClimbs: true },
+    );
+    assert.equal(filters.tallClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.tallClimbsConditions[0]);
+    assert.notEqual(rendered, 'false');
+    assert.match(rendered, /compatible_size_ids/);
+    // The shorter (10-high) product-5 sizes are 7 and 9.
+    for (const shorterSizeId of [7, 9]) {
+      assert.match(rendered, new RegExp(`(^|\\D)${shorterSizeId}(\\D|$)`));
+    }
+  });
+
+  void it('returns no results for tall climbs on the shortest size, mismatched, or unknown boards', () => {
     const unsupportedCases = [
-      { ...homewallTallParams, size_id: 21 },
-      { ...homewallTallParams, layout_id: 1 },
-      { ...homewallTallParams, board_name: 'tension' as const },
+      { ...homewallTallParams, size_id: 21 }, // 10x10 is the shortest — no shorter size exists
+      { ...homewallTallParams, layout_id: 1 }, // size 25 (product 7) doesn't belong to layout 1 (product 1)
+      { ...homewallTallParams, board_name: 'tension' as const }, // size 25 isn't a Tension size
     ];
 
     for (const unsupportedParams of unsupportedCases) {
@@ -282,75 +301,57 @@ void describe('createClimbFilters: wide climbs', () => {
     assert.equal(filters.wideClimbsConditions.length, 0);
   });
 
-  void it('uses an individual-hold EXISTS predicate for 10x10 side expansion holds', () => {
+  void it('excludes climbs compatible with any narrower Homewall size via compatible_size_ids', () => {
     const filters = createClimbFilters(homewallWideParams, { onlyWideClimbs: true });
 
     assert.equal(filters.wideClimbsConditions.length, 1);
     const rendered = sqlToString(filters.wideClimbsConditions[0]);
-    const wideHoldIds = getKilterHomewallWideHoldIdsForSets(homewallWideParams.set_ids);
-
-    assert.equal(wideHoldIds.length, 86);
-    assert.match(rendered, /EXISTS/);
-    assert.match(rendered, /FROM\s+wide_ch/);
-    assert.match(rendered, /wide_ch\.hold_id IN/);
-    assert.match(rendered, new RegExp(String(wideHoldIds[0])));
-    assert.match(rendered, new RegExp(String(wideHoldIds[wideHoldIds.length - 1])));
-    assert.doesNotMatch(rendered, /JOIN\s+wide_bp/);
-    assert.doesNotMatch(rendered, /JOIN\s+.*wide_bh/);
-    assert.doesNotMatch(rendered, /board_product_sizes/);
-    assert.doesNotMatch(rendered, /wide_ps/);
-    assert.doesNotMatch(rendered, /small_ps/);
-    assert.doesNotMatch(rendered, /compatible_size_ids/);
+    assert.match(rendered, /NOT/);
+    assert.match(rendered, /compatible_size_ids/);
+    assert.match(rendered, /&&/);
+    assert.match(rendered, /ARRAY\[/);
+    // The narrower (8-wide) Homewall sizes: 7x10 (17,18,19) + 8x12 (23,24).
+    for (const narrowerSizeId of [17, 18, 19, 23, 24]) {
+      assert.match(rendered, new RegExp(`(^|\\D)${narrowerSizeId}(\\D|$)`));
+    }
+    // No longer the old hold-membership machinery.
+    assert.doesNotMatch(rendered, /wide_ch/);
+    assert.doesNotMatch(rendered, /hold_id/);
   });
 
-  void it('can reset cached wide hold metadata for test isolation', () => {
-    const beforeReset = getKilterHomewallWideHoldIdsForSets([26, 27]);
-    resetKilterHomewallWideHoldIdsForTests();
-    const afterReset = getKilterHomewallWideHoldIdsForSets([26, 27]);
-
-    assert.deepEqual(afterReset, beforeReset);
+  void it('is independent of selected route sets (compatible_size_ids is precomputed)', () => {
+    // The old hold-based path narrowed by set_ids; the size-grid path does not.
+    const withSets = sqlToString(
+      createClimbFilters({ ...homewallWideParams, set_ids: [26] }, { onlyWideClimbs: true }).wideClimbsConditions[0],
+    );
+    const withoutSets = sqlToString(
+      createClimbFilters({ ...homewallWideParams, set_ids: [] }, { onlyWideClimbs: true }).wideClimbsConditions[0],
+    );
+    assert.equal(withSets, withoutSets);
+    assert.notEqual(withSets, 'false');
   });
 
-  void it('narrows the wide hold list to selected route sets', () => {
-    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [26] }, { onlyWideClimbs: true });
-
+  void it('generalizes wide climbs to other boards with a size grid (Tension Board 2)', () => {
+    // Tension Board 2 layout 11 -> product 5; size 6 = "12 high x 12 wide".
+    const filters = createClimbFilters(
+      { board_name: 'tension', layout_id: 11, size_id: 6, set_ids: [], angle: 40 },
+      { onlyWideClimbs: true },
+    );
     assert.equal(filters.wideClimbsConditions.length, 1);
     const rendered = sqlToString(filters.wideClimbsConditions[0]);
-    const mainlineWideHoldIds = getKilterHomewallWideHoldIdsForSets([26]);
-    const auxiliaryWideHoldIds = getKilterHomewallWideHoldIdsForSets([27]);
-
-    assert.equal(mainlineWideHoldIds.length, 30);
-    assert.equal(auxiliaryWideHoldIds.length, 56);
-    assert.match(rendered, new RegExp(String(mainlineWideHoldIds[0])));
-    assert.match(rendered, new RegExp(String(mainlineWideHoldIds[mainlineWideHoldIds.length - 1])));
-    assert.doesNotMatch(rendered, new RegExp(String(auxiliaryWideHoldIds[0])));
-  });
-
-  void it('keeps wide filtering active when selected sets mix expansion and non-expansion sets', () => {
-    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [26, 28] }, { onlyWideClimbs: true });
-
-    assert.equal(filters.wideClimbsConditions.length, 1);
-    const rendered = sqlToString(filters.wideClimbsConditions[0]);
-    const mixedWideHoldIds = getKilterHomewallWideHoldIdsForSets([26, 28]);
-
-    assert.equal(mixedWideHoldIds.length, 30);
     assert.notEqual(rendered, 'false');
-    assert.match(rendered, /wide_ch\.hold_id IN/);
-    assert.match(rendered, new RegExp(String(mixedWideHoldIds[0])));
+    assert.match(rendered, /compatible_size_ids/);
+    // The narrower (8-wide) product-5 sizes are 8 and 9.
+    for (const narrowerSizeId of [8, 9]) {
+      assert.match(rendered, new RegExp(`(^|\\D)${narrowerSizeId}(\\D|$)`));
+    }
   });
 
-  void it('uses a false condition when selected sets contain no side expansion holds', () => {
-    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [28, 29] }, { onlyWideClimbs: true });
-
-    assert.equal(filters.wideClimbsConditions.length, 1);
-    assert.equal(sqlToString(filters.wideClimbsConditions[0]), 'false');
-  });
-
-  void it('returns no results for wide climbs requests on unsupported boards or sizes', () => {
+  void it('returns no results for wide climbs on the narrowest size, mismatched, or unknown boards', () => {
     const unsupportedCases = [
-      { ...homewallWideParams, size_id: 17 },
-      { ...homewallWideParams, layout_id: 1 },
-      { ...homewallWideParams, board_name: 'tension' as const },
+      { ...homewallWideParams, size_id: 17 }, // 7x10 is the narrowest — no narrower size exists
+      { ...homewallWideParams, layout_id: 1 }, // size 25 (product 7) doesn't belong to layout 1 (product 1)
+      { ...homewallWideParams, board_name: 'tension' as const }, // size 25 isn't a Tension size
     ];
 
     for (const unsupportedParams of unsupportedCases) {
@@ -358,13 +359,6 @@ void describe('createClimbFilters: wide climbs', () => {
       assert.equal(filters.wideClimbsConditions.length, 1);
       assert.equal(sqlToString(filters.wideClimbsConditions[0]), 'false');
     }
-  });
-
-  void it('applies wide climbs filtering to the 10x10 Auxiliary LED Kit size', () => {
-    const filters = createClimbFilters({ ...homewallWideParams, size_id: 29, set_ids: [27] }, { onlyWideClimbs: true });
-
-    assert.equal(filters.wideClimbsConditions.length, 1);
-    assert.match(sqlToString(filters.wideClimbsConditions[0]), /EXISTS/);
   });
 
   void it('can combine tall and wide filters on 10x12 Kilter Homewall', () => {

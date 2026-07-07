@@ -112,6 +112,70 @@ export const getSizesForProduct = (boardName: BoardName, productId: number): Pro
   });
 };
 
+export type TallWideScope = {
+  /** Family size ids strictly narrower than the active size (width axis). */
+  narrowerSizeIds: number[];
+  /** Family size ids strictly shorter than the active size (height axis). */
+  shorterSizeIds: number[];
+  /** A narrower family size exists — gates the "wide" filter/chip. */
+  hasNarrower: boolean;
+  /** A shorter family size exists — gates the "tall" filter/chip. */
+  hasShorter: boolean;
+};
+
+const EMPTY_TALL_WIDE_SCOPE: TallWideScope = {
+  narrowerSizeIds: [],
+  shorterSizeIds: [],
+  hasNarrower: false,
+  hasShorter: false,
+};
+
+/**
+ * Size-relative "tall"/"wide" scope for a board's active (layout, size), the
+ * single source of truth for both filters on every board.
+ *
+ * A climb is **wide** when it can't be done on any size in the active layout's
+ * product family that is narrower than the active size, and **tall** when it
+ * can't be done on any shorter one — a caller expresses that as: the climb's
+ * `compatible_size_ids` overlaps NONE of the returned `narrowerSizeIds` /
+ * `shorterSizeIds`. Both axes are scoped to the active size's product family: a
+ * board type can mix products whose coordinate systems differ (so a climb's
+ * `compatible_size_ids` may list cross-product sizes that must not leak into the
+ * reference set), and every family size class counts — duplicate LED-kit variants
+ * (e.g. Kilter Homewall 17/18/19, all 7x10) are all "narrower".
+ *
+ * `hasNarrower` / `hasShorter` are false when the active size is the
+ * narrowest / shortest in its axis — how callers hide the Wide / Tall option so
+ * the smallest size never offers a filter that would match nothing. A board with
+ * a single size (MoonBoard, Touchstone) yields empty sets on both axes.
+ *
+ * Width = `edgeRight - edgeLeft`, height = `edgeTop - edgeBottom`.
+ */
+export const getTallWideScope = (boardName: BoardName, layoutId: number, sizeId: number): TallWideScope => {
+  const activeSize = getProductSize(boardName, sizeId);
+  const layout = getLayout(boardName, layoutId);
+  // A mismatched (layout, size) — a stale/crafted combo whose size belongs to a
+  // different product than the layout — has no coherent family; fail closed.
+  if (!activeSize || !layout || activeSize.productId !== layout.productId) return EMPTY_TALL_WIDE_SCOPE;
+
+  const activeWidth = activeSize.edgeRight - activeSize.edgeLeft;
+  const activeHeight = activeSize.edgeTop - activeSize.edgeBottom;
+
+  // Whole product family (not getSizesForProduct, which drops a Grasshopper
+  // duplicate for the picker) — the reference set needs every size class.
+  const family = Object.values(PRODUCT_SIZES[boardName] ?? {}).filter((size) => size.productId === layout.productId);
+
+  const narrowerSizeIds = family.filter((size) => size.edgeRight - size.edgeLeft < activeWidth).map((size) => size.id);
+  const shorterSizeIds = family.filter((size) => size.edgeTop - size.edgeBottom < activeHeight).map((size) => size.id);
+
+  return {
+    narrowerSizeIds,
+    shorterSizeIds,
+    hasNarrower: narrowerSizeIds.length > 0,
+    hasShorter: shorterSizeIds.length > 0,
+  };
+};
+
 export const getSetsForLayoutAndSize = (boardName: BoardName, layoutId: number, sizeId: number): SetData[] => {
   const key = `${layoutId}-${sizeId}`;
   return SETS[boardName]?.[key] ?? [];

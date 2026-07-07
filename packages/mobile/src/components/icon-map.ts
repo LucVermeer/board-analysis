@@ -109,6 +109,7 @@ export const iconMap = {
   'offline.download': { ios: 'icloud.and.arrow.down', android: 'cloud-download-outline' },
   'offline.downloaded': { ios: 'checkmark.icloud.fill', android: 'cloud-check-variant' },
   'offline.pending': { ios: 'icloud', android: 'cloud-outline' },
+  'offline.unavailable': { ios: 'wifi.slash', android: 'wifi-off' },
 
   // Social
   person: { ios: 'person', android: 'account-outline' },

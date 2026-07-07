@@ -3,9 +3,12 @@ import {
   KILTER_HOMEWALL_LAYOUT_ID,
   KILTER_HOMEWALL_PRODUCT_ID,
   getLayoutName,
+  getTallWideScope,
   isKilterHomewallTallSizeId,
   isKilterHomewallWideSizeId,
 } from '../product-sizes';
+
+const EMPTY_SCOPE = { narrowerSizeIds: [], shorterSizeIds: [], hasNarrower: false, hasShorter: false };
 
 describe('getLayoutName', () => {
   it('returns the human-readable name for a known board + layoutId', () => {
@@ -41,5 +44,52 @@ describe('Kilter Homewall size filter capabilities', () => {
     for (const sizeId of [23, 24]) {
       expect(isKilterHomewallWideSizeId(sizeId)).toBe(false);
     }
+  });
+});
+
+describe('getTallWideScope', () => {
+  const sorted = (ids: number[]) => [...ids].sort((left, right) => left - right);
+
+  it('classifies the Kilter Homewall 10x12 as both tall- and wide-capable', () => {
+    const scope = getTallWideScope('kilter', 8, 25);
+    expect(scope.hasShorter).toBe(true);
+    expect(scope.hasNarrower).toBe(true);
+    // Shorter (10-high) sizes: 7x10 (17,18,19) + 10x10 (21,22,29).
+    expect(sorted(scope.shorterSizeIds)).toEqual([17, 18, 19, 21, 22, 29]);
+    // Narrower (8-wide) sizes: 7x10 (17,18,19) + 8x12 (23,24).
+    expect(sorted(scope.narrowerSizeIds)).toEqual([17, 18, 19, 23, 24]);
+  });
+
+  it('offers only tall on 8x12 (narrowest width) and only wide on 10x10 (shortest height)', () => {
+    const tallOnly = getTallWideScope('kilter', 8, 23); // 8x12
+    expect(tallOnly.hasShorter).toBe(true);
+    expect(tallOnly.hasNarrower).toBe(false);
+
+    const wideOnly = getTallWideScope('kilter', 8, 21); // 10x10
+    expect(wideOnly.hasShorter).toBe(false);
+    expect(wideOnly.hasNarrower).toBe(true);
+  });
+
+  it('offers neither on the smallest Homewall size (7x10)', () => {
+    expect(getTallWideScope('kilter', 8, 17)).toEqual(EMPTY_SCOPE);
+  });
+
+  it('generalizes to Tension Board 2 (layout 11, product 5)', () => {
+    const scope = getTallWideScope('tension', 11, 6); // 12 high x 12 wide
+    expect(scope.hasShorter).toBe(true);
+    expect(scope.hasNarrower).toBe(true);
+    expect(sorted(scope.shorterSizeIds)).toEqual([7, 9]); // 10-high sizes
+    expect(sorted(scope.narrowerSizeIds)).toEqual([8, 9]); // 8-wide sizes
+  });
+
+  it('returns an empty scope for MoonBoard (single size) and unknown boards', () => {
+    expect(getTallWideScope('moonboard', 1, 1)).toEqual(EMPTY_SCOPE);
+    expect(getTallWideScope('kilter', 99999, 25)).toEqual(EMPTY_SCOPE);
+    expect(getTallWideScope('kilter', 8, 99999)).toEqual(EMPTY_SCOPE);
+  });
+
+  it('fails closed on a mismatched (layout, size) whose products differ', () => {
+    // size 25 is product 7 (Homewall); layout 1 is product 1 (Original).
+    expect(getTallWideScope('kilter', 1, 25)).toEqual(EMPTY_SCOPE);
   });
 });

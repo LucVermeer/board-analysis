@@ -1,7 +1,8 @@
 import type { OfflineDatabase } from '@boardsesh/offline-sync';
-import type { Climb, ClimbSearchInput } from '@boardsesh/shared-schema';
+import type { BoardName, Climb, ClimbSearchInput } from '@boardsesh/shared-schema';
 import { isNoMatch } from '@boardsesh/shared-schema';
 import { isSizeScopedBoard } from '@boardsesh/board-config';
+import { getTallWideScope } from '@boardsesh/board-constants';
 import { getGradeLabel, getClimbStars } from '../../lib/grade-label';
 
 /**
@@ -97,10 +98,11 @@ function parseHoldsFilter(holdsFilter: unknown): HoldFilters {
  */
 export function isOfflineSearchSupported(input: ClimbSearchInput): boolean {
   // projectsOnly, boulders/routes, benchmarks, name, setter, grade range, min
-  // ascents/rating, present-hold, and personal-progress filters are all supported.
+  // ascents/rating, present-hold, tall/wide (via the synced compatible_size_ids,
+  // see buildJoinAndWhere), and personal-progress filters are all supported.
   // These need tables we don't sync (or the drafts owner path), so fall back:
   if (input.onlyDrafts) return false;
-  if (input.onlyTallClimbs || input.onlyWideClimbs || input.onlyWithBetaVideos) return false;
+  if (input.onlyWithBetaVideos) return false;
   if (input.zoneBox) return false;
   const { hasHoldState } = parseHoldsFilter(input.holdsFilter);
   if (hasHoldState) return false;
@@ -227,6 +229,36 @@ function buildJoinAndWhere(input: ClimbSearchInput): JoinAndWhere {
   }
   for (const holdId of notHolds) {
     push(`c.frames NOT LIKE ? ESCAPE '\\'`, `%p${holdId}r%`);
+  }
+
+  // Tall / Wide (size-grid) filters over the synced compatible_size_ids —
+  // mirrors the server (create-climb-filters.ts) so an online and offline search
+  // return the same rows. getTallWideScope fails closed (empty sets) when the
+  // active size is the shortest/narrowest in its axis or the board has no grid,
+  // so the filter then matches nothing (`0 = 1`), exactly like the server's
+  // `false`. The `IS NOT NULL` guard matches the server's `NOT (NULL && …)` NULL
+  // handling (a null array is not tall/wide) — json_each(NULL) would otherwise
+  // yield an empty set that a bare NOT EXISTS reads as a match.
+  if (input.onlyTallClimbs || input.onlyWideClimbs) {
+    const { narrowerSizeIds, shorterSizeIds, hasNarrower, hasShorter } = getTallWideScope(
+      boardType as BoardName,
+      input.layoutId,
+      input.sizeId,
+    );
+    const pushSizeGridFilter = (enabled: boolean | null | undefined, hasSmaller: boolean, smallerSizeIds: number[]) => {
+      if (!enabled) return;
+      if (!hasSmaller) {
+        push('0 = 1');
+        return;
+      }
+      const placeholders = smallerSizeIds.map(() => '?').join(', ');
+      push(
+        `c.compatible_size_ids IS NOT NULL AND NOT EXISTS (SELECT 1 FROM json_each(c.compatible_size_ids) WHERE value IN (${placeholders}))`,
+        ...smallerSizeIds,
+      );
+    };
+    pushSizeGridFilter(input.onlyTallClimbs, hasShorter, shorterSizeIds);
+    pushSizeGridFilter(input.onlyWideClimbs, hasNarrower, narrowerSizeIds);
   }
 
   // Personal progress against local ticks (device is single-user).
