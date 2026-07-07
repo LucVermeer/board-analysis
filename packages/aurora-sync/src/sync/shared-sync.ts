@@ -428,19 +428,27 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
     // explicitly for ticks-driven updates.
     const values = batch.map((item) => {
       const auroraCount = Number(item.ascensionist_count);
+      // Preserve NULL difficulty instead of coercing it to 0. `Number(null)` is
+      // 0, and difficulty id 0 doesn't exist (valid ids are ~10-33), so the old
+      // `Number(item.difficulty_average)` stamped a bogus 0 grade whenever Aurora
+      // omitted the field — those rows are cleaned up by the sentinel migration.
+      const difficultyAverage = item.difficulty_average != null ? Number(item.difficulty_average) : null;
+      const displayDifficulty = item.display_difficulty != null ? Number(item.display_difficulty) : difficultyAverage;
       return {
         boardType: board,
         climbUuid: item.climb_uuid,
         angle: Number(item.angle),
-        displayDifficulty: Number(item.display_difficulty || item.difficulty_average),
+        displayDifficulty,
         benchmarkDifficulty: item.benchmark_difficulty != null ? Number(item.benchmark_difficulty) : null,
         ascensionistCount: auroraCount,
         upstreamAscensionistCount: auroraCount,
-        difficultyAverage: Number(item.difficulty_average),
+        difficultyAverage,
         // Aurora reports quality on a 1–3 scale; Kilter Grips and MoonBoard use
-        // 1–5. Normalise every board to 1–5 (×5/3) so board_climb_stats.quality_average
-        // is one scale the UI can render uniformly. quality_average is a stored
-        // average (double), so keep it continuous rather than rounding.
+        // 1–5. Normalise every board to 1–5 with the affine map 2q−1 (1→1, 2→3,
+        // 3→5) so board_climb_stats.quality_average is one scale the UI renders
+        // uniformly. Because AVG is linear, 2·avg−1 is the correct rescale of an
+        // average (the old ×5/3 inflated low-rated climbs). quality_average is a
+        // stored average (double), so it stays continuous rather than rounded.
         qualityAverage: normalizeQualityTo5(item.quality_average),
         // We just normalised quality_average to 1-5, so the row is on the
         // canonical scale — the one-time 1-3→1-5 backfill must skip it.
