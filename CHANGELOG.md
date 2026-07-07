@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-07
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ### New
 
 - Early testers: download a board in My Boards and keep browsing, logging sends, and saving favorites with no signal — everything queues on your phone and syncs when you're back online. (Rolling out gradually behind a feature flag.) ([#2785](https://github.com/boardsesh/boardsesh/pull/2785))
