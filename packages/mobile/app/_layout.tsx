@@ -77,6 +77,10 @@ import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
 import { AccessoryOnboardingTip } from '../src/components/onboarding/AccessoryOnboardingTip';
 import { FreezeDebugOverlay } from '../src/components/FreezeDebugOverlay';
 import { DATABASE_NAME, initializeDatabase } from '../src/db';
+// Side-effect import: instantiates the Android-only MemoryTrim native module
+// (expo-modules-core creates modules lazily on first JS access), whose Kotlin
+// OnCreate registers the Glide trim-on-UI_HIDDEN callback. No-op on iOS.
+import '../modules/memory-trim/src/index';
 
 void SplashScreen.preventAutoHideAsync();
 

@@ -5,6 +5,7 @@ import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.bumptech.glide.Glide
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -24,6 +25,10 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * BACKGROUND(40).
  */
 class MemoryTrimModule : Module() {
+    private companion object {
+        const val TAG = "MemoryTrim"
+    }
+
     // Held so OnDestroy can unregister the exact same instance we registered.
     private var registeredApplication: Application? = null
     private var memoryCallbacks: ComponentCallbacks2? = null
@@ -33,7 +38,11 @@ class MemoryTrimModule : Module() {
 
         OnCreate {
             val application = appContext.reactContext?.applicationContext as? Application
-                ?: return@OnCreate
+            if (application == null) {
+                Log.w(TAG, "OnCreate: no application context; trim callbacks not registered")
+                return@OnCreate
+            }
+            Log.d(TAG, "OnCreate: registering trim callbacks")
 
             val callbacks = object : ComponentCallbacks2 {
                 override fun onConfigurationChanged(newConfig: Configuration) {
@@ -52,6 +61,7 @@ class MemoryTrimModule : Module() {
                         // drop all of it now instead of Glide's stock half-trim.
                         // Outside this window stock Glide's self-registered callback
                         // already trims/clears; acting here would double-trim.
+                        Log.d(TAG, "onTrimMemory(level=$level): full Glide clear")
                         clearGlideMemoryOnMain(application)
                     }
                 }
