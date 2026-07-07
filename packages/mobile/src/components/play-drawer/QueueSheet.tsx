@@ -9,7 +9,7 @@ import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList } from './QueueList';
 import { Text } from '../Text';
 import type { QueueItemRowBoard } from '../QueueItemRow';
-import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
+import { usePlaylistSuggestionSource, useQueueData, useQueueActions } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticMedium, hapticWarning } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
@@ -50,9 +50,9 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
   const { systemColors, sheet } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
 
-  const { state, removeFromQueue, clearQueue, reorderQueue } = useQueue();
+  const { removeFromQueue, clearQueue, reorderQueue } = useQueueActions();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
-  const { queue, currentClimbQueueItem } = state;
+  const liveQueueData = useQueueData();
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
@@ -62,8 +62,26 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
   // Tracks whether the sheet is currently presented so the list only
   // auto-scrolls to the current item on a real open (not on background mounts).
   const [isPresented, setIsPresented] = useState(false);
+  // Flipped true in present() and cleared once the dismiss settles. present()
+  // calls managed.handle.present() first, so the native sheet begins animating
+  // one render before this setState commits — but that same re-render refreshes
+  // the frozen snapshot below (activeOrPresented turns true), so the live queue
+  // lands before any stale frame is user-visible. OR'd with the native
+  // isPresented so the imperative-open path and the coordinator's re-present
+  // path both read active.
+  const [isActive, setIsActive] = useState(false);
 
   const snapPoints = useMemo(() => ['70%', '95%'], []);
+
+  // Both QueueSheet instances (root + /play copy, PR #3337) stay mounted the whole
+  // session. Freeze the hidden one's queue data to a referentially stable snapshot
+  // so it bails out of the memoized QueueList instead of rebuilding
+  // buildQueueListModel on every queue nav elsewhere; the visible sheet tracks live.
+  // Derive-during-render (compiler-safe) — no ref writes, no effect lag.
+  const activeOrPresented = isActive || isPresented;
+  const [snapshot, setSnapshot] = useState(liveQueueData);
+  if (activeOrPresented && snapshot !== liveQueueData) setSnapshot(liveQueueData);
+  const { queue, currentClimbQueueItem } = snapshot;
 
   const currentItemUuid = currentClimbQueueItem?.uuid ?? null;
 
@@ -77,6 +95,7 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
   // request, backdrop, or pan-down). Reset local UI state; the sheet stays
   // mounted (imperative model) and is re-presented on the next open.
   const handleFullyDismissed = useCallback(() => {
+    setIsActive(false);
     resetState();
     onDismissed?.();
   }, [resetState, onDismissed]);
@@ -102,6 +121,7 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
     ref,
     () => ({
       present: () => {
+        setIsActive(true);
         managed.handle.present();
       },
       dismiss: () => {

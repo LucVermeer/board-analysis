@@ -4,7 +4,7 @@ import type { SharedValue } from 'react-native-reanimated';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
+import { useDeferredUntilFrame } from '../../hooks/use-deferred-until-frame';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -12,9 +12,10 @@ type BoardRenderData = {
 };
 
 type DeferredBoardProps = {
-  /** Drives the InteractionManager gate. While the sheet is presenting this is
-   *  false and a sized placeholder stands in for the board; once the present
-   *  animation settles it flips true and the interactive carousel mounts. */
+  /** Drives the single-frame defer gate. While the route commits its first frame
+   *  this is false and a sized placeholder stands in for the board; one
+   *  requestAnimationFrame later it flips true and the interactive carousel
+   *  mounts, so the present animation runs natively over the placeholder. */
   open: boolean;
   boardName: BoardName;
   boardRenderData: BoardRenderData;
@@ -38,14 +39,15 @@ type DeferredBoardProps = {
 };
 
 /**
- * Defers mounting the interactive {@link SwipeBoardCarousel} until after the
- * play drawer's present animation settles. The carousel mounts 2×
- * `BoardImageNative` plus a pinch/swipe/zoom gesture composition; rendering all
- * of that synchronously the moment the sheet opens blocks the present animation
- * for ~0.5–1s (the user-reported stall). Mirrors `DeferredSections`'
- * `InteractionManager.runAfterInteractions` approach: the sheet animates open
- * immediately over a board-sized placeholder, then the board mounts a frame
- * later.
+ * Defers mounting the interactive {@link SwipeBoardCarousel} until one frame
+ * after the play drawer opens. The carousel mounts 2× `BoardImageNative` plus a
+ * pinch/swipe/zoom gesture composition; rendering all of that synchronously the
+ * moment the route commits blocks the present animation for ~0.5–1s (the
+ * user-reported stall). A single `requestAnimationFrame` gate lets the sheet
+ * animate open immediately over a board-sized placeholder, then mounts the board
+ * a frame later — and unlike `runAfterInteractions` a rAF can't be starved by the
+ * sub-sheet hosts churning the interaction queue (the old 350ms-fallback stall,
+ * which `docs/mobile-sheets-vs-routes.md` explicitly forbids for this).
  *
  * The gate is keyed on the OPEN TRANSITION (`open`), not on the displayed
  * climb's uuid, so once the drawer is open, swiping to next/prev climbs renders
@@ -61,12 +63,11 @@ export const DeferredBoard = memo(function DeferredBoard({
   boardRenderData,
   ...carouselProps
 }: DeferredBoardProps) {
-  // Gate on the open transition only (no resetKey) so the board stays mounted
-  // across in-drawer swipes once the drawer is open. The hook defers past the
-  // present animation in the common case but falls back to a bounded timeout, so
-  // a starved interaction queue can't leave the board permanently unmounted
-  // (the "blank board until you reopen" bug).
-  const ready = useDeferredAfterInteractions(open);
+  // Gate on the open transition only so the board stays mounted across in-drawer
+  // swipes once the drawer is open. A single rAF fires after the route commits
+  // its first frame; it can't be starved the way the interaction queue can, so
+  // there's no "blank board until you reopen" fallback to wait out.
+  const ready = useDeferredUntilFrame(open);
 
   if (!ready) {
     return (

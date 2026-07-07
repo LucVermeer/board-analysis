@@ -44,6 +44,7 @@ import {
   QueueLiveStatsContext,
   QueueActiveClimbContext,
   QueueHasActiveClimbContext,
+  QueueDataContext,
   QueueActionsContext,
   QueuePlaylistSuggestionContext,
   type StartSessionConfig,
@@ -53,6 +54,7 @@ import {
   type QueueLiveStatsContextValue,
   type QueueActiveClimbContextValue,
   type QueueHasActiveClimbContextValue,
+  type QueueDataContextValue,
   type QueueActionsContextValue,
   type QueuePlaylistSuggestionContextValue,
 } from './queue/queue-contexts';
@@ -74,6 +76,7 @@ export {
   useQueueLiveStats,
   useActiveClimbUuid,
   useHasActiveClimb,
+  useQueueData,
   useQueueActions,
   usePlaylistSuggestionSource,
 } from './queue/queue-contexts';
@@ -869,6 +872,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const hasActiveClimb = activeClimbUuid != null;
   const hasActiveClimbValue = useMemo<QueueHasActiveClimbContextValue>(() => ({ hasActiveClimb }), [hasActiveClimb]);
 
+  // Queue-data selector: the queue array + current climb item, memoized on that
+  // pair. The reducer spreads state on every update, so these two references
+  // survive session/wall-lit/roster bookkeeping — the play drawer and queue
+  // sheets subscribe here and stop re-rendering on that unrelated churn.
+  const queueDataValue = useMemo<QueueDataContextValue>(
+    () => ({ queue: state.queue, currentClimbQueueItem: state.currentClimbQueueItem }),
+    [state.queue, state.currentClimbQueueItem],
+  );
+
   // SessionId-only selector: identity changes only when a session starts/ends,
   // so structural readers (tab layout, board adapter, session screen) stop
   // re-rendering the navigation tree on every queue mutation.
@@ -935,7 +947,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             <QueuePlaylistSuggestionContext.Provider value={playlistSuggestionValue}>
               <QueueActiveClimbContext.Provider value={activeClimbValue}>
                 <QueueHasActiveClimbContext.Provider value={hasActiveClimbValue}>
-                  <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+                  <QueueDataContext.Provider value={queueDataValue}>
+                    <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+                  </QueueDataContext.Provider>
                 </QueueHasActiveClimbContext.Provider>
               </QueueActiveClimbContext.Provider>
             </QueuePlaylistSuggestionContext.Provider>

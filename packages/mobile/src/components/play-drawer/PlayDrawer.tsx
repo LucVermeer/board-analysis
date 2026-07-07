@@ -50,13 +50,19 @@ import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
 import { BleControlSheetHost } from '../ble/BleControlSheetHost';
 import { Icon } from '../Icon';
-import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
+import {
+  usePlaylistSuggestionSource,
+  useQueueData,
+  useQueueActions,
+  useQueueSessionId,
+} from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useShareClimb } from '../../hooks/use-share-climb';
+import { useMountedOnFirstOpen } from '../../hooks/use-mounted-on-first-open';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
@@ -304,7 +310,9 @@ export function PlayDrawer({
     setBetaHeaderHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
   }, []);
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
+  const { queue, currentClimbQueueItem } = useQueueData();
+  const { setCurrentClimb, nextClimb, previousClimb, addToQueue } = useQueueActions();
+  const { sessionId } = useQueueSessionId();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -335,7 +343,7 @@ export function PlayDrawer({
     });
   }, [boardName, layoutId, sizeId, setIds]);
 
-  const displayedQueueItem = drawerPreviewItem ?? state.currentClimbQueueItem;
+  const displayedQueueItem = drawerPreviewItem ?? currentClimbQueueItem;
   const displayedClimb = displayedQueueItem?.climb;
   // A view-only preview is showing (not the active/wall climb). Commit paths
   // never set `drawerPreviewItem`, so this is true only for genuine previews
@@ -369,8 +377,8 @@ export function PlayDrawer({
   });
   const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
   const navigationState = useMemo(
-    () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),
-    [state.queue, displayedQueueItem, navigationSuggestionSource],
+    () => computeNavigationStateWithSuggestions(queue, displayedQueueItem, navigationSuggestionSource),
+    [queue, displayedQueueItem, navigationSuggestionSource],
   );
 
   // The climb the header peek shows while swiping — the one being swiped toward.
@@ -482,13 +490,13 @@ export function PlayDrawer({
         // make it current unless it already is, so re-opening the current climb
         // doesn't re-append it. A fresh-uuid item on a genuinely new selection is
         // intentional (re-tapping starts a fresh pass — see queue setCurrentClimb).
-        const isAlreadyCurrent = state.currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
+        const isAlreadyCurrent = currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
         if (!isAlreadyCurrent) {
           setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
         }
       }
     },
-    [state.currentClimbQueueItem, setCurrentClimb],
+    [currentClimbQueueItem, setCurrentClimb],
   );
 
   // Apply the host's open target. A new target is a fresh object with a bumped
@@ -702,6 +710,18 @@ export function PlayDrawer({
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
+
+  // Lazy-mount the sub-sheet hosts: each native ModalBottomSheet host is only
+  // instantiated the first time its sheet opens, not on the drawer's mount
+  // frame, then stays mounted so dismiss animations and re-opens behave as
+  // before. Trims ~5 Android Compose host instantiations off the open.
+  const climbActionsVisible = activeSubDrawer === 'actions';
+  const angleSelectorVisible = activeSubDrawer === 'angleSelector';
+  const mountClimbActions = useMountedOnFirstOpen(climbActionsVisible);
+  const mountAddBetaVideo = useMountedOnFirstOpen(addBetaVideoOpen);
+  const mountAngleSelector = useMountedOnFirstOpen(angleSelectorVisible);
+  const mountLogAscent = useMountedOnFirstOpen(isTickBarActive);
+  const mountBleControl = useMountedOnFirstOpen(bleControlVisible);
 
   return (
     // Transparent root — the play route paints the full-screen GlassSurface
@@ -926,56 +946,63 @@ export function PlayDrawer({
       {/* Sub-drawers: @expo/ui native .sheet()s presented from within the player
           route's view controller, so they stack ABOVE it. On iOS the ellipsis
           routes to ClimbReactionMenu via onOpenClimbActions, so activeSubDrawer
-          never becomes 'actions' there. Always mounted, toggled via `visible`. */}
-      <ClimbActionsSheet
-        visible={activeSubDrawer === 'actions'}
-        climb={displayedClimb ?? null}
-        boardName={boardName as BoardName}
-        layoutId={layoutId}
-        sizeId={sizeId}
-        setIds={setIds}
-        angle={angle}
-        onAddToQueue={() => {
-          if (displayedClimb) {
-            addToQueue({
-              uuid: randomUUID(),
-              climb: displayedClimb,
-            });
-          }
-        }}
-        onToggleFavorite={handleToggleFavorite}
-        onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
-        onClose={handleCloseSubDrawer}
-      />
+          never becomes 'actions' there. Mounted on first open, then kept. */}
+      {mountClimbActions && (
+        <ClimbActionsSheet
+          visible={climbActionsVisible}
+          climb={displayedClimb ?? null}
+          boardName={boardName as BoardName}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          angle={angle}
+          onAddToQueue={() => {
+            if (displayedClimb) {
+              addToQueue({
+                uuid: randomUUID(),
+                climb: displayedClimb,
+              });
+            }
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
+          onClose={handleCloseSubDrawer}
+        />
+      )}
 
       {/* Sub-drawer: Share your beta — opened from the action sheet's "Add beta
-          video" row or the Beta Videos section "+" button. */}
-      <AddBetaVideoSheet
-        visible={addBetaVideoOpen}
-        climb={displayedClimb ?? null}
-        boardName={boardName as BoardName}
-        layoutId={layoutId}
-        angle={angle}
-        onClose={handleCloseAddBetaVideo}
-      />
+          video" row or the Beta Videos section "+" button. Mounted on first open. */}
+      {mountAddBetaVideo && (
+        <AddBetaVideoSheet
+          visible={addBetaVideoOpen}
+          climb={displayedClimb ?? null}
+          boardName={boardName as BoardName}
+          layoutId={layoutId}
+          angle={angle}
+          onClose={handleCloseAddBetaVideo}
+        />
+      )}
 
-      {/* Sub-drawer: Angle selector. Always mounted, toggled via `visible`. */}
-      <AngleSelectorSheet
-        visible={activeSubDrawer === 'angleSelector'}
-        onClose={handleCloseSubDrawer}
-        boardName={boardName}
-        layoutId={layoutId}
-        climbUuid={displayedClimb?.uuid}
-        currentAngle={angle}
-        onAngleChange={(newAngle) => {
-          onAngleChange?.(newAngle);
-          handleCloseSubDrawer();
-        }}
-      />
+      {/* Sub-drawer: Angle selector. Mounted on first open, then toggled via `visible`. */}
+      {mountAngleSelector && (
+        <AngleSelectorSheet
+          visible={angleSelectorVisible}
+          onClose={handleCloseSubDrawer}
+          boardName={boardName}
+          layoutId={layoutId}
+          climbUuid={displayedClimb?.uuid}
+          currentAngle={angle}
+          onAngleChange={(newAngle) => {
+            onAngleChange?.(newAngle);
+            handleCloseSubDrawer();
+          }}
+        />
+      )}
 
       {/* Tick sheet — a 60% sub-drawer so the climb image stays visible while
-          logging. Presents over the player route. */}
-      {displayedClimb && (
+          logging. Presents over the player route. The displayedClimb guard stays;
+          the host is mounted on first open. */}
+      {mountLogAscent && displayedClimb && (
         <LogAscentSheet
           visible={isTickBarActive}
           onClose={handleTickBarDismiss}
@@ -994,8 +1021,8 @@ export function PlayDrawer({
 
       {/* BLE controls (Re-light / Turn off all lights / Disconnect), opened by the
           lightbulb long-press. Hosted here so it presents ABOVE the player route
-          (the app-root instance would land behind it). */}
-      <BleControlSheetHost visible={bleControlVisible} onClose={handleCloseBleControl} />
+          (the app-root instance would land behind it). Mounted on first open. */}
+      {mountBleControl && <BleControlSheetHost visible={bleControlVisible} onClose={handleCloseBleControl} />}
     </View>
   );
 }

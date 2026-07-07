@@ -125,6 +125,7 @@ export const QueueContext = createContext<QueueContextValue | null>(null);
  * QueueProvider intentionally exposes several narrow hooks. Pick the smallest
  * subscription that matches the read:
  * - useQueue(): legacy/full reducer state plus actions; use only when state shape is required.
+ * - useQueueData(): the live queue + current climb item, without the rest of state; for the play drawer / queue sheet.
  * - useQueueActions(): stable command surface for enqueue/session/playback writes.
  * - useQueueSessionId(): rare session-id changes for structural chrome.
  * - useQueueSessionControls(): session id, serial/wall controls, and the member-userId set for party surfaces.
@@ -217,6 +218,21 @@ type QueueHasActiveClimbContextValue = {
 export const QueueHasActiveClimbContext = createContext<QueueHasActiveClimbContextValue | null>(null);
 
 /**
+ * Live queue data — the queue array plus the current climb item — split out so
+ * the ~1040-line play drawer and the always-mounted queue sheets subscribe to
+ * just the queue and stop re-rendering on session/wall-lit/roster churn. The
+ * reducer spreads state on every update, so `state.queue` and
+ * `state.currentClimbQueueItem` keep their identity across those unrelated
+ * updates; the value is memoized on exactly that pair.
+ */
+type QueueDataContextValue = {
+  queue: ClimbQueueItem[];
+  currentClimbQueueItem: ClimbQueueItem | null;
+};
+
+export const QueueDataContext = createContext<QueueDataContextValue | null>(null);
+
+/**
  * Stable queue actions, split out so consumers that only dispatch actions (e.g.
  * the climb list's add-to-queue) don't subscribe to the whole reducer `state`.
  * Holds everything in QueueContextValue except volatile state and selector-only
@@ -278,6 +294,12 @@ export function useHasActiveClimb(): boolean {
   return context.hasActiveClimb;
 }
 
+export function useQueueData(): QueueDataContextValue {
+  const context = useContext(QueueDataContext);
+  if (!context) throw new Error('useQueueData must be used within QueueProvider');
+  return context;
+}
+
 export function useQueueActions(): QueueActionsContextValue {
   const context = useContext(QueueActionsContext);
   if (!context) throw new Error('useQueueActions must be used within QueueProvider');
@@ -302,6 +324,7 @@ export type {
   QueueLiveStatsContextValue,
   QueueActiveClimbContextValue,
   QueueHasActiveClimbContextValue,
+  QueueDataContextValue,
   QueueActionsContextValue,
   QueuePlaylistSuggestionContextValue,
 };

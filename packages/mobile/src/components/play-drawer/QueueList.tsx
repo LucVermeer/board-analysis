@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet, type FlatList } from 'react-native';
 import { BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -61,7 +61,7 @@ type QueueListProps = {
   onDraggingChange?: (dragging: boolean) => void;
 };
 
-export function QueueList({
+function QueueListComponent({
   queue,
   currentItemUuid,
   board,
@@ -369,6 +369,11 @@ export function QueueList({
     />
   );
 }
+
+// Memoized so a hidden, always-mounted QueueSheet (which freezes its queue
+// snapshot) skips reconciling the list — and buildQueueListModel — on every
+// unrelated queue nav elsewhere. Relies on the sheet keeping its props stable.
+export const QueueList = memo(QueueListComponent);
 
 const styles = StyleSheet.create({
   listContent: {
