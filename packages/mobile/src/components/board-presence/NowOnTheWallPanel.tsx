@@ -49,7 +49,7 @@ import { useBoardPresenceControls } from '../../providers/board-presence-provide
 import { track } from '../../lib/analytics';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { getHttpClient } from '../../lib/graphql/client';
+import { offlineAwareRequest } from '../../lib/graphql/offline-request';
 import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
 import { boardPresenceClimbToClimb } from '../../lib/board-presence/presence-climb';
 import { withAlpha } from '../../theme/colors';
@@ -347,15 +347,14 @@ function NowOnTheWallPanelComponent(
 
       let climbRequest = actionClimbRequestRef.current.get(cacheKey);
       if (!climbRequest) {
-        climbRequest = getHttpClient()
-          .request<GetClimbQueryResponse>(GET_CLIMB, {
-            boardName: actionBoardConfig.boardName,
-            layoutId: actionBoardConfig.layoutId,
-            sizeId: actionBoardConfig.sizeId,
-            setIds: actionBoardConfig.setIds,
-            angle: actionBoardConfig.angle,
-            climbUuid: presenceClimb.climbUuid,
-          })
+        climbRequest = offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, {
+          boardName: actionBoardConfig.boardName,
+          layoutId: actionBoardConfig.layoutId,
+          sizeId: actionBoardConfig.sizeId,
+          setIds: actionBoardConfig.setIds,
+          angle: actionBoardConfig.angle,
+          climbUuid: presenceClimb.climbUuid,
+        })
           .then((response): Climb | null => {
             if (!response.climb) {
               console.warn('Board-sheet climb action returned no climb', presenceClimb.climbUuid);

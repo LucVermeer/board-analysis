@@ -3,7 +3,7 @@ import { isPlaylistPeekQueueItemUuid } from '@boardsesh/queue';
 import type { ClimbQueueItem, ClimbRegradePatch, PlaylistSuggestionSource, QueueAction } from '@boardsesh/queue';
 import { findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import { getHttpClient } from '../../lib/graphql/client';
+import { offlineAwareRequest } from '../../lib/graphql/offline-request';
 import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
 
 type UseQueueRegradeParams = {
@@ -79,11 +79,10 @@ export function useQueueRegrade({
 
     let cancelled = false;
     void (async () => {
-      const client = getHttpClient();
       const patches = await Promise.all(
         targetUuids.map(async (climbUuid) => {
           try {
-            const response = await client.request<GetClimbQueryResponse>(GET_CLIMB, {
+            const response = await offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, {
               boardName: boardType,
               layoutId,
               sizeId,

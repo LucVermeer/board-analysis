@@ -1,7 +1,7 @@
 import type { Climb, ClimbSearchInput, UserBoard } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { PlannedClimbSlot } from '@boardsesh/playlist-generator';
-import { getHttpClient } from '../../../lib/graphql/client';
+import { offlineAwareRequest } from '../../../lib/graphql/offline-request';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../lib/graphql/operations';
 import {
   buildPools,
@@ -61,7 +61,7 @@ export function buildClimbSearchInput(grade: number, ctx: PreviewFetchContext): 
  */
 export async function fetchGradePool(grade: number, ctx: PreviewFetchContext): Promise<Climb[]> {
   const input = buildClimbSearchInput(grade, ctx);
-  const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
+  const response = await offlineAwareRequest<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
   return response.searchClimbs.climbs.slice();
 }
 
