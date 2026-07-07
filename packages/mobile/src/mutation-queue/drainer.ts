@@ -96,7 +96,17 @@ function invalidateForTable(queryClient: QueryClient, tableName: string): void {
     board_climbs: [['searchClimbs'], ['infiniteSearchClimbs'], ['searchClimbsCount'], ['climb']],
     board_climb_stats: [['searchClimbs'], ['infiniteSearchClimbs'], ['searchClimbsCount'], ['climb']],
   };
-  for (const key of keyMap[tableName] ?? []) {
+  const keys = keyMap[tableName];
+  if (!keys) {
+    // table_name is a plain string, so a NEW mutation type missing from the
+    // map compiles fine and drains fine — but its UI would never refresh.
+    // Surface the gap loudly in dev instead of silently skipping.
+    if (__DEV__) {
+      console.warn(`[MutationQueue] no invalidation keys mapped for table "${tableName}" — UI will not refresh`);
+    }
+    return;
+  }
+  for (const key of keys) {
     queryClient.invalidateQueries({ queryKey: key });
   }
 }
