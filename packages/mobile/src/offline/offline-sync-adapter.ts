@@ -15,6 +15,8 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { onlineManager, type QueryClient } from '@tanstack/react-query';
+// The adapter is the one sanctioned importer of the raw engine entry points.
+// oxlint-disable-next-line no-restricted-imports
 import {
   drainMutationQueue as drainMutationQueueCore,
   startSyncScheduler as startSyncSchedulerCore,

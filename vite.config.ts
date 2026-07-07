@@ -589,6 +589,16 @@ export default defineConfig({
         command: 'bash scripts/mobile-platform-imports-check.sh',
         cache: false,
       },
+      'check:mobile-offline-sync-imports': {
+        // Guards the offline-sync adapter boundary: the engine's drain/scheduler/
+        // pull entry points must be imported via src/offline/offline-sync-adapter
+        // (which binds the connectivity probe + platform triggers), never from
+        // '@boardsesh/offline-sync' directly. Like the platform-imports guard,
+        // the .oxlintrc.json rule isn't enforced by `vp check`, so this is the
+        // real backstop.
+        command: 'bash scripts/mobile-offline-sync-imports-check.sh',
+        cache: false,
+      },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
         cache: false,

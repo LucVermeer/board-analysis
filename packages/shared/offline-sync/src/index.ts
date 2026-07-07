@@ -13,6 +13,12 @@
 // (db/schema.ts), the per-table sync config (sync/table-config.ts), and the
 // pull client that enforces them must agree with the backend resolvers to the
 // character.
+//
+// KNOWN CONSTRAINT: the drain/scheduler guards (drain flag, sign-out flag,
+// wipe epoch, single-flight sync) are module-level singletons — correct for
+// exactly ONE app runtime per JS context. A future web consumer must use it
+// client-side only; importing this under SSR would leak that state across
+// requests.
 
 // --- Seams -------------------------------------------------------------------
 export type { SqlValue, SqlRunResult, SqlExecutor, OfflineDatabase, QueryInvalidator } from './database';
