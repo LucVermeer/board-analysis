@@ -1,5 +1,5 @@
 diff --git a/build/community/bottom-sheet/types.d.ts b/build/community/bottom-sheet/types.d.ts
-index 72fc6be..d1cf11e 100644
+index 72fc6becbc414c318799e28103d15484ed86f703..d1cf11e93b0c0d8dc77abddaafc89e14d34faccc 100644
 --- a/build/community/bottom-sheet/types.d.ts
 +++ b/build/community/bottom-sheet/types.d.ts
 @@ -159,6 +159,14 @@ export interface BottomSheetProps {
@@ -17,22 +17,59 @@ index 72fc6be..d1cf11e 100644
      /**
       * Whether the sheet can be dismissed by panning down.
       * @default false
+diff --git a/src/community/bottom-sheet/BottomSheet.android.tsx b/src/community/bottom-sheet/BottomSheet.android.tsx
+index f60ae61bf0c9023d41c55cdca2d9af0de7291a92..4e64d1a89518f9c22c0f9f3fb4473ae73ca99d40 100644
+--- a/src/community/bottom-sheet/BottomSheet.android.tsx
++++ b/src/community/bottom-sheet/BottomSheet.android.tsx
+@@ -11,6 +11,20 @@ import { RNHostView } from '../../jetpack-compose/RNHostView';
+ 
+ export { useBottomSheet } from './context';
+ 
++// `expand()` / `partialExpand()` are native AsyncFunctions on `ModalBottomSheetView`.
++// A store binary whose native ExpoUI layer predates a method rejects the call with
++// "No handler registered for AsyncFunction '<method>' on view 'ModalBottomSheetView'".
++// These calls are fire-and-forget, so an unhandled rejection would surface as a global
++// onunhandledrejection (crash report + noise) even though the re-snap is a harmless
++// no-op on those binaries. Swallow it: the sheet stays where it is, which is the
++// existing behaviour, and never wrongly expands a collapse. On binaries whose native
++// layer has the method this never rejects. (boardsesh patch — see issue #3478.)
++function swallowMissingNativeHandler(error: unknown): void {
++  // Never rejects on a dev build (current native layer has the method), so a warning
++  // here means something genuinely unexpected — surface it in dev, stay silent in prod.
++  if (__DEV__) console.warn('[bottom-sheet] native snap call rejected:', error);
++}
++
+ function extractBackgroundColor(
+   backgroundStyle: BottomSheetProps['backgroundStyle']
+ ): string | undefined {
+@@ -143,9 +157,9 @@ export function BottomSheet(props: BottomSheetProps) {
+         // Native ModalBottomSheet has two states: partial (~50%) and expanded (full).
+         // Map index 0 → partialExpand(), last index → expand().
+         if (clampedIndex === maxIndex) {
+-          sheetRef.current?.expand();
++          sheetRef.current?.expand()?.catch(swallowMissingNativeHandler);
+         } else {
+-          sheetRef.current?.partialExpand();
++          sheetRef.current?.partialExpand()?.catch(swallowMissingNativeHandler);
+         }
+         pendingIndexRef.current = null;
+       }
 diff --git a/src/community/bottom-sheet/BottomSheet.ios.tsx b/src/community/bottom-sheet/BottomSheet.ios.tsx
-index 0dd7d25..5bef3f2 100644
+index 9908630d50d9a405688ae60c88f5e6638948420d..75f4219b6ce2a72a90ec442329241c83b97af04f 100644
 --- a/src/community/bottom-sheet/BottomSheet.ios.tsx
 +++ b/src/community/bottom-sheet/BottomSheet.ios.tsx
 @@ -86,6 +86,7 @@ export function BottomSheet(props: BottomSheetProps) {
+     index: indexProp = 0,
      onChange,
      onClose,
-     onDismiss,
 +    onFullyDismissed,
+     onDismiss,
      enablePanDownToClose = false,
      enableDynamicSizing = true,
-     handleComponent,
 @@ -108,6 +109,15 @@ export function BottomSheet(props: BottomSheetProps) {
+   const onCloseRef = useRef(onClose);
    onCloseRef.current = onClose;
    const onDismissRef = useRef(onDismiss);
-   onDismissRef.current = onDismiss;
 +  const onFullyDismissedRef = useRef(onFullyDismissed);
 +  onFullyDismissedRef.current = onFullyDismissed;
 +
@@ -42,19 +79,19 @@ index 0dd7d25..5bef3f2 100644
 +  const handleNativeDismiss = useCallback(() => {
 +    onFullyDismissedRef.current?.();
 +  }, []);
+   onDismissRef.current = onDismiss;
  
    const detents = useMemo<PresentationDetent[]>(() => {
-     if (!snapPointsProp || snapPointsProp.length === 0) return ['medium', 'large'];
 @@ -234,6 +244,7 @@ export function BottomSheet(props: BottomSheetProps) {
+         <Host style={{ position: 'absolute', width }} pointerEvents="none">
            <NativeBottomSheet
              isPresented={isPresented}
-             onIsPresentedChange={handlePresentedChange}
 +            onDismiss={handleNativeDismiss}
+             onIsPresentedChange={handlePresentedChange}
              fitToContents={fitToContents}>
              <Group modifiers={modifiers}>
-               <RNHostView matchContents={fitToContents}>
 diff --git a/src/community/bottom-sheet/types.ts b/src/community/bottom-sheet/types.ts
-index d7372fc..efcf425 100644
+index d7372fcb72e3717329ee8df4e27e2f537f17decb..efcf4256103d5b9f1a068e32778a92efc6fa30bc 100644
 --- a/src/community/bottom-sheet/types.ts
 +++ b/src/community/bottom-sheet/types.ts
 @@ -178,6 +178,15 @@ export interface BottomSheetProps {

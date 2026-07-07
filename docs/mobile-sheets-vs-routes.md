@@ -71,7 +71,7 @@ in a higher window, not native sheets.
 
 **How a dismiss "settles."** The coordinator needs to know when a dismiss animation has
 really finished before it starts the next transition. On **iOS** that's the accurate native
-signal: our `@expo/ui` patch (`patches/@expo%2Fui@56.0.18.patch`) forwards SwiftUI's
+signal: our `@expo/ui` patch (`patches/@expo%2Fui@57.0.3.patch`) forwards SwiftUI's
 post-animation `.sheet(onDismiss:)` out of the community wrapper as `onFullyDismissed`, which
 `useManagedSheet` routes into `coordinator.notifyFullyDismissed`. So a surface that renders the
 raw `BottomSheetModal`/`BottomSheet` must pass `onFullyDismissed={managed.onFullyDismissed}` (the
@@ -81,6 +81,15 @@ is the fallback: it's the only settle signal on **Android** (Compose has no post
 and on iOS it's the ceiling for the rare case the native event never arrives (a Host torn down
 mid-animation). A `__DEV__` warning fires only when the ceiling beats a native signal that was
 expected (an iOS dismiss of a still-registered sheet).
+
+The same patch also guards the **Android** re-snap path: `snapToIndex` on an already-open
+multi-detent sheet fires `expand()` / `partialExpand()` fire-and-forget on the native
+`ModalBottomSheetView`. A store binary whose native `@expo/ui` predates one of those
+AsyncFunctions rejects the call ("No handler registered for AsyncFunction …"), which — being
+unawaited — surfaces as a crash-reported unhandled rejection (#3478). The patch attaches a
+`.catch` so it no-ops on those binaries and never reaches a native build that has the method.
+This is the OTA-ahead-of-native invariant in `docs/mobile-ota-updates.md`: OTA JS must not call
+native `@expo/ui` methods newer than the min shipped binary without a guard.
 
 **iOS sizing — the single-flex-child contract.** Hand the native `@expo/ui` sheet exactly ONE
 flex child; multiple direct children make it size to content and collapse a `flex: 1` scroll body.

@@ -28,11 +28,16 @@ export const isSentryEnabled = !!sentryDsn && !__DEV__;
 // AsyncFunction on the `ModalBottomSheetView` native view, so the call rejects
 // ("No handler registered for AsyncFunction '<method>' on view 'ModalBottomSheetView'")
 // and, being unawaited, surfaces as an onunhandledrejection. The op is a no-op on those
-// binaries (the sheet is already at that detent), so only the Sentry noise is worth
-// dropping. Match the view name + method (never a bare `partialExpand` substring) so no
-// unrelated error is ever dropped; cover `expand` too — same mechanism, even though only
-// `partialExpand` rejects on today's fleet. See docs/mobile-ota-updates.md: this is a
-// JS-only change, so it keeps the same fingerprint and rides the OTA to shipped binaries.
+// binaries (the sheet is already at that detent).
+//
+// The real fix guards the call at source: `patches/@expo%2Fui@57.0.3.patch` attaches a
+// `.catch` to both calls in BottomSheet.android.tsx (issue #3478), so once a binary pulls
+// that OTA the rejection never fires. This filter is now belt-and-braces: it still drops
+// the report from binaries running the pre-patch OTA bundle, and from the tail of old
+// binaries before the next native build ships. Match the view name + method (never a bare
+// `partialExpand` substring) so no unrelated error is ever dropped; cover `expand` too —
+// same mechanism, even though only `partialExpand` rejects on today's fleet. See
+// docs/mobile-ota-updates.md: JS-only, so it keeps the same fingerprint and rides the OTA.
 const EXPO_UI_SHEET_NO_HANDLER =
   /Call to function 'ModalBottomSheetView\.(?:partialExpand|expand)' has been rejected|No handler registered for AsyncFunction '(?:partialExpand|expand)' on view 'ModalBottomSheetView'/;
 

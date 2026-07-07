@@ -49,6 +49,23 @@ install, since the device couldn't verify the manifest came from us.
    version, decoupled from OTA compatibility. Resolve the current value with
    `bunx expo-updates runtimeversion:resolve --platform ios|android` (from `packages/mobile/`).
 
+### Invariant: OTA JS must not call native methods newer than the min shipped binary
+
+The fingerprint gate only protects you when the JS change is matched by a native change. It does
+**not** catch a JS-only change that starts calling a native method the shipped binary doesn't have —
+e.g. bumping a native module's JS (or the module itself, if its native side ships separately) so the
+JS invokes a newer imperative native method. The fingerprint is unchanged (JS-only), so the OTA lands
+on old binaries whose native layer predates the method, and the call fails at runtime.
+
+This is exactly how #3478 happened: `@expo/ui`'s Android bottom sheet calls `partialExpand()` /
+`expand()` on the native `ModalBottomSheetView`. A production OTA pushed JS that calls them onto a
+store binary built against an older `@expo/ui`, and the unregistered AsyncFunction rejected — a
+crash-reported unhandled rejection.
+
+Rule: any imperative native call that could be OTA-ahead of the native binary must be guarded (a
+`.catch` / capability probe / `requireOptionalNativeModule` null-check) so it degrades to a no-op
+instead of throwing. For `@expo/ui` sheets the guard lives in `patches/@expo%2Fui@57.0.3.patch`.
+
 ## Publishing a production update
 
 **Automatic.** Every push to `main` that touches the mobile app runs
