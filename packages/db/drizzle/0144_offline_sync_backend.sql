@@ -6,6 +6,49 @@
 -- the generated snapshot, but reach the same schema through nullable adds,
 -- explicit sequences, batched backfills, and final NOT NULL/default changes.
 
+-- Take every table lock this migration needs up front, before any slow work.
+-- The first production run deadlocked (40P01): the ALTER on board_climb_stats
+-- held its AccessExclusiveLock through the ~2 minute backfill, then the ALTER
+-- on board_climbs queued behind a live app query that held board_climbs and
+-- was itself waiting on board_climb_stats. Acquiring all locks in one
+-- retry-protected step means we never wait for a new lock while sitting on an
+-- old one with traffic interleaved. lock_timeout bounds each attempt and the
+-- subtransaction rollback releases partial acquisitions before retrying, so
+-- the migration can't deadlock against app queries — it just queues.
+-- boardsesh_ticks and playlists only receive triggers/indexes here, so they
+-- get SHARE ROW EXCLUSIVE (blocks writes, keeps reads flowing) instead of
+-- ACCESS EXCLUSIVE.
+DO $$
+DECLARE
+  attempts integer := 0;
+BEGIN
+  LOOP
+    attempts := attempts + 1;
+    BEGIN
+      SET LOCAL lock_timeout = '3s';
+      LOCK TABLE
+        "board_climb_stats",
+        "board_climbs",
+        "user_favorites",
+        "playlist_climbs",
+        "user_playlist_pins",
+        "playlist_follows",
+        "setter_follows",
+        "user_follows"
+      IN ACCESS EXCLUSIVE MODE;
+      LOCK TABLE "boardsesh_ticks", "playlists" IN SHARE ROW EXCLUSIVE MODE;
+      SET LOCAL lock_timeout = '0';
+      RETURN;
+    EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
+      IF attempts >= 40 THEN
+        RAISE;
+      END IF;
+      PERFORM pg_sleep(1);
+    END;
+  END LOOP;
+END $$;
+--> statement-breakpoint
+
 CREATE TABLE "sync_deletions" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"table_name" text NOT NULL,
