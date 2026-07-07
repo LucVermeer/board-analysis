@@ -46,6 +46,11 @@ type OfflineOperation<TVariables, TResponse> = {
   // Returns the RAW GraphQL response shape (as if the server had answered).
   resolveLocal: (db: SQLiteDatabase, variables: TVariables) => Promise<TResponse>;
   offlineFallback: () => TResponse;
+  // A local result that should be retried over the network while online: a
+  // known-key read that missed because the row hasn't synced yet (e.g. a live
+  // presence event referencing a climb newer than the board download). An
+  // empty search result is a real answer, not a miss — search ops omit this.
+  isLocalMiss?: (response: TResponse) => boolean;
 };
 
 // Generics erased at storage; `never` params keep the assignment legal
@@ -91,6 +96,7 @@ registerOfflineOperation<GetClimbQueryVariables, GetClimbQueryResponse>({
     }),
   }),
   offlineFallback: () => ({ climb: null }),
+  isLocalMiss: (response) => response.climb === null,
 });
 
 /**
@@ -111,9 +117,15 @@ export async function offlineAwareRequest<TResponse>(document: string, variables
     // the offline fallback below still applies either way. `as never` re-narrows
     // the storage-erased generics — see the OFFLINE_OPERATIONS declaration.
     if (db && variables !== undefined && (await operation.canServeLocal(db, variables as never))) {
-      return (await operation.resolveLocal(db, variables as never)) as TResponse;
+      const localResponse = (await operation.resolveLocal(db, variables as never)) as TResponse;
+      // A known-key miss falls through to the network while online — the row
+      // may simply not have synced yet. Offline, the miss stands (it has the
+      // same shape as offlineFallback).
+      const retryOverNetwork = operation.isLocalMiss?.(localResponse) === true && onlineManager.isOnline();
+      if (!retryOverNetwork) return localResponse;
+    } else if (!onlineManager.isOnline()) {
+      return operation.offlineFallback() as TResponse;
     }
-    if (!onlineManager.isOnline()) return operation.offlineFallback() as TResponse;
   }
   return getHttpClient().request<TResponse>(document, variables);
 }
