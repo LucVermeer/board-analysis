@@ -51,7 +51,11 @@ export function correctGripsQualityAverage(
   // of the database.
   if (!Number.isFinite(quality) || quality <= 0 || quality > 5) return null;
 
-  const eraMs = climbCreatedAtOrFaAt != null ? Date.parse(climbCreatedAtOrFaAt) : Number.NaN;
+  // fa_at arrives as 'YYYY-MM-DD HH:MM:SS' (DB rows) or ISO (API). Space→'T'
+  // makes the former spec-compliant ISO so parsing is engine-independent
+  // (space-separated Date.parse is V8-only behavior). Timezone slop is
+  // irrelevant against a month-scale era cutover.
+  const eraMs = climbCreatedAtOrFaAt != null ? Date.parse(climbCreatedAtOrFaAt.replace(' ', 'T')) : Number.NaN;
   // Unknown era (null / unparseable) or post-cutover → already native 1-5.
   if (Number.isNaN(eraMs) || eraMs >= GRIPS_CUTOVER_MS) return quality;
 
