@@ -14,9 +14,9 @@ import { useConfirm } from '../../src/providers/dialog-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 import { useOfflineDownloadsEnabled } from '../../src/providers/feature-flags-provider';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
-import { useSyncStatus, triggerSync, setSyncProgress, getDownloadedScopeKeys } from '../../src/sync';
-import { drainMutationQueue } from '../../src/mutation-queue';
-import type { GraphQLFetch } from '../../src/mutation-queue/handlers';
+import { useSyncStatus, setSyncProgress } from '../../src/sync';
+import { getDownloadedScopeKeys, type GraphQLFetch } from '@boardsesh/offline-sync';
+import { triggerSync, drainMutationQueue } from '../../src/offline/offline-sync-adapter';
 import {
   getSetting,
   useSetting,

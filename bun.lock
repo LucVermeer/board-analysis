@@ -221,6 +221,7 @@
         "@boardsesh/i18n": "*",
         "@boardsesh/key-value-storage": "*",
         "@boardsesh/logbook": "*",
+        "@boardsesh/offline-sync": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/playback-react": "*",
@@ -538,6 +539,14 @@
       },
       "devDependencies": {
         "@boardsesh/profile-stats": "*",
+        "typescript": "~6.0.3",
+      },
+    },
+    "packages/shared/offline-sync": {
+      "name": "@boardsesh/offline-sync",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@types/node": "^25.3.3",
         "typescript": "~6.0.3",
       },
     },
@@ -1149,6 +1158,8 @@
     "@boardsesh/moonboard-ocr": ["@boardsesh/moonboard-ocr@workspace:packages/moonboard-ocr"],
 
     "@boardsesh/moonboard-sync": ["@boardsesh/moonboard-sync@workspace:packages/moonboard-sync"],
+
+    "@boardsesh/offline-sync": ["@boardsesh/offline-sync@workspace:packages/shared/offline-sync"],
 
     "@boardsesh/party-profile": ["@boardsesh/party-profile@workspace:packages/shared/party-profile"],
 

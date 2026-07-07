@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase } from '../../database';
 
 import { getCheckpointKey, getCheckpoint, setCheckpoint, deleteCheckpoint, deleteAllCheckpoints } from '../checkpoints';
 import type { SyncCheckpoint } from '../checkpoints';
@@ -8,7 +8,7 @@ function createMockDb() {
   return {
     runAsync: vi.fn().mockResolvedValue(undefined),
     getFirstAsync: vi.fn().mockResolvedValue(null),
-  } as unknown as SQLiteDatabase;
+  } as unknown as OfflineDatabase;
 }
 
 describe('getCheckpointKey', () => {
@@ -26,7 +26,7 @@ describe('getCheckpointKey', () => {
 });
 
 describe('getCheckpoint', () => {
-  let db: SQLiteDatabase;
+  let db: OfflineDatabase;
 
   beforeEach(() => {
     db = createMockDb();

@@ -1,5 +1,7 @@
-export { pullSync, type SyncProgress, type SyncOptions } from './pull-client';
-export { startSyncScheduler, triggerSync, type SyncProgressSink } from './sync-scheduler';
+// The sync ENGINE (pull client, scheduler, checkpoints, table config) lives in
+// @boardsesh/offline-sync; its platform bindings live in
+// src/offline/offline-sync-adapter.ts. What remains here is the React-facing
+// sync-status store the Settings UI reads.
 export {
   useSyncStatus,
   setSyncProgress,
@@ -7,14 +9,3 @@ export {
   __resetSyncStatusForTests,
   type SyncStatus,
 } from './sync-status';
-export {
-  getCheckpoint,
-  setCheckpoint,
-  deleteCheckpoint,
-  deleteAllCheckpoints,
-  deleteUserCheckpoints,
-  getCheckpointKey,
-  getDownloadedScopeKeys,
-} from './checkpoints';
-export type { SyncCheckpoint } from './checkpoints';
-export { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from './table-config';

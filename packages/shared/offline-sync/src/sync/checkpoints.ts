@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { SqlExecutor } from '../database';
 
 export type SyncCheckpoint = {
   updatedAt: string;
@@ -25,14 +25,14 @@ export function getCheckpointKey(tableName: string, scope?: string): string {
 // the board rows it describes, which also survive as the shared cache.
 const SCOPE_COMPLETE_PREFIX = 'scope-complete:';
 
-export async function markScopeDownloadComplete(db: SQLiteDatabase, scopeKey: string): Promise<void> {
+export async function markScopeDownloadComplete(db: SqlExecutor, scopeKey: string): Promise<void> {
   await db.runAsync('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)', [
     `${SCOPE_COMPLETE_PREFIX}${scopeKey}`,
     '1',
   ]);
 }
 
-export async function isScopeDownloadComplete(db: SQLiteDatabase, scopeKey: string): Promise<boolean> {
+export async function isScopeDownloadComplete(db: SqlExecutor, scopeKey: string): Promise<boolean> {
   const row = await db.getFirstAsync<{ key: string }>('SELECT key FROM sync_meta WHERE key = ?', [
     `${SCOPE_COMPLETE_PREFIX}${scopeKey}`,
   ]);
@@ -46,14 +46,14 @@ export async function isScopeDownloadComplete(db: SQLiteDatabase, scopeKey: stri
  * cycle's global lastSyncedAt can't tell one board from another, and a mere
  * checkpoint only proves the first page landed).
  */
-export async function getDownloadedScopeKeys(db: SQLiteDatabase): Promise<string[]> {
+export async function getDownloadedScopeKeys(db: SqlExecutor): Promise<string[]> {
   const rows = await db.getAllAsync<{ key: string }>('SELECT key FROM sync_meta WHERE key LIKE ?', [
     `${SCOPE_COMPLETE_PREFIX}%`,
   ]);
   return rows.map((row) => row.key.slice(SCOPE_COMPLETE_PREFIX.length));
 }
 
-export async function getCheckpoint(db: SQLiteDatabase, key: string): Promise<SyncCheckpoint | null> {
+export async function getCheckpoint(db: SqlExecutor, key: string): Promise<SyncCheckpoint | null> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', [key]);
   if (!row) return null;
   try {
@@ -63,15 +63,15 @@ export async function getCheckpoint(db: SQLiteDatabase, key: string): Promise<Sy
   }
 }
 
-export async function setCheckpoint(db: SQLiteDatabase, key: string, checkpoint: SyncCheckpoint): Promise<void> {
+export async function setCheckpoint(db: SqlExecutor, key: string, checkpoint: SyncCheckpoint): Promise<void> {
   await db.runAsync('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)', [key, JSON.stringify(checkpoint)]);
 }
 
-export async function deleteCheckpoint(db: SQLiteDatabase, key: string): Promise<void> {
+export async function deleteCheckpoint(db: SqlExecutor, key: string): Promise<void> {
   await db.runAsync('DELETE FROM sync_meta WHERE key = ?', [key]);
 }
 
-export async function deleteAllCheckpoints(db: SQLiteDatabase): Promise<void> {
+export async function deleteAllCheckpoints(db: SqlExecutor): Promise<void> {
   await db.runAsync("DELETE FROM sync_meta WHERE key LIKE 'checkpoint:%'");
 }
 
@@ -81,7 +81,7 @@ export async function deleteAllCheckpoints(db: SQLiteDatabase): Promise<void> {
  * Used on sign-out: the board rows survive as the shared cache, so their checkpoints
  * must survive too — otherwise the next sign-in re-crawls 200k+ rows from epoch.
  */
-export async function deleteUserCheckpoints(db: SQLiteDatabase): Promise<void> {
+export async function deleteUserCheckpoints(db: SqlExecutor): Promise<void> {
   await db.runAsync(
     `DELETE FROM sync_meta
      WHERE key LIKE 'checkpoint:%'

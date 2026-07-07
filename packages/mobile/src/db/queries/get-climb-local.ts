@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase } from '@boardsesh/offline-sync';
 import type { Climb } from '@boardsesh/shared-schema';
 import { mapRowToClimb, type LocalClimbRow } from './search-climbs-local';
 
@@ -17,7 +17,7 @@ export type GetClimbLocalInput = {
   climbUuid: string;
 };
 
-export async function getClimbLocal(db: SQLiteDatabase, input: GetClimbLocalInput): Promise<Climb | null> {
+export async function getClimbLocal(db: OfflineDatabase, input: GetClimbLocalInput): Promise<Climb | null> {
   const { boardName, layoutId, angle, climbUuid } = input;
   const query = `
     SELECT

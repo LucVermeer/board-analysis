@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { ClimbSearchInput } from '@boardsesh/shared-schema';
-import { runMigrations } from '../../migrations';
-import { ensureMutationQueueTable } from '../../../mutation-queue/schema';
-import { createTestDatabase, type TestSqliteDb } from '../../__tests__/sqlite-test-db';
+import { runMigrations } from '@boardsesh/offline-sync';
+import { ensureMutationQueueTable } from '@boardsesh/offline-sync';
+import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 import { searchClimbsLocal, countClimbsLocal, isOfflineSearchSupported } from '../search-climbs-local';
 
 // A minimal, well-formed search input; individual tests override the pieces they exercise.

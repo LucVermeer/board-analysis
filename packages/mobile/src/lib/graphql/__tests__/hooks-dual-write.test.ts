@@ -54,9 +54,8 @@ vi.mock('../hooks/use-social', () => ({
 vi.mock('../hooks/use-session-detail', () => ({ useSessionDetail: vi.fn(), useSessionPreview: vi.fn() }));
 
 import { useToggleFavorite } from '../hooks';
-import { __resetDrainerStateForTests } from '../../../mutation-queue/drainer';
-import { runMigrations } from '../../../db/migrations';
-import { createTestDatabase, type TestSqliteDb } from '../../../db/__tests__/sqlite-test-db';
+import { __resetDrainerStateForTests, runMigrations } from '@boardsesh/offline-sync';
+import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 
 type Row = Record<string, unknown>;
 type ToggleVariables = { input: { boardName: string; climbUuid: string; angle: number }; currentlyFavorited?: boolean };
@@ -68,13 +67,13 @@ const asConfig = <TVariables>(hookResult: unknown): ConfigOf<TVariables> => hook
 
 const parkedRequest = () => new Promise<never>(() => {});
 
-let db: TestSqliteDb;
+let db: TestSqliteDb & SQLiteDatabase;
 
 beforeEach(async () => {
   invalidateQueries.mockClear();
   request.mockReset();
   __resetDrainerStateForTests();
-  db = createTestDatabase();
+  db = createTestDatabase() as unknown as TestSqliteDb & SQLiteDatabase;
   await runMigrations(db);
   handle = db;
   offlineEnabled = true;

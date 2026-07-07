@@ -31,14 +31,20 @@ vi.mock('expo-asset', () => ({
   },
 }));
 
+import type { SQLiteDatabase } from 'expo-sqlite';
 import { clearUserData, initializeDatabase } from '../connection';
-import { runMigrations } from '../migrations';
-import { SCHEMA_STATEMENTS } from '../schema';
-import { setCheckpoint, getCheckpoint, getCheckpointKey } from '../../sync/checkpoints';
-import { enqueue, getPendingCount } from '../../mutation-queue/queue';
-import { createTestDatabase, type TestSqliteDb } from './sqlite-test-db';
+import {
+  runMigrations,
+  SCHEMA_STATEMENTS,
+  setCheckpoint,
+  getCheckpoint,
+  getCheckpointKey,
+  enqueue,
+  getPendingCount,
+} from '@boardsesh/offline-sync';
+import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 
-let db: TestSqliteDb;
+let db: TestSqliteDb & SQLiteDatabase;
 
 async function countRows(table: string): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`);
@@ -46,7 +52,9 @@ async function countRows(table: string): Promise<number> {
 }
 
 beforeEach(async () => {
-  db = createTestDatabase();
+  // connection.ts is the expo lifecycle seam, so its API is typed against the
+  // real SQLiteDatabase; the node adapter satisfies the used surface.
+  db = createTestDatabase() as unknown as TestSqliteDb & SQLiteDatabase;
   await runMigrations(db);
   resolveSeedAssetModuleId.mockReturnValue(null);
   assetLocalUri.current = null;

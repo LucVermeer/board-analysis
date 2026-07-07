@@ -6,10 +6,14 @@
 // accessors.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { ensureMutationQueueTable } from '../mutation-queue/schema';
-import { runMigrations } from './migrations';
-import { deleteUserCheckpoints, setCheckpoint, getCheckpointKey } from '../sync/checkpoints';
-import { BOARD_DATA_TABLES } from '../sync/table-config';
+import {
+  ensureMutationQueueTable,
+  runMigrations,
+  deleteUserCheckpoints,
+  setCheckpoint,
+  getCheckpointKey,
+  BOARD_DATA_TABLES,
+} from '@boardsesh/offline-sync';
 import { resolveSeedAssetModuleId } from './seed-asset';
 import { reportError } from '../lib/error-reporting';
 

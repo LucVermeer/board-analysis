@@ -26,7 +26,8 @@ import { clearStoredActiveBoard } from '../lib/active-board-store';
 import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 import { clearUserData, getDatabaseHandle } from '../db';
 import { setSetting } from '../settings';
-import { drainMutationQueue, getPendingCount, setSigningOut } from '../mutation-queue';
+import { getPendingCount, setSigningOut } from '@boardsesh/offline-sync';
+import { drainMutationQueue } from '../offline/offline-sync-adapter';
 import { stopTokenManagement } from '../notifications';
 
 type AuthState = {

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase } from '../../database';
 
 function createMockDb() {
   return {
     runAsync: vi.fn().mockResolvedValue(undefined),
     getAllAsync: vi.fn().mockResolvedValue([]),
     getFirstAsync: vi.fn().mockResolvedValue(null),
-  } as unknown as SQLiteDatabase;
+  } as unknown as OfflineDatabase;
 }
 
 import {
@@ -23,7 +23,7 @@ import {
 } from '../queue';
 
 describe('mutation queue', () => {
-  let db: SQLiteDatabase;
+  let db: OfflineDatabase;
 
   beforeEach(() => {
     db = createMockDb();

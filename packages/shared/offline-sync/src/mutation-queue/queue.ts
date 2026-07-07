@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { SqlExecutor } from '../database';
 
 export type PendingMutation = {
   id: number;
@@ -14,7 +14,7 @@ export type PendingMutation = {
 };
 
 export async function enqueue(
-  db: SQLiteDatabase,
+  db: SqlExecutor,
   tableName: string,
   operation: 'create' | 'update' | 'delete',
   payload: Record<string, unknown>,
@@ -27,7 +27,7 @@ export async function enqueue(
   );
 }
 
-export async function peekPending(db: SQLiteDatabase, limit: number = 10): Promise<PendingMutation[]> {
+export async function peekPending(db: SqlExecutor, limit: number = 10): Promise<PendingMutation[]> {
   // created_at is 1-second resolution (datetime('now')), so two writes in the
   // same second tie on created_at. The `id` (AUTOINCREMENT) tiebreak gives true
   // FIFO for same-second writes — the order a user actually performed them.
@@ -37,7 +37,7 @@ export async function peekPending(db: SQLiteDatabase, limit: number = 10): Promi
   );
 }
 
-export async function markCompleted(db: SQLiteDatabase, id: number): Promise<void> {
+export async function markCompleted(db: SqlExecutor, id: number): Promise<void> {
   await db.runAsync('DELETE FROM pending_mutations WHERE id = ?', [id]);
 }
 
@@ -49,7 +49,7 @@ export async function markCompleted(db: SQLiteDatabase, id: number): Promise<voi
  * exhausted but status still 'pending' (which the old two-write
  * incrementRetry + markDeadLetter pair could).
  */
-export async function recordFailure(db: SQLiteDatabase, id: number, error: string): Promise<void> {
+export async function recordFailure(db: SqlExecutor, id: number, error: string): Promise<void> {
   await db.runAsync(
     `UPDATE pending_mutations
      SET retry_count = retry_count + 1,
@@ -64,41 +64,41 @@ export async function recordFailure(db: SQLiteDatabase, id: number, error: strin
  * Force-dead-letters a mutation regardless of retry_count — used for
  * non-retryable failures (validation/4xx) where retrying is pointless.
  */
-export async function markDeadLetter(db: SQLiteDatabase, id: number, error: string): Promise<void> {
+export async function markDeadLetter(db: SqlExecutor, id: number, error: string): Promise<void> {
   await db.runAsync(`UPDATE pending_mutations SET status = 'dead_letter', last_error = ? WHERE id = ?`, [error, id]);
 }
 
-export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
+export async function getPendingCount(db: SqlExecutor): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM pending_mutations WHERE status = 'pending'`,
   );
   return row?.count ?? 0;
 }
 
-export async function getDeadLetterCount(db: SQLiteDatabase): Promise<number> {
+export async function getDeadLetterCount(db: SqlExecutor): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM pending_mutations WHERE status = 'dead_letter'`,
   );
   return row?.count ?? 0;
 }
 
-export async function getDeadLetters(db: SQLiteDatabase): Promise<PendingMutation[]> {
+export async function getDeadLetters(db: SqlExecutor): Promise<PendingMutation[]> {
   return db.getAllAsync<PendingMutation>(
     `SELECT * FROM pending_mutations WHERE status = 'dead_letter' ORDER BY created_at ASC`,
   );
 }
 
-export async function retryDeadLetter(db: SQLiteDatabase, id: number): Promise<void> {
+export async function retryDeadLetter(db: SqlExecutor, id: number): Promise<void> {
   await db.runAsync(
     `UPDATE pending_mutations SET status = 'pending', retry_count = 0, last_error = NULL WHERE id = ?`,
     [id],
   );
 }
 
-export async function discardDeadLetter(db: SQLiteDatabase, id: number): Promise<void> {
+export async function discardDeadLetter(db: SqlExecutor, id: number): Promise<void> {
   await db.runAsync('DELETE FROM pending_mutations WHERE id = ? AND status = ?', [id, 'dead_letter']);
 }
 
-export async function clearAll(db: SQLiteDatabase): Promise<void> {
+export async function clearAll(db: SqlExecutor): Promise<void> {
   await db.runAsync('DELETE FROM pending_mutations');
 }

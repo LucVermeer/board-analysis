@@ -7,22 +7,12 @@
 // no-op (idempotent), so it is safe to call unconditionally at startup — including
 // against a pre-warmed DB built at an older app version.
 //
-// Pure logic: it only touches the structural subset of SQLiteDatabase below, so a
+// Pure logic: it only touches the structural executor surface in ../database, so a
 // node-based fake (or node:sqlite) can exercise the version bookkeeping without
 // loading native expo-sqlite.
 
 import { SCHEMA_STATEMENTS } from './schema';
-
-// The minimal slice of expo-sqlite's SQLiteDatabase the runner depends on. The
-// variadic param shape mirrors SQLiteDatabase's variadic overloads so a real
-// SQLiteDatabase (and a node:sqlite test adapter) is structurally assignable.
-type RunnerBindParams = (string | number | null)[];
-export type MigrationRunnerDb = {
-  execAsync(source: string): Promise<void>;
-  runAsync(source: string, ...params: RunnerBindParams): Promise<unknown>;
-  getFirstAsync<T>(source: string, ...params: RunnerBindParams): Promise<T | null>;
-  withExclusiveTransactionAsync(task: (txn: MigrationRunnerDb) => Promise<void>): Promise<void>;
-};
+import type { OfflineDatabase, SqlExecutor } from '../database';
 
 export type Migration = {
   version: number;
@@ -55,13 +45,13 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.reduce((highest, migration) => Math.max(highest, migration.version), 0);
 
-async function getCurrentVersion(db: MigrationRunnerDb): Promise<number> {
+async function getCurrentVersion(db: SqlExecutor): Promise<number> {
   const row = await db.getFirstAsync<{ version: number }>('SELECT version FROM schema_version WHERE id = 1');
   return row?.version ?? 0;
 }
 
-async function stampVersion(db: MigrationRunnerDb, version: number): Promise<void> {
-  await db.runAsync('INSERT OR REPLACE INTO schema_version (id, version) VALUES (1, ?)', version);
+async function stampVersion(db: SqlExecutor, version: number): Promise<void> {
+  await db.runAsync('INSERT OR REPLACE INTO schema_version (id, version) VALUES (1, ?)', [version]);
 }
 
 /**
@@ -70,7 +60,7 @@ async function stampVersion(db: MigrationRunnerDb, version: number): Promise<voi
  * version stamp run inside one exclusive transaction, so a crash mid-migration
  * leaves the stored version untouched and the migration re-runs cleanly next launch.
  */
-export async function runMigrations(db: MigrationRunnerDb): Promise<void> {
+export async function runMigrations(db: OfflineDatabase): Promise<void> {
   await db.execAsync(SCHEMA_VERSION_TABLE);
 
   const currentVersion = await getCurrentVersion(db);

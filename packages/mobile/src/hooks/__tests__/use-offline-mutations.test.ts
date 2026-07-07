@@ -18,6 +18,16 @@ vi.mock('react', () => ({
 }));
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries }) as unknown as QueryClient,
+  onlineManager: { isOnline: () => true },
+}));
+
+// The drain now routes through the mobile adapter, which binds AppState/NetInfo
+// at module load — stub both so this suite keeps running in the node env.
+vi.mock('react-native', () => ({
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+}));
+vi.mock('@react-native-community/netinfo', () => ({
+  default: { addEventListener: () => () => {} },
 }));
 
 import {
@@ -30,10 +40,8 @@ import {
   useOfflineUnfollowUser,
   type SaveTickInput,
 } from '../use-offline-mutations';
-import type { GraphQLFetch } from '../../mutation-queue/handlers';
-import { __resetDrainerStateForTests } from '../../mutation-queue/drainer';
-import { runMigrations } from '../../db/migrations';
-import { createTestDatabase, type TestSqliteDb } from '../../db/__tests__/sqlite-test-db';
+import { __resetDrainerStateForTests, runMigrations, type GraphQLFetch } from '@boardsesh/offline-sync';
+import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 
 type Row = Record<string, unknown>;
 

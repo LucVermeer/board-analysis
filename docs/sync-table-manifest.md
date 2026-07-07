@@ -4,8 +4,9 @@ This is the **single source of truth** binding three implementations together:
 
 1. **Backend** sync-pull resolvers (`packages/backend`) — emit JSON documents whose keys
    are listed here, and deletion triggers that emit `record_id` strings encoded as listed here.
-2. **Mobile SQLite DDL** (`packages/mobile/src/db/schema.ts`) — column names + types + PKs match exactly.
-3. **Mobile `table-config.ts`** `primaryKeyColumns` — match the **Local PK** column order here.
+2. **Client SQLite DDL** (`packages/shared/offline-sync/src/db/schema.ts`) — column names + types + PKs match exactly.
+3. **Client `table-config.ts`** (`packages/shared/offline-sync/src/sync/table-config.ts`) `primaryKeyColumns` — match the
+   **Local PK** column order here.
 
 It exists because `pull-client.ts:upsertDocuments` does `INSERT OR REPLACE INTO <table> (<Object.keys(doc)>)`:
 the resolver's JSON keys **are** the local column names. And `processDeletions` splits `record_id` on `:`

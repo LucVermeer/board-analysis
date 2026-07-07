@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { getSetting, setSetting, useSetting } from './hooks';
-import { offlineBoardKey, type OfflineBoardScope } from './offline-board-key';
+import { offlineBoardKey, type OfflineBoardScope } from '@boardsesh/offline-sync';
 
 /**
  * Read/write the per-board offline flag on top of the `syncEnabledBoards` setting.

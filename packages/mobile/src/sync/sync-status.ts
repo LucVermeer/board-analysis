@@ -8,7 +8,7 @@
 // one hook, so non-React callers (the bridge) can publish without a render.
 
 import { useSyncExternalStore } from 'react';
-import type { SyncProgress } from './pull-client';
+import type { SyncProgress } from '@boardsesh/offline-sync';
 
 export type SyncStatus = {
   /** Latest progress frame, or null before the first sync of this session. */

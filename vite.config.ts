@@ -105,6 +105,7 @@ export default defineConfig({
       './packages/shared/board-react/vite.config.ts',
       './packages/shared/create-climb-react/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
+      './packages/shared/offline-sync/vite.config.ts',
       './packages/shared/logbook/vite.config.ts',
       './packages/shared/queue-runtime/vite.config.ts',
       './packages/shared/board-presence/vite.config.ts',
@@ -405,6 +406,9 @@ export default defineConfig({
       'typecheck:queue-runtime': {
         command: 'bun run --filter=@boardsesh/queue-runtime typecheck',
       },
+      'typecheck:offline-sync': {
+        command: 'bun run --filter=@boardsesh/offline-sync typecheck',
+      },
       'typecheck:queue-react': {
         command: 'bun run --filter=@boardsesh/queue-react typecheck',
       },
@@ -505,6 +509,7 @@ export default defineConfig({
           'typecheck:ble-protocol',
           'typecheck:queue',
           'typecheck:queue-runtime',
+          'typecheck:offline-sync',
           'typecheck:queue-react',
           'typecheck:board-presence',
           'typecheck:board-presence-react',

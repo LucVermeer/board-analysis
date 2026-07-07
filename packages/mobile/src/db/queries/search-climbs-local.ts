@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase } from '@boardsesh/offline-sync';
 import type { Climb, ClimbSearchInput } from '@boardsesh/shared-schema';
 import { isNoMatch } from '@boardsesh/shared-schema';
 import { isSizeScopedBoard } from '@boardsesh/board-config';
@@ -332,7 +332,7 @@ export function mapRowToClimb(row: LocalClimbRow, boardType: string, layoutId: n
   };
 }
 
-export async function searchClimbsLocal(db: SQLiteDatabase, input: ClimbSearchInput): Promise<LocalSearchResult> {
+export async function searchClimbsLocal(db: OfflineDatabase, input: ClimbSearchInput): Promise<LocalSearchResult> {
   const boardType = input.boardName;
   const angle = input.angle;
   const page = Math.max(0, Math.trunc(input.page ?? 0));
@@ -383,7 +383,7 @@ export async function searchClimbsLocal(db: SQLiteDatabase, input: ClimbSearchIn
   return { climbs, hasMore };
 }
 
-export async function countClimbsLocal(db: SQLiteDatabase, input: ClimbSearchInput): Promise<number> {
+export async function countClimbsLocal(db: OfflineDatabase, input: ClimbSearchInput): Promise<number> {
   const { joinSql, whereSql, joinBinds, whereBinds } = buildJoinAndWhere(input);
   const query = `
     SELECT COUNT(*) AS total

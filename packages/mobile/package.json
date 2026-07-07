@@ -24,6 +24,7 @@
     "@boardsesh/i18n": "*",
     "@boardsesh/key-value-storage": "*",
     "@boardsesh/logbook": "*",
+    "@boardsesh/offline-sync": "*",
     "@boardsesh/party-profile": "*",
     "@boardsesh/play-view": "*",
     "@boardsesh/playback-react": "*",

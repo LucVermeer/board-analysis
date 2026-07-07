@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { runMigrations, MIGRATIONS, LATEST_SCHEMA_VERSION } from '../migrations';
 import { SCHEMA_STATEMENTS } from '../schema';
-import { createTestDatabase, listTables, primaryKeyColumns, tableColumns } from './sqlite-test-db';
+import { createTestDatabase, listTables, primaryKeyColumns, tableColumns } from '../../testing/sqlite-test-db';
 
 // The set of tables migration 1 must create (the sync manifest's per-table list
 // plus the bookkeeping tables). pending_mutations comes from MUTATION_QUEUE_SCHEMA,

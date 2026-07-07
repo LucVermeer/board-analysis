@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase, QueryInvalidator } from '../../database';
 import type { PendingMutation } from '../queue';
 
 vi.mock('../queue', () => ({
@@ -51,12 +51,12 @@ function makeMutation(overrides: Partial<PendingMutation> = {}): PendingMutation
   };
 }
 
-const mockDb = {} as SQLiteDatabase;
+const mockDb = {} as OfflineDatabase;
 
 function createMockQueryClient() {
   return {
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
-  } as unknown as import('@tanstack/react-query').QueryClient;
+  } as unknown as QueryInvalidator;
 }
 
 const mockGraphqlFetch = vi.fn().mockResolvedValue({});

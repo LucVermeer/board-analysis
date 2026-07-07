@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { SqlExecutor } from '../database';
 
 export const MUTATION_QUEUE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS pending_mutations (
@@ -15,6 +15,6 @@ CREATE TABLE IF NOT EXISTS pending_mutations (
 );
 `;
 
-export async function ensureMutationQueueTable(db: SQLiteDatabase): Promise<void> {
+export async function ensureMutationQueueTable(db: SqlExecutor): Promise<void> {
   await db.execAsync(MUTATION_QUEUE_SCHEMA);
 }

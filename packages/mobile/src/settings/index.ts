@@ -8,5 +8,5 @@ export {
   parseOfflineBoardKey,
   type OfflineBoardScope,
   type OfflineBoardLike,
-} from './offline-board-key';
+} from '@boardsesh/offline-sync';
 export { isOfflineBoardEnabled, setOfflineBoardEnabled, useOfflineBoardEnabled } from './use-offline-board';

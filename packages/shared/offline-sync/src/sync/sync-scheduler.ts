@@ -1,8 +1,5 @@
-import { AppState, type AppStateStatus } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
-import type { SQLiteDatabase } from 'expo-sqlite';
-import type { QueryClient } from '@tanstack/react-query';
-import { pullSync, type SyncProgress } from './pull-client';
+import type { OfflineDatabase, QueryInvalidator } from '../database';
+import { pullSync, type SyncProgress, type SchemaDriftReporter } from './pull-client';
 
 /**
  * Optional progress sink for the pull phase. The bridge passes the sync-status
@@ -24,6 +21,33 @@ type GraphqlFetch = <T>(query: string, variables?: Record<string, unknown>) => P
  */
 export type DrainQueue = () => Promise<void>;
 
+/**
+ * Platform wake-up sources, injected so the package stays free of react-native
+ * imports. Each subscribe returns an unsubscribe. The mobile adapter wires
+ * AppState ('active' transitions) and NetInfo; the foreground debounce and the
+ * offline→online edge detection live HERE, not in the adapter — they are the
+ * tested scheduling logic.
+ */
+export type SchedulerTriggers = {
+  /** Fires every time the app returns to the foreground. */
+  subscribeForeground(callback: () => void): () => void;
+  /** Fires on every connectivity change with the new connected state. */
+  subscribeConnectivity(callback: (isConnected: boolean) => void): () => void;
+};
+
+export type SchedulerOptions = {
+  onProgress?: SyncProgressSink;
+  /**
+   * Called when a sync cycle throws. A failed cycle is routine for offline
+   * users (the reconnect trigger retries), so the mobile adapter passes a
+   * dev-only console.warn — production neither spams the console nor reports
+   * expected network errors as handled exceptions.
+   */
+  onCycleError?: (error: unknown) => void;
+  /** Threaded through to pullSync — see SchemaDriftReporter. */
+  onSchemaDrift?: SchemaDriftReporter;
+};
+
 let isSyncing = false;
 let pendingTrigger = false;
 
@@ -37,12 +61,12 @@ export function __resetSyncSchedulerStateForTests(): void {
 // — not just on the next user write (B12). Single-flight: concurrent triggers
 // collapse into one in-flight run plus at most one queued follow-up.
 async function runSync(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: GraphqlFetch,
   getEnabledBoards: () => string[],
   drainQueue: DrainQueue,
-  onProgress?: SyncProgressSink,
+  options?: SchedulerOptions,
 ): Promise<void> {
   if (isSyncing) {
     pendingTrigger = true;
@@ -55,20 +79,16 @@ async function runSync(
     await drainQueue();
     await pullSync(db, queryClient, graphqlFetch, {
       enabledBoards: getEnabledBoards(),
-      onProgress,
+      onProgress: options?.onProgress,
+      onSchemaDrift: options?.onSchemaDrift,
     });
   } catch (error) {
-    // Dev-only: a failed cycle is routine for offline users (the reconnect
-    // trigger retries), so production must neither spam the console nor
-    // report expected network errors as handled exceptions.
-    if (__DEV__) {
-      console.warn('[Sync] Sync cycle failed:', error instanceof Error ? error.message : 'unknown');
-    }
+    options?.onCycleError?.(error);
     // pullSync only emits its terminal `idle` frame on success, so a throw mid-pull
     // would leave the Settings status row stuck on "Downloading…". Emit idle here so
     // the in-flight flag always clears — marked `failed` so the status store does
     // NOT stamp lastSyncedAt for a cycle that never completed.
-    onProgress?.({ phase: 'idle', currentTable: null, documentsProcessed: 0, failed: true });
+    options?.onProgress?.({ phase: 'idle', currentTable: null, documentsProcessed: 0, failed: true });
   } finally {
     isSyncing = false;
     // I1: a trigger that arrived mid-run must still produce exactly one
@@ -77,58 +97,56 @@ async function runSync(
     // re-run once. (runSync is async, so it can't throw synchronously here.)
     if (pendingTrigger) {
       pendingTrigger = false;
-      void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, onProgress);
+      void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, options);
     }
   }
 }
 
 export function triggerSync(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: GraphqlFetch,
   getEnabledBoards: () => string[],
   drainQueue: DrainQueue,
-  onProgress?: SyncProgressSink,
+  options?: SchedulerOptions,
 ): void {
-  void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, onProgress);
+  void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, options);
 }
 
 export function startSyncScheduler(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: GraphqlFetch,
   getEnabledBoards: () => string[],
   drainQueue: DrainQueue,
-  onProgress?: SyncProgressSink,
+  triggers: SchedulerTriggers,
+  options?: SchedulerOptions,
 ): () => void {
   let foregroundTimeout: ReturnType<typeof setTimeout> | null = null;
   let wasConnected = true;
 
-  const appStateSubscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-    if (nextState === 'active') {
-      if (foregroundTimeout) clearTimeout(foregroundTimeout);
-      foregroundTimeout = setTimeout(() => {
-        foregroundTimeout = null;
-        void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, onProgress);
-      }, FOREGROUND_DEBOUNCE_MS);
-    }
+  const unsubscribeForeground = triggers.subscribeForeground(() => {
+    if (foregroundTimeout) clearTimeout(foregroundTimeout);
+    foregroundTimeout = setTimeout(() => {
+      foregroundTimeout = null;
+      void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, options);
+    }, FOREGROUND_DEBOUNCE_MS);
   });
 
-  const netInfoUnsubscribe = NetInfo.addEventListener((state) => {
-    const isConnected = state.isConnected ?? false;
+  const unsubscribeConnectivity = triggers.subscribeConnectivity((isConnected) => {
     if (!wasConnected && isConnected) {
-      void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, onProgress);
+      void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, options);
     }
     wasConnected = isConnected;
   });
 
   // Run initial sync immediately
-  void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, onProgress);
+  void runSync(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, options);
 
   return () => {
     if (foregroundTimeout) clearTimeout(foregroundTimeout);
-    appStateSubscription.remove();
-    netInfoUnsubscribe();
+    unsubscribeForeground();
+    unsubscribeConnectivity();
     // A trigger queued behind an in-flight cycle would otherwise fire that
     // cycle's finally-block re-run AFTER this scheduler stopped (sign-out,
     // flag flip). React runs this cleanup before any replacement scheduler's

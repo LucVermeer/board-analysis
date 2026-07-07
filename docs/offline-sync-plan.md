@@ -2,6 +2,8 @@
 
 Offline data layer for the React Native mobile app. Uses `expo-sqlite` for the local database with a custom GraphQL mutation queue for offline writes. Ships a pre-warmed SQLite database as an app asset for instant offline access to all ~10 boards.
 
+> **Where the code lives.** The engine (mutation queue + drainer, pull client, checkpoints, table config, SQLite DDL/migrations) is the platform-free package **`@boardsesh/offline-sync`** (`packages/shared/offline-sync`). The mobile app binds its platform seams — expo-sqlite handle, NetInfo/AppState triggers, `onlineManager` connectivity, Sentry telemetry — in `packages/mobile/src/offline/offline-sync-adapter.ts`; mobile code calls `drainMutationQueue`/`startSyncScheduler`/`triggerSync`/`pullSync` via that adapter only, never from the package directly. Expo-specific pieces (DB lifecycle/`connection.ts`, seed ATTACH, local read queries, the sync-status store, hooks, the bridge component) stay in `packages/mobile`.
+
 This document records the evaluation of four approaches and why `expo-sqlite` + custom mutation queue is the recommendation. The plan was refined through 4 rounds of review by paired Opus agents (8 review agents total, 100+ findings).
 
 ## Alternatives evaluated
@@ -155,6 +157,17 @@ CREATE INDEX idx_stats_difficulty ON board_climb_stats (board_type, angle, displ
 ## Mutation queue — offline writes
 
 A FIFO queue for offline mutations. Estimated ~800-1200 lines of production-quality code including: queue infrastructure, per-entity handlers, error classification, retry limits, dead letter handling, TanStack Query cache invalidation, network/foreground listeners, and concurrent drain protection.
+
+### Why an outbox, not dirty flags on the data tables
+
+The obvious-seeming alternative — write only to the data tables and sync "unsynced" rows from them directly — was considered and doesn't survive contact with this design. Offline writes DO go to the data tables (optimistically, in the same SQLite transaction as the outbox insert, so the two can't diverge); the `pending_mutations` row is *replay state* that a dirty-flag column cannot represent:
+
+1. **Deletes.** An offline delete removes the data row — nothing remains to mark dirty. In-table tracking needs soft-delete/tombstone columns on every user table, which is exactly the WatermelonDB dealbreaker above.
+2. **Pulls destroy in-table flags.** The pull client applies server rows with `INSERT OR REPLACE` (delete + re-insert), which would reset any client-only `dirty` column on every sync — and the manifest contract (resolver JSON keys == local columns) would need per-table carve-outs plus merge logic so pulls don't clobber unsynced edits.
+3. **The server API is domain mutations, not row upserts.** The drainer replays ~18 distinct GraphQL mutations (`saveTick` vs `updateTick` vs `deleteTick`, `addFavorite`/`removeFavorite`, …). A dirty row can't say *which operation* produced it; syncing row state directly means building a generic push protocol server-side — the rejected WatermelonDB/PowerSync shape.
+4. **Retry/dead-letter bookkeeping** (`retry_count`, `last_error`, `status`, the dead-letter UI) lives on the outbox row instead of polluting every data table.
+5. **Cross-table FIFO + cancellation.** The queue preserves user-action order across tables and lets an offline add→remove pair net out to zero server calls (the queued add is cancelled in-transaction).
+6. **Queue-only entities.** `user_playlist_pins` has mutations but no local mirror table at all.
 
 ### How it works
 

@@ -41,8 +41,8 @@ import { useActiveBoard } from '../use-active-board';
 import type { PlaylistCreateBoard } from '../../../providers/playlists-provider';
 import { getDatabaseHandle } from '../../../db';
 import { addFavoriteLocal, removeFavoriteLocal } from '../../../hooks/use-offline-mutations';
-import { drainMutationQueue } from '../../../mutation-queue';
-import type { GraphQLFetch } from '../../../mutation-queue/handlers';
+import type { GraphQLFetch } from '@boardsesh/offline-sync';
+import { drainMutationQueue } from '../../../offline/offline-sync-adapter';
 
 const PLAYLISTS_QUERY_KEY = ['userPlaylists'] as const;
 
