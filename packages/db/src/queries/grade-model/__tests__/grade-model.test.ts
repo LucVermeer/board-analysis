@@ -57,8 +57,8 @@ function observation(partial: Partial<ClimbAngleObservation>): ClimbAngleObserva
   };
 }
 
-describe('gradeBandForDifficulty', () => {
-  test('maps band edges', () => {
+void describe('gradeBandForDifficulty', () => {
+  void test('maps band edges', () => {
     assert.equal(gradeBandForDifficulty(15), 'v0-2');
     assert.equal(gradeBandForDifficulty(16), 'v3-5');
     assert.equal(gradeBandForDifficulty(20), 'v3-5');
@@ -68,16 +68,16 @@ describe('gradeBandForDifficulty', () => {
   });
 });
 
-describe('effectiveN', () => {
-  test('discounts by echo fraction with floor of 1', () => {
+void describe('effectiveN', () => {
+  void test('discounts by echo fraction with floor of 1', () => {
     assert.ok(Math.abs(effectiveN(100, 0.8) - 20) < 1e-9);
     assert.equal(effectiveN(1, 0.8), 1);
     assert.equal(effectiveN(0, 0.8), 0);
   });
 });
 
-describe('crossAnglePrior', () => {
-  test('transports sibling means through the angle surface', () => {
+void describe('crossAnglePrior', () => {
+  void test('transports sibling means through the angle surface', () => {
     const coefficients = makeCoefficients();
     // Sibling at 20° reads 18.0; surface says 20° sits −1 from climb mean and
     // 50° sits +1 → prediction for 50° is 18 − (−1) + 1 = 20.
@@ -88,7 +88,7 @@ describe('crossAnglePrior', () => {
     assert.ok(Math.abs(prior - 20) < 1e-9);
   });
 
-  test('weights siblings by effective n and ignores the target angle itself', () => {
+  void test('weights siblings by effective n and ignores the target angle itself', () => {
     const coefficients = makeCoefficients();
     const target = observation({ angle: 50, displayDifficulty: 20 });
     const strong = observation({ angle: 20, difficultyAverage: 18, ascensionistCount: 1000 });
@@ -100,14 +100,14 @@ describe('crossAnglePrior', () => {
     assert.ok(prior > 19.9 && prior < 20.2, `prior was ${prior}`);
   });
 
-  test('returns null with no usable siblings', () => {
+  void test('returns null with no usable siblings', () => {
     const coefficients = makeCoefficients();
     assert.equal(crossAnglePrior(observation({ angle: 40 }), [], coefficients), null);
   });
 });
 
-describe('computePosteriorGrade', () => {
-  test('regime 1: blends crowd mean with cross-angle prior', () => {
+void describe('computePosteriorGrade', () => {
+  void test('regime 1: blends crowd mean with cross-angle prior', () => {
     const coefficients = makeCoefficients();
     const target = observation({
       angle: 50,
@@ -124,7 +124,7 @@ describe('computePosteriorGrade', () => {
     assert.equal(posterior.confidence, CONFIDENCE.provisional);
   });
 
-  test('regime 2: single-angle crowd mean stands with honest SE, no fake shrink to display', () => {
+  void test('regime 2: single-angle crowd mean stands with honest SE, no fake shrink to display', () => {
     const coefficients = makeCoefficients();
     const target = observation({
       angle: 40,
@@ -139,7 +139,7 @@ describe('computePosteriorGrade', () => {
     assert.equal(posterior.confidence, CONFIDENCE.confirmed);
   });
 
-  test('regime 3: display-only pass-through has no CI and is setter_only', () => {
+  void test('regime 3: display-only pass-through has no CI and is setter_only', () => {
     const coefficients = makeCoefficients();
     const target = observation({ angle: 40, displayDifficulty: 18, ascensionistCount: 0 });
     const posterior = computePosteriorGrade(target, [], coefficients);
@@ -149,7 +149,7 @@ describe('computePosteriorGrade', () => {
     assert.equal(posterior.confidence, CONFIDENCE.setterOnly);
   });
 
-  test('thin siblings carry their own sampling error — weak pull', () => {
+  void test('thin siblings carry their own sampling error — weak pull', () => {
     const coefficients = makeCoefficients();
     const target = observation({
       angle: 50,
@@ -164,7 +164,7 @@ describe('computePosteriorGrade', () => {
     assert.ok(posterior.localGrade !== null && posterior.localGrade > 21, `pulled too far: ${posterior.localGrade}`);
   });
 
-  test('established crowd is never moved more than the no-shock bound', () => {
+  void test('established crowd is never moved more than the no-shock bound', () => {
     const coefficients = makeCoefficients();
     const target = observation({
       angle: 50,
@@ -178,13 +178,13 @@ describe('computePosteriorGrade', () => {
     assert.ok(posterior.localGrade !== null && posterior.localGrade >= 19, `moved past clamp: ${posterior.localGrade}`);
   });
 
-  test('nothing at all → null grade, setter_only', () => {
+  void test('nothing at all → null grade, setter_only', () => {
     const posterior = computePosteriorGrade(observation({}), [], makeCoefficients());
     assert.equal(posterior.localGrade, null);
     assert.equal(posterior.confidence, CONFIDENCE.setterOnly);
   });
 
-  test('universal grade only for boards with a fitted offset', () => {
+  void test('universal grade only for boards with a fitted offset', () => {
     const coefficients = makeCoefficients();
     const kilter = computePosteriorGrade(
       observation({ difficultyAverage: 20, displayDifficulty: 20, ascensionistCount: 50 }),
@@ -203,8 +203,8 @@ describe('computePosteriorGrade', () => {
   });
 });
 
-describe('assignTier', () => {
-  test('tier boundaries', () => {
+void describe('assignTier', () => {
+  void test('tier boundaries', () => {
     assert.equal(assignTier(2, 0.1), CONFIDENCE.setterOnly);
     assert.equal(assignTier(3, 0.1), CONFIDENCE.provisional);
     assert.equal(assignTier(19, 0.1), CONFIDENCE.provisional);
@@ -214,7 +214,7 @@ describe('assignTier', () => {
   });
 });
 
-describe('shouldPublish', () => {
+void describe('shouldPublish', () => {
   const next = {
     localGrade: 20,
     universalGrade: 18.8,
@@ -223,16 +223,16 @@ describe('shouldPublish', () => {
     confidence: CONFIDENCE.confirmed,
     postSd: 0.2,
   };
-  test('always publishes a first row', () => {
+  void test('always publishes a first row', () => {
     assert.equal(shouldPublish(undefined, next), true);
   });
-  test('suppresses sub-threshold movement', () => {
+  void test('suppresses sub-threshold movement', () => {
     assert.equal(
       shouldPublish({ localGrade: 20.1, universalGrade: 18.9, confidence: CONFIDENCE.confirmed }, next),
       false,
     );
   });
-  test('publishes on tier change or big move', () => {
+  void test('publishes on tier change or big move', () => {
     assert.equal(
       shouldPublish({ localGrade: 20.1, universalGrade: 18.9, confidence: CONFIDENCE.provisional }, next),
       true,
@@ -241,21 +241,21 @@ describe('shouldPublish', () => {
   });
 });
 
-describe('estimateEchoFractions', () => {
-  test('deconvolves auto-copy share from provenance split', () => {
+void describe('estimateEchoFractions', () => {
+  void test('deconvolves auto-copy share from provenance split', () => {
     // e = 0.848 synced echo, a = 0.771 native agreement → λ ≈ 0.336
     const result = estimateEchoFractions([
       { board_type: 'kilter', synced_graded: 10000, synced_echo: 8480, native_graded: 1000, native_echo: 771 },
     ]);
     assert.ok(Math.abs(result.kilter - (0.848 - 0.771) / (1 - 0.771)) < 1e-9);
   });
-  test('falls back on thin data', () => {
+  void test('falls back on thin data', () => {
     const result = estimateEchoFractions([
       { board_type: 'soill', synced_graded: 10, synced_echo: 9, native_graded: 0, native_echo: 0 },
     ]);
     assert.equal(result.soill, DEFAULT_ECHO_FRACTION);
   });
-  test('borrows pooled native agreement when a board has few native ticks', () => {
+  void test('borrows pooled native agreement when a board has few native ticks', () => {
     const result = estimateEchoFractions([
       { board_type: 'kilter', synced_graded: 10000, synced_echo: 8000, native_graded: 2000, native_echo: 1500 },
       { board_type: 'tension', synced_graded: 5000, synced_echo: 4500, native_graded: 10, native_echo: 9 },
@@ -266,8 +266,8 @@ describe('estimateEchoFractions', () => {
   });
 });
 
-describe('estimateSigmaWithin', () => {
-  test('takes sqrt of mean squared deviation and backfills bands', () => {
+void describe('estimateSigmaWithin', () => {
+  void test('takes sqrt of mean squared deviation and backfills bands', () => {
     const result = estimateSigmaWithin([
       { board_type: 'kilter', grade_band: 'v3-5', mean_sq_deviation: 0.64, n_users: 100 },
       { board_type: 'kilter', grade_band: 'v9+', mean_sq_deviation: 4, n_users: 5 },
@@ -278,8 +278,8 @@ describe('estimateSigmaWithin', () => {
   });
 });
 
-describe('estimateAngleSurface', () => {
-  test('keeps supported cells and builds weighted all-band fallback', () => {
+void describe('estimateAngleSurface', () => {
+  void test('keeps supported cells and builds weighted all-band fallback', () => {
     const rows: AngleSurfaceRow[] = [
       { board_type: 'kilter', grade_band: 'v3-5', angle: 40, offset_from_climb_mean: 0.5, n_climbs: 100 },
       { board_type: 'kilter', grade_band: 'v6-8', angle: 40, offset_from_climb_mean: 0.3, n_climbs: 100 },
@@ -294,8 +294,8 @@ describe('estimateAngleSurface', () => {
   });
 });
 
-describe('estimateTauSquared', () => {
-  test('measures leave-one-angle-out residual variance', () => {
+void describe('estimateTauSquared', () => {
+  void test('measures leave-one-angle-out residual variance', () => {
     // Two-angle climbs where 40° and 50° agree through a zero surface, plus
     // controlled residual spread.
     const rows: TauSampleRow[] = [];
@@ -326,8 +326,8 @@ describe('estimateTauSquared', () => {
   });
 });
 
-describe('estimateBoardOffsets', () => {
-  test('median gap with LOO stability', () => {
+void describe('estimateBoardOffsets', () => {
+  void test('median gap with LOO stability', () => {
     const rows: BoardOffsetSampleRow[] = Array.from({ length: 30 }, (_, i) => ({
       user_id: `user-${i}`,
       kilter_median: 20,
@@ -341,13 +341,13 @@ describe('estimateBoardOffsets', () => {
     assert.ok(kilter.looMaxDelta < 0.5);
     assert.equal(kilter.users, 30);
   });
-  test('refuses with too few shared users', () => {
+  void test('refuses with too few shared users', () => {
     assert.equal(estimateBoardOffsets([]).kilter, null);
   });
 });
 
-describe('evaluateResidualGapGate', () => {
-  test('passes when mean gap matches fitted offset', () => {
+void describe('evaluateResidualGapGate', () => {
+  void test('passes when mean gap matches fitted offset', () => {
     const rows: BoardOffsetSampleRow[] = Array.from({ length: 25 }, (_, i) => ({
       user_id: `user-${i}`,
       kilter_median: 20,
@@ -358,7 +358,7 @@ describe('evaluateResidualGapGate', () => {
     const gate = evaluateResidualGapGate(rows, -1.2);
     assert.equal(gate.passed, true);
   });
-  test('fails when the offset misrepresents the population', () => {
+  void test('fails when the offset misrepresents the population', () => {
     const rows: BoardOffsetSampleRow[] = Array.from({ length: 25 }, (_, i) => ({
       user_id: `user-${i}`,
       kilter_median: 20,
@@ -371,16 +371,16 @@ describe('evaluateResidualGapGate', () => {
   });
 });
 
-describe('evaluateFingerprintGate', () => {
-  test('tolerates up to 1% disagreement', () => {
+void describe('evaluateFingerprintGate', () => {
+  void test('tolerates up to 1% disagreement', () => {
     assert.equal(evaluateFingerprintGate({ violations: 1, groups: 200 }).passed, true);
     assert.equal(evaluateFingerprintGate({ violations: 10, groups: 200 }).passed, false);
     assert.equal(evaluateFingerprintGate({ violations: 0, groups: 0 }).passed, true);
   });
 });
 
-describe('evaluateBacktest', () => {
-  test('multi-angle blending beats the raw tail mean on synthetic data', () => {
+void describe('evaluateBacktest', () => {
+  void test('multi-angle blending beats the raw tail mean on synthetic data', () => {
     const coefficients = makeCoefficients({
       angleOffset: { kilter: { all: { 40: 0, 50: 0 } } },
     });
@@ -404,7 +404,7 @@ describe('evaluateBacktest', () => {
     assert.equal(summary.tailGate.passed, true, summary.tailGate.detail);
   });
 
-  test('single-angle rows assert no-regression only', () => {
+  void test('single-angle rows assert no-regression only', () => {
     const coefficients = makeCoefficients();
     const rows: BacktestSampleRow[] = Array.from({ length: 120 }, (_, i) => ({
       board_type: 'kilter',

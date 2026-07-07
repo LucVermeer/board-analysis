@@ -16,7 +16,10 @@
  * Model spec and the reasoning behind every threshold: docs/boardsesh-grade.md.
  *
  * Run locally: `node --import tsx packages/db/scripts/refresh-climb-grades.ts`
- * Flags: --refit-coefficients (force a refit), --dry-run (gates + stats only).
+ * Flags: --refit-coefficients (force a refit), --dry-run (gates + stats only),
+ * --validate-only (read-only gates report, works without the grade tables),
+ * --allow-empty-backtest (dev DBs without stats history: skip the backtest
+ * instead of blocking — never use in prod).
  */
 import { sql } from 'drizzle-orm';
 import { createScriptDb } from './db-connection.js';
@@ -542,6 +545,7 @@ async function validateOnly(db: Db): Promise<void> {
 async function main(): Promise<void> {
   const forceRefit = process.argv.includes('--refit-coefficients');
   const dryRun = process.argv.includes('--dry-run');
+  const allowEmptyBacktest = process.argv.includes('--allow-empty-backtest');
   const { db, close } = createScriptDb();
   try {
     if (process.argv.includes('--validate-only')) {
@@ -556,12 +560,28 @@ async function main(): Promise<void> {
     // Pre-write gates: history backtest + cross-board residual.
     console.log('[grades] running backtest gate…');
     const backtestRows = rowsOf<BacktestSampleRow>(await db.execute(buildBacktestSampleSql(BACKTEST_SAMPLE_LIMIT)));
-    const backtest = evaluateBacktest(backtestRows, coefficients);
-    gates.push(backtest.tailGate, backtest.headGate);
-    console.log(
-      `[grades]   tail_backtest: ${backtest.tailGate.passed ? 'PASS' : 'FAIL'} — ${backtest.tailGate.detail}`,
-    );
-    console.log(`[grades]   head_holdout: ${backtest.headGate.passed ? 'PASS' : 'FAIL'} — ${backtest.headGate.detail}`);
+    if (backtestRows.length === 0 && allowEmptyBacktest) {
+      // Environments without stats history (e.g. the dev DB image) can't run
+      // the backtest at all — that's "no evidence", not a model regression.
+      // Prod keeps the strict behavior: an empty sample there means a broken
+      // query and must block.
+      console.warn('[grades]   backtest SKIPPED — no stats-history sample (--allow-empty-backtest).');
+      gates.push({
+        gate: 'tail_backtest',
+        passed: true,
+        detail: 'skipped: empty history sample (--allow-empty-backtest)',
+        metrics: { multiN: 0 },
+      });
+    } else {
+      const backtest = evaluateBacktest(backtestRows, coefficients);
+      gates.push(backtest.tailGate, backtest.headGate);
+      console.log(
+        `[grades]   tail_backtest: ${backtest.tailGate.passed ? 'PASS' : 'FAIL'} — ${backtest.tailGate.detail}`,
+      );
+      console.log(
+        `[grades]   head_holdout: ${backtest.headGate.passed ? 'PASS' : 'FAIL'} — ${backtest.headGate.detail}`,
+      );
+    }
 
     const kilterOffset = coefficients.boardOffset.kilter;
     if (kilterOffset) {
