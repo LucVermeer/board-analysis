@@ -42,8 +42,9 @@ type ClimbReactionMenuProps = {
   onEditEntry?: () => void;
   /** When provided, the "Add beta video" action runs this instead of opening the
    *  root beta sheet — the play drawer passes its own in-tree opener so the sheet
-   *  stacks above the `/play` modal (#3505). */
-  onAddBetaVideo?: () => void;
+   *  stacks above the `/play` modal (#3505). Receives the climb/board snapshot the
+   *  menu was opened for. */
+  onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
   /** Read once at the app root (resolved) and passed in, so the mount-time enter
    *  animation uses the real value rather than useReduceMotion's conservative default. */
   reduceMotion: boolean;

@@ -76,9 +76,11 @@ type UseClimbActionsArgs = {
    * When provided, the "Add beta video" action runs this INSTEAD of opening the
    * root `AddBetaVideoSheet`. The play drawer passes its own in-tree sheet opener
    * so the beta sheet stacks above the `/play` fullScreenModal (a root-tree sheet
-   * can't present over it — see #3505). Omit it and beta opens the root sheet.
+   * can't present over it — see #3505). Receives the same `climb`/`boardConfig`
+   * snapshot the fallback path uses, so a party-session queue/angle change while
+   * the menu is open can't retarget it. Omit it and beta opens the root sheet.
    */
-  onAddBetaVideo?: () => void;
+  onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
 };
 
 // Mirrors web's constructClimbInfoUrl: Kilter no longer has a public app URL.
@@ -265,8 +267,9 @@ export function useClimbActions({
         run: () => {
           // Play drawer passes its own in-tree opener so the beta sheet stacks
           // above the `/play` modal; every other surface falls back to the root
-          // sheet (correct there — no covering modal). See #3505.
-          if (onAddBetaVideo) onAddBetaVideo();
+          // sheet (correct there — no covering modal). Both take the same
+          // climb/board snapshot so a live queue change can't retarget it. See #3505.
+          if (onAddBetaVideo) onAddBetaVideo(climb, boardConfig);
           else openAddBetaVideo(climb, boardConfig);
           after();
         },

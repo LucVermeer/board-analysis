@@ -59,8 +59,9 @@ export type OpenClimbActionsOptions = {
   onEditEntry?: () => void;
   /** When set, the "Add beta video" action runs this instead of opening the root
    *  beta sheet. The play drawer passes its own in-tree opener so the sheet stacks
-   *  above the `/play` fullScreenModal (a root-tree sheet can't — see #3505). */
-  onAddBetaVideo?: () => void;
+   *  above the `/play` fullScreenModal (a root-tree sheet can't — see #3505). It
+   *  receives the climb/board snapshot the menu was opened for. */
+  onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
 };
 
 export type LogAscentInput = {
@@ -325,7 +326,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     climb: Climb;
     boardConfig: BoardConfig;
     onEditEntry?: () => void;
-    onAddBetaVideo?: () => void;
+    onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
   } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();

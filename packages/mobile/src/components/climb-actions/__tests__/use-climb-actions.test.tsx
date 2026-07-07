@@ -173,7 +173,8 @@ describe('useClimbActions colours and dispatch', () => {
       useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: true, onAddBetaVideo, onAfterAction }),
     );
     result.current.find((action) => action.id === 'betaVideo')?.run();
-    expect(onAddBetaVideo).toHaveBeenCalledTimes(1);
+    // Same climb/board snapshot the root path uses, so a live queue change can't retarget it.
+    expect(onAddBetaVideo).toHaveBeenCalledWith(climb, kilterBoard);
     // The play drawer's own sheet takes over — the root opener is skipped, but the
     // reaction menu still dismisses (unlike the inline playlist path).
     expect(openers.openAddBetaVideo).not.toHaveBeenCalled();

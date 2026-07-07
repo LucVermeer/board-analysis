@@ -228,6 +228,10 @@ export function PlayDrawer({
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
+  // Non-null when the reaction menu opened the beta sheet for a specific climb
+  // snapshot (so a live queue/angle change can't retarget it); null when the Beta
+  // Videos "+" button opened it for the live displayedClimb. See #3505.
+  const [betaVideoTarget, setBetaVideoTarget] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
@@ -631,7 +635,19 @@ export function PlayDrawer({
     setBleControlVisible(true);
   }, [bluetooth]);
 
+  // The "+" button in the Beta Videos section adds beta for the climb currently
+  // shown — clear any snapshot so the sheet reads the live displayedClimb.
   const handleOpenAddBetaVideo = useCallback(() => {
+    setBetaVideoTarget(null);
+    setAddBetaVideoOpen(true);
+  }, []);
+
+  // The reaction menu's beta action passes the climb/board it was opened for.
+  // Snapshot it so a party-session queue/angle change while the menu is open can't
+  // retarget the sheet onto a different climb (the root-sheet fallback snapshots
+  // the same way — see #3505 review).
+  const handleOpenAddBetaVideoForClimb = useCallback((targetClimb: Climb, targetBoardConfig: BoardConfig) => {
+    setBetaVideoTarget({ climb: targetClimb, boardConfig: targetBoardConfig });
     setAddBetaVideoOpen(true);
   }, []);
 
@@ -646,11 +662,11 @@ export function PlayDrawer({
       // Hand the reaction menu the drawer's OWN beta opener so the share-your-beta
       // sheet presents inside the `/play` modal (above it) rather than the root
       // sheet, which can't stack over the fullScreenModal (#3505).
-      onOpenClimbActions(displayedClimb, undefined, { onAddBetaVideo: handleOpenAddBetaVideo });
+      onOpenClimbActions(displayedClimb, undefined, { onAddBetaVideo: handleOpenAddBetaVideoForClimb });
       return;
     }
     setActiveSubDrawer('actions');
-  }, [onOpenClimbActions, displayedClimb, handleOpenAddBetaVideo]);
+  }, [onOpenClimbActions, displayedClimb, handleOpenAddBetaVideoForClimb]);
 
   const handleScrollTowardBelowFold = useCallback(() => {
     setBelowFoldContentRequested(true);
@@ -981,10 +997,12 @@ export function PlayDrawer({
       {mountAddBetaVideo && (
         <AddBetaVideoSheet
           visible={addBetaVideoOpen}
-          climb={displayedClimb ?? null}
-          boardName={boardName as BoardName}
-          layoutId={layoutId}
-          angle={angle}
+          // Snapshot when the reaction menu opened it for a specific climb;
+          // otherwise the live displayedClimb (the "+" button path). See #3505.
+          climb={betaVideoTarget?.climb ?? displayedClimb ?? null}
+          boardName={(betaVideoTarget?.boardConfig.boardName ?? boardName) as BoardName}
+          layoutId={betaVideoTarget?.boardConfig.layoutId ?? layoutId}
+          angle={betaVideoTarget?.boardConfig.angle ?? angle}
           onClose={handleCloseAddBetaVideo}
         />
       )}
