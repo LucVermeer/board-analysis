@@ -117,6 +117,8 @@ function ProfileTopChromeMaterial({
         ) : null}
       </Appbar.Header>
 
+      {/* Inner box-none is fine: the outer `auto` container already claims the RNGH
+          pointer, so this wrapper only needs RN hit-testing to reach the tabs. */}
       <View pointerEvents="box-none" style={[styles.materialTabsRow, { borderTopColor: m3.outlineVariant }]}>
         <MaterialTabs
           options={tabOptions}

@@ -216,6 +216,11 @@ export function ClimbTopChrome({
           </View>
         ) : null}
 
+        {/* Inner wrappers stay box-none: once the outer `auto` container claims the
+            RNGH pointer, only RN's own hit-testing runs inside, where box-none just
+            means "let touches reach the controls". If an inner control ever adopts
+            an RNGH gesture it needs no change — the outer container already stops
+            the list's handlers from being recorded. */}
         {usesCustomSearch ? (
           <View pointerEvents="box-none" style={styles.materialSearchStack}>
             <View pointerEvents="box-none" style={styles.materialSearchRow}>
