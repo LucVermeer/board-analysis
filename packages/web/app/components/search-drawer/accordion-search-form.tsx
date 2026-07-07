@@ -42,11 +42,7 @@ import CollapsibleSection, {
 import { useTranslation } from 'react-i18next';
 import styles from './accordion-search-form.module.css';
 
-import {
-  KILTER_HOMEWALL_LAYOUT_ID,
-  isKilterHomewallTallSizeId,
-  isKilterHomewallWideSizeId,
-} from '@/app/lib/board-constants';
+import { getTallWideScope } from '@/app/lib/board-constants';
 
 type AccordionSearchFormProps = {
   boardDetails: BoardDetails;
@@ -62,9 +58,13 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const [showSort, setShowSort] = useState(false);
   const summaryLabels = createSearchSummaryLabels(t);
 
-  const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
-  const showTallClimbsFilter = isKilterHomewall && isKilterHomewallTallSizeId(boardDetails.size_id);
-  const showWideClimbsFilter = isKilterHomewall && isKilterHomewallWideSizeId(boardDetails.size_id);
+  // Tall/Wide filters show on any board whose active size has a shorter/narrower
+  // size in its product family (getTallWideScope — shared with mobile + server).
+  const { hasShorter: showTallClimbsFilter, hasNarrower: showWideClimbsFilter } = getTallWideScope(
+    boardDetails.board_name,
+    boardDetails.layout_id,
+    boardDetails.size_id,
+  );
   const minRatingPickerValue = getMinRatingPickerValue(uiSearchParams.minRating);
 
   let statusValue: 'any' | 'drafts' | 'established' | 'projects' = 'any';

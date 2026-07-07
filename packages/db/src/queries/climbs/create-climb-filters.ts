@@ -1,72 +1,15 @@
 import { type SQL, eq, gt, gte, sql, like, notLike, inArray, isNull, or, and } from 'drizzle-orm';
-import {
-  KILTER_HOMEWALL_LAYOUT_ID,
-  KILTER_HOMEWALL_PRODUCT_ID,
-  getHolePlacements,
-  getProductSize,
-  isKilterHomewallTallSizeId,
-  isKilterHomewallWideSizeId,
-  type HoldTuple,
-  type ProductSizeData,
-} from '@boardsesh/board-constants/product-sizes';
+import { getTallWideScope } from '@boardsesh/board-constants/product-sizes';
 import {
   boardClimbs,
   boardClimbStats,
   boardseshTicks,
-  boardProductSizes,
   boardClimbHolds,
   boardPlacements,
   boardHoles,
   boardBetaLinks,
 } from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
-
-// Kilter Homewall constants for expansion-aware filtering (layout/product ids
-// come from @boardsesh/board-constants; these sizes/sets are db-query-local).
-const KILTER_HOMEWALL_SMALL_SIZE_ID = 17;
-const KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID = 21;
-const KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS = [26, 27, 28, 29] as const;
-
-function isKilterHomewallWideSideExpansionHold(
-  holdPlacement: HoldTuple,
-  smallSize: ProductSizeData,
-  wideSize: ProductSizeData,
-): boolean {
-  const [, , xCoordinate, yCoordinate] = holdPlacement;
-  // Product-size edges are outer board bounds. A hold exactly on the 7x10 edge
-  // is outside that size, while a hold exactly on the 10x10 outer edge is not
-  // inside the 10x10 renderable area. Match getBoardDetails' strict bounds.
-  const isInsideWideSize =
-    xCoordinate > wideSize.edgeLeft &&
-    xCoordinate < wideSize.edgeRight &&
-    yCoordinate > wideSize.edgeBottom &&
-    yCoordinate < wideSize.edgeTop;
-  const isOutsideSmallWidth = xCoordinate <= smallSize.edgeLeft || xCoordinate >= smallSize.edgeRight;
-  return isInsideWideSize && isOutsideSmallWidth;
-}
-
-function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
-  const smallSize = getProductSize('kilter', KILTER_HOMEWALL_SMALL_SIZE_ID);
-  const wideSize = getProductSize('kilter', KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID);
-  if (!smallSize || !wideSize) {
-    throw new Error('Kilter Homewall size metadata is missing for the wide climb filter');
-  }
-
-  const wideHoldIdsBySet = new Map(
-    KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS.map((setId) => [
-      setId,
-      getHolePlacements('kilter', KILTER_HOMEWALL_LAYOUT_ID, setId)
-        .filter((holdPlacement) => isKilterHomewallWideSideExpansionHold(holdPlacement, smallSize, wideSize))
-        .map(([holdId]) => holdId),
-    ]),
-  );
-  const wideHoldCount = [...wideHoldIdsBySet.values()].reduce((total, holdIds) => total + holdIds.length, 0);
-  if (wideHoldCount === 0) {
-    throw new Error('Kilter Homewall wide climb filter did not find any side-expansion holds');
-  }
-
-  return wideHoldIdsBySet;
-}
 
 // Escape LIKE/ILIKE metacharacters so user-supplied search text is matched
 // literally. Postgres' default escape character is backslash, so `\%`, `\_`,
@@ -76,25 +19,13 @@ function escapeLikePattern(input: string): string {
   return input.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
-// Board constants are generated static data in the deployed bundle, so this
-// production cache is intentionally never invalidated.
-let kilterHomewallWideHoldIdsBySet: ReadonlyMap<number, readonly number[]> | null = null;
-
-function getKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
-  kilterHomewallWideHoldIdsBySet ??= buildKilterHomewallWideHoldIdsBySet();
-  return kilterHomewallWideHoldIdsBySet;
-}
-
-export function resetKilterHomewallWideHoldIdsForTests(): void {
-  kilterHomewallWideHoldIdsBySet = null;
-}
-
-export function getKilterHomewallWideHoldIdsForSets(setIds: readonly number[]): number[] {
-  const selectedSetIds = new Set(setIds);
-  const wideHoldIdsBySet = getKilterHomewallWideHoldIdsBySet();
-  return [...selectedSetIds]
-    .flatMap((setId) => wideHoldIdsBySet.get(setId) ?? [])
-    .sort((leftHoldId, rightHoldId) => leftHoldId - rightHoldId);
+// A Postgres `ARRAY[...]::int[]` literal from a size-id list, for the tall/wide
+// `compatible_size_ids &&` overlap predicates.
+function sizeIdArrayLiteral(sizeIds: readonly number[]): SQL {
+  return sql`ARRAY[${sql.join(
+    sizeIds.map((sizeId) => sql`${sizeId}`),
+    sql`, `,
+  )}]::int[]`;
 }
 
 /**
@@ -354,64 +285,35 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     }
   }
 
-  // Tall climbs filter condition
-  const tallClimbsConditions: SQL[] = [];
+  // Tall / Wide climbs filters. A climb is "tall"/"wide" when it can't be done
+  // on any size of the active layout's product family that is shorter/narrower
+  // than the active size — i.e. its denormalized compatible_size_ids overlaps
+  // none of the shorter/narrower family sizes. getTallWideScope is the single
+  // source of truth (shared with the mobile offline search and every UI chip);
+  // it fails closed (empty sets) when the active size is the shortest/narrowest
+  // in its axis or the (board, layout, size) is unknown/mismatched, so a
+  // stale/crafted request stays restrictive (`false`) instead of returning
+  // everything. Works on every board with a size grid — Kilter Homewall &
+  // Original, Tension Board 2, Decoy, Grasshopper — and no-ops on single-size
+  // boards (MoonBoard, Touchstone).
+  const { narrowerSizeIds, shorterSizeIds, hasNarrower, hasShorter } = getTallWideScope(
+    params.board_name,
+    params.layout_id,
+    params.size_id,
+  );
 
+  const tallClimbsConditions: SQL[] = [];
   if (searchParams.onlyTallClimbs) {
-    const isTallClimbSupportedBoard =
-      params.board_name === 'kilter' &&
-      params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
-      isKilterHomewallTallSizeId(params.size_id);
-    if (!isTallClimbSupportedBoard) {
-      // A stale/crafted URL asked for a board-scoped filter the current board
-      // cannot satisfy. Keep the request restrictive instead of silently
-      // returning unfiltered climbs.
-      tallClimbsConditions.push(sql`false`);
-    } else {
-      tallClimbsConditions.push(
-        sql`${boardClimbs.edgeBottom} < (
-        SELECT MAX(ps.edge_bottom)
-        FROM ${boardProductSizes} ps
-        WHERE ps.board_type = ${params.board_name}
-        AND ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-        AND ps.id != ${params.size_id}
-      )`,
-      );
-    }
+    tallClimbsConditions.push(
+      hasShorter ? sql`NOT (${boardClimbs.compatibleSizeIds} && ${sizeIdArrayLiteral(shorterSizeIds)})` : sql`false`,
+    );
   }
 
   const wideClimbsConditions: SQL[] = [];
-
   if (searchParams.onlyWideClimbs) {
-    const isWideClimbSupportedBoard =
-      params.board_name === 'kilter' &&
-      params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
-      isKilterHomewallWideSizeId(params.size_id);
-    if (!isWideClimbSupportedBoard) {
-      // A stale/crafted URL asked for a board-scoped filter the current board
-      // cannot satisfy. Keep the request restrictive instead of silently
-      // returning unfiltered climbs.
-      wideClimbsConditions.push(sql`false`);
-    } else {
-      const wideHoldIds = getKilterHomewallWideHoldIdsForSets(params.set_ids);
-      if (wideHoldIds.length === 0) {
-        wideClimbsConditions.push(sql`false`);
-      } else {
-        const wideHoldIdLiterals = sql.join(
-          wideHoldIds.map((holdId) => sql`${holdId}`),
-          sql`, `,
-        );
-        // This requires at least one hold in the 10x10 side expansion over 7x10.
-        // On 10x12 boards, other holds may still use the lower 10x12-only rows.
-        wideClimbsConditions.push(sql`EXISTS (
-        SELECT 1
-        FROM ${boardClimbHolds} wide_ch
-        WHERE wide_ch.board_type = ${params.board_name}
-          AND wide_ch.climb_uuid = ${boardClimbs.uuid}
-          AND wide_ch.hold_id IN (${wideHoldIdLiterals})
-      )`);
-      }
-    }
+    wideClimbsConditions.push(
+      hasNarrower ? sql`NOT (${boardClimbs.compatibleSizeIds} && ${sizeIdArrayLiteral(narrowerSizeIds)})` : sql`false`,
+    );
   }
 
   // Beta-videos filter: keep only climbs that have at least one beta link the

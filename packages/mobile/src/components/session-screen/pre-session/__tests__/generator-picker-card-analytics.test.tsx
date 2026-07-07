@@ -91,9 +91,9 @@ vi.mock('@boardsesh/board-config', () => ({
   ],
 }));
 vi.mock('@boardsesh/board-constants', () => ({
-  KILTER_HOMEWALL_LAYOUT_ID: 8,
-  isKilterHomewallTallSizeId: () => false,
-  isKilterHomewallWideSizeId: () => false,
+  // No shorter/narrower sizes → no tall/wide chips, keeping this analytics test
+  // focused on the other filters.
+  getTallWideScope: () => ({ narrowerSizeIds: [], shorterSizeIds: [], hasNarrower: false, hasShorter: false }),
 }));
 vi.mock('@boardsesh/climb-filters', () => ({
   formatMinAscentsFilterCount: (value: number) => String(value),

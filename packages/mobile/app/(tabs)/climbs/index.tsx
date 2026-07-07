@@ -18,11 +18,7 @@ import {
   type ClimbBoardFilterState,
   type GradeTapMeta,
 } from '@boardsesh/climb-filters';
-import {
-  KILTER_HOMEWALL_LAYOUT_ID,
-  isKilterHomewallTallSizeId,
-  isKilterHomewallWideSizeId,
-} from '@boardsesh/board-constants';
+import { getTallWideScope } from '@boardsesh/board-constants';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ClimbListRowSkeleton } from '../../../src/components/ClimbListRowSkeleton';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
@@ -55,6 +51,8 @@ import { useLastUsedGrade } from '../../../src/hooks/use-last-used-grade';
 import { useClimbListPlaylistMemberships } from '../../../src/hooks/use-climb-list-playlist-memberships';
 import { useInfiniteSearchClimbs } from '../../../src/lib/graphql/hooks/use-infinite-search-climbs';
 import { offlineAwareRequest } from '../../../src/lib/graphql/offline-request';
+import { isOfflineSearchSupported } from '../../../src/db/queries/search-climbs-local';
+import { useIsOffline } from '../../../src/hooks/use-is-offline';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
@@ -364,6 +362,9 @@ function ClimbListInner() {
   const angle = activeBoard?.angle ?? 0;
 
   const hasBoardConfig = !!activeBoard;
+
+  // Reactive connectivity, for the offline-only empty state below.
+  const isOffline = useIsOffline();
 
   const { data: gradesData } = useGrades(boardName);
   const gradesRef = useRef(gradesData);
@@ -1035,14 +1036,18 @@ function ClimbListInner() {
     (next: boolean) => patchBoardFilters({ onlyBenchmarks: next || undefined }),
     [patchBoardFilters],
   );
-  // Tall/Wide chips: only on the Kilter homewall sizes where they apply, mirroring
-  // web (isKilterHomewall{Tall,Wide}SizeId) — Wide on 10x10, Tall on 8x12, both on
-  // 10x12. Tap toggles the filter; long-press locks it (persisted) so it survives
-  // clears — the re-pin effects below re-apply a locked filter whenever it's cleared.
+  // Tall/Wide chips appear on any board whose active size has a shorter/narrower
+  // size in its product family — Kilter Homewall & Original, Tension Board 2,
+  // Decoy, Grasshopper (getTallWideScope is the shared source of truth, matching
+  // the server filter). Tap toggles the filter; long-press locks it (persisted)
+  // so it survives clears — the re-pin effects below re-apply a locked filter
+  // whenever it's cleared.
   const { locks: dimensionLocks, setLock: setDimensionLock } = useDimensionLocks();
-  const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
-  const showTallChip = isKilterHomewall && isKilterHomewallTallSizeId(sizeId);
-  const showWideChip = isKilterHomewall && isKilterHomewallWideSizeId(sizeId);
+  const { hasShorter: showTallChip, hasNarrower: showWideChip } = getTallWideScope(
+    boardName as BoardName,
+    layoutId,
+    sizeId,
+  );
   const dimensionChips = useMemo<DimensionChip[]>(() => {
     const chips: DimensionChip[] = [];
     if (showTallChip) {
@@ -1325,6 +1330,11 @@ function ClimbListInner() {
   }
 
   const isEmpty = visibleClimbs.length === 0 && !isClimbsLoading;
+  // Offline with a filter we can't answer on-device (drafts, beta, zones, hold
+  // state) — the search returns an empty result, so tell the user why instead of
+  // the generic "no climbs". Tall/wide are offline-expressible, so they don't
+  // trip this.
+  const offlineFilterUnavailable = isEmpty && isOffline && !isOfflineSearchSupported(searchInput);
 
   return (
     <View testID="climbs-screen" style={[styles.container, { backgroundColor: systemColors.background }]}>
@@ -1352,6 +1362,22 @@ function ClimbListInner() {
         ListEmptyComponent={
           showInitialSkeletons ? (
             <ClimbListSkeletonRows count={INITIAL_SKELETON_ROW_COUNT} />
+          ) : offlineFilterUnavailable ? (
+            <View style={styles.emptyContainer}>
+              <Icon name="offline.unavailable" size={48} color={iosSystemColors.systemGray4} />
+              <Text variant="headline" style={styles.emptyTitle}>
+                {t('mobile.emptyState.offlineFilter.title')}
+              </Text>
+              <Text variant="subheadline" style={styles.emptySubtitle}>
+                {t('mobile.emptyState.offlineFilter.subtitle')}
+              </Text>
+              <Button
+                title={t('mobile.emptyState.offlineFilter.cta')}
+                variant="outlined"
+                onPress={handleClearNonGradeFilters}
+                style={styles.emptyCta}
+              />
+            </View>
           ) : isEmpty ? (
             <View style={styles.emptyContainer}>
               <Icon name="search" size={48} color={iosSystemColors.systemGray4} />

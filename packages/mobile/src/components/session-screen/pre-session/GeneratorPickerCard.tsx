@@ -5,11 +5,7 @@ import { Chip as PaperChip } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, Grade } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
-import {
-  KILTER_HOMEWALL_LAYOUT_ID,
-  isKilterHomewallTallSizeId,
-  isKilterHomewallWideSizeId,
-} from '@boardsesh/board-constants';
+import { getTallWideScope } from '@boardsesh/board-constants';
 import {
   formatMinAscentsFilterCount,
   getMinAscentsFilterOptions,
@@ -271,9 +267,10 @@ export function GeneratorPickerCard({
   const { formatGradeByDifficultyId } = useGradeFormat();
   const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
 
-  const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
-  const showTallClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallTallSizeId(sizeId);
-  const showWideClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallWideSizeId(sizeId);
+  const tallWideScope =
+    boardName != null && layoutId != null && sizeId != null ? getTallWideScope(boardName, layoutId, sizeId) : null;
+  const showTallClimbsFilter = tallWideScope?.hasShorter ?? false;
+  const showWideClimbsFilter = tallWideScope?.hasNarrower ?? false;
 
   useEffect(() => {
     if (selection.type !== 'on') return;

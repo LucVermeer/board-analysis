@@ -37,11 +37,7 @@ import {
 } from './types';
 import styles from './generator-options-form.module.css';
 
-import {
-  KILTER_HOMEWALL_LAYOUT_ID,
-  isKilterHomewallTallSizeId,
-  isKilterHomewallWideSizeId,
-} from '@/app/lib/board-constants';
+import { getTallWideScope } from '@/app/lib/board-constants';
 
 const qualityBucketRowSx: SxProps<Theme> = {
   alignItems: 'stretch',
@@ -85,10 +81,13 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
     label: t(`generator.climbBiasOptions.${value}`),
   }));
 
-  // Check if we should show the tall climbs filter.
-  const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
-  const showTallClimbsFilter = isKilterHomewall && isKilterHomewallTallSizeId(boardDetails.size_id);
-  const showWideClimbsFilter = isKilterHomewall && isKilterHomewallWideSizeId(boardDetails.size_id);
+  // Tall/Wide filters show on any board whose active size has a shorter/narrower
+  // size in its product family (getTallWideScope — shared with mobile + server).
+  const { hasShorter: showTallClimbsFilter, hasNarrower: showWideClimbsFilter } = getTallWideScope(
+    boardDetails.board_name,
+    boardDetails.layout_id,
+    boardDetails.size_id,
+  );
 
   // Helper to update options
   const updateOption = <K extends keyof GeneratorOptions>(key: K, value: GeneratorOptions[K]) => {

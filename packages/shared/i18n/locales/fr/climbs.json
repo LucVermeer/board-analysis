@@ -559,6 +559,11 @@
       "noMatches": {
         "title": "Aucun résultat",
         "description": "Rien ne correspond à \"{{query}}\""
+      },
+      "offlineFilter": {
+        "title": "Ce filtre nécessite une connexion",
+        "subtitle": "Les brouillons, les betas, les zones et les filtres de prises ne fonctionnent qu'en ligne. Efface-le pour continuer à parcourir hors ligne.",
+        "cta": "Effacer le filtre"
       }
     },
     "detail": {
