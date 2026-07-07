@@ -1,0 +1,1 @@
+CREATE INDEX "sync_deletions_null_scope_idx" ON "sync_deletions" USING btree ("deleted_at","id") WHERE "sync_deletions"."user_id" IS NULL;

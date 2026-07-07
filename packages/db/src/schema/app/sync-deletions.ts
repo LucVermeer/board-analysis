@@ -1,4 +1,5 @@
 import { pgTable, bigserial, text, timestamp, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 /**
  * Sync deletions — append-only log of hard deletes for the mobile offline sync
@@ -34,6 +35,12 @@ export const syncDeletions = pgTable(
     // (deleted_at, id) row-value pairs. Leading user_id keeps each user's pull
     // index-only.
     userSinceIdx: index('sync_deletions_user_since_idx').on(table.userId, table.deletedAt, table.id),
+    // The resolver's `user_id = $x OR user_id IS NULL` can't ride the composite
+    // index's leading user_id column as ONE range scan; this partial index gives
+    // the reference-data (NULL-scoped) branch its own narrow scan.
+    nullScopeIdx: index('sync_deletions_null_scope_idx')
+      .on(table.deletedAt, table.id)
+      .where(sql`${table.userId} IS NULL`),
   }),
 );
 

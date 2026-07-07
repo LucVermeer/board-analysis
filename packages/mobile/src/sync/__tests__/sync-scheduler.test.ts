@@ -204,4 +204,30 @@ describe('sync-scheduler', () => {
     // Cleanup unsubscribes both listeners without throwing.
     expect(() => stop()).not.toThrow();
   });
+
+  it('a trigger queued behind an in-flight cycle does NOT re-run after cleanup', async () => {
+    // Sign-out / flag-flip stops the scheduler while a cycle is mid-pull; the
+    // pending follow-up captured before the stop must die with it, or a "new"
+    // sync fires with nothing mounted to own it.
+    const drainQueue: DrainQueue = vi.fn().mockResolvedValue(undefined);
+    const queryClient = createMockQueryClient();
+    const inFlightPull = deferred();
+    mockPullSync.mockImplementation(() => inFlightPull.promise);
+
+    const stop = startSyncScheduler(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue);
+    await flush();
+    expect(mockPullSync).toHaveBeenCalledTimes(1);
+
+    // A trigger arrives while the initial cycle is still pulling → queued.
+    triggerSync(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue);
+    await flush();
+
+    // Scheduler stops before the in-flight cycle finishes.
+    stop();
+    inFlightPull.resolve();
+    await flush();
+
+    // The queued follow-up must NOT have fired a second cycle.
+    expect(mockPullSync).toHaveBeenCalledTimes(1);
+  });
 });

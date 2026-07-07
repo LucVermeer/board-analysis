@@ -129,5 +129,10 @@ export function startSyncScheduler(
     if (foregroundTimeout) clearTimeout(foregroundTimeout);
     appStateSubscription.remove();
     netInfoUnsubscribe();
+    // A trigger queued behind an in-flight cycle would otherwise fire that
+    // cycle's finally-block re-run AFTER this scheduler stopped (sign-out,
+    // flag flip). React runs this cleanup before any replacement scheduler's
+    // effect, so a remounting bridge can't lose its own trigger here.
+    pendingTrigger = false;
   };
 }
