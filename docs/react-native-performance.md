@@ -287,8 +287,13 @@ and the play-drawer carousel piling a native-res (~7 MB RGBA) overlay per swiped
 cache. Display-sizing + recycling cut carousel browse-growth ~19%; background-blanking cut the
 worst case (board left open on app-switch) ~96 MB. **Ceiling:** expo-image on Android is Glide,
 whose cache/pool are sized to device RAM and resist JS `clearMemoryCache()` (the native allocator
-retains freed pages), so the common feed-backgrounded footprint is unmoved by JS — the next lever is
-native (`onTrimMemory(UI_HIDDEN) → Glide.clearMemory()`). The high MB on a 12 GB device overstates
+retains freed pages), so the common feed-backgrounded footprint is unmoved by JS. The native lever
+is implemented: `modules/memory-trim/` registers a `ComponentCallbacks2` that full-clears Glide
+(memory cache + bitmap/array pools) on `onTrimMemory(UI_HIDDEN..39)` — the window where stock
+Glide only half-trims (it already full-clears at `BACKGROUND(40)+`). The module is side-effect-only
+and activated by a JS import in `app/_layout.tsx` (Expo modules are created lazily on first JS
+access — without the import its OnCreate never runs). Verify via
+`adb logcat -s MemoryTrim`. The high MB on a 12 GB device overstates
 real risk; the OOM actually reproduces on 4 GB iPhones.
 
 **Examples in this repo:**
@@ -297,6 +302,8 @@ real risk; the OOM actually reproduces on 4 GB iPhones.
   listener) + `packages/mobile/src/hooks/use-image-cache-memory-management.ts` (root cache sweep).
 - `renderWidth` + `backgroundVariant` threaded through `BoardImageNative.tsx` →
   `use-native-climb-render.ts`; applied in `play-drawer/SwipeBoardCarousel.tsx`.
+- `packages/mobile/modules/memory-trim/` (Android-only) — native Glide full-clear at
+  `TRIM_MEMORY_UI_HIDDEN`; policy in `MemoryTrimPolicy.kt`, activation import in `app/_layout.tsx`.
 
 ---
 

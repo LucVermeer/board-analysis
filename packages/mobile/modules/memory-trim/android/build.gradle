@@ -1,0 +1,44 @@
+plugins {
+  id 'com.android.library'
+  // Canonical Expo local-module plugin: applies Kotlin + provides
+  // expo-modules-core (Module/ModuleDefinition API) on the compile classpath,
+  // version-proof. Groovy (not .kts) so the library defaultConfig
+  // versionCode/versionName the plugin requires can be set.
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.boardsesh'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.memorytrim'
+  compileSdk 36
+
+  defaultConfig {
+    minSdk 24
+    // Required by expo-module-gradle-plugin's publication setup.
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // Glide is provided AT RUNTIME by expo-image, which declares
+  //   api "com.github.bumptech.glide:glide:5.0.5"
+  // in node_modules/expo-image/android/build.gradle. Because that's an `api`
+  // (not `implementation`) dependency, Glide 5.0.5 is already exposed on the
+  // merged app classpath. This module only needs the Glide *types* at compile
+  // time to call Glide.get(app).clearMemory()/trimMemory(), so we use
+  // `compileOnly` at the exact same version: it compiles against the same Glide
+  // the app runs, without bundling a second (potentially version-skewed) copy of
+  // Glide into the APK. Version skew with expo-image's bundled Glide is the main
+  // build/runtime risk here — keep this version in lockstep with expo-image's
+  // GLIDE_VERSION whenever expo-image is upgraded.
+  compileOnly 'com.github.bumptech.glide:glide:5.0.5'
+
+  // JVM unit tests for the trim-level policy (which onTrimMemory levels we
+  // full-clear vs leave to stock Glide). Run via :…:testDebugUnitTest in
+  // .github/workflows/android-pr-rn.yml; the repo's `vp` flow has no Kotlin
+  // test runner.
+  testImplementation 'junit:junit:4.13.2'
+}
