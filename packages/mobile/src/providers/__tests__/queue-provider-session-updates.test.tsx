@@ -691,6 +691,55 @@ describe('QueueProvider session update subscription', () => {
     });
   });
 
+  it('retries the re-announce on the next identity change after a failed UPDATE_USERNAME', async () => {
+    // Profile unresolved at join; JOIN carries the empty identity.
+    partyProfile.username = undefined;
+    partyProfile.avatarUrl = undefined;
+    const snapshots: Snapshot[] = [];
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+
+    // Profile resolves — the re-announce fires but the mutation fails, so the
+    // ref must NOT advance (otherwise the next change wouldn't retry).
+    graph.execute.mockRejectedValueOnce(new Error('transient network error'));
+    act(() => {
+      partyProfile.username = 'Marco';
+      partyProfile.avatarUrl = 'https://example.com/marco.png';
+      rerender(makeTree());
+    });
+    await waitFor(() => {
+      const attempted = graph.execute.mock.calls.some((args) => {
+        const operation = args[1] as { query?: string; variables?: Record<string, unknown> } | undefined;
+        return operation?.query?.includes('updateUsername') && operation.variables?.username === 'Marco';
+      });
+      expect(attempted).toBe(true);
+    });
+
+    // Identity changes again — because the failure left the ref untouched, the
+    // re-announce retries with the new identity.
+    act(() => {
+      partyProfile.username = 'Marco Polo';
+      partyProfile.avatarUrl = 'https://example.com/marco-2.png';
+      rerender(makeTree());
+    });
+    await waitFor(() => {
+      const retried = graph.execute.mock.calls.some((args) => {
+        const operation = args[1] as { query?: string; variables?: Record<string, unknown> } | undefined;
+        return operation?.query?.includes('updateUsername') && operation.variables?.username === 'Marco Polo';
+      });
+      expect(retried).toBe(true);
+    });
+  });
+
   it('keeps the session-id selector value stable across queue mutations', async () => {
     const snapshots: Snapshot[] = [];
     const selectorSnapshots: SelectorSnapshot[] = [];

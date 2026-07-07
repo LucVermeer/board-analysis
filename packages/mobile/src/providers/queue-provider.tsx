@@ -288,19 +288,21 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // race where the authenticated profile resolves after a cold-launch eager join
   // (roster would otherwise stay on the `User-<uuid>` fallback), and profile
   // edits made mid-session. `announcedIdentityRef` is seeded at join time so this
-  // never fires a redundant re-announce right after joining. Best-effort — a
-  // failed presence update isn't worth surfacing to the user.
+  // never fires a redundant re-announce right after joining. Best-effort, but the
+  // ref only advances on success — so a transient failure is retried the next
+  // time identity changes instead of being silently swallowed.
   useEffect(() => {
     if (!participantId || !partyUsername) return;
     const announced = announcedIdentityRef.current;
     if (announced && announced.username === partyUsername && announced.avatarUrl === partyAvatarUrl) return;
-    announcedIdentityRef.current = { username: partyUsername, avatarUrl: partyAvatarUrl };
-    void execute(getWsClient(), {
-      query: UPDATE_USERNAME,
-      variables: { username: partyUsername, avatarUrl: partyAvatarUrl },
-    }).catch((error) => {
-      if (__DEV__) console.warn('[queue] failed to re-announce identity', error);
-    });
+    const pending = { username: partyUsername, avatarUrl: partyAvatarUrl };
+    void execute(getWsClient(), { query: UPDATE_USERNAME, variables: pending })
+      .then(() => {
+        announcedIdentityRef.current = pending;
+      })
+      .catch((error) => {
+        if (__DEV__) console.warn('[queue] failed to re-announce identity', error);
+      });
   }, [participantId, partyUsername, partyAvatarUrl]);
 
   // Build the sync coordinator once per provider mount. The clientId is
