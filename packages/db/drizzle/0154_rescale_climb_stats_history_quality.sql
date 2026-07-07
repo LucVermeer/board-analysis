@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS _bs_migration_guards (
   applied_at timestamptz NOT NULL DEFAULT now()
 );
 
+COMMENT ON TABLE _bs_migration_guards IS
+  'Double-apply guards for non-idempotent data migrations. DO NOT DROP: without the guard rows a manual re-application of 0149/0150/0154 would re-rescale quality values and corrupt them.';
+
 DO $$
 DECLARE
   v_batch bigint := 50000;
