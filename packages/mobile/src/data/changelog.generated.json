@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-07T04:13:11.158Z",
+  "generatedAt": "2026-07-07T07:49:13.375Z",
   "entries": [
+    {
+      "prNumber": 3509,
+      "category": "improved",
+      "title": "The play drawer shows your climb the moment it opens, instead of a grey box catching up",
+      "mergedAt": "2026-07-07T07:48:18Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3509",
+      "body": "Scrolling, searching, and queueing climbs is smoother, especially on Android"
+    },
     {
       "prNumber": 3498,
       "category": "new",
