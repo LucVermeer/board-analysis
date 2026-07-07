@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-07T21:14:56.088Z",
+  "generatedAt": "2026-07-07T23:23:52.061Z",
   "entries": [
+    {
+      "prNumber": 3547,
+      "category": "fixed",
+      "title": "Star ratings finally read true on every board — Kilter classics that were stuck at 3 stars now show their real 5",
+      "mergedAt": "2026-07-07T23:22:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3547",
+      "body": "Low-rated climbs stop getting a free bump: Tension-family averages are back on the same scale as your own tick ratings\n\"Unrated\" climbs no longer sort as zero stars or drag averages down"
+    },
+    {
+      "prNumber": 3548,
+      "category": "fixed",
+      "title": "The Boardsesh grade now stays consistent across angles — the same climb can't be graded easier at a steeper angle (fixes inversions like The Enchiridion reading harder at 30° than 35°)",
+      "mergedAt": "2026-07-07T21:25:26Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3548"
+    },
     {
       "prNumber": 3546,
       "category": "fixed",

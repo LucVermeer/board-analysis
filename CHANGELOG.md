@@ -32,6 +32,10 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Star ratings finally read true on every board — Kilter classics that were stuck at 3 stars now show their real 5 ([#3547](https://github.com/boardsesh/boardsesh/pull/3547))
+  Low-rated climbs stop getting a free bump: Tension-family averages are back on the same scale as your own tick ratings
+  "Unrated" climbs no longer sort as zero stars or drag averages down
+- The Boardsesh grade now stays consistent across angles — the same climb can't be graded easier at a steeper angle (fixes inversions like The Enchiridion reading harder at 30° than 35°) ([#3548](https://github.com/boardsesh/boardsesh/pull/3548))
 - Fixed over-the-air updates not reaching phones still on the current App Store build ([#3546](https://github.com/boardsesh/boardsesh/pull/3546))
 - Adding a beta video from the player's "..." menu works again — the share sheet opens over the player instead of vanishing. ([#3514](https://github.com/boardsesh/boardsesh/pull/3514))
 - Your real name and avatar now show up when you start or join a session with your crew — no more `user-3f8a12`. ([#3516](https://github.com/boardsesh/boardsesh/pull/3516))
