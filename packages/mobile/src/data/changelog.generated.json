@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-07T11:18:49.658Z",
+  "generatedAt": "2026-07-07T20:09:13.284Z",
   "entries": [
+    {
+      "prNumber": 3517,
+      "category": "new",
+      "title": "See how hard a climb really is: a new Boardsesh grade in the play drawer, built from every logged send — with a confidence level, and comparable across Kilter and Tension",
+      "mergedAt": "2026-07-07T20:08:13Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3517",
+      "body": "Sandbagged at 25°? The Boardsesh grade accounts for the angle you're actually climbing at\nMoonBoard crew: log your Moon sends on Boardsesh to help unlock standardized Moon grades"
+    },
     {
       "prNumber": 3514,
       "category": "fixed",
