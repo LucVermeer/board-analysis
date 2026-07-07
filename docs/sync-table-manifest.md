@@ -157,6 +157,12 @@ via `SET LOCAL boardsesh.suppress_sync_tombstones = 'on'` (see `clearBoardData`)
 Legend — **Scope**: how the resolver filters rows. **Seq**: cursor 2nd component. **Del**: deletion `record_id` encoding
 (segment count must equal Local PK length). **Hook**: is there an offline write hook today.
 
+**Encoding invariant — no PK component may contain a `:`.** Composite deletion `record_id`s are colon-joined by the
+triggers and colon-split by the client (`processDeletions`); a colon inside any component shifts the segment count and
+the client skips the deletion (safe, but the tombstone is lost). This holds today because every composite-PK component
+is a board type (enum), a UUID, an angle integer, a username, or a playlist uuid — none can contain `:`. Any NEW
+composite-keyed sync table must keep this true (or version the encoding).
+
 ### `boardsesh_ticks` — `syncTicks` (user data)
 
 - Scope: `user_id = $userId`. Seq: `id`. updated_at: **exists**. Hook: **yes** (`saveTick`).

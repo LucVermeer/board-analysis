@@ -42,7 +42,10 @@ const EPOCH_SEQ = '0';
 // be skipped forever. Excluding rows younger than the longest realistic write
 // transaction bounds that race: a skip is unrecoverable, a re-pull is a free
 // upsert. Tests set SYNC_STABILITY_WINDOW_SECONDS=0 to pull their own writes.
-const STABILITY_WINDOW_SECONDS = Number(process.env.SYNC_STABILITY_WINDOW_SECONDS ?? 30);
+// A non-numeric env value falls back to the default rather than poisoning
+// every sync query with a NaN interval.
+const parsedStabilityWindow = Number(process.env.SYNC_STABILITY_WINDOW_SECONDS ?? 30);
+const STABILITY_WINDOW_SECONDS = Number.isFinite(parsedStabilityWindow) ? parsedStabilityWindow : 30;
 
 const PG_TIMESTAMP_TEXT = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
 
