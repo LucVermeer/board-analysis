@@ -116,7 +116,8 @@ export function CollapsingTopChrome({
   if (isMaterial) {
     return (
       <View
-        pointerEvents="box-none"
+        // NOT box-none — the opaque Material band must swallow touches; see ClimbTopChrome for the RNGH mechanism.
+        pointerEvents="auto"
         style={[
           styles.materialContainer,
           {

@@ -446,6 +446,10 @@ function FilterChipRowComponent({
 const styles = StyleSheet.create({
   host: {
     width: '100%',
+    // RN Android installs a background drawable even for a transparent colour, which
+    // makes the Host itself an RNGH hit-test target (shouldHandlerlessViewBecomeTouchTarget)
+    // if a future refactor reintroduces a box-none ancestor. Zero visual effect.
+    backgroundColor: 'transparent',
   },
 });
 
