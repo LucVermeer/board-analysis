@@ -49,11 +49,17 @@ function buildDispatch(mutation: PendingMutation): MutationDispatch {
             mutationName: 'SaveTick',
             variables: { input: { uuid: mutation.idempotency_key, ...payload } },
           };
-        case 'update':
+        case 'update': {
+          // UpdateTickInput has no `uuid` field — it rides as a separate
+          // variable. Spreading the raw payload (which naturally carries the
+          // uuid) into `input` would fail GraphQL validation and dead-letter
+          // the mutation.
+          const { uuid, ...updateInput } = payload;
           return {
             mutationName: 'UpdateTick',
-            variables: { uuid: payload.uuid, input: payload },
+            variables: { uuid, input: updateInput },
           };
+        }
         case 'delete':
           return {
             mutationName: 'DeleteTick',

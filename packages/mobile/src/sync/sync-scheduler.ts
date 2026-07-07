@@ -58,7 +58,12 @@ async function runSync(
       onProgress,
     });
   } catch (error) {
-    console.warn('[Sync] Sync cycle failed:', error instanceof Error ? error.message : 'unknown');
+    // Dev-only: a failed cycle is routine for offline users (the reconnect
+    // trigger retries), so production must neither spam the console nor
+    // report expected network errors as handled exceptions.
+    if (__DEV__) {
+      console.warn('[Sync] Sync cycle failed:', error instanceof Error ? error.message : 'unknown');
+    }
     // pullSync only emits its terminal `idle` frame on success, so a throw mid-pull
     // would leave the Settings status row stuck on "Downloading…". Emit idle here so
     // the in-flight flag always clears — marked `failed` so the status store does
