@@ -121,6 +121,13 @@ export const queriesTypeDefs = /* GraphQL */ `
     """
     boardseshGrade(boardName: String!, climbUuid: String!, angle: Int!): BoardseshGrade
 
+    """
+    Get the Boardsesh grade for a climb at every angle it's been computed for.
+    Returns one entry per angle, ordered by angle ascending. Empty when no grade
+    has been computed for the climb (e.g. MoonBoard, or too few ascents).
+    """
+    boardseshGradesForAngles(boardName: String!, climbUuid: String!): [BoardseshGradeForAngle!]!
+
     # ============================================
     # User Management Queries (require auth)
     # ============================================
