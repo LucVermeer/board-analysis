@@ -40,6 +40,10 @@ type ClimbReactionMenuProps = {
   currentUserId?: string | null;
   isAuthenticated: boolean;
   onEditEntry?: () => void;
+  /** When provided, the "Add beta video" action runs this instead of opening the
+   *  root beta sheet — the play drawer passes its own in-tree opener so the sheet
+   *  stacks above the `/play` modal (#3505). */
+  onAddBetaVideo?: () => void;
   /** Read once at the app root (resolved) and passed in, so the mount-time enter
    *  animation uses the real value rather than useReduceMotion's conservative default. */
   reduceMotion: boolean;
@@ -81,6 +85,7 @@ export function ClimbReactionMenu({
   currentUserId,
   isAuthenticated,
   onEditEntry,
+  onAddBetaVideo,
   reduceMotion,
   onClose,
 }: ClimbReactionMenuProps) {
@@ -133,6 +138,7 @@ export function ClimbReactionMenu({
     onEditEntry,
     onAfterAction: dismiss,
     onSelectPlaylist: openPlaylist,
+    onAddBetaVideo,
   });
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;

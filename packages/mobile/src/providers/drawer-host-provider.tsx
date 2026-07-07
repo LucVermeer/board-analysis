@@ -57,6 +57,10 @@ export type OpenClimbActionsOptions = {
   /** When set, the climb actions sheet shows an "Edit entry" row wired to this
    *  callback (logbook rows pass it to open the tick editor). */
   onEditEntry?: () => void;
+  /** When set, the "Add beta video" action runs this instead of opening the root
+   *  beta sheet. The play drawer passes its own in-tree opener so the sheet stacks
+   *  above the `/play` fullScreenModal (a root-tree sheet can't — see #3505). */
+  onAddBetaVideo?: () => void;
 };
 
 export type LogAscentInput = {
@@ -115,7 +119,7 @@ export type PlayDrawerPaneProps = {
   boardMismatch: boolean;
   mismatchBoardLabel: string | undefined;
   onSwitchBoard: () => void;
-  onOpenClimbActions: (climb: Climb) => void;
+  onOpenClimbActions: (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => void;
   /** The climb to show in the pane, with a bumped nonce per selection so the pane
    *  re-applies even when the same climb is re-tapped. Set by `openPlayDrawer` on
    *  iPad regular width (where it drives the pane instead of the `/play` route). */
@@ -321,6 +325,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     climb: Climb;
     boardConfig: BoardConfig;
     onEditEntry?: () => void;
+    onAddBetaVideo?: () => void;
   } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
@@ -504,7 +509,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => {
       const boardConfig = boardConfigOverride ?? storedActiveBoardConfigRef.current;
       if (!boardConfig) return;
-      setClimbActions({ climb, boardConfig, onEditEntry: options?.onEditEntry });
+      setClimbActions({
+        climb,
+        boardConfig,
+        onEditEntry: options?.onEditEntry,
+        onAddBetaVideo: options?.onAddBetaVideo,
+      });
     },
     [],
   );
@@ -893,6 +903,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
             currentUserId={profile?.id ?? null}
             isAuthenticated={isAuthenticated}
             onEditEntry={climbActions.onEditEntry}
+            onAddBetaVideo={climbActions.onAddBetaVideo}
             reduceMotion={reduceMotion}
             onClose={closeClimbActions}
           />

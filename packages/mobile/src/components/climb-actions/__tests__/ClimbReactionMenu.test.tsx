@@ -138,6 +138,21 @@ describe('ClimbReactionMenu view switching', () => {
     expect(queryByLabelText('Add to Playlist')).toBeNull();
   });
 
+  it('forwards the onAddBetaVideo override into useClimbActions', () => {
+    const onAddBetaVideo = vi.fn();
+    render(
+      <ClimbReactionMenu
+        climb={climb}
+        boardConfig={boardConfig as never}
+        isAuthenticated
+        onAddBetaVideo={onAddBetaVideo}
+        reduceMotion
+        onClose={vi.fn()}
+      />,
+    );
+    expect(captured.actionArgs?.onAddBetaVideo).toBe(onAddBetaVideo);
+  });
+
   it('returns to the action list when the picker calls onBack', () => {
     const { getByLabelText, container } = renderMenu();
     act(() => fireEvent.click(getByLabelText('Add to Playlist')));

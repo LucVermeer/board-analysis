@@ -156,6 +156,30 @@ describe('useClimbActions colours and dispatch', () => {
     expect(onAfterAction).not.toHaveBeenCalled();
   });
 
+  it('betaVideo.run opens the root beta sheet and fires onAfterAction by default', () => {
+    const onAfterAction = vi.fn();
+    const { result } = renderHook(() =>
+      useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: true, onAfterAction }),
+    );
+    result.current.find((action) => action.id === 'betaVideo')?.run();
+    expect(openers.openAddBetaVideo).toHaveBeenCalledWith(climb, kilterBoard);
+    expect(onAfterAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('betaVideo.run calls onAddBetaVideo (in-tree) instead of the root sheet when provided', () => {
+    const onAddBetaVideo = vi.fn();
+    const onAfterAction = vi.fn();
+    const { result } = renderHook(() =>
+      useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: true, onAddBetaVideo, onAfterAction }),
+    );
+    result.current.find((action) => action.id === 'betaVideo')?.run();
+    expect(onAddBetaVideo).toHaveBeenCalledTimes(1);
+    // The play drawer's own sheet takes over — the root opener is skipped, but the
+    // reaction menu still dismisses (unlike the inline playlist path).
+    expect(openers.openAddBetaVideo).not.toHaveBeenCalled();
+    expect(onAfterAction).toHaveBeenCalledTimes(1);
+  });
+
   it('share.run opens the native share sheet', () => {
     const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
     result.current.find((action) => action.id === 'share')?.run();

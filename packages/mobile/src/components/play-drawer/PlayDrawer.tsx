@@ -57,6 +57,7 @@ import {
   useQueueSessionId,
 } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
+import type { OpenClimbActionsOptions } from '../../providers/drawer-host-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
@@ -146,8 +147,10 @@ type PlayDrawerProps = {
   /** Switch to the climb's board (one-tap if owned, else the board picker). */
   onSwitchBoard?: () => void;
   /** Opens the climb reaction menu (DrawerHostProvider's openClimbActions). On iOS
-   *  the ellipsis uses this instead of the in-drawer bottom sheet. */
-  onOpenClimbActions?: (climb: Climb) => void;
+   *  the ellipsis uses this instead of the in-drawer bottom sheet. The drawer passes
+   *  its own in-tree beta opener via `options.onAddBetaVideo` so the beta sheet
+   *  stacks above the `/play` modal (#3505). */
+  onOpenClimbActions?: (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => void;
   /** The climb to show; applied on mount and whenever `nonce` changes. */
   openTarget: PlayDrawerOpenTarget | null;
   /** Rendering context. `'route'` (default) is the full-screen `/play` modal — a
@@ -628,16 +631,6 @@ export function PlayDrawer({
     setBleControlVisible(true);
   }, [bluetooth]);
 
-  const handleOpenActions = useCallback(() => {
-    // iOS: open the floating reaction menu (over the drawer) instead of the in-drawer
-    // bottom sheet. Android keeps the bottom sheet.
-    if (Platform.OS === 'ios' && onOpenClimbActions && displayedClimb) {
-      onOpenClimbActions(displayedClimb);
-      return;
-    }
-    setActiveSubDrawer('actions');
-  }, [onOpenClimbActions, displayedClimb]);
-
   const handleOpenAddBetaVideo = useCallback(() => {
     setAddBetaVideoOpen(true);
   }, []);
@@ -645,6 +638,19 @@ export function PlayDrawer({
   const handleCloseAddBetaVideo = useCallback(() => {
     setAddBetaVideoOpen(false);
   }, []);
+
+  const handleOpenActions = useCallback(() => {
+    // iOS: open the floating reaction menu (over the drawer) instead of the in-drawer
+    // bottom sheet. Android keeps the bottom sheet.
+    if (Platform.OS === 'ios' && onOpenClimbActions && displayedClimb) {
+      // Hand the reaction menu the drawer's OWN beta opener so the share-your-beta
+      // sheet presents inside the `/play` modal (above it) rather than the root
+      // sheet, which can't stack over the fullScreenModal (#3505).
+      onOpenClimbActions(displayedClimb, undefined, { onAddBetaVideo: handleOpenAddBetaVideo });
+      return;
+    }
+    setActiveSubDrawer('actions');
+  }, [onOpenClimbActions, displayedClimb, handleOpenAddBetaVideo]);
 
   const handleScrollTowardBelowFold = useCallback(() => {
     setBelowFoldContentRequested(true);

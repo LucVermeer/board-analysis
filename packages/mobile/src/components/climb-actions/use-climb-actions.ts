@@ -72,6 +72,13 @@ type UseClimbActionsArgs = {
    * sheet dismisses the first (#3294). Omit it and playlist opens the sheet.
    */
   onSelectPlaylist?: () => void;
+  /**
+   * When provided, the "Add beta video" action runs this INSTEAD of opening the
+   * root `AddBetaVideoSheet`. The play drawer passes its own in-tree sheet opener
+   * so the beta sheet stacks above the `/play` fullScreenModal (a root-tree sheet
+   * can't present over it — see #3505). Omit it and beta opens the root sheet.
+   */
+  onAddBetaVideo?: () => void;
 };
 
 // Mirrors web's constructClimbInfoUrl: Kilter no longer has a public app URL.
@@ -89,6 +96,7 @@ export function useClimbActions({
   onEditEntry,
   onAfterAction,
   onSelectPlaylist,
+  onAddBetaVideo,
 }: UseClimbActionsArgs): ClimbActionItem[] {
   const { t } = useTranslation('climbs');
   const router = useRouter();
@@ -255,7 +263,11 @@ export function useClimbActions({
         icon: 'video',
         color: accentColor,
         run: () => {
-          openAddBetaVideo(climb, boardConfig);
+          // Play drawer passes its own in-tree opener so the beta sheet stacks
+          // above the `/play` modal; every other surface falls back to the root
+          // sheet (correct there — no covering modal). See #3505.
+          if (onAddBetaVideo) onAddBetaVideo();
+          else openAddBetaVideo(climb, boardConfig);
           after();
         },
       });
@@ -346,6 +358,7 @@ export function useClimbActions({
     isAuthenticated,
     onEditEntry,
     onSelectPlaylist,
+    onAddBetaVideo,
     after,
     t,
     actionColors,
