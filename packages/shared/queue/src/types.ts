@@ -48,6 +48,11 @@ export type Climb = {
   // multi-frame playback uses the setter's pace instead of DEFAULT_PACE_MS.
   framesCount?: number | null;
   framesPace?: number | null;
+  // Boardsesh grade (COALESCE(universal, local) on the shared difficulty scale)
+  // + confidence tier, carried through the queue so a climb rendered from a
+  // party-peer broadcast shows the grade without a per-climb refetch.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
 };
 
 export type ClimbQueueItem = {

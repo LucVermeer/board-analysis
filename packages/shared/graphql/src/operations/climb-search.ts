@@ -29,6 +29,8 @@ const CLIMB_SEARCH_FIELDS = `
   created_at
   framesCount
   framesPace
+  boardseshDifficulty
+  boardseshConfidence
 `;
 
 const CLIMB_DRAFT_FIELDS = `
@@ -62,6 +64,8 @@ const CLIMB_DETAIL_FIELDS = `
   published_at
   framesCount
   framesPace
+  boardseshDifficulty
+  boardseshConfidence
 `;
 
 export const SEARCH_CLIMBS = gql`

@@ -85,6 +85,11 @@ export const ClimbInputSchema = z.object({
   // Round-trip multi-frame metadata so peers don't have to refetch /climb.
   framesCount: z.number().int().min(1).nullish(),
   framesPace: z.number().int().min(0).nullish(),
+  // Boardsesh grade + confidence tier, round-tripped through the queue so peers
+  // render the grade without a per-climb refetch. Nullish: older clients and
+  // pre-grade queue items omit them.
+  boardseshDifficulty: z.number().nullish(),
+  boardseshConfidence: z.string().max(20).nullish(),
 });
 
 /**

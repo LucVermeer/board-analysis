@@ -174,6 +174,8 @@ export const GET_PLAYLIST_CLIMBS = gql`
         stars
         difficulty_error
         benchmark_difficulty
+        boardseshDifficulty
+        boardseshConfidence
       }
       totalCount
       hasMore
@@ -439,6 +441,8 @@ export type PlaylistClimbsResult = {
     stars: number;
     difficulty_error: string;
     benchmark_difficulty: string | null;
+    boardseshDifficulty?: number | null;
+    boardseshConfidence?: string | null;
   }>;
   totalCount: number;
   hasMore: boolean;
@@ -738,6 +742,8 @@ export const GET_SMART_PLAYLIST = gql`
         stars
         difficulty_error
         benchmark_difficulty
+        boardseshDifficulty
+        boardseshConfidence
       }
       totalCount
       hasMore

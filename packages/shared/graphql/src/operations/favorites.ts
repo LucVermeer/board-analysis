@@ -92,6 +92,8 @@ export const GET_USER_FAVORITE_CLIMBS = gql`
         stars
         difficulty_error
         benchmark_difficulty
+        boardseshDifficulty
+        boardseshConfidence
       }
       totalCount
       hasMore
@@ -130,6 +132,8 @@ export type UserFavoriteClimbsResult = {
     stars: number;
     difficulty_error: string;
     benchmark_difficulty: string | null;
+    boardseshDifficulty?: number | null;
+    boardseshConfidence?: string | null;
   }>;
   totalCount: number;
   hasMore: boolean;

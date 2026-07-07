@@ -376,6 +376,8 @@ export const GET_SETTER_CLIMBS_FULL = gql`
         stars
         difficulty_error
         benchmark_difficulty
+        boardseshDifficulty
+        boardseshConfidence
       }
       totalCount
       hasMore
@@ -429,6 +431,8 @@ export const GET_USER_CLIMBS = gql`
         stars
         difficulty_error
         benchmark_difficulty
+        boardseshDifficulty
+        boardseshConfidence
       }
       totalCount
       hasMore

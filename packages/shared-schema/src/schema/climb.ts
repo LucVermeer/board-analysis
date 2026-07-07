@@ -54,6 +54,10 @@ export const climbTypeDefs = /* GraphQL */ `
     framesCount: Int
     "Animation pace between frames, in Aurora's native unit (treated as milliseconds). 0 when not set."
     framesPace: Int
+    "Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade), for this climb at its angle. Null when no grade row exists (e.g. MoonBoard, or too few ascents) — the UI keeps the Aurora grade."
+    boardseshDifficulty: Float
+    "Boardsesh grade confidence tier: 'confirmed' | 'provisional' | 'setter_only'. Null when no grade row exists. The UI keeps the Aurora grade when this is null or 'setter_only'."
+    boardseshConfidence: String
   }
 
   """
@@ -92,6 +96,10 @@ export const climbTypeDefs = /* GraphQL */ `
     framesCount: Int
     "Native per-frame pace, in milliseconds. 0 when unset."
     framesPace: Int
+    "Boardsesh grade on the shared difficulty scale for this climb+angle. Round-tripped through the queue so party peers render the grade without a refetch."
+    boardseshDifficulty: Float
+    "Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'), round-tripped through the queue."
+    boardseshConfidence: String
   }
 
   # ============================================
