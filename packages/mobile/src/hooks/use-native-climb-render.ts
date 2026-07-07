@@ -246,6 +246,10 @@ export const _renderedOverlaysForTests = renderedOverlays;
  * "renderer unavailable", so async-render paths would be untestable.
  */
 export function _setNativeModuleForTests(module: typeof renderModule): void {
+  // No-op in release bundles — this seam mutates module state and must not be
+  // reachable from production code paths. (Mobile vitest runs with __DEV__ set,
+  // so tests pass through.)
+  if (!__DEV__) return;
   renderModule = module;
   moduleLoadAttempted = true;
   moduleLoadFailureCount = 0;
