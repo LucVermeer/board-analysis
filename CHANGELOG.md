@@ -20,6 +20,10 @@ A new version shipped to the App Store and Play Store.
 - The play drawer shows your climb the moment it opens, instead of a grey box catching up ([#3509](https://github.com/boardsesh/boardsesh/pull/3509))
   Scrolling, searching, and queueing climbs is smoother, especially on Android
 
+### Fixed
+
+- Filter chips on Android now respond after you scroll the climb list, instead of opening the climb hiding underneath ([#3508](https://github.com/boardsesh/boardsesh/pull/3508))
+
 ## 2026-07-06
 
 ### App update
