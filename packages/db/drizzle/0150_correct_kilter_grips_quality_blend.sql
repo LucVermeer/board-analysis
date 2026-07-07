@@ -34,6 +34,13 @@
 -- Batching: monotonic key cursor over (climb_uuid, angle) — every kilter row is
 -- visited once, so the (non value-idempotent) 2q − 1 update is single-pass safe.
 
+-- Durable double-apply guard (see 0154 for rationale): a guard row makes even
+-- a manual psql re-application a no-op.
+CREATE TABLE IF NOT EXISTS _bs_migration_guards (
+  tag text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
+
 DO $$
 DECLARE
   v_batch      int := 20000;
@@ -45,6 +52,11 @@ DECLARE
   v_delta      bigint;
   v_total      bigint := 0;
 BEGIN
+  IF EXISTS (SELECT 1 FROM _bs_migration_guards WHERE tag = '0150_kilter_grips_quality_blend') THEN
+    RAISE NOTICE '0150_kilter_grips_quality_blend already applied — skipping (guard row present)';
+    RETURN;
+  END IF;
+
   LOOP
     WITH page AS (
       SELECT s.climb_uuid, s.angle
@@ -91,6 +103,8 @@ BEGIN
     v_uuid := v_last_uuid;
     v_angle := v_last_angle;
   END LOOP;
+
+  INSERT INTO _bs_migration_guards (tag) VALUES ('0150_kilter_grips_quality_blend');
 
   RAISE NOTICE 'kilter Grips quality correction: rescaled % pre-cutover row(s) (2q-1, clamped)', v_total;
 END $$;

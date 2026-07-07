@@ -44,6 +44,13 @@
 -- cursor cannot). A big single-statement UPDATE would also work but bloats WAL
 -- and holds one long lock — the page loop keeps each statement bounded.
 
+-- Durable double-apply guard (see 0154 for rationale): a guard row makes even
+-- a manual psql re-application a no-op.
+CREATE TABLE IF NOT EXISTS _bs_migration_guards (
+  tag text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
+
 DO $$
 DECLARE
   v_batch      int := 20000;
@@ -57,6 +64,11 @@ DECLARE
   v_delta      bigint;
   v_total      bigint := 0;
 BEGIN
+  IF EXISTS (SELECT 1 FROM _bs_migration_guards WHERE tag = '0149_aurora_quality_affine') THEN
+    RAISE NOTICE '0149_aurora_quality_affine already applied — skipping (guard row present)';
+    RETURN;
+  END IF;
+
   LOOP
     WITH page AS (
       SELECT s.board_type, s.climb_uuid, s.angle
@@ -103,6 +115,8 @@ BEGIN
     v_uuid := v_last_uuid;
     v_angle := v_last_angle;
   END LOOP;
+
+  INSERT INTO _bs_migration_guards (tag) VALUES ('0149_aurora_quality_affine');
 
   RAISE NOTICE 'aurora quality re-backfill: rescaled % row(s) from x5/3 to 2q-1 (1.2q-1)', v_total;
 END $$;

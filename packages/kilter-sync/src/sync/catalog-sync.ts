@@ -182,11 +182,9 @@ export function foldCatalogStat(
   accum.kilterCount += stat.ascentCount;
   // Kilter Grips reports a MIXED-scale quality average (Aurora-era 1-3 blended
   // with Grips-era 1-5). correctGripsQualityAverage puts it on the canonical 1-5
-  // scale using the climb's era (fa_at), and drops unrated (≤0) → null. Then a
-  // final ingest guard rejects anything still outside (0, 5] so a bad upstream
-  // value can never land as a real star rating.
-  const correctedQuality = correctGripsQualityAverage(stat.qualityAverage, stat.faAt);
-  const incomingQuality = correctedQuality != null && correctedQuality <= 5 ? correctedQuality : null;
+  // scale using the climb's era (fa_at) and is self-contained on range: unrated
+  // (≤0) and garbage (>5) both come back null, so no further guard is needed.
+  const incomingQuality = correctGripsQualityAverage(stat.qualityAverage, stat.faAt);
   // Difficulty ingest guard: id 1 doesn't exist and 0 is a "no data" sentinel
   // (valid grade ids are ~10-33), so treat anything ≤ 1 as "no grade" → null.
   const incomingDisplayDifficulty = guardDifficulty(stat.currentDifficultyId ?? stat.difficultyAverage);

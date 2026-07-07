@@ -247,6 +247,15 @@ describe('foldCatalogStat — kilter catalog stat accumulation', () => {
     });
     expect(real.displayDifficulty).toBe(12);
     expect(real.difficultyAverage).toBe(12.3);
+
+    // Mixed: a real display grade with a sentinel average — each field is
+    // guarded independently.
+    const mixed = fold({
+      stat: stat({ climbUuid: CANON, angle: 40, ascentCount: 1, currentDifficultyId: 12, difficultyAverage: 1 }),
+      canonical: CANON,
+    });
+    expect(mixed.displayDifficulty).toBe(12);
+    expect(mixed.difficultyAverage).toBeNull();
   });
 
   it('falls back to difficultyAverage when currentDifficultyId is null; separates by angle', () => {
