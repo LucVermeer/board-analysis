@@ -168,9 +168,9 @@ vi.mock('../../../../hooks/use-native-glass', () => ({ useNativeGlass: () => fal
 vi.mock('../../../../theme/colors', () => ({ withAlpha: (color: string) => color }));
 vi.mock('../../../../theme/ios-colors', () => ({ iosSystemColors: { systemGray: '#999' } }));
 vi.mock('../../../../theme/animations', () => ({ springs: { gentle: {} } }));
-vi.mock('../../../../theme/tokens', () => ({ borderRadius: { lg: 16 }, spacing: { 2: 8, 3: 12, 4: 16 } }));
+vi.mock('../../../../theme/tokens', () => ({ borderRadius: { lg: 16 }, spacing: { 2: 8, 3: 12, 4: 16, 5: 20 } }));
 vi.mock('../../../you/profile-chart-colors', () => ({ gradeBadgeColor: () => '#fff' }));
-vi.mock('../../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
+vi.mock('../../../../lib/haptics', () => ({ hapticSelection: vi.fn(), hapticMedium: vi.fn() }));
 vi.mock('../SessionAnalytics', () => ({ SessionAnalytics: () => null }));
 vi.mock('../SessionLeaderboard', () => ({ SessionLeaderboard: () => null }));
 vi.mock('../SessionPresenceRow', () => ({ SessionPresenceRow: () => null }));

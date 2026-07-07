@@ -575,8 +575,8 @@ export function InSessionView({
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
       // Tab mode only: use a gesture-handler scroll host so the RNGH orchestrator
-      // on Android can properly arbitrate this scroll against the RecordTopChrome
-      // Material container (pointerEvents="auto" makes it opaque to RNGH).
+      // can properly arbitrate this scroll against the RecordTopChrome Material
+      // container (pointerEvents="auto" makes it opaque to RNGH; safe no-op on iOS).
       // In overlay mode the parent pull-to-dismiss GestureDetector must own the
       // swipe — keeping the native scroll host lets the pan win when at the top.
       renderScrollComponent={showChrome ? GestureScrollView : undefined}
