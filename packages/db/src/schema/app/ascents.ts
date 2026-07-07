@@ -9,7 +9,9 @@ import {
   index,
   uniqueIndex,
   pgEnum,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from '../auth/users';
 import { boardSessions } from './sessions';
 import { userBoards } from './boards';
@@ -120,6 +122,14 @@ export const boardseshTicks = pgTable(
       table.climbUuid,
     ),
     syncCursorIdx: index('boardsesh_ticks_sync_cursor_idx').on(table.userId, table.updatedAt, table.id),
+    // quality is a 1-5 star rating (NULL for attempts / unrated). Enforce the
+    // range at the DB so a bad conversion (raw Aurora 0-3 stars, an old
+    // proportional formula, etc.) can never re-poison the column. Backfills that
+    // clear existing out-of-range values run earlier (migrations 0139/0140/0152).
+    qualityRangeCheck: check(
+      'boardsesh_ticks_quality_range',
+      sql`${table.quality} IS NULL OR (${table.quality} >= 1 AND ${table.quality} <= 5)`,
+    ),
   }),
 );
 
