@@ -128,7 +128,8 @@ vi.mock('../../../../providers/theme-provider', () => ({
       secondaryLabel: '#999',
       separator: '#222',
     },
-    brandColors: { success: '#0f0', warning: '#ff0' },
+    brandColors: { success: '#0f0', warning: '#ff0', primary: '#00f', error: '#f00' },
+    features: { inBodyLargeTitle: false },
   }),
 }));
 vi.mock('../../../../providers/queue-provider', () => ({
@@ -225,9 +226,16 @@ describe('InSessionView footer', () => {
   });
 
   it('uses a RNGH scroll host so Android can arbitrate the scroll against the RecordTopChrome Material container', () => {
-    render(createElement(InSessionView));
+    render(createElement(InSessionView, { showChrome: true }));
     expect(list.hasGestureScrollComponent).toBe(true);
     expect(list.nestedScrollEnabled).toBe(true);
+  });
+
+  it('keeps the native scroll host in overlay mode so pull-to-dismiss is not blocked', () => {
+    const translateY = { value: 0 };
+    render(createElement(InSessionView, { translateY: translateY as never, screenHeight: 844 }));
+    expect(list.hasGestureScrollComponent).toBe(false);
+    expect(list.nestedScrollEnabled).toBe(false);
   });
 
   it('clears the ending spinner even when endSession rejects', async () => {
