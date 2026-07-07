@@ -91,6 +91,13 @@ const toast = vi.hoisted(() => ({
   showToast: vi.fn(),
 }));
 
+// Mutable so a test can flip identity from "still loading" (undefined) to a
+// resolved profile and re-render to exercise the re-announce path.
+const partyProfile = vi.hoisted(() => ({
+  username: undefined as string | undefined,
+  avatarUrl: undefined as string | undefined,
+}));
+
 const queueMutations = vi.hoisted(() => ({
   addQueueItem: vi.fn(async () => {}),
   removeQueueItem: vi.fn(async () => {}),
@@ -168,6 +175,10 @@ vi.mock('../toast-provider', () => ({
 
 vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }),
+}));
+
+vi.mock('../party-profile-provider', () => ({
+  usePartyProfile: () => ({ username: partyProfile.username, avatarUrl: partyProfile.avatarUrl }),
 }));
 
 import {
@@ -345,6 +356,17 @@ function renderProviderWithSelectors(
   );
 }
 
+// Find the variables of the graph.execute call whose GraphQL document contains
+// `marker` (e.g. the mutation's field name). mock.calls elements are `any[]`, so
+// pull the operation out by index rather than tuple-destructuring.
+function executeVariablesFor(marker: string): Record<string, unknown> | undefined {
+  const call = graph.execute.mock.calls.find((args) => {
+    const operation = args[1] as { query?: string } | undefined;
+    return operation?.query?.includes(marker) ?? false;
+  });
+  return call ? (call[1] as { variables?: Record<string, unknown> }).variables : undefined;
+}
+
 describe('QueueProvider session update subscription', () => {
   beforeEach(() => {
     ws.reset();
@@ -377,6 +399,11 @@ describe('QueueProvider session update subscription', () => {
     activeBoard.getStoredActiveBoard.mockResolvedValue(activeBoard.stored);
     activeBoard.setActiveBoard.mockClear();
     toast.showToast.mockClear();
+    // Default to "profile still loading" so existing JOIN/backoff tests keep
+    // their exact graph.execute call counts (undefined identity never triggers
+    // the re-announce effect). Identity-carrying tests opt in explicitly.
+    partyProfile.username = undefined;
+    partyProfile.avatarUrl = undefined;
     for (const mutation of Object.values(queueMutations) as Array<ReturnType<typeof vi.fn>>) {
       mutation.mockReset();
       mutation.mockResolvedValue(undefined);
@@ -528,6 +555,188 @@ describe('QueueProvider session update subscription', () => {
 
     await waitFor(() => {
       expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('sends the signed-in profile identity with JOIN_SESSION', async () => {
+    partyProfile.username = 'Marco';
+    partyProfile.avatarUrl = 'https://example.com/marco.png';
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+
+    expect(executeVariablesFor('joinSession')).toEqual(
+      expect.objectContaining({ username: 'Marco', avatarUrl: 'https://example.com/marco.png' }),
+    );
+    // JOIN already carried the identity, so the re-announce effect must not
+    // fire a redundant UPDATE_USERNAME (announcedIdentityRef is seeded at join).
+    expect(executeVariablesFor('updateUsername')).toBeUndefined();
+  });
+
+  it('re-announces identity with UPDATE_USERNAME when the profile resolves after joining', async () => {
+    // Profile still loading at join time — JOIN carries an empty identity and the
+    // roster shows the backend's `User-<id>` fallback.
+    const snapshots: Snapshot[] = [];
+    // A fresh element each render — passing the same reference makes React bail
+    // out of re-rendering QueueProvider, so the updated usePartyProfile mock
+    // would never be re-read.
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+    expect(executeVariablesFor('updateUsername')).toBeUndefined();
+
+    // Profile resolves → provider re-renders → re-announce fires.
+    act(() => {
+      partyProfile.username = 'Marco';
+      partyProfile.avatarUrl = 'https://example.com/marco.png';
+      rerender(makeTree());
+    });
+
+    await waitFor(() => {
+      expect(executeVariablesFor('updateUsername')).toEqual({
+        username: 'Marco',
+        avatarUrl: 'https://example.com/marco.png',
+      });
+    });
+  });
+
+  it('re-announces identity with UPDATE_USERNAME when the profile is edited mid-session', async () => {
+    // Signed in with a real identity from the start — JOIN carries it, so no
+    // re-announce fires yet.
+    partyProfile.username = 'Marco';
+    partyProfile.avatarUrl = 'https://example.com/marco.png';
+    const snapshots: Snapshot[] = [];
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+    expect(executeVariablesFor('updateUsername')).toBeUndefined();
+
+    // User edits their display name + avatar while still in the session.
+    act(() => {
+      partyProfile.username = 'Marco Polo';
+      partyProfile.avatarUrl = 'https://example.com/marco-2.png';
+      rerender(makeTree());
+    });
+
+    await waitFor(() => {
+      expect(executeVariablesFor('updateUsername')).toEqual({
+        username: 'Marco Polo',
+        avatarUrl: 'https://example.com/marco-2.png',
+      });
+    });
+  });
+
+  it('re-announces when the profile resolves while JOIN is still in flight', async () => {
+    // Profile unresolved when JOIN is dispatched, then resolves before JOIN
+    // returns. announcedIdentityRef must record what we actually sent (empty),
+    // not the newer ref value, or the re-announce would be skipped and the
+    // roster would stay on the `User-<id>` fallback.
+    partyProfile.username = undefined;
+    partyProfile.avatarUrl = undefined;
+    const joinDeferred = createDeferred<ReturnType<typeof createJoinSessionResponse>>();
+    graph.execute.mockReturnValueOnce(joinDeferred.promise);
+
+    const snapshots: Snapshot[] = [];
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(graph.execute).toHaveBeenCalled();
+    });
+    expect(executeVariablesFor('joinSession')).toEqual(
+      expect.objectContaining({ username: undefined, avatarUrl: undefined }),
+    );
+
+    // Profile resolves while JOIN is still awaiting.
+    act(() => {
+      partyProfile.username = 'Marco';
+      partyProfile.avatarUrl = 'https://example.com/marco.png';
+      rerender(makeTree());
+    });
+
+    await act(async () => {
+      joinDeferred.resolve(createJoinSessionResponse());
+      await joinDeferred.promise;
+    });
+
+    await waitFor(() => {
+      expect(executeVariablesFor('updateUsername')).toEqual({
+        username: 'Marco',
+        avatarUrl: 'https://example.com/marco.png',
+      });
+    });
+  });
+
+  it('retries the re-announce on the next identity change after a failed UPDATE_USERNAME', async () => {
+    // Profile unresolved at join; JOIN carries the empty identity.
+    partyProfile.username = undefined;
+    partyProfile.avatarUrl = undefined;
+    const snapshots: Snapshot[] = [];
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+
+    // Profile resolves — the re-announce fires but the mutation fails, so the
+    // ref must NOT advance (otherwise the next change wouldn't retry).
+    graph.execute.mockRejectedValueOnce(new Error('transient network error'));
+    act(() => {
+      partyProfile.username = 'Marco';
+      partyProfile.avatarUrl = 'https://example.com/marco.png';
+      rerender(makeTree());
+    });
+    await waitFor(() => {
+      const attempted = graph.execute.mock.calls.some((args) => {
+        const operation = args[1] as { query?: string; variables?: Record<string, unknown> } | undefined;
+        return operation?.query?.includes('updateUsername') && operation.variables?.username === 'Marco';
+      });
+      expect(attempted).toBe(true);
+    });
+
+    // Identity changes again — because the failure left the ref untouched, the
+    // re-announce retries with the new identity.
+    act(() => {
+      partyProfile.username = 'Marco Polo';
+      partyProfile.avatarUrl = 'https://example.com/marco-2.png';
+      rerender(makeTree());
+    });
+    await waitFor(() => {
+      const retried = graph.execute.mock.calls.some((args) => {
+        const operation = args[1] as { query?: string; variables?: Record<string, unknown> } | undefined;
+        return operation?.query?.includes('updateUsername') && operation.variables?.username === 'Marco Polo';
+      });
+      expect(retried).toBe(true);
     });
   });
 

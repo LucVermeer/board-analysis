@@ -95,6 +95,9 @@ vi.mock('../../lib/graphql/client', () => ({ getHttpClient: () => ({ request: ht
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }));
 vi.mock('../toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../queue-snackbar-provider', () => ({ useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }) }));
+vi.mock('../party-profile-provider', () => ({
+  usePartyProfile: () => ({ username: undefined, avatarUrl: undefined }),
+}));
 
 import { QueueProvider, useQueue, useQueueSessionId } from '../queue-provider';
 

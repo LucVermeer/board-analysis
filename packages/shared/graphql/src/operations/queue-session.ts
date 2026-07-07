@@ -88,6 +88,16 @@ export const LEAVE_SESSION = `
   }
 `;
 
+// Re-announce the current connection's display name + avatar to everyone in the
+// session. Used when the authenticated profile resolves after we've already
+// joined (cold launch into a restored session) or when the user edits their
+// profile mid-session — JOIN_SESSION carries identity for the common case.
+export const UPDATE_USERNAME = `
+  mutation UpdateUsername($username: String!, $avatarUrl: String) {
+    updateUsername(username: $username, avatarUrl: $avatarUrl)
+  }
+`;
+
 export const END_SESSION = `
   mutation EndSession($sessionId: ID!, $timezone: String) {
     endSession(sessionId: $sessionId, timezone: $timezone) {
