@@ -52,16 +52,22 @@ export function convertQuality(auroraQuality: number | null | undefined): number
 /**
  * Scale a 1-3 quality *average* onto the 1-5 scale Kilter Grips / MoonBoard
  * use, so board_climb_stats.quality_average is one scale the UI renders the
- * same way for every board. Linear ×5/3, kept continuous — unlike
- * convertQuality (which rounds a single rating to integer star steps) this
- * operates on a stored average, so rounding would lose precision. 0/null
- * ("unrated") stays null.
+ * same way for every board. This is the continuous (non-rounding) sibling of
+ * {@link convertQuality}: both use the affine map `2q − 1` (1→1, 2→3, 3→5),
+ * which is the ONLY linear transform that agrees with convertQuality at the
+ * endpoints and the midpoint. Because AVG is linear, `2·avg − 1` is the
+ * correct way to rescale an *average* of 1-3 ratings onto 1-5 — the old ×5/3
+ * scaling ([1,3]→[1.67,5]) was wrong and inflated low-rated climbs by up to
+ * +0.67 stars. Input is clamped to [1,3] defensively (like convertQuality);
+ * 0/null ("unrated") stays null. Unlike convertQuality this does NOT round, so
+ * a stored average keeps its precision.
  */
 export function normalizeQualityTo5(quality: number | null | undefined): number | null {
   if (quality == null) return null;
   const q = Number(quality);
   if (!Number.isFinite(q) || q <= 0) return null;
-  return (q * 5) / 3;
+  const clamped = Math.min(3, Math.max(1, q));
+  return 2 * clamped - 1;
 }
 
 /**
