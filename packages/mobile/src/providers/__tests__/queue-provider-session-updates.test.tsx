@@ -645,6 +645,52 @@ describe('QueueProvider session update subscription', () => {
     });
   });
 
+  it('re-announces when the profile resolves while JOIN is still in flight', async () => {
+    // Profile unresolved when JOIN is dispatched, then resolves before JOIN
+    // returns. announcedIdentityRef must record what we actually sent (empty),
+    // not the newer ref value, or the re-announce would be skipped and the
+    // roster would stay on the `User-<id>` fallback.
+    partyProfile.username = undefined;
+    partyProfile.avatarUrl = undefined;
+    const joinDeferred = createDeferred<ReturnType<typeof createJoinSessionResponse>>();
+    graph.execute.mockReturnValueOnce(joinDeferred.promise);
+
+    const snapshots: Snapshot[] = [];
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(graph.execute).toHaveBeenCalled();
+    });
+    expect(executeVariablesFor('joinSession')).toEqual(
+      expect.objectContaining({ username: undefined, avatarUrl: undefined }),
+    );
+
+    // Profile resolves while JOIN is still awaiting.
+    act(() => {
+      partyProfile.username = 'Marco';
+      partyProfile.avatarUrl = 'https://example.com/marco.png';
+      rerender(makeTree());
+    });
+
+    await act(async () => {
+      joinDeferred.resolve(createJoinSessionResponse());
+      await joinDeferred.promise;
+    });
+
+    await waitFor(() => {
+      expect(executeVariablesFor('updateUsername')).toEqual({
+        username: 'Marco',
+        avatarUrl: 'https://example.com/marco.png',
+      });
+    });
+  });
+
   it('keeps the session-id selector value stable across queue mutations', async () => {
     const snapshots: Snapshot[] = [];
     const selectorSnapshots: SelectorSnapshot[] = [];

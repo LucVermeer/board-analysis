@@ -230,6 +230,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           );
         },
         execute: async ({ sessionId: sid, boardPath }) => {
+          // Snapshot identity at the moment we build the payload. If the profile
+          // resolves while JOIN is in flight, we must record the values we
+          // actually sent — not identityRef.current's newer ones — so the
+          // re-announce effect still fires UPDATE_USERNAME for the new identity.
+          const sentIdentity = { username: identityRef.current.username, avatarUrl: identityRef.current.avatarUrl };
           const result = await execute<{
             joinSession?: {
               participantId?: string | null;
@@ -244,13 +249,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             variables: {
               sessionId: sid,
               boardPath,
-              username: identityRef.current.username,
-              avatarUrl: identityRef.current.avatarUrl,
+              username: sentIdentity.username,
+              avatarUrl: sentIdentity.avatarUrl,
             },
           });
           // Remember what we announced so the re-announce effect only fires if
           // the identity changes after this join (profile loaded late / edited).
-          announcedIdentityRef.current = { ...identityRef.current };
+          announcedIdentityRef.current = sentIdentity;
           const joined = result?.joinSession;
           // Remember our participant id so we can ignore the echo of our own
           // board-path broadcasts. Only overwrite on a concrete value.
