@@ -91,6 +91,13 @@ const toast = vi.hoisted(() => ({
   showToast: vi.fn(),
 }));
 
+// Mutable so a test can flip identity from "still loading" (undefined) to a
+// resolved profile and re-render to exercise the re-announce path.
+const partyProfile = vi.hoisted(() => ({
+  username: undefined as string | undefined,
+  avatarUrl: undefined as string | undefined,
+}));
+
 const queueMutations = vi.hoisted(() => ({
   addQueueItem: vi.fn(async () => {}),
   removeQueueItem: vi.fn(async () => {}),
@@ -168,6 +175,10 @@ vi.mock('../toast-provider', () => ({
 
 vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }),
+}));
+
+vi.mock('../party-profile-provider', () => ({
+  usePartyProfile: () => ({ username: partyProfile.username, avatarUrl: partyProfile.avatarUrl }),
 }));
 
 import {
@@ -377,6 +388,11 @@ describe('QueueProvider session update subscription', () => {
     activeBoard.getStoredActiveBoard.mockResolvedValue(activeBoard.stored);
     activeBoard.setActiveBoard.mockClear();
     toast.showToast.mockClear();
+    // Default to "profile still loading" so existing JOIN/backoff tests keep
+    // their exact graph.execute call counts (undefined identity never triggers
+    // the re-announce effect). Identity-carrying tests opt in explicitly.
+    partyProfile.username = undefined;
+    partyProfile.avatarUrl = undefined;
     for (const mutation of Object.values(queueMutations) as Array<ReturnType<typeof vi.fn>>) {
       mutation.mockReset();
       mutation.mockResolvedValue(undefined);
@@ -528,6 +544,67 @@ describe('QueueProvider session update subscription', () => {
 
     await waitFor(() => {
       expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // Find the variables of the graph.execute call whose GraphQL document contains
+  // `marker` (e.g. the mutation's field name). mock.calls elements are `any[]`,
+  // so pull the operation out by index rather than tuple-destructuring.
+  function executeVariablesFor(marker: string): Record<string, unknown> | undefined {
+    const call = graph.execute.mock.calls.find((args) => {
+      const operation = args[1] as { query?: string } | undefined;
+      return operation?.query?.includes(marker) ?? false;
+    });
+    return call ? (call[1] as { variables?: Record<string, unknown> }).variables : undefined;
+  }
+
+  it('sends the signed-in profile identity with JOIN_SESSION', async () => {
+    partyProfile.username = 'Marco';
+    partyProfile.avatarUrl = 'https://example.com/marco.png';
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(graph.execute).toHaveBeenCalled();
+    });
+
+    expect(executeVariablesFor('joinSession')).toEqual(
+      expect.objectContaining({ username: 'Marco', avatarUrl: 'https://example.com/marco.png' }),
+    );
+  });
+
+  it('re-announces identity with UPDATE_USERNAME when the profile resolves after joining', async () => {
+    // Profile still loading at join time — JOIN carries an empty identity and the
+    // roster shows the backend's `User-<id>` fallback.
+    const snapshots: Snapshot[] = [];
+    // A fresh element each render — passing the same reference makes React bail
+    // out of re-rendering QueueProvider, so the updated usePartyProfile mock
+    // would never be re-read.
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+    expect(executeVariablesFor('updateUsername')).toBeUndefined();
+
+    // Profile resolves → provider re-renders → re-announce fires.
+    act(() => {
+      partyProfile.username = 'Marco';
+      partyProfile.avatarUrl = 'https://example.com/marco.png';
+      rerender(makeTree());
+    });
+
+    await waitFor(() => {
+      expect(executeVariablesFor('updateUsername')).toEqual({
+        username: 'Marco',
+        avatarUrl: 'https://example.com/marco.png',
+      });
     });
   });
 

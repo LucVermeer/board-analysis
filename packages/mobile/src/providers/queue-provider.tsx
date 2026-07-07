@@ -20,7 +20,7 @@ import type { SubscriptionQueueEvent, SessionUser } from '@boardsesh/shared-sche
 import { execute, GraphQLOperationError, isRateLimitedExtension } from '@boardsesh/graphql-client';
 import { buildBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
+import { JOIN_SESSION, UPDATE_USERNAME } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
 import {
@@ -37,6 +37,7 @@ import { track } from '../lib/analytics';
 import { reportHandledError } from '../lib/error-reporting';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
+import { usePartyProfile } from './party-profile-provider';
 import {
   QueueContext,
   QueueSessionControlContext,
@@ -186,6 +187,23 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const { showQueueAddedSnackbar } = useQueueSnackbar();
   const { t } = useTranslation('session');
 
+  // The signed-in user's display name + avatar (undefined while signed out or
+  // still loading). Sent with JOIN_SESSION so the backend roster shows real
+  // identity instead of a `User-<uuid>` fallback + empty avatar. Mirrored into a
+  // ref because the joinTracker is memoized once (empty deps) and its execute
+  // closure must read the latest value — mirrors web's usernameRef/avatarUrlRef
+  // in persistent-session/hooks/session-connection-ports.ts.
+  const { username: partyUsername, avatarUrl: partyAvatarUrl } = usePartyProfile();
+  const identityRef = useRef<{ username: string | undefined; avatarUrl: string | undefined }>({
+    username: partyUsername,
+    avatarUrl: partyAvatarUrl,
+  });
+  identityRef.current = { username: partyUsername, avatarUrl: partyAvatarUrl };
+  // The identity last announced to the session, seeded at JOIN time so the
+  // re-announce effect (below) only fires when it changes afterwards — e.g. the
+  // profile resolved after a cold-launch eager join, or the user edited it.
+  const announcedIdentityRef = useRef<{ username: string | undefined; avatarUrl: string | undefined } | null>(null);
+
   // The active board is read synchronously from the React Query cache
   // (staleTime: Infinity, hydrated from AsyncStorage) so analytics call sites
   // can tag events with the current board layout without re-creating the
@@ -223,8 +241,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             };
           }>(getWsClient(), {
             query: JOIN_SESSION,
-            variables: { sessionId: sid, boardPath },
+            variables: {
+              sessionId: sid,
+              boardPath,
+              username: identityRef.current.username,
+              avatarUrl: identityRef.current.avatarUrl,
+            },
           });
+          // Remember what we announced so the re-announce effect only fires if
+          // the identity changes after this join (profile loaded late / edited).
+          announcedIdentityRef.current = { ...identityRef.current };
           const joined = result?.joinSession;
           // Remember our participant id so we can ignore the echo of our own
           // board-path broadcasts. Only overwrite on a concrete value.
@@ -251,6 +277,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     (sessionIdToJoin: string) => joinTracker.ensureJoined(sessionIdToJoin),
     [joinTracker],
   );
+
+  // Re-announce identity to the session when it changes after we've joined.
+  // JOIN_SESSION already carries the profile in the common case; this covers the
+  // race where the authenticated profile resolves after a cold-launch eager join
+  // (roster would otherwise stay on the `User-<uuid>` fallback), and profile
+  // edits made mid-session. `announcedIdentityRef` is seeded at join time so this
+  // never fires a redundant re-announce right after joining. Best-effort — a
+  // failed presence update isn't worth surfacing to the user.
+  useEffect(() => {
+    if (!participantId || !partyUsername) return;
+    const announced = announcedIdentityRef.current;
+    if (announced && announced.username === partyUsername && announced.avatarUrl === partyAvatarUrl) return;
+    announcedIdentityRef.current = { username: partyUsername, avatarUrl: partyAvatarUrl };
+    void execute(getWsClient(), {
+      query: UPDATE_USERNAME,
+      variables: { username: partyUsername, avatarUrl: partyAvatarUrl },
+    }).catch((error) => {
+      if (__DEV__) console.warn('[queue] failed to re-announce identity', error);
+    });
+  }, [participantId, partyUsername, partyAvatarUrl]);
 
   // Build the sync coordinator once per provider mount. The clientId is
   // generated fresh per app launch (no persistence needed today — only

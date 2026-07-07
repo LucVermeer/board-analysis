@@ -186,6 +186,10 @@ vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }),
 }));
 
+vi.mock('../party-profile-provider', () => ({
+  usePartyProfile: () => ({ username: undefined, avatarUrl: undefined }),
+}));
+
 vi.mock('../../lib/error-reporting', () => ({
   reportError: errorReporter.reportError,
   reportHandledError: errorReporter.reportHandledError,

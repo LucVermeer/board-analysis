@@ -132,6 +132,9 @@ vi.mock('../../lib/error-reporting', () => ({
 }));
 vi.mock('../toast-provider', () => ({ useToast: () => ({ showToast: toast.showToast }) }));
 vi.mock('../queue-snackbar-provider', () => ({ useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }) }));
+vi.mock('../party-profile-provider', () => ({
+  usePartyProfile: () => ({ username: undefined, avatarUrl: undefined }),
+}));
 
 import { QueueProvider, useQueue, useQueueData } from '../queue-provider';
 
