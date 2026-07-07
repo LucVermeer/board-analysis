@@ -302,17 +302,26 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     params.size_id,
   );
 
+  // The explicit `IS NOT NULL` guard mirrors the mobile offline path
+  // (search-climbs-local.ts) and makes the intent obvious: a climb whose
+  // compatible_size_ids is NULL isn't classifiable, so it's not tall/wide.
+  // (`NOT (NULL && …)` is already NULL — falsy in WHERE — so this is a
+  // readability/parity change, not a behavior change.)
   const tallClimbsConditions: SQL[] = [];
   if (searchParams.onlyTallClimbs) {
     tallClimbsConditions.push(
-      hasShorter ? sql`NOT (${boardClimbs.compatibleSizeIds} && ${sizeIdArrayLiteral(shorterSizeIds)})` : sql`false`,
+      hasShorter
+        ? sql`${boardClimbs.compatibleSizeIds} IS NOT NULL AND NOT (${boardClimbs.compatibleSizeIds} && ${sizeIdArrayLiteral(shorterSizeIds)})`
+        : sql`false`,
     );
   }
 
   const wideClimbsConditions: SQL[] = [];
   if (searchParams.onlyWideClimbs) {
     wideClimbsConditions.push(
-      hasNarrower ? sql`NOT (${boardClimbs.compatibleSizeIds} && ${sizeIdArrayLiteral(narrowerSizeIds)})` : sql`false`,
+      hasNarrower
+        ? sql`${boardClimbs.compatibleSizeIds} IS NOT NULL AND NOT (${boardClimbs.compatibleSizeIds} && ${sizeIdArrayLiteral(narrowerSizeIds)})`
+        : sql`false`,
     );
   }
 
