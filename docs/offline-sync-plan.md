@@ -160,11 +160,11 @@ A FIFO queue for offline mutations. Estimated ~800-1200 lines of production-qual
 
 ### Why an outbox, not dirty flags on the data tables
 
-The obvious-seeming alternative — write only to the data tables and sync "unsynced" rows from them directly — was considered and doesn't survive contact with this design. Offline writes DO go to the data tables (optimistically, in the same SQLite transaction as the outbox insert, so the two can't diverge); the `pending_mutations` row is _replay state_ that a dirty-flag column cannot represent:
+The obvious-seeming alternative — write only to the data tables and sync "unsynced" rows from them directly — was considered and doesn't survive contact with this design. Offline writes DO go to the data tables (optimistically, in the same SQLite transaction as the outbox insert, so the two can't diverge); the `pending_mutations` row is *replay state* that a dirty-flag column cannot represent:
 
 1. **Deletes.** An offline delete removes the data row — nothing remains to mark dirty. In-table tracking needs soft-delete/tombstone columns on every user table, which is exactly the WatermelonDB dealbreaker above.
 2. **Pulls destroy in-table flags.** The pull client applies server rows with `INSERT OR REPLACE` (delete + re-insert), which would reset any client-only `dirty` column on every sync — and the manifest contract (resolver JSON keys == local columns) would need per-table carve-outs plus merge logic so pulls don't clobber unsynced edits.
-3. **The server API is domain mutations, not row upserts.** The drainer replays ~18 distinct GraphQL mutations (`saveTick` vs `updateTick` vs `deleteTick`, `addFavorite`/`removeFavorite`, …). A dirty row can't say _which operation_ produced it; syncing row state directly means building a generic push protocol server-side — the rejected WatermelonDB/PowerSync shape.
+3. **The server API is domain mutations, not row upserts.** The drainer replays ~18 distinct GraphQL mutations (`saveTick` vs `updateTick` vs `deleteTick`, `addFavorite`/`removeFavorite`, …). A dirty row can't say *which operation* produced it; syncing row state directly means building a generic push protocol server-side — the rejected WatermelonDB/PowerSync shape.
 4. **Retry/dead-letter bookkeeping** (`retry_count`, `last_error`, `status`, the dead-letter UI) lives on the outbox row instead of polluting every data table.
 5. **Cross-table FIFO + cancellation.** The queue preserves user-action order across tables and lets an offline add→remove pair net out to zero server calls (the queued add is cancelled in-transaction).
 6. **Queue-only entities.** `user_playlist_pins` has mutations but no local mirror table at all.
