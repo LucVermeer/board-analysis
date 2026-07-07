@@ -21,18 +21,17 @@
 // violates the DDL's NOT NULL. (Both proven by the drift tests below.)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryInvalidator } from '../../database';
 
-// Capture schema-drift telemetry (and keep Sentry out of this test's graph).
-const reportHandledError = vi.hoisted(() => vi.fn());
-vi.mock('../../lib/error-reporting', () => ({ reportHandledError }));
+// Capture schema-drift telemetry through the injected reporter seam.
+const onSchemaDrift = vi.fn();
 
 import { pullSync } from '../pull-client';
 import { enqueue } from '../../mutation-queue/queue';
 import { processMutation, type GraphQLFetch } from '../../mutation-queue/handlers';
 import { runMigrations } from '../../db/migrations';
 import { ensureMutationQueueTable } from '../../mutation-queue/schema';
-import { createTestDatabase, type TestSqliteDb } from '../../db/__tests__/sqlite-test-db';
+import { createTestDatabase, type TestSqliteDb } from '../../testing/sqlite-test-db';
 
 // The non-null fields of the backend's `input SaveTickInput`
 // (packages/shared-schema/src/schema/ticks.ts) — i.e. every `Field!` minus the
@@ -96,8 +95,8 @@ function extractQueryName(query: string): string {
   return match[1];
 }
 
-function createMockQueryClient(): QueryClient {
-  return { invalidateQueries: vi.fn().mockResolvedValue(undefined) } as unknown as QueryClient;
+function createMockQueryClient(): QueryInvalidator {
+  return { invalidateQueries: vi.fn().mockResolvedValue(undefined) } as unknown as QueryInvalidator;
 }
 
 /** Reads the JSON checkpoint a sync wrote into sync_meta for a table. */
@@ -108,7 +107,7 @@ async function readCheckpoint(db: TestSqliteDb, key: string): Promise<typeof DEF
 
 describe('sync layer — real-DDL integration', () => {
   let db: TestSqliteDb;
-  let queryClient: QueryClient;
+  let queryClient: QueryInvalidator;
 
   beforeEach(async () => {
     // A fresh in-memory SQLite with the REAL app DDL (every CREATE TABLE in
@@ -316,6 +315,7 @@ describe('sync layer — real-DDL integration', () => {
           db,
           queryClient,
           makeSingleTableFetch({ queryName: 'syncFavorites', documents: [favoriteWithNewServerColumn] }),
+          { onSchemaDrift },
         ),
       ).resolves.toBeUndefined();
 
@@ -324,8 +324,8 @@ describe('sync layer — real-DDL integration', () => {
         ['climb-forward-compat'],
       );
       expect(row).toMatchObject({ board_name: 'tension', climb_uuid: 'climb-forward-compat', angle: 25 });
-      const driftReports = reportHandledError.mock.calls.filter(
-        ([, context]) => (context as { extra?: { column?: string } })?.extra?.column === 'shiny_new_column',
+      const driftReports = onSchemaDrift.mock.calls.filter(
+        ([drift]) => (drift as { column?: string })?.column === 'shiny_new_column',
       );
       expect(driftReports).toHaveLength(1);
     });

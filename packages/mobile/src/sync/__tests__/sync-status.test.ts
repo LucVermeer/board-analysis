@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setSyncProgress, getSyncStatusSnapshot, __resetSyncStatusForTests } from '../sync-status';
-import type { SyncProgress } from '../pull-client';
+import type { SyncProgress } from '@boardsesh/offline-sync';
 
 // Store is React-free apart from the hook, so it's exercised through
 // setSyncProgress + getSyncStatusSnapshot directly. useSyncStatus is a thin

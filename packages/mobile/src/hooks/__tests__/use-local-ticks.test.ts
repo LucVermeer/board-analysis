@@ -7,9 +7,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { runMigrations } from '../../db/migrations';
-import { enqueue } from '../../mutation-queue/queue';
-import { createTestDatabase, type TestSqliteDb } from '../../db/__tests__/sqlite-test-db';
+import { runMigrations, enqueue } from '@boardsesh/offline-sync';
+import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 
 let db: TestSqliteDb;
 

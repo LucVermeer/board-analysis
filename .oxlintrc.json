@@ -12,7 +12,12 @@
     "prefer-const": "error",
     "no-template-curly-in-string": "error",
     "eqeqeq": ["error", "smart"],
-    "no-console": ["error", { "allow": ["warn", "error", "info"] }],
+    "no-console": [
+      "error",
+      {
+        "allow": ["warn", "error", "info"]
+      }
+    ],
     "no-nested-ternary": "error",
     "no-restricted-globals": [
       "error",
@@ -37,7 +42,12 @@
         ]
       }
     ],
-    "typescript/no-explicit-any": ["deny", { "fixToUnknown": true }],
+    "typescript/no-explicit-any": [
+      "deny",
+      {
+        "fixToUnknown": true
+      }
+    ],
     "typescript/return-await": "error",
     "typescript/await-thenable": "error",
     "typescript/no-misused-spread": "error",
@@ -46,16 +56,36 @@
     "typescript/restrict-template-expressions": "error",
     "typescript/unbound-method": "error",
     "typescript/no-floating-promises": "error",
-    "typescript/no-misused-promises": ["error", { "checksVoidReturn": false }],
-    "typescript/consistent-type-imports": ["error", { "fixStyle": "inline-type-imports" }],
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        "checksVoidReturn": false
+      }
+    ],
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "fixStyle": "inline-type-imports"
+      }
+    ],
     "typescript/no-unnecessary-type-assertion": "error",
     "typescript/adjacent-overload-signatures": "error",
     "typescript/class-literal-property-style": "error",
     "typescript/consistent-generic-constructors": "error",
     "typescript/consistent-indexed-object-style": ["error", "record"],
-    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "as" }],
+    "typescript/consistent-type-assertions": [
+      "error",
+      {
+        "assertionStyle": "as"
+      }
+    ],
     "typescript/consistent-type-definitions": ["error", "type"],
-    "typescript/consistent-type-exports": ["error", { "fixMixedExportsWithInlineTypeSpecifier": true }],
+    "typescript/consistent-type-exports": [
+      "error",
+      {
+        "fixMixedExportsWithInlineTypeSpecifier": true
+      }
+    ],
     "typescript/dot-notation": "error",
     "typescript/no-deprecated": "error",
     "typescript/no-duplicate-enum-values": "error",
@@ -85,7 +115,12 @@
     "import/no-absolute-path": "error",
     "import/no-amd": "error",
     "import/no-commonjs": "error",
-    "import/no-duplicates": ["error", { "preferInline": true }],
+    "import/no-duplicates": [
+      "error",
+      {
+        "preferInline": true
+      }
+    ],
     "import/no-empty-named-blocks": "error",
     "import/no-named-as-default": "error",
     "import/no-named-as-default-member": "error",
@@ -101,12 +136,12 @@
           {
             "object": "Intl",
             "property": "RelativeTimeFormat",
-            "message": "Hermes does not implement Intl.RelativeTimeFormat — crashes mobile release builds. Use dayjs relativeTime via @boardsesh/profile-stats."
+            "message": "Hermes does not implement Intl.RelativeTimeFormat \u2014 crashes mobile release builds. Use dayjs relativeTime via @boardsesh/profile-stats."
           },
           {
             "object": "Intl",
             "property": "ListFormat",
-            "message": "Hermes does not implement Intl.ListFormat — crashes mobile release builds. Join the parts manually or via i18n."
+            "message": "Hermes does not implement Intl.ListFormat \u2014 crashes mobile release builds. Join the parts manually or via i18n."
           }
         ]
       }
@@ -120,11 +155,18 @@
             "patterns": [
               {
                 "group": ["@expo/ui/swift-ui", "@expo/ui/swift-ui/*"],
-                "message": "@expo/ui/swift-ui resolves native SwiftUI views at module load — importing it on Android crashes at runtime (\"Unable to get view config\"). Import it only from a *.ios.tsx / *.ios.ts file and platform-split the component (see SwitchRow / FilterChipRow and docs/expo-ui-components.md)."
+                "message": "@expo/ui/swift-ui resolves native SwiftUI views at module load \u2014 importing it on Android crashes at runtime (\"Unable to get view config\"). Import it only from a *.ios.tsx / *.ios.ts file and platform-split the component (see SwitchRow / FilterChipRow and docs/expo-ui-components.md)."
               },
               {
                 "group": ["@expo/ui/jetpack-compose", "@expo/ui/jetpack-compose/*"],
-                "message": "@expo/ui/jetpack-compose resolves native Compose views at module load — importing it on iOS crashes at runtime (\"Unable to get view config\"). Import it only from a *.android.tsx / *.android.ts file and platform-split the component (see SwitchRow / FilterChipRow and docs/expo-ui-components.md)."
+                "message": "@expo/ui/jetpack-compose resolves native Compose views at module load \u2014 importing it on iOS crashes at runtime (\"Unable to get view config\"). Import it only from a *.android.tsx / *.android.ts file and platform-split the component (see SwitchRow / FilterChipRow and docs/expo-ui-components.md)."
+              }
+            ],
+            "paths": [
+              {
+                "name": "@boardsesh/offline-sync",
+                "importNames": ["drainMutationQueue", "startSyncScheduler", "triggerSync", "pullSync"],
+                "message": "Import these from src/offline/offline-sync-adapter instead \u2014 the package leaves the connectivity probe, AppState/NetInfo triggers, and Sentry telemetry injected, and only the adapter binds them."
               }
             ]
           }
@@ -140,7 +182,7 @@
             "patterns": [
               {
                 "group": ["@expo/ui/jetpack-compose", "@expo/ui/jetpack-compose/*"],
-                "message": "@expo/ui/jetpack-compose is Android-only — it must not be imported from a *.ios file. Put Compose code in the matching *.android.tsx file."
+                "message": "@expo/ui/jetpack-compose is Android-only \u2014 it must not be imported from a *.ios file. Put Compose code in the matching *.android.tsx file."
               }
             ]
           }
@@ -156,7 +198,7 @@
             "patterns": [
               {
                 "group": ["@expo/ui/swift-ui", "@expo/ui/swift-ui/*"],
-                "message": "@expo/ui/swift-ui is iOS-only — it must not be imported from a *.android file. Put SwiftUI code in the matching *.ios.tsx file."
+                "message": "@expo/ui/swift-ui is iOS-only \u2014 it must not be imported from a *.android file. Put SwiftUI code in the matching *.ios.tsx file."
               }
             ]
           }

@@ -39,6 +39,7 @@ We'll always create a PR, never asks if a PR should be created, open as a draft.
     /board-config/  # Board metadata, hold maps, angle tables
     /board-constants/ # Grade colours, difficulty bands
     /board-react/   # Renderer-agnostic BoardProvider + logbook/tick hooks (useSaveTick/useUpdateTick/useDeleteTick)
+    /offline-sync/  # Offline sync engine: mutation outbox + drainer, pull client, SQLite DDL (platform I/O injected)
     /profile-stats/ # Pure climbing-stats aggregation for the You page / profile (chart builders, deriveProfileViewModel)
     /ble-protocol/  # Bluetooth LED control protocol
   /db/              # Shared database schema, client, migrations (drizzle)

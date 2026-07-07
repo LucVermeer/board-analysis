@@ -13,6 +13,9 @@ vi.mock('../../client', () => ({
 vi.mock('../use-infinite-search-climbs', () => ({ useInfiniteSearchClimbs: vi.fn() }));
 vi.mock('../use-beta-link-preview', () => ({ useBetaLinkPreview: vi.fn() }));
 vi.mock('../use-mobile-climb-actions-data', () => ({ useMobileClimbActionsData: vi.fn() }));
+// The hooks barrel statically imports the offline-sync adapter, which imports
+// react-native (Flow entry Rolldown's scan can't parse) — mock it out.
+vi.mock('../../../../offline/offline-sync-adapter', () => ({ drainMutationQueue: vi.fn(async () => {}) }));
 vi.mock('../use-you-data', () => ({
   useAllBoardsTicks: vi.fn(),
   useUserProfileStats: vi.fn(),

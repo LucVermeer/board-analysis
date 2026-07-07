@@ -11,10 +11,10 @@ vi.mock('react-native-mmkv', () => {
   return { createMMKV: vi.fn(() => createMockInstance()) };
 });
 
-import { runMigrations } from '../../migrations';
-import { createTestDatabase, type TestSqliteDb } from '../../__tests__/sqlite-test-db';
+import { runMigrations } from '@boardsesh/offline-sync';
+import { createTestDatabase, type TestSqliteDb } from '@boardsesh/offline-sync/testing';
 import { isBoardDownloadedLocally } from '../board-download-status';
-import { markScopeDownloadComplete } from '../../../sync/checkpoints';
+import { markScopeDownloadComplete } from '@boardsesh/offline-sync';
 import { setSetting, resetAllSettings } from '../../../settings/hooks';
 
 async function insertClimb(

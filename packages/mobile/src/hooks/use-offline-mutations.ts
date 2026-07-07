@@ -1,9 +1,7 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { SQLiteDatabase } from 'expo-sqlite';
-import { enqueue } from '../mutation-queue';
-import { drainMutationQueue } from '../mutation-queue';
-import type { GraphQLFetch } from '../mutation-queue/handlers';
+import { enqueue, type GraphQLFetch, type OfflineDatabase } from '@boardsesh/offline-sync';
+import { drainMutationQueue } from '../offline/offline-sync-adapter';
 import type { SaveTickMutationVariables } from '../lib/graphql/operations';
 
 export type SaveTickInput = SaveTickMutationVariables['input'];
@@ -14,7 +12,11 @@ export type FavoriteInput = {
   angle: number;
 };
 
-function scheduleDrain(db: SQLiteDatabase, queryClient: ReturnType<typeof useQueryClient>, graphqlFetch: GraphQLFetch) {
+function scheduleDrain(
+  db: OfflineDatabase,
+  queryClient: ReturnType<typeof useQueryClient>,
+  graphqlFetch: GraphQLFetch,
+) {
   void drainMutationQueue(db, queryClient, graphqlFetch).catch((error: unknown) => {
     if (__DEV__) {
       console.warn('[MutationQueue] drain failed after local write:', error);
@@ -22,7 +24,7 @@ function scheduleDrain(db: SQLiteDatabase, queryClient: ReturnType<typeof useQue
   });
 }
 
-export async function writeTickLocal(db: SQLiteDatabase, input: SaveTickInput, tickUuid: string): Promise<void> {
+export async function writeTickLocal(db: OfflineDatabase, input: SaveTickInput, tickUuid: string): Promise<void> {
   const now = new Date().toISOString();
   const climbedAt = input.climbedAt ?? now;
   const sessionId = input.sessionId ?? null;
@@ -64,7 +66,7 @@ export function favoriteRemoveKey(input: FavoriteInput): string {
   return `del:user_favorites:${input.boardName}:${input.climbUuid}:${input.angle}`;
 }
 
-export async function addFavoriteLocal(db: SQLiteDatabase, input: FavoriteInput): Promise<void> {
+export async function addFavoriteLocal(db: OfflineDatabase, input: FavoriteInput): Promise<void> {
   const now = new Date().toISOString();
 
   await db.withExclusiveTransactionAsync(async (txn) => {
@@ -81,7 +83,7 @@ export async function addFavoriteLocal(db: SQLiteDatabase, input: FavoriteInput)
   });
 }
 
-export async function removeFavoriteLocal(db: SQLiteDatabase, input: FavoriteInput): Promise<void> {
+export async function removeFavoriteLocal(db: OfflineDatabase, input: FavoriteInput): Promise<void> {
   await db.withExclusiveTransactionAsync(async (txn) => {
     await txn.runAsync(`DELETE FROM user_favorites WHERE board_name = ? AND climb_uuid = ? AND angle = ?`, [
       input.boardName,
@@ -102,7 +104,7 @@ export async function removeFavoriteLocal(db: SQLiteDatabase, input: FavoriteInp
   });
 }
 
-export function useOfflineFollowUser(db: SQLiteDatabase, graphqlFetch: GraphQLFetch) {
+export function useOfflineFollowUser(db: OfflineDatabase, graphqlFetch: GraphQLFetch) {
   const queryClient = useQueryClient();
 
   return useCallback(
@@ -136,7 +138,7 @@ export function useOfflineFollowUser(db: SQLiteDatabase, graphqlFetch: GraphQLFe
   );
 }
 
-export function useOfflineUnfollowUser(db: SQLiteDatabase, graphqlFetch: GraphQLFetch) {
+export function useOfflineUnfollowUser(db: OfflineDatabase, graphqlFetch: GraphQLFetch) {
   const queryClient = useQueryClient();
 
   return useCallback(

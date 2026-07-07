@@ -105,6 +105,7 @@ export default defineConfig({
       './packages/shared/board-react/vite.config.ts',
       './packages/shared/create-climb-react/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
+      './packages/shared/offline-sync/vite.config.ts',
       './packages/shared/logbook/vite.config.ts',
       './packages/shared/queue-runtime/vite.config.ts',
       './packages/shared/board-presence/vite.config.ts',
@@ -405,6 +406,9 @@ export default defineConfig({
       'typecheck:queue-runtime': {
         command: 'bun run --filter=@boardsesh/queue-runtime typecheck',
       },
+      'typecheck:offline-sync': {
+        command: 'bun run --filter=@boardsesh/offline-sync typecheck',
+      },
       'typecheck:queue-react': {
         command: 'bun run --filter=@boardsesh/queue-react typecheck',
       },
@@ -505,6 +509,7 @@ export default defineConfig({
           'typecheck:ble-protocol',
           'typecheck:queue',
           'typecheck:queue-runtime',
+          'typecheck:offline-sync',
           'typecheck:queue-react',
           'typecheck:board-presence',
           'typecheck:board-presence-react',
@@ -582,6 +587,16 @@ export default defineConfig({
         // runtime ("Unable to get view config"). The .oxlintrc.json rule isn't
         // enforced by `vp check` (reduced ruleset), so this is the real backstop.
         command: 'bash scripts/mobile-platform-imports-check.sh',
+        cache: false,
+      },
+      'check:mobile-offline-sync-imports': {
+        // Guards the offline-sync adapter boundary: the engine's drain/scheduler/
+        // pull entry points must be imported via src/offline/offline-sync-adapter
+        // (which binds the connectivity probe + platform triggers), never from
+        // '@boardsesh/offline-sync' directly. Like the platform-imports guard,
+        // the .oxlintrc.json rule isn't enforced by `vp check`, so this is the
+        // real backstop.
+        command: 'bash scripts/mobile-offline-sync-imports-check.sh',
         cache: false,
       },
       'check:mobile-bundle': {

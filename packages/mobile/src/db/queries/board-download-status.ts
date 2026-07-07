@@ -1,7 +1,10 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
 import { isSizeScopedBoard } from '@boardsesh/board-config';
-import { offlineBoardKey, type OfflineBoardScope } from '../../settings/offline-board-key';
-import { isScopeDownloadComplete } from '../../sync/checkpoints';
+import {
+  offlineBoardKey,
+  isScopeDownloadComplete,
+  type OfflineBoardScope,
+  type OfflineDatabase,
+} from '@boardsesh/offline-sync';
 
 /**
  * Whether a board's exact (type, layout, size) scope is available to browse
@@ -20,7 +23,7 @@ import { isScopeDownloadComplete } from '../../sync/checkpoints';
  * thus react-native's Flow entry) into the test collection-time module scan. The
  * pure `offlineBoardKey` stays a static import.
  */
-export async function isBoardDownloadedLocally(db: SQLiteDatabase, scope: OfflineBoardScope): Promise<boolean> {
+export async function isBoardDownloadedLocally(db: OfflineDatabase, scope: OfflineBoardScope): Promise<boolean> {
   const { getSetting } = await import('../../settings/hooks');
   const scopeKey = offlineBoardKey(scope);
   if (!getSetting('syncEnabledBoards').includes(scopeKey)) return false;

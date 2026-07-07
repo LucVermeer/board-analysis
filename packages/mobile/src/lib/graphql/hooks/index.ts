@@ -39,8 +39,8 @@ import { getDatabaseHandle } from '../../../db';
 import { offlineAwareRequest } from '../offline-request';
 import { useOfflineDownloadsEnabled } from '../../../providers/feature-flags-provider';
 import { addFavoriteLocal, removeFavoriteLocal } from '../../../hooks/use-offline-mutations';
-import { drainMutationQueue } from '../../../mutation-queue';
-import type { GraphQLFetch } from '../../../mutation-queue/handlers';
+import type { GraphQLFetch } from '@boardsesh/offline-sync';
+import { drainMutationQueue } from '../../../offline/offline-sync-adapter';
 import {
   DELETE_DRAFT_CLIMB_MUTATION,
   type DeleteDraftClimbMutationVariables,

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
-import type { QueryClient } from '@tanstack/react-query';
+import type { OfflineDatabase, QueryInvalidator } from '../../database';
 
 vi.mock('../checkpoints', () => ({
   getCheckpoint: vi.fn().mockResolvedValue(null),
@@ -17,7 +16,7 @@ vi.mock('../table-config', async () => {
 });
 
 import { pullSync } from '../pull-client';
-import { setSigningOut } from '../../mutation-queue';
+import { setSigningOut } from '../../mutation-queue/drainer';
 import { getCheckpoint, setCheckpoint, getCheckpointKey, markScopeDownloadComplete } from '../checkpoints';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from '../table-config';
 
@@ -39,14 +38,14 @@ function createMockDb() {
     withExclusiveTransactionAsync: vi.fn(async (callback: (txn: typeof mockTxn) => Promise<void>) => {
       await callback(mockTxn);
     }),
-  } as unknown as SQLiteDatabase;
+  } as unknown as OfflineDatabase;
   return { db, sqlCalls, mockTxn };
 }
 
 function createMockQueryClient() {
   return {
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
-  } as unknown as QueryClient;
+  } as unknown as QueryInvalidator;
 }
 
 function makeSyncResult(
@@ -70,10 +69,10 @@ type GraphqlFetchMock = ReturnType<typeof vi.fn> &
   (<T>(query: string, variables?: Record<string, unknown>) => Promise<T>);
 
 describe('pullSync', () => {
-  let db: SQLiteDatabase;
+  let db: OfflineDatabase;
   let sqlCalls: SqlCall[];
   let mockTxn: ReturnType<typeof createMockDb>['mockTxn'];
-  let queryClient: QueryClient;
+  let queryClient: QueryInvalidator;
   let graphqlFetch: GraphqlFetchMock;
 
   beforeEach(() => {

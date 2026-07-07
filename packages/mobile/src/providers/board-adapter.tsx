@@ -16,7 +16,7 @@ import { getDatabaseHandle } from '../db';
 import { getHttpClient } from '../lib/graphql/client';
 import { reportHandledError } from '../lib/error-reporting';
 import { getWsClient } from '../lib/graphql/ws-client';
-import { drainMutationQueue } from '../mutation-queue';
+import { drainMutationQueue } from '../offline/offline-sync-adapter';
 import { writeTickLocal } from '../hooks/use-offline-mutations';
 
 export function BoardAdapterWrapper({ children }: { children: ReactNode }) {

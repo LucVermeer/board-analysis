@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase, QueryInvalidator } from '../../database';
 import type { PendingMutation } from '../queue';
 
 vi.mock('../queue', () => ({
@@ -51,12 +51,12 @@ function makeMutation(overrides: Partial<PendingMutation> = {}): PendingMutation
   };
 }
 
-const mockDb = {} as SQLiteDatabase;
+const mockDb = {} as OfflineDatabase;
 
 function createMockQueryClient() {
   return {
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
-  } as unknown as import('@tanstack/react-query').QueryClient;
+  } as unknown as QueryInvalidator;
 }
 
 const mockGraphqlFetch = vi.fn().mockResolvedValue({});
@@ -111,7 +111,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(mockProcessMutation).toHaveBeenCalledTimes(2);
     expect(mockProcessMutation.mock.calls[0][0]).toBe(mutationA);
@@ -136,7 +136,7 @@ describe('drainMutationQueue', () => {
 
     // maxCycleAttempts:0 → give up the cycle on the first retryable hit (no
     // in-cycle backoff retry), exercising the single-pass stop behavior.
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { maxCycleAttempts: 0 });
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE, maxCycleAttempts: 0 });
 
     expect(mockMarkCompleted).toHaveBeenCalledTimes(1);
     expect(mockMarkCompleted).toHaveBeenCalledWith(mockDb, 1);
@@ -156,7 +156,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(mockMarkDeadLetter).toHaveBeenCalledWith(mockDb, 1, 'Validation failed');
     expect(mockMarkCompleted).toHaveBeenCalledWith(mockDb, 2);
@@ -174,7 +174,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { maxCycleAttempts: 0 });
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE, maxCycleAttempts: 0 });
 
     // recordFailure does the retry bump AND the dead-letter transition in one
     // UPDATE; the drainer no longer issues a separate markDeadLetter for the
@@ -196,8 +196,8 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    const drainPromiseA = drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
-    const drainPromiseB = drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    const drainPromiseA = drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
+    const drainPromiseB = drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     resolveSlowProcess!();
     await Promise.all([drainPromiseA, drainPromiseB]);
@@ -214,7 +214,7 @@ describe('drainMutationQueue', () => {
 
     // Sign-out is wiping local data — a scheduler/listener drain must not run.
     setSigningOut(true);
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(mockPeekPending).not.toHaveBeenCalled();
     expect(mockProcessMutation).not.toHaveBeenCalled();
@@ -222,7 +222,7 @@ describe('drainMutationQueue', () => {
     // Once sign-out clears the guard, draining resumes normally.
     setSigningOut(false);
     mockPeekPending.mockResolvedValueOnce([mutation]).mockResolvedValueOnce([]);
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
     expect(mockProcessMutation).toHaveBeenCalledTimes(1);
   });
 
@@ -243,7 +243,7 @@ describe('drainMutationQueue', () => {
     });
 
     const queryClient = createMockQueryClient();
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     // Mutation #2 must never have been sent.
     expect(mockProcessMutation).toHaveBeenCalledTimes(1);
@@ -257,7 +257,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['ticks'] });
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['logbook'] });
@@ -270,7 +270,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['favorites'] });
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['searchClimbs'] });
@@ -283,7 +283,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
   });
@@ -293,7 +293,7 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(mockProcessMutation).not.toHaveBeenCalled();
   });
@@ -309,13 +309,13 @@ describe('drainMutationQueue', () => {
 
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     const newMutation = makeMutation({ id: 2 });
     mockPeekPending.mockResolvedValueOnce([newMutation]).mockResolvedValueOnce([]);
     mockProcessMutation.mockResolvedValueOnce(undefined);
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     expect(mockProcessMutation).toHaveBeenCalledTimes(2);
   });
@@ -334,7 +334,12 @@ describe('drainMutationQueue', () => {
     const sleep = vi.fn().mockResolvedValue(undefined);
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { sleep, baseDelayMs: 10, maxDelayMs: 100 });
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, {
+      ...ONLINE,
+      sleep,
+      baseDelayMs: 10,
+      maxDelayMs: 100,
+    });
 
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(mockRecordFailure).toHaveBeenCalledWith(mockDb, 1, 'transient 503');
@@ -350,7 +355,7 @@ describe('drainMutationQueue', () => {
     const sleep = vi.fn().mockResolvedValue(undefined);
     const queryClient = createMockQueryClient();
 
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { sleep });
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE, sleep });
 
     expect(sleep).not.toHaveBeenCalled();
   });
@@ -367,6 +372,7 @@ describe('drainMutationQueue', () => {
     const queryClient = createMockQueryClient();
 
     await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, {
+      ...ONLINE,
       sleep,
       maxCycleAttempts: 3,
       baseDelayMs: 1,
@@ -392,6 +398,7 @@ describe('drainMutationQueue', () => {
     const queryClient = createMockQueryClient();
 
     await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, {
+      ...ONLINE,
       sleep,
       maxCycleAttempts: 4,
       baseDelayMs: 100,

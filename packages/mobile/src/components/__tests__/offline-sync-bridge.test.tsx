@@ -10,14 +10,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const startSyncSchedulerStop = vi.fn();
 const startSyncSchedulerMock = vi.fn(() => startSyncSchedulerStop);
 vi.mock('../../sync', () => ({
-  startSyncScheduler: (...args: unknown[]) => startSyncSchedulerMock(...(args as [])),
   setSyncProgress: vi.fn(),
 }));
 
 const drainMutationQueueMock = vi.fn(async (..._args: unknown[]) => {});
-const getPendingCountMock = vi.fn(async (..._args: unknown[]) => 0);
-vi.mock('../../mutation-queue', () => ({
+// The scheduler + drain bindings live in the adapter (which statically imports
+// react-native — mock it so Rolldown's scan never parses the RN Flow entry).
+vi.mock('../../offline/offline-sync-adapter', () => ({
+  startSyncScheduler: (...args: unknown[]) => startSyncSchedulerMock(...(args as [])),
   drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
+}));
+
+const getPendingCountMock = vi.fn(async (..._args: unknown[]) => 0);
+vi.mock('@boardsesh/offline-sync', () => ({
   getPendingCount: (...args: unknown[]) => getPendingCountMock(...args),
 }));
 

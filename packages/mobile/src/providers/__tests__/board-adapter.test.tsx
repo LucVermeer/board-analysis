@@ -67,7 +67,7 @@ vi.mock('../../lib/error-reporting', () => ({
   reportHandledError: vi.fn(),
 }));
 
-vi.mock('../../mutation-queue', () => ({
+vi.mock('../../offline/offline-sync-adapter', () => ({
   drainMutationQueue: vi.fn(async () => {}),
 }));
 

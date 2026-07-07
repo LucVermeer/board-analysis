@@ -1,11 +1,16 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
-import type { QueryClient } from '@tanstack/react-query';
-import type { SyncCursorInput, SyncResult, SyncDeletionsResult } from '../lib/graphql/operations';
-import { reportHandledError } from '../lib/error-reporting';
+import type { OfflineDatabase, QueryInvalidator, SqlValue } from '../database';
+import type { SyncCursorInput, SyncResult, SyncDeletionsResult } from '../types';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from './table-config';
 import { getCheckpoint, setCheckpoint, getCheckpointKey, markScopeDownloadComplete } from './checkpoints';
-import { isSigningOut, getWipeEpoch } from '../mutation-queue';
-import { parseOfflineBoardKey, type OfflineBoardScope } from '../settings/offline-board-key';
+import { isSigningOut, getWipeEpoch } from '../mutation-queue/drainer';
+import { parseOfflineBoardKey, type OfflineBoardScope } from '../offline-board-key';
+
+/**
+ * Telemetry hook for schema drift: a sync document carried a column the local
+ * allowlist doesn't know. The app adapter reports it (mobile → Sentry, tags
+ * source: 'offline-sync', kind: 'schema-drift'); tests and headless callers omit it.
+ */
+export type SchemaDriftReporter = (drift: { tableName: string; column: string }) => void;
 
 export type SyncProgress = {
   phase: 'user_data' | 'board_data' | 'deletions' | 'idle';
@@ -28,6 +33,7 @@ export type SyncOptions = {
   /** Encoded board scope keys ("boardType:layoutId:sizeId") to download offline. */
   enabledBoards?: string[];
   onProgress?: (progress: SyncProgress) => void;
+  onSchemaDrift?: SchemaDriftReporter;
 };
 
 /** A per-board download target: the parsed scope plus its encoded key. */
@@ -77,10 +83,11 @@ const SYNC_DELETIONS_QUERY = `
 `;
 
 async function upsertDocuments(
-  db: SQLiteDatabase,
+  db: OfflineDatabase,
   tableName: string,
   documents: Record<string, unknown>[],
   allowedColumns: readonly string[],
+  onSchemaDrift?: SchemaDriftReporter,
 ): Promise<void> {
   if (documents.length === 0) return;
 
@@ -97,10 +104,7 @@ async function upsertDocuments(
       const driftKey = `${tableName}.${unknownColumn}`;
       if (reportedUnknownSyncColumns.has(driftKey)) continue;
       reportedUnknownSyncColumns.add(driftKey);
-      reportHandledError(new Error(`Sync document for ${tableName} contains unknown column: ${unknownColumn}`), {
-        tags: { source: 'offline-sync', kind: 'schema-drift' },
-        extra: { tableName, column: unknownColumn },
-      });
+      onSchemaDrift?.({ tableName, column: unknownColumn });
     }
   }
 
@@ -128,18 +132,19 @@ async function upsertDocuments(
         if (typeof value === 'object') return JSON.stringify(value);
         return value;
       });
-      await transaction.runAsync(sql, values as (string | number | null)[]);
+      await transaction.runAsync(sql, values as SqlValue[]);
     }
   });
 }
 
 async function syncTable(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: <T>(query: string, variables?: Record<string, unknown>) => Promise<T>,
   tableName: string,
   boardScope?: BoardScope,
   onProgress?: (documentsProcessed: number) => void,
+  onSchemaDrift?: SchemaDriftReporter,
 ): Promise<{ reachedTail: boolean }> {
   const config = TABLE_CONFIGS[tableName];
   if (!config) throw new Error(`No sync config for table: ${tableName}`);
@@ -184,7 +189,7 @@ async function syncTable(
     // documents:[] with hasMore:true we'd spin forever. Stop here (I2).
     if (result.documents.length === 0) break;
 
-    await upsertDocuments(db, tableName, result.documents, config.localColumns);
+    await upsertDocuments(db, tableName, result.documents, config.localColumns, onSchemaDrift);
     await setCheckpoint(db, checkpointKey, result.cursor);
 
     totalProcessed += result.documents.length;
@@ -210,8 +215,8 @@ async function syncTable(
 }
 
 async function processDeletions(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: <T>(query: string, variables?: Record<string, unknown>) => Promise<T>,
   onProgress?: (documentsProcessed: number) => void,
 ): Promise<void> {
@@ -313,8 +318,8 @@ async function processDeletions(
 }
 
 export async function pullSync(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: <T>(query: string, variables?: Record<string, unknown>) => Promise<T>,
   options?: SyncOptions,
 ): Promise<void> {
@@ -337,10 +342,18 @@ export async function pullSync(
   for (const tableName of USER_DATA_TABLES) {
     onProgress?.({ phase: 'user_data', currentTable: tableName, documentsProcessed: totalDocuments });
     const baseCount = totalDocuments;
-    await syncTable(db, queryClient, graphqlFetch, tableName, undefined, (tableProcessed) => {
-      totalDocuments = baseCount + tableProcessed;
-      onProgress?.({ phase: 'user_data', currentTable: tableName, documentsProcessed: totalDocuments });
-    });
+    await syncTable(
+      db,
+      queryClient,
+      graphqlFetch,
+      tableName,
+      undefined,
+      (tableProcessed) => {
+        totalDocuments = baseCount + tableProcessed;
+        onProgress?.({ phase: 'user_data', currentTable: tableName, documentsProcessed: totalDocuments });
+      },
+      options?.onSchemaDrift,
+    );
   }
 
   // Each enabled board is a "boardType:layoutId:sizeId" scope key. Malformed keys
@@ -375,6 +388,7 @@ export async function pullSync(
             currentTableProcessed: tableProcessed,
           });
         },
+        options?.onSchemaDrift,
       );
       if (!reachedTail) allTablesReachedTail = false;
     }

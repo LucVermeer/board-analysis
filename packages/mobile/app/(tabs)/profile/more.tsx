@@ -20,9 +20,9 @@ import {
   getDeadLetters,
   retryDeadLetter,
   getPendingCount,
-  drainMutationQueue,
-} from '../../../src/mutation-queue';
-import type { GraphQLFetch } from '../../../src/mutation-queue/handlers';
+  type GraphQLFetch,
+} from '@boardsesh/offline-sync';
+import { drainMutationQueue } from '../../../src/offline/offline-sync-adapter';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { hapticLight, hapticSelection } from '../../../src/lib/haptics';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';

@@ -56,7 +56,7 @@ vi.mock('../../../../hooks/use-offline-mutations', () => ({
 }));
 
 const drainMutationQueueMock = vi.fn(async (..._args: unknown[]) => {});
-vi.mock('../../../../mutation-queue', () => ({
+vi.mock('../../../../offline/offline-sync-adapter', () => ({
   drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
 }));
 

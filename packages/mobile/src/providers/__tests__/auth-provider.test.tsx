@@ -75,10 +75,12 @@ vi.mock('../../db', () => ({
 
 const drainMutationQueueMock = vi.fn(async (..._args: unknown[]) => {});
 const getPendingCountMock = vi.fn(async (..._args: unknown[]) => 0);
-vi.mock('../../mutation-queue', () => ({
-  drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
+vi.mock('@boardsesh/offline-sync', () => ({
   getPendingCount: (...args: unknown[]) => getPendingCountMock(...args),
   setSigningOut: vi.fn(),
+}));
+vi.mock('../../offline/offline-sync-adapter', () => ({
+  drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
 }));
 
 vi.mock('../../notifications', () => ({

@@ -4,18 +4,18 @@
 // behave as claimed on real rows.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase } from '../../database';
 
 import { peekPending, recordFailure, type PendingMutation } from '../queue';
 import { ensureMutationQueueTable } from '../schema';
-import { createTestDatabase, type TestSqliteDb } from '../../db/__tests__/sqlite-test-db';
+import { createTestDatabase, type TestSqliteDb } from '../../testing/sqlite-test-db';
 
 let db: TestSqliteDb;
 
 // Insert a pending mutation with an EXPLICIT created_at so same-second ties are
 // deterministic (enqueue() always stamps datetime('now'), which we can't pin).
 // id is AUTOINCREMENT, so insertion order fixes the tiebreak.
-async function insertPending(database: SQLiteDatabase, idempotencyKey: string, createdAt: string): Promise<void> {
+async function insertPending(database: OfflineDatabase, idempotencyKey: string, createdAt: string): Promise<void> {
   await database.runAsync(
     `INSERT INTO pending_mutations (table_name, operation, payload, idempotency_key, created_at)
      VALUES ('boardsesh_ticks', 'create', '{}', ?, ?)`,

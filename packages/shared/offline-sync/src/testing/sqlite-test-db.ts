@@ -1,14 +1,14 @@
 // Test-only adapter wrapping Node's built-in `node:sqlite` (available since
-// Node 22) behind the async surface our DB / sync / mutation-queue code calls on
-// expo-sqlite's SQLiteDatabase. Native expo-sqlite cannot load in vitest's node
-// environment, so this gives real round-trip coverage of the actual DDL and SQL
-// without mocking the database engine.
+// Node 22) behind the async OfflineDatabase surface the sync / mutation-queue
+// code calls (the same shape expo-sqlite's SQLiteDatabase satisfies). Native
+// expo-sqlite cannot load in vitest's node environment, so this gives real
+// round-trip coverage of the actual DDL and SQL without mocking the engine.
 //
 // Only the methods our code under test uses are implemented:
 //   execAsync, runAsync, getFirstAsync, getAllAsync, withExclusiveTransactionAsync.
 
 import { DatabaseSync } from 'node:sqlite';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { OfflineDatabase } from '../database';
 
 type SqlBindValue = string | number | null;
 
@@ -78,18 +78,18 @@ class NodeSqliteAdapter {
   }
 }
 
-export type TestSqliteDb = NodeSqliteAdapter & SQLiteDatabase;
+export type TestSqliteDb = NodeSqliteAdapter & OfflineDatabase;
 
-/** Opens a fresh in-memory database adapted to the SQLiteDatabase surface. */
+/** Opens a fresh in-memory database adapted to the OfflineDatabase surface. */
 export function createTestDatabase(): TestSqliteDb {
   const adapter = new NodeSqliteAdapter(new DatabaseSync(':memory:'));
-  // The adapter implements only the subset of SQLiteDatabase our code touches;
-  // cast through unknown so call sites get the real type without re-declaring it.
+  // The adapter's variadic methods satisfy OfflineDatabase's overload pair
+  // behaviorally; cast through unknown so call sites get the interface type.
   return adapter as unknown as TestSqliteDb;
 }
 
 /** Lists user-defined table names, excluding sqlite internal bookkeeping. */
-export async function listTables(db: SQLiteDatabase): Promise<string[]> {
+export async function listTables(db: OfflineDatabase): Promise<string[]> {
   const rows = await db.getAllAsync<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   );
@@ -97,13 +97,13 @@ export async function listTables(db: SQLiteDatabase): Promise<string[]> {
 }
 
 /** Returns the column names of a table in definition order. */
-export async function tableColumns(db: SQLiteDatabase, tableName: string): Promise<string[]> {
+export async function tableColumns(db: OfflineDatabase, tableName: string): Promise<string[]> {
   const rows = await db.getAllAsync<{ name: string }>(`SELECT name FROM pragma_table_info('${tableName}')`);
   return rows.map((row) => row.name);
 }
 
 /** Returns the primary-key column names of a table, ordered by their PK position. */
-export async function primaryKeyColumns(db: SQLiteDatabase, tableName: string): Promise<string[]> {
+export async function primaryKeyColumns(db: OfflineDatabase, tableName: string): Promise<string[]> {
   const rows = await db.getAllAsync<{ name: string; pk: number }>(
     `SELECT name, pk FROM pragma_table_info('${tableName}') WHERE pk > 0 ORDER BY pk`,
   );

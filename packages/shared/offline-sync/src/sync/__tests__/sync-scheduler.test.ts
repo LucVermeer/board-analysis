@@ -1,38 +1,55 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQLiteDatabase } from 'expo-sqlite';
-import type { QueryClient } from '@tanstack/react-query';
-
-// ── Native module mocks ───────────────────────────────────────────────────
-
-const appStateAddListener = vi.fn((..._args: unknown[]) => ({ remove: vi.fn() }));
-vi.mock('react-native', () => ({
-  AppState: {
-    addEventListener: (...args: unknown[]) => appStateAddListener(...args),
-  },
-}));
-
-const netInfoAddListener = vi.fn((..._args: unknown[]) => vi.fn());
-vi.mock('@react-native-community/netinfo', () => ({
-  default: {
-    addEventListener: (...args: unknown[]) => netInfoAddListener(...args),
-  },
-}));
+import type { OfflineDatabase, QueryInvalidator } from '../../database';
 
 vi.mock('../pull-client', () => ({
   pullSync: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { triggerSync, startSyncScheduler, __resetSyncSchedulerStateForTests, type DrainQueue } from '../sync-scheduler';
+import {
+  triggerSync,
+  startSyncScheduler,
+  __resetSyncSchedulerStateForTests,
+  type DrainQueue,
+  type SchedulerTriggers,
+} from '../sync-scheduler';
 import { pullSync } from '../pull-client';
 
 const mockPullSync = pullSync as ReturnType<typeof vi.fn>;
 
-const mockDb = {} as SQLiteDatabase;
+const mockDb = {} as OfflineDatabase;
 function createMockQueryClient() {
-  return { invalidateQueries: vi.fn() } as unknown as QueryClient;
+  return { invalidateQueries: vi.fn() } as unknown as QueryInvalidator;
 }
 const mockGraphqlFetch = vi.fn().mockResolvedValue({});
 const getEnabledBoards = () => ['kilter'];
+
+// Fake platform triggers standing in for the mobile adapter's AppState/NetInfo
+// subscriptions. Tests fire them by hand.
+function createFakeTriggers() {
+  let foregroundCallback: (() => void) | null = null;
+  let connectivityCallback: ((isConnected: boolean) => void) | null = null;
+  const unsubscribeForeground = vi.fn();
+  const unsubscribeConnectivity = vi.fn();
+  const triggers: SchedulerTriggers = {
+    subscribeForeground(callback) {
+      foregroundCallback = callback;
+      return unsubscribeForeground;
+    },
+    subscribeConnectivity(callback) {
+      connectivityCallback = callback;
+      return unsubscribeConnectivity;
+    },
+  };
+  return {
+    triggers,
+    fireForeground: () => foregroundCallback?.(),
+    fireConnectivity: (isConnected: boolean) => connectivityCallback?.(isConnected),
+    isForegroundWired: () => foregroundCallback !== null,
+    isConnectivityWired: () => connectivityCallback !== null,
+    unsubscribeForeground,
+    unsubscribeConnectivity,
+  };
+}
 
 // Lets a test resolve an in-flight async step on demand.
 function deferred<T = void>() {
@@ -151,7 +168,6 @@ describe('sync-scheduler', () => {
     });
 
     const queryClient = createMockQueryClient();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // First run enters and awaits the gated drain.
     triggerSync(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue);
@@ -168,16 +184,18 @@ describe('sync-scheduler', () => {
 
     expect(drainQueue).toHaveBeenCalledTimes(2);
     expect(mockPullSync).toHaveBeenCalledTimes(1); // only the follow-up pulled
-    warnSpy.mockRestore();
   });
 
-  it('swallows a throwing cycle without rejecting and clears the in-flight lock', async () => {
-    const drainQueue: DrainQueue = vi.fn().mockRejectedValue(new Error('boom'));
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('swallows a throwing cycle without rejecting, reports it, and clears the in-flight lock', async () => {
+    const cycleError = new Error('boom');
+    const drainQueue: DrainQueue = vi.fn().mockRejectedValue(cycleError);
+    const onCycleError = vi.fn();
 
     const queryClient = createMockQueryClient();
-    triggerSync(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue);
+    triggerSync(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue, { onCycleError });
     await flush();
+
+    expect(onCycleError).toHaveBeenCalledWith(cycleError);
 
     // A subsequent independent trigger must be able to run (lock released).
     const drainQueue2: DrainQueue = vi.fn().mockResolvedValue(undefined);
@@ -186,23 +204,81 @@ describe('sync-scheduler', () => {
 
     expect(drainQueue2).toHaveBeenCalledTimes(1);
     expect(mockPullSync).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
   });
 
-  it('startSyncScheduler runs an initial cycle and wires native listeners', async () => {
+  it('startSyncScheduler runs an initial cycle and wires the injected triggers', async () => {
     const drainQueue: DrainQueue = vi.fn().mockResolvedValue(undefined);
     const queryClient = createMockQueryClient();
+    const fakeTriggers = createFakeTriggers();
 
-    const stop = startSyncScheduler(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue);
+    const stop = startSyncScheduler(
+      mockDb,
+      queryClient,
+      mockGraphqlFetch,
+      getEnabledBoards,
+      drainQueue,
+      fakeTriggers.triggers,
+    );
     await flush();
 
     expect(drainQueue).toHaveBeenCalledTimes(1);
     expect(mockPullSync).toHaveBeenCalledTimes(1);
-    expect(appStateAddListener).toHaveBeenCalledTimes(1);
-    expect(netInfoAddListener).toHaveBeenCalledTimes(1);
+    expect(fakeTriggers.isForegroundWired()).toBe(true);
+    expect(fakeTriggers.isConnectivityWired()).toBe(true);
 
     // Cleanup unsubscribes both listeners without throwing.
     expect(() => stop()).not.toThrow();
+    expect(fakeTriggers.unsubscribeForeground).toHaveBeenCalledTimes(1);
+    expect(fakeTriggers.unsubscribeConnectivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('debounces foreground triggers and syncs after the quiet period', async () => {
+    vi.useFakeTimers();
+    try {
+      const drainQueue: DrainQueue = vi.fn().mockResolvedValue(undefined);
+      const queryClient = createMockQueryClient();
+      const fakeTriggers = createFakeTriggers();
+
+      startSyncScheduler(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue, fakeTriggers.triggers);
+      await vi.advanceTimersByTimeAsync(0); // initial cycle settles
+      expect(drainQueue).toHaveBeenCalledTimes(1);
+
+      // Two rapid foreground events coalesce into one debounced run.
+      fakeTriggers.fireForeground();
+      fakeTriggers.fireForeground();
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(drainQueue).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(drainQueue).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('syncs only on the offline→online connectivity edge', async () => {
+    const drainQueue: DrainQueue = vi.fn().mockResolvedValue(undefined);
+    const queryClient = createMockQueryClient();
+    const fakeTriggers = createFakeTriggers();
+
+    startSyncScheduler(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue, fakeTriggers.triggers);
+    await flush();
+    expect(drainQueue).toHaveBeenCalledTimes(1); // initial cycle
+
+    // Already-connected report: no extra run (starts assumed connected).
+    fakeTriggers.fireConnectivity(true);
+    await flush();
+    expect(drainQueue).toHaveBeenCalledTimes(1);
+
+    // Drop offline: no run.
+    fakeTriggers.fireConnectivity(false);
+    await flush();
+    expect(drainQueue).toHaveBeenCalledTimes(1);
+
+    // Reconnect: exactly one run.
+    fakeTriggers.fireConnectivity(true);
+    await flush();
+    expect(drainQueue).toHaveBeenCalledTimes(2);
   });
 
   it('a trigger queued behind an in-flight cycle does NOT re-run after cleanup', async () => {
@@ -211,10 +287,18 @@ describe('sync-scheduler', () => {
     // sync fires with nothing mounted to own it.
     const drainQueue: DrainQueue = vi.fn().mockResolvedValue(undefined);
     const queryClient = createMockQueryClient();
+    const fakeTriggers = createFakeTriggers();
     const inFlightPull = deferred();
     mockPullSync.mockImplementation(() => inFlightPull.promise);
 
-    const stop = startSyncScheduler(mockDb, queryClient, mockGraphqlFetch, getEnabledBoards, drainQueue);
+    const stop = startSyncScheduler(
+      mockDb,
+      queryClient,
+      mockGraphqlFetch,
+      getEnabledBoards,
+      drainQueue,
+      fakeTriggers.triggers,
+    );
     await flush();
     expect(mockPullSync).toHaveBeenCalledTimes(1);
 

@@ -1,11 +1,13 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
-import { onlineManager, type QueryClient } from '@tanstack/react-query';
-
+import type { OfflineDatabase, QueryInvalidator } from '../database';
 import type { GraphQLFetch } from './handlers';
 import { processMutation } from './handlers';
 import { peekPending, markCompleted, recordFailure, markDeadLetter } from './queue';
 import { isRetryable, isNetworkError } from './error-classification';
 
+// Module-level singletons (drain flag, sign-out guard, wipe epoch): correct as
+// long as exactly one app runtime consumes this package per JS context — the
+// guards coordinate the drainer, the pull client, and sign-out, which all live
+// in that one context.
 let _isDraining = false;
 
 // Sign-out guard (account lifecycle): while sign-out is wiping local user data,
@@ -58,11 +60,15 @@ export type DrainOptions = {
   /** Upper bound on a single backoff delay. */
   maxDelayMs?: number;
   /**
-   * Connectivity probe. Defaults to React Query's onlineManager (wired to NetInfo
-   * in query-provider). When it reports offline the drain is skipped entirely so a
-   * queued write never burns retry attempts while there's no connection.
+   * Connectivity probe. When it reports offline the drain is skipped entirely
+   * so a queued write never burns retry attempts while there's no connection.
+   * REQUIRED (no default): "assume online" silently burns retries offline and
+   * "assume offline" silently never syncs, so the caller must decide. The app
+   * adapter binds the real probe once (mobile passes React Query's
+   * onlineManager, wired to NetInfo) — see
+   * packages/mobile/src/offline/offline-sync-adapter.ts; tests pass a literal.
    */
-  isOnline?: () => boolean;
+  isOnline: () => boolean;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -76,7 +82,7 @@ function backoffDelay(attempt: number, baseDelayMs: number, maxDelayMs: number):
   return Math.floor(Math.random() * exponential);
 }
 
-function invalidateForTable(queryClient: QueryClient, tableName: string): void {
+function invalidateForTable(queryClient: QueryInvalidator, tableName: string): void {
   const keyMap: Record<string, string[][]> = {
     // ['climb'] + ['localTicks'] so the climb detail's server counts refetch and
     // the "waiting to sync" badge clears once a tick actually reaches the server.
@@ -100,8 +106,10 @@ function invalidateForTable(queryClient: QueryClient, tableName: string): void {
   if (!keys) {
     // table_name is a plain string, so a NEW mutation type missing from the
     // map compiles fine and drains fine — but its UI would never refresh.
-    // Surface the gap loudly in dev instead of silently skipping.
-    if (__DEV__) {
+    // Surface the gap loudly in dev instead of silently skipping. (NODE_ENV is
+    // the platform-free stand-in for RN's __DEV__ — Metro inlines it the same
+    // way, and this package has no react-native globals.)
+    if (process.env.NODE_ENV !== 'production') {
       console.warn(`[MutationQueue] no invalidation keys mapped for table "${tableName}" — UI will not refresh`);
     }
     return;
@@ -117,24 +125,23 @@ function formatError(error: unknown): string {
 }
 
 export async function drainMutationQueue(
-  db: SQLiteDatabase,
-  queryClient: QueryClient,
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
   graphqlFetch: GraphQLFetch,
-  options?: DrainOptions,
+  options: DrainOptions,
 ): Promise<void> {
   // Don't start (or re-enter) a drain while sign-out is wiping local data.
   if (_isSigningOut) return;
   if (_isDraining) return;
   // Offline: nothing can be pushed, and attempting would only churn retry counts
   // and burn backoff sleeps. Skip; the reconnect/foreground trigger drains later.
-  const isOnline = options?.isOnline ?? (() => onlineManager.isOnline());
-  if (!isOnline()) return;
+  if (!options.isOnline()) return;
   _isDraining = true;
 
-  const sleep = options?.sleep ?? defaultSleep;
-  const maxCycleAttempts = options?.maxCycleAttempts ?? DEFAULT_MAX_CYCLE_ATTEMPTS;
-  const baseDelayMs = options?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-  const maxDelayMs = options?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+  const sleep = options.sleep ?? defaultSleep;
+  const maxCycleAttempts = options.maxCycleAttempts ?? DEFAULT_MAX_CYCLE_ATTEMPTS;
+  const baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+  const maxDelayMs = options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
 
   // Counts only retryable failures within this cycle. A successful batch resets
   // it, so a long healthy queue never exhausts the budget.
