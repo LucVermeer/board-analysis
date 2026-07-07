@@ -23,6 +23,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Your real name and avatar now show up when you start or join a session with your crew — no more `user-3f8a12`. ([#3516](https://github.com/boardsesh/boardsesh/pull/3516))
+- Scrolling the climb history list during a session is fixed on Android. ([#3515](https://github.com/boardsesh/boardsesh/pull/3515))
 - Downloaded boards now work fully offline: changing the queue angle keeps grades accurate, "plan my session" builds from your downloaded climbs, and wall-panel climbs load without a connection ([#3499](https://github.com/boardsesh/boardsesh/pull/3499))
 - Fixed the play drawer sometimes showing the board without the lit holds on Android ([#3512](https://github.com/boardsesh/boardsesh/pull/3512))
 - Filter chips on Android now respond after you scroll the climb list, instead of opening the climb hiding underneath ([#3508](https://github.com/boardsesh/boardsesh/pull/3508))

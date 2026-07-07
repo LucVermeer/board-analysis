@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-07T09:15:19.736Z",
+  "generatedAt": "2026-07-07T11:13:56.311Z",
   "entries": [
+    {
+      "prNumber": 3516,
+      "category": "fixed",
+      "title": "Your real name and avatar now show up when you start or join a session with your crew — no more `user-3f8a12`.",
+      "mergedAt": "2026-07-07T11:13:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3516"
+    },
+    {
+      "prNumber": 3515,
+      "category": "fixed",
+      "title": "Scrolling the climb history list during a session is fixed on Android.",
+      "mergedAt": "2026-07-07T11:12:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3515"
+    },
     {
       "prNumber": 3499,
       "category": "fixed",
@@ -1038,6 +1052,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-07T19:06:42+10:00",
+      "sha": "5aae4b7a174d1d2768b886b3d59d9c609e12b0d8",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "dcfaf40631dba4c567869407561df1397c3ebb1c"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-07T11:47:30+10:00",
