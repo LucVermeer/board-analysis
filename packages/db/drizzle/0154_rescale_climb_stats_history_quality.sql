@@ -60,6 +60,10 @@ BEGIN
     WITH upd AS (
       UPDATE board_climb_stats_history t
       SET quality_average = CASE
+        -- 0 is the legacy "unrated" sentinel, not a rating — NULL it here the
+        -- same way 0151 does for live stats, so charts stop plotting 0-star
+        -- points. (Also why the transforms below never see a 0.)
+        WHEN t.quality_average = 0 THEN NULL
         -- Kilter (WHERE already restricts to pre-cutover): raw 1-3 → 1-5.
         WHEN t.board_type = 'kilter'
           THEN LEAST(5.0, GREATEST(1.0, 2.0 * t.quality_average - 1.0))
@@ -72,10 +76,17 @@ BEGIN
       WHERE t.id >= v_lo
         AND t.id < v_lo + v_batch
         AND t.quality_average IS NOT NULL
-        AND t.quality_average > 0
         AND (
-          (t.board_type = 'kilter' AND t.fa_at IS NOT NULL AND t.fa_at < TIMESTAMP '2025-09-01')
-          OR t.board_type IN ('tension', 'decoy', 'soill', 'touchstone', 'grasshopper')
+          -- zero-sentinels are nulled on EVERY board (they're never a rating)…
+          t.quality_average = 0
+          -- …while the rescale itself keeps its era/board scope.
+          OR (
+            t.quality_average > 0
+            AND (
+              (t.board_type = 'kilter' AND t.fa_at IS NOT NULL AND t.fa_at < TIMESTAMP '2025-09-01')
+              OR t.board_type IN ('tension', 'decoy', 'soill', 'touchstone', 'grasshopper')
+            )
+          )
         )
       RETURNING 1
     )

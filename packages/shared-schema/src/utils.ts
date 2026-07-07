@@ -61,6 +61,10 @@ export function convertQuality(auroraQuality: number | null | undefined): number
  * +0.67 stars. Input is clamped to [1,3] defensively (like convertQuality);
  * 0/null ("unrated") stays null. Unlike convertQuality this does NOT round, so
  * a stored average keeps its precision.
+ *
+ * ⚠️ Input must be a 1-3-scale value. The clamp exists for out-of-range noise,
+ * not for scale mixing — feeding an already-normalized 1-5 average in here
+ * silently clamps everything ≥ 3 up to 5.
  */
 export function normalizeQualityTo5(quality: number | null | undefined): number | null {
   if (quality == null) return null;

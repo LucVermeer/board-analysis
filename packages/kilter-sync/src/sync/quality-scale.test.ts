@@ -29,6 +29,12 @@ describe('correctGripsQualityAverage', () => {
     expect(correctGripsQualityAverage(4.2, 'not-a-date')).toBe(4.2);
   });
 
+  it('rejects a bogus above-5 upstream value in every era (self-contained guard)', () => {
+    expect(correctGripsQualityAverage(10, POST)).toBeNull();
+    expect(correctGripsQualityAverage(10, null)).toBeNull();
+    expect(correctGripsQualityAverage(10, PRE)).toBeNull();
+  });
+
   it('treats unrated (null / undefined / ≤ 0 / non-finite) as null', () => {
     expect(correctGripsQualityAverage(null, PRE)).toBeNull();
     expect(correctGripsQualityAverage(undefined, PRE)).toBeNull();

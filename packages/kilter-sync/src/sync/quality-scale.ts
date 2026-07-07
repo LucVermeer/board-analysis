@@ -28,7 +28,8 @@ const GRIPS_CUTOVER_MS = Date.parse('2025-09-01T00:00:00Z');
 /**
  * Correct a Kilter Grips `qualityAverage` onto the canonical 1-5 scale.
  *
- * - `null`/`undefined`/non-finite/`≤ 0` → `null` (unrated is never a 0 rating).
+ * - `null`/`undefined`/non-finite/`≤ 0`/`> 5` → `null` (unrated is never a 0
+ *   rating; above 5 is garbage on either scale).
  * - pre-cutover era (`climbCreatedAtOrFaAt` parses to before 2025-09-01) →
  *   `clamp(2·raw − 1, 1, 5)` (Aurora-era 1-3 → 1-5).
  * - at/after the cutover, or an unknown era (`null`/unparseable) → `raw` as-is
@@ -44,7 +45,11 @@ export function correctGripsQualityAverage(
 ): number | null {
   if (raw == null) return null;
   const quality = Number(raw);
-  if (!Number.isFinite(quality) || quality <= 0) return null;
+  // ≤ 0 is the "unrated" sentinel; > 5 is garbage on either scale (legacy tops
+  // out at 3, native at 5) — reject both here so the function is self-contained
+  // and no caller-side range guard is needed for out-of-range input to stay out
+  // of the database.
+  if (!Number.isFinite(quality) || quality <= 0 || quality > 5) return null;
 
   const eraMs = climbCreatedAtOrFaAt != null ? Date.parse(climbCreatedAtOrFaAt) : Number.NaN;
   // Unknown era (null / unparseable) or post-cutover → already native 1-5.
