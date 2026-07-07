@@ -233,7 +233,7 @@ describe('InSessionView footer', () => {
 
   it('keeps the native scroll host in overlay mode so pull-to-dismiss is not blocked', () => {
     const translateY = { value: 0 };
-    render(createElement(InSessionView, { translateY: translateY as never, screenHeight: 844 }));
+    render(createElement(InSessionView, { showChrome: false, translateY: translateY as never, screenHeight: 844 }));
     expect(list.hasGestureScrollComponent).toBe(false);
     expect(list.nestedScrollEnabled).toBe(false);
   });
