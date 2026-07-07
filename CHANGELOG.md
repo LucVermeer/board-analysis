@@ -23,6 +23,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Downloaded boards now work fully offline: changing the queue angle keeps grades accurate, "plan my session" builds from your downloaded climbs, and wall-panel climbs load without a connection ([#3499](https://github.com/boardsesh/boardsesh/pull/3499))
+- Fixed the play drawer sometimes showing the board without the lit holds on Android ([#3512](https://github.com/boardsesh/boardsesh/pull/3512))
 - Filter chips on Android now respond after you scroll the climb list, instead of opening the climb hiding underneath ([#3508](https://github.com/boardsesh/boardsesh/pull/3508))
 
 ## 2026-07-06

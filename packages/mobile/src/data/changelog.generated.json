@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-07T09:07:40.214Z",
+  "generatedAt": "2026-07-07T09:15:19.736Z",
   "entries": [
+    {
+      "prNumber": 3499,
+      "category": "fixed",
+      "title": "Downloaded boards now work fully offline: changing the queue angle keeps grades accurate, \"plan my session\" builds from your downloaded climbs, and wall-panel climbs load without a connection",
+      "mergedAt": "2026-07-07T09:08:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3499"
+    },
+    {
+      "prNumber": 3512,
+      "category": "fixed",
+      "title": "Fixed the play drawer sometimes showing the board without the lit holds on Android",
+      "mergedAt": "2026-07-07T09:07:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3512"
+    },
     {
       "prNumber": 3510,
       "category": "new",
