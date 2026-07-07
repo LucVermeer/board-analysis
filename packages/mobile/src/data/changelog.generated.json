@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-07T02:33:47.655Z",
+  "generatedAt": "2026-07-07T04:13:11.158Z",
   "entries": [
+    {
+      "prNumber": 3498,
+      "category": "new",
+      "title": "Filter for **tall and wide climbs on more boards** — Kilter Original, Tension Board 2, Decoy and Grasshopper now show the Tall/Wide chips, not just the Kilter Homewall. And they work **with no signal**: once you've downloaded a board, tall/wide filtering runs on-device. Flip on a filter that still needs a connection (drafts, beta, zones, holds) while offline and the screen now tells you why, with a tap to clear it, instead of just coming up empty.",
+      "mergedAt": "2026-07-07T04:12:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3498"
+    },
     {
       "prNumber": 2785,
       "category": "new",
