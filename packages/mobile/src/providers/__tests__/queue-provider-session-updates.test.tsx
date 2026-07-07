@@ -356,6 +356,17 @@ function renderProviderWithSelectors(
   );
 }
 
+// Find the variables of the graph.execute call whose GraphQL document contains
+// `marker` (e.g. the mutation's field name). mock.calls elements are `any[]`, so
+// pull the operation out by index rather than tuple-destructuring.
+function executeVariablesFor(marker: string): Record<string, unknown> | undefined {
+  const call = graph.execute.mock.calls.find((args) => {
+    const operation = args[1] as { query?: string } | undefined;
+    return operation?.query?.includes(marker) ?? false;
+  });
+  return call ? (call[1] as { variables?: Record<string, unknown> }).variables : undefined;
+}
+
 describe('QueueProvider session update subscription', () => {
   beforeEach(() => {
     ws.reset();
@@ -547,17 +558,6 @@ describe('QueueProvider session update subscription', () => {
     });
   });
 
-  // Find the variables of the graph.execute call whose GraphQL document contains
-  // `marker` (e.g. the mutation's field name). mock.calls elements are `any[]`,
-  // so pull the operation out by index rather than tuple-destructuring.
-  function executeVariablesFor(marker: string): Record<string, unknown> | undefined {
-    const call = graph.execute.mock.calls.find((args) => {
-      const operation = args[1] as { query?: string } | undefined;
-      return operation?.query?.includes(marker) ?? false;
-    });
-    return call ? (call[1] as { variables?: Record<string, unknown> }).variables : undefined;
-  }
-
   it('sends the signed-in profile identity with JOIN_SESSION', async () => {
     partyProfile.username = 'Marco';
     partyProfile.avatarUrl = 'https://example.com/marco.png';
@@ -604,6 +604,40 @@ describe('QueueProvider session update subscription', () => {
       expect(executeVariablesFor('updateUsername')).toEqual({
         username: 'Marco',
         avatarUrl: 'https://example.com/marco.png',
+      });
+    });
+  });
+
+  it('re-announces identity with UPDATE_USERNAME when the profile is edited mid-session', async () => {
+    // Signed in with a real identity from the start — JOIN carries it, so no
+    // re-announce fires yet.
+    partyProfile.username = 'Marco';
+    partyProfile.avatarUrl = 'https://example.com/marco.png';
+    const snapshots: Snapshot[] = [];
+    const makeTree = () =>
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      );
+    const { rerender } = render(makeTree());
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalled();
+    });
+    expect(executeVariablesFor('updateUsername')).toBeUndefined();
+
+    // User edits their display name + avatar while still in the session.
+    act(() => {
+      partyProfile.username = 'Marco Polo';
+      partyProfile.avatarUrl = 'https://example.com/marco-2.png';
+      rerender(makeTree());
+    });
+
+    await waitFor(() => {
+      expect(executeVariablesFor('updateUsername')).toEqual({
+        username: 'Marco Polo',
+        avatarUrl: 'https://example.com/marco-2.png',
       });
     });
   });
