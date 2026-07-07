@@ -32,7 +32,7 @@ vi.mock('drizzle-orm/postgres-js', async () => {
   };
 });
 
-import { createSetterSyncNotifications, syncSharedData } from './shared-sync';
+import { createSetterSyncNotifications, parseDifficultyFields, syncSharedData } from './shared-sync';
 
 /**
  * Minimal db shim. Drizzle's query builder is fluent — every call returns
@@ -383,5 +383,35 @@ describe('createSetterSyncNotifications', () => {
     const allRows = inserts.filter((i) => i.table === notifications).flatMap((i) => i.rows);
     expect(allRows).toHaveLength(1);
     expect(allRows[0].recipientId).toBe('direct-follower');
+  });
+});
+
+describe('parseDifficultyFields', () => {
+  it('passes through numeric difficulty and display values', () => {
+    expect(parseDifficultyFields({ difficulty_average: 15.4, display_difficulty: 16 })).toEqual({
+      difficultyAverage: 15.4,
+      displayDifficulty: 16,
+    });
+  });
+
+  it('preserves NULL difficulty instead of coercing to grade 0', () => {
+    expect(parseDifficultyFields({ difficulty_average: null, display_difficulty: null })).toEqual({
+      difficultyAverage: null,
+      displayDifficulty: null,
+    });
+  });
+
+  it('falls back display_difficulty to the average when Aurora omits it', () => {
+    expect(parseDifficultyFields({ difficulty_average: 22.1, display_difficulty: null })).toEqual({
+      difficultyAverage: 22.1,
+      displayDifficulty: 22.1,
+    });
+  });
+
+  it('keeps an explicit display value when the average is null', () => {
+    expect(parseDifficultyFields({ difficulty_average: null, display_difficulty: 18 })).toEqual({
+      difficultyAverage: null,
+      displayDifficulty: 18,
+    });
   });
 });

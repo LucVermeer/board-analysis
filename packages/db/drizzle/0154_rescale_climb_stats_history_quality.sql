@@ -35,10 +35,12 @@
 -- ~1.8M) and runs inside the migration transaction. It is chunked by the
 -- bigserial id (single pass, safe within the run) to keep each statement bounded,
 -- but it is still a large one-time backfill — expect meaningful WAL and runtime.
--- Prefer a low-traffic window. It is safe to interrupt and re-run: the id cursor
--- advances monotonically so no row is visited twice in a run, and the transforms
--- fix the endpoints (2q−1 fixes 1.0, 1.2q−1 fixes 5.0), but a partial run that is
--- resumed by a fresh apply is not value-idempotent — re-run only the whole thing.
+-- Prefer a low-traffic window. This migration is NOT value-idempotent: a second
+-- application would rescale already-rescaled values. Safety comes from the
+-- migrator, not this file — drizzle's postgres-js migrator wraps all pending
+-- migrations and their __drizzle_migrations records in ONE transaction, so a
+-- failed/interrupted run rolls back completely and a retry starts from the
+-- original data. The id cursor is single-pass only WITHIN a run.
 
 DO $$
 DECLARE

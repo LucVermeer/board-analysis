@@ -409,6 +409,24 @@ async function upsertAttempts(db: DrizzleDb, board: AuroraBoardName, data: Attem
   });
 }
 
+// Preserve NULL difficulty instead of coercing it to 0. `Number(null)` is 0,
+// and difficulty id 0 doesn't exist (valid ids are ~10-33), so coercing stamps
+// a bogus 0 grade whenever Aurora omits the field — legacy rows are cleaned up
+// by the sentinel migration. display_difficulty falls back to the average when
+// Aurora omits it, mirroring how Aurora derives display FROM the average.
+// Exported for unit tests.
+// The ClimbStats type declares these fields as plain `number`, but Aurora
+// really does send null (that's the bug this guards against), so the parameter
+// is typed to reality rather than to the wire type.
+export function parseDifficultyFields(item: { difficulty_average: number | null; display_difficulty: number | null }): {
+  difficultyAverage: number | null;
+  displayDifficulty: number | null;
+} {
+  const difficultyAverage = item.difficulty_average != null ? Number(item.difficulty_average) : null;
+  const displayDifficulty = item.display_difficulty != null ? Number(item.display_difficulty) : difficultyAverage;
+  return { difficultyAverage, displayDifficulty };
+}
+
 async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: ClimbStats[], writeHistory: boolean) {
   const climbStatsSchema = UNIFIED_TABLES.climbStats;
   const climbStatHistorySchema = UNIFIED_TABLES.climbStatsHistory;
@@ -428,12 +446,7 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
     // explicitly for ticks-driven updates.
     const values = batch.map((item) => {
       const auroraCount = Number(item.ascensionist_count);
-      // Preserve NULL difficulty instead of coercing it to 0. `Number(null)` is
-      // 0, and difficulty id 0 doesn't exist (valid ids are ~10-33), so the old
-      // `Number(item.difficulty_average)` stamped a bogus 0 grade whenever Aurora
-      // omitted the field — those rows are cleaned up by the sentinel migration.
-      const difficultyAverage = item.difficulty_average != null ? Number(item.difficulty_average) : null;
-      const displayDifficulty = item.display_difficulty != null ? Number(item.display_difficulty) : difficultyAverage;
+      const { difficultyAverage, displayDifficulty } = parseDifficultyFields(item);
       return {
         boardType: board,
         climbUuid: item.climb_uuid,

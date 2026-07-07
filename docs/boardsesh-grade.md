@@ -70,10 +70,10 @@ count by roughly 5–7×.
 
 Tick **provenance** splits the signal, and we exploit it:
 
-| Tick source | Exact-echo rate | Dispersion | Treatment |
-| --- | --- | --- | --- |
-| Native Boardsesh (grade opt-in) | 0.77 | 0.97 | genuine opinion (opt-in ⇒ intentional; an echo is honest agreement) |
-| Upstream-synced (quick-ascent) | 0.85 | 0.81 | echo = probable auto-fill, carries no opinion |
+| Tick source                     | Exact-echo rate | Dispersion | Treatment                                                           |
+| ------------------------------- | --------------- | ---------- | ------------------------------------------------------------------- |
+| Native Boardsesh (grade opt-in) | 0.77            | 0.97       | genuine opinion (opt-in ⇒ intentional; an echo is honest agreement) |
+| Upstream-synced (quick-ascent)  | 0.85            | 0.81       | echo = probable auto-fill, carries no opinion                       |
 
 Boardsesh made grade/quality optional on native ticks precisely for data
 quality. Because a native grade is opt-in, even an exact echo is a real "the
@@ -151,7 +151,7 @@ combined weighted by `n_eff`, then mapped forward to the target angle
 there is no prior.
 
 The display grade is **never** treated as independent evidence. On most boards
-the display *is* the crowd mean (on Kilter, a damped blend of it), and logged
+the display _is_ the crowd mean (on Kilter, a damped blend of it), and logged
 grades anchor to it. Blending toward display would re-count the same signal and
 fake a tighter CI. This is why the middle regime below leaves the mean alone.
 
@@ -236,11 +236,11 @@ Estimator: `estimateBoardOffsets`.
 
 ### Confidence tiers
 
-| Tier | Condition | UI |
-| --- | --- | --- |
-| `confirmed` | n ≥ 20 and `post_sd` ≤ 0.35 | grade, "confirmed by N sends" |
-| `provisional` | 3 ≤ n < 20 | grade with a visible ± band |
-| `setter_only` | n < 3 | no Boardsesh number, setter's call |
+| Tier          | Condition                   | UI                                 |
+| ------------- | --------------------------- | ---------------------------------- |
+| `confirmed`   | n ≥ 20 and `post_sd` ≤ 0.35 | grade, "confirmed by N sends"      |
+| `provisional` | 3 ≤ n < 20                  | grade with a visible ± band        |
+| `setter_only` | n < 3                       | no Boardsesh number, setter's call |
 
 ### Publish hysteresis
 
@@ -255,14 +255,14 @@ Coefficients are refit weekly and frozen between refits. Every nightly run
 evaluates the gates first and **writes zero grade rows if any blocking gate
 fails**. Results persist to `board_grade_coefficients` (kind `gate_results`).
 
-| Gate | Threshold | Blocks? | What a failure means |
-| --- | --- | --- | --- |
-| `tail_backtest` | multi-angle shrunk MAE must not exceed raw MAE (+0.01 tolerance), n ≥ 100; improvement % reported against an aspirational 20% bar | yes | the blend makes sparse grades worse than doing nothing |
-| `head_holdout` | single-angle shrunk MAE must not exceed raw MAE (+0.01), n ≥ 100 | yes | the model regressed the rows where it is supposed to be a no-op |
-| `no_shock` | no ≥50-ascent climb's local grade moves >1.0 from its raw mean | yes | the prior is overpowering established grades (also enforced by a clamp inside the blend itself; the gate catches regressions) |
-| `fingerprint_consistency` | ≤1% of duplicate-fingerprint groups disagree by >1 grade at the same angle | yes | evidence for one physical problem is being split badly |
-| `residual_paired_gap` | shared-user mean gap vs fitted offset ≤ 0.3 after the Kilter offset | withholds universal | the "constant offset" story is wrong; local grades still publish, universal grades don't |
-| honesty report | reports `corr(grade, display)` and mean \|Δ\| per board | no (report only) | a board whose numbers never leave the label is dressing the label as a data product; UI copy must say so |
+| Gate                      | Threshold                                                                                                                         | Blocks?             | What a failure means                                                                                                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `tail_backtest`           | multi-angle shrunk MAE must not exceed raw MAE (+0.01 tolerance), n ≥ 100; improvement % reported against an aspirational 20% bar | yes                 | the blend makes sparse grades worse than doing nothing                                                                        |
+| `head_holdout`            | single-angle shrunk MAE must not exceed raw MAE (+0.01), n ≥ 100                                                                  | yes                 | the model regressed the rows where it is supposed to be a no-op                                                               |
+| `no_shock`                | no ≥50-ascent climb's local grade moves >1.0 from its raw mean                                                                    | yes                 | the prior is overpowering established grades (also enforced by a clamp inside the blend itself; the gate catches regressions) |
+| `fingerprint_consistency` | ≤1% of duplicate-fingerprint groups disagree by >1 grade at the same angle                                                        | yes                 | evidence for one physical problem is being split badly                                                                        |
+| `residual_paired_gap`     | shared-user mean gap vs fitted offset ≤ 0.3 after the Kilter offset                                                               | withholds universal | the "constant offset" story is wrong; local grades still publish, universal grades don't                                      |
+| honesty report            | reports `corr(grade, display)` and mean \|Δ\| per board                                                                           | no (report only)    | a board whose numbers never leave the label is dressing the label as a data product; UI copy must say so                      |
 
 The backtest replays `board_climb_stats_history` (5.4M snapshots): for series
 that later reached ≥50 ascents (their final mean ≈ truth), it takes the
@@ -272,7 +272,7 @@ final truth. Scoring: `evaluateBacktest` in `gates.ts`.
 
 Why the pass bar is no-regression rather than "beat raw by 20%": the backtest's
 "truth" is the eventual community mean, and quick-log echoes herd that mean
-toward whatever the early label was — so the raw early average partly *creates*
+toward whatever the early label was — so the raw early average partly _creates_
 the target it is scored against. Under that metric a corrective model cannot
 win big; what it must never do is lose. On the 2026-07-07 prod run the blend
 beat raw by 2.5% on the multi-angle subset (MAE 0.592 vs 0.607) and exactly
@@ -297,7 +297,7 @@ These are real and we'd rather state them than paper over them.
   fixed.
 - **Anchoring / herding attenuates deviations.** Because loggers anchor to the
   displayed grade, the crowd mean drifts less than true disagreement would
-  warrant. v1 applies the (1 − λ) de-attenuation to the *standard error* but
+  warrant. v1 applies the (1 − λ) de-attenuation to the _standard error_ but
   does **not** de-attenuate the point estimate itself — inflating the deviation
   is easy to get wrong and could manufacture movement on thin evidence, so we
   chose the conservative option and left it for Stage 2's rater model.
@@ -307,11 +307,11 @@ These are real and we'd rather state them than paper over them.
 
 ## 6. Rejected alternatives
 
-| Alternative | Why not (for v1) |
-| --- | --- |
-| Full Bayesian / MCMC | Upstream gives us aggregate means, not per-ascent variances. Without the underlying distributions there's nothing for a sampler to condition on that the closed-form EB blend doesn't already capture — the cost buys no extra signal. |
+| Alternative               | Why not (for v1)                                                                                                                                                                                                                                                                        |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full Bayesian / MCMC      | Upstream gives us aggregate means, not per-ascent variances. Without the underlying distributions there's nothing for a sampler to condition on that the closed-form EB blend doesn't already capture — the cost buys no extra signal.                                                  |
 | WHR / IRT as the backbone | Per-user outcomes cover only ~14% of the Kilter catalog. theCrag's GRAID works because it has dense per-user ascent data; ours is too sparse to carry a rating system as the primary estimator. Ticks are a coefficient factory (variance, cross-board offset), not a grading backbone. |
-| CNN content model | Deferred, not rejected. A gradient-boosted model on hold features is the cheaper, more credible Stage-3 version (`content_prior` column is already reserved, NULL in v1). |
+| CNN content model         | Deferred, not rejected. A gradient-boosted model on hold features is the cheaper, more credible Stage-3 version (`content_prior` column is already reserved, NULL in v1).                                                                                                               |
 
 ## 7. Contributing
 
