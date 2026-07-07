@@ -239,6 +239,18 @@ export function getOrStartInflightRender(cacheKey: string, startRender: () => Pr
 export const _inflightRendersForTests = inflightRenders;
 export const _renderedOverlaysForTests = renderedOverlays;
 
+/**
+ * Test-only: inject a fake native module. The real one loads via a literal
+ * CJS require() that vitest's mock registry can't intercept — in tests the
+ * try/catch silently exhausts the retry budget and the hook behaves as
+ * "renderer unavailable", so async-render paths would be untestable.
+ */
+export function _setNativeModuleForTests(module: typeof renderModule): void {
+  renderModule = module;
+  moduleLoadAttempted = true;
+  moduleLoadFailureCount = 0;
+}
+
 /** Memoize board render configs to avoid re-computing hold positions */
 const boardConfigCache = new Map<
   string,
@@ -560,6 +572,15 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   });
 
   const mountedRef = useRef(true);
+  // Tracks the cache key of the most recent overlay-effect run so a slow
+  // render's resolution can be discarded once props have moved to a different
+  // climb. Without this, a late .then sets nativeRender to the OLD key: the
+  // key-match guard on overlayUri then returns null for the current climb and
+  // nothing re-fires the effect — the board sits with unlit holds until the
+  // next swipe. Hit in the play-drawer carousel when swiping onto a climb
+  // whose overlay is already cached (sync branch, no new promise) while the
+  // previous climb's render is still in flight.
+  const latestCacheKeyRef = useRef(currentCacheKey);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -645,6 +666,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // Overlay-render effect: kick off the native render if we don't already
   // have one for this cache key in the sync map.
   useEffect(() => {
+    latestCacheKeyRef.current = currentCacheKey;
     if (!frames || unsupportedRenderSignatures.has(holdRenderSignature)) return;
 
     if (renderedOverlays.has(currentCacheKey)) {
@@ -687,7 +709,12 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     renderPromise
       .then((fileUri) => {
         renderedOverlays.set(currentCacheKey, fileUri);
-        if (mountedRef.current) setNativeRender({ key: currentCacheKey, uri: fileUri });
+        // Discard a stale resolution (props moved on while this render was in
+        // flight) — see latestCacheKeyRef. The sync map above still keeps the
+        // file, so swiping back to this climb is an instant cache hit.
+        if (mountedRef.current && latestCacheKeyRef.current === currentCacheKey) {
+          setNativeRender({ key: currentCacheKey, uri: fileUri });
+        }
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
