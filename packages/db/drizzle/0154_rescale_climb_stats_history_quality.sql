@@ -41,6 +41,10 @@
 -- migrations and their __drizzle_migrations records in ONE transaction, so a
 -- failed/interrupted run rolls back completely and a retry starts from the
 -- original data. The id cursor is single-pass only WITHIN a run.
+--
+-- ⚠️ NEVER run this file manually via psql (e.g. during incident response):
+-- outside the migrator's transaction + __drizzle_migrations bookkeeping there
+-- is nothing to stop a second application from double-converting 5.4M rows.
 
 DO $$
 DECLARE
