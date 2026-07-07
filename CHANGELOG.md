@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Boardsesh frees up memory as soon as you switch away from the app on Android ([#3510](https://github.com/boardsesh/boardsesh/pull/3510))
 - Filter for **tall and wide climbs on more boards** — Kilter Original, Tension Board 2, Decoy and Grasshopper now show the Tall/Wide chips, not just the Kilter Homewall. And they work **with no signal**: once you've downloaded a board, tall/wide filtering runs on-device. Flip on a filter that still needs a connection (drafts, beta, zones, holds) while offline and the screen now tells you why, with a tap to clear it, instead of just coming up empty. ([#3498](https://github.com/boardsesh/boardsesh/pull/3498))
 - Early testers: download a board in My Boards and keep browsing, logging sends, and saving favorites with no signal — everything queues on your phone and syncs when you're back online. (Rolling out gradually behind a feature flag.) ([#2785](https://github.com/boardsesh/boardsesh/pull/2785))
 
