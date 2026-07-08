@@ -474,8 +474,10 @@ final class BoardBleWriteFlowTests: XCTestCase {
             hooks.setConnection(peripheral: peripheral, characteristic: characteristic)
             manager.write(data: Data((0 ..< 10).map { UInt8($0) })) { _, _ in }
         }
-        fireLatestOneShot(label: "writeResumeWatchdog") // latch bypass
+        fireLatestOneShot(label: "writeResumeWatchdog") // latch bypass, resume + write chunk
+        fireLatestOneShot(label: "chunkDelay") // drain the first write (clears isWriting/queue)
         XCTAssertTrue(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+        XCTAssertFalse(hooks.sync { hooks.isWriting })
 
         // Reconnect (new characteristic) clears the latch.
         hooks.sync { hooks.setConnection(peripheral: peripheral, characteristic: characteristic) }
