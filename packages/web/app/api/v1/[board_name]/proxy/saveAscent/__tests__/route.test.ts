@@ -16,13 +16,13 @@ vi.mock('@/app/lib/api-wrappers/aurora/saveAscent', () => ({
 
 import { POST } from '../route';
 
-function saveAscentRequest(quality: unknown): Request {
+function saveAscentRequest(quality: unknown, uuid: string = '0B2BADB3C1E24A9DB021E5180F4B4C93'): Request {
   return new Request('http://localhost/api/v1/kilter/proxy/saveAscent', {
     method: 'POST',
     body: JSON.stringify({
       token: 'aurora-token',
       options: {
-        uuid: 'ascent-uuid-1',
+        uuid,
         user_id: 123,
         climb_uuid: 'climb-uuid-1',
         angle: 40,
@@ -74,4 +74,31 @@ describe('POST /api/v1/[board_name]/proxy/saveAscent', () => {
     expect(response.status).toBe(401);
     expect(mockSaveAscent).not.toHaveBeenCalled();
   });
+
+  // The client uuid becomes the tick's idempotency key (boardsesh_ticks.uuid),
+  // so the route accepts both well-formed shapes and rejects everything else.
+  it.each(['0B2BADB3C1E24A9DB021E5180F4B4C93', '0b2badb3-c1e2-4a9d-b021-e5180f4b4c93'])(
+    'accepts well-formed uuid %s',
+    async (uuid) => {
+      const response = await POST(saveAscentRequest(3, uuid), routeParams);
+      expect(response.status).toBe(200);
+      expect(mockSaveAscent).toHaveBeenCalledWith(
+        'kilter',
+        'aurora-token',
+        expect.objectContaining({ uuid }),
+        'user-1',
+      );
+    },
+  );
+
+  it.each(['ascent-uuid-1', '', 'DROP TABLE', '0B2BADB3C1E24A9DB021E5180F4B4C9'])(
+    'rejects malformed uuid %j with 400 (arbitrary strings must not become tick uuids)',
+    async (uuid) => {
+      const response = await POST(saveAscentRequest(3, uuid), routeParams);
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe('Invalid request data');
+      expect(mockSaveAscent).not.toHaveBeenCalled();
+    },
+  );
 });

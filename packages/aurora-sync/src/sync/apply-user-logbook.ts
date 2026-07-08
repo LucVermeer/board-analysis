@@ -83,6 +83,7 @@ type NormalizedLogbookRow = {
 type ComparedRow = {
   uuid: string;
   auroraId: string | null;
+  ownerUserId: string;
   climbUuid: string;
   angle: number;
   isMirror: boolean | null;
@@ -255,11 +256,20 @@ async function applyLogbookChunk(
 
   const incomingIds = incoming.map((r) => r.auroraId);
 
-  // (a) Existing rows by aurora_id (the idempotent re-sync case).
+  // (a) Existing rows by aurora_id (the idempotent re-sync case). The SELECT is
+  // deliberately global — boardsesh_ticks_aurora_id_unique means each id lives
+  // on at most one row table-wide — and the hits are partitioned by owner
+  // below. A same-id row owned by a DIFFERENT user (the same Aurora account
+  // linked to two Boardsesh accounts) must be skipped entirely: updating it
+  // would cross users, and filtering it out of the SELECT instead would turn
+  // the row into a "miss" whose INSERT collides with the global unique index
+  // and aborts the whole chunk. Same partition-and-skip shape as kilter-sync's
+  // applyLogs foreignKilterIds handling.
   const byAuroraIdRows = (await db
     .select({
       uuid: boardseshTicks.uuid,
       auroraId: boardseshTicks.auroraId,
+      ownerUserId: boardseshTicks.userId,
       climbUuid: boardseshTicks.climbUuid,
       angle: boardseshTicks.angle,
       isMirror: boardseshTicks.isMirror,
@@ -278,11 +288,22 @@ async function applyLogbookChunk(
     .where(inArray(boardseshTicks.auroraId, incomingIds))) as ComparedRow[];
 
   const storedByAuroraId = new Map<string, ComparedRow>();
+  const foreignAuroraIds = new Set<string>();
   for (const row of byAuroraIdRows) {
-    if (row.auroraId) storedByAuroraId.set(row.auroraId, row);
+    if (!row.auroraId) continue;
+    if (row.ownerUserId === userId) {
+      storedByAuroraId.set(row.auroraId, row);
+    } else {
+      foreignAuroraIds.add(row.auroraId);
+      console.warn(
+        `[aurora-sync] aurora_id ${row.auroraId} already linked to a different Boardsesh user — skipping for user ${userId} (duplicate Aurora account link)`,
+      );
+    }
   }
 
-  const misses = incoming.filter((r) => !storedByAuroraId.has(r.auroraId));
+  // Foreign-owned ids are excluded from the misses too: they must be neither
+  // claimed nor inserted (the insert would collide on the unique index).
+  const misses = incoming.filter((r) => !storedByAuroraId.has(r.auroraId) && !foreignAuroraIds.has(r.auroraId));
 
   // (b) Cross-source claim for the misses.
   const claims = new Map<string, string>(); // aurora_id → existing tick uuid to claim
@@ -385,7 +406,10 @@ async function applyLogbookChunk(
       -- also keeps updated_at < aurora_synced_at so the edit-clobber guard
       -- correctly reads the row as NOT locally edited.
       FROM jsonb_to_recordset(${claimPayload}::jsonb) AS u(uuid text, aurora_id text)
+      -- user_id is redundant (claim candidates were selected with eq(userId))
+      -- but keeps the never-cross-users invariant enforced at the write itself.
       WHERE t.uuid = u.uuid
+        AND t.user_id = ${userId}
     `);
   }
 
@@ -442,7 +466,11 @@ async function applyLogbookChunk(
         aurora_synced_at text,
         updated_at text
       )
+      -- user_id is redundant with the owner partition above (updates only carry
+      -- same-user rows) but keeps the never-cross-users invariant enforced at
+      -- the write itself.
       WHERE t.aurora_id = u.aurora_id
+        AND t.user_id = ${userId}
     `);
   }
 

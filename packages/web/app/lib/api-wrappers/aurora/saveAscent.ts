@@ -3,7 +3,7 @@ import type { SaveAscentOptions, SaveAscentResponse, Ascent } from './types';
 import { convertQuality } from '@boardsesh/shared-schema';
 import { dbz } from '@/app/lib/db/db';
 import { boardseshTicks } from '@/app/lib/db/schema';
-import { randomUUID } from 'crypto';
+import { sql } from 'drizzle-orm';
 
 /**
  * Saves an ascent to boardsesh_ticks.
@@ -36,9 +36,6 @@ export async function saveAscent(
   // Determine status based on attempt_id (1 = flash, otherwise send)
   const status = options.attempt_id === 1 ? 'flash' : 'send';
 
-  // Generate a new UUID for the tick (different from the ascent uuid which is Aurora's)
-  const tickUuid = randomUUID();
-
   // The proxy speaks Aurora's convention (quality 0-3, 0 = unrated) but
   // boardsesh_ticks stores the 1-5 scale, so convert before storage. The
   // Aurora-shaped response below keeps the caller's raw value.
@@ -51,26 +48,59 @@ export async function saveAscent(
   // landed a twin. Store aurora_id NULL + origin 'native': the tick counts
   // toward the Boardsesh ascensionist total and stays pending-push. The pull's
   // cross-source claim links it to the real Aurora ascent once it exists.
-  await dbz.insert(boardseshTicks).values({
-    uuid: tickUuid,
-    userId: nextAuthUserId,
-    boardType: board,
-    climbUuid: options.climb_uuid,
-    angle: options.angle,
-    isMirror: options.is_mirror,
-    origin: 'native',
-    status: status,
-    attemptCount: options.bid_count,
-    quality: boardseshQuality,
-    difficulty: options.difficulty,
-    isBenchmark: options.is_benchmark,
-    comment: options.comment || '',
-    climbedAt: climbedAtUtc,
-    createdAt: now,
-    updatedAt: now,
-    auroraType: 'ascents',
-    auroraId: null,
-  });
+  //
+  // Idempotency: the client-minted uuid becomes the tick's OWN uuid
+  // (boardsesh_ticks.uuid is globally unique), so a client retry of the same
+  // POST upserts the same row instead of inserting a duplicate — the dedup the
+  // old fake-aurora_id conflict target used to provide, without polluting sync
+  // provenance. The route validates the uuid's shape (RFC-hyphenated or
+  // Aurora's 32-hex form), so a client can't plant arbitrary strings.
+  //
+  // The conflict update only touches content columns (never origin or the
+  // aurora_*/kilter_* sync markers), and setWhere pins it to rows owned by this
+  // user: a uuid colliding with ANOTHER user's tick is a no-op — not inserted
+  // (unique index) and not updated (ownership guard) — never a cross-user
+  // overwrite.
+  await dbz
+    .insert(boardseshTicks)
+    .values({
+      uuid: options.uuid,
+      userId: nextAuthUserId,
+      boardType: board,
+      climbUuid: options.climb_uuid,
+      angle: options.angle,
+      isMirror: options.is_mirror,
+      origin: 'native',
+      status: status,
+      attemptCount: options.bid_count,
+      quality: boardseshQuality,
+      difficulty: options.difficulty,
+      isBenchmark: options.is_benchmark,
+      comment: options.comment || '',
+      climbedAt: climbedAtUtc,
+      createdAt: now,
+      updatedAt: now,
+      auroraType: 'ascents',
+      auroraId: null,
+    })
+    .onConflictDoUpdate({
+      target: boardseshTicks.uuid,
+      set: {
+        boardType: board,
+        climbUuid: options.climb_uuid,
+        angle: options.angle,
+        isMirror: options.is_mirror,
+        status: status,
+        attemptCount: options.bid_count,
+        quality: boardseshQuality,
+        difficulty: options.difficulty,
+        isBenchmark: options.is_benchmark,
+        comment: options.comment || '',
+        climbedAt: climbedAtUtc,
+        updatedAt: now,
+      },
+      setWhere: sql`${boardseshTicks.userId} = ${nextAuthUserId}`,
+    });
 
   // Create a local ascent object for the response (for API compatibility)
   const localAscent: Ascent = {

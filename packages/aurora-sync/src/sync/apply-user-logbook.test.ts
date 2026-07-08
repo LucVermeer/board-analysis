@@ -160,6 +160,53 @@ describe('applyAuroraAscents — cross-source claim', () => {
     expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(1);
     expect(insertValues).toHaveLength(0);
   });
+
+  it("never touches another user's row holding the same aurora_id (duplicate account link)", async () => {
+    // The by-aurora-id SELECT is global (the unique index means one row
+    // table-wide); a hit owned by a DIFFERENT user must be skipped entirely:
+    // no update (cross-user clobber), no claim, and no insert (which would
+    // collide on boardsesh_ticks_aurora_id_unique and abort the chunk).
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { tx, calls, insertValues } = createTx({
+        selectResults: [
+          [
+            {
+              uuid: 'tick-foreign',
+              auroraId: 'aur-1', // same aurora_id as the incoming ascent
+              ownerUserId: 'user-OTHER', // owned by a different Boardsesh user
+              climbUuid: 'climb-1',
+              angle: 40,
+              isMirror: false,
+              status: 'send',
+              attemptCount: 3,
+              quality: 3,
+              difficulty: 20,
+              isBenchmark: false,
+              comment: '',
+              climbedAt: '2026-05-01T22:00:00.000Z',
+              updatedAt: '2026-05-01T22:00:00.000Z',
+              auroraSyncedAt: '2026-05-01T22:00:00.000Z',
+              origin: 'aurora_pull',
+            },
+          ],
+        ],
+      });
+
+      await applyAuroraAscents(tx as unknown as Db, 'kilter', 'user-1', [ascent()]);
+
+      // Only the by-aurora-id SELECT ran — the foreign id is excluded from the
+      // misses, so no claim SELECT, no UPDATE, no INSERT: the foreign row is
+      // untouched and nothing collides.
+      expect(calls.filter((c) => c.kind === 'select')).toHaveLength(1);
+      expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(0);
+      expect(calls.filter((c) => c.kind === 'update')).toHaveLength(0);
+      expect(insertValues).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('already linked to a different Boardsesh user'));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 describe('applyAuroraAscents — is_listed soft-delete', () => {
@@ -203,6 +250,7 @@ describe('applyAuroraAscents — edit-clobber guard', () => {
           {
             uuid: 'tick-1',
             auroraId: 'aur-1',
+            ownerUserId: 'user-1',
             climbUuid: 'climb-1',
             angle: 40,
             isMirror: false,
@@ -235,6 +283,7 @@ describe('applyAuroraAscents — edit-clobber guard', () => {
           {
             uuid: 'tick-1',
             auroraId: 'aur-1',
+            ownerUserId: 'user-1',
             climbUuid: 'climb-1',
             angle: 40,
             isMirror: false,
@@ -266,6 +315,7 @@ describe('applyAuroraAscents — edit-clobber guard', () => {
           {
             uuid: 'tick-1',
             auroraId: 'aur-1',
+            ownerUserId: 'user-1',
             climbUuid: 'climb-1',
             angle: 40,
             isMirror: false,

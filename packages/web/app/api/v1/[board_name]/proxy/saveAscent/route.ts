@@ -11,7 +11,17 @@ const saveAscentSchema = z.object({
   token: z.string().min(1),
   options: z
     .object({
-      uuid: z.string(),
+      // The client-minted ascent uuid doubles as the tick's idempotency key
+      // (saveAscent upserts on it), so it must be a well-formed UUID: either
+      // RFC-hyphenated or Aurora's 32-hex form (uuidv4 with dashes stripped,
+      // what the historical Aurora clients mint). Reject anything else with a
+      // 400 — arbitrary strings must not become boardsesh_ticks.uuid values.
+      uuid: z
+        .string()
+        .regex(
+          /^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/,
+          'must be a UUID (RFC-hyphenated or 32-hex Aurora form)',
+        ),
       user_id: z.number(), // Legacy Aurora user_id (not used for storage anymore)
       climb_uuid: z.string(),
       angle: z.number(),
