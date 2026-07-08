@@ -32,7 +32,17 @@ vi.mock('drizzle-orm/postgres-js', async () => {
   };
 });
 
-import { createSetterSyncNotifications, parseDifficultyFields, syncSharedData } from './shared-sync';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import {
+  climbListingConflictSet,
+  climbStatsUpstreamConflictSet,
+  createSetterSyncNotifications,
+  healRequiredSetIds,
+  parseDifficultyFields,
+  REQUIRED_SET_ID_DRAIN_LIMIT,
+  shouldHealRequiredSetIds,
+  syncSharedData,
+} from './shared-sync';
 
 /**
  * Minimal db shim. Drizzle's query builder is fluent — every call returns
@@ -413,5 +423,168 @@ describe('parseDifficultyFields', () => {
       difficultyAverage: null,
       displayDifficulty: 18,
     });
+  });
+});
+
+describe('climb conflict policies (SQL)', () => {
+  const dialect = new PgDialect();
+  const render = (fragment: Parameters<typeof dialect.sqlToQuery>[0]) => dialect.sqlToQuery(fragment).sql.toLowerCase();
+
+  it('is_listed / is_draft: verbatim from Aurora for non-user climbs, preserved for user climbs', () => {
+    const { isListed, isDraft } = climbListingConflictSet();
+    const listedSql = render(isListed);
+    const draftSql = render(isDraft);
+    // Ownership gate + verbatim incoming for catalog rows.
+    expect(listedSql).toContain('user_id');
+    expect(listedSql).toContain('is null');
+    expect(listedSql).toContain('excluded.is_listed');
+    expect(draftSql).toContain('excluded.is_draft');
+    // The user branch keeps the stored value (never flips a Boardsesh climb).
+    expect(listedSql).toContain('"is_listed"');
+    expect(draftSql).toContain('"is_draft"');
+    // No lingering "only flip toward visible" GREATEST/OR-style pinning.
+    expect(listedSql).not.toContain('= false and excluded');
+  });
+
+  it('upstream_ascensionist_count: authoritative incoming, no GREATEST', () => {
+    const { upstreamAscensionistCount, ascensionistCount } = climbStatsUpstreamConflictSet();
+    const upSql = render(upstreamAscensionistCount);
+    const totalSql = render(ascensionistCount);
+    // Takes the incoming cursored value verbatim, so decreases propagate.
+    expect(upSql).toContain('excluded.upstream_ascensionist_count');
+    expect(upSql).not.toContain('greatest');
+    // Total = incoming upstream + the independent boardsesh count.
+    expect(totalSql).toContain('excluded.upstream_ascensionist_count');
+    expect(totalSql).toContain('boardsesh_ascensionist_count');
+    expect(totalSql).not.toContain('greatest');
+  });
+
+  /**
+   * Evaluate the RENDERED COALESCE(...) expression for an (incoming, stored)
+   * pair with Postgres semantics (first non-null argument wins). Parsing the
+   * SQL the helper actually ships — instead of restating the intended policy —
+   * means these assertions fail if anyone swaps the argument order or
+   * reintroduces GREATEST, not just if the string changes cosmetically.
+   */
+  const evalUpstreamCoalesce = (rendered: string, incoming: number | null, stored: number | null): number => {
+    const coalesceMatch = rendered.match(/^coalesce\(([^()]*)\)$/);
+    if (!coalesceMatch) throw new Error(`not a bare COALESCE expression: ${rendered}`);
+    for (const argument of coalesceMatch[1].split(',').map((part) => part.trim())) {
+      if (argument === 'excluded.upstream_ascensionist_count') {
+        if (incoming != null) return incoming;
+      } else if (argument === '"board_climb_stats"."upstream_ascensionist_count"') {
+        if (stored != null) return stored;
+      } else {
+        return Number(argument); // literal fallback (the trailing 0)
+      }
+    }
+    throw new Error(`no COALESCE argument resolved in: ${rendered}`);
+  };
+
+  it('upstream count: a genuine numeric decrease lands; NULL incoming preserves stored (deliberate)', () => {
+    const { upstreamAscensionistCount } = climbStatsUpstreamConflictSet();
+    const upSql = render(upstreamAscensionistCount);
+    // Non-null incoming ALWAYS wins — a decrease and an explicit 0 both land.
+    expect(evalUpstreamCoalesce(upSql, 50, 100)).toBe(50);
+    expect(evalUpstreamCoalesce(upSql, 0, 100)).toBe(0);
+    // NULL incoming = "no data for this row", NOT "count is now zero" → the
+    // stored count is preserved (see climbStatsUpstreamConflictSet docs).
+    expect(evalUpstreamCoalesce(upSql, null, 100)).toBe(100);
+    // A row that never carried a count on either side seeds at 0.
+    expect(evalUpstreamCoalesce(upSql, null, null)).toBe(0);
+  });
+});
+
+describe('shouldHealRequiredSetIds (gate)', () => {
+  it('fires when the run synced climbs', () => {
+    expect(shouldHealRequiredSetIds({ climbs: { synced: 3 } })).toBe(true);
+  });
+
+  it('fires on late placements even when no climbs moved (the cursor hole)', () => {
+    expect(shouldHealRequiredSetIds({ climbs: { synced: 0 }, placements: { synced: 12 } })).toBe(true);
+  });
+
+  it('stays quiet on an idle run so it never scans the catalog', () => {
+    expect(shouldHealRequiredSetIds({})).toBe(false);
+    expect(shouldHealRequiredSetIds({ climbs: { synced: 0 }, placements: { synced: 0 } })).toBe(false);
+    // Other tables moving (e.g. climb_stats) do not trigger the heal.
+    expect(shouldHealRequiredSetIds({ climb_stats: { synced: 500 } })).toBe(false);
+  });
+
+  it('an idle syncSharedData run never reaches the drain (gate wired in)', async () => {
+    mockSharedSync.mockReset();
+    mockPopulateDenormalizedColumns.mockReset();
+    mockPopulateDenormalizedColumns.mockResolvedValue(undefined);
+    mockSharedSync.mockResolvedValueOnce(complete({ shared_syncs: [] }));
+
+    await syncSharedData(fakePostgresClient(), 'decoy', 'token');
+
+    // No climbs/placements moved → neither the per-batch denormalization nor
+    // the tail drain touches populateDenormalizedColumns.
+    expect(mockPopulateDenormalizedColumns).not.toHaveBeenCalled();
+  });
+});
+
+describe('healRequiredSetIds (drain)', () => {
+  const dialect = new PgDialect();
+
+  /**
+   * Targeted db shim for the drain's single SELECT: captures the where
+   * condition and the limit, resolves to the given straggler rows.
+   */
+  function mockDrainDb(stragglerRows: Array<{ uuid: string }>) {
+    const captured: { where?: unknown; limit?: number } = {};
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: (condition: unknown) => {
+            captured.where = condition;
+            return {
+              limit: (cap: number) => {
+                captured.limit = cap;
+                return Promise.resolve(stragglerRows);
+              },
+            };
+          },
+        }),
+      }),
+    };
+    return { db: db as unknown as Parameters<typeof healRequiredSetIds>[0], captured };
+  }
+
+  beforeEach(() => {
+    mockPopulateDenormalizedColumns.mockReset();
+    mockPopulateDenormalizedColumns.mockResolvedValue(undefined);
+  });
+
+  it('caps the per-run drain at REQUIRED_SET_ID_DRAIN_LIMIT and heals exactly the returned uuids', async () => {
+    const { db, captured } = mockDrainDb([{ uuid: 'c1' }, { uuid: 'c2' }]);
+    const logs: string[] = [];
+    await healRequiredSetIds(db, 'tension', (message) => logs.push(message));
+    expect(captured.limit).toBe(REQUIRED_SET_ID_DRAIN_LIMIT);
+    expect(REQUIRED_SET_ID_DRAIN_LIMIT).toBe(2000);
+    expect(mockPopulateDenormalizedColumns).toHaveBeenCalledTimes(1);
+    expect(mockPopulateDenormalizedColumns).toHaveBeenCalledWith(db, 'tension', ['c1', 'c2']);
+    expect(logs.join('\n')).toContain('healed required_set_ids for 2');
+  });
+
+  it('is a silent no-op when no stragglers remain', async () => {
+    const { db } = mockDrainDb([]);
+    const logs: string[] = [];
+    await healRequiredSetIds(db, 'tension', (message) => logs.push(message));
+    expect(mockPopulateDenormalizedColumns).not.toHaveBeenCalled();
+    expect(logs).toEqual([]);
+  });
+
+  it('selects only synced, listed rows missing set ids (user-authored climbs excluded)', async () => {
+    const { db, captured } = mockDrainDb([]);
+    await healRequiredSetIds(db, 'tension', () => {});
+    // Render the REAL where condition the drain issued — the assertion fails if
+    // someone drops the ownership fence (or any other predicate) from the query.
+    const whereSql = dialect.sqlToQuery(captured.where as Parameters<typeof dialect.sqlToQuery>[0]).sql.toLowerCase();
+    expect(whereSql).toContain('"user_id" is null');
+    expect(whereSql).toContain('"is_listed" =');
+    expect(whereSql).toContain('"required_set_ids" is null');
+    expect(whereSql).toContain('"frames" is not null');
   });
 });

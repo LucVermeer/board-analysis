@@ -30,9 +30,18 @@ export type DeletionReport = {
   skippedForeignSource: number;
   /** Canonicals that still back live aliases — skipped (would orphan survivors). */
   skippedCanonicalWithAliases: number;
-  /** Self-canonicals already is_listed=false from a prior run (drained). */
+  /**
+   * Rows already is_listed=false from a prior run (drained) — self-canonicals
+   * from the alias graph plus direct-uuid matches outside it.
+   */
   alreadyUnlisted: number;
-  /** Reported uuids not found in board_climb_aliases at all (never imported). */
+  /**
+   * Reported uuids absent from the alias graph but matched directly against a
+   * live synced board_climbs.uuid — the self-alias-gap fallback (see below).
+   * Soft-deleted like a lone self-canonical.
+   */
+  directUuidSoftDeletes: number;
+  /** Reported uuids found in neither the alias graph nor board_climbs (expected). */
   unknown: number;
   applied: boolean;
   /** Changes actually written this cycle (alias drops + soft-deletes). */
@@ -58,6 +67,8 @@ export type DeletionClassification = {
   skippedForeignSource: number;
   skippedCanonicalWithAliases: number;
   alreadyUnlisted: number;
+  /** Lowered reported uuids absent from the alias graph — fed to the direct fallback. */
+  unknownLoweredUuids: string[];
   unknown: number;
 };
 
@@ -123,7 +134,11 @@ export function classifyKilterDeletions(input: {
     }
   }
 
-  const unknown = loweredUuids.filter((uuid) => !knownLower.has(uuid)).length;
+  // Uuids the alias graph never knew about. Before the self-alias backfill,
+  // ~6k synced kilter climbs reached the catalog without a self-alias, so a
+  // genuine upstream deletion of one landed here and was silently ignored. The
+  // caller resolves these against board_climbs.uuid directly (see below).
+  const unknownLoweredUuids = loweredUuids.filter((uuid) => !knownLower.has(uuid));
   return {
     aliasUuidsToDelete,
     canonicalsToSoftDelete,
@@ -131,7 +146,8 @@ export function classifyKilterDeletions(input: {
     skippedForeignSource,
     skippedCanonicalWithAliases,
     alreadyUnlisted,
-    unknown,
+    unknownLoweredUuids,
+    unknown: unknownLoweredUuids.length,
   };
 }
 
@@ -198,6 +214,7 @@ export async function reconcileDeletions(
     skippedForeignSource: 0,
     skippedCanonicalWithAliases: 0,
     alreadyUnlisted: 0,
+    directUuidSoftDeletes: 0,
     unknown: 0,
     applied: false,
     appliedThisRun: 0,
@@ -247,14 +264,62 @@ export async function reconcileDeletions(
   report.skippedForeignSource = classification.skippedForeignSource;
   report.skippedCanonicalWithAliases = classification.skippedCanonicalWithAliases;
   report.alreadyUnlisted = classification.alreadyUnlisted;
-  report.unknown = classification.unknown;
 
-  const backlog = report.aliasDeletes + report.softDeletes;
+  // Direct-uuid fallback: a reported deletion whose uuid the alias graph never
+  // knew (the self-alias gap) can still match a board_climbs row directly by
+  // uuid (case-insensitive). Classify EVERY match into the alias-graph buckets —
+  // not just the actionable ones — so a row drained on a prior run is reported
+  // as alreadyUnlisted instead of being re-counted as "never-imported (unknown)"
+  // on every subsequent cycle:
+  //   - synced (user_id NULL), is_listed true OR NULL → soft-delete, exactly
+  //     like a lone self-canonical. NULL is invisible in search but has never
+  //     been written explicitly — Kilter reporting it deleted must still write
+  //     is_listed = false so the 0144/0146 sync trigger fires and offline
+  //     clients receive the removal (the reverse of the IS NOT TRUE re-list
+  //     rule; the alias-graph classifier likewise only short-circuits on an
+  //     explicit false);
+  //   - synced + explicitly unlisted (false) → alreadyUnlisted (drained);
+  //   - user-authored → protectedUserAuthored (never touched, mirrors the
+  //     alias-graph protection).
+  // Only uuids matched by NEITHER path remain unknown (truly never imported).
+  const directSoftDeletes: string[] = [];
+  let directResolved = 0;
+  if (classification.unknownLoweredUuids.length > 0) {
+    const directRows = await db
+      .select({ uuid: boardClimbs.uuid, isListed: boardClimbs.isListed, userId: boardClimbs.userId })
+      .from(boardClimbs)
+      .where(
+        and(
+          eq(boardClimbs.boardType, KILTER),
+          inArray(sql`lower(${boardClimbs.uuid})`, classification.unknownLoweredUuids),
+        ),
+      );
+    directResolved = directRows.length;
+    for (const row of directRows) {
+      if (row.userId != null) {
+        report.protectedUserAuthored += 1;
+      } else if (row.isListed !== false) {
+        directSoftDeletes.push(row.uuid);
+      } else {
+        report.alreadyUnlisted += 1;
+      }
+    }
+  }
+  report.directUuidSoftDeletes = directSoftDeletes.length;
+  // Only the rows matched by neither path are truly never-imported.
+  report.unknown = classification.unknown - directResolved;
+
+  // Both self-canonicals and direct-uuid matches are soft-deletes (is_listed →
+  // false on board_climbs.uuid), so batch/guard/apply treat them as one set.
+  const allSoftDeletes = [...classification.canonicalsToSoftDelete, ...directSoftDeletes];
+  const totalSoftDeletes = allSoftDeletes.length;
+
+  const backlog = report.aliasDeletes + totalSoftDeletes;
 
   if (!applyDeletions) {
     report.remaining = backlog;
     log(
-      `[kilter-catalog] deletions (report only): ${report.reported} reported → ${report.aliasDeletes} alias drops, ${report.softDeletes} soft-deletes, ${report.skippedCanonicalWithAliases} skipped (live aliases), ${report.protectedUserAuthored} protected (user-authored), ${report.alreadyUnlisted} already unlisted, ${report.unknown} never-imported (expected)`,
+      `[kilter-catalog] deletions (report only): ${report.reported} reported → ${report.aliasDeletes} alias drops, ${report.softDeletes} soft-deletes, ${report.directUuidSoftDeletes} direct-uuid soft-deletes, ${report.skippedCanonicalWithAliases} skipped (live aliases), ${report.protectedUserAuthored} protected (user-authored), ${report.alreadyUnlisted} already unlisted, ${report.unknown} never-imported (expected)`,
     );
     return report;
   }
@@ -274,23 +339,26 @@ export async function reconcileDeletions(
   // mass-delete would otherwise drain a batch at a time and silently unlist a big
   // slice of the catalog without ever tripping. If a large drop is legitimate, the
   // operator reviews it and raises ANOMALY_FRACTION for a one-off manual apply.
-  if (report.softDeletes > 0) {
+  if (totalSoftDeletes > 0) {
     const [liveRow] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(boardClimbs)
       .where(and(eq(boardClimbs.boardType, KILTER), eq(boardClimbs.isListed, true), isNull(boardClimbs.userId)));
     const liveListedCount = liveRow?.count ?? 0;
-    if (isAnomalousDeletionBacklog(report.softDeletes, liveListedCount)) {
+    if (isAnomalousDeletionBacklog(totalSoftDeletes, liveListedCount)) {
       report.refused = true;
       report.remaining = backlog;
       log(
-        `[kilter-catalog] REFUSING deletions: ${report.softDeletes} soft-deletes exceed ${Math.round(ANOMALY_FRACTION * 100)}% of ${liveListedCount} live climbs — manual review required`,
+        `[kilter-catalog] REFUSING deletions: ${totalSoftDeletes} soft-deletes exceed ${Math.round(ANOMALY_FRACTION * 100)}% of ${liveListedCount} live climbs — manual review required`,
       );
       return report;
     }
   }
 
-  const { aliasBatch, softBatch, appliedThisRun, remaining } = planDeletionBatch(classification, batchLimit);
+  const { aliasBatch, softBatch, appliedThisRun, remaining } = planDeletionBatch(
+    { aliasUuidsToDelete: classification.aliasUuidsToDelete, canonicalsToSoftDelete: allSoftDeletes },
+    batchLimit,
+  );
   // Apply both writes atomically so a crash can't leave the batch half-applied.
   await db.transaction(async (tx) => {
     if (aliasBatch.length > 0) {

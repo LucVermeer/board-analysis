@@ -1,6 +1,6 @@
 import { sharedSync } from '../api/shared-sync-api';
 import { type SyncOptions, type AuroraBoardName, SHARED_SYNC_TABLES } from '../api/types';
-import { sql, eq, and, inArray } from 'drizzle-orm';
+import { sql, eq, and, inArray, isNull, isNotNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import type postgres from 'postgres';
@@ -79,6 +79,13 @@ const TABLES_TO_PROCESS = new Set([...PROCESSING_ORDER, 'shared_syncs']);
 
 const MAX_SYNC_ATTEMPTS = 100;
 
+// Per-run cap on the required_set_ids straggler drain (see healRequiredSetIds).
+// Large enough to keep up with any real trickle of late-arriving placements,
+// small enough that a one-off historical backlog drains over cycles instead of
+// updating tens of thousands of rows in a single sync transaction. Exported
+// for tests.
+export const REQUIRED_SET_ID_DRAIN_LIMIT = 2000;
+
 // Chunk multi-row INSERTs to keep statement size bounded. Postgres has a hard
 // limit of 65535 parameters per statement; the widest table we write here is
 // `climbs` at 19 columns, so 1000 rows/statement = 19 000 params, well under
@@ -90,6 +97,47 @@ async function processBatches<T>(data: T[], processor: (batch: T[]) => Promise<v
   for (let i = 0; i < data.length; i += BATCH_SIZE) {
     await processor(data.slice(i, i + BATCH_SIZE));
   }
+}
+
+/**
+ * Conflict policy for board_climbs.is_draft / is_listed on the Aurora shared
+ * sync. For NON-user climbs (user_id IS NULL — Aurora catalog rows) take the
+ * incoming flags VERBATIM: Aurora only re-sends rows it changed, so its flags
+ * are authoritative and an upstream delist (listed → hidden) or re-draft
+ * (published → draft) must propagate so the climb leaves search. For user
+ * climbs (Boardsesh-created) the stored flags are preserved. Exported for tests.
+ */
+export function climbListingConflictSet() {
+  const climbsSchema = UNIFIED_TABLES.climbs;
+  return {
+    isDraft: sql`CASE WHEN ${climbsSchema.userId} IS NULL THEN excluded.is_draft ELSE ${climbsSchema.isDraft} END`,
+    isListed: sql`CASE WHEN ${climbsSchema.userId} IS NULL THEN excluded.is_listed ELSE ${climbsSchema.isListed} END`,
+  };
+}
+
+/**
+ * Conflict policy for board_climb_stats upstream/total ascent counts on the
+ * Aurora shared sync. Takes the incoming (cursored) upstream count verbatim —
+ * Aurora only re-sends changed rows, so it is the current truth and a legitimate
+ * decrease must propagate. (The old GREATEST(stored, incoming) pinned counts at
+ * their all-time high, silently swallowing a revoked ascent.) Total is the same
+ * incoming upstream plus the independent Boardsesh count.
+ *
+ * NULL semantics (deliberate): COALESCE(excluded.…, stored, 0) means an incoming
+ * NULL count PRESERVES the stored value rather than zeroing it. A NULL from
+ * upstream is "no data for this row", not "the count is now zero" — a genuine
+ * drop to zero arrives as an explicit 0, which the incoming-first argument order
+ * takes verbatim, exactly like any other decrease. So: non-null incoming always
+ * wins (increase, decrease, or 0); NULL incoming keeps what we have; the final 0
+ * only seeds a row that has never carried a count on either side.
+ * Exported for tests.
+ */
+export function climbStatsUpstreamConflictSet() {
+  const climbStatsSchema = UNIFIED_TABLES.climbStats;
+  return {
+    upstreamAscensionistCount: sql`COALESCE(excluded.upstream_ascensionist_count, ${climbStatsSchema.upstreamAscensionistCount}, 0)`,
+    ascensionistCount: sql`COALESCE(excluded.upstream_ascensionist_count, ${climbStatsSchema.upstreamAscensionistCount}, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
+  };
 }
 
 async function upsertProducts(db: DrizzleDb, board: AuroraBoardName, data: Product[]) {
@@ -485,12 +533,10 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         set: {
           displayDifficulty: sql`excluded.display_difficulty`,
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
-          // upstream_ is the board's single manufacturer count (Tension/Aurora
-          // here). Keep the higher of the stored and incoming snapshot so a
-          // stale/partial sync can never lower a climb.
-          upstreamAscensionistCount: sql`GREATEST(COALESCE(${climbStatsSchema.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
-          // Total = upstream + Boardsesh's local count.
-          ascensionistCount: sql`GREATEST(COALESCE(${climbStatsSchema.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0)) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
+          // upstream_ = the board's single manufacturer count; take the incoming
+          // cursored value verbatim (not GREATEST) so a legitimate decrease
+          // propagates. See climbStatsUpstreamConflictSet.
+          ...climbStatsUpstreamConflictSet(),
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
           qualityNormalized: sql`true`,
@@ -591,16 +637,17 @@ async function upsertClimbs(db: DrizzleDb, board: AuroraBoardName, data: Climb[]
     .where(inArray(climbsSchema.uuid, uuids));
   const existingUuids = new Set(existingRows.map((r) => r.uuid));
 
-  // Climbs: chunked multi-row upsert. The conflict policy is asymmetric on
-  // the two boolean flags (inherited verbatim from the original web cron):
-  //   - isDraft (true = draft, false = published) is only allowed to flip
-  //     false → true, i.e. let Aurora pull a previously-published climb back
-  //     to draft. The reverse direction (draft → published) is NOT honored
-  //     here; a draft climb stays draft in our copy until it's seen as
-  //     published on insert (new row) or until this is reworked.
-  //   - isListed (true = visible, false = hidden) only flips false → true,
-  //     i.e. once a climb is publicly listed we keep it listed even if a
-  //     later remote re-edit tries to hide it.
+  // Climbs: chunked multi-row upsert. The conflict policy splits on ownership:
+  //   - NON-user climbs (board_climbs.user_id IS NULL — Aurora catalog rows):
+  //     is_draft and is_listed are taken from the incoming payload VERBATIM.
+  //     Aurora only re-sends rows it changed, so its flags are authoritative —
+  //     an upstream delist (listed → hidden) or re-draft (published → draft)
+  //     must propagate so the climb leaves search, matching the deletion the
+  //     manufacturer made. (The old policy only ever let the flags flip toward
+  //     visible, silently pinning delisted catalog climbs as listed forever.)
+  //   - USER climbs (user_id set — Boardsesh-created): flags are preserved on
+  //     conflict. A Boardsesh climb is never synced through this path, but the
+  //     ownership guard protects it belt-and-suspenders if a UUID ever collides.
   // Everything else (frames/edges/setter/layout/angle) is preserved on
   // conflict — Aurora seeds these on insert, but we don't trust remote
   // re-edits to overwrite our copy.
@@ -637,8 +684,9 @@ async function upsertClimbs(db: DrizzleDb, board: AuroraBoardName, data: Climb[]
       .onConflictDoUpdate({
         target: [climbsSchema.uuid],
         set: {
-          isDraft: sql`CASE WHEN ${climbsSchema.isDraft} = false AND excluded.is_draft = true THEN true ELSE ${climbsSchema.isDraft} END`,
-          isListed: sql`CASE WHEN ${climbsSchema.isListed} = false AND excluded.is_listed = true THEN true ELSE ${climbsSchema.isListed} END`,
+          // is_draft/is_listed: verbatim for catalog rows, preserved for user
+          // climbs. See climbListingConflictSet.
+          ...climbListingConflictSet(),
           name: sql`excluded.name`,
           description: sql`excluded.description`,
           // Description is overwritten from excluded, so keep the derived
@@ -682,6 +730,75 @@ async function upsertClimbs(db: DrizzleDb, board: AuroraBoardName, data: Climb[]
       layoutId: c.layout_id,
       name: c.name,
     }));
+}
+
+/**
+ * Gate for the required_set_ids straggler drain: run it only when this sync
+ * cycle actually moved climbs OR placements, so an idle run never scans the
+ * catalog. Late placements (climbs.synced == 0 but placements.synced > 0) must
+ * trigger it too — that's exactly the cursor hole being healed. Pure + exported
+ * for unit testing.
+ */
+export function shouldHealRequiredSetIds(totalResults: Record<string, { synced: number }>): boolean {
+  return (totalResults['climbs']?.synced ?? 0) > 0 || (totalResults['placements']?.synced ?? 0) > 0;
+}
+
+/**
+ * Heal climbs whose denormalized `required_set_ids` never populated because
+ * their layout's placements arrived in a different sync batch/run than the
+ * climb itself — the per-batch populateDenormalizedColumns then found no
+ * placements to join and left the column NULL. A NULL `required_set_ids`
+ * silently excludes a climb from every set-filtered search (`NULL <@ array` is
+ * false), so an otherwise-live climb goes invisible. Runs once at the tail of a
+ * sync loop, when every placement this run carried is present; bounded per run
+ * so a historical backlog drains over cycles rather than updating tens of
+ * thousands of rows in one transaction. (MoonBoard, which uses a separate
+ * cell→set path, never flows through this Aurora shared-sync at all.)
+ *
+ * This is a single capped SELECT per run, not a loop — it cannot spin within a
+ * run. A climb whose frames reference holds with no placement on its layout is
+ * un-healable (populateDenormalizedColumns leaves it NULL) and would re-appear in
+ * the next qualifying run's scan; that's harmless (an idempotent no-op re-write)
+ * and bounded by REQUIRED_SET_ID_DRAIN_LIMIT. Prod-verified 2026-07-08: 0 such
+ * un-healable rows across kilter/tension/grasshopper/decoy, so no marker column is
+ * warranted. If a large un-healable population ever emerges it would occupy the
+ * cap and slow (never block) healable stragglers — revisit with a marker then.
+ *
+ * Exported for tests (gating lives in shouldHealRequiredSetIds).
+ */
+export async function healRequiredSetIds(db: DrizzleDb, board: AuroraBoardName, log: (message: string) => void) {
+  const climbsSchema = UNIFIED_TABLES.climbs;
+  const stragglers = await db
+    .select({ uuid: climbsSchema.uuid })
+    .from(climbsSchema)
+    .where(
+      and(
+        eq(climbsSchema.boardType, board),
+        // Synced catalog rows only (user_id IS NULL): the shared sync owns their
+        // denormalization. User-authored climbs are populated by their creation
+        // path; an un-healable one (frames referencing another layout's
+        // placements) would otherwise squat in the drain cap on every run.
+        // Prod 2026-07-08: 0 user-authored listed rows with NULL required_set_ids,
+        // so this changes no current behaviour — it fences the future.
+        isNull(climbsSchema.userId),
+        eq(climbsSchema.isListed, true),
+        isNull(climbsSchema.requiredSetIds),
+        isNotNull(climbsSchema.frames),
+      ),
+    )
+    // TODO(required-set-ids): un-healable rows (frames referencing holds with no
+    // placement on the climb's layout) stay NULL and would re-occupy this cap on
+    // every run. Prod 2026-07-08: 0 such rows exist; if a population ever
+    // emerges, add a marker column (e.g. required_set_ids_unhealable_at) and
+    // exclude marked rows here so healable stragglers aren't crowded out.
+    .limit(REQUIRED_SET_ID_DRAIN_LIMIT);
+  if (stragglers.length === 0) return;
+  await populateDenormalizedColumns(
+    db,
+    board,
+    stragglers.map((row) => row.uuid),
+  );
+  log(`[SharedSync] ${board}: healed required_set_ids for ${stragglers.length} straggler climb(s)`);
 }
 
 async function upsertSharedTableData(
@@ -921,6 +1038,17 @@ export async function syncSharedData(
   if (didWriteClimbStatsHistory) {
     await markClimbStatsHistorySnapshotDone(db, board);
     log(`[SharedSync] Recorded climb_stats_history snapshot timestamp for ${board}`);
+  }
+
+  // Close the required_set_ids cursor hole: after the whole run is persisted,
+  // heal any climbs still missing set ids — gated so an idle sync never scans
+  // the catalog (see shouldHealRequiredSetIds).
+  if (shouldHealRequiredSetIds(totalResults)) {
+    try {
+      await healRequiredSetIds(db, board, log);
+    } catch (error) {
+      log(`[SharedSync] required_set_ids heal failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   if (allNewClimbs.length > 0) {

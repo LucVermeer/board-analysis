@@ -577,11 +577,14 @@ export const boardClimbStats = pgTable(
     // Each board has exactly one upstream (the manufacturer's own count): Tension
     // via the Aurora API sync, Kilter via the Kilter Grips catalog sync, MoonBoard
     // via the community-repeat count in the app catalog import. Every upstream
-    // writer sets upstream_ascensionist_count (GREATEST of the existing and the
-    // incoming snapshot, so a stale/partial sync can never lower a climb) and
-    // rewrites the total in the same statement; the Boardsesh tick recompute owns
-    // boardsesh_ascensionist_count and adds it on top. Boardsesh ascents ADD to the
-    // upstream number — they never replace it.
+    // writer sets upstream_ascensionist_count and rewrites the total in the same
+    // statement. The Aurora shared-sync takes the incoming cursored value VERBATIM
+    // (Aurora only re-sends changed rows, so a legitimate decrease must propagate —
+    // see climbStatsUpstreamConflictSet); the Kilter Grips catalog sync, which
+    // recomputes the full count from every source uuid each run, still floors with
+    // GREATEST so a partial fetch can't lower a climb. The Boardsesh tick recompute
+    // owns boardsesh_ascensionist_count and adds it on top. Boardsesh ascents ADD to
+    // the upstream number — they never replace it.
     // (Historically upstream was split into aurora_/kilter_ columns for the two
     // Kilter backends; migration 0141 folded them into GREATEST(aurora, kilter) and
     // dropped the kilter column.)

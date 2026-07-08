@@ -466,6 +466,83 @@ export function generateClimbImportUuid(
   return `json-import-climb-${hash}`;
 }
 
+export type ImportedClimbRow = typeof boardClimbs.$inferInsert;
+
+/**
+ * Build a board_climbs insert row for a climb pulled from an Aurora account
+ * export. Both draft climbs and published-but-uncatalogued climbs are per-user
+ * placeholders — userId-owned and, crucially, is_listed = FALSE. A published
+ * placeholder must never surface in catalog search (it is a low-signal duplicate
+ * of the real climb the user logged); it exists only to anchor the importer's
+ * own ticks, which still resolve via resolveClimbNames' userOwnedFilter. `isDraft`
+ * is the only difference between the draft and published variants.
+ */
+export function buildImportedClimbRow(args: {
+  userId: string;
+  boardType: BoardType;
+  layoutId: number;
+  setterUsername: string;
+  name: string;
+  description: string | null | undefined;
+  frames: string;
+  edges: { edgeLeft: number; edgeRight: number; edgeBottom: number; edgeTop: number } | null;
+  createdAt: string;
+  isDraft: boolean;
+}): ImportedClimbRow {
+  return {
+    uuid: generateClimbImportUuid(args.userId, args.boardType, args.layoutId, args.name, args.createdAt),
+    boardType: args.boardType,
+    layoutId: args.layoutId,
+    userId: args.userId,
+    setterId: null,
+    setterUsername: args.setterUsername,
+    name: args.name,
+    description: args.description ?? '',
+    characteristics: isNoMatchClimb(args.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
+    frames: args.frames,
+    framesCount: 1,
+    framesPace: 0,
+    isDraft: args.isDraft,
+    isListed: false,
+    edgeLeft: args.edges?.edgeLeft ?? null,
+    edgeRight: args.edges?.edgeRight ?? null,
+    edgeBottom: args.edges?.edgeBottom ?? null,
+    edgeTop: args.edges?.edgeTop ?? null,
+    angle: null,
+    createdAt: args.createdAt,
+    synced: false,
+    syncError: null,
+  };
+}
+
+/**
+ * Key for the layout-aware published-climb skip list: a placeholder is only
+ * suppressed when a real catalog climb covers the SAME (layoutId, name) pair —
+ * a same-name catalog climb on another layout is a different climb and must not
+ * block this layout's placeholder (the import's ascents would have nothing to
+ * resolve to). Exported for tests.
+ */
+export function publishedClimbKey(layoutId: number, name: string): string {
+  return `${layoutId}:${name}`;
+}
+
+/**
+ * ON CONFLICT policy for the published-placeholder batch. A uuid conflict can
+ * only be a placeholder this same user imported before (generateClimbImportUuid
+ * hashes userId+board+layout+name+createdAt), and the update flips the stored
+ * row to the current unlisted policy — healing is_listed=true placeholders left
+ * behind by imports made before placeholders went unlisted. The setWhere
+ * belt-and-suspenders that invariant: only a 'json-import-climb-' row owned by
+ * THIS user is ever updated, so a real catalog climb can never be delisted even
+ * if a uuid somehow collided. Exported for tests.
+ */
+export function importedPlaceholderConflictPolicy(userId: string) {
+  return {
+    setWhere: and(sql`${boardClimbs.uuid} LIKE 'json-import-climb-%'`, eq(boardClimbs.userId, userId)),
+    set: { isListed: sql`excluded.is_listed` },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Climb name resolution
 // ---------------------------------------------------------------------------
@@ -773,21 +850,45 @@ export async function importJsonExportData(
     const draftClimbs = data.climbs.filter((c) => c.is_draft === true);
     const publishedClimbs = data.climbs.filter((c) => c.is_draft !== true);
 
-    // For published climbs, check which names already exist so we skip them
+    // For published climbs, skip creating a placeholder only when a REAL catalog
+    // climb (user_id IS NULL) already covers the name ON THE SAME LAYOUT. Keying
+    // by (layoutId, name) — not name alone — matters: a same-name catalog climb
+    // on ANOTHER layout is a different climb, and letting it suppress this
+    // layout's placeholder would leave the import's ascents with nothing to
+    // resolve to. We also intentionally do NOT skip on another user's unlisted
+    // placeholder (user_id set) — placeholders are per-user import artifacts, and
+    // skipping there would leave this user's ascents unable to resolve to
+    // anything (resolveClimbNames matches a foreign placeholder neither as
+    // catalog nor as this user's own).
     const publishedNames = publishedClimbs.map((c) => c.name);
-    const existingPublishedNames = new Set<string>();
-    if (publishedNames.length > 0) {
+    const publishedLayoutIds = [
+      ...new Set(
+        publishedClimbs
+          .map((climb) => resolveLayoutName(boardType, climb.layout))
+          .filter((layoutId): layoutId is number => layoutId != null),
+      ),
+    ];
+    const existingPublishedKeys = new Set<string>();
+    if (publishedNames.length > 0 && publishedLayoutIds.length > 0) {
       const chunkSize = 500;
       for (let i = 0; i < publishedNames.length; i += chunkSize) {
         const chunk = publishedNames.slice(i, i + chunkSize);
         const existing = await db
-          .select({ name: boardClimbs.name })
+          .select({ name: boardClimbs.name, layoutId: boardClimbs.layoutId })
           .from(boardClimbs)
           .where(
-            and(eq(boardClimbs.boardType, boardType), inArray(boardClimbs.name, chunk), eq(boardClimbs.isDraft, false)),
+            and(
+              eq(boardClimbs.boardType, boardType),
+              inArray(boardClimbs.layoutId, publishedLayoutIds),
+              inArray(boardClimbs.name, chunk),
+              eq(boardClimbs.isDraft, false),
+              isNull(boardClimbs.userId),
+            ),
           );
         for (const row of existing) {
-          if (row.name) existingPublishedNames.add(row.name);
+          if (row.name && row.layoutId != null) {
+            existingPublishedKeys.add(publishedClimbKey(row.layoutId, row.name));
+          }
         }
       }
     }
@@ -810,43 +911,34 @@ export async function importJsonExportData(
 
       const edges = computeEdgesFromHolds(climb.holds);
 
-      draftRows.push({
-        uuid: generateClimbImportUuid(userId, boardType, layoutId, climb.name, climb.created_at),
-        boardType,
-        layoutId,
-        userId,
-        setterId: null,
-        setterUsername: data.user.username,
-        name: climb.name,
-        description: climb.description ?? '',
-        characteristics: isNoMatchClimb(climb.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
-        frames,
-        framesCount: 1,
-        framesPace: 0,
-        isDraft: true,
-        isListed: false,
-        edgeLeft: edges?.edgeLeft ?? null,
-        edgeRight: edges?.edgeRight ?? null,
-        edgeBottom: edges?.edgeBottom ?? null,
-        edgeTop: edges?.edgeTop ?? null,
-        angle: null,
-        createdAt: climb.created_at ?? now,
-        synced: false,
-        syncError: null,
-      });
+      draftRows.push(
+        buildImportedClimbRow({
+          userId,
+          boardType,
+          layoutId,
+          setterUsername: data.user.username,
+          name: climb.name,
+          description: climb.description,
+          frames,
+          edges,
+          createdAt: climb.created_at,
+          isDraft: true,
+        }),
+      );
     }
 
     // Build rows for published climbs that don't already exist
     const publishedRows: ClimbRow[] = [];
     for (const climb of publishedClimbs) {
-      if (existingPublishedNames.has(climb.name)) {
-        result.climbs.skipped++;
-        continue;
-      }
-
+      // Resolve the layout FIRST — the skip decision is per (layout, name).
       const layoutId = resolveLayoutName(boardType, climb.layout);
       if (layoutId == null) {
         result.climbs.failed++;
+        continue;
+      }
+
+      if (existingPublishedKeys.has(publishedClimbKey(layoutId, climb.name))) {
+        result.climbs.skipped++;
         continue;
       }
 
@@ -859,30 +951,23 @@ export async function importJsonExportData(
 
       const edges = computeEdgesFromHolds(climb.holds);
 
-      publishedRows.push({
-        uuid: generateClimbImportUuid(userId, boardType, layoutId, climb.name, climb.created_at),
-        boardType,
-        layoutId,
-        userId,
-        setterId: null,
-        setterUsername: data.user.username,
-        name: climb.name,
-        description: climb.description ?? '',
-        characteristics: isNoMatchClimb(climb.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
-        frames,
-        framesCount: 1,
-        framesPace: 0,
-        isDraft: false,
-        isListed: true,
-        edgeLeft: edges?.edgeLeft ?? null,
-        edgeRight: edges?.edgeRight ?? null,
-        edgeBottom: edges?.edgeBottom ?? null,
-        edgeTop: edges?.edgeTop ?? null,
-        angle: null,
-        createdAt: climb.created_at ?? now,
-        synced: false,
-        syncError: null,
-      });
+      // Published-but-uncatalogued climbs import UNLISTED (see buildImportedClimbRow):
+      // per-user placeholders that anchor the importer's ticks without polluting
+      // catalog search with a duplicate of the real climb.
+      publishedRows.push(
+        buildImportedClimbRow({
+          userId,
+          boardType,
+          layoutId,
+          setterUsername: data.user.username,
+          name: climb.name,
+          description: climb.description,
+          frames,
+          edges,
+          createdAt: climb.created_at,
+          isDraft: false,
+        }),
+      );
     }
 
     const totalRows = draftRows.length + publishedRows.length;
@@ -914,11 +999,36 @@ export async function importJsonExportData(
           result.climbs.imported += batch.length;
         }
 
-        // Insert published climbs — skip on conflict (already exist from a prior import)
+        // Insert published placeholders. On a uuid conflict — a placeholder this
+        // same user imported before — flip the stored row to the current unlisted
+        // policy instead of DO NOTHING, which would preserve is_listed=true
+        // pollution from imports made before placeholders went unlisted. See
+        // importedPlaceholderConflictPolicy for the scoping invariants.
         for (let i = 0; i < publishedRows.length; i += BATCH_SIZE) {
           const batch = publishedRows.slice(i, i + BATCH_SIZE);
-          await tx.insert(boardClimbs).values(batch).onConflictDoNothing();
-          result.climbs.imported += batch.length;
+          // Count actual insertions: rows whose uuid already exists are re-imports
+          // (updated in place), reported as skipped rather than imported. The
+          // SELECT+INSERT pair is not atomic, so these counts are approximate
+          // under concurrent same-user imports; data integrity is unaffected
+          // (the upsert itself is conflict-safe).
+          const preExisting = await tx
+            .select({ uuid: boardClimbs.uuid })
+            .from(boardClimbs)
+            .where(
+              inArray(
+                boardClimbs.uuid,
+                batch.map((row) => row.uuid),
+              ),
+            );
+          await tx
+            .insert(boardClimbs)
+            .values(batch)
+            .onConflictDoUpdate({
+              target: boardClimbs.uuid,
+              ...importedPlaceholderConflictPolicy(userId),
+            });
+          result.climbs.imported += batch.length - preExisting.length;
+          result.climbs.skipped += preExisting.length;
         }
 
         // Populate denormalized required_set_ids and compatible_size_ids

@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import {
   boardClimbs,
@@ -69,6 +69,8 @@ export type KilterCatalogSummary = {
   canonicalsInserted: number;
   aliasesUpserted: number;
   statsUpserted: number;
+  selfAliasesBackfilled: number;
+  canonicalsRelisted: number;
   locations: LocationSyncSummary | null;
   deletions: DeletionReport;
 };
@@ -117,10 +119,32 @@ type GroupResult = {
   canonicalsInserted: number;
   aliasesUpserted: number;
   statsUpserted: number;
+  /** Self-aliases inserted this run for existing canonicals that lacked one. */
+  selfAliasesBackfilled: number;
+  /** Unlisted synced canonicals re-listed because a listed Grips climb folded on. */
+  canonicalsRelisted: number;
   newCanonicals: NewClimbInfo[];
   /** A few unmapped climbs (uuid + offending holeId) for a diagnostic log line. */
   unmappedSamples: UnmappedClimbSample[];
 };
+
+/**
+ * Decide whether an existing canonical should be re-listed because a currently
+ * LISTED Grips climb just folded onto it. Every climb that reaches the fold has
+ * already passed the `isListed && !isDraft && !isDeleted` gate upstream, so the
+ * incoming alias demonstrably exists on the wall again. If the canonical is a
+ * synced (non-user) row we'd previously unlisted, re-list it so it stops being
+ * invisible in search. User-authored canonicals are never touched, and a
+ * canonical created earlier this run (no meta entry → `undefined`) is already
+ * listed. Pure + exported for unit testing.
+ */
+export function shouldRelistFoldedCanonical(
+  canonicalMeta: { isListed: boolean | null; userId: string | null } | undefined,
+): boolean {
+  // Map.get yields `undefined` for a canonical created this run; the userId
+  // column is `string | null` (never undefined), so both checks are exact.
+  return canonicalMeta !== undefined && canonicalMeta.userId === null && canonicalMeta.isListed !== true;
+}
 
 // Cap the diagnostic sample so a systemic mapping break can't balloon the log.
 const UNMAPPED_SAMPLE_LIMIT = 10;
@@ -259,23 +283,65 @@ async function syncBoardLayoutGroup(
     canonicalsInserted: 0,
     aliasesUpserted: 0,
     statsUpserted: 0,
+    selfAliasesBackfilled: 0,
+    canonicalsRelisted: 0,
     newCanonicals: [],
     unmappedSamples: [],
   };
 
-  // Existing catalog for this layout: uuid identity + fingerprint → canonical.
+  // Existing catalog for this layout: uuid identity + fingerprint → canonical,
+  // carrying listing/ownership so the fold path can re-list a synced canonical
+  // an incoming listed alias proves is back on the wall (never a user climb).
   const existingRows = await db
-    .select({ uuid: boardClimbs.uuid, fingerprint: boardClimbs.holdFingerprint })
+    .select({
+      uuid: boardClimbs.uuid,
+      fingerprint: boardClimbs.holdFingerprint,
+      isListed: boardClimbs.isListed,
+      userId: boardClimbs.userId,
+    })
     .from(boardClimbs)
     .where(and(eq(boardClimbs.boardType, KILTER), eq(boardClimbs.layoutId, boardLayoutId)));
   const existingByLowerUuid = new Map<string, string>();
   const fingerprintToCanonical = new Map<string, string>();
+  // canonicalUuid → {isListed, userId} for DB-resident canonicals only. New
+  // canonicals created this run are absent (already listed → never re-listed).
+  const existingCanonicalMeta = new Map<string, { isListed: boolean | null; userId: string | null }>();
   for (const row of existingRows) {
     existingByLowerUuid.set(row.uuid.toLowerCase(), row.uuid);
+    existingCanonicalMeta.set(row.uuid, { isListed: row.isListed, userId: row.userId });
     if (row.fingerprint && !fingerprintToCanonical.has(row.fingerprint)) {
       fingerprintToCanonical.set(row.fingerprint, row.uuid);
     }
   }
+
+  // Existing self-aliases (alias_uuid = canonical_uuid) for this layout, so the
+  // identity path only writes the ones actually missing (~6k historical gap;
+  // steady-state 0) instead of re-upserting a self-alias for every known climb.
+  // Plain equality (not lower() = lower()): every self-alias writer — the
+  // identity/new-canonical paths here and the 0159 backfill — assigns the SAME
+  // string to both columns, so a self-alias can never differ by case only.
+  // Prod-verified 2026-07-08: 0 rows where lower(alias)=lower(canonical) but
+  // alias<>canonical, across 242k mixed-case kilter alias rows.
+  const existingSelfAliasRows = await db
+    .select({ aliasUuid: boardClimbAliases.aliasUuid })
+    .from(boardClimbAliases)
+    .innerJoin(
+      boardClimbs,
+      and(eq(boardClimbs.uuid, boardClimbAliases.canonicalUuid), eq(boardClimbs.boardType, KILTER)),
+    )
+    .where(
+      and(
+        eq(boardClimbAliases.boardType, KILTER),
+        eq(boardClimbs.layoutId, boardLayoutId),
+        eq(boardClimbAliases.aliasUuid, boardClimbAliases.canonicalUuid),
+      ),
+    );
+  const existingSelfAliasLower = new Set<string>();
+  for (const row of existingSelfAliasRows) existingSelfAliasLower.add(row.aliasUuid.toLowerCase());
+
+  // Canonicals to re-list this group (a listed Grips climb folded onto a synced
+  // unlisted canonical). Deduped across the group's Grips layouts.
+  const canonicalsToRelist = new Set<string>();
 
   const holeToPlacement = await loadHoleToPlacement(db, boardLayoutId);
 
@@ -316,6 +382,15 @@ async function syncBoardLayoutGroup(
       const existingUuid = existingByLowerUuid.get(lowerUuid);
       if (existingUuid) {
         climbUuidToCanonical.set(lowerUuid, existingUuid);
+        // Self-heal the self-alias gap (~6k kilter climbs reached the catalog
+        // via a path that never wrote one, leaving them invisible to deletion
+        // reconciliation). Only write the missing ones so steady-state runs add
+        // zero alias churn. Idempotent — the ON CONFLICT below refreshes seen.
+        if (!existingSelfAliasLower.has(lowerUuid)) {
+          existingSelfAliasLower.add(lowerUuid);
+          aliasRows.push({ boardType: KILTER, aliasUuid: existingUuid, canonicalUuid: existingUuid, source: KILTER });
+          result.selfAliasesBackfilled += 1;
+        }
         continue;
       }
 
@@ -344,6 +419,11 @@ async function syncBoardLayoutGroup(
           canonicalUuid: canonicalByFingerprint,
           source: KILTER,
         });
+        // A listed Grips climb folded onto this canonical → if it's a synced
+        // canonical we'd previously unlisted, re-list it (it exists again).
+        if (shouldRelistFoldedCanonical(existingCanonicalMeta.get(canonicalByFingerprint))) {
+          canonicalsToRelist.add(canonicalByFingerprint);
+        }
         continue;
       }
 
@@ -454,6 +534,43 @@ async function syncBoardLayoutGroup(
     );
   }
 
+  // Re-list synced canonicals a listed Grips climb folded back onto. The
+  // isNull(userId) + is_listed guards belt-and-suspenders the classifier above,
+  // so a user-authored or already-listed row is never touched.
+  //
+  // Ordering vs deletions: reconcileDeletions runs LAST in syncKilterCatalog
+  // (after every layout group), so it is the authority within a cycle. This
+  // re-list can only fire when a *live-listed* alias (from the current catalog
+  // pull) folds onto the canonical, which necessarily gives that canonical ≥2
+  // aliases (its self-alias + the folded one). So even if the same cycle's
+  // /delteduuids also names this canonical, the deletion pass classifies it as
+  // skippedCanonicalWithAliases (it still backs a live alias) and does NOT
+  // re-unlist it — correct, because a live alias proves the wall position exists.
+  // A genuinely-dead canonical (no live folded alias) is never reached here, so
+  // the fold cannot resurrect a truly-deleted climb.
+  if (canonicalsToRelist.size > 0) {
+    const relistUuids = [...canonicalsToRelist];
+    await processBatches(relistUuids, async (chunk) => {
+      await db
+        .update(boardClimbs)
+        .set({ isListed: true })
+        .where(
+          and(
+            eq(boardClimbs.boardType, KILTER),
+            isNull(boardClimbs.userId),
+            // IS NOT TRUE, not `= false`: is_listed is nullable and search filters
+            // on `is_listed = true`, so a NULL row is just as invisible as a false
+            // one. shouldRelistFoldedCanonical classifies NULL as re-listable; a
+            // strict `= false` here would silently skip those rows.
+            sql`${boardClimbs.isListed} IS NOT TRUE`,
+            inArray(boardClimbs.uuid, chunk),
+          ),
+        );
+    });
+    result.canonicalsRelisted += relistUuids.length;
+    log(`[kilter-catalog] layout group ${boardLayoutId}: re-listed ${relistUuids.length} folded canonical(s)`);
+  }
+
   // Stats for the whole group (after every climb is in climbUuidToCanonical).
   const statsByCanonicalAngle = new Map<string, StatAccum>();
   const seenSourceStats = new Set<string>();
@@ -559,6 +676,8 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
     canonicalsInserted: 0,
     aliasesUpserted: 0,
     statsUpserted: 0,
+    selfAliasesBackfilled: 0,
+    canonicalsRelisted: 0,
     locations: null,
     deletions: {
       reported: 0,
@@ -568,6 +687,7 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
       skippedForeignSource: 0,
       skippedCanonicalWithAliases: 0,
       alreadyUnlisted: 0,
+      directUuidSoftDeletes: 0,
       unknown: 0,
       applied: false,
       appliedThisRun: 0,
@@ -586,6 +706,8 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
     summary.canonicalsInserted += groupResult.canonicalsInserted;
     summary.aliasesUpserted += groupResult.aliasesUpserted;
     summary.statsUpserted += groupResult.statsUpserted;
+    summary.selfAliasesBackfilled += groupResult.selfAliasesBackfilled;
+    summary.canonicalsRelisted += groupResult.canonicalsRelisted;
     allNewCanonicals.push(...groupResult.newCanonicals);
     for (const sample of groupResult.unmappedSamples) {
       if (unmappedSamples.length < UNMAPPED_SAMPLE_LIMIT) unmappedSamples.push(sample);
