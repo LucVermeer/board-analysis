@@ -54,9 +54,11 @@ const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.d
 // (COALESCE(quality, rating)) — the same raw-vs-effective split as
 // `difficulty`/`effectiveDifficulty`, so the per-tick `quality` stays the raw
 // user value for edit/optimistic flows. Ratings are already 1–5 native (DB
-// check constraint), so there's nothing to rescale. The unique index on
-// (board_type, climb_uuid, angle, user_id) keeps this a 1:1 left join that
-// never multiplies rows.
+// check constraint), so there's nothing to rescale. The unique index
+// `board_climb_ratings_user_climb_angle_idx` on exactly
+// (board_type, climb_uuid, angle, user_id) — declared in
+// packages/db/src/schema/boards/unified.ts — makes this a 1:1 left join that
+// never multiplies rows and is fully index-backed.
 const boardClimbRatingsJoinCondition = and(
   eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbRatings.boardType),
   eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbRatings.climbUuid),

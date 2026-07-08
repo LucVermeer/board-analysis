@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { recomputeClimbStats as recomputeClimbStatsCore, recomputeClimbStatsBulk } from '@boardsesh/db/queries';
+import { sqlText } from '@boardsesh/db/test-utils';
 import { getWorkerDatabaseUrl, setupWorkerDatabase } from './worker-db';
 import { logger } from '../utils/logger';
 
@@ -24,20 +25,6 @@ vi.mock('../db/client', () => ({
 
 import { recomputeClimbStats } from '../graphql/resolvers/ticks/recompute-climb-stats';
 
-// Recursively stitch drizzle's `queryChunks` AST back into raw SQL text.
-// Nested `sql`…`` fragments (the blendedQualityAverageSql() interpolation) carry
-// their own `queryChunks`, so a flat pass over the top level would miss the
-// blend — we must recurse to see it.
-function stitchSql(query: unknown): string {
-  function walk(node: unknown): string {
-    if (node === null || typeof node !== 'object') return '';
-    const chunk = node as { value?: string[]; queryChunks?: unknown[] };
-    if (Array.isArray(chunk.value)) return chunk.value.join('');
-    if (Array.isArray(chunk.queryChunks)) return chunk.queryChunks.map(walk).join('');
-    return '';
-  }
-  return walk(query);
-}
 
 describe('recomputeClimbStats', () => {
   beforeEach(() => {
@@ -131,7 +118,7 @@ describe('recomputeClimbStats', () => {
 
     await recomputeClimbStats('kilter', 'CLIMB-1', 40);
 
-    const sql = stitchSql(capturedQuery);
+    const sql = sqlText(capturedQuery);
 
     // Hard invariants the delete-last-tick path depends on:
     // 1. boardsesh_ascensionist_count defaults to 0 when no senders remain.
@@ -176,7 +163,7 @@ describe('recomputeClimbStats', () => {
 
     await recomputeClimbStats('kilter', 'CLIMB-1', 40);
 
-    const sql = stitchSql(capturedQuery);
+    const sql = sqlText(capturedQuery);
 
     // The agg CTE must compute the averages — Postgres AVG skips NULL inputs,
     // so a single rated tick is enough to populate the column. quality = 0 is a
@@ -676,6 +663,63 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     expect(Number(row.bs_quality_sum)).toBe(5); // latest rating only
     expect(Number(row.bs_quality_count)).toBe(1); // one voter
     // blend = (4*10 + 5) / (10 + 1) = 45/11.
+    expect(Number(row.quality)).toBeCloseTo(45 / 11, 6);
+  });
+
+  it('a rated ATTEMPT never votes — only flash/send ticks feed bs_quality', async () => {
+    await seedUser('u-native', 'Nadia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    // A native attempt carrying a rating (odd but possible): excluded by the
+    // status IN ('flash','send') filter — no Boardsesh vote materializes.
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'attempt',
+      origin: 'native',
+      quality: 5,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(row.bs_quality_sum).toBe(null);
+    expect(row.bs_quality_count).toBe(null);
+    // quality_average stays the pure upstream 4.0 — an attempt's stars don't blend.
+    expect(Number(row.quality)).toBeCloseTo(4, 6);
+  });
+
+  it('two rated sends sharing climbed_at tie-break on id DESC (later insert wins)', async () => {
+    await seedUser('u-native', 'Nadia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    // Same user, same climbed_at second — only the serial id orders them. The
+    // second insert (quality 5) has the higher id, so `climbed_at DESC, id DESC`
+    // must pick it; an id ASC (or unordered) implementation would pick the 2.
+    const sharedClimbedAt = '2026-03-01 12:00:00';
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 2,
+      climbedAt: sharedClimbedAt,
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 5,
+      climbedAt: sharedClimbedAt,
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs_quality_sum)).toBe(5); // higher-id tick wins the tie
+    expect(Number(row.bs_quality_count)).toBe(1);
     expect(Number(row.quality)).toBeCloseTo(45 / 11, 6);
   });
 

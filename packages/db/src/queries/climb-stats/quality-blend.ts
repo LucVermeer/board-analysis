@@ -56,6 +56,9 @@ import { sql, type SQL } from 'drizzle-orm';
  * measurable gain. Keep callers to that contract: don't pass a subquery as a
  * term; materialize it into a statement-level column (e.g. a CTE) first.
  */
+// CALLER CONTRACT: each fragment is interpolated TWICE — pass only cheap,
+// deterministic, side-effect-free expressions (column refs / COALESCE /
+// GREATEST), never subqueries or volatile functions.
 export function blendedQualityAverageSql(args: {
   upstreamQualityAverage: SQL;
   upstreamAscensionistCount: SQL;

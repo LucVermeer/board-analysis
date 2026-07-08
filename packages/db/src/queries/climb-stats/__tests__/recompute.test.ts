@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { recomputeClimbStatsBulk, type ClimbStatsKey } from '../recompute';
+import { sqlText } from '../../../test-utils/sql-text';
 
 type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
@@ -18,21 +19,6 @@ function makeDb() {
     },
   };
   return { queries, handle: handle as unknown as DrizzleDb };
-}
-
-// Recursively stitch drizzle's `queryChunks` AST back into raw SQL text.
-// Nested `sql`…`` fragments (e.g. the blendedQualityAverageSql() interpolation)
-// are themselves chunk objects with their own `queryChunks`, so we must recurse
-// to see their text — a flat pass over the top level would miss the blend.
-function sqlText(query: unknown): string {
-  function walk(node: unknown): string {
-    if (node === null || typeof node !== 'object') return '';
-    const chunk = node as { value?: string[]; queryChunks?: unknown[] };
-    if (Array.isArray(chunk.value)) return chunk.value.join('');
-    if (Array.isArray(chunk.queryChunks)) return chunk.queryChunks.map(walk).join('');
-    return '';
-  }
-  return walk(query);
 }
 
 void describe('recomputeClimbStatsBulk', () => {

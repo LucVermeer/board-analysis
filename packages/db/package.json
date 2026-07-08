@@ -50,6 +50,11 @@
       "types": "./src/testing/dedup-replay.ts",
       "import": "./src/testing/dedup-replay.ts",
       "default": "./src/testing/dedup-replay.ts"
+    },
+    "./test-utils": {
+      "types": "./src/test-utils/sql-text.ts",
+      "import": "./src/test-utils/sql-text.ts",
+      "default": "./src/test-utils/sql-text.ts"
     }
   },
   "scripts": {

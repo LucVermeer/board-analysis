@@ -2,17 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { sql } from 'drizzle-orm';
 import { blendedQualityAverageSql } from '../quality-blend';
-
-// Recursively stitch drizzle's `queryChunks` AST back into raw SQL text so we
-// can assert the composed blend (nested `sql`…`` fragments carry their own
-// queryChunks — a flat pass would miss the operands).
-function sqlText(node: unknown): string {
-  if (node === null || typeof node !== 'object') return '';
-  const chunk = node as { value?: string[]; queryChunks?: unknown[] };
-  if (Array.isArray(chunk.value)) return chunk.value.join('');
-  if (Array.isArray(chunk.queryChunks)) return chunk.queryChunks.map(sqlText).join('');
-  return '';
-}
+import { sqlText } from '../../../test-utils/sql-text';
 
 void describe('blendedQualityAverageSql', () => {
   const fragment = blendedQualityAverageSql({
