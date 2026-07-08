@@ -30,7 +30,10 @@ export type DeletionReport = {
   skippedForeignSource: number;
   /** Canonicals that still back live aliases — skipped (would orphan survivors). */
   skippedCanonicalWithAliases: number;
-  /** Self-canonicals already is_listed=false from a prior run (drained). */
+  /**
+   * Rows already is_listed=false from a prior run (drained) — self-canonicals
+   * from the alias graph plus direct-uuid matches outside it.
+   */
   alreadyUnlisted: number;
   /**
    * Reported uuids absent from the alias graph but matched directly against a
@@ -263,28 +266,43 @@ export async function reconcileDeletions(
   report.alreadyUnlisted = classification.alreadyUnlisted;
 
   // Direct-uuid fallback: a reported deletion whose uuid the alias graph never
-  // knew (the self-alias gap) still matches a live synced board_climbs row by
-  // uuid. Soft-delete those exactly like a lone self-canonical. Only case-
-  // insensitive, synced (user_id NULL), still-listed rows qualify — user climbs
-  // and already-drained rows are excluded, same as the alias-graph path.
-  let directSoftDeletes: string[] = [];
+  // knew (the self-alias gap) can still match a board_climbs row directly by
+  // uuid (case-insensitive). Classify EVERY match into the alias-graph buckets —
+  // not just the actionable ones — so a row drained on a prior run is reported
+  // as alreadyUnlisted instead of being re-counted as "never-imported (unknown)"
+  // on every subsequent cycle:
+  //   - synced (user_id NULL) + still listed → soft-delete, exactly like a lone
+  //     self-canonical;
+  //   - synced + already unlisted → alreadyUnlisted (drained previously);
+  //   - user-authored → protectedUserAuthored (never touched, mirrors the
+  //     alias-graph protection).
+  // Only uuids matched by NEITHER path remain unknown (truly never imported).
+  const directSoftDeletes: string[] = [];
+  let directResolved = 0;
   if (classification.unknownLoweredUuids.length > 0) {
     const directRows = await db
-      .select({ uuid: boardClimbs.uuid })
+      .select({ uuid: boardClimbs.uuid, isListed: boardClimbs.isListed, userId: boardClimbs.userId })
       .from(boardClimbs)
       .where(
         and(
           eq(boardClimbs.boardType, KILTER),
-          isNull(boardClimbs.userId),
-          eq(boardClimbs.isListed, true),
           inArray(sql`lower(${boardClimbs.uuid})`, classification.unknownLoweredUuids),
         ),
       );
-    directSoftDeletes = directRows.map((row) => row.uuid);
+    directResolved = directRows.length;
+    for (const row of directRows) {
+      if (row.userId != null) {
+        report.protectedUserAuthored += 1;
+      } else if (row.isListed === true) {
+        directSoftDeletes.push(row.uuid);
+      } else {
+        report.alreadyUnlisted += 1;
+      }
+    }
   }
   report.directUuidSoftDeletes = directSoftDeletes.length;
   // Only the rows matched by neither path are truly never-imported.
-  report.unknown = classification.unknown - directSoftDeletes.length;
+  report.unknown = classification.unknown - directResolved;
 
   // Both self-canonicals and direct-uuid matches are soft-deletes (is_listed →
   // false on board_climbs.uuid), so batch/guard/apply treat them as one set.

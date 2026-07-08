@@ -515,6 +515,23 @@ export function buildImportedClimbRow(args: {
   };
 }
 
+/**
+ * ON CONFLICT policy for the published-placeholder batch. A uuid conflict can
+ * only be a placeholder this same user imported before (generateClimbImportUuid
+ * hashes userId+board+layout+name+createdAt), and the update flips the stored
+ * row to the current unlisted policy — healing is_listed=true placeholders left
+ * behind by imports made before placeholders went unlisted. The setWhere
+ * belt-and-suspenders that invariant: only a 'json-import-climb-' row owned by
+ * THIS user is ever updated, so a real catalog climb can never be delisted even
+ * if a uuid somehow collided. Exported for tests.
+ */
+export function importedPlaceholderConflictPolicy(userId: string) {
+  return {
+    setWhere: and(sql`${boardClimbs.uuid} LIKE 'json-import-climb-%'`, eq(boardClimbs.userId, userId)),
+    set: { isListed: sql`excluded.is_listed` },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Climb name resolution
 // ---------------------------------------------------------------------------
@@ -956,11 +973,33 @@ export async function importJsonExportData(
           result.climbs.imported += batch.length;
         }
 
-        // Insert published climbs — skip on conflict (already exist from a prior import)
+        // Insert published placeholders. On a uuid conflict — a placeholder this
+        // same user imported before — flip the stored row to the current unlisted
+        // policy instead of DO NOTHING, which would preserve is_listed=true
+        // pollution from imports made before placeholders went unlisted. See
+        // importedPlaceholderConflictPolicy for the scoping invariants.
         for (let i = 0; i < publishedRows.length; i += BATCH_SIZE) {
           const batch = publishedRows.slice(i, i + BATCH_SIZE);
-          await tx.insert(boardClimbs).values(batch).onConflictDoNothing();
-          result.climbs.imported += batch.length;
+          // Count actual insertions: rows whose uuid already exists are re-imports
+          // (updated in place), reported as skipped rather than imported.
+          const preExisting = await tx
+            .select({ uuid: boardClimbs.uuid })
+            .from(boardClimbs)
+            .where(
+              inArray(
+                boardClimbs.uuid,
+                batch.map((row) => row.uuid),
+              ),
+            );
+          await tx
+            .insert(boardClimbs)
+            .values(batch)
+            .onConflictDoUpdate({
+              target: boardClimbs.uuid,
+              ...importedPlaceholderConflictPolicy(userId),
+            });
+          result.climbs.imported += batch.length - preExisting.length;
+          result.climbs.skipped += preExisting.length;
         }
 
         // Populate denormalized required_set_ids and compatible_size_ids

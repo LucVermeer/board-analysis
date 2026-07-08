@@ -315,6 +315,11 @@ async function syncBoardLayoutGroup(
   // Existing self-aliases (alias_uuid = canonical_uuid) for this layout, so the
   // identity path only writes the ones actually missing (~6k historical gap;
   // steady-state 0) instead of re-upserting a self-alias for every known climb.
+  // Plain equality (not lower() = lower()): every self-alias writer — the
+  // identity/new-canonical paths here and the 0159 backfill — assigns the SAME
+  // string to both columns, so a self-alias can never differ by case only.
+  // Prod-verified 2026-07-08: 0 rows where lower(alias)=lower(canonical) but
+  // alias<>canonical, across 242k mixed-case kilter alias rows.
   const existingSelfAliasRows = await db
     .select({ aliasUuid: boardClimbAliases.aliasUuid })
     .from(boardClimbAliases)
@@ -326,7 +331,7 @@ async function syncBoardLayoutGroup(
       and(
         eq(boardClimbAliases.boardType, KILTER),
         eq(boardClimbs.layoutId, boardLayoutId),
-        eq(sql`lower(${boardClimbAliases.aliasUuid})`, sql`lower(${boardClimbAliases.canonicalUuid})`),
+        eq(boardClimbAliases.aliasUuid, boardClimbAliases.canonicalUuid),
       ),
     );
   const existingSelfAliasLower = new Set<string>();

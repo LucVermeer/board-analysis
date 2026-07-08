@@ -18,9 +18,12 @@
 -- and derives set ids from a separate cell->set map.
 --
 -- Prod-verified 2026-07-08 (boardsesh_readonly): 9,230 target rows (kilter 4,815,
--- tension 3,031, grasshopper 945, decoy 439); a sample of 2,000 all resolve to a
--- non-empty set list under the join. compatible_size_ids among these rows: 0 NULL
--- (already populated), so only required_set_ids is healed here.
+-- tension 3,031, grasshopper 945, decoy 439) — ALL synced (user_id IS NULL; 0
+-- user-authored rows match, so the user_id guard changes no counts and just pins
+-- the scope to catalog rows, same as the healRequiredSetIds drain). A sample of
+-- 2,000 all resolve to a non-empty set list under the join. compatible_size_ids
+-- among these rows: 0 NULL (already populated), so only required_set_ids is
+-- healed here.
 --
 -- Chunked in batches of 2,000 climbs: the per-climb regexp_matches LATERAL fan-out
 -- against board_placements is heavy, and a single pass over the whole target set
@@ -39,6 +42,7 @@ BEGIN
            ((row_number() OVER (ORDER BY board_type, uuid)) - 1) / 2000 AS batch
       FROM board_climbs
      WHERE board_type <> 'moonboard'
+       AND user_id IS NULL -- synced catalog rows only, matching healRequiredSetIds
        AND is_listed = true
        AND is_draft IS NOT TRUE
        AND required_set_ids IS NULL

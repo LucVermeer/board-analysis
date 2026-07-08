@@ -120,8 +120,16 @@ export function climbListingConflictSet() {
  * Aurora only re-sends changed rows, so it is the current truth and a legitimate
  * decrease must propagate. (The old GREATEST(stored, incoming) pinned counts at
  * their all-time high, silently swallowing a revoked ascent.) Total is the same
- * incoming upstream plus the independent Boardsesh count. The COALESCE fallback
- * only applies if a row ever arrives with no count. Exported for tests.
+ * incoming upstream plus the independent Boardsesh count.
+ *
+ * NULL semantics (deliberate): COALESCE(excluded.…, stored, 0) means an incoming
+ * NULL count PRESERVES the stored value rather than zeroing it. A NULL from
+ * upstream is "no data for this row", not "the count is now zero" — a genuine
+ * drop to zero arrives as an explicit 0, which the incoming-first argument order
+ * takes verbatim, exactly like any other decrease. So: non-null incoming always
+ * wins (increase, decrease, or 0); NULL incoming keeps what we have; the final 0
+ * only seeds a row that has never carried a count on either side.
+ * Exported for tests.
  */
 export function climbStatsUpstreamConflictSet() {
   const climbStatsSchema = UNIFIED_TABLES.climbStats;
@@ -752,6 +760,13 @@ async function healRequiredSetIds(db: DrizzleDb, board: AuroraBoardName, log: (m
     .where(
       and(
         eq(climbsSchema.boardType, board),
+        // Synced catalog rows only (user_id IS NULL): the shared sync owns their
+        // denormalization. User-authored climbs are populated by their creation
+        // path; an un-healable one (frames referencing another layout's
+        // placements) would otherwise squat in the drain cap on every run.
+        // Prod 2026-07-08: 0 user-authored listed rows with NULL required_set_ids,
+        // so this changes no current behaviour — it fences the future.
+        isNull(climbsSchema.userId),
         eq(climbsSchema.isListed, true),
         isNull(climbsSchema.requiredSetIds),
         isNotNull(climbsSchema.frames),

@@ -264,7 +264,7 @@ describe('reconcileDeletions', () => {
     // (empty), (2) direct-uuid match, (3) live-listed count.
     const { db, deletes, updates } = mockDb([
       [], // no alias rows for 'ghost'
-      [{ uuid: 'ghost' }], // direct board_climbs match
+      [{ uuid: 'ghost', isListed: true, userId: null }], // direct board_climbs match
       [{ count: 1000 }], // live listed count (guard)
     ]);
     const report = await reconcileDeletions(db, ['ghost'], true, noop);
@@ -276,6 +276,34 @@ describe('reconcileDeletions', () => {
     expect(deletes).toHaveLength(0); // no alias rows dropped
     expect(updates).toHaveLength(1);
     expect(updates[0].set).toEqual({ isListed: false });
+  });
+
+  it('direct-uuid fallback: an already-unlisted match counts as drained, not unknown forever', async () => {
+    // 'ghost' was soft-deleted on a previous cycle (is_listed=false) and still has
+    // no alias row. It must land in alreadyUnlisted — NOT stay in unknown, which
+    // would misreport it as "never imported" in the log on every subsequent run.
+    const { db, updates } = mockDb([
+      [], // no alias rows
+      [{ uuid: 'ghost', isListed: false, userId: null }], // direct match, drained
+    ]);
+    const report = await reconcileDeletions(db, ['ghost'], true, noop);
+    expect(report.directUuidSoftDeletes).toBe(0);
+    expect(report.alreadyUnlisted).toBe(1);
+    expect(report.unknown).toBe(0);
+    expect(report.applied).toBe(true); // nothing left to apply
+    expect(updates).toHaveLength(0);
+  });
+
+  it('direct-uuid fallback: a user-authored match is protected, never soft-deleted', async () => {
+    const { db, updates } = mockDb([
+      [], // no alias rows
+      [{ uuid: 'mine', isListed: true, userId: 'user-1' }], // direct match, user-owned
+    ]);
+    const report = await reconcileDeletions(db, ['mine'], true, noop);
+    expect(report.directUuidSoftDeletes).toBe(0);
+    expect(report.protectedUserAuthored).toBe(1);
+    expect(report.unknown).toBe(0);
+    expect(updates).toHaveLength(0);
   });
 
   it('direct-uuid fallback: still counts a genuinely never-imported uuid as unknown', async () => {

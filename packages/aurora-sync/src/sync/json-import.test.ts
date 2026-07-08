@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   buildImportedClimbRow,
   buildJsonImportAscentTickRow,
   generateJsonImportAuroraId,
+  importedPlaceholderConflictPolicy,
   type AuroraExportAscent,
 } from './json-import';
 
@@ -98,5 +100,29 @@ describe('buildImportedClimbRow', () => {
     expect(plain.characteristics).toBeNull();
     const noMatch = buildImportedClimbRow({ ...base, description: 'No match. Feet follow hands.', isDraft: false });
     expect(noMatch.characteristics).toEqual(['no_match']);
+  });
+});
+
+describe('importedPlaceholderConflictPolicy', () => {
+  const dialect = new PgDialect();
+
+  it('scopes the on-conflict update to placeholder rows owned by the importing user', () => {
+    const policy = importedPlaceholderConflictPolicy(USER_ID);
+    expect(policy.setWhere).toBeDefined();
+    const rendered = dialect.sqlToQuery(policy.setWhere as NonNullable<typeof policy.setWhere>);
+    const whereSql = rendered.sql.toLowerCase();
+    // Only json-import placeholder rows are updatable — a real catalog climb can
+    // never be delisted by a uuid collision.
+    expect(whereSql).toContain("like 'json-import-climb-%'");
+    // ...and only THIS user's placeholders (the importing user binds as a param).
+    expect(whereSql).toContain('"user_id"');
+    expect(rendered.params).toContain(USER_ID);
+  });
+
+  it('updates only is_listed, taking the incoming (unlisted) value', () => {
+    const policy = importedPlaceholderConflictPolicy(USER_ID);
+    expect(Object.keys(policy.set)).toEqual(['isListed']);
+    const setSql = dialect.sqlToQuery(policy.set.isListed).sql.toLowerCase();
+    expect(setSql).toBe('excluded.is_listed');
   });
 });

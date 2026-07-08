@@ -455,4 +455,39 @@ describe('climb conflict policies (SQL)', () => {
     expect(totalSql).toContain('boardsesh_ascensionist_count');
     expect(totalSql).not.toContain('greatest');
   });
+
+  /**
+   * Evaluate the RENDERED COALESCE(...) expression for an (incoming, stored)
+   * pair with Postgres semantics (first non-null argument wins). Parsing the
+   * SQL the helper actually ships — instead of restating the intended policy —
+   * means these assertions fail if anyone swaps the argument order or
+   * reintroduces GREATEST, not just if the string changes cosmetically.
+   */
+  const evalUpstreamCoalesce = (rendered: string, incoming: number | null, stored: number | null): number => {
+    const coalesceMatch = rendered.match(/^coalesce\(([^()]*)\)$/);
+    if (!coalesceMatch) throw new Error(`not a bare COALESCE expression: ${rendered}`);
+    for (const argument of coalesceMatch[1].split(',').map((part) => part.trim())) {
+      if (argument === 'excluded.upstream_ascensionist_count') {
+        if (incoming != null) return incoming;
+      } else if (argument === '"board_climb_stats"."upstream_ascensionist_count"') {
+        if (stored != null) return stored;
+      } else {
+        return Number(argument); // literal fallback (the trailing 0)
+      }
+    }
+    throw new Error(`no COALESCE argument resolved in: ${rendered}`);
+  };
+
+  it('upstream count: a genuine numeric decrease lands; NULL incoming preserves stored (deliberate)', () => {
+    const { upstreamAscensionistCount } = climbStatsUpstreamConflictSet();
+    const upSql = render(upstreamAscensionistCount);
+    // Non-null incoming ALWAYS wins — a decrease and an explicit 0 both land.
+    expect(evalUpstreamCoalesce(upSql, 50, 100)).toBe(50);
+    expect(evalUpstreamCoalesce(upSql, 0, 100)).toBe(0);
+    // NULL incoming = "no data for this row", NOT "count is now zero" → the
+    // stored count is preserved (see climbStatsUpstreamConflictSet docs).
+    expect(evalUpstreamCoalesce(upSql, null, 100)).toBe(100);
+    // A row that never carried a count on either side seeds at 0.
+    expect(evalUpstreamCoalesce(upSql, null, null)).toBe(0);
+  });
 });

@@ -54,13 +54,20 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Duplicate groups (identical holds at the same angle, >1 member).
+  -- Duplicate groups (identical holds at the same angle, >1 member). angle IS NOT
+  -- NULL is explicit: GROUP BY treats NULLs as one group, and "same problem" is
+  -- only defined at a known angle. (The _mb_members equality join on
+  -- g.angle = bc.angle could never actually match a NULL-angle row — NULL = NULL
+  -- is not true in a join predicate — but the guard states the intent rather than
+  -- leaning on that. Prod 2026-07-08: 0 moonboard rows with NULL angle in either
+  -- board_climbs or board_climb_stats.)
   CREATE TEMP TABLE _mb_groups ON COMMIT DROP AS
     SELECT layout_id, hold_fingerprint, angle
       FROM board_climbs
      WHERE board_type = 'moonboard'
        AND hold_fingerprint IS NOT NULL
        AND hold_fingerprint <> ''
+       AND angle IS NOT NULL
      GROUP BY layout_id, hold_fingerprint, angle
     HAVING count(*) > 1;
 
