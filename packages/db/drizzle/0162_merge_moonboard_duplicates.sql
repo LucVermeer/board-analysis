@@ -9,22 +9,34 @@
 --
 -- Per group we pick a canonical (most ascents, tie-break oldest created_at, then
 -- uuid), alias every other member onto it (source='moonboard-dedup'), repoint
--- ticks and playlist entries, SUM the group's upstream ascent counts onto the
--- canonical's stats row, recompute the canonical's boardsesh/total counts, and
--- delist the non-canonical rows so they leave search. All members are non-owned
--- (user_id IS NULL), so the recompute preserves upstream-owned fa/quality/difficulty
--- and only rebuilds ascent counts.
+-- ticks and playlist entries, MERGE the group's upstream ascent counts onto the
+-- canonical's stats row (policy below), recompute the canonical's boardsesh/total
+-- counts, and delist the non-canonical rows so they leave search. All members are
+-- non-owned (user_id IS NULL), so the recompute preserves upstream-owned
+-- fa/quality/difficulty and only rebuilds ascent counts.
+--
+-- MERGED-COUNT POLICY (upstream_ascensionist_count on the canonical):
+--   * DOUBLE-IMPORT groups — ALL members share one name AND carry an identical
+--     upstream count — are the same problem imported twice, so each member's count
+--     is a COPY of one real count. Taking SUM would double it; take MAX (= the lone
+--     value) instead.
+--   * EVERY OTHER group (distinct names, or same name but differing counts) is
+--     genuinely separate duplicate entries with independent logbooks -> SUM.
+-- This narrows the earlier SUM-everywhere behaviour, which over-counted the
+-- double-imports. (ascensionist_count == upstream for these non-owned catalog rows,
+-- so keying the identical-count test on upstream matches "identical ascents".)
 --
 -- Prod-verified 2026-07-08 (boardsesh_readonly): 456 groups / 950 climbs / 494
--- non-canonical; group upstream sum 114,035; 76 ticks reference non-canonical rows.
+-- non-canonical; 76 ticks reference non-canonical rows. Merged-count split:
+--   * 89 double-import groups -> MAX
+--   * 367 genuinely-distinct groups -> SUM (incl. 26 same-name groups whose members
+--     carry DIFFERING counts — real separate logbooks, correctly summed)
+-- Group SUM-everywhere total was 114,035; the refined policy yields 113,710, i.e.
+-- MAX removes 325 double-counted ascents (~0.29%). (A same-name-only MAX — the
+-- discarded looser signature — would have collapsed 115 groups and cut 480; the
+-- extra 26/155 are the differing-count groups the stricter signature keeps as SUM.)
 --
--- KNOWN LIMITATION (accepted, tracked): 116 of the 456 groups are same-name
--- double-imports whose members carry an identical upstream count, so SUM double-
--- counts them — inflating the merged upstream by ~480 ascents total (~0.4% of the
--- 114,035). SUM is the specified, audit-verified behaviour; the residual is small
--- and confined to the merged (delisted) rows.
---
--- NON-IDEMPOTENT: the SUM would compound on a re-run (the canonical is itself a
+-- NON-IDEMPOTENT: the merge would compound on a re-run (the canonical is itself a
 -- group member), so a _bs_migration_guard row makes even a manual re-application a
 -- no-op. DO NOT run manually without checking the guard.
 
@@ -52,9 +64,11 @@ BEGIN
      GROUP BY layout_id, hold_fingerprint, angle
     HAVING count(*) > 1;
 
-  -- Group members with their ascent/upstream counts.
+  -- Group members with their ascent/upstream counts. name is carried so the
+  -- merged-count policy below can spot same-name double-imports (see step 4).
   CREATE TEMP TABLE _mb_members ON COMMIT DROP AS
     SELECT bc.uuid, bc.angle, bc.layout_id, bc.hold_fingerprint, bc.created_at,
+           lower(bc.name) AS lname,
            COALESCE(s.ascensionist_count, 0)          AS ascents,
            COALESCE(s.upstream_ascensionist_count, 0) AS upstream
       FROM board_climbs bc
@@ -111,18 +125,31 @@ BEGIN
     FROM _mb_map m
    WHERE pc.climb_uuid = m.alias_uuid;
 
-  -- 4. SUM the group's upstream ascent counts onto the canonical's stats row.
+  -- 4. Merge the group's upstream ascent counts onto the canonical's stats row.
   --    Seed a canonical stats row first in case it was missing.
   INSERT INTO board_climb_stats (board_type, climb_uuid, angle,
                                  ascensionist_count, upstream_ascensionist_count, boardsesh_ascensionist_count)
   SELECT 'moonboard', canonical_uuid, angle, 0, 0, 0 FROM _mb_canon
   ON CONFLICT (board_type, climb_uuid, angle) DO NOTHING;
 
+  --    Merged-count policy (see header): a group whose members ALL share one name
+  --    AND carry an identical upstream count is a same-import-twice double-import,
+  --    so its per-member counts are copies of ONE real count — take MAX (the single
+  --    value), not SUM, or we'd inflate the canonical. Every other group (distinct
+  --    names, or same name but differing counts) is genuinely separate duplicate
+  --    entries with independent logbooks -> SUM. MAX = the lone value when identical.
   UPDATE board_climb_stats s
-     SET upstream_ascensionist_count = grp.sum_up
+     SET upstream_ascensionist_count =
+           CASE WHEN grp.distinct_names = 1 AND grp.min_up = grp.max_up
+                THEN grp.max_up
+                ELSE grp.sum_up END
     FROM _mb_canon c
     JOIN (
-      SELECT layout_id, hold_fingerprint, angle, SUM(upstream) AS sum_up
+      SELECT layout_id, hold_fingerprint, angle,
+             SUM(upstream)              AS sum_up,
+             MAX(upstream)              AS max_up,
+             MIN(upstream)              AS min_up,
+             count(DISTINCT lname)      AS distinct_names
         FROM _mb_members
        GROUP BY layout_id, hold_fingerprint, angle
     ) grp

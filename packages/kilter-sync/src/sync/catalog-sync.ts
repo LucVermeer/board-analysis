@@ -530,6 +530,17 @@ async function syncBoardLayoutGroup(
   // Re-list synced canonicals a listed Grips climb folded back onto. The
   // isNull(userId) + is_listed guards belt-and-suspenders the classifier above,
   // so a user-authored or already-listed row is never touched.
+  //
+  // Ordering vs deletions: reconcileDeletions runs LAST in syncKilterCatalog
+  // (after every layout group), so it is the authority within a cycle. This
+  // re-list can only fire when a *live-listed* alias (from the current catalog
+  // pull) folds onto the canonical, which necessarily gives that canonical ≥2
+  // aliases (its self-alias + the folded one). So even if the same cycle's
+  // /delteduuids also names this canonical, the deletion pass classifies it as
+  // skippedCanonicalWithAliases (it still backs a live alias) and does NOT
+  // re-unlist it — correct, because a live alias proves the wall position exists.
+  // A genuinely-dead canonical (no live folded alias) is never reached here, so
+  // the fold cannot resurrect a truly-deleted climb.
   if (canonicalsToRelist.size > 0) {
     const relistUuids = [...canonicalsToRelist];
     await processBatches(relistUuids, async (chunk) => {

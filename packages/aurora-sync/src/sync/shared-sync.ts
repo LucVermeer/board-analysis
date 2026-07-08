@@ -734,6 +734,15 @@ async function upsertClimbs(db: DrizzleDb, board: AuroraBoardName, data: Climb[]
  * so a historical backlog drains over cycles rather than updating tens of
  * thousands of rows in one transaction. (MoonBoard, which uses a separate
  * cell→set path, never flows through this Aurora shared-sync at all.)
+ *
+ * This is a single capped SELECT per run, not a loop — it cannot spin within a
+ * run. A climb whose frames reference holds with no placement on its layout is
+ * un-healable (populateDenormalizedColumns leaves it NULL) and would re-appear in
+ * the next qualifying run's scan; that's harmless (an idempotent no-op re-write)
+ * and bounded by REQUIRED_SET_ID_DRAIN_LIMIT. Prod-verified 2026-07-08: 0 such
+ * un-healable rows across kilter/tension/grasshopper/decoy, so no marker column is
+ * warranted. If a large un-healable population ever emerges it would occupy the
+ * cap and slow (never block) healable stragglers — revisit with a marker then.
  */
 async function healRequiredSetIds(db: DrizzleDb, board: AuroraBoardName, log: (message: string) => void) {
   const climbsSchema = UNIFIED_TABLES.climbs;
