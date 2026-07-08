@@ -34,7 +34,7 @@ export type DeleteCredentialResult =
   | { success: true }
   | { success: false; localCleared: true; reason: 'revocation_failed' };
 
-export type KilterConnectResult = 'connected' | 'cancelled' | 'error' | 'not_allowed';
+export type KilterConnectResult = 'connected' | 'cancelled' | 'error' | 'not_allowed' | 'account_already_linked';
 
 export type BoardAccountErrorCode =
   | 'account_already_linked'
@@ -186,7 +186,12 @@ export async function connectKilterAccount(): Promise<KilterConnectResult> {
       await finalizeKilterCredential(completion);
       return 'connected';
     } catch (error) {
+      // Surface the two codes the caller has dedicated copy for; a duplicate
+      // account link comes back as a 409 with `account_already_linked` and must
+      // not collapse to the generic 'error'.
       if (error instanceof BoardAccountError && error.code === 'not_allowed') return 'not_allowed';
+      if (error instanceof BoardAccountError && error.code === 'account_already_linked')
+        return 'account_already_linked';
       return 'error';
     }
   }

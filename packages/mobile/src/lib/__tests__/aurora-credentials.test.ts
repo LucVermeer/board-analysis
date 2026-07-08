@@ -2,16 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { ImportProgressEvent, ImportResult, StrippedAuroraExportData } from '@boardsesh/shared-schema';
 
 const authenticatedFetchMock = vi.fn();
+const openAuthSessionAsyncMock = vi.fn();
 
 vi.mock('../auth-interceptor', () => ({
   authenticatedFetch: authenticatedFetchMock,
 }));
 
 vi.mock('expo-web-browser', () => ({
-  openAuthSessionAsync: vi.fn(),
+  openAuthSessionAsync: openAuthSessionAsyncMock,
 }));
 
-const { streamAuroraImport } = await import('../aurora-credentials');
+const { streamAuroraImport, connectKilterAccount } = await import('../aurora-credentials');
 
 function result(overrides: Partial<ImportResult> = {}): ImportResult {
   return {
@@ -73,5 +74,46 @@ describe('streamAuroraImport', () => {
     });
     expect(complete?.results.climbs.imported).toBe(1);
     expect(complete?.results.partialError).toBe('import_failed');
+  });
+});
+
+describe('connectKilterAccount', () => {
+  const REDIRECT_URL = 'com.boardsesh.app://board-credentials/kilter';
+
+  beforeEach(() => {
+    authenticatedFetchMock.mockReset();
+    openAuthSessionAsyncMock.mockReset();
+  });
+
+  // The handoff POST returns a start URL; then the in-app browser hands back the
+  // deep link; then the finalize POST is where a duplicate account surfaces.
+  function mockHandoffThenFinalize(finalizeResponse: Response) {
+    authenticatedFetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ startUrl: 'https://kilter.example/authorize' }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(finalizeResponse);
+    openAuthSessionAsyncMock.mockResolvedValueOnce({
+      type: 'success',
+      url: `${REDIRECT_URL}?status=connected&completion=completion-token`,
+    });
+  }
+
+  it('surfaces account_already_linked when finalize returns a 409 duplicate-link code', async () => {
+    mockHandoffThenFinalize(new Response(JSON.stringify({ code: 'account_already_linked' }), { status: 409 }));
+
+    expect(await connectKilterAccount()).toBe('account_already_linked');
+  });
+
+  it('returns connected when finalize succeeds', async () => {
+    mockHandoffThenFinalize(new Response(JSON.stringify({ success: true }), { status: 200 }));
+
+    expect(await connectKilterAccount()).toBe('connected');
+  });
+
+  it('returns not_allowed when finalize is forbidden', async () => {
+    mockHandoffThenFinalize(new Response(JSON.stringify({ error: 'not allowed' }), { status: 403 }));
+
+    expect(await connectKilterAccount()).toBe('not_allowed');
   });
 });

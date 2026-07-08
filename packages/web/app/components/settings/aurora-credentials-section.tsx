@@ -472,7 +472,23 @@ export default function AuroraCredentialsSection() {
     if (!kilterStatus) return;
 
     if (kilterStatus === 'error') {
-      showMessage(t('aurora.mobile.kilterConnectFailed'), 'error');
+      // The OAuth callback can carry `reason=account_already_linked` when the
+      // browser flow (not the /finalize POST) hits a duplicate-account link.
+      // Route it through the same helper so it gets the dedicated copy instead
+      // of the generic failure string.
+      const reason = searchParams.get('reason');
+      const linkError =
+        reason === 'account_already_linked'
+          ? new AuroraBackendError(409, 'account_already_linked', 'account_already_linked')
+          : undefined;
+      showMessage(
+        resolveLinkErrorMessage(
+          linkError,
+          t('aurora.linkDialog.accountAlreadyLinked'),
+          t('aurora.mobile.kilterConnectFailed'),
+        ),
+        'error',
+      );
       clearKilterSearchParams();
       return;
     }
