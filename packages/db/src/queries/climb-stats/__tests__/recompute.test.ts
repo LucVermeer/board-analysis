@@ -42,11 +42,15 @@ void describe('recomputeClimbStatsBulk', () => {
     assert.equal(db.queries.length, 2);
     assert.match(sqlText(db.queries[0]), /INSERT INTO board_climb_stats/);
     assert.match(sqlText(db.queries[1]), /UPDATE board_climb_stats/);
-    // The counting rule + provenance guard must be present in the UPDATE.
-    assert.match(sqlText(db.queries[1]), /bool_or\(bt\.origin <> 'native'\)/);
+    // The counting rule + provenance guard must be present in the UPDATE. Only
+    // imported FLASH/SEND ticks mark a user upstream-represented (an imported
+    // bid must not disqualify a native send).
+    assert.match(sqlText(db.queries[1]), /bool_or\(bt\.origin <> 'native' AND bt\.status IN \('flash','send'\)\)/);
     assert.match(sqlText(db.queries[1]), /has_send AND NOT has_upstream/);
     // quality = 0 sentinel excluded; ascensionist = upstream + boardsesh.
     assert.match(sqlText(db.queries[1]), /AVG\(NULLIF\(bt\.quality, 0\)\)/);
+    // Kilter-detached (upstream-deleted) rows must be excluded from the count.
+    assert.match(sqlText(db.queries[1]), /kilter_detached_at IS NULL/);
   });
 
   void it('dedupes identical keys into a single chunk', async () => {
