@@ -196,6 +196,13 @@ export class SyncRunner {
       } catch (error) {
         results.failed++;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        // Stamp the scheduler + observability fields on every failure here too,
+        // exactly as syncNextUser does. This CLI `all` path is deprecated in
+        // favour of syncNextUser, but it's still wired to the `aurora-sync all`
+        // command — without this it would advance neither the attempt clock nor
+        // consecutive_failures, so an operator run would leave the backoff /
+        // attempt-clock invisible for every credential it touched.
+        await this.recordSyncFailure(cred, errorMsg);
         results.errors.push({
           userId: cred.userId,
           boardType: cred.boardType,

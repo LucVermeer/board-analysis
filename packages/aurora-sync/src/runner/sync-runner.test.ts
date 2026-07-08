@@ -332,6 +332,10 @@ describe('SyncRunner per-user fault isolation', () => {
       const syncSingle = vi.spyOn(runnerPrivates, 'syncSingleCredential').mockImplementation(async (cred) => {
         if (cred.userId === 'user-B') throw dbError;
       });
+      // recordSyncFailure would open a real DB connection; stub it and assert it
+      // fires for the failed credential — the deprecated `all` path must stamp
+      // the attempt clock + backoff counter exactly like syncNextUser.
+      const recordSyncFailure = vi.spyOn(runnerPrivates, 'recordSyncFailure').mockResolvedValue(undefined);
 
       const syncPromise = runner.syncAllUsers();
       // syncAllUsers sleeps 10s after each successful credential — fast-forward through them
@@ -349,6 +353,10 @@ describe('SyncRunner per-user fault isolation', () => {
           error: dbError.message,
         },
       ]);
+      // The one failed credential is stamped; the two successes are not (their
+      // scheduler fields are cleared on the success path inside syncSingleCredential).
+      expect(recordSyncFailure).toHaveBeenCalledTimes(1);
+      expect(recordSyncFailure).toHaveBeenCalledWith(credB, dbError.message);
     } finally {
       vi.useRealTimers();
     }
