@@ -243,6 +243,20 @@ describe('applyAuroraAscents — cross-source claim', () => {
     const pairParams = rendered.params.filter((p) => p === 'climb-1' || p === 'climb-2' || p === 40 || p === 25);
     expect(pairParams).toEqual(['climb-1', 40, 'climb-2', 25]);
   });
+
+  it('excludes already-Aurora-linked rows from claim candidates (only unlinked / json-import placeholders are claimable)', async () => {
+    const { tx, calls } = createTx({ selectResults: [[], []] });
+
+    await applyAuroraAscents(tx as unknown as Db, 'kilter', 'user-1', [ascent()]);
+
+    const claimSelect = calls.filter((c) => c.kind === 'select')[1];
+    const rendered = new PgDialect().sqlToQuery(claimSelect.where as SQL);
+    const lower = rendered.sql.toLowerCase();
+    // A row already carrying a real aurora_id must not be a claim candidate —
+    // overwriting it would orphan the original upstream link.
+    expect(lower).toContain('"aurora_id" is null');
+    expect(lower).toContain("like 'json-import-%'");
+  });
 });
 
 describe('applyAuroraAscents — is_listed soft-delete', () => {

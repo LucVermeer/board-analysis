@@ -104,7 +104,25 @@ export async function saveAscent(
         climbedAt: climbedAtUtc,
         updatedAt: now,
       },
-      setWhere: sql`${boardseshTicks.userId} = ${nextAuthUserId}`,
+      // Only update when this user owns the row AND at least one content column
+      // actually changed. An identical retry (e.g. a double-tap after the
+      // background pull already claimed this tick and set aurora_synced_at) is a
+      // no-op, so updated_at is NOT bumped past aurora_synced_at — otherwise the
+      // Aurora edit-clobber guard would misread the row as locally edited and
+      // stop applying upstream changes to it.
+      setWhere: sql`${boardseshTicks.userId} = ${nextAuthUserId} AND (
+        ${boardseshTicks.boardType}   IS DISTINCT FROM excluded.board_type
+        OR ${boardseshTicks.climbUuid}    IS DISTINCT FROM excluded.climb_uuid
+        OR ${boardseshTicks.angle}        IS DISTINCT FROM excluded.angle
+        OR ${boardseshTicks.isMirror}     IS DISTINCT FROM excluded.is_mirror
+        OR ${boardseshTicks.status}       IS DISTINCT FROM excluded.status
+        OR ${boardseshTicks.attemptCount} IS DISTINCT FROM excluded.attempt_count
+        OR ${boardseshTicks.quality}      IS DISTINCT FROM excluded.quality
+        OR ${boardseshTicks.difficulty}   IS DISTINCT FROM excluded.difficulty
+        OR ${boardseshTicks.isBenchmark}  IS DISTINCT FROM excluded.is_benchmark
+        OR ${boardseshTicks.comment}      IS DISTINCT FROM excluded.comment
+        OR ${boardseshTicks.climbedAt}    IS DISTINCT FROM excluded.climbed_at
+      )`,
     });
 
   // Create a local ascent object for the response (for API compatibility)

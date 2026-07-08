@@ -346,6 +346,11 @@ async function applyLogbookChunk(
             sql`(${boardseshTicks.climbUuid}, ${boardseshTicks.angle}) IN (${pairTuples})`,
             inArray(boardseshTicks.origin, ['native', 'json_import']),
             inArray(boardseshTicks.status, claimStatuses),
+            // Never claim a row that already carries a REAL Aurora link — only
+            // an unlinked native tick or a synthetic json-import placeholder is
+            // claimable. Overwriting an existing aurora_id would orphan the
+            // original upstream link and churn/duplicate the row on later pulls.
+            sql`(${boardseshTicks.auroraId} IS NULL OR ${boardseshTicks.auroraId} LIKE 'json-import-%')`,
             sql`${boardseshTicks.climbedAt}::timestamptz BETWEEN ${minTs}::timestamptz AND ${maxTs}::timestamptz`,
           ),
         );

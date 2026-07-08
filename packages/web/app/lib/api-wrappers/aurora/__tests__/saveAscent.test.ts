@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 /**
  * saveAscent idempotency (PR #3555 review finding 1).
@@ -148,5 +150,22 @@ describe('saveAscent — idempotent upsert on the client uuid', () => {
     const bindsCallingUser = chunks.some((chunk) => chunk === 'user-1');
     expect(referencesUserIdColumn).toBe(true);
     expect(bindsCallingUser).toBe(true);
+  });
+
+  it('setWhere skips the update when content is unchanged so an idempotent retry never bumps updated_at', async () => {
+    await saveAscent('kilter', 'token', options(), 'user-1');
+
+    const setWhere = insertCalls[0].conflict?.setWhere as SQL;
+    const rendered = new PgDialect().sqlToQuery(setWhere).sql;
+    // The guard must include an IS DISTINCT FROM change-detection over content
+    // columns. Without it, a byte-identical double-POST after the background
+    // pull set aurora_synced_at would rewrite updated_at, making updated_at >
+    // aurora_synced_at and tripping the Aurora edit-clobber guard into skipping
+    // all future upstream changes.
+    expect(rendered).toMatch(/IS DISTINCT FROM excluded\./);
+    // The comparison must cover the mutable content columns, not just one.
+    for (const col of ['status', 'quality', 'comment', 'climbed_at']) {
+      expect(rendered).toContain(`excluded.${col}`);
+    }
   });
 });
