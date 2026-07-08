@@ -1,6 +1,6 @@
 {
-  "id": "8c407496-b3ee-44cb-9bbe-51cac5a61c00",
-  "prevId": "7759ea31-6514-49df-a07f-f5f08d9bd52f",
+  "id": "dc25c253-e265-497c-a84e-bc69029932a9",
+  "prevId": "9a47d2d7-5651-4b4d-9791-b356d936ceaf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -10422,6 +10422,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "sync_seq": {
+          "name": "sync_seq",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
         }
       },
       "indexes": {
@@ -10436,6 +10442,33 @@
             },
             {
               "expression": "confidence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "board_climb_grades_sync_cursor_idx": {
+          "name": "board_climb_grades_sync_cursor_idx",
+          "columns": [
+            {
+              "expression": "board_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "computed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sync_seq",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
