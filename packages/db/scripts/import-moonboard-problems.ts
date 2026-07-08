@@ -3,6 +3,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql } from 'drizzle-orm';
 import { boardClimbs, boardClimbStats, boardClimbHolds } from '../src/schema/boards/unified.js';
+import { blendedQualityAverageSql } from '../src/queries/climb-stats/quality-blend.js';
 import {
   uuidv5,
   coordinateToHoldId,
@@ -228,6 +229,10 @@ async function importMoonBoardProblems() {
           // MoonBoard userRating is already on the 1-5 scale — mark normalized
           // so the 1-3→1-5 backfill (0116) and future runs leave it untouched.
           qualityAverage: problem.userRating,
+          // Seed upstream_quality_average with the same manufacturer average (the
+          // blend's upstream term). On a fresh INSERT quality_average == this value
+          // because no Boardsesh votes exist yet; on conflict it re-blends.
+          upstreamQualityAverage: problem.userRating,
           qualityNormalized: true,
           faUsername: null,
           faAt: null,
@@ -273,6 +278,15 @@ async function importMoonBoardProblems() {
 
       // Batch insert stats (upsert to refresh on re-run)
       console.info(`   Inserting ${statsRecords.length} stats...`);
+      // quality_average is the blend of the clobbered upstream quality — weighted by
+      // the GREATEST upstream count — and Boardsesh's own votes. Inlined GREATEST
+      // because a SET expression reads the OLD stored upstream_ascensionist_count.
+      const blendedQuality = blendedQualityAverageSql({
+        upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+        upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
+        boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
+        boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
+      });
       for (let i = 0; i < statsRecords.length; i += BATCH_SIZE) {
         const batch = statsRecords.slice(i, i + BATCH_SIZE);
         await db
@@ -288,7 +302,10 @@ async function importMoonBoardProblems() {
               upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
               ascensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0)) + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
               difficultyAverage: sql`excluded.difficulty_average`,
-              qualityAverage: sql`excluded.quality_average`,
+              // Manufacturer average lands in upstream_quality_average; quality_average
+              // is the blend of it and Boardsesh's own votes.
+              upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+              qualityAverage: blendedQuality,
               qualityNormalized: sql`true`,
               upstreamSyncedAt: sql`excluded.upstream_synced_at`,
             },

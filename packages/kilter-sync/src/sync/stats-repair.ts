@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { boardClimbAliases, boardClimbs, boardClimbStats } from '@boardsesh/db/schema';
+import { blendedQualityAverageSql } from '@boardsesh/db/queries';
 import { commandCountFromResult, rowsFromResult } from '@boardsesh/db/client';
 
 import type { KilterTokenProvider } from '../api/token-provider';
@@ -59,6 +60,7 @@ type RepairStatValue = {
   displayDifficulty: number | null;
   difficultyAverage: number | null;
   qualityAverage: number | null;
+  upstreamQualityAverage: number | null;
   qualityNormalized: boolean;
   faUsername: string | null;
   faAt: string | null;
@@ -194,6 +196,8 @@ function statValueFromAccum(accum: StatAccum): RepairStatValue {
     // guarded by foldCatalogStat (correctGripsQualityAverage) when this repair
     // accumulated the stat rows — the repair reads them straight from the accum.
     qualityAverage: accum.qualityAverage,
+    // Corrected manufacturer average also seeds the blend's upstream term.
+    upstreamQualityAverage: accum.qualityAverage,
     qualityNormalized: true,
     faUsername: accum.faUsername,
     faAt: accum.faAt,
@@ -266,6 +270,15 @@ async function countFormulaMismatches(db: DrizzleDb): Promise<number> {
 }
 
 async function upsertRepairedStats(db: DrizzleDb, statValues: RepairStatValue[]): Promise<void> {
+  // Repair authoritatively overwrites the upstream count (excluded value), so
+  // that is the blend weight. quality_average = blend of the (preserved-or-
+  // overwritten) upstream quality and Boardsesh's own votes.
+  const blendedQuality = blendedQualityAverageSql({
+    upstreamQualityAverage: sql`COALESCE(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
+    upstreamAscensionistCount: sql`excluded.upstream_ascensionist_count`,
+    boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
+    boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
+  });
   await processBatches(statValues, async (chunk) => {
     await db
       .insert(boardClimbStats)
@@ -280,7 +293,8 @@ async function upsertRepairedStats(db: DrizzleDb, statValues: RepairStatValue[])
           ascensionistCount: sql`COALESCE(excluded.upstream_ascensionist_count, 0) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
           displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
           difficultyAverage: sql`COALESCE(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
-          qualityAverage: sql`COALESCE(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
+          upstreamQualityAverage: sql`COALESCE(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
+          qualityAverage: blendedQuality,
           qualityNormalized: sql`true`,
           faUsername: sql`COALESCE(excluded.fa_username, ${boardClimbStats.faUsername})`,
           faAt: sql`COALESCE(excluded.fa_at, ${boardClimbStats.faAt})`,

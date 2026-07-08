@@ -147,6 +147,10 @@ async function importMoonBoard2024() {
         // No quality data in the export. Mark normalized so the 1-3→1-5 quality
         // backfill never touches these rows.
         qualityAverage: null,
+        // No upstream quality either — set the blend's upstream term to null for
+        // schema completeness. There's nothing to blend, so the on-conflict leaves
+        // quality_average untouched.
+        upstreamQualityAverage: null,
         qualityNormalized: true,
         faUsername: null,
         faAt: null,

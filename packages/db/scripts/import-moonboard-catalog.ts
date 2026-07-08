@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql, eq } from 'drizzle-orm';
 import { boardClimbs, boardClimbStats, boardClimbHolds, boardClimbAliases } from '../src/schema/boards/unified.js';
+import { blendedQualityAverageSql } from '../src/queries/climb-stats/quality-blend.js';
 import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
 import {
   HOLDSETUP_TO_LAYOUT,
@@ -253,6 +254,10 @@ async function importMoonBoardCatalog() {
             ascensionistCount: mapped.ascensionistCount,
             difficultyAverage: mapped.difficultyId ?? null,
             qualityAverage: mapped.qualityAverage,
+            // The manufacturer average also seeds upstream_quality_average (the
+            // blend's upstream term). On a fresh INSERT quality_average == this
+            // value because no Boardsesh votes exist yet; on conflict it re-blends.
+            upstreamQualityAverage: mapped.qualityAverage,
             qualityNormalized: true,
             faUsername: null,
             faAt: null,
@@ -307,6 +312,16 @@ async function importMoonBoardCatalog() {
         // rebuilt as upstream + existing Boardsesh, so re-running the import repairs
         // any climb whose count was previously clobbered by a tick recompute without
         // dropping the ticks it has since accrued.
+        //
+        // quality_average is the blend of the (coalesced) upstream quality — weighted
+        // by the GREATEST upstream count — and Boardsesh's own votes. Inlined GREATEST
+        // because a SET expression reads the OLD stored upstream_ascensionist_count.
+        const blendedQuality = blendedQualityAverageSql({
+          upstreamQualityAverage: sql`coalesce(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
+          upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
+          boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
+          boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
+        });
         for (let i = 0; i < statsRecords.length; i += BATCH_SIZE) {
           await tx
             .insert(boardClimbStats)
@@ -321,7 +336,10 @@ async function importMoonBoardCatalog() {
                 difficultyAverage: sql`coalesce(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
                 upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
                 ascensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0)) + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
-                qualityAverage: sql`coalesce(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
+                // Manufacturer average lands in upstream_quality_average; quality_average
+                // is the blend of it and Boardsesh's own votes.
+                upstreamQualityAverage: sql`coalesce(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
+                qualityAverage: blendedQuality,
                 qualityNormalized: sql`true`,
                 upstreamSyncedAt: sql`excluded.upstream_synced_at`,
               },

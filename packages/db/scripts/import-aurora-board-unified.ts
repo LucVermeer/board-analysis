@@ -431,6 +431,10 @@ function createImportConfigs(): ImportConfig[] {
         // mark normalized so the 0116 backfill never double-scales these rows.
         // DIRECT_AURORA_BOARDS (decoy/touchstone/grasshopper/soill) are all 1-3.
         qualityAverage: normalizeQualityTo5(toNullableNumber(row.quality_average)),
+        // This importer clears then re-inserts board_climb_stats, so there's no row
+        // to blend with — seed upstream_quality_average with the same normalized
+        // value, which equals the blend when a climb has no Boardsesh votes.
+        upstreamQualityAverage: normalizeQualityTo5(toNullableNumber(row.quality_average)),
         qualityNormalized: true,
         faUsername: toNullableText(row.fa_username),
         faAt: toNullableText(row.fa_at),
