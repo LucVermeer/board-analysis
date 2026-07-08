@@ -85,6 +85,13 @@ export const consensusDifficultyExpr = sql<number | null>`ROUND(${dbSchema.board
  *   .leftJoin(boardClimbAliases, ...)
  *   .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
  * ```
+ *
+ * `fetchTickHighlightsByUuid` and `fetchHardestSendsBatch` in
+ * `../social/session-feed.ts` duplicate this same condition as raw SQL
+ * (`bcg.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND ...`)
+ * instead of reusing this constant — those queries hand-alias their tables
+ * (t/bca/bcg), which this Drizzle-object-based condition can't target. If
+ * the join condition changes here, update those two raw-SQL sites too.
  */
 export const boardseshGradeTickJoinCondition = and(
   sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbGrades.climbUuid}`,
@@ -108,8 +115,15 @@ export const boardseshDifficultyExpr = sql<number | null>`COALESCE(
  * from the joined `board_climb_grades` row; NULL when no grade row is joined.
  * The UI keeps the Aurora grade when this is NULL or 'setter_only'.
  * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoinCondition}).
+ *
+ * Plain column reference, not a `sql<...>` wrapper: `confidence` is `.notNull()`
+ * on `board_climb_grades` itself, so Drizzle's inferred TS type here is `string`,
+ * not `string | null` — but a LEFT JOIN miss still returns `null` at runtime.
+ * Every call site applies `?? null` after selecting this, so the narrower
+ * compile-time type doesn't hide a real bug; if a future call site consumes
+ * this value without that fallback, re-wrap as `sql<string | null>`.
  */
-export const boardseshConfidenceExpr = sql<string | null>`${dbSchema.boardClimbGrades.confidence}`;
+export const boardseshConfidenceExpr = dbSchema.boardClimbGrades.confidence;
 
 /**
  * Number of non-deleted comments targeting each tick, as a correlated

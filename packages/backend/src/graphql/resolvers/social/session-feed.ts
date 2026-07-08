@@ -1192,6 +1192,11 @@ async function fetchTickHighlightsByUuid(tickUuids: string[]): Promise<Map<strin
       ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
       AND bcs.board_type = t.board_type
       AND bcs.angle = t.angle
+    -- Boardsesh grade join. Same condition as boardseshGradeTickJoinCondition
+    -- in ../shared/sql-expressions.ts, duplicated as raw SQL: that helper
+    -- targets Drizzle's unaliased schema objects, which collide with the
+    -- t/bca/bcg short aliases this hand-written query (and
+    -- fetchHardestSendsBatch below) uses. Keep all three in sync.
     LEFT JOIN board_climb_grades bcg
       ON bcg.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
       AND bcg.board_type = t.board_type
@@ -1253,6 +1258,9 @@ async function fetchHardestSendsBatch(
       ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
       AND bcs.board_type = t.board_type
       AND bcs.angle = t.angle
+    -- Boardsesh grade join — same condition as boardseshGradeTickJoinCondition
+    -- in ../shared/sql-expressions.ts; see the comment on the identical join
+    -- in fetchTickHighlightsByUuid above for why this stays raw SQL.
     LEFT JOIN board_climb_grades bcg
       ON bcg.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
       AND bcg.board_type = t.board_type

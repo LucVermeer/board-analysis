@@ -44,6 +44,15 @@ export function resolveCrowdDifficulty(
   },
   useBoardseshGrades: boolean,
 ): number | null {
+  // Blocklist ('!== setter_only'), not an allowlist of known tiers. Intentional:
+  // the DB only ever writes a `board_climb_grades` row with confidence set, so a
+  // present `boardseshDifficulty` with an undefined/unknown confidence can't
+  // happen from real data — but if it did, this still surfaces the grade rather
+  // than silently dropping it. That mirrors mobile's buildBoardseshGradeView
+  // (boardsesh-grade-utils.ts), which reads any confidence other than
+  // 'setter_only'/'confirmed' (including a future unrecognized tier) as
+  // provisional-like rather than hiding the grade. Keep both in sync — do not
+  // tighten this to an allowlist of specific tier strings.
   if (useBoardseshGrades && fields.boardseshDifficulty != null && fields.boardseshConfidence !== 'setter_only') {
     return Math.round(fields.boardseshDifficulty);
   }

@@ -82,4 +82,13 @@ describe('resolveCrowdDifficulty', () => {
       ),
     ).toBe(0);
   });
+
+  it('uses a present grade with an undefined confidence (blocklist, not allowlist)', () => {
+    // The DB guarantees confidence is set whenever a grade row exists, so this
+    // shouldn't happen with real data — but the guard is a blocklist
+    // (`!== 'setter_only'`) on purpose, so an unset/unrecognized tier still
+    // surfaces the grade instead of being silently dropped. See the comment
+    // on the guard in grade-display.ts.
+    expect(resolveCrowdDifficulty({ boardseshDifficulty: 18, boardseshConfidence: undefined }, true)).toBe(18);
+  });
 });
