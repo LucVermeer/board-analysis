@@ -292,6 +292,9 @@ export function toClimbQueueItemInput(item: LocalClimbQueueItem): ClimbQueueItem
       // as a spill instead of dark-firing their board (issue #3193).
       boardType: item.climb.boardType,
       layoutId: item.climb.layoutId ?? null,
+      // Round-trip the Boardsesh grade so party peers render it without a refetch.
+      boardseshDifficulty: item.climb.boardseshDifficulty ?? null,
+      boardseshConfidence: item.climb.boardseshConfidence ?? null,
     },
     addedBy: item.addedBy,
     addedByUser: item.addedByUser

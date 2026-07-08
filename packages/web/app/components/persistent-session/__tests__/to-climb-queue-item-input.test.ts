@@ -37,4 +37,16 @@ describe('toClimbQueueItemInput', () => {
     expect(input.climb.boardType).toBeUndefined();
     expect(input.climb.layoutId).toBeNull();
   });
+
+  it('round-trips the Boardsesh grade so party peers render it without a refetch', () => {
+    const input = toClimbQueueItemInput(makeItem({ boardseshDifficulty: 19.2, boardseshConfidence: 'confirmed' }));
+    expect(input.climb.boardseshDifficulty).toBe(19.2);
+    expect(input.climb.boardseshConfidence).toBe('confirmed');
+  });
+
+  it('sends null Boardsesh grade fields (not undefined) when unavailable', () => {
+    const input = toClimbQueueItemInput(makeItem({ boardseshDifficulty: undefined, boardseshConfidence: undefined }));
+    expect(input.climb.boardseshDifficulty).toBeNull();
+    expect(input.climb.boardseshConfidence).toBeNull();
+  });
 });

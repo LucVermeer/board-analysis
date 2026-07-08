@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vite-plus/test';
+import { describe, it, expect, beforeAll, afterAll } from 'vite-plus/test';
 import { sql } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
@@ -48,6 +48,13 @@ async function seedStats(boardType: string, uuid: string, angle: number, display
   `);
 }
 
+async function seedGrade(boardType: string, uuid: string, angle: number, universalGrade: number, confidence: string) {
+  await db.execute(sql`
+    INSERT INTO board_climb_grades (board_type, climb_uuid, angle, local_grade, universal_grade, confidence, model_version, coeff_version)
+    VALUES (${boardType}, ${uuid}, ${angle}, ${universalGrade}, ${universalGrade}, ${confidence}, 'test', 'test')
+  `);
+}
+
 describe('playlistClimbs — active-angle override (real DB)', () => {
   beforeAll(async () => {
     // Playlist tables aren't in the global per-file reset list, so own the cleanup.
@@ -67,6 +74,16 @@ describe('playlistClimbs — active-angle override (real DB)', () => {
     await seedClimb('tension', 'climb-c', 'Off-board');
     await seedStats('tension', 'climb-c', 30, 16, 50);
 
+    // climb-D (kilter): stats at BOTH 40° (few ascents) and 60° (most ascents).
+    // Boardsesh grade row exists ONLY at 60° — the climb's most-ascended /
+    // playlist-added-at angle. Used to pin the grades join in
+    // hydrateClimbsByRefs to the SAME resolved climbStats.angle the stats join
+    // used (not the raw requested/stored angle), for #boardsesh-grade-ui.
+    await seedClimb('kilter', 'climb-d', 'Grade only at most-ascended angle');
+    await seedStats('kilter', 'climb-d', 40, 15, 4);
+    await seedStats('kilter', 'climb-d', 60, 23, 400);
+    await seedGrade('kilter', 'climb-d', 60, 23.4, 'confirmed');
+
     // Explicit id keeps the playlist_climbs FK references below trivial; the
     // TRUNCATE ... RESTART IDENTITY above frees id 1.
     await db.execute(sql`
@@ -75,8 +92,17 @@ describe('playlistClimbs — active-angle override (real DB)', () => {
     `);
     await db.execute(sql`
       INSERT INTO playlist_climbs (playlist_id, climb_uuid, angle, position)
-      VALUES (1, 'climb-a', 50, 0), (1, 'climb-b', 50, 1), (1, 'climb-c', 30, 2)
+      VALUES (1, 'climb-a', 50, 0), (1, 'climb-b', 50, 1), (1, 'climb-c', 30, 2), (1, 'climb-d', 60, 3)
     `);
+  });
+
+  afterAll(async () => {
+    // board_climb_grades isn't in setup.ts's per-file TABLES_TO_RESET list (no
+    // FK back to board_climbs to cascade the cleanup), so a leftover row here
+    // would survive into the next file that reuses this worker's DB and could
+    // collide with a re-run of this file's own seed (PK is board_type +
+    // climb_uuid + angle).
+    await db.execute(sql`DELETE FROM board_climb_grades WHERE board_type = ${'kilter'} AND climb_uuid = ${'climb-d'}`);
   });
 
   it('renders on-active-board grades at the selected angle, falls back when stats are missing, and leaves off-board climbs alone', async () => {
@@ -112,5 +138,45 @@ describe('playlistClimbs — active-angle override (real DB)', () => {
     expect(byUuid['climb-a'].angle).toBe(50);
     // climb-C keeps its stored 30°.
     expect(byUuid['climb-c'].angle).toBe(30);
+  });
+
+  // The grades join in hydrateClimbsByRefs binds to `climbStats.angle` — the
+  // SAME resolved (override-else-most-ascended) angle the stats join lands
+  // on — not the raw requested/stored angle. climb-D has a Boardsesh grade
+  // row at ONLY one angle (60°, its most-ascended angle); these two cases
+  // drive the resolved effective angle to 60° and to 40° respectively and
+  // confirm the grade fields track it.
+  describe('boardsesh grade join follows the resolved stats angle, not the requested angle', () => {
+    it('surfaces boardseshDifficulty when the grade row is at the resolved effective angle', async () => {
+      // No active-board override → angleOverrides falls back to the playlist's
+      // stored angle (60°), which is also climb-D's most-ascended angle — the
+      // same angle the lone board_climb_grades row was seeded at.
+      const result = await playlistQueries.playlistClimbs(null, { input: { playlistId: PLAYLIST_UUID } }, makeCtx());
+
+      const climbD = result.climbs.find((climb) => climb.uuid === 'climb-d');
+      expect(climbD).toBeDefined();
+      expect(climbD!.angle).toBe(60);
+      expect(climbD!.boardseshDifficulty).toBeCloseTo(23.4);
+      expect(climbD!.boardseshConfidence).toBe('confirmed');
+    });
+
+    it('surfaces null when the grade row exists only at a different angle than the resolved one', async () => {
+      // activeAngle=40 redirects the override to 40° — climb-D has a stats row
+      // there too, so the EXISTS guard lets the override win and the stats join
+      // resolves climbStats.angle to 40°. The grade row lives only at 60°, so
+      // the grades join (which reuses that SAME resolved 40°) must come back
+      // null rather than leaking the 60° grade.
+      const result = await playlistQueries.playlistClimbs(
+        null,
+        { input: { playlistId: PLAYLIST_UUID, activeBoardName: 'kilter', activeAngle: 40 } },
+        makeCtx(),
+      );
+
+      const climbD = result.climbs.find((climb) => climb.uuid === 'climb-d');
+      expect(climbD).toBeDefined();
+      expect(climbD!.angle).toBe(40);
+      expect(climbD!.boardseshDifficulty).toBeNull();
+      expect(climbD!.boardseshConfidence).toBeNull();
+    });
   });
 });

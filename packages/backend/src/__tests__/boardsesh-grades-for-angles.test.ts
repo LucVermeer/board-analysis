@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { asc } from 'drizzle-orm';
+import * as dbSchema from '@boardsesh/db/schema';
 
 // Mock the read client: capture what the resolver selects and feed it canned
 // rows. The chain mirrors dbRead.select().from().where().orderBy().
@@ -106,9 +108,16 @@ describe('boardseshGradesForAngles resolver', () => {
 
     await callResolver('kilter', 'CLIMB-1');
 
-    // The terminal .orderBy runs once with the ascending-angle ordering.
+    // The terminal .orderBy runs once, and with the actual ascending-angle
+    // ordering — not just "some" ordering. `asc()`/`desc()` on the same
+    // column produce structurally-distinct (but reference-stable, since the
+    // column object is a shared singleton) SQL ASTs, so a deep-equal
+    // comparison against a freshly-built `asc(...)` call catches a
+    // regression to `desc()` or a different column that `toHaveBeenCalledTimes`
+    // alone would miss.
     const chain = dbReadMock.select.mock.results[0]?.value as { orderBy: ReturnType<typeof vi.fn> };
     expect(chain.orderBy).toHaveBeenCalledTimes(1);
+    expect(chain.orderBy).toHaveBeenCalledWith(asc(dbSchema.boardClimbGrades.angle));
   });
 
   it('passes through null universalGrade / grade band for an unanchorable grade', async () => {
