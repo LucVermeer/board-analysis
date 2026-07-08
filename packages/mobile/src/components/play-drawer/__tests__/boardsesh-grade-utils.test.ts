@@ -1,30 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import type { BoardseshGrade, BoardseshGradeAtAngle } from '@boardsesh/graphql/operations';
+import type { BoardseshGrade } from '@boardsesh/graphql/operations';
 import {
   buildBoardseshGradeView,
   buildBoardseshGradeSummary,
-  buildBoardseshAngleGradeBars,
+  buildCorrection,
+  formatHalfGrades,
   renderDifficulty,
   isMoonBoard,
 } from '../boardsesh-grade-utils';
 
 function makeGrade(overrides: Partial<BoardseshGrade> = {}): BoardseshGrade {
   return {
-    localGrade: 20,
-    universalGrade: 20,
-    gradeLow: 20,
-    gradeHigh: 20,
-    confidence: 'confirmed',
-    ascensionistCount: 42,
-    modelVersion: 'v1',
-    computedAt: '2026-01-01',
-    ...overrides,
-  };
-}
-
-function makeAngleRow(overrides: Partial<BoardseshGradeAtAngle> = {}): BoardseshGradeAtAngle {
-  return {
-    angle: 40,
     localGrade: 20,
     universalGrade: 20,
     gradeLow: 20,
@@ -68,33 +54,41 @@ describe('buildBoardseshGradeView', () => {
     expect(buildBoardseshGradeView('moonboard', makeGrade(), 'v-grade')).toEqual({ kind: 'moonboard' });
   });
 
-  it('falls back to setter-only when there is no grade row', () => {
-    expect(buildBoardseshGradeView('kilter', null, 'v-grade')).toEqual({ kind: 'setterOnly' });
+  it('falls back to setter-only (no grade) when there is no grade row', () => {
+    expect(buildBoardseshGradeView('kilter', null, 'v-grade')).toEqual({ kind: 'setterOnly', grade: null, count: 0 });
   });
 
-  it('returns setter-only for setter_only confidence', () => {
-    const view = buildBoardseshGradeView('kilter', makeGrade({ confidence: 'setter_only' }), 'v-grade');
+  it('carries the setter grade + count for setter_only confidence', () => {
+    const view = buildBoardseshGradeView(
+      'kilter',
+      makeGrade({ confidence: 'setter_only', ascensionistCount: 2 }),
+      'v-grade',
+    );
     expect(view.kind).toBe('setterOnly');
+    if (view.kind === 'setterOnly') {
+      expect(view.grade?.label).toBe('V5');
+      expect(view.count).toBe(2);
+    }
   });
 
-  it('returns setter-only when both grade values are null', () => {
+  it('returns setter-only with a null grade when both grade values are null', () => {
     const view = buildBoardseshGradeView(
       'kilter',
       makeGrade({ confidence: 'confirmed', universalGrade: null, localGrade: null }),
       'v-grade',
     );
-    expect(view.kind).toBe('setterOnly');
+    expect(view).toMatchObject({ kind: 'setterOnly', grade: null });
   });
 
-  it('shows a confirmed universal (cross-board) grade with the send count', () => {
+  it('shows a confirmed cross-board grade with the send count and raw value', () => {
     const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 22, ascensionistCount: 7 }), 'v-grade');
-    expect(view).toMatchObject({ kind: 'confirmed', scope: 'universal', count: 7 });
+    expect(view).toMatchObject({ kind: 'confirmed', universal: true, count: 7, gradeValue: 22 });
     if (view.kind === 'confirmed') expect(view.grade.label).toBe('V6'); // 22 = 7a/V6
   });
 
-  it('scopes to this board only when there is no universal grade', () => {
+  it('marks the grade local-only when there is no universal grade', () => {
     const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: null, localGrade: 20 }), 'v-grade');
-    expect(view).toMatchObject({ kind: 'confirmed', scope: 'local' });
+    expect(view).toMatchObject({ kind: 'confirmed', universal: false, gradeValue: 20 });
   });
 
   it('shows a provisional range when the bounds round to different grades', () => {
@@ -103,7 +97,7 @@ describe('buildBoardseshGradeView', () => {
       makeGrade({ confidence: 'provisional', universalGrade: 20, gradeLow: 20, gradeHigh: 22 }),
       'v-grade',
     );
-    expect(view).toMatchObject({ kind: 'provisional', scope: 'universal', rangeLabel: 'V5–V6' });
+    expect(view).toMatchObject({ kind: 'provisional', universal: true, rangeLabel: 'V5–V6' });
   });
 
   it('shows a provisional single grade (no range) when the bounds round together', () => {
@@ -136,114 +130,93 @@ describe('buildBoardseshGradeView', () => {
     );
     expect(provisional).toMatchObject({ kind: 'provisional', computedAt: '2026-03-16T00:00:00Z' });
   });
+});
 
-  describe('localSecondary', () => {
-    it('shows the board-local grade when it rounds to a different label than the universal headline', () => {
-      // universalGrade 22 = V6; localGrade 20 = V5 — the board scales harder/easier locally.
-      const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 22, localGrade: 20 }), 'v-grade');
-      expect(view).toMatchObject({ kind: 'confirmed', scope: 'universal' });
-      if (view.kind === 'confirmed') {
-        expect(view.localSecondary?.label).toBe('V5');
-      }
-    });
+describe('formatHalfGrades', () => {
+  it('renders ½-step magnitudes compactly', () => {
+    expect(formatHalfGrades(0)).toBeNull();
+    expect(formatHalfGrades(0.5)).toBe('½');
+    expect(formatHalfGrades(1)).toBe('1');
+    expect(formatHalfGrades(1.5)).toBe('1½');
+    expect(formatHalfGrades(2)).toBe('2');
+  });
+});
 
-    it('omits localSecondary when the local grade rounds to the same label as the universal headline', () => {
-      const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 20, localGrade: 20.3 }), 'v-grade');
-      expect(view).toMatchObject({ kind: 'confirmed', localSecondary: null });
-    });
+describe('buildCorrection', () => {
+  it('returns null when there is no crowd grade at this angle', () => {
+    expect(buildCorrection(null, 20, 'v-grade')).toBeNull();
+  });
 
-    it('omits localSecondary when the grade is already scoped to this board', () => {
-      const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: null, localGrade: 20 }), 'v-grade');
-      expect(view).toMatchObject({ kind: 'confirmed', scope: 'local', localSecondary: null });
-    });
+  it('reads a stiffer crowd as "everywhere is easier"', () => {
+    // Crowd 22 (V6) vs cross-board 20 (V5): the crowd over-grades by one V-grade
+    // (two id steps), so everywhere it climbs a full grade easier.
+    const correction = buildCorrection(22, 20, 'v-grade');
+    expect(correction).toMatchObject({ direction: 'easier', steps: 1, label: '1' });
+    expect(correction?.crowd.label).toBe('V6');
+  });
 
-    it('omits localSecondary when there is no local grade value', () => {
-      const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 22, localGrade: null }), 'v-grade');
-      expect(view).toMatchObject({ kind: 'confirmed', localSecondary: null });
-    });
+  it('reads a softer crowd as "everywhere is stiffer"', () => {
+    const correction = buildCorrection(20, 22, 'v-grade');
+    expect(correction).toMatchObject({ direction: 'stiffer', steps: 1, label: '1' });
+  });
+
+  it('rounds a one-id gap to half a grade', () => {
+    const correction = buildCorrection(21, 20, 'v-grade');
+    expect(correction).toMatchObject({ direction: 'easier', steps: 0.5, label: '½' });
+  });
+
+  it('reports equal when both round to the same grade bucket', () => {
+    const correction = buildCorrection(20.3, 20, 'v-grade');
+    expect(correction).toMatchObject({ direction: 'equal', steps: 0, label: null });
   });
 });
 
 describe('buildBoardseshGradeSummary', () => {
-  it('returns the grade label for a confirmed grade', () => {
+  it('leads with the correction when a differing crowd label is supplied', () => {
     const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 20 }), 'v-grade');
+    expect(buildBoardseshGradeSummary(view, { crowdLabel: 'V6' })).toBe('V6 ▸ V5 ✓');
+  });
+
+  it('shows just the confirmed grade with a check when there is no crowd label', () => {
+    const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 20 }), 'v-grade');
+    expect(buildBoardseshGradeSummary(view)).toBe('V5 ✓');
+  });
+
+  it('drops the arrow when the crowd label matches the cross-board grade', () => {
+    const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 20 }), 'v-grade');
+    expect(buildBoardseshGradeSummary(view, { crowdLabel: 'V5' })).toBe('V5 ✓');
+  });
+
+  it('marks a local-only grade with the local word', () => {
+    const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: null, localGrade: 20 }), 'v-grade');
+    expect(buildBoardseshGradeSummary(view, { localWord: 'local' })).toBe('V5 · local');
+  });
+
+  it('shows the bare local grade when no local word is supplied', () => {
+    const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: null, localGrade: 20 }), 'v-grade');
     expect(buildBoardseshGradeSummary(view)).toBe('V5');
   });
 
-  it('returns the range label for a provisional grade spanning two grades', () => {
-    const view = buildBoardseshGradeView(
-      'kilter',
-      makeGrade({ confidence: 'provisional', universalGrade: 20, gradeLow: 20, gradeHigh: 22 }),
-      'v-grade',
-    );
-    expect(buildBoardseshGradeSummary(view)).toBe('V5–V6');
-  });
-
-  it('returns the grade label with a trailing ± for a provisional single grade', () => {
+  it('marks a provisional grade with a tilde', () => {
     const view = buildBoardseshGradeView(
       'kilter',
       makeGrade({ confidence: 'provisional', universalGrade: 20, gradeLow: 20, gradeHigh: 20.4 }),
       'v-grade',
     );
-    expect(buildBoardseshGradeSummary(view)).toBe('V5 ±');
+    expect(buildBoardseshGradeSummary(view)).toBe('V5 ~');
+  });
+
+  it('uses the range for a provisional grade spanning two grades', () => {
+    const view = buildBoardseshGradeView(
+      'kilter',
+      makeGrade({ confidence: 'provisional', universalGrade: 20, gradeLow: 20, gradeHigh: 22 }),
+      'v-grade',
+    );
+    expect(buildBoardseshGradeSummary(view)).toBe('V5–V6 ~');
   });
 
   it('returns null for moonboard and setter-only tiers', () => {
     expect(buildBoardseshGradeSummary({ kind: 'moonboard' })).toBeNull();
-    expect(buildBoardseshGradeSummary({ kind: 'setterOnly' })).toBeNull();
-  });
-});
-
-describe('buildBoardseshAngleGradeBars', () => {
-  it('skips rows with setter_only confidence', () => {
-    const bars = buildBoardseshAngleGradeBars(
-      [makeAngleRow({ angle: 40, confidence: 'setter_only' }), makeAngleRow({ angle: 25, confidence: 'confirmed' })],
-      'v-grade',
-    );
-    expect(bars).toHaveLength(1);
-    expect(bars[0].angle).toBe(25);
-  });
-
-  it('skips rows with no usable grade value', () => {
-    const bars = buildBoardseshAngleGradeBars(
-      [makeAngleRow({ angle: 40, universalGrade: null, localGrade: null })],
-      'v-grade',
-    );
-    expect(bars).toHaveLength(0);
-  });
-
-  it('prefers the universal grade over the local grade', () => {
-    const bars = buildBoardseshAngleGradeBars(
-      [makeAngleRow({ angle: 40, universalGrade: 22, localGrade: 20 })],
-      'v-grade',
-    );
-    expect(bars[0].difficulty).toBe(22);
-    expect(bars[0].gradeName).toBe('V6');
-  });
-
-  it('falls back to the local grade when there is no universal grade', () => {
-    const bars = buildBoardseshAngleGradeBars(
-      [makeAngleRow({ angle: 40, universalGrade: null, localGrade: 20 })],
-      'v-grade',
-    );
-    expect(bars[0].difficulty).toBe(20);
-    expect(bars[0].gradeName).toBe('V5');
-  });
-
-  it('maps ascensionistCount to sends', () => {
-    const bars = buildBoardseshAngleGradeBars([makeAngleRow({ angle: 40, ascensionistCount: 17 })], 'v-grade');
-    expect(bars[0].sends).toBe(17);
-  });
-
-  it('sorts bars by angle ascending', () => {
-    const bars = buildBoardseshAngleGradeBars(
-      [makeAngleRow({ angle: 55 }), makeAngleRow({ angle: 10 }), makeAngleRow({ angle: 40 })],
-      'v-grade',
-    );
-    expect(bars.map((bar) => bar.angle)).toEqual([10, 40, 55]);
-  });
-
-  it('returns an empty array for no rows', () => {
-    expect(buildBoardseshAngleGradeBars([], 'v-grade')).toEqual([]);
+    expect(buildBoardseshGradeSummary({ kind: 'setterOnly', grade: null, count: 0 })).toBeNull();
   });
 });

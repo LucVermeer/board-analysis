@@ -354,9 +354,30 @@
     "moonboardBody": "Nous n'avons pas encore de données de grade communautaires pour le MoonBoard. Enregistre tes croix Moon sur Boardsesh pour aider à le débloquer.",
     "loadError": "Impossible de charger le grade pour le moment.",
     "byAngle": "Grade Boardsesh par angle",
-    "updated": "Mis à jour {{when}}",
-    "localGradeLine": "Sur cette board : {{grade}}",
-    "logScale": "Échelle logarithmique",
+    "summaryLocal": "local",
+    "matchesBoard": "Correspond au grade de cette board",
+    "localOnlyNote": "Pas encore assez de croix inter-boards pour standardiser.",
+    "setterCall": "Avis de l'ouvreur",
+    "hero": {
+      "thisBoard": "Cette board",
+      "everywhere": "Partout",
+      "thisBoardOnly": "Cette board seulement",
+      "easier": "{{amount}} plus facile",
+      "stiffer": "{{amount}} plus dur",
+      "approx": "environ {{amount}}"
+    },
+    "payoff": {
+      "softer": "{{amount}} plus facile que ce que dit cette board {{board}}.",
+      "stiffer": "{{amount}} plus dur que ce que dit cette board {{board}}.",
+      "same": "Se grimpe pareil partout qu'ici."
+    },
+    "trust": {
+      "confirmed_one": "95% enchaînent {{low}}–{{high}} · {{count}} croix · mis à jour {{when}}",
+      "confirmed_other": "95% enchaînent {{low}}–{{high}} · {{count}} croix · mis à jour {{when}}",
+      "provisional_one": "Sans doute {{low}}–{{high}} · seulement {{count}} croix",
+      "provisional_other": "Sans doute {{low}}–{{high}} · seulement {{count}} croix",
+      "setter": "Moins de 3 croix pour standardiser"
+    },
     "dumbbell": {
       "legendBoardsesh": "Partout (Boardsesh)",
       "legendCrowd": "Cette board (communauté)",

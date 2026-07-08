@@ -1,12 +1,16 @@
-// Pure view-model builder for the play drawer's "Boardsesh grade" section.
-// Turns the nightly data-science grade (floats on the shared difficulty scale,
-// where 10 = 4a/V0 and one unit is one Font letter step) into a display model:
-// which confidence tier to show, the formatted grade label + colour, and whether
-// the grade is cross-board (universal) or scoped to this board only (local).
+// Pure view-model builders for the play drawer's "Boardsesh grade" section.
+//
+// The section leads with the CROSS-BOARD CORRECTION: what this board's crowd
+// calls a climb (its community grade at the current angle) versus what it climbs
+// everywhere (the nightly data-science Boardsesh grade). These helpers turn the
+// grade floats (on the shared difficulty scale, where 10 = 4a/V0 and one unit is
+// one Font letter step) into a display model: which confidence tier to show, the
+// formatted labels + colours, whether the grade is cross-board (universal), and
+// the magnitude + direction of the correction.
 //
 // Kept free of React so it unit-tests without a renderer.
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
-import type { BoardseshGrade, BoardseshGradeAtAngle } from '@boardsesh/graphql/operations';
+import type { BoardseshGrade } from '@boardsesh/graphql/operations';
 import {
   renderDifficulty,
   clampDifficultyId,
@@ -15,7 +19,6 @@ import {
   MAX_DIFFICULTY_ID,
   type RenderedGrade,
 } from '../../lib/boardsesh-grade-display';
-import type { AngleGradeBar } from './community-utils';
 
 // Re-exported for existing/back-compat call sites — the difficulty-scale
 // primitives now live in lib/boardsesh-grade-display.ts (a lib must not
@@ -23,62 +26,53 @@ import type { AngleGradeBar } from './community-utils';
 // helper, imports them like any other consumer).
 export { renderDifficulty, clampDifficultyId, GRADE_BY_ID, MIN_DIFFICULTY_ID, MAX_DIFFICULTY_ID, type RenderedGrade };
 
-// Locale-neutral math symbol shown after a provisional single grade to signal it
-// may still shift by a grade. Not user-facing prose, so it stays out of i18n.
-export const APPROX_SYMBOL = '±';
+// Compact status markers for the collapsed-header teaser. Not user-facing
+// prose (glyphs, not words), so they stay out of i18n.
+const TEASER_ARROW = '▸';
+const TEASER_CONFIRMED = '✓';
+const TEASER_PROVISIONAL = '~';
 
 /** MoonBoard has no standardized community grade in our feed yet. */
 export function isMoonBoard(boardName: string): boolean {
   return boardName.toLowerCase() === 'moonboard';
 }
 
-/** `'universal'` = one grade across every board; `'local'` = this board only. */
-export type GradeScope = 'universal' | 'local';
-
 export type BoardseshGradeView =
   | { kind: 'moonboard' }
-  | { kind: 'setterOnly' }
+  | {
+      kind: 'setterOnly';
+      /** The setter's grade to show muted ("Setter's call: V4"), or null when there's none at all. */
+      grade: RenderedGrade | null;
+      count: number;
+    }
   | {
       kind: 'confirmed';
-      scope: GradeScope;
+      /** True = cross-board (universal) grade; false = scoped to this board only. */
+      universal: boolean;
       grade: RenderedGrade;
+      /** Raw primary grade float (drives the correction delta + chart reference line). */
+      gradeValue: number;
+      gradeLow: number | null;
+      gradeHigh: number | null;
       count: number;
-      /** The board-local grade ("On this board: V4"), shown alongside a universal
-       *  headline only when it rounds to a different label than the primary grade. */
-      localSecondary: RenderedGrade | null;
       computedAt: string;
     }
   | {
       kind: 'provisional';
-      scope: GradeScope;
+      universal: boolean;
       grade: RenderedGrade;
+      gradeValue: number;
       /** Non-null when the low/high bounds round to different grades ("V5–V6"). */
       rangeLabel: string | null;
+      gradeLow: number | null;
+      gradeHigh: number | null;
       count: number;
-      localSecondary: RenderedGrade | null;
       computedAt: string;
     };
 
 /** The label a bound rounds to, used to decide whether a range spans two grades. */
 function boundLabel(value: number, gradeFormat: GradeDisplayFormat): string | null {
   return renderDifficulty(value, gradeFormat)?.label ?? null;
-}
-
-/**
- * The board-local grade line ("On this board: V4"), or null when it wouldn't
- * add information: the headline is already board-local, there's no local
- * grade, or it rounds to the same label as the universal headline.
- */
-function buildLocalSecondary(
-  scope: GradeScope,
-  grade: BoardseshGrade,
-  primaryLabel: string,
-  gradeFormat: GradeDisplayFormat,
-): RenderedGrade | null {
-  if (scope !== 'universal' || grade.localGrade == null) return null;
-  const rendered = renderDifficulty(grade.localGrade, gradeFormat);
-  if (!rendered || rendered.label === primaryLabel) return null;
-  return rendered;
 }
 
 /**
@@ -91,29 +85,27 @@ export function buildBoardseshGradeView(
   gradeFormat: GradeDisplayFormat,
 ): BoardseshGradeView {
   if (isMoonBoard(boardName)) return { kind: 'moonboard' };
-  if (!grade) return { kind: 'setterOnly' };
+  if (!grade) return { kind: 'setterOnly', grade: null, count: 0 };
 
   // Prefer the cross-board universal grade; fall back to the board-local grade
   // (small boards that never earn a universal number).
-  const scope: GradeScope = grade.universalGrade != null ? 'universal' : 'local';
+  const universal = grade.universalGrade != null;
   const primary = grade.universalGrade ?? grade.localGrade;
+  const rendered = primary != null ? renderDifficulty(primary, gradeFormat) : null;
 
-  if (grade.confidence === 'setter_only' || primary == null) {
-    return { kind: 'setterOnly' };
+  if (grade.confidence === 'setter_only' || primary == null || !rendered) {
+    return { kind: 'setterOnly', grade: rendered, count: grade.ascensionistCount };
   }
-
-  const rendered = renderDifficulty(primary, gradeFormat);
-  if (!rendered) return { kind: 'setterOnly' };
-
-  const localSecondary = buildLocalSecondary(scope, grade, rendered.label, gradeFormat);
 
   if (grade.confidence === 'confirmed') {
     return {
       kind: 'confirmed',
-      scope,
+      universal,
       grade: rendered,
+      gradeValue: primary,
+      gradeLow: grade.gradeLow,
+      gradeHigh: grade.gradeHigh,
       count: grade.ascensionistCount,
-      localSecondary,
       computedAt: grade.computedAt,
     };
   }
@@ -131,50 +123,93 @@ export function buildBoardseshGradeView(
 
   return {
     kind: 'provisional',
-    scope,
+    universal,
     grade: rendered,
+    gradeValue: primary,
     rangeLabel,
+    gradeLow: grade.gradeLow,
+    gradeHigh: grade.gradeHigh,
     count: grade.ascensionistCount,
-    localSecondary,
     computedAt: grade.computedAt,
   };
 }
 
+/** Direction of the crowd grade relative to the cross-board Boardsesh grade. */
+export type DeltaDirection = 'easier' | 'stiffer' | 'equal';
+
+export type BoardseshCorrection = {
+  /** The crowd's community grade at this angle ("This board"). */
+  crowd: RenderedGrade;
+  /** Correction magnitude in V-grade steps (a multiple of ½), 0 when they agree. */
+  steps: number;
+  /** Magnitude label for the pill ("½", "1", "1½"), or null when the grades agree. */
+  label: string | null;
+  /** Which way the crowd sits relative to everywhere: `easier` = everywhere is
+   *  easier than the crowd calls it (crowd over-grades); `stiffer` = the reverse. */
+  direction: DeltaDirection;
+};
+
 /**
- * Collapsed-header summary for the Boardsesh grade section: just the label
- * (or range) with no metadata, or null when there's nothing headline-worthy
- * yet (moonboard / setter-only).
+ * Render a ½-step magnitude as a compact label: 0.5 → "½", 1 → "1", 1.5 → "1½".
+ * Returns null for a zero (or negative) magnitude.
  */
-export function buildBoardseshGradeSummary(view: BoardseshGradeView): string | null {
-  switch (view.kind) {
-    case 'confirmed':
-      return view.grade.label;
-    case 'provisional':
-      return view.rangeLabel ?? `${view.grade.label} ${APPROX_SYMBOL}`;
-    default:
-      return null;
-  }
+export function formatHalfGrades(steps: number): string | null {
+  if (steps <= 0) return null;
+  const whole = Math.floor(steps);
+  const hasHalf = steps - whole >= 0.5;
+  const label = `${whole > 0 ? whole : ''}${hasHalf ? '½' : ''}`;
+  return label.length ? label : null;
 }
 
 /**
- * Per-angle bars for the Boardsesh-grade-by-angle chart, built from the
- * plural `useBoardseshGradesForAngles` rows. Prefers each row's universal
- * grade, falling back to its local grade; skips angles with no usable
- * grade and setter-only rows (no Boardsesh-branded setter numbers). Sorted
- * ascending by angle, matching the Community chart's convention.
+ * The correction between the crowd's grade at this angle and the cross-board
+ * Boardsesh grade. Both are rounded to a difficulty id first — one id step is
+ * one Font letter, i.e. half a V-grade — so the magnitude reads in ½-grades and
+ * "they agree" means they round to the same bucket. Null when there's no crowd
+ * grade at this angle (nothing to correct against).
  */
-export function buildBoardseshAngleGradeBars(
-  rows: BoardseshGradeAtAngle[],
+export function buildCorrection(
+  crowdDifficulty: number | null,
+  boardseshValue: number,
   gradeFormat: GradeDisplayFormat,
-): AngleGradeBar[] {
-  const bars: AngleGradeBar[] = [];
-  for (const row of rows) {
-    if (row.confidence === 'setter_only') continue;
-    const primary = row.universalGrade ?? row.localGrade;
-    if (primary == null) continue;
-    const rendered = renderDifficulty(primary, gradeFormat);
-    if (!rendered) continue;
-    bars.push({ angle: row.angle, difficulty: primary, gradeName: rendered.label, sends: row.ascensionistCount });
+): BoardseshCorrection | null {
+  if (crowdDifficulty == null) return null;
+  const crowd = renderDifficulty(crowdDifficulty, gradeFormat);
+  if (!crowd) return null;
+
+  const idDelta = clampDifficultyId(crowdDifficulty) - clampDifficultyId(boardseshValue);
+  const steps = Math.abs(idDelta) / 2;
+  const direction: DeltaDirection = idDelta > 0 ? 'easier' : idDelta < 0 ? 'stiffer' : 'equal';
+  return { crowd, steps, label: formatHalfGrades(steps), direction };
+}
+
+/**
+ * Collapsed-header teaser for the Boardsesh grade section — a compact plain
+ * string leading with the correction. When a crowd label is supplied and it
+ * differs from the confirmed cross-board grade, shows "{crowd} ▸ {bs} ✓"; a
+ * confident cross-board grade alone reads "{bs} ✓"; provisional "{bs} ~";
+ * local-only "{bs} · {localWord}". Null for moonboard / setter-only.
+ */
+export function buildBoardseshGradeSummary(
+  view: BoardseshGradeView,
+  options?: { crowdLabel?: string | null; localWord?: string },
+): string | null {
+  const crowdLabel = options?.crowdLabel ?? null;
+  const localWord = options?.localWord;
+
+  switch (view.kind) {
+    case 'confirmed': {
+      const bs = view.grade.label;
+      if (!view.universal) return localWord ? `${bs} · ${localWord}` : bs;
+      if (crowdLabel && crowdLabel !== bs) return `${crowdLabel} ${TEASER_ARROW} ${bs} ${TEASER_CONFIRMED}`;
+      return `${bs} ${TEASER_CONFIRMED}`;
+    }
+    case 'provisional': {
+      const bs = view.rangeLabel ?? view.grade.label;
+      if (!view.universal && localWord) return `${bs} · ${localWord}`;
+      return `${bs} ${TEASER_PROVISIONAL}`;
+    }
+    default:
+      return null;
   }
-  return bars.sort((a, b) => a.angle - b.angle);
 }

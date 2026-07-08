@@ -140,6 +140,8 @@ export const iconMap = {
   // Data
   'chart.bar': { ios: 'chart.bar', android: 'chart-bar' },
   repeat: { ios: 'repeat', android: 'repeat' },
+  'arrow.right': { ios: 'arrow.right', android: 'arrow-right' },
+  'checkmark.seal.fill': { ios: 'checkmark.seal.fill', android: 'check-decagram' },
 
   // Misc
   star: { ios: 'star', android: 'star-outline' },

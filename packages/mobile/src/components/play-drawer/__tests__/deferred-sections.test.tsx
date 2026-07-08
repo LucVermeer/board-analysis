@@ -81,6 +81,7 @@ vi.mock('../../../lib/graphql/hooks', () => ({
     boardseshGradeQuery.calls.push({ boardName, climbUuid, angle, enabled: options?.enabled });
     return { data: boardseshGradeQuery.data };
   },
+  useClimbStatsHistory: () => ({ data: undefined }),
 }));
 
 vi.mock('../../../hooks/use-grade-format', () => ({

@@ -354,9 +354,30 @@
     "moonboardBody": "We don't have community grade data for MoonBoard yet. Log your Moon sends on Boardsesh to help unlock it.",
     "loadError": "Couldn't load the grade right now.",
     "byAngle": "Boardsesh grade by angle",
-    "updated": "Updated {{when}}",
-    "localGradeLine": "On this board: {{grade}}",
-    "logScale": "Log scale",
+    "summaryLocal": "local",
+    "matchesBoard": "Matches this board's grade",
+    "localOnlyNote": "Not enough cross-board sends yet to standardize.",
+    "setterCall": "Setter's call",
+    "hero": {
+      "thisBoard": "This board",
+      "everywhere": "Everywhere",
+      "thisBoardOnly": "This board only",
+      "easier": "{{amount}} easier",
+      "stiffer": "{{amount}} stiffer",
+      "approx": "about {{amount}}"
+    },
+    "payoff": {
+      "softer": "{{amount}} softer than this {{board}} board calls it.",
+      "stiffer": "{{amount}} stiffer than this {{board}} board calls it.",
+      "same": "Climbs the same everywhere as it does here."
+    },
+    "trust": {
+      "confirmed_one": "95% land {{low}}–{{high}} · {{count}} send · updated {{when}}",
+      "confirmed_other": "95% land {{low}}–{{high}} · {{count}} sends · updated {{when}}",
+      "provisional_one": "Likely {{low}}–{{high}} · only {{count}} send",
+      "provisional_other": "Likely {{low}}–{{high}} · only {{count}} sends",
+      "setter": "Fewer than 3 sends to standardize"
+    },
     "dumbbell": {
       "legendBoardsesh": "Everywhere (Boardsesh)",
       "legendCrowd": "This board (crowd)",

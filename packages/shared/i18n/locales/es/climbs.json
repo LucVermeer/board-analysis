@@ -354,9 +354,30 @@
     "moonboardBody": "Aún no tenemos datos de grado de la comunidad para MoonBoard. Registra tus encadenes en Moon con Boardsesh para ayudar a desbloquearlo.",
     "loadError": "No se pudo cargar el grado ahora mismo.",
     "byAngle": "Grado Boardsesh por ángulo",
-    "updated": "Actualizado {{when}}",
-    "localGradeLine": "En este plafón: {{grade}}",
-    "logScale": "Escala logarítmica",
+    "summaryLocal": "local",
+    "matchesBoard": "Coincide con el grado de este plafón",
+    "localOnlyNote": "Todavía no hay suficientes encadenes entre plafones para estandarizar.",
+    "setterCall": "Criterio del setter",
+    "hero": {
+      "thisBoard": "Este plafón",
+      "everywhere": "En todas partes",
+      "thisBoardOnly": "Solo este plafón",
+      "easier": "{{amount}} más fácil",
+      "stiffer": "{{amount}} más duro",
+      "approx": "unos {{amount}}"
+    },
+    "payoff": {
+      "softer": "{{amount}} más blando de lo que dice este plafón {{board}}.",
+      "stiffer": "{{amount}} más duro de lo que dice este plafón {{board}}.",
+      "same": "Cuesta lo mismo en todas partes que aquí."
+    },
+    "trust": {
+      "confirmed_one": "95% encadenan {{low}}–{{high}} · {{count}} encadene · actualizado {{when}}",
+      "confirmed_other": "95% encadenan {{low}}–{{high}} · {{count}} encadenes · actualizado {{when}}",
+      "provisional_one": "Probablemente {{low}}–{{high}} · solo {{count}} encadene",
+      "provisional_other": "Probablemente {{low}}–{{high}} · solo {{count}} encadenes",
+      "setter": "Menos de 3 encadenes para estandarizar"
+    },
     "dumbbell": {
       "legendBoardsesh": "En todas partes (Boardsesh)",
       "legendCrowd": "Este plafón (comunidad)",
