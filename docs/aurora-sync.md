@@ -52,6 +52,29 @@ The `@boardsesh/aurora-sync` package provides the shared sync implementation. It
   - `bids` → `kilter_bids` + `boardsesh_ticks`
   - `circuits` → `kilter_circuits` + `playlists` + `playlist_climbs`
 
+### Logbook writes (`ascents`/`bids`): timezone, claim, soft-delete
+
+Both pull implementations (the daemon `packages/aurora-sync/src/sync/user-sync.ts`
+and the web cron `packages/web/app/lib/data-sync/aurora/user-sync.ts`) route
+`ascents`/`bids` through the shared `applyAuroraAscents` / `applyAuroraBids`
+(`packages/aurora-sync/src/sync/apply-user-logbook.ts`):
+
+- **Timezone-correct.** Aurora's naive `"YYYY-MM-DD HH:MM:SS"` is UTC; it is
+  written through `normalizeTimestamp`, not `new Date(...)` (which V8 would parse
+  as server-local and shift by the deployment offset). This makes a pulled ascent
+  land on the same instant the JSON import wrote for the same climb.
+- **Cross-source claim.** On an `aurora_id` miss, before inserting, the incoming
+  ascent natural-key-matches the user's existing `json_import`/`native` rows
+  (widened window + per-user offset inference) and, on a hit, stamps
+  `aurora_id`/`aurora_type`/`aurora_synced_at` onto that row (keeping `origin`)
+  instead of inserting a twin.
+- **Soft-delete.** Aurora `is_listed=false` tombstones a deleted logbook entry:
+  a pull-owned row is deleted; a claimed `native`/`json_import` row keeps the tick
+  and just drops its aurora markers.
+- **Edit-clobber guard.** A by-`aurora_id` re-sync skips a row edited locally
+  since the last sync (`updated_at > aurora_synced_at`) and any no-op (unchanged
+  payload).
+
 ### Tables Synced
 
 #### Per-user tables
