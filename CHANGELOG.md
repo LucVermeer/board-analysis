@@ -10,8 +10,20 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### New
+
+- Your star ratings finally move the needle — rate a climb in Boardsesh and the stars everyone sees shift with it ([#3556](https://github.com/boardsesh/boardsesh/pull/3556))
+  Climbs nobody rated before show stars as soon as someone in your crew rates them
+  Ticks synced from Kilter now show the stars you gave the climb over there
+
 ### Fixed
 
+- Your logbook stops double-counting: if you linked a Kilter or Aurora account, the same send used to show up twice — sometimes hours off. Every send now lands on one tick at the real moment you climbed it ([#3555](https://github.com/boardsesh/boardsesh/pull/3555))
+  Sends you delete in the Kilter app disappear here too, and they stop being re-pushed
+  Edits you make in Boardsesh survive the next sync instead of being stomped
+- Thousands of climbs that had quietly vanished from search are back — including 837 live Kilter climbs and 9,230 climbs hidden from set-filtered searches ([#3553](https://github.com/boardsesh/boardsesh/pull/3553))
+  When a board maker pulls or unpublishes a climb, it now disappears from Boardsesh too
+  Duplicate MoonBoard problems and stray import copies are merged into one entry, so ticks and stars land on the real climb
 - Fixed some iPhones on iOS 26.5 that connected to a board but never lit up climbs. ([#3563](https://github.com/boardsesh/boardsesh/pull/3563))
 
 ## 2026-07-07

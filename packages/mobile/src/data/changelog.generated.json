@@ -1,6 +1,30 @@
 {
-  "generatedAt": "2026-07-08T07:59:01.667Z",
+  "generatedAt": "2026-07-08T10:29:27.011Z",
   "entries": [
+    {
+      "prNumber": 3556,
+      "category": "new",
+      "title": "Your star ratings finally move the needle — rate a climb in Boardsesh and the stars everyone sees shift with it",
+      "mergedAt": "2026-07-08T10:28:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3556",
+      "body": "Climbs nobody rated before show stars as soon as someone in your crew rates them\nTicks synced from Kilter now show the stars you gave the climb over there"
+    },
+    {
+      "prNumber": 3555,
+      "category": "fixed",
+      "title": "Your logbook stops double-counting: if you linked a Kilter or Aurora account, the same send used to show up twice — sometimes hours off. Every send now lands on one tick at the real moment you climbed it",
+      "mergedAt": "2026-07-08T09:43:23Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3555",
+      "body": "Sends you delete in the Kilter app disappear here too, and they stop being re-pushed\nEdits you make in Boardsesh survive the next sync instead of being stomped"
+    },
+    {
+      "prNumber": 3553,
+      "category": "fixed",
+      "title": "Thousands of climbs that had quietly vanished from search are back — including 837 live Kilter climbs and 9,230 climbs hidden from set-filtered searches",
+      "mergedAt": "2026-07-08T09:17:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3553",
+      "body": "When a board maker pulls or unpublishes a climb, it now disappears from Boardsesh too\nDuplicate MoonBoard problems and stray import copies are merged into one entry, so ticks and stars land on the real climb"
+    },
     {
       "prNumber": 3563,
       "category": "fixed",
@@ -1104,6 +1128,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-08T18:09:19+10:00",
+      "sha": "e31fa21eaf9cefdbdeccbd410ce62a39ff29c32d",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "6a98424366bedd6655d9f186a2c5e5b16e0725f7"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-08T06:08:12+10:00",
