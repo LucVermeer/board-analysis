@@ -141,7 +141,9 @@ type GroupResult = {
 export function shouldRelistFoldedCanonical(
   canonicalMeta: { isListed: boolean | null; userId: string | null } | undefined,
 ): boolean {
-  return canonicalMeta != null && canonicalMeta.userId == null && canonicalMeta.isListed !== true;
+  // Map.get yields `undefined` for a canonical created this run; the userId
+  // column is `string | null` (never undefined), so both checks are exact.
+  return canonicalMeta !== undefined && canonicalMeta.userId === null && canonicalMeta.isListed !== true;
 }
 
 // Cap the diagnostic sample so a systemic mapping break can't balloon the log.

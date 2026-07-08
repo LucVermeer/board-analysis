@@ -37,7 +37,10 @@ import {
   climbListingConflictSet,
   climbStatsUpstreamConflictSet,
   createSetterSyncNotifications,
+  healRequiredSetIds,
   parseDifficultyFields,
+  REQUIRED_SET_ID_DRAIN_LIMIT,
+  shouldHealRequiredSetIds,
   syncSharedData,
 } from './shared-sync';
 
@@ -489,5 +492,99 @@ describe('climb conflict policies (SQL)', () => {
     expect(evalUpstreamCoalesce(upSql, null, 100)).toBe(100);
     // A row that never carried a count on either side seeds at 0.
     expect(evalUpstreamCoalesce(upSql, null, null)).toBe(0);
+  });
+});
+
+describe('shouldHealRequiredSetIds (gate)', () => {
+  it('fires when the run synced climbs', () => {
+    expect(shouldHealRequiredSetIds({ climbs: { synced: 3 } })).toBe(true);
+  });
+
+  it('fires on late placements even when no climbs moved (the cursor hole)', () => {
+    expect(shouldHealRequiredSetIds({ climbs: { synced: 0 }, placements: { synced: 12 } })).toBe(true);
+  });
+
+  it('stays quiet on an idle run so it never scans the catalog', () => {
+    expect(shouldHealRequiredSetIds({})).toBe(false);
+    expect(shouldHealRequiredSetIds({ climbs: { synced: 0 }, placements: { synced: 0 } })).toBe(false);
+    // Other tables moving (e.g. climb_stats) do not trigger the heal.
+    expect(shouldHealRequiredSetIds({ climb_stats: { synced: 500 } })).toBe(false);
+  });
+
+  it('an idle syncSharedData run never reaches the drain (gate wired in)', async () => {
+    mockSharedSync.mockReset();
+    mockPopulateDenormalizedColumns.mockReset();
+    mockPopulateDenormalizedColumns.mockResolvedValue(undefined);
+    mockSharedSync.mockResolvedValueOnce(complete({ shared_syncs: [] }));
+
+    await syncSharedData(fakePostgresClient(), 'decoy', 'token');
+
+    // No climbs/placements moved → neither the per-batch denormalization nor
+    // the tail drain touches populateDenormalizedColumns.
+    expect(mockPopulateDenormalizedColumns).not.toHaveBeenCalled();
+  });
+});
+
+describe('healRequiredSetIds (drain)', () => {
+  const dialect = new PgDialect();
+
+  /**
+   * Targeted db shim for the drain's single SELECT: captures the where
+   * condition and the limit, resolves to the given straggler rows.
+   */
+  function mockDrainDb(stragglerRows: Array<{ uuid: string }>) {
+    const captured: { where?: unknown; limit?: number } = {};
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: (condition: unknown) => {
+            captured.where = condition;
+            return {
+              limit: (cap: number) => {
+                captured.limit = cap;
+                return Promise.resolve(stragglerRows);
+              },
+            };
+          },
+        }),
+      }),
+    };
+    return { db: db as unknown as Parameters<typeof healRequiredSetIds>[0], captured };
+  }
+
+  beforeEach(() => {
+    mockPopulateDenormalizedColumns.mockReset();
+    mockPopulateDenormalizedColumns.mockResolvedValue(undefined);
+  });
+
+  it('caps the per-run drain at REQUIRED_SET_ID_DRAIN_LIMIT and heals exactly the returned uuids', async () => {
+    const { db, captured } = mockDrainDb([{ uuid: 'c1' }, { uuid: 'c2' }]);
+    const logs: string[] = [];
+    await healRequiredSetIds(db, 'tension', (message) => logs.push(message));
+    expect(captured.limit).toBe(REQUIRED_SET_ID_DRAIN_LIMIT);
+    expect(REQUIRED_SET_ID_DRAIN_LIMIT).toBe(2000);
+    expect(mockPopulateDenormalizedColumns).toHaveBeenCalledTimes(1);
+    expect(mockPopulateDenormalizedColumns).toHaveBeenCalledWith(db, 'tension', ['c1', 'c2']);
+    expect(logs.join('\n')).toContain('healed required_set_ids for 2');
+  });
+
+  it('is a silent no-op when no stragglers remain', async () => {
+    const { db } = mockDrainDb([]);
+    const logs: string[] = [];
+    await healRequiredSetIds(db, 'tension', (message) => logs.push(message));
+    expect(mockPopulateDenormalizedColumns).not.toHaveBeenCalled();
+    expect(logs).toEqual([]);
+  });
+
+  it('selects only synced, listed rows missing set ids (user-authored climbs excluded)', async () => {
+    const { db, captured } = mockDrainDb([]);
+    await healRequiredSetIds(db, 'tension', () => {});
+    // Render the REAL where condition the drain issued — the assertion fails if
+    // someone drops the ownership fence (or any other predicate) from the query.
+    const whereSql = dialect.sqlToQuery(captured.where as Parameters<typeof dialect.sqlToQuery>[0]).sql.toLowerCase();
+    expect(whereSql).toContain('"user_id" is null');
+    expect(whereSql).toContain('"is_listed" =');
+    expect(whereSql).toContain('"required_set_ids" is null');
+    expect(whereSql).toContain('"frames" is not null');
   });
 });

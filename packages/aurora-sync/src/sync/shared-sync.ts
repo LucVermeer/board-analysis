@@ -82,8 +82,9 @@ const MAX_SYNC_ATTEMPTS = 100;
 // Per-run cap on the required_set_ids straggler drain (see healRequiredSetIds).
 // Large enough to keep up with any real trickle of late-arriving placements,
 // small enough that a one-off historical backlog drains over cycles instead of
-// updating tens of thousands of rows in a single sync transaction.
-const REQUIRED_SET_ID_DRAIN_LIMIT = 2000;
+// updating tens of thousands of rows in a single sync transaction. Exported
+// for tests.
+export const REQUIRED_SET_ID_DRAIN_LIMIT = 2000;
 
 // Chunk multi-row INSERTs to keep statement size bounded. Postgres has a hard
 // limit of 65535 parameters per statement; the widest table we write here is
@@ -732,6 +733,17 @@ async function upsertClimbs(db: DrizzleDb, board: AuroraBoardName, data: Climb[]
 }
 
 /**
+ * Gate for the required_set_ids straggler drain: run it only when this sync
+ * cycle actually moved climbs OR placements, so an idle run never scans the
+ * catalog. Late placements (climbs.synced == 0 but placements.synced > 0) must
+ * trigger it too — that's exactly the cursor hole being healed. Pure + exported
+ * for unit testing.
+ */
+export function shouldHealRequiredSetIds(totalResults: Record<string, { synced: number }>): boolean {
+  return (totalResults['climbs']?.synced ?? 0) > 0 || (totalResults['placements']?.synced ?? 0) > 0;
+}
+
+/**
  * Heal climbs whose denormalized `required_set_ids` never populated because
  * their layout's placements arrived in a different sync batch/run than the
  * climb itself — the per-batch populateDenormalizedColumns then found no
@@ -751,8 +763,10 @@ async function upsertClimbs(db: DrizzleDb, board: AuroraBoardName, data: Climb[]
  * un-healable rows across kilter/tension/grasshopper/decoy, so no marker column is
  * warranted. If a large un-healable population ever emerges it would occupy the
  * cap and slow (never block) healable stragglers — revisit with a marker then.
+ *
+ * Exported for tests (gating lives in shouldHealRequiredSetIds).
  */
-async function healRequiredSetIds(db: DrizzleDb, board: AuroraBoardName, log: (message: string) => void) {
+export async function healRequiredSetIds(db: DrizzleDb, board: AuroraBoardName, log: (message: string) => void) {
   const climbsSchema = UNIFIED_TABLES.climbs;
   const stragglers = await db
     .select({ uuid: climbsSchema.uuid })
@@ -1022,10 +1036,9 @@ export async function syncSharedData(
   }
 
   // Close the required_set_ids cursor hole: after the whole run is persisted,
-  // heal any climbs still missing set ids — but only when climbs OR placements
-  // actually moved this run, so an idle sync never scans the catalog. Late
-  // placements (climbs.synced == 0 but placements.synced > 0) trigger it too.
-  if ((totalResults['climbs']?.synced ?? 0) > 0 || (totalResults['placements']?.synced ?? 0) > 0) {
+  // heal any climbs still missing set ids — gated so an idle sync never scans
+  // the catalog (see shouldHealRequiredSetIds).
+  if (shouldHealRequiredSetIds(totalResults)) {
     try {
       await healRequiredSetIds(db, board, log);
     } catch (error) {
