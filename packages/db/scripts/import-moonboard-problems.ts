@@ -278,12 +278,15 @@ async function importMoonBoardProblems() {
 
       // Batch insert stats (upsert to refresh on re-run)
       console.info(`   Inserting ${statsRecords.length} stats...`);
-      // quality_average is the blend of the clobbered upstream quality — weighted by
-      // the GREATEST upstream count — and Boardsesh's own votes. Inlined GREATEST
-      // because a SET expression reads the OLD stored upstream_ascensionist_count.
+      // The NEW upstream count this upsert resolves to: monotonic GREATEST of the
+      // stored and incoming snapshot. Defined ONCE and reused for the count SET,
+      // the total, AND the blend weight — a SET expression reads the OLD value of a
+      // bare column, so the blend must weight by this NEW resolved count. Single
+      // source keeps the three in lockstep if the count policy ever changes.
+      const resolvedUpstreamAscensionistCount = sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`;
       const blendedQuality = blendedQualityAverageSql({
         upstreamQualityAverage: sql`excluded.upstream_quality_average`,
-        upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
+        upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
         boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
         boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
       });
@@ -299,8 +302,8 @@ async function importMoonBoardProblems() {
               benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
               // Upstream is monotonic; the total is rebuilt as upstream + existing
               // Boardsesh so a re-run never clobbers accrued tick counts.
-              upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
-              ascensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0)) + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+              upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
+              ascensionistCount: sql`${resolvedUpstreamAscensionistCount} + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
               difficultyAverage: sql`excluded.difficulty_average`,
               // Manufacturer average lands in upstream_quality_average; quality_average
               // is the blend of it and Boardsesh's own votes.

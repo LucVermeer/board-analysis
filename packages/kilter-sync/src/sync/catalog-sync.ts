@@ -611,14 +611,18 @@ async function syncBoardLayoutGroup(
     upstreamSyncedAt: new Date().toISOString(),
   }));
   if (statValues.length > 0) {
+    // The NEW upstream count this upsert resolves to: GREATEST of stored and
+    // incoming, so a stale/partial sync can never lower a climb. Defined ONCE and
+    // reused for the count SET, the total, AND the blend weight — a Postgres SET
+    // reads the OLD value of a bare column, so the blend must weight by this NEW
+    // expression. Single source keeps them in lockstep if the count policy changes.
     // Aurora-origin canonicals have no Grips row (excluded.upstream_quality_average
     // is null) → preserve the stored upstream quality; Kilter-origin canonicals
-    // clobber with the corrected Grips value. Either way, quality_average is the
-    // blend of that upstream term (weighted by the GREATEST upstream count) and
-    // Boardsesh's own votes — inlined GREATEST because SET reads the OLD count.
+    // clobber with the corrected Grips value.
+    const resolvedUpstreamAscensionistCount = sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`;
     const blendedQuality = blendedQualityAverageSql({
       upstreamQualityAverage: sql`COALESCE(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
-      upstreamAscensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+      upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
       boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
       boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
     });
@@ -629,12 +633,10 @@ async function syncBoardLayoutGroup(
         .onConflictDoUpdate({
           target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
           set: {
-            // upstream_ is the board's single manufacturer count (Kilter Grips
-            // here). Keep the higher of the stored and incoming snapshot so a
-            // stale/partial sync can never lower a climb.
-            upstreamAscensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+            // upstream_ is the board's single manufacturer count (Kilter Grips here).
+            upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
             // Total = upstream + the independent Boardsesh count.
-            ascensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0)) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+            ascensionistCount: sql`${resolvedUpstreamAscensionistCount} + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
             // Kilter-origin canonicals: clobber with Grips values. Aurora-origin
             // canonicals (no Grips display row): excluded is null → keep existing.
             displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,

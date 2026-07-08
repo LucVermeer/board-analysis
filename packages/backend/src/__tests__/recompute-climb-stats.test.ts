@@ -338,7 +338,7 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
       upstream?: number;
       faUsername?: string | null;
       faAt?: string | null;
-      // Post-0159 shape: a non-owned synced climb carries its manufacturer
+      // Post-0167 shape: a non-owned synced climb carries its manufacturer
       // quality in both quality_average and upstream_quality_average.
       upstreamQuality?: number | null;
     } = {},
@@ -605,7 +605,7 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
   it('native rated tick blends into a non-owned climb’s quality_average', async () => {
     await seedUser('u-native', 'Nadia');
     await seedClimb(KEY.boardType, KEY.climbUuid, null); // non-owned
-    // Post-0159 shape: upstream quality 4.0 across 10 upstream ascents.
+    // Post-0167 shape: upstream quality 4.0 across 10 upstream ascents.
     await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
     await seedTick({
       ...KEY,

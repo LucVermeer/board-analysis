@@ -620,7 +620,7 @@ export const boardClimbStats = pgTable(
     // quality for this row. Owned by the upstream stats writers (Aurora sync,
     // Kilter Grips catalog sync / stats-repair, MoonBoard catalog import); the
     // tick recompute never writes it. Split out of quality_average by migration
-    // 0158 (initialized := quality_average for non-owned rows by 0159); before
+    // 0166 (initialized := quality_average for non-owned rows by 0167); before
     // the split, quality_average WAS the raw upstream value on synced climbs.
     upstreamQualityAverage: doublePrecision('upstream_quality_average'),
     // The blend's Boardsesh numerator: SUM of one vote per climber — each

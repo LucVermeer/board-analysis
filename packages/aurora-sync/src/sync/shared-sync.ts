@@ -532,13 +532,17 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
       upstreamSyncedAt: nowIso,
     }));
 
-    // The GREATEST(...) of stored-and-incoming upstream count is the NEW weight
-    // for the blend — Postgres SET expressions see the OLD row value of a bare
-    // column, so the blend must inline the same GREATEST rather than reference
-    // the just-assigned upstream_ascensionist_count.
+    // The upstream conflict policy (climbStatsUpstreamConflictSet): take the
+    // incoming cursored count verbatim so a legitimate decrease propagates; a
+    // NULL incoming preserves the stored count. Resolved ONCE and reused for the
+    // count SET, the total, AND the blend weight, because a Postgres SET
+    // expression sees the OLD row value of a bare column — the blend must weight
+    // by this NEW upstream count, not the stale stored one. Single source keeps
+    // the three in lockstep: the blend follows the count policy automatically.
+    const upstreamConflictSet = climbStatsUpstreamConflictSet();
     const blendedQualityAverage = blendedQualityAverageSql({
       upstreamQualityAverage: sql`excluded.upstream_quality_average`,
-      upstreamAscensionistCount: sql`GREATEST(COALESCE(${climbStatsSchema.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+      upstreamAscensionistCount: upstreamConflictSet.upstreamAscensionistCount,
       boardseshQualitySum: sql`${climbStatsSchema.boardseshQualitySum}`,
       boardseshQualityCount: sql`${climbStatsSchema.boardseshQualityCount}`,
     });
@@ -553,8 +557,9 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
           // upstream_ = the board's single manufacturer count; take the incoming
           // cursored value verbatim (not GREATEST) so a legitimate decrease
-          // propagates. See climbStatsUpstreamConflictSet.
-          ...climbStatsUpstreamConflictSet(),
+          // propagates. See climbStatsUpstreamConflictSet. Same object drives the
+          // blend weight above, keeping count and blend in lockstep.
+          ...upstreamConflictSet,
           difficultyAverage: sql`excluded.difficulty_average`,
           // Manufacturer average lands in upstream_quality_average; quality_average
           // is the blend of it and Boardsesh's own votes.
