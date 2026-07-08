@@ -1191,6 +1191,20 @@
       "when": 1783505301857,
       "tag": "0169_backfill_quality_blend",
       "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1783507363637,
+      "tag": "0170_credential_backoff_and_selfheal_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1783507403048,
+      "tag": "0171_backfill_dead_kilter_link_errors",
+      "breakpoints": true
     }
   ]
 }
