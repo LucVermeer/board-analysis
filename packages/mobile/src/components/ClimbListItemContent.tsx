@@ -48,6 +48,15 @@ export type ClimbListItemClimb = {
   // from PR #3554. Optional + permissive so both the web-schema `Climb` and the
   // `@boardsesh/queue` `Climb` satisfy this shape; `resolveGrade` renders the
   // Boardsesh grade in their place when the "Show Boardsesh grades" toggle is on.
+  //
+  // INVARIANT (enforced at the callers, not here): set these two fields ONLY when
+  // `difficulty` above is a COMMUNITY/CONSENSUS grade — NEVER a user's own logged
+  // ascent grade. `resolveGrade` swaps in the Boardsesh grade unconditionally when
+  // the toggle is on, so it cannot tell the two apart; a caller that renders a
+  // climber's own logged grade would silently violate the hard rule (a user grade
+  // always wins) if it populated these. Such callers MUST omit them — see
+  // `sessionTickToClimb`, which carries the Boardsesh fields only for an ungraded
+  // tick and drops them the moment a logged grade is present.
   boardseshDifficulty?: number | null;
   boardseshConfidence?: string | null;
 };

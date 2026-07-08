@@ -13,9 +13,23 @@ type Router = ReturnType<typeof useRouter>;
  *
  * The logger's personal `quality` is deliberately NOT surfaced as the community
  * star average, so `quality_average` stays '0' (the row hides the star when 0).
+ *
+ * Boardsesh-grade fallback: a climber's OWN logged ascent grade always wins over
+ * the Boardsesh grade (the hard rule). `tick.difficulty` is that effective grade
+ * (their own, or the community consensus the resolver folds in) — null only for a
+ * truly ungraded/attempt tick, the exact signal the frameless path uses
+ * (SessionTickRow ~L187). So we carry the Boardsesh grade fields onto the climb
+ * ONLY when `tick.difficulty == null`: then `ClimbListItemContent.resolveGrade`
+ * fills the blank with the Boardsesh grade (when the toggle is on and it's
+ * trusted), instead of showing nothing. When a grade IS present we OMIT the
+ * fields, so `ClimbListItemContent` renders `difficulty` (the climber's / crowd's
+ * grade) unchanged — honouring the invariant documented on `ClimbListItemClimb`
+ * that the Boardsesh fields are set only alongside a community/consensus grade,
+ * never a user's own logged one.
  */
 export function sessionTickToClimb(tick: SessionDetailTick): ClimbListItemClimb | null {
   if (!tick.frames) return null;
+  const isUngraded = tick.difficulty == null;
   return {
     uuid: tick.climbUuid,
     name: tick.climbName ?? '',
@@ -27,6 +41,9 @@ export function sessionTickToClimb(tick: SessionDetailTick): ClimbListItemClimb 
     benchmark_difficulty: tick.isBenchmark ? (tick.difficultyName ?? null) : null,
     mirrored: tick.isMirror,
     is_no_match: tick.isNoMatch,
+    ...(isUngraded
+      ? { boardseshDifficulty: tick.boardseshDifficulty, boardseshConfidence: tick.boardseshConfidence }
+      : {}),
   };
 }
 
