@@ -1596,7 +1596,7 @@ describe('tickQueries — behavior fixes', () => {
       expect(row?.effectiveQuality).toBe(2);
     });
 
-    it('userTicks (public): null tick quality falls back to the tick OWNER\'s synced rating', async () => {
+    it("userTicks (public): null tick quality falls back to the tick OWNER's synced rating", async () => {
       const climbUuid = CLIMB_PREFIX + 'rating-userticks';
       await insertClimb(climbUuid, 'Rating UserTicks');
       await insertTick({ uuid: 'tick-rating-public', climbUuid, climbedAt: '2026-05-08 10:00:00', status: 'send' });
