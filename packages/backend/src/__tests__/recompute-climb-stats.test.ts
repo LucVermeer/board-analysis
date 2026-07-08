@@ -328,12 +328,13 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
       // Post-0168 shape: a non-owned synced climb carries its manufacturer
       // quality in both quality_average and upstream_quality_average.
       upstreamQuality?: number | null;
+      upstreamSyncedAt?: string | null;
     } = {},
   ) {
     const upstreamQuality = opts.upstreamQuality ?? null;
     await db.execute(sql`
-      INSERT INTO board_climb_stats (board_type, climb_uuid, angle, upstream_ascensionist_count, ascensionist_count, boardsesh_ascensionist_count, fa_username, fa_at, quality_average, upstream_quality_average, quality_normalized)
-      VALUES (${boardType}, ${uuid}, ${angle}, ${opts.upstream ?? 0}, ${opts.upstream ?? 0}, 0, ${opts.faUsername ?? null}, ${opts.faAt ?? null}, ${upstreamQuality}, ${upstreamQuality}, true)
+      INSERT INTO board_climb_stats (board_type, climb_uuid, angle, upstream_ascensionist_count, ascensionist_count, boardsesh_ascensionist_count, fa_username, fa_at, quality_average, upstream_quality_average, quality_normalized, upstream_synced_at)
+      VALUES (${boardType}, ${uuid}, ${angle}, ${opts.upstream ?? 0}, ${opts.upstream ?? 0}, 0, ${opts.faUsername ?? null}, ${opts.faAt ?? null}, ${upstreamQuality}, ${upstreamQuality}, true, ${opts.upstreamSyncedAt ?? null})
     `);
   }
 
@@ -348,12 +349,13 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     difficulty?: number | null;
     climbedAt: string;
     kilterId?: string | null;
+    kilterSyncedAt?: string | null;
   };
 
   async function seedTick(t: SeedTick) {
     await db.execute(sql`
-      INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, origin, attempt_count, quality, difficulty, climbed_at, created_at, updated_at, kilter_id)
-      VALUES (gen_random_uuid()::text, ${t.userId}, ${t.boardType}, ${t.climbUuid}, ${t.angle}, ${t.status}::tick_status, ${t.origin}::tick_origin, 1, ${t.quality ?? null}, ${t.difficulty ?? null}, ${t.climbedAt}, now(), now(), ${t.kilterId ?? null})
+      INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, origin, attempt_count, quality, difficulty, climbed_at, created_at, updated_at, kilter_id, kilter_synced_at)
+      VALUES (gen_random_uuid()::text, ${t.userId}, ${t.boardType}, ${t.climbUuid}, ${t.angle}, ${t.status}::tick_status, ${t.origin}::tick_origin, 1, ${t.quality ?? null}, ${t.difficulty ?? null}, ${t.climbedAt}, now(), now(), ${t.kilterId ?? null}, ${t.kilterSyncedAt ?? null})
     `);
   }
 
@@ -477,9 +479,11 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     expect(Number(row.total)).toBe(10);
   });
 
-  it('pushed-native tick (kilter_id set, origin native) KEEPS counting', async () => {
+  it('freshly pushed-native tick (kilter_id set, not yet absorbed) KEEPS counting', async () => {
     await seedUser('u-push', 'Priya');
     await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    // No upstream_synced_at + no kilter_synced_at → the absorption guard can't
+    // fire, so a pushed-but-not-yet-absorbed native tick still counts.
     await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10 });
     await seedTick({
       ...KEY,
@@ -493,8 +497,145 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     await recomputeClimbStatsBulk(db, [KEY]);
 
     const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
-    expect(Number(row.bs)).toBe(1); // origin still native → counts despite kilter_id
+    expect(Number(row.bs)).toBe(1); // origin still native, not absorbed → counts
     expect(Number(row.total)).toBe(11);
+  });
+
+  it('ABSORBED pushed-native tick (synced > 48h before upstream) STOPS counting', async () => {
+    // Push landed in Kilter on Feb 1; the board's upstream count was last synced
+    // Mar 1 — well past the 48h absorption horizon (Feb 27) — so Kilter's own
+    // count already includes this ascent. Counting the native tick too would
+    // double-count, so the user drops out of boardsesh_ascensionist_count.
+    await seedUser('u-absorbed', 'Ada');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, {
+      upstream: 10,
+      upstreamSyncedAt: '2026-03-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-absorbed',
+      status: 'send',
+      origin: 'native',
+      climbedAt: '2026-01-01 00:00:00',
+      kilterId: 'pushed-log-uuid',
+      kilterSyncedAt: '2026-02-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs)).toBe(0); // absorbed into upstream → contributes 0
+    expect(Number(row.total)).toBe(10);
+  });
+
+  it('recently pushed-native tick (within 48h of upstream) STILL counts (fresh push)', async () => {
+    // Pushed Feb 28 12:00, upstream synced Mar 1 00:00 → only ~36h apart, inside
+    // the 48h horizon. The upstream snapshot may not have re-counted it yet, so
+    // it keeps counting immediately (the locked product requirement).
+    await seedUser('u-fresh', 'Fred');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, {
+      upstream: 10,
+      upstreamSyncedAt: '2026-03-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-fresh',
+      status: 'send',
+      origin: 'native',
+      climbedAt: '2026-02-28 00:00:00',
+      kilterId: 'pushed-log-uuid',
+      kilterSyncedAt: '2026-02-28 12:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs)).toBe(1); // within 48h → not yet absorbed → counts
+    expect(Number(row.total)).toBe(11);
+  });
+
+  it('pushed-native tick with NULL upstream_synced_at is never absorbed (still counts)', async () => {
+    // A board that never upstream-syncs (MoonBoard shape) can't have absorbed
+    // anything, so the guard must not fire on a NULL watermark.
+    await seedUser('u-noupstream', 'Nia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamSyncedAt: null });
+    await seedTick({
+      ...KEY,
+      userId: 'u-noupstream',
+      status: 'send',
+      origin: 'native',
+      climbedAt: '2026-01-01 00:00:00',
+      kilterId: 'pushed-log-uuid',
+      kilterSyncedAt: '2020-01-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs)).toBe(1); // upstream_synced_at NULL → not absorbed
+    expect(Number(row.total)).toBe(11);
+  });
+
+  it('user with one absorbed AND one fresh native tick still counts (not ALL absorbed)', async () => {
+    // A user only drops out when EVERY one of their native sends is absorbed.
+    // One still-fresh push keeps them in the count.
+    await seedUser('u-both', 'Bo');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, {
+      upstream: 10,
+      upstreamSyncedAt: '2026-03-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-both',
+      status: 'send',
+      origin: 'native',
+      climbedAt: '2026-01-01 00:00:00',
+      kilterId: 'absorbed-log',
+      kilterSyncedAt: '2026-02-01 00:00:00', // absorbed
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-both',
+      status: 'send',
+      origin: 'native',
+      climbedAt: '2026-02-28 00:00:00',
+      kilterId: 'fresh-log',
+      kilterSyncedAt: '2026-02-28 12:00:00', // fresh
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs)).toBe(1); // one unabsorbed native send → counts
+    expect(Number(row.total)).toBe(11);
+  });
+
+  it('single-key recompute applies the same absorption rule as bulk', async () => {
+    await seedUser('u-abs-single', 'Sol');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, {
+      upstream: 10,
+      upstreamSyncedAt: '2026-03-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-abs-single',
+      status: 'send',
+      origin: 'native',
+      climbedAt: '2026-01-01 00:00:00',
+      kilterId: 'pushed-log-uuid',
+      kilterSyncedAt: '2026-02-01 00:00:00', // absorbed
+    });
+
+    await recomputeClimbStatsCore(db, KEY.boardType, KEY.climbUuid, KEY.angle);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs)).toBe(0); // absorbed → single-key path drops it too
+    expect(Number(row.total)).toBe(10);
   });
 
   it('non-owned climb NEVER derives FA from ticks (native or imported) — stays NULL', async () => {

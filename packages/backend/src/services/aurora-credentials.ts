@@ -77,8 +77,10 @@ type CredentialTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
  */
 async function assertNoConflictingAuroraOwner(
   tx: CredentialTransaction,
-  input: { userId: string; boardType: string; auroraUserId: number },
+  input: { userId: string; boardType: string; auroraUserId: number | null | undefined },
 ): Promise<void> {
+  // No upstream id means no account identity to collide on — nothing to block.
+  if (input.auroraUserId == null) return;
   const conflicting = await tx
     .select({ userId: auroraCredentials.userId })
     .from(auroraCredentials)
