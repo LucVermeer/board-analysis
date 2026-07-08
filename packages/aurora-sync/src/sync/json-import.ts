@@ -466,6 +466,55 @@ export function generateClimbImportUuid(
   return `json-import-climb-${hash}`;
 }
 
+export type ImportedClimbRow = typeof boardClimbs.$inferInsert;
+
+/**
+ * Build a board_climbs insert row for a climb pulled from an Aurora account
+ * export. Both draft climbs and published-but-uncatalogued climbs are per-user
+ * placeholders — userId-owned and, crucially, is_listed = FALSE. A published
+ * placeholder must never surface in catalog search (it is a low-signal duplicate
+ * of the real climb the user logged); it exists only to anchor the importer's
+ * own ticks, which still resolve via resolveClimbNames' userOwnedFilter. `isDraft`
+ * is the only difference between the draft and published variants.
+ */
+export function buildImportedClimbRow(args: {
+  userId: string;
+  boardType: BoardType;
+  layoutId: number;
+  setterUsername: string;
+  name: string;
+  description: string | null | undefined;
+  frames: string;
+  edges: { edgeLeft: number; edgeRight: number; edgeBottom: number; edgeTop: number } | null;
+  createdAt: string;
+  isDraft: boolean;
+}): ImportedClimbRow {
+  return {
+    uuid: generateClimbImportUuid(args.userId, args.boardType, args.layoutId, args.name, args.createdAt),
+    boardType: args.boardType,
+    layoutId: args.layoutId,
+    userId: args.userId,
+    setterId: null,
+    setterUsername: args.setterUsername,
+    name: args.name,
+    description: args.description ?? '',
+    characteristics: isNoMatchClimb(args.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
+    frames: args.frames,
+    framesCount: 1,
+    framesPace: 0,
+    isDraft: args.isDraft,
+    isListed: false,
+    edgeLeft: args.edges?.edgeLeft ?? null,
+    edgeRight: args.edges?.edgeRight ?? null,
+    edgeBottom: args.edges?.edgeBottom ?? null,
+    edgeTop: args.edges?.edgeTop ?? null,
+    angle: null,
+    createdAt: args.createdAt,
+    synced: false,
+    syncError: null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Climb name resolution
 // ---------------------------------------------------------------------------
@@ -773,7 +822,12 @@ export async function importJsonExportData(
     const draftClimbs = data.climbs.filter((c) => c.is_draft === true);
     const publishedClimbs = data.climbs.filter((c) => c.is_draft !== true);
 
-    // For published climbs, check which names already exist so we skip them
+    // For published climbs, skip creating a placeholder only when a REAL catalog
+    // climb (user_id IS NULL) already covers the name. We intentionally do NOT
+    // skip on another user's unlisted placeholder (user_id set) — placeholders
+    // are per-user import artifacts, and skipping there would leave this user's
+    // ascents unable to resolve to anything (resolveClimbNames matches a foreign
+    // placeholder neither as catalog nor as this user's own).
     const publishedNames = publishedClimbs.map((c) => c.name);
     const existingPublishedNames = new Set<string>();
     if (publishedNames.length > 0) {
@@ -784,7 +838,12 @@ export async function importJsonExportData(
           .select({ name: boardClimbs.name })
           .from(boardClimbs)
           .where(
-            and(eq(boardClimbs.boardType, boardType), inArray(boardClimbs.name, chunk), eq(boardClimbs.isDraft, false)),
+            and(
+              eq(boardClimbs.boardType, boardType),
+              inArray(boardClimbs.name, chunk),
+              eq(boardClimbs.isDraft, false),
+              isNull(boardClimbs.userId),
+            ),
           );
         for (const row of existing) {
           if (row.name) existingPublishedNames.add(row.name);
@@ -810,30 +869,20 @@ export async function importJsonExportData(
 
       const edges = computeEdgesFromHolds(climb.holds);
 
-      draftRows.push({
-        uuid: generateClimbImportUuid(userId, boardType, layoutId, climb.name, climb.created_at),
-        boardType,
-        layoutId,
-        userId,
-        setterId: null,
-        setterUsername: data.user.username,
-        name: climb.name,
-        description: climb.description ?? '',
-        characteristics: isNoMatchClimb(climb.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
-        frames,
-        framesCount: 1,
-        framesPace: 0,
-        isDraft: true,
-        isListed: false,
-        edgeLeft: edges?.edgeLeft ?? null,
-        edgeRight: edges?.edgeRight ?? null,
-        edgeBottom: edges?.edgeBottom ?? null,
-        edgeTop: edges?.edgeTop ?? null,
-        angle: null,
-        createdAt: climb.created_at ?? now,
-        synced: false,
-        syncError: null,
-      });
+      draftRows.push(
+        buildImportedClimbRow({
+          userId,
+          boardType,
+          layoutId,
+          setterUsername: data.user.username,
+          name: climb.name,
+          description: climb.description,
+          frames,
+          edges,
+          createdAt: climb.created_at,
+          isDraft: true,
+        }),
+      );
     }
 
     // Build rows for published climbs that don't already exist
@@ -859,30 +908,23 @@ export async function importJsonExportData(
 
       const edges = computeEdgesFromHolds(climb.holds);
 
-      publishedRows.push({
-        uuid: generateClimbImportUuid(userId, boardType, layoutId, climb.name, climb.created_at),
-        boardType,
-        layoutId,
-        userId,
-        setterId: null,
-        setterUsername: data.user.username,
-        name: climb.name,
-        description: climb.description ?? '',
-        characteristics: isNoMatchClimb(climb.description) ? [CLIMB_CHARACTERISTICS.NO_MATCH] : null,
-        frames,
-        framesCount: 1,
-        framesPace: 0,
-        isDraft: false,
-        isListed: true,
-        edgeLeft: edges?.edgeLeft ?? null,
-        edgeRight: edges?.edgeRight ?? null,
-        edgeBottom: edges?.edgeBottom ?? null,
-        edgeTop: edges?.edgeTop ?? null,
-        angle: null,
-        createdAt: climb.created_at ?? now,
-        synced: false,
-        syncError: null,
-      });
+      // Published-but-uncatalogued climbs import UNLISTED (see buildImportedClimbRow):
+      // per-user placeholders that anchor the importer's ticks without polluting
+      // catalog search with a duplicate of the real climb.
+      publishedRows.push(
+        buildImportedClimbRow({
+          userId,
+          boardType,
+          layoutId,
+          setterUsername: data.user.username,
+          name: climb.name,
+          description: climb.description,
+          frames,
+          edges,
+          createdAt: climb.created_at,
+          isDraft: false,
+        }),
+      );
     }
 
     const totalRows = draftRows.length + publishedRows.length;

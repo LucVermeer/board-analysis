@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildJsonImportAscentTickRow, generateJsonImportAuroraId, type AuroraExportAscent } from './json-import';
+import {
+  buildImportedClimbRow,
+  buildJsonImportAscentTickRow,
+  generateJsonImportAuroraId,
+  type AuroraExportAscent,
+} from './json-import';
 
 const NOW = '2026-07-03T00:00:00.000Z';
 const CLIMB_UUID = 'climb-uuid-1';
@@ -56,5 +61,42 @@ describe('buildJsonImportAscentTickRow', () => {
     // timestamp here.
     expect(row.updatedAt).toBe(NOW);
     expect(row.auroraSyncedAt).toBe(NOW);
+  });
+});
+
+describe('buildImportedClimbRow', () => {
+  const base = {
+    userId: USER_ID,
+    boardType: 'kilter' as const,
+    layoutId: 1,
+    setterUsername: 'someone',
+    name: 'Test Climb',
+    description: '',
+    frames: 'p1r15',
+    edges: { edgeLeft: 0, edgeRight: 100, edgeBottom: 0, edgeTop: 100 },
+    createdAt: '2026-06-01 10:00:00',
+  };
+
+  // Regression: a published-but-uncatalogued import must land UNLISTED so it
+  // stops polluting catalog search with a per-user placeholder duplicate.
+  it('imports a published placeholder as unlisted, non-draft, user-owned', () => {
+    const row = buildImportedClimbRow({ ...base, isDraft: false });
+    expect(row.isListed).toBe(false);
+    expect(row.isDraft).toBe(false);
+    expect(row.userId).toBe(USER_ID);
+    expect(row.uuid.startsWith('json-import-climb-')).toBe(true);
+  });
+
+  it('imports a draft as unlisted and draft', () => {
+    const row = buildImportedClimbRow({ ...base, isDraft: true });
+    expect(row.isListed).toBe(false);
+    expect(row.isDraft).toBe(true);
+  });
+
+  it('derives the no_match characteristic from an Aurora "No match" description', () => {
+    const plain = buildImportedClimbRow({ ...base, isDraft: false });
+    expect(plain.characteristics).toBeNull();
+    const noMatch = buildImportedClimbRow({ ...base, description: 'No match. Feet follow hands.', isDraft: false });
+    expect(noMatch.characteristics).toEqual(['no_match']);
   });
 });

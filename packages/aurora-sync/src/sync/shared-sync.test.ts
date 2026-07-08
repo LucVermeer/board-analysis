@@ -32,7 +32,14 @@ vi.mock('drizzle-orm/postgres-js', async () => {
   };
 });
 
-import { createSetterSyncNotifications, parseDifficultyFields, syncSharedData } from './shared-sync';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import {
+  climbListingConflictSet,
+  climbStatsUpstreamConflictSet,
+  createSetterSyncNotifications,
+  parseDifficultyFields,
+  syncSharedData,
+} from './shared-sync';
 
 /**
  * Minimal db shim. Drizzle's query builder is fluent — every call returns
@@ -413,5 +420,39 @@ describe('parseDifficultyFields', () => {
       difficultyAverage: null,
       displayDifficulty: 18,
     });
+  });
+});
+
+describe('climb conflict policies (SQL)', () => {
+  const dialect = new PgDialect();
+  const render = (fragment: Parameters<typeof dialect.sqlToQuery>[0]) => dialect.sqlToQuery(fragment).sql.toLowerCase();
+
+  it('is_listed / is_draft: verbatim from Aurora for non-user climbs, preserved for user climbs', () => {
+    const { isListed, isDraft } = climbListingConflictSet();
+    const listedSql = render(isListed);
+    const draftSql = render(isDraft);
+    // Ownership gate + verbatim incoming for catalog rows.
+    expect(listedSql).toContain('user_id');
+    expect(listedSql).toContain('is null');
+    expect(listedSql).toContain('excluded.is_listed');
+    expect(draftSql).toContain('excluded.is_draft');
+    // The user branch keeps the stored value (never flips a Boardsesh climb).
+    expect(listedSql).toContain('"is_listed"');
+    expect(draftSql).toContain('"is_draft"');
+    // No lingering "only flip toward visible" GREATEST/OR-style pinning.
+    expect(listedSql).not.toContain('= false and excluded');
+  });
+
+  it('upstream_ascensionist_count: authoritative incoming, no GREATEST', () => {
+    const { upstreamAscensionistCount, ascensionistCount } = climbStatsUpstreamConflictSet();
+    const upSql = render(upstreamAscensionistCount);
+    const totalSql = render(ascensionistCount);
+    // Takes the incoming cursored value verbatim, so decreases propagate.
+    expect(upSql).toContain('excluded.upstream_ascensionist_count');
+    expect(upSql).not.toContain('greatest');
+    // Total = incoming upstream + the independent boardsesh count.
+    expect(totalSql).toContain('excluded.upstream_ascensionist_count');
+    expect(totalSql).toContain('boardsesh_ascensionist_count');
+    expect(totalSql).not.toContain('greatest');
   });
 });
