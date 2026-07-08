@@ -15,6 +15,13 @@ import { LAYOUTS, HOLE_PLACEMENTS } from '@boardsesh/board-constants/product-siz
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { isNoMatchClimb, CLIMB_CHARACTERISTICS, convertQuality } from '@boardsesh/shared-schema';
 import { populateDenormalizedColumns, recomputeClimbStatsBulk, type ClimbStatsKey } from '@boardsesh/db/queries';
+import { normalizeTimestamp } from './normalize-timestamp';
+
+// Re-exported so existing importers (`@boardsesh/aurora-sync/json-import`, and
+// the `./sync` barrel) keep resolving `normalizeTimestamp` from here. The
+// canonical definition now lives in ./normalize-timestamp so the live Aurora
+// pull can share it without pulling in this module's heavy board-config deps.
+export { normalizeTimestamp };
 
 const BATCH_SIZE = 100;
 const FALLBACK_NAME_CHUNK_SIZE = 50;
@@ -141,27 +148,6 @@ export type ImportProgressEvent =
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Normalize a timestamp to ISO format for consistent dedup key generation.
- * Drizzle returns timestamps as "2024-01-15 10:30:00" (no T, no Z),
- * while new Date().toISOString() produces "2024-01-15T10:30:00.000Z".
- *
- * Space-separated timestamps (from Drizzle/Aurora) have no timezone indicator
- * and represent UTC. We must explicitly treat them as UTC before parsing,
- * otherwise `new Date()` interprets them as local time.
- */
-export function normalizeTimestamp(ts: string): string {
-  let normalized = ts.trim();
-  // If the string has no timezone indicator (T/Z/+/-), treat as UTC
-  // by replacing the space separator with 'T' and appending 'Z'
-  if (!normalized.includes('T') && !normalized.includes('Z')) {
-    // Truncate microseconds (.000001) to milliseconds (.000) for consistency
-    normalized = normalized.replace(/(\.\d{3})\d*$/, '$1');
-    normalized = normalized.replace(' ', 'T') + 'Z';
-  }
-  return new Date(normalized).toISOString();
-}
 
 export function generateJsonImportAuroraId(
   userId: string,
@@ -719,13 +705,28 @@ async function getExistingTickKeys(
 // Flash-status correction
 // ---------------------------------------------------------------------------
 
+/** Seconds within which two ticks count as the same first ascent (see below). */
+const FLASH_CORRECTION_TOLERANCE_SECONDS = 60;
+
 /**
- * Correct flash/send labels for one user across all their ticks.
+ * Correct flash/send labels for one user on ONE board.
  *
  * A "flash" is the first-ever tick of a (climb_uuid, angle) pair, sent in a
  * single attempt. The Aurora export only gives us per-session attempt counts,
- * not first-ever-ness, so the importer writes everything as 'send' and we
- * fix things here once all their history is in the DB.
+ * not first-ever-ness, so the importer writes everything as 'send' and we fix
+ * things here once all their history is in the DB.
+ *
+ * Scoping (§work-item 8):
+ *  - Board-scoped: a Kilter import must not touch the user's Tension flashes.
+ *    The first-tick MIN is computed within the imported board only.
+ *  - Origin guard: only native/json_import rows are relabelled. aurora_pull /
+ *    kilter_pull ticks carry an upstream-authoritative status (Aurora's
+ *    attempt_id / Kilter's flashed flag) — never demote or promote those. They
+ *    still participate in the MIN so they can be the true first ascent that
+ *    demotes a later json_import "flash".
+ *  - Timestamp tolerance: only demote a flash that is more than a minute after
+ *    the first ascent, so a near-duplicate log of the same session (or clock
+ *    jitter) doesn't get spuriously demoted.
  *
  * Two statements because PostgreSQL's UPDATE doesn't see its own mid-statement
  * changes — the promotion must commit before the demotion's prior-tick check
@@ -734,6 +735,7 @@ async function getExistingTickKeys(
 export async function correctFlashStatusForUser(
   db: PgDatabase<PgQueryResultHKT, Record<string, unknown>>,
   userId: string,
+  boardType: BoardType,
 ): Promise<void> {
   // Materialize per-(climb_uuid, angle) MIN(climbed_at) once, then drive both
   // updates off it. Cheaper than the correlated NOT EXISTS / EXISTS variant on
@@ -743,17 +745,20 @@ export async function correctFlashStatusForUser(
       SELECT climb_uuid, angle, MIN(climbed_at) AS first_climbed_at
       FROM boardsesh_ticks
       WHERE user_id = ${userId}
+        AND board_type = ${boardType}
       GROUP BY climb_uuid, angle
     )
     UPDATE boardsesh_ticks t
     SET status = 'flash'
     FROM first_ticks f
     WHERE t.user_id = ${userId}
+      AND t.board_type = ${boardType}
       AND t.climb_uuid = f.climb_uuid
       AND t.angle = f.angle
       AND t.climbed_at = f.first_climbed_at
       AND t.attempt_count = 1
       AND t.status = 'send'
+      AND t.origin IN ('native','json_import')
   `);
 
   await db.execute(sql`
@@ -761,16 +766,20 @@ export async function correctFlashStatusForUser(
       SELECT climb_uuid, angle, MIN(climbed_at) AS first_climbed_at
       FROM boardsesh_ticks
       WHERE user_id = ${userId}
+        AND board_type = ${boardType}
       GROUP BY climb_uuid, angle
     )
     UPDATE boardsesh_ticks t
     SET status = 'send'
     FROM first_ticks f
     WHERE t.user_id = ${userId}
+      AND t.board_type = ${boardType}
       AND t.climb_uuid = f.climb_uuid
       AND t.angle = f.angle
-      AND t.climbed_at > f.first_climbed_at
+      AND t.climbed_at::timestamptz > f.first_climbed_at::timestamptz
+                                      + make_interval(secs => ${FLASH_CORRECTION_TOLERANCE_SECONDS})
       AND t.status = 'flash'
+      AND t.origin IN ('native','json_import')
   `);
 }
 
@@ -1301,7 +1310,7 @@ export async function importJsonExportData(
   // them their flashes may need a re-run.
   if (!options?.skipFinalization) {
     try {
-      await correctFlashStatusForUser(db, userId);
+      await correctFlashStatusForUser(db, userId, boardType);
       // correctFlashStatusForUser only flips flash<->send (both ascents), so it
       // never changes the ascensionist count — but re-run the recompute for this
       // import's keys so FA/first-ascent derivation reflects the final statuses.

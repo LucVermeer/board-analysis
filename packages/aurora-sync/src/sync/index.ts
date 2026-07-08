@@ -10,4 +10,6 @@ export {
   type AuroraLocationBoardName,
 } from './locations-sync';
 export * from './json-import';
+export { applyAuroraAscents, applyAuroraBids } from './apply-user-logbook';
+export { normalizeTimestamp } from './normalize-timestamp';
 export { convertQuality } from '@boardsesh/shared-schema';

@@ -1,7 +1,6 @@
 import type { BoardName } from '../../types';
 import type { SaveAscentOptions, SaveAscentResponse, Ascent } from './types';
 import { convertQuality } from '@boardsesh/shared-schema';
-import dayjs from 'dayjs';
 import { dbz } from '@/app/lib/db/db';
 import { boardseshTicks } from '@/app/lib/db/schema';
 import { randomUUID } from 'crypto';
@@ -23,8 +22,15 @@ export async function saveAscent(
   options: SaveAscentOptions,
   nextAuthUserId: string,
 ): Promise<SaveAscentResponse> {
-  // Convert the ISO date to the required format
-  const formattedDate = dayjs(options.climbed_at).format('YYYY-MM-DD HH:mm:ss');
+  // Store the moment in UTC. `new Date(iso).toISOString()` is timezone-safe on
+  // any host (unlike the old dayjs().format(), which rendered the server's
+  // LOCAL wall time and shifted every logged ascent by the deployment offset).
+  // This matches what the Aurora/JSON pull paths write via normalizeTimestamp,
+  // so the same ascent lines up across sources for the cross-source dedup.
+  const climbedAtUtc = new Date(options.climbed_at).toISOString();
+  // Aurora's naive wire format is UTC "YYYY-MM-DD HH:mm:ss" — derive it from the
+  // UTC ISO, never from local formatting.
+  const formattedDate = climbedAtUtc.slice(0, 19).replace('T', ' ');
   const now = new Date().toISOString();
 
   // Determine status based on attempt_id (1 = flash, otherwise send)
@@ -38,43 +44,33 @@ export async function saveAscent(
   // Aurora-shaped response below keeps the caller's raw value.
   const boardseshQuality = convertQuality(options.quality);
 
-  await dbz
-    .insert(boardseshTicks)
-    .values({
-      uuid: tickUuid,
-      userId: nextAuthUserId,
-      boardType: board,
-      climbUuid: options.climb_uuid,
-      angle: options.angle,
-      isMirror: options.is_mirror,
-      status: status,
-      attemptCount: options.bid_count,
-      quality: boardseshQuality,
-      difficulty: options.difficulty,
-      isBenchmark: options.is_benchmark,
-      comment: options.comment || '',
-      climbedAt: formattedDate,
-      createdAt: now,
-      updatedAt: now,
-      auroraType: 'ascents',
-      auroraId: options.uuid, // Store Aurora's UUID for sync reference
-    })
-    .onConflictDoUpdate({
-      target: boardseshTicks.auroraId,
-      set: {
-        climbUuid: options.climb_uuid,
-        angle: options.angle,
-        isMirror: options.is_mirror,
-        status: status,
-        attemptCount: options.bid_count,
-        quality: boardseshQuality,
-        difficulty: options.difficulty,
-        isBenchmark: options.is_benchmark,
-        comment: options.comment || '',
-        climbedAt: formattedDate,
-        updatedAt: now,
-      },
-    });
+  // Native Boardsesh tick. `options.uuid` is a client-minted Aurora UUID for a
+  // row that hasn't been created upstream yet — planting it as aurora_id made
+  // the push-to-Aurora selection (aurora_id IS NULL) skip the tick, so it never
+  // reached the user's Aurora logbook, and a later pull of the real ascent
+  // landed a twin. Store aurora_id NULL + origin 'native': the tick counts
+  // toward the Boardsesh ascensionist total and stays pending-push. The pull's
+  // cross-source claim links it to the real Aurora ascent once it exists.
+  await dbz.insert(boardseshTicks).values({
+    uuid: tickUuid,
+    userId: nextAuthUserId,
+    boardType: board,
+    climbUuid: options.climb_uuid,
+    angle: options.angle,
+    isMirror: options.is_mirror,
+    origin: 'native',
+    status: status,
+    attemptCount: options.bid_count,
+    quality: boardseshQuality,
+    difficulty: options.difficulty,
+    isBenchmark: options.is_benchmark,
+    comment: options.comment || '',
+    climbedAt: climbedAtUtc,
+    createdAt: now,
+    updatedAt: now,
+    auroraType: 'ascents',
+    auroraId: null,
+  });
 
   // Create a local ascent object for the response (for API compatibility)
   const localAscent: Ascent = {
