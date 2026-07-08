@@ -170,6 +170,23 @@ describe('credential selection + backoff (real DB)', () => {
     expect(await pickNextKilterCredential()).toBe(USER_FAIL);
   });
 
+  it('treats a zero-failure credential with a recent attempt clock as retry-ready (SQL/JS parity)', async () => {
+    // consecutive_failures = 0 but attempted seconds ago. The JS mirror
+    // (isCredentialInBackoff) returns not-in-backoff for zero failures, and the
+    // SQL predicate must agree. Without the GREATEST(n-1, 0) guard on the
+    // exponent, power(2, -1) = 0.5 would fabricate a ~1-minute window here and
+    // wrongly exclude a healthy credential that just happens to carry an attempt
+    // timestamp (a data inconsistency, but the two paths must not diverge).
+    await seedCredential({
+      userId: USER_H1,
+      syncStatus: 'active',
+      consecutiveFailures: 0,
+      lastSyncAttemptAt: sql`now()`,
+    });
+
+    expect(await pickNextKilterCredential()).toBe(USER_H1);
+  });
+
   it('sorts a never-attempted credential first (NULLS FIRST)', async () => {
     await seedCredential({
       userId: USER_H1,

@@ -47,13 +47,20 @@ export function isCredentialInBackoff(now: Date, lastSyncAttemptAt: Date | null,
  * eligible for another attempt (not inside its backoff window). Keep in lockstep
  * with {@link credentialBackoffMs}. Postgres interval arithmetic mirrors the JS:
  * base 2 min · 2^min(n-1, 20), capped at 6 h.
+ *
+ * The exponent is `GREATEST(n - 1, 0)` so it can never go negative. The
+ * `consecutive_failures <= 0` branch already short-circuits the healthy case,
+ * but the GREATEST keeps the SQL honest under a data inconsistency
+ * (consecutive_failures = 0 alongside a non-null last_sync_attempt_at): without
+ * it `power(2, -1) = 0.5` would compute a bogus 1-minute window, disagreeing
+ * with the JS mirror, which returns ready-immediately for zero failures.
  */
 export function credentialRetryReadySql(): SQL {
   return sql`(
     ${auroraCredentials.consecutiveFailures} <= 0
     OR ${auroraCredentials.lastSyncAttemptAt} IS NULL
     OR ${auroraCredentials.lastSyncAttemptAt} + LEAST(
-         interval '2 minutes' * power(2, LEAST(${auroraCredentials.consecutiveFailures} - 1, ${MAX_BACKOFF_DOUBLINGS})),
+         interval '2 minutes' * power(2, LEAST(GREATEST(${auroraCredentials.consecutiveFailures} - 1, 0), ${MAX_BACKOFF_DOUBLINGS})),
          interval '6 hours'
        ) <= now()
   )`;
