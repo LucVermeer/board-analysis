@@ -362,14 +362,13 @@
       "thisBoard": "This board",
       "everywhere": "Everywhere",
       "thisBoardOnly": "This board only",
-      "easier": "{{amount}} easier",
+      "softer": "{{amount}} softer",
       "stiffer": "{{amount}} stiffer",
       "approx": "about {{amount}}"
     },
     "payoff": {
       "softer": "{{amount}} softer than this {{board}} board calls it.",
-      "stiffer": "{{amount}} stiffer than this {{board}} board calls it.",
-      "same": "Climbs the same everywhere as it does here."
+      "stiffer": "{{amount}} stiffer than this {{board}} board calls it."
     },
     "trust": {
       "confirmed_one": "95% land {{low}}–{{high}} · {{count}} send · updated {{when}}",

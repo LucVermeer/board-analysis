@@ -362,14 +362,13 @@
       "thisBoard": "Este plafón",
       "everywhere": "En todas partes",
       "thisBoardOnly": "Solo este plafón",
-      "easier": "{{amount}} más fácil",
+      "softer": "{{amount}} más blando",
       "stiffer": "{{amount}} más duro",
       "approx": "unos {{amount}}"
     },
     "payoff": {
       "softer": "{{amount}} más blando de lo que dice este plafón {{board}}.",
-      "stiffer": "{{amount}} más duro de lo que dice este plafón {{board}}.",
-      "same": "Cuesta lo mismo en todas partes que aquí."
+      "stiffer": "{{amount}} más duro de lo que dice este plafón {{board}}."
     },
     "trust": {
       "confirmed_one": "95% encadenan {{low}}–{{high}} · {{count}} encadene · actualizado {{when}}",

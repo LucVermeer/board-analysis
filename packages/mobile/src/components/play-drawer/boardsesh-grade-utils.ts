@@ -163,10 +163,12 @@ export function formatHalfGrades(steps: number): string | null {
 
 /**
  * The correction between the crowd's grade at this angle and the cross-board
- * Boardsesh grade. Both are rounded to a difficulty id first — one id step is
- * one Font letter, i.e. half a V-grade — so the magnitude reads in ½-grades and
- * "they agree" means they round to the same bucket. Null when there's no crowd
- * grade at this angle (nothing to correct against).
+ * Boardsesh grade. Agreement is decided by the LABEL each side renders under the
+ * viewer's grade format — not the raw id delta — so two ids that fall in the same
+ * displayed V-grade read as "matches this board". When the labels differ, the
+ * magnitude comes from the id delta (one id step is one Font letter, i.e. half a
+ * V-grade), so it reads in ½-grades. Null when there's no crowd grade at this
+ * angle (nothing to correct against).
  */
 export function buildCorrection(
   crowdDifficulty: number | null,
@@ -176,6 +178,18 @@ export function buildCorrection(
   if (crowdDifficulty == null) return null;
   const crowd = renderDifficulty(crowdDifficulty, gradeFormat);
   if (!crowd) return null;
+
+  // Gate agreement on the LABEL the hero actually shows, not the id delta. Some
+  // V-grades cover multiple ids that collapse to one label — V0 (4a/4b/4c) and V1
+  // (5a/5b), whose Font members never take a "+" suffix — so a crowd id and a
+  // Boardsesh id can differ yet render the identical label. When the two displayed
+  // labels match it "matches this board" — no pill, no payoff — even if the ids
+  // differ, which keeps the hero in step with the collapsed teaser (it gates the
+  // same way on the label).
+  const boardsesh = renderDifficulty(boardseshValue, gradeFormat);
+  if (boardsesh && crowd.label === boardsesh.label) {
+    return { crowd, steps: 0, label: null, direction: 'equal' };
+  }
 
   const idDelta = clampDifficultyId(crowdDifficulty) - clampDifficultyId(boardseshValue);
   const steps = Math.abs(idDelta) / 2;

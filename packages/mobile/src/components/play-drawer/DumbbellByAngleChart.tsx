@@ -30,9 +30,13 @@ const Y_AXIS_LABEL_WIDTH = 30;
 const INITIAL_SPACING = 26;
 const END_SPACING = 16;
 // Cap the per-angle tap column so a two-angle climb doesn't give each marker
-// half the screen; the floor keeps a comfortable touch target when there's room.
+// half the screen. There is deliberately NO lower floor: a column wider than the
+// marker spacing overlaps its neighbour, and RN hands the overlap to the later
+// sibling, so a marker's edge pixels would trigger the wrong angle. Tiling the
+// column to the spacing (below the cap) keeps every marker owning its own tap
+// target; the column runs the full plot height, so even a crowded ~30px-wide
+// slot stays a usable target.
 const MAX_SLOT_WIDTH = 76;
-const MIN_SLOT_WIDTH = 44;
 
 // Ring (crowd) outer diameter and diamond (Boardsesh) square side, by ascent bin.
 const RING_DIAMETER: Record<DumbbellSizeBin, number> = { small: 12, medium: 16, large: 22 };
@@ -85,7 +89,7 @@ export const DumbbellByAngleChart = memo(function DumbbellByAngleChart({
   const plotWidth = Math.max(0, width - Y_AXIS_LABEL_WIDTH);
   const count = rows.length;
   const rawSpacing = count > 1 ? (plotWidth - INITIAL_SPACING - END_SPACING) / (count - 1) : 0;
-  const slotWidth = Math.max(MIN_SLOT_WIDTH, Math.min(rawSpacing, MAX_SLOT_WIDTH));
+  const slotWidth = Math.min(rawSpacing, MAX_SLOT_WIDTH);
 
   const neutralStroke = chartColors.secondaryLabel;
   const diamondEdge = chartColors.label;

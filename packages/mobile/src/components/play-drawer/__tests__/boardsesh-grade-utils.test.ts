@@ -160,14 +160,49 @@ describe('buildCorrection', () => {
     expect(correction).toMatchObject({ direction: 'stiffer', steps: 1, label: '1' });
   });
 
-  it('rounds a one-id gap to half a grade', () => {
-    const correction = buildCorrection(21, 20, 'v-grade');
+  it('rounds a one-id gap that crosses a grade boundary to half a grade', () => {
+    // Crowd 22 (V6) vs cross-board 21 (V5): one Font step apart, and — crucially —
+    // the rendered labels differ, so it surfaces as a ½-grade correction.
+    const correction = buildCorrection(22, 21, 'v-grade');
     expect(correction).toMatchObject({ direction: 'easier', steps: 0.5, label: '½' });
+    expect(correction?.crowd.label).toBe('V6');
+  });
+
+  it('reads a genuine one-V difference as a full-grade correction', () => {
+    // Crowd 18 (V4) vs cross-board 16 (V3): two id steps, labels differ.
+    const correction = buildCorrection(18, 16, 'v-grade');
+    expect(correction).toMatchObject({ direction: 'easier', steps: 1, label: '1' });
+    expect(correction?.crowd.label).toBe('V4');
   });
 
   it('reports equal when both round to the same grade bucket', () => {
     const correction = buildCorrection(20.3, 20, 'v-grade');
     expect(correction).toMatchObject({ direction: 'equal', steps: 0, label: null });
+  });
+
+  it('agrees (no pill, no payoff) when two different ids render the same V-grade label', () => {
+    // V1 covers ids 13 (5a) and 14 (5b) — neither Font grade takes a "+", so both
+    // render exactly "V1". The crowd rounds V1 from id 14, the Boardsesh grade V1
+    // from id 13; the hero shows "V1" on both sides, so the one-id gap must NOT
+    // surface as a correction — the displayed label, not the id delta, decides.
+    const correction = buildCorrection(14, 13, 'v-grade');
+    expect(correction).toMatchObject({ direction: 'equal', steps: 0, label: null });
+    expect(correction?.crowd.label).toBe('V1');
+  });
+
+  it('surfaces the same ids as a correction under font format, where the labels differ', () => {
+    // Same ids, but font format renders 5B vs 5A — different labels — so at font
+    // resolution it IS a ½-grade correction. Agreement follows what the viewer sees.
+    const correction = buildCorrection(14, 13, 'font');
+    expect(correction).toMatchObject({ direction: 'easier', steps: 0.5, label: '½' });
+  });
+
+  it('gates agreement the same way the collapsed teaser does', () => {
+    // crowd id 14 and Boardsesh id 13 both render V1: the correction reads equal
+    // AND the teaser drops its "▸" arrow, so hero and teaser stay in lockstep.
+    expect(buildCorrection(14, 13, 'v-grade')?.direction).toBe('equal');
+    const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 13 }), 'v-grade');
+    expect(buildBoardseshGradeSummary(view, { crowdLabel: 'V1' })).toBe('V1 ✓');
   });
 });
 

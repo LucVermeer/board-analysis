@@ -211,9 +211,17 @@ export function buildDumbbellAxis(rows: DumbbellAngleRow[], gradeFormat: GradeDi
   const step = maxId - minId > DENSE_SPAN_THRESHOLD ? 2 : 1;
   const noOfSections = Math.ceil((maxId - minId) / step);
   const maxValue = step * noOfSections;
-  // Extend the top so the window is an exact multiple of the step (keeps the top
-  // tick label truthful and the marker for the hardest grade inside the plot).
+  // Round the window up to an exact multiple of the step so every marker sits
+  // inside the plot. Normally we grow the top upward, but that can push maxId
+  // past MAX_DIFFICULTY_ID and the top tick would render a clamped, over-read
+  // label (e.g. id 34 → "V16"). When it would overflow, pin the top to the
+  // hardest real grade and grow the window downward instead, preserving the
+  // maxId − minId === maxValue invariant the marker geometry relies on.
   maxId = minId + maxValue;
+  if (maxId > MAX_DIFFICULTY_ID) {
+    maxId = MAX_DIFFICULTY_ID;
+    minId = maxId - maxValue;
+  }
 
   const yAxisLabelTexts = Array.from(
     { length: noOfSections + 1 },

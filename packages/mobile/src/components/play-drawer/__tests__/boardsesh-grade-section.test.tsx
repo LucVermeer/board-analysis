@@ -110,7 +110,7 @@ describe('BoardseshGradeSection', () => {
 
     expect(text).toContain('boardseshGrade.hero.thisBoard');
     expect(text).toContain('boardseshGrade.hero.everywhere');
-    expect(text).toContain('boardseshGrade.hero.easier'); // delta pill
+    expect(text).toContain('boardseshGrade.hero.softer'); // delta pill
     expect(text).toContain('boardseshGrade.payoff.softer');
     expect(text).toContain('boardseshGrade.trust.confirmed');
     expect(container.querySelector('[data-icon="checkmark.seal.fill"]')).not.toBeNull();
@@ -156,7 +156,7 @@ describe('BoardseshGradeSection', () => {
     expect(text).toContain('boardseshGrade.hero.thisBoardOnly');
     expect(text).toContain('boardseshGrade.localOnlyNote');
     // No correction: no delta pill, no payoff sentence.
-    expect(text).not.toContain('boardseshGrade.hero.easier');
+    expect(text).not.toContain('boardseshGrade.hero.softer');
     expect(text).not.toContain('boardseshGrade.payoff');
   });
 
@@ -169,8 +169,9 @@ describe('BoardseshGradeSection', () => {
     const text = container.textContent ?? '';
 
     expect(text).toContain('boardseshGrade.matchesBoard');
-    expect(text).toContain('boardseshGrade.payoff.same');
-    expect(text).not.toContain('boardseshGrade.hero.easier');
+    // The "matches this board" note is the single "same" line — no duplicate payoff row.
+    expect(text).not.toContain('boardseshGrade.payoff');
+    expect(text).not.toContain('boardseshGrade.hero.softer');
     expect(text).not.toContain('boardseshGrade.hero.stiffer');
   });
 });

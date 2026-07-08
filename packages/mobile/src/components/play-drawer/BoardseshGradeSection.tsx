@@ -222,7 +222,7 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
             {amount && (
               <View style={styles.pill}>
                 <Text variant="caption1" color={iosSystemColors.systemGray} allowFontScaling={false}>
-                  {t(correction.direction === 'easier' ? 'boardseshGrade.hero.easier' : 'boardseshGrade.hero.stiffer', {
+                  {t(correction.direction === 'easier' ? 'boardseshGrade.hero.softer' : 'boardseshGrade.hero.stiffer', {
                     amount,
                   })}
                 </Text>
@@ -245,17 +245,17 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
         </View>
       )}
 
-      {/* PAYOFF — softer/stiffer/same voice, in one line under the hero. */}
-      {correction && (
+      {/* PAYOFF — softer/stiffer voice, in one line under the hero. Suppressed on
+          the equal tier: the hero's "matches this board" note already says it, so
+          a payoff row here would just repeat it. */}
+      {correction && correction.direction !== 'equal' && (
         <View style={styles.payoffRow}>
           <View style={[styles.accentBar, { backgroundColor: brandColors.primary }]} />
           <Text variant="subheadline" style={styles.flexText}>
-            {correction.direction === 'equal'
-              ? t('boardseshGrade.payoff.same')
-              : t(
-                  correction.direction === 'easier' ? 'boardseshGrade.payoff.softer' : 'boardseshGrade.payoff.stiffer',
-                  { amount, board: displayBoardName(boardName) },
-                )}
+            {t(correction.direction === 'easier' ? 'boardseshGrade.payoff.softer' : 'boardseshGrade.payoff.stiffer', {
+              amount,
+              board: displayBoardName(boardName),
+            })}
           </Text>
         </View>
       )}

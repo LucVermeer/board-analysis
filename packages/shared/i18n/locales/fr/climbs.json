@@ -362,14 +362,13 @@
       "thisBoard": "Cette board",
       "everywhere": "Partout",
       "thisBoardOnly": "Cette board seulement",
-      "easier": "{{amount}} plus facile",
+      "softer": "{{amount}} plus souple",
       "stiffer": "{{amount}} plus dur",
       "approx": "environ {{amount}}"
     },
     "payoff": {
-      "softer": "{{amount}} plus facile que ce que dit cette board {{board}}.",
-      "stiffer": "{{amount}} plus dur que ce que dit cette board {{board}}.",
-      "same": "Se grimpe pareil partout qu'ici."
+      "softer": "{{amount}} plus souple que ce que dit cette board {{board}}.",
+      "stiffer": "{{amount}} plus dur que ce que dit cette board {{board}}."
     },
     "trust": {
       "confirmed_one": "95% enchaînent {{low}}–{{high}} · {{count}} croix · mis à jour {{when}}",

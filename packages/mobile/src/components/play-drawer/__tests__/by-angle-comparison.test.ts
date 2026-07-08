@@ -7,6 +7,7 @@ import {
   sizeBinForSends,
   hasAnyBoardseshDiamond,
 } from '../by-angle-comparison';
+import { MAX_DIFFICULTY_ID } from '../../../lib/boardsesh-grade-display';
 
 // 20 = 6c/V5, 22 = 7a/V6 on the shared difficulty scale.
 function bsRow(overrides: Partial<BoardseshGradeAtAngle> = {}): BoardseshGradeAtAngle {
@@ -206,5 +207,25 @@ describe('buildDumbbellAxis', () => {
     const axis = buildDumbbellAxis([], 'v-grade');
     expect(axis.noOfSections).toBeGreaterThanOrEqual(1);
     expect(axis.yAxisLabelTexts).toHaveLength(axis.noOfSections + 1);
+  });
+
+  it('keeps the top tick truthful when the step extension would overflow the scale', () => {
+    // Boardsesh grades V6 (id 22) and V16 (id 33, the top of the scale). Padding
+    // gives the window [20, 33], span 13 → step 2, ceil(13/2)=7 sections,
+    // maxValue 14. Growing the top upward would land on id 34, whose label clamps
+    // to a false "V16"; instead the window grows downward so the top tick is a
+    // real V16 and the marker-geometry invariant (maxId − minId === maxValue) holds.
+    const rows = buildDumbbellByAngleModel(
+      [
+        bsRow({ angle: 20, universalGrade: 22, gradeLow: 22, gradeHigh: 22 }),
+        bsRow({ angle: 45, universalGrade: 33, gradeLow: 33, gradeHigh: 33 }),
+      ],
+      [],
+      'v-grade',
+    );
+    const axis = buildDumbbellAxis(rows, 'v-grade');
+    expect(axis.maxId).toBeLessThanOrEqual(MAX_DIFFICULTY_ID); // never past the hardest real grade
+    expect(axis.maxId).toBe(axis.minId + axis.maxValue); // marker geometry stays consistent
+    expect(axis.yAxisLabelTexts[axis.yAxisLabelTexts.length - 1]).toBe('V16'); // truthful top tick
   });
 });
