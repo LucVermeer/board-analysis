@@ -70,7 +70,8 @@ export function LogbookEntryChooserSheet({ entries, intent, onPick, onDismiss }:
           : entry.status === 'send'
             ? brandColors.success
             : iosSystemColors.systemOrange;
-      const quality = normalizeLogbookQuality(entry.quality);
+      // Effective quality so a Kilter-pulled tick shows the climber's own synced rating.
+      const quality = normalizeLogbookQuality(entry.effectiveQuality ?? entry.quality);
       const timeLabel = parseTickTime(entry.climbedAt)
         .toDate()
         .toLocaleTimeString(i18n.language, { hour: 'numeric', minute: '2-digit' });

@@ -11,6 +11,7 @@ export const GET_TICKS = gql`
       status
       attemptCount
       quality
+      effectiveQuality
       difficulty
       boardseshDifficulty
       boardseshConfidence
@@ -68,6 +69,7 @@ type TickFromGetTicks = Pick<
   | 'status'
   | 'attemptCount'
   | 'quality'
+  | 'effectiveQuality'
   | 'difficulty'
   | 'boardseshDifficulty'
   | 'boardseshConfidence'
@@ -168,6 +170,7 @@ export const GET_USER_ASCENTS_FEED = gql`
         status
         attemptCount
         quality
+        effectiveQuality
         difficulty
         difficultyName
         consensusDifficulty
@@ -203,6 +206,13 @@ export type AscentFeedItem = {
   status: 'flash' | 'send' | 'attempt';
   attemptCount: number;
   quality: number | null;
+  // COALESCE(quality, the climber's own synced star rating from
+  // board_climb_ratings). What the "user stars" column should read — falls back
+  // to the Kilter-synced rating when a pulled tick has no per-tick quality.
+  // 1-5 native (no rescaling); null when neither exists. Optional (like
+  // hasBetaVideo) so fixtures and non-feed producers of this shape stay valid;
+  // UI reads `effectiveQuality ?? quality`.
+  effectiveQuality?: number | null;
   difficulty: number | null;
   difficultyName: string | null;
   consensusDifficulty: number | null;
@@ -290,6 +300,7 @@ export const GET_USER_ASCENT_CAPTION_MATCHES = gql`
       status
       attemptCount
       quality
+      effectiveQuality
       difficulty
       difficultyName
       consensusDifficulty
@@ -356,6 +367,7 @@ export const GET_USER_GROUPED_ASCENTS_FEED = gql`
           status
           attemptCount
           quality
+          effectiveQuality
           difficulty
           difficultyName
           consensusDifficulty

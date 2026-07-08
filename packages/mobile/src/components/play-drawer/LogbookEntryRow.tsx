@@ -70,16 +70,19 @@ export const LogbookEntryRow = memo(function LogbookEntryRow({
   }, [entry.difficulty]);
 
   const stars = useMemo(() => {
-    if (!isSuccess || entry.quality == null || entry.quality <= 0) return null;
+    // Show the effective quality so a Kilter-pulled tick (no per-tick quality)
+    // surfaces the climber's own synced star rating.
+    const displayQuality = entry.effectiveQuality ?? entry.quality;
+    if (!isSuccess || displayQuality == null || displayQuality <= 0) return null;
     return Array.from({ length: 5 }, (_, index) => (
       <Icon
         key={index}
-        name={index < entry.quality! ? 'star.fill' : 'star'}
+        name={index < displayQuality ? 'star.fill' : 'star'}
         size={12}
-        color={index < entry.quality! ? iosSystemColors.starGold : iosSystemColors.systemGray4}
+        color={index < displayQuality ? iosSystemColors.starGold : iosSystemColors.systemGray4}
       />
     ));
-  }, [isSuccess, entry.quality]);
+  }, [isSuccess, entry.effectiveQuality, entry.quality]);
 
   return (
     <View style={styles.container}>

@@ -13,6 +13,12 @@ export type LogbookEntry = {
   is_mirror: boolean;
   tries: number;
   quality: number | null;
+  // COALESCE(quality, the climber's own synced star rating from
+  // board_climb_ratings). Read this for star DISPLAY — it falls back to the
+  // Kilter-synced rating when a pulled tick has no per-tick quality. `quality`
+  // stays the raw per-tick value so edit-draft prefills don't adopt the synced
+  // rating. 1-5 native (no rescaling); null when neither exists.
+  effectiveQuality?: number | null;
   difficulty: number | null;
   comment: string;
   climbed_at: string;
@@ -45,6 +51,7 @@ export type LogbookSourceTick = {
   status: TickStatus;
   attemptCount: number;
   quality: number | null;
+  effectiveQuality?: number | null;
   difficulty: number | null;
   comment: string;
   climbedAt: string;
@@ -61,6 +68,10 @@ export function toLogbookEntry(tick: LogbookSourceTick): LogbookEntry {
     is_mirror: tick.isMirror,
     tries: tick.attemptCount,
     quality: tick.quality,
+    // Falls back to the tick's own raw quality when the server didn't send a
+    // synced rating (e.g. saveTick mutation responses), so display stays
+    // correct on optimistic writes.
+    effectiveQuality: tick.effectiveQuality ?? tick.quality,
     difficulty: tick.difficulty,
     comment: tick.comment,
     climbed_at: tick.climbedAt,

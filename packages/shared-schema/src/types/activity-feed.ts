@@ -48,6 +48,10 @@ export type AscentFeedItem = {
   status: 'flash' | 'send' | 'attempt';
   attemptCount: number;
   quality?: number | null;
+  // COALESCE(quality, the climber's own synced star rating from
+  // board_climb_ratings). What star displays should read. 1-5 native (no
+  // rescaling); null when neither exists.
+  effectiveQuality?: number | null;
   difficulty?: number | null;
   difficultyName?: string | null;
   consensusDifficulty?: number | null;

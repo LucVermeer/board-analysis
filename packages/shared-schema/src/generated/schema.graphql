@@ -899,8 +899,10 @@ type Tick {
   status: TickStatus!
   "Number of attempts before success (or total attempts if not sent)"
   attemptCount: Int!
-  "User's quality rating (1-5)"
+  "User's quality rating (1-5). Raw per-tick value — null for a tick pulled from Kilter, which carries no per-tick quality. Read `effectiveQuality` for the value to display."
   quality: Int
+  "Effective quality for display: COALESCE(quality, the climber's own synced star rating for this climb+angle from board_climb_ratings). Both are 1-5 native (no rescaling). Still nullable when neither exists. Populated by read queries; mutation responses don't compute it."
+  effectiveQuality: Int
   "User's personal grade override as a difficulty_id. Null means the user did not attach a personal grade — read `effectiveDifficulty` for the value to display (it falls back to the climb's consensus). See docs/ascents-and-attempts.md."
   difficulty: Int
   "Effective grade for display and aggregation: COALESCE(difficulty, ROUND(consensus_difficulty)). Still nullable when the climb has no consensus yet."
@@ -1066,8 +1068,10 @@ type AscentFeedItem {
   status: TickStatus!
   "Number of attempts"
   attemptCount: Int!
-  "Quality rating"
+  "Raw per-tick quality rating (1-5). Null for a tick pulled from Kilter, which carries no per-tick quality. Read `effectiveQuality` for the value to display."
   quality: Int
+  "Effective quality for display: COALESCE(quality, the climber's own synced star rating for this climb+angle from board_climb_ratings). Both are 1-5 native (no rescaling). Still nullable when neither exists."
+  effectiveQuality: Int
   "Difficulty rating"
   difficulty: Int
   "Human-readable difficulty name"

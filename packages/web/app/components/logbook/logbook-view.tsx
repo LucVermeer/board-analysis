@@ -69,7 +69,9 @@ export const LogbookView: React.FC<LogbookViewProps> = ({ currentClimb }) => {
               isMirror: !!ascent.is_mirror,
               status: ascent.status ?? null,
               attemptCount: ascent.tries,
-              quality: ascent.quality,
+              // Read-only card: show the effective quality so a Kilter-pulled
+              // tick surfaces the climber's own synced star rating.
+              quality: ascent.effectiveQuality ?? ascent.quality,
               comment: ascent.comment,
               tickUuid: isPersistedUuid(ascent.uuid) ? ascent.uuid : null,
               upvotes: ascent.upvotes,

@@ -69,6 +69,9 @@ const PlayViewComments: React.FC<PlayViewCommentsProps> = ({ climbUuid }) => {
             tries: ascent.tries,
           });
           const hasSuccess = ascentStatus !== 'attempt';
+          // Show the effective quality so a Kilter-pulled tick surfaces the
+          // climber's own synced star rating (raw quality is null on those).
+          const displayQuality = ascent.effectiveQuality ?? ascent.quality;
 
           return (
             <Box
@@ -119,10 +122,10 @@ const PlayViewComments: React.FC<PlayViewCommentsProps> = ({ climbUuid }) => {
                     </Typography>
                   )}
                 </Box>
-                {hasSuccess && ascent.quality != null && ascent.quality > 0 && (
+                {hasSuccess && displayQuality != null && displayQuality > 0 && (
                   <Rating
                     readOnly
-                    value={ascent.quality}
+                    value={displayQuality}
                     max={5}
                     size="small"
                     sx={{ mt: 0.25, fontSize: themeTokens.typography.fontSize.xs }}

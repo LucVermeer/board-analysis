@@ -202,7 +202,9 @@ export const LogbookRow = memo(function LogbookRow({
   // repeat-ascent disambiguator, and it must not mutate with the result set.
   const attemptsKind = logbookAttemptsKind(ascent.status);
   const triesShown = groupTries ?? displayedAttemptCount(ascent.attemptCount);
-  const quality = normalizeLogbookQuality(ascent.quality);
+  // Display the effective quality so a Kilter-pulled tick (no per-tick quality)
+  // surfaces the climber's own synced star rating. Edit still uses raw quality.
+  const quality = normalizeLogbookQuality(ascent.effectiveQuality ?? ascent.quality);
   const hasNote = logbookNoteIsVisible(ascent.comment);
   const hasBetaVideo = ascent.hasBetaVideo === true;
   // The user-named board when the tick has one ("Garage Board"), else the
