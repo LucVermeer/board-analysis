@@ -402,6 +402,9 @@ describe('applyLogs — natural-key adoption', () => {
       kilterSyncedAt: null,
       kilterSyncError: null,
     });
+    // The detach stamps kilter_detached_at so push-back and the recompute can
+    // tell an upstream-deleted row apart from a never-pushed native tick.
+    expect(typeof (updateCalls[0].args[0] as Record<string, unknown>).kilterDetachedAt).toBe('string');
     expect(calls.filter((c) => c.kind === 'delete')).toHaveLength(0);
     expect(calls.filter((c) => c.kind === 'select')).toHaveLength(0);
     expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
@@ -854,6 +857,177 @@ describe('applyLogs — natural-key adoption', () => {
     const message = logSpy.mock.calls[0]?.[0] as string;
     expect(message).toContain('different Boardsesh user');
     expect(message).toContain('log-FOREIGN');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyLogs — PR4: per-user offset inference (the 3,208-duplicate fix) and the
+// by-kilter-id edit-clobber / no-op guards. Same mock-tx harness.
+// ---------------------------------------------------------------------------
+
+/** A full existing-tick row shaped like the by-kilter-id SELECT returns. */
+function existingKilterTick(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    uuid: 'tick-1',
+    kilterId: 'log-A',
+    ownerUserId: 'user-1',
+    climbUuid: 'climb-1',
+    angle: 40,
+    status: 'send',
+    attemptCount: 1,
+    climbedAt: '2026-05-01T12:00:00.000Z',
+    kilterType: 'logs',
+    updatedAt: '2026-05-01T12:00:00.000Z',
+    kilterSyncedAt: '2026-05-01T12:00:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('applyLogs — PR4 offset inference + edit guard', () => {
+  let logSpy: ReturnType<typeof vi.fn<(msg: string) => void>>;
+
+  beforeEach(() => {
+    logSpy = vi.fn<(msg: string) => void>();
+    recomputeMock.mockClear();
+  });
+
+  it('adopts a timezone-shifted original via the inferred +10h offset (the 3,208-dup fix)', async () => {
+    // The existing Aurora/JSON original stored local wall time (UTC+10)
+    // relabelled as UTC — 10h AHEAD of the honest-UTC Kilter created_at. The
+    // old ±60s window never matched; per-user offset inference now adopts it.
+    const { tx, calls, insertValues } = createTx({
+      selectResults: [
+        [], // no kilter_id match
+        [
+          {
+            uuid: 'tick-shifted',
+            kilterId: null,
+            climbUuid: 'climb-1',
+            angle: 40,
+            climbedAt: '2026-05-01T22:00:00.000Z', // +10h ahead of the incoming log
+            status: 'send',
+          },
+        ],
+      ],
+    });
+
+    const op = makeLogPutOp({
+      log_uuid: 'log-A',
+      climb_uuid: 'climb-1',
+      angle: 40,
+      created_at: '2026-05-01T12:00:00.000Z',
+      topped: 1,
+      flashed: 0,
+    });
+
+    await applyLogs(tx as unknown as TxArg, 'user-1', [op], aliasCacheFor(['climb-1']), logSpy);
+
+    // Adoption UPDATE (priorKey SELECT + bulk UPDATE = 2 executes), no insert.
+    expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(2);
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+    expect(insertValues).toHaveLength(0);
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT adopt an implausibly-shifted row (gap beyond ±14h, no offset)', async () => {
+    // A 20h gap is not a real UTC offset; inference finds nothing and the fast
+    // path rejects it → the incoming log inserts as its own tick.
+    const { tx, calls, insertValues } = createTx({
+      selectResults: [
+        [],
+        [
+          {
+            uuid: 'tick-far',
+            kilterId: null,
+            climbUuid: 'climb-1',
+            angle: 40,
+            climbedAt: '2026-05-02T08:00:00.000Z', // +20h — implausible offset
+            status: 'send',
+          },
+        ],
+      ],
+    });
+
+    const op = makeLogPutOp({
+      log_uuid: 'log-A',
+      climb_uuid: 'climb-1',
+      angle: 40,
+      created_at: '2026-05-01T12:00:00.000Z',
+    });
+
+    await applyLogs(tx as unknown as TxArg, 'user-1', [op], aliasCacheFor(['climb-1']), logSpy);
+
+    expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(0);
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+    expect(insertValues[0][0]).toMatchObject({ kilterId: 'log-A', origin: 'kilter_pull' });
+  });
+
+  it('skips overwriting a locally-edited row on a kilter_id re-sync (edit-clobber guard)', async () => {
+    // The row was edited locally (updated_at > kilter_synced_at) after the last
+    // sync — a pending push-back. Kilter's stale snapshot must not stomp it.
+    const { tx, calls, insertValues } = createTx({
+      selectResults: [[existingKilterTick({ updatedAt: '2026-05-02T00:00:00.000Z' })]],
+    });
+
+    const op = makeLogPutOp({
+      log_uuid: 'log-A',
+      climb_uuid: 'climb-1',
+      angle: 40,
+      created_at: '2026-05-01T12:00:00.000Z',
+      topped: 0, // incoming attempt would downgrade the local send — but it's guarded
+    });
+
+    await applyLogs(tx as unknown as TxArg, 'user-1', [op], aliasCacheFor(['climb-1']), logSpy);
+
+    // Only the kilter_id SELECT runs; no UPDATE (local edit protected), no insert.
+    expect(calls.filter((c) => c.kind === 'select')).toHaveLength(1);
+    expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(0);
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+    expect(insertValues).toHaveLength(0);
+  });
+
+  it('skips a no-op kilter_id re-sync when the payload is identical (no trigger churn)', async () => {
+    const { tx, calls } = createTx({
+      selectResults: [[existingKilterTick()]],
+    });
+
+    const op = makeLogPutOp({
+      log_uuid: 'log-A',
+      climb_uuid: 'climb-1',
+      angle: 40,
+      created_at: '2026-05-01T12:00:00.000Z', // same climbed_at
+      topped: 1,
+      flashed: 0, // send, attempts default 1 — identical to stored
+    });
+
+    await applyLogs(tx as unknown as TxArg, 'user-1', [op], aliasCacheFor(['climb-1']), logSpy);
+
+    // Payload unchanged → no UPDATE.
+    expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(0);
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+  });
+
+  it('still applies a real kilter_id edit (changed status) despite the guards', async () => {
+    // Not locally edited (updated_at <= kilter_synced_at) and the payload
+    // differs (attempt → send) → the edit flows through.
+    const { tx, calls } = createTx({
+      selectResults: [[existingKilterTick({ status: 'attempt', kilterType: 'attempts' })]],
+    });
+
+    const op = makeLogPutOp({
+      log_uuid: 'log-A',
+      climb_uuid: 'climb-1',
+      angle: 40,
+      created_at: '2026-05-01T12:00:00.000Z',
+      topped: 1,
+      flashed: 0, // now a send
+    });
+
+    await applyLogs(tx as unknown as TxArg, 'user-1', [op], aliasCacheFor(['climb-1']), logSpy);
+
+    // priorKey SELECT + bulk UPDATE.
+    expect(calls.filter((c) => c.kind === 'execute')).toHaveLength(2);
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
   });
 });
 

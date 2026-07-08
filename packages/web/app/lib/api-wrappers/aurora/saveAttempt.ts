@@ -1,6 +1,5 @@
 import { type SaveAttemptOptions, type AuroraBoardName, WEB_HOSTS } from './types';
 import { generateUuid } from './util';
-import dayjs from 'dayjs';
 
 export async function saveAttempt(
   board: AuroraBoardName,
@@ -9,8 +8,10 @@ export async function saveAttempt(
 ): Promise<unknown> {
   const uuid = generateUuid();
 
-  // Convert the ISO date to the required format "YYYY-MM-DD HH:mm:ss"
-  const formattedDate = dayjs(options.climbed_at).format('YYYY-MM-DD HH:mm:ss');
+  // Aurora's wire format "YYYY-MM-DD HH:mm:ss" is UTC. Derive it from the UTC
+  // ISO instant — the old dayjs().format() rendered the server's LOCAL wall
+  // time, so a non-UTC deployment posted every attempt shifted by its offset.
+  const formattedDate = new Date(options.climbed_at).toISOString().slice(0, 19).replace('T', ' ');
 
   // Match the Kotlin implementation structure
   const requestData = {

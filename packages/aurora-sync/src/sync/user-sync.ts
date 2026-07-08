@@ -4,11 +4,9 @@ import { eq, and, inArray, sql } from 'drizzle-orm';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type postgres from 'postgres';
 import { UNIFIED_TABLES } from '../db/table-select';
-import { boardseshTicks, playlists, playlistClimbs, playlistOwnership } from '@boardsesh/db/schema/app';
-import { recomputeClimbStatsBulk, type ClimbStatsKey } from '@boardsesh/db/queries';
-import { randomUUID } from 'crypto';
-import { convertQuality } from '@boardsesh/shared-schema';
+import { playlists, playlistClimbs, playlistOwnership } from '@boardsesh/db/schema/app';
 import { formatDbError } from './db-error';
+import { applyAuroraAscents, applyAuroraBids } from './apply-user-logbook';
 
 const BATCH_SIZE = 100;
 
@@ -162,74 +160,9 @@ async function upsertTableData(
 
     case 'ascents': {
       if (nextAuthUserId) {
-        const now = new Date().toISOString();
-        // Distinct (board, climb, angle) keys of the ascents we wrote, so we
-        // can recompute board_climb_stats once per key after the batch. Every
-        // ascent is flash/send, so every one is a counting key.
-        const recomputeKeys = new Map<string, ClimbStatsKey>();
-        await processBatches(data, BATCH_SIZE, async (batch) => {
-          const tickValues = batch.map((item) => {
-            const angle = Number(item.angle);
-            recomputeKeys.set(`${item.climb_uuid} ${angle}`, {
-              boardType: boardName,
-              climbUuid: item.climb_uuid,
-              angle,
-            });
-            return {
-              uuid: randomUUID(),
-              userId: nextAuthUserId,
-              boardType: boardName,
-              climbUuid: item.climb_uuid,
-              angle,
-              isMirror: Boolean(item.is_mirror),
-              // Pulled from the user's Aurora logbook — already inside
-              // upstream_ascensionist_count, so origin excludes it from the
-              // Boardsesh double-count guard.
-              origin: 'aurora_pull' as const,
-              status: (Number(item.attempt_id) === 1 ? 'flash' : 'send') as 'flash' | 'send' | 'attempt',
-              attemptCount: Number(item.bid_count || 1),
-              quality: convertQuality(item.quality ? Number(item.quality) : null),
-              difficulty: item.difficulty ? Number(item.difficulty) : null,
-              isBenchmark: Boolean(item.is_benchmark || 0),
-              comment: item.comment || '',
-              climbedAt: new Date(item.climbed_at).toISOString(),
-              createdAt: item.created_at ? new Date(item.created_at).toISOString() : now,
-              updatedAt: now,
-              auroraType: 'ascents' as const,
-              auroraId: item.uuid,
-              auroraSyncedAt: now,
-            };
-          });
-          await db
-            .insert(boardseshTicks)
-            .values(tickValues)
-            .onConflictDoUpdate({
-              target: boardseshTicks.auroraId,
-              set: {
-                // `origin` is intentionally absent: it records where the row was
-                // FIRST created. A native tick that later matches an upstream
-                // ascent must keep origin='native' on re-sync, or the recompute
-                // would silently stop counting it.
-                climbUuid: sql`excluded.climb_uuid`,
-                angle: sql`excluded.angle`,
-                isMirror: sql`excluded.is_mirror`,
-                status: sql`excluded.status`,
-                attemptCount: sql`excluded.attempt_count`,
-                quality: sql`excluded.quality`,
-                difficulty: sql`excluded.difficulty`,
-                isBenchmark: sql`excluded.is_benchmark`,
-                comment: sql`excluded.comment`,
-                climbedAt: sql`excluded.climbed_at`,
-                updatedAt: sql`excluded.updated_at`,
-                auroraSyncedAt: sql`excluded.aurora_synced_at`,
-              },
-            });
-        });
-        // Fold this user's Aurora ascents into board_climb_stats. Even though
-        // these ticks don't add to the Boardsesh count (they're aurora_pull),
-        // the recompute keeps the materialized row consistent and demotes any
-        // stale Boardsesh crown a native tick had held.
-        await recomputeClimbStatsBulk(db, [...recomputeKeys.values()]);
+        // Timezone-correct write + cross-source claim + soft-delete + edit
+        // guard all live in the shared apply module (see apply-user-logbook.ts).
+        await applyAuroraAscents(db, boardName, nextAuthUserId, data);
       } else {
         log(`  Skipping ascents sync: no NextAuth user ID provided`);
         return { synced: 0, skipped: data.length, skippedReason: 'No NextAuth user ID provided' };
@@ -239,47 +172,7 @@ async function upsertTableData(
 
     case 'bids': {
       if (nextAuthUserId) {
-        const now = new Date().toISOString();
-        await processBatches(data, BATCH_SIZE, async (batch) => {
-          const tickValues = batch.map((item) => ({
-            uuid: randomUUID(),
-            userId: nextAuthUserId,
-            boardType: boardName,
-            climbUuid: item.climb_uuid,
-            angle: Number(item.angle),
-            isMirror: Boolean(item.is_mirror),
-            status: 'attempt' as const,
-            attemptCount: Number(item.bid_count || 1),
-            quality: null,
-            difficulty: null,
-            isBenchmark: false,
-            comment: item.comment || '',
-            climbedAt: new Date(item.climbed_at).toISOString(),
-            createdAt: new Date(item.created_at).toISOString(),
-            updatedAt: now,
-            // Pulled from the user's Aurora bids logbook.
-            origin: 'aurora_pull' as const,
-            auroraType: 'bids' as const,
-            auroraId: item.uuid,
-            auroraSyncedAt: now,
-          }));
-          await db
-            .insert(boardseshTicks)
-            .values(tickValues)
-            .onConflictDoUpdate({
-              target: boardseshTicks.auroraId,
-              set: {
-                climbUuid: sql`excluded.climb_uuid`,
-                angle: sql`excluded.angle`,
-                isMirror: sql`excluded.is_mirror`,
-                attemptCount: sql`excluded.attempt_count`,
-                comment: sql`excluded.comment`,
-                climbedAt: sql`excluded.climbed_at`,
-                updatedAt: sql`excluded.updated_at`,
-                auroraSyncedAt: sql`excluded.aurora_synced_at`,
-              },
-            });
-        });
+        await applyAuroraBids(db, boardName, nextAuthUserId, data);
       } else {
         log(`  Skipping bids sync: no NextAuth user ID provided`);
         return { synced: 0, skipped: data.length, skippedReason: 'No NextAuth user ID provided' };

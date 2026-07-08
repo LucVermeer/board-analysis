@@ -123,6 +123,7 @@ export async function recomputeClimbStats(
                WHERE bt_u.board_type = ${boardType}
                  AND bt_u.climb_uuid = ${climbUuid}
                  AND bt_u.angle      = ${angle}
+                 AND bt_u.kilter_detached_at IS NULL
                GROUP BY bt_u.user_id
               HAVING bool_or(bt_u.status IN ('flash','send'))
                  AND NOT bool_or(bt_u.origin <> 'native' AND bt_u.status IN ('flash','send'))
@@ -142,6 +143,7 @@ export async function recomputeClimbStats(
               AND bt2.climb_uuid = ${climbUuid}
               AND bt2.angle      = ${angle}
               AND bt2.status IN ('flash','send')
+              AND bt2.kilter_detached_at IS NULL
             ORDER BY bt2.climbed_at ASC
             LIMIT 1)                   AS first_user
         FROM boardsesh_ticks bt
@@ -149,6 +151,7 @@ export async function recomputeClimbStats(
           AND bt.climb_uuid = ${climbUuid}
           AND bt.angle      = ${angle}
           AND bt.status IN ('flash','send')
+          AND bt.kilter_detached_at IS NULL
       ),
       owner AS (
         SELECT bc.user_id IS NOT NULL AS boardsesh_owned
@@ -278,6 +281,9 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
           FROM boardsesh_ticks bt
           JOIN keys k
             ON k.board_type = bt.board_type AND k.climb_uuid = bt.climb_uuid AND k.angle = bt.angle
+         -- Kilter-detached rows are upstream-deleted; they must not count nor
+         -- keep a user "upstream-represented" (see kilter_detached_at docs).
+         WHERE bt.kilter_detached_at IS NULL
          GROUP BY bt.board_type, bt.climb_uuid, bt.angle, bt.user_id
       ),
       counts AS (
@@ -295,6 +301,7 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
           JOIN keys k
             ON k.board_type = bt.board_type AND k.climb_uuid = bt.climb_uuid AND k.angle = bt.angle
          WHERE bt.status IN ('flash','send')
+           AND bt.kilter_detached_at IS NULL
          GROUP BY bt.board_type, bt.climb_uuid, bt.angle
       ),
       first_user AS (
@@ -307,6 +314,7 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
           JOIN users u ON u.id = bt.user_id
      LEFT JOIN user_profiles up ON up.user_id = u.id
          WHERE bt.status IN ('flash','send')
+           AND bt.kilter_detached_at IS NULL
          ORDER BY bt.board_type, bt.climb_uuid, bt.angle, bt.climbed_at ASC
       )
       UPDATE board_climb_stats s

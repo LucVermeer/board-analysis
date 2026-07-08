@@ -1,0 +1,1 @@
+ALTER TABLE "boardsesh_ticks" ADD COLUMN "kilter_detached_at" timestamp;

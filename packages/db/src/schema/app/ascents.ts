@@ -114,6 +114,14 @@ export const boardseshTicks = pgTable(
     kilterId: text('kilter_id'),
     kilterSyncedAt: timestamp('kilter_synced_at', { mode: 'string' }),
     kilterSyncError: text('kilter_sync_error'),
+    // Stamped when Kilter sends a REMOVE (soft-detach): the upstream log was
+    // deleted. The detach clears kilter_id, which alone makes the row
+    // indistinguishable from a never-pushed native tick — push-back would
+    // re-push it and resurrect it upstream (echo loop), and the ascensionist
+    // recompute would keep counting a deleted ascent. This marker lets both
+    // paths exclude it. Cleared when a later PUT re-links the same log
+    // (REMOVE-then-PUT snapshot redelivery: the adoption path resets it).
+    kilterDetachedAt: timestamp('kilter_detached_at', { mode: 'string' }),
   },
   (table) => ({
     // Index for efficient user logbook queries

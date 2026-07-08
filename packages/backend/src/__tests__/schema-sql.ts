@@ -275,7 +275,8 @@ export const schemaSQL = `
     "kilter_type" kilter_table_type,
     "kilter_id" text,
     "kilter_synced_at" timestamp,
-    "kilter_sync_error" text
+    "kilter_sync_error" text,
+    "kilter_detached_at" timestamp
   );
 
   DROP TABLE IF EXISTS "board_placements" CASCADE;

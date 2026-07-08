@@ -29,10 +29,20 @@
       "import": "./src/sync/index.ts",
       "default": "./src/sync/index.ts"
     },
+    "./apply-user-logbook": {
+      "types": "./src/sync/apply-user-logbook.ts",
+      "import": "./src/sync/apply-user-logbook.ts",
+      "default": "./src/sync/apply-user-logbook.ts"
+    },
     "./json-import": {
       "types": "./src/sync/json-import.ts",
       "import": "./src/sync/json-import.ts",
       "default": "./src/sync/json-import.ts"
+    },
+    "./normalize-timestamp": {
+      "types": "./src/sync/normalize-timestamp.ts",
+      "import": "./src/sync/normalize-timestamp.ts",
+      "default": "./src/sync/normalize-timestamp.ts"
     }
   },
   "scripts": {
