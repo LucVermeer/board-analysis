@@ -1,6 +1,8 @@
 # Offline Sync Plan
 
-Offline data layer for the React Native mobile app. Uses `expo-sqlite` for the local database with a custom GraphQL mutation queue for offline writes. Ships a pre-warmed SQLite database as an app asset for instant offline access to all ~10 boards.
+Offline data layer for the React Native mobile app. Uses `expo-sqlite` for the local database with a custom GraphQL mutation queue for offline writes.
+
+> **Shipped design supersedes the "pre-warmed, ships with the app" plan below.** This document is the original architecture evaluation (four approaches compared, one recommended) plus a first-cut design for warming boards on-device. What actually shipped downloads reference data **per board scope, on demand**, warmed by a nightly-built, CDN-hosted SQLite snapshot per `(boardType, layoutId)` rather than a single all-boards database bundled into the app binary. See **[`board-snapshots.md`](board-snapshots.md)** for the shipped export job, artifact format, client bootstrap flow, and ops runbook. The rest of this document (alternatives evaluation, mutation queue, sync pull protocol, table manifest) still describes the shipped system accurately; only the "Pre-warmed SQLite database" section below and any "first sync" / "pre-warmed timestamp" references describe the superseded design.
 
 > **Where the code lives.** The engine (mutation queue + drainer, pull client, checkpoints, table config, SQLite DDL/migrations) is the platform-free package **`@boardsesh/offline-sync`** (`packages/shared/offline-sync`). The mobile app binds its platform seams — expo-sqlite handle, NetInfo/AppState triggers, `onlineManager` connectivity, Sentry telemetry — in `packages/mobile/src/offline/offline-sync-adapter.ts`; mobile code calls `drainMutationQueue`/`startSyncScheduler`/`triggerSync`/`pullSync` via that adapter only, never from the package directly. Expo-specific pieces (DB lifecycle/`connection.ts`, seed ATTACH, local read queries, the sync-status store, hooks, the bridge component) stay in `packages/mobile`.
 
@@ -77,6 +79,15 @@ PostgreSQL (Railway, unchanged)
 No additional services. No MongoDB. No replication slots. Sync happens directly between the mobile app and the existing GraphQL API.
 
 ## Pre-warmed SQLite database
+
+> **Superseded — kept for history.** This section describes an early design: ship one SQLite file with
+> _every_ board's reference data bundled into the app binary (~150-200MB), so first launch has everything
+> offline with no download at all. That design was not what shipped. The shipped design downloads a
+> per-`(boardType, layoutId)` snapshot **only for boards the user actually enables**, fetched from a
+> CDN-hosted artifact built by a nightly GitHub Action rather than committed to the app repo — see
+> [`board-snapshots.md`](board-snapshots.md) for the real build pipeline, artifact format, client bootstrap
+> flow, and rollout status. The rest of this section (app-size table, staleness discussion, build-pipeline
+> pseudocode) reflects the superseded all-boards-in-binary approach, not the shipped one.
 
 The app ships with a CI-built SQLite database containing all board reference data (~150-200MB compressed). All boards are browsable offline from first launch.
 
@@ -799,7 +810,8 @@ On logout or account switch:
 
 ### Phase 5 — client-side offline (Platform features, within the 3-week phase)
 
-- Pre-warmed SQLite database build pipeline (GitHub Action).
+- ~~Pre-warmed SQLite database build pipeline (GitHub Action).~~ Shipped as the per-board nightly snapshot
+  export instead — see [`board-snapshots.md`](board-snapshots.md).
 - On-device schema migration system.
 - Mutation queue (~800-1200 lines) with queue drainer, error classification, dead letter handling.
 - Sync pull client with composite cursor and per-board checkpoints.
