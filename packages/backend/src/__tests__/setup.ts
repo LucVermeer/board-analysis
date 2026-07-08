@@ -31,6 +31,8 @@ const TABLES_TO_RESET = [
   'boardsesh_ticks',
   'board_climb_holds',
   'board_climb_stats',
+  'board_climb_stats_history',
+  'board_shared_syncs',
   'board_climbs',
   'board_placements',
   'board_difficulty_grades',

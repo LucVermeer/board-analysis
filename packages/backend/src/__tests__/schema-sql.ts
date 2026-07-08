@@ -258,6 +258,38 @@ export const schemaSQL = `
   );
   CREATE UNIQUE INDEX IF NOT EXISTS "board_climb_ratings_user_climb_angle_idx" ON "board_climb_ratings" ("board_type", "climb_uuid", "angle", "user_id");
 
+  -- Mirrors packages/db schema/boards/unified.ts boardClimbStatsHistory. The
+  -- weekly full-table snapshot (snapshotClimbStatsHistoryIfDue) appends the
+  -- current state of every climb with ascents; the grade backtest reads the
+  -- series back. No FK to board_climb_stats — history rows outlive their source.
+  DROP TABLE IF EXISTS "board_climb_stats_history" CASCADE;
+  CREATE TABLE IF NOT EXISTS "board_climb_stats_history" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "board_type" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "angle" integer NOT NULL,
+    "display_difficulty" double precision,
+    "benchmark_difficulty" double precision,
+    "ascensionist_count" bigint,
+    "difficulty_average" double precision,
+    "quality_average" double precision,
+    "fa_username" text,
+    "fa_at" timestamp,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "board_climb_stats_history_lookup_idx" ON "board_climb_stats_history" ("board_type", "climb_uuid", "angle");
+
+  -- Mirrors packages/db schema/boards/unified.ts boardSharedSyncs. Per-board
+  -- sync cursors; the weekly gate (weekly-gate.ts) stores its "last run"
+  -- watermark here under a synthetic __local_* table_name.
+  DROP TABLE IF EXISTS "board_shared_syncs" CASCADE;
+  CREATE TABLE IF NOT EXISTS "board_shared_syncs" (
+    "board_type" text NOT NULL,
+    "table_name" text NOT NULL,
+    "last_synchronized_at" text,
+    PRIMARY KEY ("board_type", "table_name")
+  );
+
   DO $$ BEGIN
     CREATE TYPE tick_status AS ENUM ('flash', 'send', 'attempt');
   EXCEPTION WHEN duplicate_object THEN NULL;
