@@ -20,6 +20,16 @@ const KilterApiErrorMock = class KilterApiError extends Error {
   }
 };
 
+// Mirror the real DuplicateBoardLinkError so the handler's `instanceof` → 409
+// mapping works against the mocked service module.
+const DuplicateBoardLinkErrorMock = class DuplicateBoardLinkError extends Error {
+  code = 'account_already_linked';
+  constructor(message = 'This board account is already linked to another Boardsesh member.') {
+    super(message);
+    this.name = 'DuplicateBoardLinkError';
+  }
+};
+
 vi.mock('@boardsesh/kilter-sync/api', () => ({
   exchangeAuthorizationCode: exchangeAuthorizationCodeMock,
   KILTER_BOARD_TYPE: 'kilter',
@@ -33,6 +43,7 @@ vi.mock('../middleware/auth', () => ({
 }));
 
 vi.mock('../services/aurora-credentials', () => ({
+  DuplicateBoardLinkError: DuplicateBoardLinkErrorMock,
   saveKilterCredential: saveKilterCredentialMock,
   saveKilterCredentialViaPassword: saveKilterCredentialViaPasswordMock,
 }));
@@ -209,6 +220,29 @@ describe('Kilter credential OAuth handlers', () => {
     });
   });
 
+  it('finalize returns 409 + code when the Kilter account is already linked to another user', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'dup-user' });
+    saveKilterCredentialMock.mockRejectedValueOnce(new DuplicateBoardLinkErrorMock());
+    const completion = credentialState.signBoardCredentialCompletion({
+      userId: 'dup-user',
+      provider: 'kilter',
+      encryptedRefreshToken: encrypt('refresh-token'),
+      kilterUserId: 'shared-kilter-user',
+      username: 'kilter-name',
+    });
+    const request = makeRequest({
+      method: 'POST',
+      headers: { authorization: 'Bearer boardsesh-token' },
+      body: JSON.stringify({ completion }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsFinalize(request as never, response as never);
+
+    expect(response.statusCode).toBe(409);
+    expect(JSON.parse(response.body)).toMatchObject({ code: 'account_already_linked' });
+  });
+
   it('password rejects unauthenticated requests', async () => {
     const request = makeRequest({
       method: 'POST',
@@ -276,6 +310,22 @@ describe('Kilter credential OAuth handlers', () => {
     // Generic message — never leaks whether the username exists, and matches the
     // string the mobile client maps to `invalid_credentials`.
     expect(JSON.parse(response.body)).toEqual({ error: 'Invalid Aurora credentials' });
+  });
+
+  it('password returns 409 + code when the Kilter account is already linked to another user', async () => {
+    validateTokenMock.mockResolvedValue({ userId: 'pw-dup-user' });
+    saveKilterCredentialViaPasswordMock.mockRejectedValue(new DuplicateBoardLinkErrorMock());
+    const request = makeRequest({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: JSON.stringify({ username: 'climber', password: 'secret' }),
+    });
+    const response = makeResponse();
+
+    await oauthHandlers.handleKilterCredentialsPassword(request as never, response as never);
+
+    expect(response.statusCode).toBe(409);
+    expect(JSON.parse(response.body)).toMatchObject({ code: 'account_already_linked' });
   });
 
   it('password rate-limits repeated attempts', async () => {

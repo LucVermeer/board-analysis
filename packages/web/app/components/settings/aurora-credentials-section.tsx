@@ -39,6 +39,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Trans, useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
+  AuroraBackendError,
   deleteAuroraCredential,
   finalizeKilterCredential,
   getAuroraCredentials,
@@ -109,6 +110,18 @@ function buildKilterDataRequestMailto(
   const body = t('aurora.kilterEmail.body', { name, email });
 
   return `mailto:peter@auroraclimbing.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+// Localise a link failure. The duplicate-account rejection carries a stable
+// `account_already_linked` code we map to a dedicated string; everything else
+// keeps the existing behaviour (backend message, or the generic fallback).
+// Both messages are passed pre-resolved so the i18n linter keeps its literal
+// `t('...')` calls at the call sites.
+function resolveLinkErrorMessage(error: unknown, alreadyLinkedMessage: string, fallbackMessage: string): string {
+  if (error instanceof AuroraBackendError && error.code === 'account_already_linked') {
+    return alreadyLinkedMessage;
+  }
+  return error instanceof Error ? error.message : fallbackMessage;
 }
 
 // Kilter renders two cards: `kilterAurora` for the legacy Aurora-built app (JSON
@@ -485,7 +498,14 @@ export default function AuroraCredentialsSection() {
         await Promise.all([fetchCredentials(), fetchUnsyncedCounts()]);
       } catch (error) {
         handledKilterCompletionRef.current = null;
-        showMessage(error instanceof Error ? error.message : t('aurora.mobile.kilterConnectFailed'), 'error');
+        showMessage(
+          resolveLinkErrorMessage(
+            error,
+            t('aurora.linkDialog.accountAlreadyLinked'),
+            t('aurora.mobile.kilterConnectFailed'),
+          ),
+          'error',
+        );
       } finally {
         clearKilterSearchParams();
       }
@@ -530,7 +550,10 @@ export default function AuroraCredentialsSection() {
       setFormValues({ username: '', password: '' });
       await fetchCredentials();
     } catch (error) {
-      showMessage(error instanceof Error ? error.message : t('aurora.linkDialog.linkError'), 'error');
+      showMessage(
+        resolveLinkErrorMessage(error, t('aurora.linkDialog.accountAlreadyLinked'), t('aurora.linkDialog.linkError')),
+        'error',
+      );
     } finally {
       setIsSaving(false);
     }

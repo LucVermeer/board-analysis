@@ -34,11 +34,15 @@ export type AuroraBackendTransport = {
 
 export class AuroraBackendError extends Error {
   readonly status: number;
+  // Stable machine code from the backend (e.g. 'account_already_linked') for
+  // callers to localise off, independent of the plain-English `message`.
+  readonly code?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.name = 'AuroraBackendError';
     this.status = status;
+    if (code) this.code = code;
   }
 }
 
@@ -61,12 +65,12 @@ function buildRequestHeaders(headers: RequestInit['headers'], authToken: string,
   return mergedHeaders;
 }
 
-async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+async function readError(response: Response, fallback: string): Promise<{ message: string; code?: string }> {
   try {
-    const payload = (await response.json()) as { error?: string };
-    return payload.error ?? fallback;
+    const payload = (await response.json()) as { error?: string; code?: string };
+    return { message: payload.error ?? fallback, code: payload.code };
   } catch {
-    return fallback;
+    return { message: fallback };
   }
 }
 
@@ -81,7 +85,8 @@ async function requestBackendJson<T>(
   });
 
   if (!response.ok) {
-    throw new AuroraBackendError(response.status, await readErrorMessage(response, 'Request failed'));
+    const { message, code } = await readError(response, 'Request failed');
+    throw new AuroraBackendError(response.status, message, code);
   }
 
   return (await response.json()) as T;

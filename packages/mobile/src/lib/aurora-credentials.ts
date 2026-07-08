@@ -37,6 +37,7 @@ export type DeleteCredentialResult =
 export type KilterConnectResult = 'connected' | 'cancelled' | 'error' | 'not_allowed';
 
 export type BoardAccountErrorCode =
+  | 'account_already_linked'
   | 'invalid_credentials'
   | 'not_allowed'
   | 'rate_limited'
@@ -63,15 +64,16 @@ function endpoint(path: string): string {
   return `${BACKEND_URL.replace(/\/+$/, '')}${path}`;
 }
 
-async function readErrorPayload(response: Response): Promise<{ error?: string }> {
+async function readErrorPayload(response: Response): Promise<{ error?: string; code?: string }> {
   try {
-    return (await response.json()) as { error?: string };
+    return (await response.json()) as { error?: string; code?: string };
   } catch {
     return {};
   }
 }
 
-function errorCodeForResponse(response: Response, payload: { error?: string }): BoardAccountErrorCode {
+function errorCodeForResponse(response: Response, payload: { error?: string; code?: string }): BoardAccountErrorCode {
+  if (payload.code === 'account_already_linked') return 'account_already_linked';
   if (response.status === 401 && payload.error === 'Invalid Aurora credentials') return 'invalid_credentials';
   if (response.status === 401) return 'unauthorized';
   if (response.status === 403) return 'not_allowed';

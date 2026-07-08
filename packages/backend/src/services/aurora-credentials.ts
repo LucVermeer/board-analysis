@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, ne, or } from 'drizzle-orm';
 import { AuroraClimbingClient } from '@boardsesh/aurora-sync/api';
 import { decrypt, encrypt } from '@boardsesh/crypto';
 import { auroraCredentials, boardClimbs, boardseshTicks, userBoardMappings } from '@boardsesh/db/schema';
@@ -40,6 +40,97 @@ export type DeleteAuroraCredentialResult =
 
 export function isAuroraBoardType(value: string | null | undefined): value is AuroraBoardName {
   return !!value && (AURORA_BOARDS as readonly string[]).includes(value);
+}
+
+// Stable machine code carried by every duplicate-link surface (REST 409,
+// GraphQL extension, mobile/web clients) so clients localise off the code
+// rather than the plain-English message.
+export const DUPLICATE_BOARD_LINK_CODE = 'account_already_linked';
+
+/**
+ * Thrown when the upstream board account being linked is already claimed by a
+ * DIFFERENT Boardsesh user. The same upstream identity must map to at most one
+ * ACTIVE Boardsesh owner: owner resolution downstream is LIMIT-1 / global, so a
+ * second claimant's synced ticks would land on the first user. An expired /
+ * abandoned prior claim does NOT block a genuine re-owner — only a live one.
+ */
+export class DuplicateBoardLinkError extends Error {
+  readonly code = DUPLICATE_BOARD_LINK_CODE;
+
+  constructor(message = 'This board account is already linked to another Boardsesh member.') {
+    super(message);
+    this.name = 'DuplicateBoardLinkError';
+  }
+}
+
+// The transaction handle drizzle hands the `db.transaction` callback. Derived so
+// the guard helpers can run on the same tx as the write (consistent read) without
+// an `any`.
+type CredentialTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Reject an Aurora-family link when another Boardsesh user already holds this
+ * upstream account (`board_type` + numeric `aurora_user_id`). An 'expired' claim
+ * is skipped — the syncable set is positive (pending/active/error), matching the
+ * sync runners' selection filter — so an abandoned link can't permanently block
+ * the account's genuine owner.
+ */
+async function assertNoConflictingAuroraOwner(
+  tx: CredentialTransaction,
+  input: { userId: string; boardType: string; auroraUserId: number },
+): Promise<void> {
+  const conflicting = await tx
+    .select({ userId: auroraCredentials.userId })
+    .from(auroraCredentials)
+    .where(
+      and(
+        eq(auroraCredentials.boardType, input.boardType),
+        eq(auroraCredentials.auroraUserId, input.auroraUserId),
+        ne(auroraCredentials.userId, input.userId),
+        ne(auroraCredentials.syncStatus, 'expired'),
+      ),
+    )
+    .limit(1);
+
+  if (conflicting.length > 0) {
+    throw new DuplicateBoardLinkError();
+  }
+}
+
+/**
+ * Reject a Kilter link when another Boardsesh user already holds this Keycloak
+ * `sub` (stored on `user_board_mappings.board_user_id_text`). The mapping match
+ * is the core guard; the left-join to `aurora_credentials` mirrors the Aurora
+ * rule so an 'expired' prior claim doesn't block a re-owner. A missing credential
+ * row (NULL status) still blocks — `isNull` keeps the row.
+ */
+async function assertNoConflictingKilterOwner(
+  tx: CredentialTransaction,
+  input: { userId: string; kilterUserId: string },
+): Promise<void> {
+  const conflicting = await tx
+    .select({ userId: userBoardMappings.userId })
+    .from(userBoardMappings)
+    .leftJoin(
+      auroraCredentials,
+      and(
+        eq(auroraCredentials.userId, userBoardMappings.userId),
+        eq(auroraCredentials.boardType, userBoardMappings.boardType),
+      ),
+    )
+    .where(
+      and(
+        eq(userBoardMappings.boardType, KILTER_BOARD_TYPE),
+        eq(userBoardMappings.boardUserIdText, input.kilterUserId),
+        ne(userBoardMappings.userId, input.userId),
+        or(isNull(auroraCredentials.syncStatus), ne(auroraCredentials.syncStatus, 'expired')),
+      ),
+    )
+    .limit(1);
+
+  if (conflicting.length > 0) {
+    throw new DuplicateBoardLinkError();
+  }
 }
 
 function decryptUsername(boardType: string, encryptedUsername: string | null, mappingUsername?: string | null): string {
@@ -196,6 +287,14 @@ export async function saveAuroraCredential(input: {
   const encryptedToken = encrypt(loginResponse.token);
 
   await db.transaction(async (tx) => {
+    // Block the link if another Boardsesh user already actively owns this upstream
+    // account. Runs before either the INSERT or UPDATE branch below.
+    await assertNoConflictingAuroraOwner(tx, {
+      userId: input.userId,
+      boardType: input.boardType,
+      auroraUserId: loginResponse.user_id,
+    });
+
     const existingCredential = await tx
       .select({ id: auroraCredentials.id })
       .from(auroraCredentials)
@@ -315,6 +414,10 @@ export async function saveKilterCredential(input: {
   const encryptedRefreshToken = encrypt(input.refreshToken);
 
   await db.transaction(async (tx) => {
+    // Block the link if another Boardsesh user already actively owns this Kilter
+    // account. Runs before either the INSERT or UPDATE branch below.
+    await assertNoConflictingKilterOwner(tx, { userId: input.userId, kilterUserId: input.kilterUserId });
+
     const existingCredential = await tx
       .select({ id: auroraCredentials.id })
       .from(auroraCredentials)

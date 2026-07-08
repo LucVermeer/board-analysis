@@ -20,7 +20,11 @@ import {
   verifyBoardCredentialHandoff,
   verifyBoardCredentialState,
 } from '../services/board-credential-state';
-import { saveKilterCredential, saveKilterCredentialViaPassword } from '../services/aurora-credentials';
+import {
+  DuplicateBoardLinkError,
+  saveKilterCredential,
+  saveKilterCredentialViaPassword,
+} from '../services/aurora-credentials';
 import { checkRateLimitRedis } from '../utils/redis-rate-limiter';
 import { RateLimitError } from '../utils/rate-limiter';
 import { logger } from '../utils/logger';
@@ -52,6 +56,10 @@ const REFLECTABLE_OAUTH_ERRORS = new Set<string>([
   'temporarily_unavailable',
   'unauthorized_client',
   'unsupported_response_type',
+  // Not a provider error — a Boardsesh-side reason. Allowlisted so the browser
+  // callback redirect can surface a duplicate-account link (the save normally
+  // happens at /finalize, which returns a JSON 409 instead).
+  'account_already_linked',
 ]);
 
 function base64url(buffer: Buffer): string {
@@ -587,6 +595,11 @@ export async function handleKilterCredentialsFinalize(req: IncomingMessage, res:
       ...(verifiedCompletion.username ? { username: verifiedCompletion.username } : {}),
     });
   } catch (error) {
+    if (error instanceof DuplicateBoardLinkError) {
+      logger.warn('[BoardCredentials] Kilter link rejected — account already linked to another Boardsesh member');
+      sendJson(res, 409, { error: error.message, code: error.code });
+      return;
+    }
     logger.warn('[BoardCredentials] Failed to persist Kilter credential:', error);
     sendJson(res, 500, { error: 'Failed to save Kilter credential' });
     return;
@@ -676,6 +689,13 @@ export async function handleKilterCredentialsPassword(req: IncomingMessage, res:
     });
     sendJson(res, 200, { success: true });
   } catch (error) {
+    if (error instanceof DuplicateBoardLinkError) {
+      logger.warn(
+        '[BoardCredentials] Kilter password link rejected — account already linked to another Boardsesh member',
+      );
+      sendJson(res, 409, { error: error.message, code: error.code });
+      return;
+    }
     // Log the failure shape but never the credentials or raw Keycloak body.
     logger.warn(
       '[BoardCredentials] Kilter password login failed:',

@@ -211,7 +211,8 @@
       "submit": "Link Account",
       "submitting": "Linking...",
       "linkError": "Failed to link account",
-      "linkSuccess": "{{boardName}} account linked. Your data will show up within 12 hours."
+      "linkSuccess": "{{boardName}} account linked. Your data will show up within 12 hours.",
+      "accountAlreadyLinked": "Another Boardsesh member already has this account linked. If it's yours, unlink it from their account first, then try again."
     },
     "kilterLinkDialog": {
       "title": "Sign in to Kilter",

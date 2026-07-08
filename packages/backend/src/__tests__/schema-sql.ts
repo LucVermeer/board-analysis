@@ -340,6 +340,33 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_board_mapping" ON "user_board_mappings" ("user_id", "board_type");
   CREATE INDEX IF NOT EXISTS "board_user_mapping_idx" ON "user_board_mappings" ("board_type", "board_user_id");
 
+  -- Mirrors packages/db schema/auth/mappings.ts auroraCredentials. The
+  -- duplicate-link guard reads (board_type, aurora_user_id, sync_status) here;
+  -- the unique index enforces one credential per (user, board).
+  DROP TABLE IF EXISTS "aurora_credentials" CASCADE;
+  CREATE TABLE IF NOT EXISTS "aurora_credentials" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "board_type" text NOT NULL,
+    "encrypted_username" text,
+    "encrypted_password" text,
+    "encrypted_refresh_token" text,
+    "aurora_user_id" integer,
+    "aurora_token" text,
+    "last_sync_at" timestamp,
+    "last_sync_attempt_at" timestamp,
+    "sync_status" text DEFAULT 'pending' NOT NULL,
+    "sync_error" text,
+    "credential_failure_count" integer DEFAULT 0 NOT NULL,
+    "last_credential_failure_at" timestamp,
+    "consecutive_failures" integer DEFAULT 0 NOT NULL,
+    "last_sync_error" text,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_board_credential" ON "aurora_credentials" ("user_id", "board_type");
+  CREATE INDEX IF NOT EXISTS "aurora_credentials_user_idx" ON "aurora_credentials" ("user_id");
+
   -- user-data-export resolver joins these (playlists/favorites). Minimal DDL
   -- covering only the columns the export queries read.
   DROP TABLE IF EXISTS "playlist_climbs" CASCADE;
