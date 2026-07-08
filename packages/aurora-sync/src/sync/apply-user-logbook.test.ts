@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 // Stub only the stats recompute; keep the offset-inference helpers real so the
 // cross-source claim exercises the actual matching logic.
@@ -12,7 +14,7 @@ import { applyAuroraAscents, applyAuroraBids } from './apply-user-logbook';
 
 const recomputeMock = vi.mocked(recomputeClimbStatsBulk);
 
-type CallRecord = { kind: 'select' | 'delete' | 'update' | 'insert' | 'execute'; args: unknown[] };
+type CallRecord = { kind: 'select' | 'delete' | 'update' | 'insert' | 'execute'; args: unknown[]; where?: unknown };
 type Row = Record<string, unknown>;
 
 /**
@@ -27,9 +29,17 @@ function createTx(opts: { selectResults?: Row[][] } = {}) {
 
   const tx = {
     select(cols: unknown) {
-      calls.push({ kind: 'select', args: [cols] });
+      const call: CallRecord = { kind: 'select', args: [cols] };
+      calls.push(call);
       const next = selectResults[selectIdx++] ?? [];
-      return { from: (_t: unknown) => ({ where: (_c: unknown) => Promise.resolve(next) }) };
+      return {
+        from: (_t: unknown) => ({
+          where: (cond: unknown) => {
+            call.where = cond;
+            return Promise.resolve(next);
+          },
+        }),
+      };
     },
     delete(_t: unknown) {
       return {
@@ -206,6 +216,32 @@ describe('applyAuroraAscents — cross-source claim', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  it('fetches claim candidates with a row-value (climb_uuid, angle) tuple filter, not a cartesian pair of IN-lists', async () => {
+    // Two misses at DIFFERENT (climb, angle) pairs. Separate
+    // IN(climb_uuid) × IN(angle) lists would also fetch the cross pairs
+    // (climb-1, 25) and (climb-2, 40); the tuple filter must pin exactly the
+    // two real pairs.
+    const { tx, calls } = createTx({ selectResults: [[], []] });
+
+    await applyAuroraAscents(tx as unknown as Db, 'kilter', 'user-1', [
+      ascent({ uuid: 'aur-1', climb_uuid: 'climb-1', angle: 40 }),
+      ascent({ uuid: 'aur-2', climb_uuid: 'climb-2', angle: 25 }),
+    ]);
+
+    const claimSelect = calls.filter((c) => c.kind === 'select')[1];
+    expect(claimSelect).toBeDefined();
+    const rendered = new PgDialect().sqlToQuery(claimSelect.where as SQL);
+
+    // Row-value tuple membership, not two independent column IN-lists.
+    expect(rendered.sql).toContain('("boardsesh_ticks"."climb_uuid", "boardsesh_ticks"."angle") IN (');
+    expect(rendered.sql).not.toMatch(/"climb_uuid" in \(/i);
+    expect(rendered.sql).not.toMatch(/"angle" in \(/i);
+    // Exactly the two real pairs are bound, adjacent per tuple — the cross
+    // pairs never reach SQL.
+    const pairParams = rendered.params.filter((p) => p === 'climb-1' || p === 'climb-2' || p === 40 || p === 25);
+    expect(pairParams).toEqual(['climb-1', 40, 'climb-2', 25]);
   });
 });
 

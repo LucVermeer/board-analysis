@@ -82,6 +82,13 @@ describe('saveAscent — idempotent upsert on the client uuid', () => {
     expect(values.climbedAt).toBe('2026-07-01T10:00:00.000Z');
   });
 
+  it('defensively pins an Aurora-style naive climbed_at to UTC (normalizeTimestamp), never server-local', async () => {
+    await saveAscent('kilter', 'token', options({ climbed_at: '2026-07-01 10:00:00' }), 'user-1');
+
+    // Identical instant to the ISO form above, regardless of the host TZ.
+    expect(insertCalls[0].values.climbedAt).toBe('2026-07-01T10:00:00.000Z');
+  });
+
   it('targets boardsesh_ticks.uuid on conflict so a double-POST updates the same row (no duplicate)', async () => {
     // Two identical POSTs (client retry).
     await saveAscent('kilter', 'token', options(), 'user-1');

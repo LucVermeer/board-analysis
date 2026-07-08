@@ -38,6 +38,11 @@
       "types": "./src/sync/json-import.ts",
       "import": "./src/sync/json-import.ts",
       "default": "./src/sync/json-import.ts"
+    },
+    "./normalize-timestamp": {
+      "types": "./src/sync/normalize-timestamp.ts",
+      "import": "./src/sync/normalize-timestamp.ts",
+      "default": "./src/sync/normalize-timestamp.ts"
     }
   },
   "scripts": {

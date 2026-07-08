@@ -309,8 +309,19 @@ async function applyLogbookChunk(
   const claims = new Map<string, string>(); // aurora_id → existing tick uuid to claim
   const claimedUuids = new Set<string>();
   if (misses.length > 0) {
-    const climbSet = Array.from(new Set(misses.map((m) => m.climbUuid)));
-    const angleSet = Array.from(new Set(misses.map((m) => m.angle)));
+    // Row-value tuple filter, NOT separate climb_uuid/angle IN-lists: two
+    // independent IN-lists fetch the cartesian product (every listed climb at
+    // every listed angle), which over-fetches badly for a user who logs many
+    // climbs across many angles in one chunk. Bounded: misses ≤
+    // WRITE_CHUNK_SIZE (100) → ≤ 200 tuple params per statement.
+    const pairByKey = new Map<string, { climbUuid: string; angle: number }>();
+    for (const miss of misses) {
+      pairByKey.set(`${miss.climbUuid} ${miss.angle}`, { climbUuid: miss.climbUuid, angle: miss.angle });
+    }
+    const pairTuples = sql.join(
+      [...pairByKey.values()].map((pair) => sql`(${pair.climbUuid}, ${pair.angle})`),
+      sql`, `,
+    );
     const timestamps = misses.map((m) => Date.parse(m.climbedAt)).filter((t) => Number.isFinite(t));
     if (timestamps.length > 0) {
       // Widen the fetch window by the max plausible offset so a pre-fix,
@@ -332,8 +343,7 @@ async function applyLogbookChunk(
           and(
             eq(boardseshTicks.userId, userId),
             eq(boardseshTicks.boardType, boardName),
-            inArray(boardseshTicks.climbUuid, climbSet),
-            inArray(boardseshTicks.angle, angleSet),
+            sql`(${boardseshTicks.climbUuid}, ${boardseshTicks.angle}) IN (${pairTuples})`,
             inArray(boardseshTicks.origin, ['native', 'json_import']),
             inArray(boardseshTicks.status, claimStatuses),
             sql`${boardseshTicks.climbedAt}::timestamptz BETWEEN ${minTs}::timestamptz AND ${maxTs}::timestamptz`,

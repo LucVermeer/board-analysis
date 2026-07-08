@@ -45,6 +45,11 @@
       "types": "./src/queries/index.ts",
       "import": "./src/queries/index.ts",
       "default": "./src/queries/index.ts"
+    },
+    "./testing/dedup-replay": {
+      "types": "./src/testing/dedup-replay.ts",
+      "import": "./src/testing/dedup-replay.ts",
+      "default": "./src/testing/dedup-replay.ts"
     }
   },
   "scripts": {

@@ -4,6 +4,7 @@ import { convertQuality } from '@boardsesh/shared-schema';
 import { dbz } from '@/app/lib/db/db';
 import { boardseshTicks } from '@/app/lib/db/schema';
 import { sql } from 'drizzle-orm';
+import { normalizeTimestamp } from '@boardsesh/aurora-sync/normalize-timestamp';
 
 /**
  * Saves an ascent to boardsesh_ticks.
@@ -22,12 +23,16 @@ export async function saveAscent(
   options: SaveAscentOptions,
   nextAuthUserId: string,
 ): Promise<SaveAscentResponse> {
-  // Store the moment in UTC. `new Date(iso).toISOString()` is timezone-safe on
-  // any host (unlike the old dayjs().format(), which rendered the server's
-  // LOCAL wall time and shifted every logged ascent by the deployment offset).
-  // This matches what the Aurora/JSON pull paths write via normalizeTimestamp,
-  // so the same ascent lines up across sources for the cross-source dedup.
-  const climbedAtUtc = new Date(options.climbed_at).toISOString();
+  // Store the moment in UTC via the same normalizeTimestamp every pull/import
+  // path uses, so the same ascent lines up across sources for the cross-source
+  // dedup. The route contract sends an ISO-8601 string with a zone, which
+  // passes through untouched and is timezone-safe on any host (unlike the old
+  // dayjs().format(), which rendered the server's LOCAL wall time and shifted
+  // every logged ascent by the deployment offset). Defensively, an
+  // Aurora-style naive "YYYY-MM-DD HH:mm:ss" gets pinned to UTC instead of
+  // being parsed as server-local; a zoneless ISO ("...THH:mm:ss" with no
+  // offset) is still host-dependent per the JS Date spec — don't send one.
+  const climbedAtUtc = normalizeTimestamp(options.climbed_at);
   // Aurora's naive wire format is UTC "YYYY-MM-DD HH:mm:ss" — derive it from the
   // UTC ISO, never from local formatting.
   const formattedDate = climbedAtUtc.slice(0, 19).replace('T', ' ');
