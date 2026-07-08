@@ -97,11 +97,11 @@ export const DEDUP_REPLAY_SCHEMA_SQL = `
 /** Seed: user + owned catalog climb + a stats row per key, plus every case. */
 export const DEDUP_REPLAY_SEED_SQL = `
   INSERT INTO users (id, name) VALUES
-    ('u1','Ana'),('u2','Bob'),('u3','Cid'),('u4','Dee'),('u5','Eve');
+    ('u1','Ana'),('u2','Bob'),('u3','Cid'),('u4','Dee'),('u5','Eve'),('u6','Fay');
   INSERT INTO board_climbs (board_type, uuid, user_id) VALUES
-    ('kilter','c1',NULL),('kilter','c2',NULL),('kilter','c3',NULL),('kilter','c5',NULL);
+    ('kilter','c1',NULL),('kilter','c2',NULL),('kilter','c3',NULL),('kilter','c5',NULL),('kilter','c6',NULL);
   INSERT INTO board_climb_stats (board_type, climb_uuid, angle, upstream_ascensionist_count) VALUES
-    ('kilter','c1',40,100),('kilter','c2',40,100),('kilter','c3',40,100),('kilter','c5',40,100);
+    ('kilter','c1',40,100),('kilter','c2',40,100),('kilter','c3',40,100),('kilter','c5',40,100),('kilter','c6',40,100);
 
   -- CASE 1: clean kilter pair (json_import original +10h vs kilter_pull twin).
   INSERT INTO boardsesh_ticks (uuid,user_id,board_type,climb_uuid,angle,origin,status,climbed_at,created_at,aurora_id,kilter_id,kilter_type,kilter_synced_at) VALUES
@@ -125,6 +125,18 @@ export const DEDUP_REPLAY_SEED_SQL = `
   INSERT INTO boardsesh_ticks (uuid,user_id,board_type,climb_uuid,angle,origin,status,climbed_at,created_at,aurora_id,aurora_type,aurora_synced_at) VALUES
     ('t4-orig','u5','kilter','c5',40,'json_import','send','2026-05-01 12:00:00','2026-05-01 12:00:00','json-import-5',NULL,NULL),
     ('t4-twin','u5','kilter','c5',40,'aurora_pull','send','2026-05-01 12:00:00','2026-06-01 00:00:00','real-aurora-5','ascents','2026-06-01 00:00:00');
+
+  -- CASE 5: CHAINED — a native original collects a kilter twin (0164) AND an aurora
+  -- twin (0165) onto the SAME row. Times are picked so 0164 sees ONLY the original
+  -- as the kilter twin's candidate: original 12:00, kilter twin 02:00 (−10h, valid),
+  -- aurora twin 20:00 (+8h vs original, valid). The aurora↔kilter gap is 18h (>14h),
+  -- so the aurora row is NOT a candidate for the kilter twin — 0164 cleanly stamps
+  -- klog-6 onto the original. Then 0165 must fold the aurora twin onto that same
+  -- (now kilter-linked) original: the old kilter_id-IS-NULL guard skipped it.
+  INSERT INTO boardsesh_ticks (uuid,user_id,board_type,climb_uuid,angle,origin,status,climbed_at,created_at,aurora_id,aurora_type,aurora_synced_at,kilter_id,kilter_type,kilter_synced_at) VALUES
+    ('t5-orig','u6','kilter','c6',40,'native','send','2026-05-01 12:00:00','2026-05-01 12:00:00',NULL,NULL,NULL,NULL,NULL,NULL),
+    ('t5-ktwin','u6','kilter','c6',40,'kilter_pull','send','2026-05-01 02:00:00','2026-06-01 00:00:00',NULL,NULL,NULL,'klog-6','logs','2026-06-01 00:00:00'),
+    ('t5-atwin','u6','kilter','c6',40,'aurora_pull','send','2026-05-01 20:00:00','2026-06-01 00:00:00','real-aurora-6','ascents','2026-06-01 00:00:00',NULL,NULL,NULL);
 `;
 
 /** Build the synthetic schema, seed every case, and apply 0163→0165 verbatim. */
@@ -199,6 +211,38 @@ export const dedupReplayChecks: DedupReplayCheck[] = [
       assert.equal(orig[0].aurora_id, 'real-aurora-5', 'real aurora_id replaced the json-import synthetic');
       assert.equal(orig[0].aurora_type, 'ascents');
       assert.equal(orig[0].origin, 'json_import');
+    },
+  },
+  {
+    name: 'CASE 5: chained kilter (0164) + aurora (0165) fold onto the SAME original',
+    run: async (db) => {
+      const kilterTwin = await db`SELECT id FROM boardsesh_ticks WHERE uuid='t5-ktwin'`;
+      assert.equal(kilterTwin.length, 0, 'kilter twin deleted by 0164');
+      const auroraTwin = await db`SELECT id FROM boardsesh_ticks WHERE uuid='t5-atwin'`;
+      assert.equal(auroraTwin.length, 0, 'aurora twin deleted by 0165');
+
+      const orig = await db`SELECT kilter_id, kilter_type, aurora_id, aurora_type, origin
+        FROM boardsesh_ticks WHERE uuid='t5-orig'`;
+      assert.equal(orig.length, 1, 'original survives both merges');
+      assert.equal(orig[0].kilter_id, 'klog-6', '0164 kilter surrogate survives through 0165 (COALESCE keeps it)');
+      assert.equal(orig[0].kilter_type, 'logs');
+      assert.equal(orig[0].aurora_id, 'real-aurora-6', '0165 moved the real aurora surrogate onto the same original');
+      assert.equal(orig[0].aurora_type, 'ascents');
+      assert.equal(orig[0].origin, 'native', 'origin preserved (records first creation)');
+    },
+  },
+  {
+    name: 'CASE 5: stats key recomputed after the chained merge',
+    run: async (db) => {
+      const stats = await db`SELECT boardsesh_ascensionist_count, ascensionist_count
+        FROM board_climb_stats WHERE board_type='kilter' AND climb_uuid='c6' AND angle=40`;
+      assert.equal(stats.length, 1);
+      assert.equal(
+        stats[0].boardsesh_ascensionist_count,
+        1,
+        'exactly one distinct boardsesh sender remains after dedup',
+      );
+      assert.equal(stats[0].ascensionist_count, 101, 'seeded upstream 100 + 1 boardsesh sender');
     },
   },
   {
