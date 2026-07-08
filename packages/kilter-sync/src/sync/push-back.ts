@@ -132,6 +132,10 @@ async function pushPendingTicks(db: DrizzleDb, userId: string, _accessToken: str
         eq(boardseshTicks.userId, userId),
         eq(boardseshTicks.boardType, KILTER_BOARD_TYPE),
         isNull(boardseshTicks.kilterId),
+        // Exclude upstream-deleted rows: a REMOVE soft-detach nulls kilter_id
+        // but stamps kilter_detached_at. Re-pushing it would recreate the log
+        // on Kilter that the user just deleted (echo loop).
+        isNull(boardseshTicks.kilterDetachedAt),
       ),
     )
     .orderBy(boardseshTicks.climbedAt);

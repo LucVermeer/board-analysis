@@ -10,7 +10,15 @@ import {
   boardClimbRatings,
   boardClimbAliases,
 } from '@boardsesh/db/schema';
-import { resolveCanonicalClimbUuid, recomputeClimbStatsBulk, type ClimbStatsKey } from '@boardsesh/db/queries';
+import {
+  resolveCanonicalClimbUuid,
+  recomputeClimbStatsBulk,
+  inferUserUtcOffsetSeconds,
+  climbedAtMatchesForAdoption,
+  MAX_USER_UTC_OFFSET_SECONDS,
+  type ClimbStatsKey,
+  type TickTimeSample,
+} from '@boardsesh/db/queries';
 
 import { KILTER_BOARD_TYPE } from '../api/types';
 import { KilterApiError } from '../api/errors';
@@ -59,6 +67,15 @@ type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
  * by tens of seconds vs. Boardsesh's server-side stamp. Design §4.3.
  */
 const NATURAL_KEY_TIME_TOLERANCE_SECONDS = 60;
+
+/**
+ * How far to widen the natural-key fetch window. Pre-PR4 Aurora/JSON originals
+ * store the user's LOCAL wall time relabelled as UTC, so they sit a whole UTC
+ * offset (up to ±14h) away from the honest-UTC Kilter created_at. Fetch that
+ * whole span so the shifted original is a candidate; the JS match still pins
+ * acceptance to ±60s of the inferred offset.
+ */
+const NATURAL_KEY_FETCH_WINDOW_SECONDS = MAX_USER_UTC_OFFSET_SECONDS + NATURAL_KEY_TIME_TOLERANCE_SECONDS;
 
 /**
  * Maximum rows held in a per-type buffer before we flush mid-stream.
@@ -433,6 +450,39 @@ type NormalisedLog = {
   fields: LogTickFields;
 };
 
+/** An existing tick found by kilter_id — the columns the edit guard compares. */
+type ExistingKilterTick = {
+  uuid: string;
+  kilterId: string | null;
+  ownerUserId: string;
+  climbUuid: string;
+  angle: number;
+  status: 'flash' | 'send' | 'attempt';
+  attemptCount: number;
+  climbedAt: string;
+  kilterType: 'attempts' | 'logs' | null;
+  updatedAt: string;
+  kilterSyncedAt: string | null;
+};
+
+/** True when the row carries a local edit newer than the last successful sync. */
+function isLocallyEditedSinceKilterSync(stored: ExistingKilterTick): boolean {
+  if (stored.kilterSyncedAt === null) return false; // never synced from Kilter → Kilter is authoritative
+  return Date.parse(stored.updatedAt) > Date.parse(stored.kilterSyncedAt);
+}
+
+/** True when an incoming Kilter payload actually differs from the stored row. */
+function kilterPayloadDiffers(incoming: LogTickFields, stored: ExistingKilterTick): boolean {
+  return (
+    incoming.climbUuid !== stored.climbUuid ||
+    incoming.angle !== stored.angle ||
+    incoming.status !== stored.status ||
+    incoming.attemptCount !== stored.attemptCount ||
+    incoming.kilterType !== stored.kilterType ||
+    Date.parse(incoming.climbedAt) !== Date.parse(stored.climbedAt)
+  );
+}
+
 /**
  * Apply a batch of `logs` ops in three round trips:
  *   1. Single SELECT to find existing ticks by kilter_id (the
@@ -506,6 +556,11 @@ export async function applyLogs(
         kilterType: null,
         kilterSyncedAt: null,
         kilterSyncError: null,
+        // Mark the row upstream-deleted. Clearing kilter_id alone would make it
+        // look never-pushed — push-back would re-push it (echo loop) and the
+        // recompute would keep counting it. The marker (excluded from both) is
+        // reset if a later PUT re-links the same log (adoption path below).
+        kilterDetachedAt: new Date().toISOString(),
         // boardsesh_ticks.updated_at is `timestamp({ mode: 'string' })`
         // in the schema, so the writer must hand drizzle an ISO string,
         // not a Date.
@@ -567,16 +622,31 @@ export async function applyLogs(
   // belt-and-suspenders that keeps the invariant local and robust to a future
   // refactor that could thin `normalised` between here and the early return.
   if (incomingKilterIds.length === 0) return;
+  // Select the compared columns + sync-tracking timestamps so the categorise
+  // step can apply the edit-clobber guard (skip a locally-edited row) and skip
+  // no-op re-syncs (payload unchanged) — see §work-item 7.
   const byKilterIdRows = await tx
-    .select({ uuid: boardseshTicks.uuid, kilterId: boardseshTicks.kilterId, ownerUserId: boardseshTicks.userId })
+    .select({
+      uuid: boardseshTicks.uuid,
+      kilterId: boardseshTicks.kilterId,
+      ownerUserId: boardseshTicks.userId,
+      climbUuid: boardseshTicks.climbUuid,
+      angle: boardseshTicks.angle,
+      status: boardseshTicks.status,
+      attemptCount: boardseshTicks.attemptCount,
+      climbedAt: boardseshTicks.climbedAt,
+      kilterType: boardseshTicks.kilterType,
+      updatedAt: boardseshTicks.updatedAt,
+      kilterSyncedAt: boardseshTicks.kilterSyncedAt,
+    })
     .from(boardseshTicks)
     .where(inArray(boardseshTicks.kilterId, incomingKilterIds));
-  const kilterIdMap = new Map<string, string>();
+  const kilterIdMap = new Map<string, ExistingKilterTick>();
   const foreignKilterIds = new Set<string>();
   for (const row of byKilterIdRows) {
     if (!row.kilterId) continue;
     if (row.ownerUserId === userId) {
-      kilterIdMap.set(row.kilterId, row.uuid);
+      kilterIdMap.set(row.kilterId, row);
     } else {
       foreignKilterIds.add(row.kilterId);
     }
@@ -636,19 +706,43 @@ export async function applyLogs(
           // Kilter is an ISO string with offset, climbed_at is a TEXT
           // mode timestamp column; ::timestamptz normalises both to a
           // single UTC instant for the BETWEEN.
-          // make_interval keeps the tolerance parameterised — sql.raw on
-          // a numeric constant is safe today but becomes injection-prone
-          // the moment the constant becomes runtime-configurable.
-          sql`${boardseshTicks.climbedAt}::timestamptz BETWEEN (${minTs}::timestamptz - make_interval(secs => ${NATURAL_KEY_TIME_TOLERANCE_SECONDS})) AND (${maxTs}::timestamptz + make_interval(secs => ${NATURAL_KEY_TIME_TOLERANCE_SECONDS}))`,
+          //
+          // ⚠️ The window is widened by the MAX PLAUSIBLE UTC OFFSET (±14h),
+          // not just ±tolerance: a pre-PR4 Aurora/JSON original stored the
+          // user's LOCAL wall time relabelled as UTC, so it sits a whole
+          // offset away from the Kilter created_at. Without the wide fetch the
+          // shifted original is never returned and the adoption inserts a
+          // duplicate — the 3,208-duplicate bug. The JS match below still
+          // pins acceptance to ±60s of the inferred offset.
+          // make_interval keeps the window parameterised — sql.raw on a numeric
+          // constant is safe today but becomes injection-prone the moment the
+          // constant becomes runtime-configurable.
+          sql`${boardseshTicks.climbedAt}::timestamptz BETWEEN (${minTs}::timestamptz - make_interval(secs => ${NATURAL_KEY_FETCH_WINDOW_SECONDS})) AND (${maxTs}::timestamptz + make_interval(secs => ${NATURAL_KEY_FETCH_WINDOW_SECONDS}))`,
         ),
       );
 
-    // Match in JS by (climb_uuid, angle, |Δt| ≤ tolerance). The over-
-    // fetch is bounded by the batch's combined climb/angle/time
-    // envelope; in practice this returns at most a few extra rows.
+    // Infer the user's UTC offset from the ticks that line up (same canonical
+    // climb + angle) so a whole-offset gap between the honest-UTC Kilter
+    // created_at and a pre-fix, shifted existing climbed_at still adopts. Post-
+    // PR4 both sides are honest UTC → offset rounds to 0 → the ±60s fast path.
+    const existingSamples: TickTimeSample[] = candidateRows.map((r) => ({
+      climbUuid: r.climbUuid,
+      angle: r.angle,
+      climbedAtMs: Date.parse(r.climbedAt),
+    }));
+    const incomingSamples: TickTimeSample[] = parseable.map((n) => ({
+      climbUuid: n.canonical,
+      angle: n.raw.angle,
+      climbedAtMs: Date.parse(n.raw.created_at),
+    }));
+    const inferredOffsetSeconds = inferUserUtcOffsetSeconds(existingSamples, incomingSamples);
+
+    // Match in JS by (climb_uuid, angle) and a timestamp gap within ±60s of
+    // either 0 (fast path) or the inferred offset. The over-fetch is bounded by
+    // the batch's combined climb/angle/time envelope.
     //
     // Each existing tick can adopt AT MOST ONE incoming log. Two logs
-    // for the same canonical climb+angle within ±tolerance (a re-logged
+    // for the same canonical climb+angle within tolerance (a re-logged
     // attempt, or a server-side merge artefact) would otherwise both
     // match the same row — both become adoptions with the same target
     // uuid, the bulk UPDATE…FROM applies only one (arbitrary winner),
@@ -658,7 +752,6 @@ export async function applyLogs(
     const claimed = new Set<string>();
     for (const candidate of naturalKeyCandidates) {
       const target = Date.parse(candidate.raw.created_at);
-      const toleranceMs = NATURAL_KEY_TIME_TOLERANCE_SECONDS * 1000;
       const match = candidateRows.find((r) => {
         if (claimed.has(r.uuid)) return false;
         if (r.climbUuid !== candidate.canonical) return false;
@@ -671,8 +764,7 @@ export async function applyLogs(
         // attempt inserts as its own tick. Upgrades (incoming send/flash
         // onto an existing attempt) and same-status re-syncs still adopt.
         if (candidate.fields.status === 'attempt' && (r.status === 'send' || r.status === 'flash')) return false;
-        const dt = Math.abs(Date.parse(r.climbedAt) - target);
-        return dt <= toleranceMs;
+        return climbedAtMatchesForAdoption(Date.parse(r.climbedAt), target, inferredOffsetSeconds);
       });
       if (match) {
         claimed.add(match.uuid);
@@ -688,8 +780,8 @@ export async function applyLogs(
   const inserts: NormalisedLog[] = [];
 
   for (const n of normalised) {
-    const existingUuid = kilterIdMap.get(n.raw.log_uuid);
-    if (existingUuid) {
+    const existing = kilterIdMap.get(n.raw.log_uuid);
+    if (existing) {
       // Re-sync by kilter_id: this row IS the same Kilter log (matched on
       // its surrogate key), so Kilter is authoritative and its edits flow
       // through verbatim — INCLUDING a status change (e.g. the user un-topped
@@ -699,7 +791,15 @@ export async function applyLogs(
       // distinct physical attempt onto a completion; it must not block a
       // genuine edit to an already-linked row. Don't "fix" this by adding the
       // guard here — see the re-sync test asserting an attempt updates a send.
-      updatesByKilterId.push({ uuid: existingUuid, fields: n.fields });
+      //
+      // Edit-clobber guard (§work-item 7): don't overwrite a row the user
+      // edited locally since the last sync (updated_at > kilter_synced_at) —
+      // the local edit is pending push-back and Kilter's stale snapshot must
+      // not stomp it. And skip a no-op re-sync (payload identical) so we don't
+      // churn updated_at / re-ship the row to offline clients for nothing.
+      if (isLocallyEditedSinceKilterSync(existing)) continue;
+      if (!kilterPayloadDiffers(n.fields, existing)) continue;
+      updatesByKilterId.push({ uuid: existing.uuid, fields: n.fields });
       continue;
     }
     if (foreignKilterIds.has(n.raw.log_uuid)) {
@@ -786,6 +886,11 @@ export async function applyLogs(
         kilter_type = u.kilter_type::kilter_table_type,
         kilter_synced_at = u.kilter_synced_at::timestamp,
         kilter_sync_error = NULL,
+        -- Re-linking a log clears the upstream-deleted marker: a REMOVE-then-PUT
+        -- snapshot redelivery detaches (sets kilter_detached_at) then re-adopts,
+        -- and the adopted row is live again. A plain kilter_id re-sync (already
+        -- linked, never detached) leaves it NULL — a harmless no-op.
+        kilter_detached_at = NULL,
         updated_at = u.updated_at::timestamp,
         kilter_id = COALESCE(u.kilter_id, t.kilter_id)
       FROM jsonb_to_recordset(${payload}::jsonb) AS u(
