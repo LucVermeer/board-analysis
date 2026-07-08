@@ -352,7 +352,10 @@
     "setterOnly": "Criterio del setter — todavía no hay suficientes encadenes.",
     "moonboardTitle": "Todavía sin estandarizar",
     "moonboardBody": "Aún no tenemos datos de grado de la comunidad para MoonBoard. Registra tus encadenes en Moon con Boardsesh para ayudar a desbloquearlo.",
-    "loadError": "No se pudo cargar el grado ahora mismo."
+    "loadError": "No se pudo cargar el grado ahora mismo.",
+    "byAngle": "Grado Boardsesh por ángulo",
+    "updated": "Actualizado {{when}}",
+    "localGradeLine": "En este plafón: {{grade}}"
   },
   "multiboardList": {
     "noClimbsFound": "No se encontraron bloques",

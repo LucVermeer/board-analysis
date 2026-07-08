@@ -352,7 +352,10 @@
     "setterOnly": "Setter's call — not enough sends yet.",
     "moonboardTitle": "Not standardized yet",
     "moonboardBody": "We don't have community grade data for MoonBoard yet. Log your Moon sends on Boardsesh to help unlock it.",
-    "loadError": "Couldn't load the grade right now."
+    "loadError": "Couldn't load the grade right now.",
+    "byAngle": "Boardsesh grade by angle",
+    "updated": "Updated {{when}}",
+    "localGradeLine": "On this board: {{grade}}"
   },
   "similarClimbs": {
     "loadError": "Couldn't load similar climbs.",

@@ -352,7 +352,10 @@
     "setterOnly": "Avis de l'ouvreur — pas encore assez de croix.",
     "moonboardTitle": "Pas encore standardisé",
     "moonboardBody": "Nous n'avons pas encore de données de grade communautaires pour le MoonBoard. Enregistre tes croix Moon sur Boardsesh pour aider à le débloquer.",
-    "loadError": "Impossible de charger le grade pour le moment."
+    "loadError": "Impossible de charger le grade pour le moment.",
+    "byAngle": "Grade Boardsesh par angle",
+    "updated": "Mis à jour {{when}}",
+    "localGradeLine": "Sur cette board : {{grade}}"
   },
   "similarClimbs": {
     "loadError": "Impossible de charger les blocs similaires.",

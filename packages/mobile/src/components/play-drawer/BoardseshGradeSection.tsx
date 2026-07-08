@@ -17,6 +17,15 @@ type BoardseshGradeSectionProps = {
   angle: number;
 };
 
+// Reserved copy for the upcoming by-angle detail view (the collapsed-grade →
+// expanded-chart follow-up to this section): the per-angle breakdown title,
+// the "last computed" timestamp line, and the board-local grade line shown
+// alongside the universal grade. Not wired up yet — this file is where they
+// land once that view exists.
+// i18n-keep climbs.boardseshGrade.byAngle
+// i18n-keep climbs.boardseshGrade.updated
+// i18n-keep climbs.boardseshGrade.localGradeLine
+
 // Locale-neutral math symbol shown after a provisional single grade to signal it
 // may still shift by a grade. Not user-facing prose, so it stays out of i18n.
 const APPROX_SYMBOL = '±';

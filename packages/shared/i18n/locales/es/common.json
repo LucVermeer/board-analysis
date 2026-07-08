@@ -302,7 +302,9 @@
       "displayOptions": {
         "title": "Visualización",
         "playlistTags": "Mostrar etiquetas de playlist",
-        "playlistTagsDescription": "Mira en qué playlists está cada bloque, directamente en la lista."
+        "playlistTagsDescription": "Mira en qué playlists está cada bloque, directamente en la lista.",
+        "boardseshGrades": "Mostrar grados Boardsesh",
+        "boardseshGradesDescription": "Grados calculados a partir de encadenes reales en varios plafones. El grado del setter se mantiene hasta que haya suficientes encadenes."
       },
       "language": {
         "title": "Idioma",

@@ -5,16 +5,22 @@
 // the grade is cross-board (universal) or scoped to this board only (local).
 //
 // Kept free of React so it unit-tests without a renderer.
-import { formatGrade, type GradeDisplayFormat } from '@boardsesh/play-view';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
-import { BOULDER_GRADES, type BoulderGrade } from '@boardsesh/board-constants/boulder-grade-mapping';
+import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import type { BoardseshGrade } from '@boardsesh/graphql/operations';
+import {
+  renderDifficulty,
+  clampDifficultyId,
+  GRADE_BY_ID,
+  MIN_DIFFICULTY_ID,
+  MAX_DIFFICULTY_ID,
+  type RenderedGrade,
+} from '../../lib/boardsesh-grade-display';
 
-const GRADE_BY_ID = new Map<number, BoulderGrade>(BOULDER_GRADES.map((grade) => [grade.difficulty_id, grade]));
-
-// The difficulty scale the data-science grade shares with Aurora's ids.
-const MIN_DIFFICULTY_ID = BOULDER_GRADES[0].difficulty_id;
-const MAX_DIFFICULTY_ID = BOULDER_GRADES[BOULDER_GRADES.length - 1].difficulty_id;
+// Re-exported for existing/back-compat call sites — the difficulty-scale
+// primitives now live in lib/boardsesh-grade-display.ts (a lib must not
+// import from components, so they moved there; this file, a component-tree
+// helper, imports them like any other consumer).
+export { renderDifficulty, clampDifficultyId, GRADE_BY_ID, MIN_DIFFICULTY_ID, MAX_DIFFICULTY_ID, type RenderedGrade };
 
 /** MoonBoard has no standardized community grade in our feed yet. */
 export function isMoonBoard(boardName: string): boolean {
@@ -23,13 +29,6 @@ export function isMoonBoard(boardName: string): boolean {
 
 /** `'universal'` = one grade across every board; `'local'` = this board only. */
 export type GradeScope = 'universal' | 'local';
-
-export type RenderedGrade = {
-  /** Formatted label per the user's grade preference (e.g. "V5", "6c"). */
-  label: string;
-  /** Hex colour for the grade, consistent with the play drawer header. */
-  color: string;
-};
 
 export type BoardseshGradeView =
   | { kind: 'moonboard' }
@@ -43,20 +42,6 @@ export type BoardseshGradeView =
       rangeLabel: string | null;
       count: number;
     };
-
-function clampDifficultyId(value: number): number {
-  return Math.min(MAX_DIFFICULTY_ID, Math.max(MIN_DIFFICULTY_ID, Math.round(value)));
-}
-
-/** Round a float difficulty to the nearest grade and render its label + colour. */
-export function renderDifficulty(value: number, gradeFormat: GradeDisplayFormat): RenderedGrade | null {
-  const grade = GRADE_BY_ID.get(clampDifficultyId(value));
-  if (!grade) return null;
-  return {
-    label: formatGrade(grade.difficulty_name, gradeFormat) ?? grade.v_grade,
-    color: getGradeColor(grade.difficulty_name) ?? DEFAULT_GRADE_COLOR,
-  };
-}
 
 /** The label a bound rounds to, used to decide whether a range spans two grades. */
 function boundLabel(value: number, gradeFormat: GradeDisplayFormat): string | null {
