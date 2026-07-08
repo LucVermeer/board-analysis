@@ -99,6 +99,10 @@ export function useQueueRegrade({
               ascensionist_count: climb.ascensionist_count,
               benchmark_difficulty: climb.benchmark_difficulty ?? null,
               difficulty_error: climb.difficulty_error,
+              // Explicit nulls so an angle with no boardsesh grade row clears
+              // the stale value from the climb's previous angle.
+              boardseshDifficulty: climb.boardseshDifficulty ?? null,
+              boardseshConfidence: climb.boardseshConfidence ?? null,
             };
             return [climbUuid, patch] as const;
           } catch {

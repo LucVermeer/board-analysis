@@ -96,6 +96,10 @@ export type ClimbRegradePatch = {
   ascensionist_count: number;
   benchmark_difficulty: string | null;
   difficulty_error?: string;
+  // Explicit nulls (not omitted) so an angle with no boardsesh grade row
+  // clears a stale value carried over from the climb's previous angle.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
 };
 
 export type QueueSearchParams = Record<string, unknown>;

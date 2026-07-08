@@ -458,6 +458,120 @@ describe('REGRADE_CLIMBS', () => {
     expect(result).toBe(state);
   });
 
+  it('patches boardsesh grade fields onto a matching climb', () => {
+    const queued = makeClimbQueueItem({
+      uuid: 'q1',
+      climb: {
+        uuid: 'climb-a',
+        angle: 40,
+        difficulty: '6a/V3',
+        boardseshDifficulty: 20,
+        boardseshConfidence: 'confirmed',
+      },
+    });
+    const state = makeState({ queue: [queued] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+            boardseshDifficulty: 25,
+            boardseshConfidence: 'provisional',
+          },
+        },
+      },
+    });
+
+    expect(result.queue[0].climb.boardseshDifficulty).toBe(25);
+    expect(result.queue[0].climb.boardseshConfidence).toBe('provisional');
+  });
+
+  it('clears a stale boardsesh grade when the patch carries an explicit null', () => {
+    const queued = makeClimbQueueItem({
+      uuid: 'q1',
+      climb: {
+        uuid: 'climb-a',
+        angle: 40,
+        difficulty: '6a/V3',
+        boardseshDifficulty: 20,
+        boardseshConfidence: 'confirmed',
+      },
+    });
+    const state = makeState({ queue: [queued] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+            boardseshDifficulty: null,
+            boardseshConfidence: null,
+          },
+        },
+      },
+    });
+
+    // The angle-appropriate fields still apply even though the grade cleared.
+    expect(result.queue[0].climb.difficulty).toBe('6c/V5');
+    expect(result.queue[0].climb.boardseshDifficulty).toBeNull();
+    expect(result.queue[0].climb.boardseshConfidence).toBeNull();
+  });
+
+  it('keeps reference equality for untouched climbs when clearing a boardsesh grade elsewhere', () => {
+    const patched = makeClimbQueueItem({
+      uuid: 'q1',
+      climb: {
+        uuid: 'climb-a',
+        angle: 40,
+        difficulty: '6a/V3',
+        boardseshDifficulty: 20,
+        boardseshConfidence: 'confirmed',
+      },
+    });
+    const untouched = makeClimbQueueItem({
+      uuid: 'q2',
+      climb: {
+        uuid: 'climb-z',
+        angle: 40,
+        difficulty: '5+/V1',
+        boardseshDifficulty: 15,
+        boardseshConfidence: 'confirmed',
+      },
+    });
+    const state = makeState({ queue: [patched, untouched] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+            boardseshDifficulty: null,
+            boardseshConfidence: null,
+          },
+        },
+      },
+    });
+
+    expect(result.queue[1]).toBe(untouched); // same reference — not re-created
+    expect(result.queue[0].climb.boardseshDifficulty).toBeNull();
+  });
+
   it('is idempotent when the climb already carries the target angle', () => {
     const queued = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'climb-a', angle: 50, difficulty: '6c/V5' } });
     const state = makeState({ queue: [queued] });
