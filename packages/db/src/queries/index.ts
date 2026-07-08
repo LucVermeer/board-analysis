@@ -1,5 +1,7 @@
 export * from './climbs/index';
 export * from './climb-stats/index';
+export * from './sync/credential-backoff';
+export * from './sync/weekly-gate';
 export * from './aliases';
 export * from './tick-offset-inference';
 export * from './gyms/index';

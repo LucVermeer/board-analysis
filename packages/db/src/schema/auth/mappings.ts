@@ -57,6 +57,24 @@ export const auroraCredentials = pgTable(
     syncError: text('sync_error'),
     credentialFailureCount: integer('credential_failure_count').default(0).notNull(),
     lastCredentialFailureAt: timestamp('last_credential_failure_at'),
+    // consecutive_failures = count of consecutive FAILED sync cycles from ANY
+    // cause (transient network, permanent auth, or an unknown throw), reset to
+    // 0 on the next success. Distinct from credential_failure_count, which
+    // counts only invalid-username/password login failures and expires a
+    // credential after 2 — folding network blips into that would wrongly expire
+    // a credential after 2 transient failures. This counter instead drives the
+    // per-credential exponential backoff in both sync runners: a credential is
+    // skipped from selection until last_sync_attempt_at + backoff(n) has
+    // elapsed, so a deterministically-failing credential can't burn a daemon
+    // cycle every rotation (and can't wedge the single-user-per-cycle queue).
+    consecutiveFailures: integer('consecutive_failures').default(0).notNull(),
+    // last_sync_error = the most recent failure's message, recorded on EVERY
+    // failed cycle — including transient ones that deliberately leave the
+    // user-facing sync_status/sync_error untouched (so the card doesn't flip to
+    // 'error' on a retryable blip). Observability only: this is how an operator
+    // sees WHY a credential keeps failing while the card still reads 'active'.
+    // Cleared to NULL on the next success.
+    lastSyncError: text('last_sync_error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

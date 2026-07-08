@@ -154,6 +154,16 @@ export const boardseshTicks = pgTable(
       table.climbUuid,
     ),
     syncCursorIdx: index('boardsesh_ticks_sync_cursor_idx').on(table.userId, table.updatedAt, table.id),
+    // Partial index for the hourly recompute self-heal (aurora daemon): the
+    // in-process debounced recompute uses setTimeout, so a deploy drops any
+    // pending recompute and leaves board_climb_stats.updated_at older than the
+    // flash/send tick that should have bumped it. The self-heal scans
+    // flash/send ticks updated within a recent window and re-derives the keys
+    // whose stats row is stale. Bounding the scan to (flash,send, updated_at)
+    // keeps it off a full boardsesh_ticks seq-scan.
+    flashSendUpdatedAtIdx: index('boardsesh_ticks_flash_send_updated_at_idx')
+      .on(table.updatedAt)
+      .where(sql`${table.status} IN ('flash','send')`),
     // quality is a 1-5 star rating (NULL for attempts / unrated). Enforce the
     // range at the DB so a bad conversion (raw Aurora 0-3 stars, an old
     // proportional formula, etc.) can never re-poison the column. Backfills that
