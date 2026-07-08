@@ -25,7 +25,6 @@ vi.mock('../db/client', () => ({
 
 import { recomputeClimbStats } from '../graphql/resolvers/ticks/recompute-climb-stats';
 
-
 describe('recomputeClimbStats', () => {
   beforeEach(() => {
     vi.clearAllMocks();

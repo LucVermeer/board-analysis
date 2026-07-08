@@ -284,8 +284,14 @@ async function importMoonBoardProblems() {
       // bare column, so the blend must weight by this NEW resolved count. Single
       // source keeps the three in lockstep if the count policy ever changes.
       const resolvedUpstreamAscensionistCount = sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`;
+      // COALESCE like the catalog importer (import-moonboard-catalog.ts): a
+      // problem whose source userRating is NULL on a re-run must preserve the
+      // stored last-known rating, not clobber it back to NULL. Defined ONCE and
+      // reused by the SET and the blend so the written column and the blend's
+      // upstream term can never disagree.
+      const resolvedUpstreamQualityAverage = sql`coalesce(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`;
       const blendedQuality = blendedQualityAverageSql({
-        upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+        upstreamQualityAverage: resolvedUpstreamQualityAverage,
         upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
         boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
         boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
@@ -305,9 +311,10 @@ async function importMoonBoardProblems() {
               upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
               ascensionistCount: sql`${resolvedUpstreamAscensionistCount} + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
               difficultyAverage: sql`excluded.difficulty_average`,
-              // Manufacturer average lands in upstream_quality_average; quality_average
-              // is the blend of it and Boardsesh's own votes.
-              upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+              // Manufacturer average lands in upstream_quality_average (COALESCEd:
+              // an unrated source row preserves the stored last-known rating);
+              // quality_average is the blend of it and Boardsesh's own votes.
+              upstreamQualityAverage: resolvedUpstreamQualityAverage,
               qualityAverage: blendedQuality,
               qualityNormalized: sql`true`,
               upstreamSyncedAt: sql`excluded.upstream_synced_at`,
