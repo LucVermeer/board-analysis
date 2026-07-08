@@ -194,11 +194,11 @@ describe('buildDumbbellAxis', () => {
     expect(axis.maxId).toBeGreaterThanOrEqual(24);
   });
 
-  it('labels every whole V-grade once across the range — no duplicates, no skipped grades', () => {
+  it('labels every gridline with a distinct, increasing grade — no blanks, no "0" ticks', () => {
     // Crowd + Boardsesh at V0 (12) and V6 (22); after ±2 padding the window
-    // covers V0…V8. The old id-stepped axis rendered "V0, V0, V1, V3, V4, V5,
-    // V6, V8" — V0 duplicated, V2 and V7 skipped. The fixed axis shows each
-    // whole grade exactly once, in order.
+    // covers ~V0…V7. gifted renders a blank y tick as "0", so EVERY tick must
+    // carry a real grade label — the old "blank the in-between ids" scheme
+    // leaked stray 0s. Ticks read as distinct, increasing grades bottom→top.
     const rows = buildDumbbellByAngleModel(
       [
         bsRow({ angle: 20, universalGrade: 12, gradeLow: 12, gradeHigh: 12 }),
@@ -211,17 +211,21 @@ describe('buildDumbbellAxis', () => {
       'v-grade',
     );
     const axis = buildDumbbellAxis(rows, 'v-grade');
-    const shown = axis.yAxisLabelTexts.filter((label) => label.length > 0);
-    expect(new Set(shown).size).toBe(shown.length); // no repeats
-    expect(shown).toEqual(['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8']); // even, no gaps
+    const labels = axis.yAxisLabelTexts;
+    expect(labels).toHaveLength(axis.noOfSections + 1);
+    // No blank ticks anywhere (a blank would render as "0"), and no repeats.
+    expect(labels.every((label) => label.length > 0)).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+    // Strictly increasing V-numbers bottom→top.
+    const vNumbers = labels.map((label) => Number.parseInt(label.replace(/[^0-9]/g, ''), 10));
+    for (let i = 1; i < vNumbers.length; i++) expect(vNumbers[i]).toBeGreaterThan(vNumbers[i - 1]);
     // Marker geometry invariant: a grade float plots at `grade - minId` in the span.
     expect(axis.maxValue).toBe(axis.maxId - axis.minId);
-    expect(axis.yAxisLabelTexts).toHaveLength(axis.noOfSections + 1);
   });
 
-  it('thins labels to every other grade on a very wide span but never repeats one', () => {
+  it('caps the tick count on a very wide span — still every tick labelled, no repeats', () => {
     // A window spanning ~V0…V16 has too many grades to label each; the axis
-    // keeps every other, plus the top grade, and still shows no duplicates.
+    // caps the gridlines, labels every one, keeps the true top grade, no dupes.
     const rows = buildDumbbellByAngleModel(
       [
         bsRow({ angle: 20, universalGrade: 12, gradeLow: 12, gradeHigh: 12 }),
@@ -231,10 +235,12 @@ describe('buildDumbbellAxis', () => {
       'v-grade',
     );
     const axis = buildDumbbellAxis(rows, 'v-grade');
-    const shown = axis.yAxisLabelTexts.filter((label) => label.length > 0);
-    expect(new Set(shown).size).toBe(shown.length);
-    expect(shown.length).toBeLessThan(axis.noOfSections); // thinned, not one per gridline
-    expect(shown[shown.length - 1]).toBe('V16'); // top grade kept
+    const labels = axis.yAxisLabelTexts;
+    expect(axis.noOfSections).toBeLessThanOrEqual(6); // capped
+    expect(labels).toHaveLength(axis.noOfSections + 1);
+    expect(labels.every((label) => label.length > 0)).toBe(true); // no blanks
+    expect(new Set(labels).size).toBe(labels.length); // no repeats
+    expect(labels[labels.length - 1]).toBe('V16'); // truthful top grade
   });
 
   it('returns a safe default window for an empty model', () => {
@@ -243,12 +249,11 @@ describe('buildDumbbellAxis', () => {
     expect(axis.yAxisLabelTexts).toHaveLength(axis.noOfSections + 1);
   });
 
-  it('keeps the top tick truthful when the step extension would overflow the scale', () => {
+  it('keeps the top tick truthful at the top of the scale', () => {
     // Boardsesh grades V6 (id 22) and V16 (id 33, the top of the scale). Padding
-    // gives the window [20, 33], span 13 → step 2, ceil(13/2)=7 sections,
-    // maxValue 14. Growing the top upward would land on id 34, whose label clamps
-    // to a false "V16"; instead the window grows downward so the top tick is a
-    // real V16 and the marker-geometry invariant (maxId − minId === maxValue) holds.
+    // clamps the window to [20, 33]; the top id can't grow past 33, so the top
+    // tick is a real V16 (never a clamped-from-34 false label) and the
+    // marker-geometry invariant (maxId − minId === maxValue) holds.
     const rows = buildDumbbellByAngleModel(
       [
         bsRow({ angle: 20, universalGrade: 22, gradeLow: 22, gradeHigh: 22 }),

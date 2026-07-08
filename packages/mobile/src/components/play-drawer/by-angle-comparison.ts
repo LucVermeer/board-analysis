@@ -13,7 +13,6 @@ import type { BoardseshGradeAtAngle } from '@boardsesh/graphql/operations';
 import {
   renderDifficulty,
   clampDifficultyId,
-  GRADE_BY_ID,
   MIN_DIFFICULTY_ID,
   MAX_DIFFICULTY_ID,
 } from '../../lib/boardsesh-grade-display';
@@ -173,29 +172,32 @@ export type DumbbellAxis = {
   noOfSections: number;
   /** Plotted-unit span (a grade float shifted by `minId` never exceeds this). */
   maxValue: number;
-  /** Tick labels bottom→top, one per section boundary (`noOfSections + 1`); a
-   *  V-grade spanning several ids is labelled once, the rest blank. */
+  /** Tick labels bottom→top, one per gridline (`noOfSections + 1`). Every tick
+   *  is labelled with the grade at its height — gifted renders a blank y label
+   *  as "0", so we never emit blanks. */
   yAxisLabelTexts: string[];
 };
 
-// Above this many distinct V-grades in the window, one label per grade crowds
-// the axis text, so we thin the labels to every other grade (the gridlines
-// themselves stay one-per-id).
-const DENSE_LABEL_THRESHOLD = 9;
+// Grade gridlines are coarse and fully labelled (see buildDumbbellAxis): aim for
+// ~one line per this many ids (≈2 grades), capped at MAX_AXIS_SECTIONS so the
+// axis text stays sparse and even rather than crowded.
+const IDS_PER_AXIS_SECTION = 4;
+const MAX_AXIS_SECTIONS = 6;
 
 /**
  * Build the shared Y axis from the dumbbell rows. Falls back to a small window
  * around V0 when there are no plottable values (an empty/degenerate model).
  *
- * One gridline per grade id (step 1). V-grades span a VARIABLE number of ids
- * (V0 = 4a/4b/4c, three ids; V2 = 5c, one id), so an id step wider than 1 would
- * jump over the single-id grades and land the ticks on a duplicated/uneven set
- * of V labels ("V0, V0, V1, V3, V5…"). Stepping by one id visits every grade;
- * we then label only the FIRST id of each whole V-grade (V0, V1, V2…), blanking
- * the rest, so each whole grade is labelled exactly once with no repeats and no
- * gaps — even though the shown label follows the viewer's format (a "6c+/V5" id
- * keyed under V5). `maxValue === maxId - minId` keeps the linear marker geometry
- * (`localY`) exact — a grade float plots at `grade - minId` in the axis span.
+ * Coarse, fully-labelled gridlines. gifted renders a blank y-axis tick as "0"
+ * (there is no per-tick "no label"), so we must label EVERY gridline. V-grades
+ * span a variable number of ids, so we can't drop an evenly-spaced line on every
+ * whole grade; instead we grid evenly in id space (~one line per
+ * IDS_PER_AXIS_SECTION ids) and label each line with the grade at its height.
+ * Markers still land on their own grade line via the shared value scale
+ * (`maxValue === maxId - minId`, so a grade float plots at `grade - minId`);
+ * off-grade markers sit between lines. We pick the finest section count whose
+ * labels don't repeat — a coarse step keeps neighbouring ticks on distinct
+ * grades even though one grade can cover up to three ids.
  */
 export function buildDumbbellAxis(rows: DumbbellAngleRow[], gradeFormat: GradeDisplayFormat): DumbbellAxis {
   const values: number[] = [];
@@ -221,39 +223,33 @@ export function buildDumbbellAxis(rows: DumbbellAngleRow[], gradeFormat: GradeDi
   // maxId is already clamped to the hardest real grade, so the top tick renders
   // a truthful label — no overflow correction needed at step 1.
 
-  const noOfSections = maxId - minId;
-  const maxValue = noOfSections;
+  const span = maxId - minId;
+  // Keep the plotted-unit span equal to the id span so `localY` (which divides
+  // by maxValue) lands a grade float at `grade - minId`.
+  const maxValue = span;
 
-  // Label the first id of each whole V-grade, blanking the rest — so a grade
-  // spanning several ids (V0 = 4a/4b/4c) is labelled once, at its lowest id.
-  // Dedup keys on the whole V-grade (`v_grade`), not the formatted label, so the
-  // axis reads V0, V1, V2… rather than the format's finer V5 / V5+ steps.
-  // `distinctIndices` collects the label positions so a wide window can thin them.
-  const yAxisLabelTexts: string[] = [];
-  const distinctIndices: number[] = [];
-  let lastVGrade: string | null = null;
-  for (let index = 0; index <= noOfSections; index++) {
-    const id = minId + index;
-    const vGrade = GRADE_BY_ID.get(id)?.v_grade ?? null;
-    const label = renderDifficulty(id, gradeFormat)?.label ?? '';
-    if (label && vGrade && vGrade !== lastVGrade) {
-      yAxisLabelTexts.push(label);
-      distinctIndices.push(index);
-      lastVGrade = vGrade;
-    } else {
-      yAxisLabelTexts.push('');
+  // Evenly-spaced ticks in id space, each labelled with the grade at its
+  // height. index 0 = bottom (minId), index N = top (maxId); every entry is a
+  // real grade label so gifted never falls back to a "0" tick.
+  const labelsForSections = (sections: number): string[] => {
+    const labels: string[] = [];
+    for (let index = 0; index <= sections; index++) {
+      const id = Math.round(minId + (span * index) / sections);
+      labels.push(renderDifficulty(id, gradeFormat)?.label ?? '');
     }
-  }
+    return labels;
+  };
+  const hasAdjacentDuplicate = (labels: string[]): boolean =>
+    labels.some((label, index) => index > 0 && label === labels[index - 1]);
 
-  // Wide window: thin to every other distinct grade so the axis text stays
-  // legible, always keeping the top grade so the range reads end to end.
-  if (distinctIndices.length > DENSE_LABEL_THRESHOLD) {
-    const keep = new Set<number>();
-    for (let i = 0; i < distinctIndices.length; i += 2) keep.add(distinctIndices[i]);
-    keep.add(distinctIndices[distinctIndices.length - 1]);
-    for (const index of distinctIndices) {
-      if (!keep.has(index)) yAxisLabelTexts[index] = '';
-    }
+  // Start from the target density, then coarsen until neighbouring ticks stop
+  // repeating (a single V-grade can cover up to three ids). Floors at 1 section
+  // = just the bottom + top grade for a tiny window.
+  let noOfSections = Math.min(MAX_AXIS_SECTIONS, Math.max(1, Math.round(span / IDS_PER_AXIS_SECTION)));
+  let yAxisLabelTexts = labelsForSections(noOfSections);
+  while (noOfSections > 1 && hasAdjacentDuplicate(yAxisLabelTexts)) {
+    noOfSections -= 1;
+    yAxisLabelTexts = labelsForSections(noOfSections);
   }
 
   return { minId, maxId, noOfSections, maxValue, yAxisLabelTexts };
