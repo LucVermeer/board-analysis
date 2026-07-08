@@ -558,7 +558,11 @@ async function syncBoardLayoutGroup(
           and(
             eq(boardClimbs.boardType, KILTER),
             isNull(boardClimbs.userId),
-            eq(boardClimbs.isListed, false),
+            // IS NOT TRUE, not `= false`: is_listed is nullable and search filters
+            // on `is_listed = true`, so a NULL row is just as invisible as a false
+            // one. shouldRelistFoldedCanonical classifies NULL as re-listable; a
+            // strict `= false` here would silently skip those rows.
+            sql`${boardClimbs.isListed} IS NOT TRUE`,
             inArray(boardClimbs.uuid, chunk),
           ),
         );

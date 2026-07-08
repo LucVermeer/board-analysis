@@ -7,13 +7,15 @@
 -- A non-self kilter alias (alias_uuid <> canonical_uuid, source='kilter') is only
 -- ever written when a listed, non-draft, non-deleted Grips climb folds by hold
 -- fingerprint onto an existing canonical (packages/kilter-sync catalog-sync). So
--- a canonical that (a) is synced (user_id IS NULL), (b) is currently
--- is_listed=false, and (c) backs at least one such non-self alias that was seen in
--- the most recent catalog sync, has a currently-LIVE listed alias proving it is
--- back upstream -> re-list it. User-authored canonicals are never touched (the
--- user_id IS NULL guard). Going forward the fold path re-lists inline
--- (shouldRelistFoldedCanonical in catalog-sync.ts), so this is a one-shot catch-up
--- for the historical backlog.
+-- a canonical that (a) is synced (user_id IS NULL), (b) is currently not visible
+-- (is_listed IS NOT TRUE — false or NULL; the column is nullable and search
+-- filters on is_listed = true, so NULL is exactly as invisible as false), and
+-- (c) backs at least one such non-self alias that was seen in the most recent
+-- catalog sync, has a currently-LIVE listed alias proving it is back upstream ->
+-- re-list it. User-authored canonicals are never touched (the user_id IS NULL
+-- guard). Going forward the fold path re-lists inline
+-- (shouldRelistFoldedCanonical in catalog-sync.ts, which treats NULL the same
+-- way), so this is a one-shot catch-up for the historical backlog.
 --
 -- LIVENESS GUARD: alias existence alone is not proof of liveness. If a folded
 -- Grips climb is later deleted upstream, its non-self alias row is dropped by
@@ -29,8 +31,10 @@
 -- aliases -> 837 distinct unlisted synced canonicals (all is_listed=false,
 -- is_draft=false); every folding alias last_seen within ~1 day of the freshest
 -- kilter alias, so the liveness guard keeps all 837 (0 stale excluded today).
+-- 0 rows with is_listed IS NULL exist anywhere in board_climbs, so the IS NOT
+-- TRUE form changes no counts — it makes the scope match the visibility rule.
 --
--- Idempotent: the is_listed = false predicate makes a re-run a no-op — an
+-- Idempotent: the is_listed IS NOT TRUE predicate makes a re-run a no-op — an
 -- already-re-listed row is not matched again. Each row this UPDATE changes fires
 -- trg_board_climbs_set_sync_fields (0144/0146), bumping updated_at/sync_seq so the
 -- change reaches offline clients as a bounded, one-time re-pull.
@@ -39,7 +43,7 @@ UPDATE board_climbs c
    SET is_listed = true
  WHERE c.board_type = 'kilter'
    AND c.user_id IS NULL
-   AND c.is_listed = false
+   AND c.is_listed IS NOT TRUE
    AND EXISTS (
      SELECT 1
        FROM board_climb_aliases a

@@ -11,9 +11,14 @@
 -- uuid), alias every other member onto it (source='moonboard-dedup'), repoint
 -- ticks and playlist entries, MERGE the group's upstream ascent counts onto the
 -- canonical's stats row (policy below), recompute the canonical's boardsesh/total
--- counts, and delist the non-canonical rows so they leave search. All members are
--- non-owned (user_id IS NULL), so the recompute preserves upstream-owned
--- fa/quality/difficulty and only rebuilds ascent counts.
+-- counts, and delist the non-canonical rows so they leave search. Group formation
+-- AND member selection are both fenced to catalog rows (user_id IS NULL): a
+-- user-created climb sharing a (layout, fingerprint, angle) with catalog rows is
+-- never grouped, aliased, delisted, or tick-repointed. (Prod 2026-07-08: 5
+-- user-created moonboard climbs exist, 0 currently fall inside a duplicate group —
+-- the fence is enforcement, not a data change.) All members being non-owned, the
+-- recompute preserves upstream-owned fa/quality/difficulty and only rebuilds
+-- ascent counts.
 --
 -- MERGED-COUNT POLICY (upstream_ascensionist_count on the canonical):
 --   * DOUBLE-IMPORT groups — ALL members share one name AND carry an identical
@@ -65,6 +70,7 @@ BEGIN
     SELECT layout_id, hold_fingerprint, angle
       FROM board_climbs
      WHERE board_type = 'moonboard'
+       AND user_id IS NULL -- catalog rows only: user content is never grouped
        AND hold_fingerprint IS NOT NULL
        AND hold_fingerprint <> ''
        AND angle IS NOT NULL
@@ -73,6 +79,9 @@ BEGIN
 
   -- Group members with their ascent/upstream counts. name is carried so the
   -- merged-count policy below can spot same-name double-imports (see step 4).
+  -- user_id IS NULL again on member selection: a user-created climb that happens
+  -- to share (layout, fingerprint, angle) with a catalog group must never be
+  -- aliased, delisted, or have its ticks repointed by this merge.
   CREATE TEMP TABLE _mb_members ON COMMIT DROP AS
     SELECT bc.uuid, bc.angle, bc.layout_id, bc.hold_fingerprint, bc.created_at,
            lower(bc.name) AS lname,
@@ -85,7 +94,8 @@ BEGIN
        AND g.angle = bc.angle
       LEFT JOIN board_climb_stats s
         ON s.board_type = 'moonboard' AND s.climb_uuid = bc.uuid AND s.angle = bc.angle
-     WHERE bc.board_type = 'moonboard';
+     WHERE bc.board_type = 'moonboard'
+       AND bc.user_id IS NULL;
 
   -- Canonical per group: most ascents, tie-break oldest created_at, then uuid.
   CREATE TEMP TABLE _mb_canon ON COMMIT DROP AS
