@@ -37,11 +37,7 @@ export function credentialBackoffMs(consecutiveFailures: number): number {
  * True when a credential is still inside its backoff window (should be skipped).
  * Mirrors {@link credentialRetryReadySql}; used for in-process decisions/tests.
  */
-export function isCredentialInBackoff(
-  now: Date,
-  lastSyncAttemptAt: Date | null,
-  consecutiveFailures: number,
-): boolean {
+export function isCredentialInBackoff(now: Date, lastSyncAttemptAt: Date | null, consecutiveFailures: number): boolean {
   if (consecutiveFailures <= 0 || lastSyncAttemptAt === null) return false;
   return now.getTime() < lastSyncAttemptAt.getTime() + credentialBackoffMs(consecutiveFailures);
 }

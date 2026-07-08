@@ -18,11 +18,7 @@ vi.mock('@boardsesh/aurora-sync/api', () => ({
 
 import { db } from '../db/client';
 import { auroraCredentials, userBoardMappings } from '@boardsesh/db/schema';
-import {
-  DuplicateBoardLinkError,
-  saveAuroraCredential,
-  saveKilterCredential,
-} from '../services/aurora-credentials';
+import { DuplicateBoardLinkError, saveAuroraCredential, saveKilterCredential } from '../services/aurora-credentials';
 
 const USER_A = 'dup-link-user-a';
 const USER_B = 'dup-link-user-b';
@@ -113,7 +109,12 @@ describe('duplicate upstream account link guard', () => {
 
   describe('Kilter (saveKilterCredential)', () => {
     it('rejects a second user linking the same Kilter sub and writes nothing', async () => {
-      await saveKilterCredential({ userId: USER_A, refreshToken: 'refresh-a', kilterUserId: KILTER_SUB, username: 'a' });
+      await saveKilterCredential({
+        userId: USER_A,
+        refreshToken: 'refresh-a',
+        kilterUserId: KILTER_SUB,
+        username: 'a',
+      });
 
       const error = await saveKilterCredential({
         userId: USER_B,
