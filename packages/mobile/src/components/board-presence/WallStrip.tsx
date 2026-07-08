@@ -8,7 +8,7 @@ import { AccessoryClimbThumbnail } from '../queue-control/AccessoryClimbThumbnai
 import { useWallClimbIfDistinct } from '../queue-control/use-wall-or-queue-climb';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useTheme } from '../../providers/theme-provider';
-import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { hapticSelection } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { WALL_LIVE_DOT_SIZE } from '../../theme/layout';
@@ -28,7 +28,7 @@ function WallStripComponent() {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { systemColors, brandColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   // Pass `null`: the strip always mirrors whatever's lit on the wall, so it never
   // hides the climb as a duplicate of the local queue head.
   const litClimb = useWallClimbIfDistinct(null);
@@ -40,7 +40,11 @@ function WallStripComponent() {
     openBoardSheet();
   }, [openBoardSheet]);
 
-  const grade = litClimb ? formatGrade(litClimb.grade ?? '') : null;
+  // The lit-climb payload (BoardPresenceClimb) carries no Boardsesh grade today, so
+  // `resolveGrade` falls back to the legacy label — the strip lights up the
+  // Boardsesh grade once the backend stamps presence climbs. The colour stays the
+  // warm live accent, so only the label matters here.
+  const grade = litClimb ? resolveGrade({ difficulty: litClimb.grade ?? '' }).label : null;
 
   return (
     <Pressable

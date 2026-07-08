@@ -1,12 +1,11 @@
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { readableTextColor } from '../../grade/grade-chip-colors';
 import { useTheme } from '../../../providers/theme-provider';
-import { useGradeFormat } from '../../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../../hooks/use-display-grade';
 import { formatRelativeTime } from '../../../lib/format-relative-time';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import type { WallKioskTypeScale } from './wall-kiosk-type';
@@ -32,7 +31,7 @@ type WallStateStripProps = {
 function WallStateStripComponent({ mode, stepsBack, previewTimestamp, liveClimb, typeScale }: WallStateStripProps) {
   const { t } = useTranslation('session');
   const { brandColors, systemColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
 
   const barColor =
     mode === 'live' ? brandColors.live : mode === 'history' ? brandColors.historyFill : systemColors.fill;
@@ -62,8 +61,11 @@ function WallStateStripComponent({ mode, stepsBack, previewTimestamp, liveClimb,
     lineHeight: Math.round(typeScale.stateLineHeight * 0.7),
   };
   const liveName = liveClimb?.name?.trim() || null;
-  const liveGrade = liveClimb?.grade ? formatGrade(liveClimb.grade) : null;
-  const liveGradeColor = getGradeColor(liveClimb?.grade ?? '') ?? DEFAULT_GRADE_COLOR;
+  // BoardPresenceClimb carries no Boardsesh grade today, so `resolveGrade` falls
+  // back to the legacy label + colour — lights up once the backend stamps them.
+  const liveResolvedGrade = resolveGrade({ difficulty: liveClimb?.grade ?? '' });
+  const liveGrade = liveClimb?.grade ? liveResolvedGrade.label : null;
+  const liveGradeColor = liveResolvedGrade.color;
 
   return (
     <View style={styles.root}>

@@ -1,14 +1,13 @@
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { WallStateStrip, type WallStateMode } from './WallStateStrip';
 import { WallIdentityBlock } from './WallIdentityBlock';
 import { WallScrubber } from './WallScrubber';
 import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
-import { useGradeFormat } from '../../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../../hooks/use-display-grade';
 import { formatRelativeTime } from '../../../lib/format-relative-time';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import type { WallKioskRegion } from './wall-kiosk-layout';
@@ -30,11 +29,14 @@ function WallIdleRecovery({
 }) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
 
   const name = lastLitClimb?.name?.trim() || '';
-  const grade = lastLitClimb?.grade ? formatGrade(lastLitClimb.grade) : null;
-  const gradeColor = getGradeColor(lastLitClimb?.grade ?? '') ?? DEFAULT_GRADE_COLOR;
+  // BoardPresenceClimb carries no Boardsesh grade today, so `resolveGrade` falls
+  // back to the legacy label + colour — lights up once the backend stamps them.
+  const resolvedGrade = resolveGrade({ difficulty: lastLitClimb?.grade ?? '' });
+  const grade = lastLitClimb?.grade ? resolvedGrade.label : null;
+  const gradeColor = resolvedGrade.color;
   const lastLine = { fontSize: typeScale.metaFontSize, lineHeight: typeScale.metaLineHeight };
   const hintLine = { fontSize: Math.round(typeScale.metaFontSize * 0.85) };
 

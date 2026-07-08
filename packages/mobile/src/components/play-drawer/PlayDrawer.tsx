@@ -61,7 +61,8 @@ import type { OpenClimbActionsOptions } from '../../providers/drawer-host-provid
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
-import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
+import { resolveTickDefaultGradeName } from '../../lib/boardsesh-grade-display';
 import { useShareClimb } from '../../hooks/use-share-climb';
 import { useMountedOnFirstOpen } from '../../hooks/use-mounted-on-first-open';
 import { getBoardRenderData } from '../../lib/board-details';
@@ -322,7 +323,11 @@ export function PlayDrawer({
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
-  const { formatGrade } = useGradeFormat();
+  // App-wide grade resolver: swaps the header grade (label + colour) to the
+  // Boardsesh grade when the "Show Boardsesh grades" toggle is on and a trusted
+  // one exists, else the legacy Aurora grade. `boardseshActive` also seeds the
+  // tick picker's default grade below.
+  const { resolveGrade, boardseshActive } = useDisplayGrade();
   const { isAuthenticated } = useAuth();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
@@ -394,6 +399,12 @@ export function PlayDrawer({
   // During the commit hand-off use the frozen climb (captured at fling start) so
   // the peek doesn't jump to the new climb's neighbour mid-swap.
   const headerPeekClimb = isSwipeCommitting ? frozenPeekClimb : peekClimb;
+
+  // The grade the header renders for the current + peek climbs under the "Show
+  // Boardsesh grades" toggle. `resolveGrade` is O(1) and auto-falls-back to the
+  // legacy Aurora grade, so this is safe to call each render (not a list).
+  const displayedGrade = displayedClimb ? resolveGrade(displayedClimb) : null;
+  const peekGrade = headerPeekClimb ? resolveGrade(headerPeekClimb) : null;
 
   // Host-owned post-fling reset: once the swiped-to climb has actually rendered
   // (the displayed queue item changes), snap the shared swipe offset back to 0 and
@@ -807,8 +818,9 @@ export function PlayDrawer({
                     current={
                       <PlayDrawerHeader
                         name={displayedClimb.name}
-                        difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
+                        difficulty={displayedGrade?.label ?? displayedClimb.difficulty}
                         rawDifficulty={displayedClimb.difficulty}
+                        gradeColor={displayedGrade?.color}
                         qualityAverage={displayedClimb.quality_average}
                         ascensionistCount={displayedClimb.ascensionist_count}
                         setterUsername={displayedClimb.setter_username}
@@ -825,8 +837,9 @@ export function PlayDrawer({
                       headerPeekClimb ? (
                         <PlayDrawerHeader
                           name={headerPeekClimb.name}
-                          difficulty={formatGrade(headerPeekClimb.difficulty) ?? headerPeekClimb.difficulty}
+                          difficulty={peekGrade?.label ?? headerPeekClimb.difficulty}
                           rawDifficulty={headerPeekClimb.difficulty}
+                          gradeColor={peekGrade?.color}
                           qualityAverage={headerPeekClimb.quality_average}
                           ascensionistCount={headerPeekClimb.ascensionist_count}
                           setterUsername={headerPeekClimb.setter_username}
@@ -1036,7 +1049,11 @@ export function PlayDrawer({
           sizeId={sizeId}
           setIds={setIds}
           sessionId={sessionId}
-          consensusGradeName={displayedClimb.difficulty}
+          // The tick picker opens on the Boardsesh grade (when the toggle is on and
+          // a trusted one exists) instead of the Aurora consensus, so a logged grade
+          // defaults to what the app now shows. Only the DEFAULT changes — the saved
+          // tick value stays on the Aurora scale and null until the climber picks.
+          consensusGradeName={resolveTickDefaultGradeName(displayedClimb, boardseshActive) ?? displayedClimb.difficulty}
         />
       )}
 

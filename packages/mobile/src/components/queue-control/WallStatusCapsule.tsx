@@ -25,9 +25,8 @@ import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { useTheme } from '../../providers/theme-provider';
-import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { withAlpha } from '../../theme/colors';
 import { selectByVariant } from '../../theme/variants/select-by-variant';
@@ -63,13 +62,17 @@ type WallStatusCapsuleProps = {
 function WallStatusCapsuleImpl({ climb }: WallStatusCapsuleProps) {
   const { t } = useTranslation('session');
   const { variant, colorScheme, systemColors, brandColors, m3, m3SurfaceContainers } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   const reduceMotion = useReducedMotion();
   const openWallPreview = useOpenWallPreview();
 
   const name = climb.name ?? '';
-  const formattedGrade = formatGrade(climb.grade ?? '');
-  const gradeColor = getGradeColor(climb.grade ?? '') ?? DEFAULT_GRADE_COLOR;
+  // BoardPresenceClimb carries no Boardsesh grade today, so `resolveGrade` falls
+  // back to the legacy label + colour — the capsule swaps to the Boardsesh grade
+  // once the backend stamps presence climbs.
+  const resolvedGrade = resolveGrade({ difficulty: climb.grade ?? '' });
+  const formattedGrade = climb.grade ? resolvedGrade.label : null;
+  const gradeColor = resolvedGrade.color;
   const senderName = climb.sentByDisplayName?.trim() || null;
   const hasSenderIdentity = climb.sentByAvatarUrl != null || senderName != null;
 

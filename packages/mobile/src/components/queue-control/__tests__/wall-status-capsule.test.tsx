@@ -85,9 +85,18 @@ vi.mock('../../../providers/theme-provider', () => ({
     m3SurfaceContainers: { high: '#2A2142', highest: '#322748' },
   }),
 }));
-vi.mock('../../../hooks/use-grade-format', () => ({
-  useGradeFormat: () => ({
-    formatGrade: (grade: string | null | undefined) => (grade ? `${grade} 6C` : null),
+// The capsule renders whatever `resolveGrade` returns (the app-wide "Show Boardsesh
+// grades" swap). Stub it to the legacy behaviour: label = "<grade> 6C", colour = the
+// mocked grade hue (#FF0000 for V5, else default). BoardPresenceClimb carries no
+// Boardsesh grade today, so the toggle-on path still falls through to this.
+vi.mock('../../../hooks/use-display-grade', () => ({
+  useDisplayGrade: () => ({
+    boardseshActive: false,
+    resolveGrade: (fields: { difficulty?: string | null }) => ({
+      label: fields.difficulty ? `${fields.difficulty} 6C` : '',
+      color: fields.difficulty === 'V5' ? '#FF0000' : '#808080',
+      isBoardsesh: false,
+    }),
   }),
 }));
 vi.mock('../../Text', () => ({

@@ -16,6 +16,11 @@ type PlayDrawerHeaderProps = {
   /** Raw difficulty (e.g. "6a/V3") used for grade-color lookup. Optional —
    *  falls back to `difficulty` if not provided. */
   rawDifficulty?: string;
+  /** Explicit grade colour, overriding the internal `getGradeColor` lookup. The
+   *  play drawer passes this so the colour matches the shown grade when the "Show
+   *  Boardsesh grades" toggle swaps the label to the Boardsesh grade. Falls back
+   *  to `getGradeColor(rawDifficulty ?? difficulty)` when omitted. */
+  gradeColor?: string;
   qualityAverage: string;
   ascensionistCount: number;
   setterUsername: string;
@@ -35,6 +40,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   name,
   difficulty,
   rawDifficulty,
+  gradeColor,
   qualityAverage,
   ascensionistCount,
   setterUsername,
@@ -44,9 +50,9 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   onLongPressName,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
-  const gradeColor = useMemo(
-    () => getGradeColor(rawDifficulty ?? difficulty) ?? DEFAULT_GRADE_COLOR,
-    [rawDifficulty, difficulty],
+  const resolvedGradeColor = useMemo(
+    () => gradeColor ?? getGradeColor(rawDifficulty ?? difficulty) ?? DEFAULT_GRADE_COLOR,
+    [gradeColor, rawDifficulty, difficulty],
   );
 
   const subtitleParts: string[] = [];
@@ -85,7 +91,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
         </>
       }
       trailing={
-        <Text variant="headline" style={[styles.gradeText, { color: gradeColor }]} numberOfLines={1}>
+        <Text variant="headline" style={[styles.gradeText, { color: resolvedGradeColor }]} numberOfLines={1}>
           {difficulty}
         </Text>
       }
