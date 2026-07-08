@@ -356,7 +356,19 @@
     "byAngle": "Grado Boardsesh por ángulo",
     "updated": "Actualizado {{when}}",
     "localGradeLine": "En este plafón: {{grade}}",
-    "logScale": "Escala logarítmica"
+    "logScale": "Escala logarítmica",
+    "dumbbell": {
+      "legendBoardsesh": "En todas partes (Boardsesh)",
+      "legendCrowd": "Este plafón (comunidad)",
+      "legendSize": "Punto más grande = más encadenes",
+      "tapCaption_one": "{{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadene",
+      "tapCaption_other": "{{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadenes",
+      "tapCaptionAgree_one": "{{angle}}° · la comunidad y Boardsesh coinciden · {{grade}} · {{count}} encadene",
+      "tapCaptionAgree_other": "{{angle}}° · la comunidad y Boardsesh coinciden · {{grade}} · {{count}} encadenes",
+      "singleAngle_one": "A {{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadene",
+      "singleAngle_other": "A {{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadenes",
+      "crowdOnlyNote": "Todavía no hay suficientes encadenes entre plafones para comparar por ángulo."
+    }
   },
   "multiboardList": {
     "noClimbsFound": "No se encontraron bloques",

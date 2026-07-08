@@ -356,7 +356,19 @@
     "byAngle": "Boardsesh grade by angle",
     "updated": "Updated {{when}}",
     "localGradeLine": "On this board: {{grade}}",
-    "logScale": "Log scale"
+    "logScale": "Log scale",
+    "dumbbell": {
+      "legendBoardsesh": "Everywhere (Boardsesh)",
+      "legendCrowd": "This board (crowd)",
+      "legendSize": "Bigger dot = more sends",
+      "tapCaption_one": "{{angle}}° · this board {{crowd}} · everywhere {{boardsesh}} · {{count}} send",
+      "tapCaption_other": "{{angle}}° · this board {{crowd}} · everywhere {{boardsesh}} · {{count}} sends",
+      "tapCaptionAgree_one": "{{angle}}° · crowd & Boardsesh agree · {{grade}} · {{count}} send",
+      "tapCaptionAgree_other": "{{angle}}° · crowd & Boardsesh agree · {{grade}} · {{count}} sends",
+      "singleAngle_one": "At {{angle}}° · this board {{crowd}} · everywhere {{boardsesh}} · {{count}} send",
+      "singleAngle_other": "At {{angle}}° · this board {{crowd}} · everywhere {{boardsesh}} · {{count}} sends",
+      "crowdOnlyNote": "Not enough cross-board sends yet to compare by angle."
+    }
   },
   "similarClimbs": {
     "loadError": "Couldn't load similar climbs.",

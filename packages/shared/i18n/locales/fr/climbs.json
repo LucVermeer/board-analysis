@@ -356,7 +356,19 @@
     "byAngle": "Grade Boardsesh par angle",
     "updated": "Mis à jour {{when}}",
     "localGradeLine": "Sur cette board : {{grade}}",
-    "logScale": "Échelle logarithmique"
+    "logScale": "Échelle logarithmique",
+    "dumbbell": {
+      "legendBoardsesh": "Partout (Boardsesh)",
+      "legendCrowd": "Cette board (communauté)",
+      "legendSize": "Point plus grand = plus de croix",
+      "tapCaption_one": "{{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
+      "tapCaption_other": "{{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
+      "tapCaptionAgree_one": "{{angle}}° · communauté et Boardsesh d'accord · {{grade}} · {{count}} croix",
+      "tapCaptionAgree_other": "{{angle}}° · communauté et Boardsesh d'accord · {{grade}} · {{count}} croix",
+      "singleAngle_one": "À {{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
+      "singleAngle_other": "À {{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
+      "crowdOnlyNote": "Pas encore assez de croix inter-boards pour comparer par angle."
+    }
   },
   "similarClimbs": {
     "loadError": "Impossible de charger les blocs similaires.",
