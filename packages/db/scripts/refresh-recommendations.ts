@@ -26,6 +26,7 @@ import {
   type RecommendationType,
 } from '../src/queries/recommendations/index.js';
 import { rowsOf } from '../src/queries/util/rows.js';
+import { snapshotClimbStatsHistoryIfDue } from '../src/queries/climb-stats/index.js';
 import { getSizeFullnessTiers } from '@boardsesh/board-constants/size-comparison';
 import { getProductSize, getSetsForLayoutAndSize, getLayout } from '@boardsesh/board-constants/product-sizes';
 import type { BoardName } from '@boardsesh/shared-schema';
@@ -104,6 +105,18 @@ async function refreshSendStats(db: Db): Promise<void> {
   const projectId = process.env.POSTHOG_PROJECT_ID ?? '412845';
   const host = process.env.POSTHOG_HOST ?? 'https://us.posthog.com';
   if (!apiKey) {
+    // This has silently skipped on EVERY scheduled run — board_climb_send_stats
+    // has never held a row and the recommendation send-boost has been inert
+    // since the feature shipped. The cause is an *env* gap: the
+    // POSTHOG_PERSONAL_API_KEY secret is empty in the GitHub `Production`
+    // environment this workflow runs under (the query/insert path itself is
+    // fine — verified against live PostHog). A green workflow run hid it, so
+    // emit a GitHub Actions ::warning:: annotation instead of a plain log:
+    // the send-boost stays degraded until an operator sets the secret. Setting
+    // it is the actual fix; this makes the degradation impossible to miss.
+    console.log(
+      '::warning title=send-stats skipped::POSTHOG_PERSONAL_API_KEY is not set — board_climb_send_stats was NOT refreshed and the recommendation send-boost stays neutral. Set the POSTHOG_PERSONAL_API_KEY secret in the Production environment to enable it.',
+    );
     console.log('[recs] POSTHOG_PERSONAL_API_KEY not set — skipping send-stats refresh (sendBoost stays neutral).');
     return;
   }
@@ -308,6 +321,22 @@ async function generateCohortPlaylists(db: Db): Promise<void> {
   }
 }
 
+// Weekly board_climb_stats_history catch-all for boards the sync daemons don't
+// snapshot: MoonBoard (no periodic sync daemon at all — it froze with no writer
+// since March) and Touchstone (an Aurora board with no linked user credential,
+// so the aurora daemon's shared sync — which the snapshot rides — never runs for
+// it). Each call is gated by the same 7-day per-board watermark, so a board the
+// daemons already snapshotted this week is a no-op here.
+const HISTORY_CATCHUP_BOARDS = ['moonboard', 'touchstone'];
+
+async function snapshotWeeklyHistory(db: Db): Promise<void> {
+  console.log('[recs] weekly climb-stats history snapshot (catch-all boards)…');
+  for (const board of HISTORY_CATCHUP_BOARDS) {
+    const { written, skipped } = await snapshotClimbStatsHistoryIfDue(db, board, (message) => console.log(message));
+    console.log(`[recs]   history ${board} → ${skipped ? 'not due (skipped)' : `${written} rows`}`);
+  }
+}
+
 async function main(): Promise<void> {
   const { db, close } = createScriptDb();
   try {
@@ -315,6 +344,7 @@ async function main(): Promise<void> {
     await recomputeSetterStats(db);
     await refreshSendStats(db);
     await generateCohortPlaylists(db);
+    await snapshotWeeklyHistory(db);
     console.log('[recs] done.');
   } finally {
     await close();
