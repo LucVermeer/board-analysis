@@ -46,9 +46,17 @@ void describe('recomputeClimbStatsBulk', () => {
     // Kilter-detached (upstream-deleted) rows must be excluded from the count.
     assert.match(updateSql, /kilter_detached_at IS NULL/);
     // Quality blend — the Boardsesh side (one vote per climber = LATEST rated
-    // native flash/send tick) and the blended non-owned quality_average.
-    assert.match(updateSql, /boardsesh_quality_sum\s*=\s*bq\.bs_quality_sum/);
-    assert.match(updateSql, /boardsesh_quality_count\s*=\s*NULLIF\(bq\.bs_quality_count, 0\)/);
+    // native flash/send tick) and the blended non-owned quality_average. Owned
+    // climbs NULL the blend-input columns (they never blend), matching the
+    // backfill migration so the columns mean the same thing everywhere.
+    assert.match(
+      updateSql,
+      /boardsesh_quality_sum\s*=\s*CASE WHEN owned\.boardsesh_owned THEN NULL ELSE bq\.bs_quality_sum END/,
+    );
+    assert.match(
+      updateSql,
+      /boardsesh_quality_count\s*=\s*CASE WHEN owned\.boardsesh_owned THEN NULL ELSE NULLIF\(bq\.bs_quality_count, 0\) END/,
+    );
     // The vote query: native-only, rated, one row per user (latest wins).
     assert.match(updateSql, /DISTINCT ON \(bt\.board_type, bt\.climb_uuid, bt\.angle, bt\.user_id\)/);
     assert.match(updateSql, /bt\.origin = 'native'/);

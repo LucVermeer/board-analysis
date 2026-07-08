@@ -1170,6 +1170,27 @@
       "when": 1783503256921,
       "tag": "0166_aurora_json_dedup_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "7",
+      "when": 1783505216431,
+      "tag": "0167_add_quality_blend_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1783505300234,
+      "tag": "0168_init_upstream_quality_average",
+      "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "7",
+      "when": 1783505301857,
+      "tag": "0169_backfill_quality_blend",
+      "breakpoints": true
     }
   ]
 }

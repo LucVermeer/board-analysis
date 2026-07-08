@@ -9,17 +9,17 @@ import { blendedQualityAverageSql } from '@boardsesh/db/queries';
 import { getWorkerDatabaseUrl, setupWorkerDatabase } from './worker-db';
 
 // ---------------------------------------------------------------------------
-// Quality-blend backfill migrations (0167 init + 0168 blend) replayed against a
+// Quality-blend backfill migrations (0168 init + 0169 blend) replayed against a
 // real Postgres (the backend worker DB), plus the shared ON CONFLICT blend
 // idiom the three upstream writers use. Covers every branch of the blend and
-// proves the 0167 guard makes a double-apply safe.
+// proves the 0168 guard makes a double-apply safe.
 // ---------------------------------------------------------------------------
 
 const drizzleDir = fileURLToPath(new URL('../../../db/drizzle/', import.meta.url));
-const MIGRATION_0167 = readFileSync(`${drizzleDir}0167_init_upstream_quality_average.sql`, 'utf8');
-const MIGRATION_0168 = readFileSync(`${drizzleDir}0168_backfill_quality_blend.sql`, 'utf8');
+const MIGRATION_0168 = readFileSync(`${drizzleDir}0168_init_upstream_quality_average.sql`, 'utf8');
+const MIGRATION_0169 = readFileSync(`${drizzleDir}0169_backfill_quality_blend.sql`, 'utf8');
 
-describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
+describe('quality-blend backfill (0168 + 0169) — real DB replay', () => {
   let client: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
 
@@ -37,7 +37,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
     await db.execute(
       sql`TRUNCATE TABLE boardsesh_ticks, board_climb_stats, board_climbs, users RESTART IDENTITY CASCADE`,
     );
-    // Fresh guard slate so each replay starts un-applied (0167 recreates it).
+    // Fresh guard slate so each replay starts un-applied (0168 recreates it).
     await db.execute(sql`DROP TABLE IF EXISTS _bs_migration_guards`);
   });
 
@@ -53,7 +53,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
 
   async function seedStats(uuid: string, opts: { upstream: number; qualityAverage: number | null }) {
     // Pre-migration shape: quality_average holds the raw upstream value (or NULL);
-    // upstream_quality_average / boardsesh_* are all NULL (0166 just added them).
+    // upstream_quality_average / boardsesh_* are all NULL (0167 just added them).
     await db.execute(sql`INSERT INTO board_climb_stats
       (board_type, climb_uuid, angle, upstream_ascensionist_count, ascensionist_count, boardsesh_ascensionist_count, quality_average, quality_normalized)
       VALUES ('kilter', ${uuid}, 40, ${opts.upstream}, ${opts.upstream}, 0, ${opts.qualityAverage}, true)`);
@@ -90,8 +90,8 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
   const num = (v: number | string | null) => (v == null ? null : Number(v));
 
   async function applyMigrations() {
-    await client.unsafe(MIGRATION_0167);
     await client.unsafe(MIGRATION_0168);
+    await client.unsafe(MIGRATION_0169);
   }
 
   // One fixture that lights up every branch of both migrations.
@@ -111,7 +111,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
       climbedAt: '2026-01-01 00:00:00',
     });
 
-    // K2 — non-owned, upstream-rated, only an IMPORTED rated tick → NOT a 0168
+    // K2 — non-owned, upstream-rated, only an IMPORTED rated tick → NOT a 0169
     // key; quality_average stays the pure upstream value, no Boardsesh terms.
     await seedClimb('K2', null);
     await seedStats('K2', { upstream: 10, qualityAverage: 4 });
@@ -125,7 +125,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
     });
 
     // K3 — OWNED, two native rated sends → plain AVG, never a blend. Seed a
-    // STALE quality_average to prove 0168 recomputes the owned average.
+    // STALE quality_average to prove 0169 recomputes the owned average.
     await seedClimb('K3', 'u1');
     await seedStats('K3', { upstream: 0, qualityAverage: 1 });
     await seedTick({
@@ -187,13 +187,13 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
       climbedAt: '2026-06-01 00:00:00',
     });
 
-    // K6 — non-owned, upstream-rated, NO ticks → 0167 seeds upstream_quality_average,
-    // 0168 leaves it untouched (not a native-rated key).
+    // K6 — non-owned, upstream-rated, NO ticks → 0168 seeds upstream_quality_average,
+    // 0169 leaves it untouched (not a native-rated key).
     await seedClimb('K6', null);
     await seedStats('K6', { upstream: 8, qualityAverage: 4.5 });
   }
 
-  it('produces the correct blend for every branch after 0167 + 0168', async () => {
+  it('produces the correct blend for every branch after 0168 + 0169', async () => {
     await seedEveryBranch();
     await applyMigrations();
 
@@ -240,7 +240,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
     expect(k6.bc).toBe(null);
   });
 
-  it('is double-apply safe — the 0167 guard prevents re-seeding a blended value', async () => {
+  it('is double-apply safe — the 0168 guard prevents re-seeding a blended value', async () => {
     await seedEveryBranch();
     await applyMigrations();
 
@@ -250,7 +250,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
       k6: await row('K6'),
     };
 
-    // Re-run BOTH migrations. Without the guard, 0167 would copy K1's now-blended
+    // Re-run BOTH migrations. Without the guard, 0168 would copy K1's now-blended
     // quality_average (42/11) back into upstream_quality_average, corrupting it.
     await applyMigrations();
 
@@ -264,7 +264,7 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
 
     // The guard row exists exactly once.
     const guard = (await db.execute(
-      sql`SELECT count(*)::int AS n FROM _bs_migration_guards WHERE tag='0167_init_upstream_quality_average'`,
+      sql`SELECT count(*)::int AS n FROM _bs_migration_guards WHERE tag='0168_init_upstream_quality_average'`,
     )) as unknown as Array<{
       n: number;
     }>;
