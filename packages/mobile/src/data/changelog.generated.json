@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-07T23:23:52.061Z",
+  "generatedAt": "2026-07-08T07:59:01.667Z",
   "entries": [
+    {
+      "prNumber": 3563,
+      "category": "fixed",
+      "title": "Fixed some iPhones on iOS 26.5 that connected to a board but never lit up climbs.",
+      "mergedAt": "2026-07-08T07:57:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3563"
+    },
+    {
+      "prNumber": 3549,
+      "category": "fixed",
+      "title": "Ascent counts are honest again: if you synced your Kilter or Tension logbook, your sends were being counted on top of the numbers already in the board's own history — climbs looked more repeated than they are",
+      "mergedAt": "2026-07-07T23:39:14Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3549",
+      "body": "Sends you log in Boardsesh still bump the tally instantly\nFirst-ascent credits on Kilter, Tension, and MoonBoard problems now come from the board itself, not whoever logged them first in Boardsesh"
+    },
     {
       "prNumber": 3547,
       "category": "fixed",

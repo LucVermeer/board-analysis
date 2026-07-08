@@ -10,6 +10,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### Fixed
+
+- Fixed some iPhones on iOS 26.5 that connected to a board but never lit up climbs. ([#3563](https://github.com/boardsesh/boardsesh/pull/3563))
+
 ## 2026-07-07
 
 ### App update
@@ -32,6 +36,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Ascent counts are honest again: if you synced your Kilter or Tension logbook, your sends were being counted on top of the numbers already in the board's own history — climbs looked more repeated than they are ([#3549](https://github.com/boardsesh/boardsesh/pull/3549))
+  Sends you log in Boardsesh still bump the tally instantly
+  First-ascent credits on Kilter, Tension, and MoonBoard problems now come from the board itself, not whoever logged them first in Boardsesh
 - Star ratings finally read true on every board — Kilter classics that were stuck at 3 stars now show their real 5 ([#3547](https://github.com/boardsesh/boardsesh/pull/3547))
   Low-rated climbs stop getting a free bump: Tension-family averages are back on the same scale as your own tick ratings
   "Unrated" climbs no longer sort as zero stars or drag averages down
