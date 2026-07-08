@@ -114,13 +114,15 @@ each written by a single class of writer:
 | `ascensionist_count`           | All writers, kept in lockstep    | recomputed as `COALESCE(upstream_ascensionist_count, 0) + COALESCE(boardsesh_ascensionist_count, 0)`                                                                                                                                        |
 
 `upstream_ascensionist_count` is the board's single manufacturer/upstream count,
-and every board has exactly one live upstream writer. Upstream writers set it
-`GREATEST(existing, incoming)` — monotonic, so a stale or partial snapshot can
-never lower a climb's count — except the Kilter `repair-stats` path, which
-overwrites it as an authoritative reconciliation to the live Grips catalog (see
-kilter-sync.md). The Aurora API sync no longer syncs the Kilter board (Kilter
-syncs only via Kilter Grips); it serves Tension and the other direct-Aurora
-boards. Boardsesh ticks add on top of upstream. Migration 0141 folded the old
+and every board has exactly one live upstream writer. The Aurora API sync takes
+the incoming cursored value verbatim (Aurora only re-sends rows it changed, so
+the value is current truth and legitimate decreases propagate; a NULL from
+upstream preserves the stored count — "no data", not zero). The Kilter Grips
+catalog sync still uses `GREATEST(existing, incoming)` between runs of its
+`repair-stats` path, which overwrites it as an authoritative reconciliation to
+the live Grips catalog (see kilter-sync.md). The Aurora API sync no longer
+syncs the Kilter board (Kilter syncs only via Kilter Grips); it serves Tension
+and the other direct-Aurora boards. Boardsesh ticks add on top of upstream. Migration 0141 folded the old
 per-source `aurora_`/`kilter_` columns into this single `upstream_` column.
 
 Provenance: `boardsesh_ticks.origin` (`native | aurora_pull | kilter_pull |
