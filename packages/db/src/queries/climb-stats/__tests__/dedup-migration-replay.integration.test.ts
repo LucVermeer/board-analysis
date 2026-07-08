@@ -4,8 +4,8 @@ import postgres from 'postgres';
 import { prepareDedupReplayDatabase, dedupReplayChecks } from '../../../testing/dedup-replay';
 
 /**
- * Scratch-Postgres replay of the PR4 dedup lineage (0163 add column, 0164 kilter
- * dedup, 0165 aurora/json dedup) — LOCAL opt-in mode. Set
+ * Scratch-Postgres replay of the PR4 dedup lineage (0164 add column, 0165 kilter
+ * dedup, 0166 aurora/json dedup) — LOCAL opt-in mode. Set
  * MIGRATION_REPLAY_DB_URL to a throwaway superuser Postgres (a plain
  * `docker run postgres`), e.g.
  *
@@ -25,7 +25,7 @@ const DB_NAME = 'bs_pr4_dedup_replay';
 
 const suite = REPLAY_URL ? describe : describe.skip;
 
-suite('PR4 dedup migration replay (0163→0165)', () => {
+suite('PR4 dedup migration replay (0164→0166)', () => {
   let admin: postgres.Sql;
   let db: postgres.Sql;
 
