@@ -110,9 +110,46 @@ export function inferUserUtcOffsetSeconds(existing: TickTimeSample[], incoming: 
 }
 
 /**
+ * Adoption match SCORE for an existing tick vs an incoming log — lower is a
+ * closer match, `null` means no match. Two tiers:
+ *
+ *   - Fast path (|Δt| ≤ tolerance): the honest same-instant ascent. Score lands
+ *     in [0, tolerance].
+ *   - Offset path (|Δt − offset| ≤ tolerance, only when an offset was inferred):
+ *     a pre-fix timezone-shifted historical row. Score lands in
+ *     (tolerance, 2·tolerance].
+ *
+ * The tiering guarantees a fast-path candidate ALWAYS outranks an offset-path
+ * one. So when a shifted-history user has two distinct same-(climb, angle)
+ * ascents and an incoming log sits within tolerance of BOTH the true
+ * same-instant row and an offset-distant DISTINCT row, the caller (which picks
+ * the lowest score) links the same-instant row and never merges the distinct
+ * ascent. Within a tier the numerically closest wins.
+ *
+ * `offsetSeconds` null ⇒ fast path only.
+ */
+export function adoptionMatchScoreSeconds(
+  existingMs: number,
+  incomingMs: number,
+  offsetSeconds: number | null,
+  toleranceSeconds: number = NATURAL_KEY_TOLERANCE_SECONDS,
+): number | null {
+  const deltaMs = existingMs - incomingMs;
+  const toleranceMs = toleranceSeconds * 1000;
+  const absDeltaMs = Math.abs(deltaMs);
+  if (absDeltaMs <= toleranceMs) return absDeltaMs / 1000;
+  if (offsetSeconds !== null && offsetSeconds !== 0) {
+    const offsetDistanceMs = Math.abs(deltaMs - offsetSeconds * 1000);
+    if (offsetDistanceMs <= toleranceMs) return toleranceSeconds + offsetDistanceMs / 1000;
+  }
+  return null;
+}
+
+/**
  * Does an existing tick's climbed_at match an incoming log's timestamp for
  * adoption? True when the gap is within tolerance of 0 (the honest-UTC fast
  * path) OR — when an offset was inferred — within tolerance of that offset.
+ * Thin boolean wrapper over adoptionMatchScoreSeconds (single source of truth).
  *
  * `offsetSeconds` null ⇒ fast path only.
  */
@@ -122,11 +159,5 @@ export function climbedAtMatchesForAdoption(
   offsetSeconds: number | null,
   toleranceSeconds: number = NATURAL_KEY_TOLERANCE_SECONDS,
 ): boolean {
-  const deltaMs = existingMs - incomingMs;
-  const toleranceMs = toleranceSeconds * 1000;
-  if (Math.abs(deltaMs) <= toleranceMs) return true;
-  if (offsetSeconds !== null && offsetSeconds !== 0) {
-    return Math.abs(deltaMs - offsetSeconds * 1000) <= toleranceMs;
-  }
-  return false;
+  return adoptionMatchScoreSeconds(existingMs, incomingMs, offsetSeconds, toleranceSeconds) !== null;
 }

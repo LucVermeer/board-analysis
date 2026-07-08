@@ -10,7 +10,10 @@ import { eq, and, inArray } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { UNIFIED_TABLES } from '../../db/queries/util/table-select';
 import { auroraCredentials, playlists, playlistClimbs, playlistOwnership } from '../../db/schema';
-import { applyAuroraAscents, applyAuroraBids } from '@boardsesh/aurora-sync/sync';
+// Narrow subpath import (not the `./sync` barrel) so the web bundle doesn't
+// transitively pull the aurora daemon's postgres-js client — apply-user-logbook
+// is self-contained (drizzle-orm + @boardsesh/db + shared-schema only).
+import { applyAuroraAscents, applyAuroraBids } from '@boardsesh/aurora-sync/apply-user-logbook';
 
 /**
  * Get NextAuth user ID from Aurora user ID

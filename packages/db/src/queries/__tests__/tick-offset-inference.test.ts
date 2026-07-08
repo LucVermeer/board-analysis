@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { inferUserUtcOffsetSeconds, climbedAtMatchesForAdoption, type TickTimeSample } from '../tick-offset-inference';
+import {
+  inferUserUtcOffsetSeconds,
+  climbedAtMatchesForAdoption,
+  adoptionMatchScoreSeconds,
+  type TickTimeSample,
+} from '../tick-offset-inference';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -104,5 +109,40 @@ describe('climbedAtMatchesForAdoption', () => {
   it('does not match a shifted row when no offset is inferred', () => {
     const existing = base + 10 * HOUR;
     assert.equal(climbedAtMatchesForAdoption(existing, base, null), false);
+  });
+});
+
+describe('adoptionMatchScoreSeconds', () => {
+  const base = Date.parse('2026-05-01T12:00:00Z');
+
+  it('returns null when neither the fast path nor the offset path matches', () => {
+    assert.equal(adoptionMatchScoreSeconds(base + 61_000, base, 0), null);
+    assert.equal(adoptionMatchScoreSeconds(base + 10 * HOUR, base, null), null);
+    assert.equal(adoptionMatchScoreSeconds(base + 5 * HOUR, base, 10 * 3600), null);
+  });
+
+  it('scores a fast-path match by its raw |Δt| (in [0, tolerance])', () => {
+    assert.equal(adoptionMatchScoreSeconds(base, base, 0), 0);
+    assert.equal(adoptionMatchScoreSeconds(base + 30_000, base, 10 * 3600), 30);
+  });
+
+  it('scores an offset-path match ABOVE any fast-path match (tolerance + distance)', () => {
+    // Δt = offset + 10s → offset-path distance 10s → score 60 + 10 = 70,
+    // strictly greater than the worst fast-path score (60).
+    const score = adoptionMatchScoreSeconds(base + 10 * HOUR + 10_000, base, 10 * 3600);
+    assert.equal(score, 70);
+    assert.ok((score as number) > 60);
+  });
+
+  it('prefers the honest same-instant row over an offset-distant DISTINCT ascent', () => {
+    // A shifted-history user (+10h offset) logs the SAME climb+angle twice:
+    // the true same-instant existing row is 40s away (fast path, score 40); a
+    // genuinely different ascent sits ~10h away (offset path, score ≥60).
+    // Whichever the caller loops first, the lower score must be the honest one.
+    const incoming = base;
+    const honest = adoptionMatchScoreSeconds(base + 40_000, incoming, 10 * 3600);
+    const distinct = adoptionMatchScoreSeconds(base + 10 * HOUR + 5_000, incoming, 10 * 3600);
+    assert.ok(honest !== null && distinct !== null);
+    assert.ok((honest as number) < (distinct as number), 'fast-path honest row must win');
   });
 });

@@ -6,7 +6,7 @@ import { boardseshTicks } from '@boardsesh/db/schema';
 import {
   recomputeClimbStatsBulk,
   inferUserUtcOffsetSeconds,
-  climbedAtMatchesForAdoption,
+  adoptionMatchScoreSeconds,
   MAX_USER_UTC_OFFSET_SECONDS,
   NATURAL_KEY_TOLERANCE_SECONDS,
   type ClimbStatsKey,
@@ -334,16 +334,23 @@ async function applyLogbookChunk(
       for (const miss of misses) {
         const missMs = Date.parse(miss.climbedAt);
         if (!Number.isFinite(missMs)) continue;
-        const match = candidateRows.find(
-          (r) =>
-            !claimedUuids.has(r.uuid) &&
-            r.climbUuid === miss.climbUuid &&
-            r.angle === miss.angle &&
-            climbedAtMatchesForAdoption(Date.parse(r.climbedAt), missMs, offset),
-        );
-        if (match) {
-          claims.set(miss.auroraId, match.uuid);
-          claimedUuids.add(match.uuid);
+        // Closest eligible candidate — fast-path same-instant preferred over an
+        // offset-distant one — so a shifted-history user's distinct same-key
+        // ascent is never claimed in place of the true same-instant match.
+        let matchUuid: string | null = null;
+        let bestScore = Infinity;
+        for (const r of candidateRows) {
+          if (claimedUuids.has(r.uuid)) continue;
+          if (r.climbUuid !== miss.climbUuid) continue;
+          if (r.angle !== miss.angle) continue;
+          const score = adoptionMatchScoreSeconds(Date.parse(r.climbedAt), missMs, offset);
+          if (score === null || score >= bestScore) continue;
+          bestScore = score;
+          matchUuid = r.uuid;
+        }
+        if (matchUuid) {
+          claims.set(miss.auroraId, matchUuid);
+          claimedUuids.add(matchUuid);
           addKey(miss.climbUuid, miss.angle);
         }
       }

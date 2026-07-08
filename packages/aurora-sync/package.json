@@ -29,6 +29,11 @@
       "import": "./src/sync/index.ts",
       "default": "./src/sync/index.ts"
     },
+    "./apply-user-logbook": {
+      "types": "./src/sync/apply-user-logbook.ts",
+      "import": "./src/sync/apply-user-logbook.ts",
+      "default": "./src/sync/apply-user-logbook.ts"
+    },
     "./json-import": {
       "types": "./src/sync/json-import.ts",
       "import": "./src/sync/json-import.ts",

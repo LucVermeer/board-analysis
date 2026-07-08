@@ -14,7 +14,7 @@ import {
   resolveCanonicalClimbUuid,
   recomputeClimbStatsBulk,
   inferUserUtcOffsetSeconds,
-  climbedAtMatchesForAdoption,
+  adoptionMatchScoreSeconds,
   MAX_USER_UTC_OFFSET_SECONDS,
   type ClimbStatsKey,
   type TickTimeSample,
@@ -752,10 +752,19 @@ export async function applyLogs(
     const claimed = new Set<string>();
     for (const candidate of naturalKeyCandidates) {
       const target = Date.parse(candidate.raw.created_at);
-      const match = candidateRows.find((r) => {
-        if (claimed.has(r.uuid)) return false;
-        if (r.climbUuid !== candidate.canonical) return false;
-        if (r.angle !== candidate.raw.angle) return false;
+      // Pick the CLOSEST eligible existing row, not the first one in arbitrary
+      // DB order. adoptionMatchScoreSeconds ranks an honest same-instant
+      // (fast-path) candidate ahead of any offset-distant one, so a
+      // shifted-history user with two distinct same-(climb, angle) ascents links
+      // this log to the true same-instant row instead of merging the
+      // offset-distant DISTINCT ascent that also happens to fall within the
+      // ±60s-of-offset window.
+      let match: { uuid: string; kilterId: string | null } | null = null;
+      let bestScore = Infinity;
+      for (const r of candidateRows) {
+        if (claimed.has(r.uuid)) continue;
+        if (r.climbUuid !== candidate.canonical) continue;
+        if (r.angle !== candidate.raw.angle) continue;
         // Status-aware adoption: the natural key (climb_uuid, angle, ±Δt)
         // ignores status, so without this guard an incoming `attempt`
         // logged within tolerance of an existing completion would adopt
@@ -763,12 +772,15 @@ export async function applyLogs(
         // Refuse that one direction: leave the completion unclaimed so the
         // attempt inserts as its own tick. Upgrades (incoming send/flash
         // onto an existing attempt) and same-status re-syncs still adopt.
-        if (candidate.fields.status === 'attempt' && (r.status === 'send' || r.status === 'flash')) return false;
-        return climbedAtMatchesForAdoption(Date.parse(r.climbedAt), target, inferredOffsetSeconds);
-      });
+        if (candidate.fields.status === 'attempt' && (r.status === 'send' || r.status === 'flash')) continue;
+        const score = adoptionMatchScoreSeconds(Date.parse(r.climbedAt), target, inferredOffsetSeconds);
+        if (score === null || score >= bestScore) continue;
+        bestScore = score;
+        match = { uuid: r.uuid, kilterId: r.kilterId };
+      }
       if (match) {
         claimed.add(match.uuid);
-        naturalKeyMatchesByKey.set(candidate.raw.log_uuid, { uuid: match.uuid, kilterId: match.kilterId });
+        naturalKeyMatchesByKey.set(candidate.raw.log_uuid, match);
       }
     }
   }
