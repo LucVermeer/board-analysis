@@ -19,8 +19,12 @@ import { sql, type SQL } from 'drizzle-orm';
  *                       THEN upstream_ascensionist_count END, 0)
  *         + COALESCE(boardsesh_quality_count, 0), 0)
  *
- * Result is NULL when both sides are absent (no upstream quality with a
- * non-zero weight, and no Boardsesh votes).
+ * Result is NULL only when BOTH sides are genuinely absent (no upstream quality
+ * at all, and no Boardsesh votes). When the manufacturer HAS a quality but its
+ * ascent-count weight is 0 (freshly uploaded climbs, or quality that arrived
+ * before ascents) and there are no Boardsesh votes, the weighted division is
+ * 0/0 → NULL, so we fall back to the raw upstream_quality_average rather than
+ * clearing a known rating.
  *
  * Upstream weight = upstream_ascensionist_count. This is a DOCUMENTED
  * approximation: the manufacturer publishes only one aggregate quality average
@@ -66,12 +70,20 @@ export function blendedQualityAverageSql(args: {
   boardseshQualityCount: SQL;
 }): SQL {
   const { upstreamQualityAverage, upstreamAscensionistCount, boardseshQualitySum, boardseshQualityCount } = args;
-  return sql`(
-    (COALESCE(${upstreamQualityAverage} * ${upstreamAscensionistCount}, 0) + COALESCE(${boardseshQualitySum}, 0))
-    / NULLIF(
-        COALESCE(CASE WHEN ${upstreamQualityAverage} IS NOT NULL THEN ${upstreamAscensionistCount} END, 0)
-        + COALESCE(${boardseshQualityCount}, 0),
-        0
-      )
+  // Outer COALESCE(..., upstreamQualityAverage): when the weighted division is
+  // 0/0 (upstream quality known but zero ascent weight and no Boardsesh votes)
+  // fall back to the raw upstream average instead of clearing it to NULL. When
+  // upstream quality is itself NULL this fallback is also NULL, so a genuinely
+  // unrated climb still resolves to NULL.
+  return sql`COALESCE(
+    (
+      (COALESCE(${upstreamQualityAverage} * ${upstreamAscensionistCount}, 0) + COALESCE(${boardseshQualitySum}, 0))
+      / NULLIF(
+          COALESCE(CASE WHEN ${upstreamQualityAverage} IS NOT NULL THEN ${upstreamAscensionistCount} END, 0)
+          + COALESCE(${boardseshQualityCount}, 0),
+          0
+        )
+    ),
+    ${upstreamQualityAverage}
   )`;
 }

@@ -180,9 +180,10 @@ describe('recomputeClimbStats', () => {
     // the upstream ascent count) — NOT the bare stored quality_average.
     expect(sql).toMatch(/quality_average\s*=\s*CASE[\s\S]+?agg\.avg_quality[\s\S]+?upstream_quality_average/);
     // Boardsesh side of the blend: one vote per climber = LATEST rated native
-    // flash/send tick, written to the sum/count columns.
-    expect(sql).toMatch(/boardsesh_quality_sum\s*=\s*bq\.bs_quality_sum/);
-    expect(sql).toMatch(/boardsesh_quality_count\s*=\s*NULLIF\(bq\.bs_quality_count, 0\)/);
+    // flash/send tick, written to the sum/count columns for NON-owned climbs and
+    // NULLed for owned (never blended).
+    expect(sql).toMatch(/boardsesh_quality_sum\s*=\s*CASE[\s\S]+?bq\.bs_quality_sum/);
+    expect(sql).toMatch(/boardsesh_quality_count\s*=\s*CASE[\s\S]+?NULLIF\(bq\.bs_quality_count, 0\)/);
     expect(sql).toMatch(/DISTINCT ON \(bt\.user_id\)/);
     expect(sql).toContain("bt.origin     = 'native'");
     expect(sql).toMatch(/ORDER BY bt\.user_id, bt\.climbed_at DESC, bt\.id DESC/);
@@ -749,9 +750,10 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
     // Plain AVG(2, 4) = 3 — NOT a blend against any upstream term.
     expect(Number(row.quality)).toBeCloseTo(3, 6);
-    // The Boardsesh sum/count columns are still populated (informational).
-    expect(Number(row.bs_quality_sum)).toBe(6);
-    expect(Number(row.bs_quality_count)).toBe(2);
+    // The blend-input columns are NULL for owned climbs — they're never blended,
+    // so the columns carry one consistent meaning (non-owned only).
+    expect(row.bs_quality_sum).toBe(null);
+    expect(row.bs_quality_count).toBe(null);
   });
 
   it('non-owned climb the manufacturer never rated becomes the pure Boardsesh average', async () => {

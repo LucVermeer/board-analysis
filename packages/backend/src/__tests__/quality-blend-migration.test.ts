@@ -211,12 +211,13 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
     expect(k2.bs).toBe(null);
     expect(k2.bc).toBe(null);
 
-    // K3 owned: plain AVG(2,4)=3 (stale 1 corrected), upstream stays NULL.
+    // K3 owned: plain AVG(2,4)=3 (stale 1 corrected), upstream stays NULL, and
+    // the blend-input columns are NULL — owned climbs are never blended.
     const k3 = await row('K3');
     expect(num(k3.q)).toBeCloseTo(3, 6);
     expect(k3.uq).toBe(null);
-    expect(num(k3.bs)).toBe(6);
-    expect(num(k3.bc)).toBe(2);
+    expect(k3.bs).toBe(null);
+    expect(k3.bc).toBe(null);
 
     // K4 manufacturer-unrated: pure Boardsesh (3+5)/2 = 4, upstream stays NULL.
     const k4 = await row('K4');
@@ -323,5 +324,49 @@ describe('quality-blend backfill (0167 + 0168) — real DB replay', () => {
     expect(num(w1.q)).toBeCloseTo(85 / 21, 6);
     expect(num(w1.q)).not.toBeCloseTo(45 / 11, 3);
     expect(num(w1.uq)).toBe(4);
+  });
+
+  // A manufacturer-rated climb with zero ascent weight and no Boardsesh votes
+  // must NOT have its quality cleared to NULL by the blend (0/0). The outer
+  // COALESCE falls back to the raw upstream average. Guards the regression a
+  // future live catalog-sync pass would otherwise cause.
+  it('preserves upstream quality when the ascent-count weight is 0 and there are no votes', async () => {
+    await seedClimb('Z1', null);
+    await db.execute(sql`INSERT INTO board_climb_stats
+      (board_type, climb_uuid, angle, upstream_ascensionist_count, ascensionist_count, boardsesh_ascensionist_count,
+       upstream_quality_average, quality_average, quality_normalized)
+      VALUES ('kilter', 'Z1', 40, 0, 0, 0, 3.5, 3.5, true)`);
+
+    const blend = blendedQualityAverageSql({
+      upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+      upstreamAscensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+      boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
+      boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
+    });
+    await db
+      .insert(boardClimbStats)
+      .values({
+        boardType: 'kilter',
+        climbUuid: 'Z1',
+        angle: 40,
+        upstreamAscensionistCount: 0,
+        ascensionistCount: 0,
+        boardseshAscensionistCount: 0,
+        upstreamQualityAverage: 3.5,
+        qualityAverage: 3.5,
+        qualityNormalized: true,
+      })
+      .onConflictDoUpdate({
+        target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
+        set: {
+          upstreamAscensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+          upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+          qualityAverage: blend,
+        },
+      });
+
+    const z1 = await row('Z1');
+    expect(num(z1.q)).toBe(3.5); // fallback, not NULL
+    expect(num(z1.uq)).toBe(3.5);
   });
 });

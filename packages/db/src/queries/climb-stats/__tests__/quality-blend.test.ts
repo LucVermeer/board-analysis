@@ -35,4 +35,11 @@ void describe('blendedQualityAverageSql', () => {
       assert.ok(text.includes(operand), `blend must reference ${operand}`);
     }
   });
+
+  void it('falls back to the raw upstream average when the weighted division is 0/0', () => {
+    // Zero ascent weight + no Boardsesh votes → NULLIF(0,0) → NULL; the outer
+    // COALESCE returns upstream_quality_average so a known rating is preserved.
+    assert.match(text, /^COALESCE\( \(/);
+    assert.match(text, /, uqa \)$/);
+  });
 });

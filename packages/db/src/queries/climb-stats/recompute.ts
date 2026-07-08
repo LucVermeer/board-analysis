@@ -214,8 +214,15 @@ export async function recomputeClimbStats(
                ascensionist_count           = COALESCE(s.upstream_ascensionist_count, 0)
                                             + COALESCE(agg.distinct_senders, 0),
                -- Boardsesh side of the quality blend (both NULL when no votes).
-               boardsesh_quality_sum        = bq.bs_quality_sum,
-               boardsesh_quality_count      = NULLIF(bq.bs_quality_count, 0),
+               -- Owned climbs are never blended (quality_average is a plain AVG),
+               -- so these blend-input columns are meaningless there — keep them
+               -- NULL so they carry a single consistent meaning (non-owned only).
+               boardsesh_quality_sum        = CASE
+                 WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE) THEN NULL
+                 ELSE bq.bs_quality_sum END,
+               boardsesh_quality_count      = CASE
+                 WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE) THEN NULL
+                 ELSE NULLIF(bq.bs_quality_count, 0) END,
                fa_username = CASE
                  WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
                    THEN agg.first_user
@@ -406,8 +413,10 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
              ascensionist_count           = COALESCE(s.upstream_ascensionist_count, 0)
                                           + COALESCE(c.distinct_senders, 0),
              -- Boardsesh side of the quality blend (both NULL when no votes).
-             boardsesh_quality_sum        = bq.bs_quality_sum,
-             boardsesh_quality_count      = NULLIF(bq.bs_quality_count, 0),
+             -- NULL for owned climbs — they're never blended, so these
+             -- blend-input columns carry a single consistent meaning (non-owned).
+             boardsesh_quality_sum        = CASE WHEN owned.boardsesh_owned THEN NULL ELSE bq.bs_quality_sum END,
+             boardsesh_quality_count      = CASE WHEN owned.boardsesh_owned THEN NULL ELSE NULLIF(bq.bs_quality_count, 0) END,
              -- Owned climbs re-derive FA from the earliest tick; non-owned
              -- climbs preserve the manufacturer's stored FA verbatim (never
              -- derived or filled from ticks — see the module doc).
