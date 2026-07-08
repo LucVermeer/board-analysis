@@ -35,6 +35,25 @@ export const CONFIDENCE = {
 } as const;
 export type ConfidenceTier = (typeof CONFIDENCE)[keyof typeof CONFIDENCE];
 
+const CONFIDENCE_TIERS = new Set<string>(Object.values(CONFIDENCE));
+
+/**
+ * Narrow a raw DB `confidence` value to the {@link ConfidenceTier} union.
+ *
+ * `board_climb_grades.confidence` is a text column; under a LEFT JOIN it comes
+ * back as `string | null`, yet every output site types/validates it as the tier
+ * union. Run each surfaced value through this so an unknown/future tier is
+ * WITHHELD (returned as `null`) instead of propagating: a stray tier would
+ * otherwise fail party-mode round-trip `ClimbInput` zod validation (the
+ * `boardseshConfidence` field is a strict enum) and reject the whole queue item.
+ * `null` degrades cleanly to the legacy grade display. Ship a new tier by
+ * extending {@link CONFIDENCE} and the zod enum in
+ * packages/backend/src/validation/schemas/climbs.ts together.
+ */
+export function toConfidenceTier(value: string | null | undefined): ConfidenceTier | null {
+  return value != null && CONFIDENCE_TIERS.has(value) ? (value as ConfidenceTier) : null;
+}
+
 /** Tier boundaries on the raw ascent count (what users see as "sends"). */
 export const CONFIRMED_MIN_ASCENTS = 20;
 export const PROVISIONAL_MIN_ASCENTS = 3;

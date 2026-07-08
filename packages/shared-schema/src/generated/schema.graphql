@@ -58,6 +58,10 @@ type Climb {
   framesCount: Int
   "Animation pace between frames, in Aurora's native unit (treated as milliseconds). 0 when not set."
   framesPace: Int
+  "Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade), for this climb at its angle. Null when no grade row exists (e.g. MoonBoard, or too few ascents) — the UI keeps the Aurora grade."
+  boardseshDifficulty: Float
+  "Boardsesh grade confidence tier: 'confirmed' | 'provisional' | 'setter_only'. Null when no grade row exists. The UI keeps the Aurora grade when this is null or 'setter_only'."
+  boardseshConfidence: String
 }
 
 """
@@ -96,6 +100,10 @@ input ClimbInput {
   framesCount: Int
   "Native per-frame pace, in milliseconds. 0 when unset."
   framesPace: Int
+  "Boardsesh grade on the shared difficulty scale for this climb+angle. Round-tripped through the queue so party peers render the grade without a refetch."
+  boardseshDifficulty: Float
+  "Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'), round-tripped through the queue."
+  boardseshConfidence: String
 }
 
 # ============================================
@@ -687,6 +695,32 @@ type BoardseshGrade {
   computedAt: String!
 }
 
+"""
+The Boardsesh grade for a climb at one specific angle, carried in the
+per-angle list. Same shape as BoardseshGrade with the angle attached, so a
+climb's grade at every angle it's been computed for can be fetched in one go.
+"""
+type BoardseshGradeForAngle {
+  "Board angle in degrees"
+  angle: Int!
+  "Within-board shrunk grade on the shared difficulty scale (null when unavailable)"
+  localGrade: Float
+  "Cross-board standardized grade (Tension-anchored); null when unanchorable"
+  universalGrade: Float
+  "Low end of the 95% band on the surfaced grade"
+  gradeLow: Float
+  "High end of the 95% band on the surfaced grade"
+  gradeHigh: Float
+  "Confidence tier: confirmed | provisional | setter_only"
+  confidence: String!
+  "Ascent count that produced this row"
+  ascensionistCount: Int!
+  "Model version that produced this row"
+  modelVersion: String!
+  "When this grade was computed (ISO timestamp)"
+  computedAt: String!
+}
+
 # ============================================
 # User Management Types
 # ============================================
@@ -871,6 +905,10 @@ type Tick {
   difficulty: Int
   "Effective grade for display and aggregation: COALESCE(difficulty, ROUND(consensus_difficulty)). Still nullable when the climb has no consensus yet."
   effectiveDifficulty: Int
+  "Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade), for this climb at the tick's angle. Null when no grade row exists. Fills the gap only for ungraded ascents: the user's own tick grade always wins, and the UI keeps the legacy consensus when this is null or 'setter_only'."
+  boardseshDifficulty: Float
+  "Boardsesh grade confidence tier: 'confirmed' | 'provisional' | 'setter_only'. Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'."
+  boardseshConfidence: String
   "Whether this is a benchmark climb"
   isBenchmark: Boolean!
   "User's comment about the climb"
@@ -1038,6 +1076,10 @@ type AscentFeedItem {
   consensusDifficulty: Int
   "Human-readable consensus difficulty name"
   consensusDifficultyName: String
+  "Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade) for this ascent's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or when boardseshConfidence is 'setter_only'."
+  boardseshDifficulty: Float
+  "Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'."
+  boardseshConfidence: String
   "Average quality rating from all users"
   qualityAverage: Float
   """
@@ -1433,6 +1475,10 @@ type SessionFeedTickHighlight {
   attemptCount: Int!
   difficulty: Int
   difficultyName: String
+  "Boardsesh grade on the shared difficulty scale for this tick's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or boardseshConfidence is 'setter_only'."
+  boardseshDifficulty: Float
+  "Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists."
+  boardseshConfidence: String
   quality: Int
   isMirror: Boolean!
   isBenchmark: Boolean!
@@ -1505,6 +1551,10 @@ type SessionDetailTick {
   attemptCount: Int!
   difficulty: Int
   difficultyName: String
+  "Boardsesh grade on the shared difficulty scale for this tick's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or boardseshConfidence is 'setter_only'."
+  boardseshDifficulty: Float
+  "Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists."
+  boardseshConfidence: String
   quality: Int
   isMirror: Boolean!
   isBenchmark: Boolean!
@@ -4291,6 +4341,13 @@ type Query {
   (e.g. MoonBoard, or too few ascents).
   """
   boardseshGrade(boardName: String!, climbUuid: String!, angle: Int!): BoardseshGrade
+
+  """
+  Get the Boardsesh grade for a climb at every angle it's been computed for.
+  Returns one entry per angle, ordered by angle ascending. Empty when no grade
+  has been computed for the climb (e.g. MoonBoard, or too few ascents).
+  """
+  boardseshGradesForAngles(boardName: String!, climbUuid: String!): [BoardseshGradeForAngle!]!
 
   # ============================================
   # User Management Queries (require auth)

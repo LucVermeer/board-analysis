@@ -37,6 +37,14 @@ export type Climb = {
   framesCount?: number | null;
   // Native per-frame pace in milliseconds. 0 when unset.
   framesPace?: number | null;
+  // Boardsesh grade for this climb+angle on the shared difficulty scale
+  // (COALESCE(universal_grade, local_grade)). Null when no grade row exists
+  // (MoonBoard, too few ascents) — the UI keeps the Aurora grade then.
+  boardseshDifficulty?: number | null;
+  // Boardsesh grade confidence tier ('confirmed' | 'provisional' |
+  // 'setter_only'). Null when no grade row exists. The UI keeps the Aurora
+  // grade when this is null or 'setter_only'.
+  boardseshConfidence?: string | null;
 };
 
 export type ClimbQueryResult = {

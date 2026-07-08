@@ -52,6 +52,11 @@ export type AscentFeedItem = {
   difficultyName?: string | null;
   consensusDifficulty?: number | null;
   consensusDifficultyName?: string | null;
+  // Boardsesh grade (COALESCE(universal, local)) + confidence tier for this
+  // ascent's climb at its angle. Null when no grade row exists; the UI keeps the
+  // legacy consensus when boardseshDifficulty is null or confidence is 'setter_only'.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
   qualityAverage?: number | null;
   isBenchmark: boolean;
   isNoMatch: boolean;
@@ -191,6 +196,10 @@ export type SessionFeedTickHighlight = {
   attemptCount: number;
   difficulty?: number | null;
   difficultyName?: string | null;
+  // Boardsesh grade (COALESCE(universal, local)) + confidence tier for this
+  // tick's climb at its angle. Null when no grade row exists.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
   quality?: number | null;
   isMirror: boolean;
   isBenchmark: boolean;
@@ -251,6 +260,10 @@ export type SessionDetailTick = {
   attemptCount: number;
   difficulty?: number | null;
   difficultyName?: string | null;
+  // Boardsesh grade (COALESCE(universal, local)) + confidence tier for this
+  // tick's climb at its angle. Null when no grade row exists.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
   quality?: number | null;
   isMirror: boolean;
   isBenchmark: boolean;

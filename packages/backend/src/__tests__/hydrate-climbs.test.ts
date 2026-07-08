@@ -39,6 +39,9 @@ vi.mock('@boardsesh/db/queries', () => ({
     const numericQualityAverage = Number(qualityAverage);
     return Number.isFinite(numericQualityAverage) ? Math.round(numericQualityAverage * 5) : 0;
   },
+  // Mirror the real narrowing: known tier passes through, anything else → null.
+  toConfidenceTier: (value: string | null | undefined) =>
+    value === 'confirmed' || value === 'provisional' || value === 'setter_only' ? value : null,
 }));
 
 import { hydrateClimbsByRefs } from '../graphql/resolvers/playlists/helpers/hydrate-climbs';
@@ -288,6 +291,47 @@ describe('hydrateClimbsByRefs', () => {
       });
 
       expect(result[0].angle).toBe(40);
+    });
+  });
+
+  describe('flattened Boardsesh grade fields', () => {
+    const baseRow = {
+      climbUuid: 'c1',
+      layoutId: 1,
+      boardType: 'kilter',
+      setter_username: 's',
+      name: 'C1',
+      description: '',
+      frames: '',
+      statsAngle: 40,
+      ascensionist_count: 1,
+      difficulty_id: 10,
+      quality_average: 1.0,
+      difficulty_error: 0,
+      benchmark_difficulty: null,
+    };
+
+    it('maps boardsesh_difficulty / boardsesh_confidence through onto the climb', async () => {
+      mockDb.select.mockReturnValueOnce(
+        makeChain([{ ...baseRow, boardsesh_difficulty: 18.5, boardsesh_confidence: 'confirmed' }]),
+      );
+
+      const result = await hydrateClimbsByRefs([{ climbUuid: 'c1', boardType: 'kilter' }]);
+
+      expect(result[0].boardseshDifficulty).toBe(18.5);
+      expect(result[0].boardseshConfidence).toBe('confirmed');
+    });
+
+    it('degrades to null when the row has no grade (no board_climb_grades match)', async () => {
+      // Grade columns absent from the row → the COALESCE came back NULL.
+      mockDb.select.mockReturnValueOnce(
+        makeChain([{ ...baseRow, boardsesh_difficulty: null, boardsesh_confidence: null }]),
+      );
+
+      const result = await hydrateClimbsByRefs([{ climbUuid: 'c1', boardType: 'kilter' }]);
+
+      expect(result[0].boardseshDifficulty).toBeNull();
+      expect(result[0].boardseshConfidence).toBeNull();
     });
   });
 });

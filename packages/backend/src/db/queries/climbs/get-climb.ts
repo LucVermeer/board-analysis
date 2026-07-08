@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../../client';
 import { UNIFIED_TABLES, type BoardName } from '../util/table-select';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
+import { boardClimbGrades } from '@boardsesh/db/schema';
 import type { Climb } from '@boardsesh/shared-schema';
 import { logger } from '../../../utils/logger';
 
@@ -40,6 +41,12 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
         created_at: tables.climbs.createdAt,
         published_at: tables.climbs.publishedAt,
         characteristics: tables.climbs.characteristics,
+        // Boardsesh grade at the requested angle. The queue's angle-change refetch
+        // routes through this query, so the fresh grade rides along for free.
+        boardsesh_difficulty: sql<
+          number | null
+        >`COALESCE(${boardClimbGrades.universalGrade}, ${boardClimbGrades.localGrade})`,
+        boardsesh_confidence: boardClimbGrades.confidence,
       })
       .from(tables.climbs)
       .leftJoin(
@@ -47,6 +54,12 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
         sql`${tables.climbStats.climbUuid} = ${tables.climbs.uuid}
         AND ${tables.climbStats.boardType} = ${params.board_name}
         AND ${tables.climbStats.angle} = ${params.angle}`,
+      )
+      .leftJoin(
+        boardClimbGrades,
+        sql`${boardClimbGrades.climbUuid} = ${tables.climbs.uuid}
+        AND ${boardClimbGrades.boardType} = ${params.board_name}
+        AND ${boardClimbGrades.angle} = ${params.angle}`,
       )
       .where(
         sql`${tables.climbs.boardType} = ${params.board_name}
@@ -86,6 +99,8 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
       framesCount: row.frames_count ?? null,
       framesPace: row.frames_pace ?? null,
       characteristics: row.characteristics ?? null,
+      boardseshDifficulty: row.boardsesh_difficulty == null ? null : Number(row.boardsesh_difficulty),
+      boardseshConfidence: toConfidenceTier(row.boardsesh_confidence),
     };
 
     return climb;

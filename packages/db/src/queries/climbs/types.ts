@@ -1,4 +1,5 @@
 import type { BoardName, ZoneMatchMode } from '@boardsesh/shared-schema';
+import type { ConfidenceTier } from '../grade-model/constants';
 
 /**
  * Route parameters identifying a specific board configuration.
@@ -218,4 +219,10 @@ export type ClimbRow = {
   framesCount: number | null;
   /** Per-frame playback pace in Aurora's native unit (treated as ms). 0/null when unset. */
   framesPace: number | null;
+  /** Boardsesh grade for this climb+angle: COALESCE(universal_grade, local_grade) on the
+   *  shared difficulty scale. Null when no grade row exists (MoonBoard, too few ascents). */
+  boardseshDifficulty: number | null;
+  /** Boardsesh grade confidence tier; null when no grade row (or a DB value outside
+   *  the known tiers, narrowed by `toConfidenceTier` at the mapping site). */
+  boardseshConfidence: ConfidenceTier | null;
 };

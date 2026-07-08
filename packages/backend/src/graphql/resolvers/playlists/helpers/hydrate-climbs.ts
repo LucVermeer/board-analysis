@@ -1,7 +1,8 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { type Climb, type BoardName } from '@boardsesh/shared-schema';
 import { db } from '../../../../db/client';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
+import { boardClimbGrades } from '@boardsesh/db/schema';
 import { UNIFIED_TABLES } from '../../../../db/queries/util/table-select';
 
 const DEFAULT_ANGLE = 40;
@@ -79,6 +80,13 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
       quality_average: sql<number>`ROUND(${tables.climbStats.qualityAverage}::numeric, 2)`,
       difficulty_error: sql<number>`ROUND(${tables.climbStats.difficultyAverage}::numeric - ${tables.climbStats.displayDifficulty}::numeric, 2)`,
       benchmark_difficulty: tables.climbStats.benchmarkDifficulty,
+      // Boardsesh grade at the SAME angle the stats row was joined at (climbStats.angle
+      // resolves to the override / most-ascended angle below), so grade and shown
+      // difficulty always agree. NULL when no grade row — safe.
+      boardsesh_difficulty: sql<
+        number | null
+      >`COALESCE(${boardClimbGrades.universalGrade}, ${boardClimbGrades.localGrade})`,
+      boardsesh_confidence: boardClimbGrades.confidence,
     })
     .from(tables.climbs)
     .leftJoin(
@@ -102,6 +110,16 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
             LIMIT 1
           ))`,
         ),
+      ),
+    )
+    // Grades join reuses climbStats.angle (the effective override / most-ascended
+    // angle resolved just above) so the grade matches the difficulty being shown.
+    .leftJoin(
+      boardClimbGrades,
+      and(
+        eq(boardClimbGrades.boardType, tables.climbs.boardType),
+        eq(boardClimbGrades.climbUuid, tables.climbs.uuid),
+        eq(boardClimbGrades.angle, tables.climbStats.angle),
       ),
     )
     .where(inArray(tables.climbs.uuid, uuids));
@@ -142,6 +160,8 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
       benchmark_difficulty:
         row.benchmark_difficulty && row.benchmark_difficulty > 0 ? row.benchmark_difficulty.toString() : null,
       boardType: boardName,
+      boardseshDifficulty: row.boardsesh_difficulty == null ? null : Number(row.boardsesh_difficulty),
+      boardseshConfidence: toConfidenceTier(row.boardsesh_confidence),
     });
   }
 

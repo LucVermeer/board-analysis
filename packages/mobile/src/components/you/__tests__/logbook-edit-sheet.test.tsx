@@ -163,6 +163,8 @@ function makeAscent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
     difficultyName: 'V5',
     consensusDifficulty: 20,
     consensusDifficultyName: 'V5',
+    boardseshDifficulty: null,
+    boardseshConfidence: null,
     qualityAverage: null,
     isBenchmark: false,
     isNoMatch: false,

@@ -35,3 +35,40 @@ export type BoardseshGradeVariables = {
 export type BoardseshGradeResponse = {
   boardseshGrade: BoardseshGrade | null;
 };
+
+export const BOARDSESH_GRADES_FOR_ANGLES = gql`
+  query BoardseshGradesForAngles($boardName: String!, $climbUuid: String!) {
+    boardseshGradesForAngles(boardName: $boardName, climbUuid: $climbUuid) {
+      angle
+      localGrade
+      universalGrade
+      gradeLow
+      gradeHigh
+      confidence
+      ascensionistCount
+      modelVersion
+      computedAt
+    }
+  }
+`;
+
+export type BoardseshGradeAtAngle = {
+  angle: number;
+  localGrade: number | null;
+  universalGrade: number | null;
+  gradeLow: number | null;
+  gradeHigh: number | null;
+  confidence: string;
+  ascensionistCount: number;
+  modelVersion: string;
+  computedAt: string;
+};
+
+export type BoardseshGradesForAnglesVariables = {
+  boardName: string;
+  climbUuid: string;
+};
+
+export type BoardseshGradesForAnglesResponse = {
+  boardseshGradesForAngles: BoardseshGradeAtAngle[];
+};

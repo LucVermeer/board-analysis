@@ -14,6 +14,12 @@ Code map:
 - Pipeline: `packages/db/scripts/refresh-climb-grades.ts`.
 - Output tables: `packages/db/src/schema/app/climb-grades.ts`.
 - Tests: `packages/db/src/queries/grade-model/__tests__/grade-model.test.ts`.
+- GraphQL: `boardseshGrade` (single climb+angle) and `boardseshGradesForAngles`
+  (every computed angle for a climb, ascending) resolvers in
+  `packages/backend/src/graphql/resolvers/climbs/queries.ts`. The shared
+  `boardseshDifficultyExpr` / `boardseshConfidenceExpr` / `boardseshGradeTickJoinCondition`
+  helpers in `packages/backend/src/graphql/resolvers/shared/sql-expressions.ts`
+  embed the fallback grade on Climb and tick/session payloads (see below).
 
 ## 1. What it is and why
 
@@ -380,3 +386,11 @@ node --import tsx packages/db/scripts/refresh-climb-grades.ts --refit-coefficien
   `(coeff_version, kind, key)`. Kinds: `echo_fraction`, `sigma_within`,
   `tau_squared`, `angle_offset`, `board_offset`, and `gate_results` (per-run
   pass/fail + metrics). Plain table, `pg_dump`-portable.
+- Climb and tick/session GraphQL payloads (`climb`, `searchClimbs`, `ticks`,
+  `sessionGroupedFeed`, `sessionDetail`, and friends) each embed
+  `boardseshDifficulty` (`COALESCE(universal_grade, local_grade)`) and
+  `boardseshConfidence` alongside the legacy grade fields, for row-level
+  display without a per-climb refetch. Both are nullable — null whenever no
+  `board_climb_grades` row exists (MoonBoard, or too few ascents) — and
+  clients fall back to the legacy consensus/Aurora grade in that case (and
+  when `boardseshConfidence` is `setter_only`).

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_SEARCH_PAGE } from '@boardsesh/db/queries';
+import { CONFIDENCE, MAX_SEARCH_PAGE } from '@boardsesh/db/queries';
 import { CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
 import { ExternalUUIDSchema, BoardNameSchema } from './primitives';
 
@@ -85,6 +85,13 @@ export const ClimbInputSchema = z.object({
   // Round-trip multi-frame metadata so peers don't have to refetch /climb.
   framesCount: z.number().int().min(1).nullish(),
   framesPace: z.number().int().min(0).nullish(),
+  // Boardsesh grade + confidence tier, round-tripped through the queue so peers
+  // render the grade without a per-climb refetch. Nullish: older clients and
+  // pre-grade queue items omit them.
+  boardseshDifficulty: z.number().nullish(),
+  // Source of truth for the tier set: CONFIDENCE / ConfidenceTier in
+  // packages/db/src/queries/grade-model/constants.ts.
+  boardseshConfidence: z.enum([CONFIDENCE.confirmed, CONFIDENCE.provisional, CONFIDENCE.setterOnly]).nullish(),
 });
 
 /**

@@ -1,9 +1,10 @@
 import { desc, sql, and, eq } from 'drizzle-orm';
 import type { DbInstance } from '../../client/postgres';
-import { boardClimbs, boardClimbStats } from '../../schema/index';
+import { boardClimbs, boardClimbStats, boardClimbGrades } from '../../schema/index';
 import { createClimbFilters } from './create-climb-filters';
 import { getClimbStars } from './climb-stars';
 import { getGradeLabel } from './grade-lookup';
+import { toConfidenceTier } from '../grade-model/constants';
 import {
   normalizeSearchSortBy,
   type BoardRouteParams,
@@ -37,6 +38,10 @@ type RawSelectResult = {
   published_at: string | null;
   frames_count: number | null;
   frames_pace: number | null;
+  // doublePrecision COALESCE comes back as a real JS number (like benchmark_difficulty);
+  // confidence is text. Both null when the climb has no board_climb_grades row at this angle.
+  boardsesh_difficulty: number | null;
+  boardsesh_confidence: string | null;
 };
 
 // difficulty_id arrives as a string like "15" from the driver; coerce to an integer
@@ -74,6 +79,10 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
     published_at: result.published_at,
     framesCount: result.frames_count ?? null,
     framesPace: result.frames_pace ?? null,
+    // COALESCE(universal_grade, local_grade) is doublePrecision → real JS number, but
+    // coerce defensively so a stringly-typed driver value can't string-concatenate.
+    boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
+    boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
   };
 }
 
@@ -289,12 +298,28 @@ async function statsDrivenSearch(
     published_at: boardClimbs.publishedAt,
     frames_count: boardClimbs.framesCount,
     frames_pace: boardClimbs.framesPace,
+    // Boardsesh grade at the searched angle (params.angle). Surfaced flattened so
+    // list rows carry it without a per-climb boardseshGrade round-trip.
+    boardsesh_difficulty: sql<
+      number | null
+    >`COALESCE(${boardClimbGrades.universalGrade}, ${boardClimbGrades.localGrade})`,
+    boardsesh_confidence: boardClimbGrades.confidence,
   };
 
   const results: RawSelectResult[] = (await db
     .select(selectFields)
     .from(boardClimbStats)
     .innerJoin(boardClimbs, eq(boardClimbs.uuid, boardClimbStats.climbUuid))
+    // Boardsesh grade for the searched climb at the searched angle. LEFT JOIN so a
+    // climb without a grade row still returns (fields come back NULL — safe).
+    .leftJoin(
+      boardClimbGrades,
+      and(
+        eq(boardClimbGrades.boardType, params.board_name),
+        eq(boardClimbGrades.climbUuid, boardClimbs.uuid),
+        eq(boardClimbGrades.angle, params.angle),
+      ),
+    )
     .where(
       and(
         // Stats-table scope
@@ -454,6 +479,12 @@ async function runStandardSearch(
     published_at: boardClimbs.publishedAt,
     frames_count: boardClimbs.framesCount,
     frames_pace: boardClimbs.framesPace,
+    // Boardsesh grade at the searched angle (params.angle). Surfaced flattened so
+    // list rows carry it without a per-climb boardseshGrade round-trip.
+    boardsesh_difficulty: sql<
+      number | null
+    >`COALESCE(${boardClimbGrades.universalGrade}, ${boardClimbGrades.localGrade})`,
+    boardsesh_confidence: boardClimbGrades.confidence,
   };
 
   const orderByClause = sortOrder === 'asc' ? sql`${sortColumn} ASC NULLS FIRST` : sql`${sortColumn} DESC NULLS LAST`;
@@ -462,7 +493,17 @@ async function runStandardSearch(
   const coreQuery = db
     .select(selectFields)
     .from(boardClimbs)
-    .leftJoin(boardClimbStats, and(...filters.getClimbStatsJoinConditions()));
+    .leftJoin(boardClimbStats, and(...filters.getClimbStatsJoinConditions()))
+    // Boardsesh grade at the searched angle (params.angle). LEFT JOIN so stats-less
+    // climbs still return; the grade fields are NULL when no grade row exists.
+    .leftJoin(
+      boardClimbGrades,
+      and(
+        eq(boardClimbGrades.boardType, params.board_name),
+        eq(boardClimbGrades.climbUuid, boardClimbs.uuid),
+        eq(boardClimbGrades.angle, params.angle),
+      ),
+    );
 
   const queryWithJoins = popularCountsSubquery
     ? coreQuery.leftJoin(popularCountsSubquery, eq(popularCountsSubquery.climbUuid, boardClimbs.uuid))

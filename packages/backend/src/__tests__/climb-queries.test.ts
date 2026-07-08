@@ -579,6 +579,17 @@ describe('Climb Query Functions', () => {
         ON CONFLICT DO NOTHING
       `);
 
+      // Boardsesh grades at angle 40: TYPES has a universal grade (COALESCE prefers
+      // it over local); RATING-LO has universal=NULL so COALESCE falls back to local.
+      // POP-ONE deliberately gets no grade row so the flattened fields come back null.
+      await db.execute(sql`
+        INSERT INTO board_climb_grades (board_type, climb_uuid, angle, local_grade, universal_grade, confidence, model_version, coeff_version)
+        VALUES
+          ('kilter', ${id('types')}, 40, 20.0, 21.5, 'confirmed', 'test', 'test'),
+          ('kilter', ${id('rating-lo')}, 40, 15.0, NULL, 'provisional', 'test', 'test')
+        ON CONFLICT DO NOTHING
+      `);
+
       await db.execute(sql`
         INSERT INTO board_climb_holds (board_type, climb_uuid, hold_id, frame_number, hold_state)
         VALUES
@@ -592,6 +603,7 @@ describe('Climb Query Functions', () => {
 
     afterAll(async () => {
       await db.execute(sql`DELETE FROM board_climb_holds WHERE climb_uuid LIKE ${PREFIX + '%'}`);
+      await db.execute(sql`DELETE FROM board_climb_grades WHERE climb_uuid LIKE ${PREFIX + '%'}`);
       await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${PREFIX + '%'}`);
       await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${PREFIX + '%'}`);
     });
@@ -684,6 +696,56 @@ describe('Climb Query Functions', () => {
         const count = await countClimbs(kilter1(), { page: 0, pageSize: 100, projectsOnly: true });
         // PROJ has no stats row; projectsOnly must still count it (join retained).
         expect(count).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    describe('flattened Boardsesh grade fields (F10)', () => {
+      it('surfaces COALESCE(universal, local) and the confidence tier from board_climb_grades', async () => {
+        const result = await searchClimbs(kilter1(), { page: 0, pageSize: 100, sortBy: 'ascents', sortOrder: 'desc' });
+
+        // TYPES has a universal grade → COALESCE prefers it over the local grade.
+        const withUniversal = result.climbs.find((c) => c.uuid === id('types'));
+        expect(withUniversal).toBeDefined();
+        expect(withUniversal!.boardseshDifficulty).toBe(21.5);
+        expect(withUniversal!.boardseshConfidence).toBe('confirmed');
+
+        // RATING-LO has universal=NULL → COALESCE falls back to the local grade.
+        const localOnly = result.climbs.find((c) => c.uuid === id('rating-lo'));
+        expect(localOnly).toBeDefined();
+        expect(localOnly!.boardseshDifficulty).toBe(15.0);
+        expect(localOnly!.boardseshConfidence).toBe('provisional');
+
+        // RATING-HI has a stats row but no grade row → both fields degrade to
+        // null (the safe path) even though the climb itself is returned.
+        const noGrade = result.climbs.find((c) => c.uuid === id('rating-hi'));
+        expect(noGrade).toBeDefined();
+        expect(noGrade!.boardseshDifficulty).toBeNull();
+        expect(noGrade!.boardseshConfidence).toBeNull();
+      });
+
+      it('getClimbByUuid carries the grade at the requested angle, null when absent', async () => {
+        const graded = await getClimbByUuid({
+          board_name: 'kilter',
+          layout_id: 1,
+          size_id: 7,
+          angle: 40,
+          climb_uuid: id('types'),
+        });
+        expect(graded).not.toBeNull();
+        expect(graded!.boardseshDifficulty).toBe(21.5);
+        expect(graded!.boardseshConfidence).toBe('confirmed');
+
+        // No grade row at angle 20 → the flattened fields come back null.
+        const ungraded = await getClimbByUuid({
+          board_name: 'kilter',
+          layout_id: 1,
+          size_id: 7,
+          angle: 20,
+          climb_uuid: id('types'),
+        });
+        expect(ungraded).not.toBeNull();
+        expect(ungraded!.boardseshDifficulty).toBeNull();
+        expect(ungraded!.boardseshConfidence).toBeNull();
       });
     });
   });

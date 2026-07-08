@@ -27,6 +27,9 @@ import {
   BOARDSESH_GRADE,
   type BoardseshGradeResponse,
   type BoardseshGradeVariables,
+  BOARDSESH_GRADES_FOR_ANGLES,
+  type BoardseshGradesForAnglesResponse,
+  type BoardseshGradesForAnglesVariables,
 } from '@boardsesh/graphql/operations';
 import {
   GET_FAVORITES,
@@ -1107,6 +1110,33 @@ export function useBoardseshGrade(
         angle,
       }),
     select: (data) => data.boardseshGrade,
+    enabled: (options?.enabled ?? true) && !!climbUuid,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Every computed Boardsesh grade for a climb, one row per angle (ascending).
+ * Fetches the whole per-angle list in one request so the angle picker can show
+ * the grade at each angle without a query per angle. `climbUuid` null disables
+ * the query.
+ */
+export function useBoardseshGradesForAngles(
+  boardName: string,
+  climbUuid: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['boardseshGradesForAngles', boardName, climbUuid],
+    queryFn: () =>
+      getHttpClient().request<BoardseshGradesForAnglesResponse, BoardseshGradesForAnglesVariables>(
+        BOARDSESH_GRADES_FOR_ANGLES,
+        {
+          boardName,
+          climbUuid: climbUuid!,
+        },
+      ),
+    select: (data) => data.boardseshGradesForAngles,
     enabled: (options?.enabled ?? true) && !!climbUuid,
     staleTime: 5 * 60 * 1000,
   });

@@ -2,7 +2,7 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { GetUserFavoriteClimbsInputSchema } from '../../../validation/schemas';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../db/queries/util/table-select';
@@ -67,6 +67,10 @@ export const favoriteClimbsQuery = {
         quality_average: sql<number>`ROUND(${tables.climbStats.qualityAverage}::numeric, 2)`,
         difficulty_error: sql<number>`ROUND(${tables.climbStats.difficultyAverage}::numeric - ${tables.climbStats.displayDifficulty}::numeric, 2)`,
         benchmark_difficulty: tables.climbStats.benchmarkDifficulty,
+        boardsesh_difficulty: sql<
+          number | null
+        >`COALESCE(${dbSchema.boardClimbGrades.universalGrade}, ${dbSchema.boardClimbGrades.localGrade})`,
+        boardsesh_confidence: dbSchema.boardClimbGrades.confidence,
       })
       .from(dbSchema.userFavorites)
       .innerJoin(
@@ -79,6 +83,15 @@ export const favoriteClimbsQuery = {
           eq(tables.climbStats.climbUuid, dbSchema.userFavorites.climbUuid),
           eq(tables.climbStats.boardType, boardName),
           eq(tables.climbStats.angle, input.angle),
+        ),
+      )
+      // Boardsesh grade at the same angle the stats row was joined at (input.angle).
+      .leftJoin(
+        dbSchema.boardClimbGrades,
+        and(
+          eq(dbSchema.boardClimbGrades.climbUuid, dbSchema.userFavorites.climbUuid),
+          eq(dbSchema.boardClimbGrades.boardType, boardName),
+          eq(dbSchema.boardClimbGrades.angle, input.angle),
         ),
       )
       .where(and(eq(dbSchema.userFavorites.userId, userId), eq(dbSchema.userFavorites.boardName, boardName)))
@@ -106,6 +119,8 @@ export const favoriteClimbsQuery = {
       difficulty_error: result.difficulty_error?.toString() || '0',
       benchmark_difficulty:
         result.benchmark_difficulty && result.benchmark_difficulty > 0 ? result.benchmark_difficulty.toString() : null,
+      boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
+      boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
     }));
 
     return {

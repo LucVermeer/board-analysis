@@ -53,6 +53,14 @@ export type Climb = {
   // Pace between frames, treated as milliseconds. Clamped on the engine
   // side. 0/null disables auto-advance.
   framesPace?: number | null;
+  // Boardsesh grade for this climb+angle on the shared difficulty scale
+  // (COALESCE(universal_grade, local_grade)). Null when no grade row exists
+  // (MoonBoard, too few ascents) — the UI keeps the Aurora grade then.
+  boardseshDifficulty?: number | null;
+  // Boardsesh grade confidence tier ('confirmed' | 'provisional' |
+  // 'setter_only'). Null when no grade row exists. The UI keeps the Aurora
+  // grade when this is null or 'setter_only'.
+  boardseshConfidence?: string | null;
 };
 
 // Input type for Climb (matches GraphQL ClimbInput)
@@ -90,6 +98,10 @@ export type ClimbInput = {
   // metadata without a /climb refetch — the playback engine reads these.
   framesCount?: number | null;
   framesPace?: number | null;
+  // Boardsesh grade + confidence tier, round-tripped through the queue so party
+  // peers render the grade without a per-climb refetch. Null when unavailable.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
 };
 
 /**

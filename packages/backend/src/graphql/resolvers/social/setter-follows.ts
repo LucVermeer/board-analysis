@@ -3,7 +3,7 @@ import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } 
 import { executeRows } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import {
   FollowSetterInputSchema,
@@ -267,6 +267,10 @@ export const setterFollowQueries = {
           quality_average: sql<number>`ROUND(${tables.climbStats.qualityAverage}::numeric, 2)`,
           difficulty_error: sql<number>`ROUND(${tables.climbStats.difficultyAverage}::numeric - ${tables.climbStats.displayDifficulty}::numeric, 2)`,
           benchmark_difficulty: tables.climbStats.benchmarkDifficulty,
+          boardsesh_difficulty: sql<
+            number | null
+          >`COALESCE(${dbSchema.boardClimbGrades.universalGrade}, ${dbSchema.boardClimbGrades.localGrade})`,
+          boardsesh_confidence: dbSchema.boardClimbGrades.confidence,
         })
         .from(tables.climbs)
         .leftJoin(
@@ -275,6 +279,15 @@ export const setterFollowQueries = {
             eq(tables.climbStats.climbUuid, tables.climbs.uuid),
             eq(tables.climbStats.boardType, boardName),
             eq(tables.climbStats.angle, angle),
+          ),
+        )
+        // Boardsesh grade at the same fixed angle as the stats join.
+        .leftJoin(
+          dbSchema.boardClimbGrades,
+          and(
+            eq(dbSchema.boardClimbGrades.climbUuid, tables.climbs.uuid),
+            eq(dbSchema.boardClimbGrades.boardType, boardName),
+            eq(dbSchema.boardClimbGrades.angle, angle),
           ),
         )
         .where(and(...filterConditions))
@@ -309,6 +322,8 @@ export const setterFollowQueries = {
             ? result.benchmark_difficulty.toString()
             : null,
         boardType: boardName,
+        boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
+        boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
       }));
 
       return { climbs, totalCount, hasMore };
@@ -358,6 +373,10 @@ export const setterFollowQueries = {
           quality_average: sql<number>`ROUND(${tables.climbStats.qualityAverage}::numeric, 2)`,
           difficulty_error: sql<number>`ROUND(${tables.climbStats.difficultyAverage}::numeric - ${tables.climbStats.displayDifficulty}::numeric, 2)`,
           benchmark_difficulty: tables.climbStats.benchmarkDifficulty,
+          boardsesh_difficulty: sql<
+            number | null
+          >`COALESCE(${dbSchema.boardClimbGrades.universalGrade}, ${dbSchema.boardClimbGrades.localGrade})`,
+          boardsesh_confidence: dbSchema.boardClimbGrades.confidence,
         })
         .from(tables.climbs)
         .leftJoin(
@@ -375,6 +394,16 @@ export const setterFollowQueries = {
               LIMIT 1
             )`,
             ),
+          ),
+        )
+        // Grade at the same most-ascended angle the stats row resolved to
+        // (climbStats.angle), so grade and shown difficulty agree.
+        .leftJoin(
+          dbSchema.boardClimbGrades,
+          and(
+            eq(dbSchema.boardClimbGrades.boardType, tables.climbs.boardType),
+            eq(dbSchema.boardClimbGrades.climbUuid, tables.climbs.uuid),
+            eq(dbSchema.boardClimbGrades.angle, tables.climbStats.angle),
           ),
         )
         .where(eq(tables.climbs.setterUsername, username))
@@ -411,6 +440,8 @@ export const setterFollowQueries = {
               ? result.benchmark_difficulty.toString()
               : null,
           boardType: boardName,
+          boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
+          boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
         };
       });
 
@@ -504,6 +535,8 @@ export const setterFollowQueries = {
       quality_average: number | null;
       difficulty_error: number | null;
       benchmark_difficulty: number | null;
+      boardsesh_difficulty: number | null;
+      boardsesh_confidence: string | null;
     };
 
     const rawRows = await executeRows<RawRow>(
@@ -555,11 +588,17 @@ export const setterFollowQueries = {
         ROUND(best.display_difficulty::numeric, 0)::int AS difficulty_id,
         ROUND(best.quality_average::numeric, 2) AS quality_average,
         ROUND(best.difficulty_average::numeric - best.display_difficulty::numeric, 2) AS difficulty_error,
-        best.benchmark_difficulty
+        best.benchmark_difficulty,
+        COALESCE(grades.universal_grade, grades.local_grade) AS boardsesh_difficulty,
+        grades.confidence AS boardsesh_confidence
       FROM owned_climbs
       LEFT JOIN best_angle best
         ON best.board_type = owned_climbs.board_type
        AND best.climb_uuid = owned_climbs.uuid
+      LEFT JOIN board_climb_grades grades
+        ON grades.board_type = owned_climbs.board_type
+       AND grades.climb_uuid = owned_climbs.uuid
+       AND grades.angle = best.angle
       ORDER BY ${orderSql}, owned_climbs.uuid DESC
       LIMIT ${limit + 1}
       OFFSET ${offset}
@@ -591,6 +630,8 @@ export const setterFollowQueries = {
             ? result.benchmark_difficulty.toString()
             : null,
         boardType: boardName,
+        boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
+        boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
       };
     });
 

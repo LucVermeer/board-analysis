@@ -2,7 +2,7 @@ import { eq, and, asc, sql } from 'drizzle-orm';
 import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
 import { db } from '../../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
 import { validateInput } from '../../shared/helpers';
 import { GetPlaylistClimbsInputSchema } from '../../../../validation/schemas';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../../db/queries/util/table-select';
@@ -79,6 +79,10 @@ async function fetchSpecificBoardClimbs(
       quality_average: sql<number>`ROUND(${tables.climbStats.qualityAverage}::numeric, 2)`,
       difficulty_error: sql<number>`ROUND(${tables.climbStats.difficultyAverage}::numeric - ${tables.climbStats.displayDifficulty}::numeric, 2)`,
       benchmark_difficulty: tables.climbStats.benchmarkDifficulty,
+      boardsesh_difficulty: sql<
+        number | null
+      >`COALESCE(${dbSchema.boardClimbGrades.universalGrade}, ${dbSchema.boardClimbGrades.localGrade})`,
+      boardsesh_confidence: dbSchema.boardClimbGrades.confidence,
     })
     .from(dbSchema.playlistClimbs)
     .innerJoin(tables.climbs, and(...climbJoinConditions))
@@ -88,6 +92,15 @@ async function fetchSpecificBoardClimbs(
         eq(tables.climbStats.climbUuid, dbSchema.playlistClimbs.climbUuid),
         eq(tables.climbStats.boardType, boardName),
         eq(tables.climbStats.angle, inputAngle),
+      ),
+    )
+    // Boardsesh grade at the same angle the stats row was joined at (inputAngle).
+    .leftJoin(
+      dbSchema.boardClimbGrades,
+      and(
+        eq(dbSchema.boardClimbGrades.climbUuid, dbSchema.playlistClimbs.climbUuid),
+        eq(dbSchema.boardClimbGrades.boardType, boardName),
+        eq(dbSchema.boardClimbGrades.angle, inputAngle),
       ),
     )
     .where(eq(dbSchema.playlistClimbs.playlistId, playlistId))
@@ -115,6 +128,8 @@ async function fetchSpecificBoardClimbs(
     benchmark_difficulty:
       result.benchmark_difficulty && result.benchmark_difficulty > 0 ? result.benchmark_difficulty.toString() : null,
     boardType: boardName,
+    boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
+    boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
   }));
 
   return { climbs, hasMore };

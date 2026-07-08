@@ -97,6 +97,8 @@ const CLIMB_SEARCH_FIELDS = `
   userAttempts
   framesCount
   framesPace
+  boardseshDifficulty
+  boardseshConfidence
 `;
 
 const CLIMB_DETAIL_FIELDS = `
@@ -125,6 +127,8 @@ const CLIMB_DETAIL_FIELDS = `
   published_at
   framesCount
   framesPace
+  boardseshDifficulty
+  boardseshConfidence
 `;
 
 // ============================================
@@ -1178,6 +1182,8 @@ const SUBSCRIPTION_CLIMB_FIELDS = `
   characteristics
   framesCount
   framesPace
+  boardseshDifficulty
+  boardseshConfidence
 `;
 
 // QueueItemAdded.item is ClimbQueueItem! and CurrentClimbChanged.item is

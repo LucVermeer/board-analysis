@@ -43,6 +43,9 @@ export function toClimbInput(climb: Climb): ClimbInput {
     userAttempts: climb.userAttempts,
     framesCount: climb.framesCount,
     framesPace: climb.framesPace,
+    // Round-trip the Boardsesh grade so party peers render it without a refetch.
+    boardseshDifficulty: climb.boardseshDifficulty,
+    boardseshConfidence: climb.boardseshConfidence,
   };
 }
 
@@ -82,6 +85,9 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
       // detail plays back at the setter's pace instead of DEFAULT_PACE_MS.
       framesCount: climb.framesCount,
       framesPace: climb.framesPace,
+      // Carry the Boardsesh grade so the queue row / play drawer render it.
+      boardseshDifficulty: climb.boardseshDifficulty,
+      boardseshConfidence: climb.boardseshConfidence,
     },
   };
 }

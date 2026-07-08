@@ -37,6 +37,10 @@ export type SubscriptionClimb = {
   characteristics?: string[] | null;
   framesCount?: number | null;
   framesPace?: number | null;
+  // Boardsesh grade carried on the subscription payload so a peer-broadcast climb
+  // renders its grade without a per-climb refetch. Nullish from older peers.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
 };
 
 export type SubscriptionQueueItem = {
@@ -72,6 +76,8 @@ export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): Climb
       characteristics: subscriptionItem.climb.characteristics,
       framesCount: subscriptionItem.climb.framesCount,
       framesPace: subscriptionItem.climb.framesPace,
+      boardseshDifficulty: subscriptionItem.climb.boardseshDifficulty,
+      boardseshConfidence: subscriptionItem.climb.boardseshConfidence,
     },
   };
 }

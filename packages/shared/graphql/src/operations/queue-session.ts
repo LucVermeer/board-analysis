@@ -21,6 +21,8 @@ const CLIMB_FIELDS = `
   benchmark_difficulty
   is_no_match
   characteristics
+  boardseshDifficulty
+  boardseshConfidence
 `;
 
 const QUEUE_ITEM_USER_FIELDS = `
