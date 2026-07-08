@@ -12,6 +12,8 @@ import { PressableSurface } from '../PressableSurface';
 import { ClimbListItemContent } from '../ClimbListItemContent';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useBoardseshGradesActive } from '../../hooks/use-display-grade';
+import { resolveCrowdDifficultyId, GRADE_BY_ID, clampDifficultyId } from '../../lib/boardsesh-grade-display';
 import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { brandColors, withAlpha } from '../../theme/colors';
@@ -92,6 +94,7 @@ export const SessionTickRow = memo(function SessionTickRow({
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
+  const boardseshActive = useBoardseshGradesActive();
   const { openClimbActions } = useDrawerHost();
 
   const meta = statusMeta(tick.status);
@@ -178,9 +181,17 @@ export const SessionTickRow = memo(function SessionTickRow({
     );
   }
 
+  // The logger's OWN grade (`tick.difficulty`) wins; only an ungraded tick falls
+  // back to the crowd grade — the Boardsesh grade when the app-wide toggle is on
+  // and it's trusted, otherwise nothing (session ticks carry no consensus grade).
+  const crowdDifficulty = tick.difficulty == null ? resolveCrowdDifficultyId(tick, boardseshActive) : null;
+  const effectiveDifficulty = tick.difficulty ?? crowdDifficulty;
   const gradeLabel =
-    formatGradeByDifficultyId(tick.difficulty) ?? formatGrade(tick.difficultyName) ?? tick.difficultyName;
-  const gradeColor = gradeLabel ? gradeBadgeColor(tick.difficultyName ?? gradeLabel) : undefined;
+    formatGradeByDifficultyId(effectiveDifficulty) ?? formatGrade(tick.difficultyName) ?? tick.difficultyName;
+  const gradeColorName =
+    tick.difficultyName ??
+    (crowdDifficulty != null ? (GRADE_BY_ID.get(clampDifficultyId(crowdDifficulty))?.difficulty_name ?? null) : null);
+  const gradeColor = gradeLabel ? gradeBadgeColor(gradeColorName ?? gradeLabel) : undefined;
 
   return (
     <ListRow

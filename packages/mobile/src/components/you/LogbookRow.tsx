@@ -32,6 +32,8 @@ import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useBoardseshGradesActive } from '../../hooks/use-display-grade';
+import { resolveCrowdDifficultyId, GRADE_BY_ID, clampDifficultyId } from '../../lib/boardsesh-grade-display';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
 import { hapticSelection, hapticMedium, hapticLight, hapticSuccess } from '../../lib/haptics';
 
@@ -168,34 +170,42 @@ export const LogbookRow = memo(function LogbookRow({
   const { t, i18n } = useTranslation('you');
   const { systemColors, brandColors: brand } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
+  const boardseshActive = useBoardseshGradesActive();
 
   const statusColor =
     ascent.status === 'flash' ? brand.warning : ascent.status === 'send' ? brand.success : iosSystemColors.systemGray;
 
   // --- Grade column: the big grade is always the climber's effective grade
-  // (their own, or the consensus when they never graded it — marked with the
-  // `people` glyph). The consensus shows as a small secondary only when the
-  // crowd disagrees, with an arrow for the direction of the disagreement.
+  // (their own, or the crowd grade when they never graded it — marked with the
+  // `people` glyph). The crowd grade shows as a small secondary only when it
+  // disagrees, with an arrow for the direction of the disagreement.
+  //
+  // A climber's OWN logged grade (`ascent.difficulty`) always wins; the crowd
+  // side is the only thing the app-wide "Show Boardsesh grades" toggle swaps —
+  // the Boardsesh grade replaces the legacy community consensus as the crowd
+  // grade when it's active, present and trusted (see resolveCrowdDifficultyId).
+  const crowdDifficulty = resolveCrowdDifficultyId(ascent, boardseshActive);
+  const { showConsensusSecondary, gradeIsConsensus } = deriveLogbookGradeDisplay(ascent.difficulty, crowdDifficulty);
   const rawGradeLabel = ascent.difficultyName ?? ascent.consensusDifficultyName;
-  const gradeLabel =
-    formatGradeByDifficultyId(ascent.difficulty ?? ascent.consensusDifficulty) ??
-    formatGrade(rawGradeLabel) ??
-    rawGradeLabel;
-  const gradeColor = rawGradeLabel ? (getGradeColor(rawGradeLabel) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
-  const { showConsensusSecondary, gradeIsConsensus } = deriveLogbookGradeDisplay(
-    ascent.difficulty,
-    ascent.consensusDifficulty,
-  );
+  const bigGradeDifficulty = ascent.difficulty ?? crowdDifficulty;
+  const gradeLabel = formatGradeByDifficultyId(bigGradeDifficulty) ?? formatGrade(rawGradeLabel) ?? rawGradeLabel;
+  // Colour the big grade to match the value actually shown: when the row is
+  // showing a crowd grade (Boardsesh grade when active), colour it from that
+  // grade's own difficulty bucket rather than the legacy consensus name; the
+  // climber's own logged-grade colour path is untouched.
+  const gradeColorName =
+    gradeIsConsensus && crowdDifficulty != null
+      ? (GRADE_BY_ID.get(clampDifficultyId(crowdDifficulty))?.difficulty_name ?? rawGradeLabel)
+      : rawGradeLabel;
+  const gradeColor = gradeColorName ? (getGradeColor(gradeColorName) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
   const consensusGradeLabel = showConsensusSecondary
-    ? (formatGradeByDifficultyId(ascent.consensusDifficulty) ??
+    ? (formatGradeByDifficultyId(crowdDifficulty) ??
       formatGrade(ascent.consensusDifficultyName) ??
       ascent.consensusDifficultyName)
     : null;
   // 'up' = you found it harder than the crowd. Informational, not a warning —
   // the sub-line renders in secondaryLabel, never an alert tone.
-  const deltaDirection = showConsensusSecondary
-    ? consensusDeltaDirection(ascent.difficulty, ascent.consensusDifficulty)
-    : null;
+  const deltaDirection = showConsensusSecondary ? consensusDeltaDirection(ascent.difficulty, crowdDifficulty) : null;
 
   // --- Meta line parts (review data — the climber's own record, not the
   // crowd's). Board+angle always renders: with no thumbnail it is the only
