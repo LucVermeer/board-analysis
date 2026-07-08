@@ -110,6 +110,23 @@ function parseMoonBoardImportEvent(line: string): MoonBoardImportProgressEvent |
   }
 }
 
+function normalizeMoonBoardImportErrorCode(message: string): string {
+  switch (message) {
+    case 'moonboard_import_endpoint_unavailable':
+    case 'moonboard_import_failed':
+    case 'moonboard_import_interrupted':
+      return message;
+    case 'Authentication required':
+    case 'Invalid or expired token':
+    case 'Invalid JSON body':
+    case 'Invalid request body':
+    case 'Request body too large':
+      return 'moonboard_import_failed';
+    default:
+      return 'moonboard_import_failed';
+  }
+}
+
 async function handleMoonBoardImportEvent(
   event: MoonBoardImportProgressEvent,
   onEvent: (event: MoonBoardImportProgressEvent) => void,
@@ -153,7 +170,7 @@ async function readStreamingMoonBoardImportResponse(
       if (!event) continue;
       const eventResult = await handleMoonBoardImportEvent(event, onEvent);
       if (eventResult.type === 'complete') result = eventResult.result;
-      if (eventResult.type === 'error') throw new Error(eventResult.error);
+      if (eventResult.type === 'error') throw new Error(normalizeMoonBoardImportErrorCode(eventResult.error));
     }
   }
 
@@ -162,7 +179,7 @@ async function readStreamingMoonBoardImportResponse(
     if (event) {
       const eventResult = await handleMoonBoardImportEvent(event, onEvent);
       if (eventResult.type === 'complete') result = eventResult.result;
-      if (eventResult.type === 'error') throw new Error(eventResult.error);
+      if (eventResult.type === 'error') throw new Error(normalizeMoonBoardImportErrorCode(eventResult.error));
     }
   }
 
@@ -183,17 +200,19 @@ async function readTextMoonBoardImportResponse(
     if (!event) continue;
     const eventResult = await handleMoonBoardImportEvent(event, onEvent);
     if (eventResult.type === 'complete') result = eventResult.result;
-    if (eventResult.type === 'error') throw new Error(eventResult.error);
+    if (eventResult.type === 'error') throw new Error(normalizeMoonBoardImportErrorCode(eventResult.error));
   }
 
   if (!result) throw new Error('moonboard_import_interrupted');
   return result;
 }
 
-async function readMoonBoardErrorMessage(response: Response): Promise<string> {
+async function readMoonBoardErrorCode(response: Response): Promise<string> {
   try {
     const errorBody = (await response.json()) as { error?: unknown };
-    return typeof errorBody.error === 'string' ? errorBody.error : 'moonboard_import_failed';
+    return normalizeMoonBoardImportErrorCode(
+      typeof errorBody.error === 'string' ? errorBody.error : 'moonboard_import_failed',
+    );
   } catch {
     return 'moonboard_import_failed';
   }
@@ -220,7 +239,7 @@ export async function streamMoonBoardImport(
   });
 
   if (!response.ok) {
-    throw new Error(await readMoonBoardErrorMessage(response));
+    throw new Error(await readMoonBoardErrorCode(response));
   }
 
   const result = await readStreamingMoonBoardImportResponse(response, onEvent);

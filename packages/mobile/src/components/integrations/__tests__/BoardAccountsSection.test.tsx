@@ -245,7 +245,7 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     mocks.streamMoonBoardImport.mockReset().mockResolvedValue(undefined);
     mocks.parseMoonBoardCsv.mockReset().mockReturnValue({
       data: { rows: [{ problemId: 123 }] },
-      preview: { username: 'moonuser', rows: 3, sends: 1, attempts: 2, projects: 1, fails: 0, angle: 40 },
+      preview: { username: 'moonuser', rows: 3, sends: 1, flashes: 1, attempts: 2, projects: 1, fails: 0, angle: 40 },
     });
     mocks.pickDocument.mockReset().mockResolvedValue({
       canceled: false,
@@ -296,6 +296,7 @@ describe('BoardAccountsSection — MoonBoard card', () => {
         'ProblemId,Grade,Tries,Attempts,Rating,Date\n123,6B+,Send,1,3,2026-01-01',
       );
       expect(button(container, 'aurora.import.dialog.confirm')).not.toBeNull();
+      expect(container.textContent).toContain('aurora.moonboard.importDialog.flashes');
     });
   });
 
@@ -355,6 +356,23 @@ describe('BoardAccountsSection — MoonBoard card', () => {
       expect(mocks.streamMoonBoardImport).toHaveBeenCalledWith({ rows: [{ problemId: 123 }] }, expect.any(Function));
       expect(mocks.showToast).toHaveBeenCalledWith('aurora.moonboard.csvImport.successCount', 'success');
     });
+  });
+
+  it('shows the localized failed copy when the MoonBoard import stream rejects', async () => {
+    mocks.streamMoonBoardImport.mockRejectedValueOnce(new Error('moonboard_import_failed'));
+    const { container } = render(<BoardAccountsSection />);
+    fireEvent.click(button(container, 'aurora.moonboard.import')!);
+    await waitFor(() => {
+      expect(button(container, 'aurora.import.dialog.confirm')).not.toBeNull();
+    });
+
+    fireEvent.click(button(container, 'aurora.import.dialog.confirm')!);
+
+    await waitFor(() => {
+      expect(mocks.showToast).toHaveBeenCalledWith('aurora.moonboard.csvImport.failed', 'error');
+      expect(container.textContent).toContain('aurora.moonboard.csvImport.failed');
+    });
+    expect(container.textContent).not.toContain('aurora.moonboard.csvImport.interrupted');
   });
 
   it('closes the MoonBoard preview dialog via the Cancel button', async () => {

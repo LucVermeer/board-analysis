@@ -222,6 +222,14 @@ function getMoonBoardProgressLabel(t: TFunction<'settings'>, progress: MoonBoard
   }
 }
 
+function getMoonBoardImportErrorMessage(t: TFunction<'settings'>, error: unknown): string {
+  const errorCode = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  if (errorCode === 'moonboard_import_interrupted') {
+    return t('aurora.moonboard.csvImport.interrupted');
+  }
+  return t('aurora.moonboard.csvImport.failed');
+}
+
 // Kilter links via the password grant (`/api/board-credentials/kilter/password`);
 // every other board posts username/password to the Aurora endpoint.
 async function saveBoardCredential(input: { boardType: AuroraBoardName; username: string; password: string }) {
@@ -749,14 +757,16 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
             return;
           }
 
-          setImportError(event.error);
+          const importErrorMessage = getMoonBoardImportErrorMessage(t, event.error);
+          setImportError(importErrorMessage);
           setImportPhase('error');
-          showToast(event.error, 'error');
+          showToast(importErrorMessage, 'error');
         });
-      } catch {
-        setImportError(t('aurora.moonboard.csvImport.interrupted'));
+      } catch (error) {
+        const importErrorMessage = getMoonBoardImportErrorMessage(t, error);
+        setImportError(importErrorMessage);
         setImportPhase('error');
-        showToast(t('aurora.moonboard.csvImport.failed'), 'error');
+        showToast(importErrorMessage, 'error');
       } finally {
         setImportData(null);
       }
@@ -871,6 +881,7 @@ function MoonBoardImportDialog({
               <View style={[styles.summaryBox, { backgroundColor: systemColors.tertiaryBackground }]}>
                 <SummaryLine label={t('aurora.moonboard.importDialog.rows', { count: preview.rows })} />
                 <SummaryLine label={t('aurora.moonboard.importDialog.sends', { count: preview.sends })} />
+                <SummaryLine label={t('aurora.moonboard.importDialog.flashes', { count: preview.flashes })} />
                 <SummaryLine label={t('aurora.moonboard.importDialog.attempts', { count: preview.attempts })} />
                 {preview.projects > 0 ? (
                   <SummaryLine label={t('aurora.moonboard.importDialog.projects', { count: preview.projects })} />

@@ -161,6 +161,14 @@ function getMoonBoardProgressLabel(t: TFunction<'settings'>, progress: MoonBoard
   }
 }
 
+function getMoonBoardImportErrorMessage(t: TFunction<'settings'>, error: unknown): string {
+  const errorCode = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  if (errorCode === 'moonboard_import_interrupted') {
+    return t('aurora.moonboard.csvImport.interrupted');
+  }
+  return t('aurora.moonboard.csvImport.failed');
+}
+
 // Localise a link failure. The duplicate-account rejection carries a stable
 // `account_already_linked` code we map to a dedicated string; everything else
 // keeps the existing behaviour (backend message, or the generic fallback).
@@ -905,7 +913,7 @@ export default function AuroraCredentialsSection() {
 
     try {
       const transport = resolveAuroraBackendTransport(authToken);
-      if (!transport) throw new Error(t('aurora.moonboard.csvImport.failed'));
+      if (!transport) throw new Error('moonboard_import_endpoint_unavailable');
 
       await streamMoonBoardImport(
         moonBoardImportData,
@@ -930,12 +938,14 @@ export default function AuroraCredentialsSection() {
                 event.results.partialError ? 'warning' : 'success',
               );
               break;
-            case 'error':
+            case 'error': {
               receivedMoonBoardCompleteRef.current = true;
-              setMoonBoardImportError(event.error);
+              const importErrorMessage = getMoonBoardImportErrorMessage(t, event.error);
+              setMoonBoardImportError(importErrorMessage);
               setMoonBoardImportPhase('error');
-              showMessage(event.error, 'error');
+              showMessage(importErrorMessage, 'error');
               break;
+            }
           }
         },
         {
@@ -950,7 +960,7 @@ export default function AuroraCredentialsSection() {
         showMessage(t('aurora.moonboard.csvImport.interruptedShort'), 'error');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('aurora.moonboard.csvImport.failed');
+      const message = getMoonBoardImportErrorMessage(t, error);
       setMoonBoardImportError(message);
       setMoonBoardImportPhase('error');
       showMessage(message, 'error');
@@ -1365,6 +1375,11 @@ export default function AuroraCredentialsSection() {
                 <ListItem>
                   <ListItemText
                     primary={t('aurora.moonboard.importDialog.sends', { count: moonBoardImportPreview.sends })}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importDialog.flashes', { count: moonBoardImportPreview.flashes })}
                   />
                 </ListItem>
                 <ListItem>

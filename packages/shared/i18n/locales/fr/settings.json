@@ -349,6 +349,7 @@
         "previewIntroWithUser": "Importer les données MoonBoard de {{username}} dans Boardsesh :",
         "rows": "{{count}} lignes CSV",
         "sends": "{{count}} croix",
+        "flashes": "{{count}} flashes",
         "attempts": "{{count}} essais",
         "projects": "{{count}} projets",
         "fails": "{{count}} échecs",

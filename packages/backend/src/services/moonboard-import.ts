@@ -33,7 +33,7 @@ type MoonBoardResolutionRow = {
 
 type ExistingTickRow = {
   climbUuid: string;
-  climbedAt: string;
+  climbedOn: string;
 };
 
 type PendingInsertRow = {
@@ -120,8 +120,18 @@ function pushUnique(items: string[], item: string): void {
   if (!items.includes(item)) items.push(item);
 }
 
-function existingTickKey(row: Pick<ResolvedMoonBoardLogRow, 'climbUuid' | 'climbedAt'>): string {
-  return `${row.climbUuid}:${row.climbedAt}`;
+function climbedOn(row: Pick<ResolvedMoonBoardLogRow, 'climbedAt'>): string {
+  return row.climbedAt.slice(0, 10);
+}
+
+function existingTickDateKey(row: Pick<ResolvedMoonBoardLogRow, 'climbUuid' | 'climbedAt'>): string {
+  return `${row.climbUuid}:${climbedOn(row)}`;
+}
+
+function importTickKey(
+  row: Pick<ResolvedMoonBoardLogRow, 'climbUuid' | 'climbedAt' | 'status' | 'attemptCount'>,
+): string {
+  return `${row.climbUuid}:${row.climbedAt}:${row.status}:${row.attemptCount}`;
 }
 
 async function resolveClimbUuid(
@@ -176,19 +186,19 @@ async function findExistingTickKeys(
   if (rows.length === 0) return new Set();
 
   const climbUuids = [...new Set(rows.map((row) => row.climbUuid))];
-  const climbedAtValues = [...new Set(rows.map((row) => row.climbedAt))];
+  const climbedOnValues = [...new Set(rows.map((row) => climbedOn(row)))];
   const climbUuidArraySql = sql.join(
     climbUuids.map((climbUuid) => sql`${climbUuid}`),
     sql`, `,
   );
-  const climbedAtArraySql = sql.join(
-    climbedAtValues.map((climbedAt) => sql`${climbedAt}`),
+  const climbedOnArraySql = sql.join(
+    climbedOnValues.map((climbedOnValue) => sql`${climbedOnValue}`),
     sql`, `,
   );
   const existingResult = await db.execute<ExistingTickRow>(sql`
     SELECT
       COALESCE(board_climb_aliases.canonical_uuid, boardsesh_ticks.climb_uuid) AS "climbUuid",
-      to_char(boardsesh_ticks.climbed_at, 'YYYY-MM-DD HH24:MI:SS') AS "climbedAt"
+      to_char(boardsesh_ticks.climbed_at::date, 'YYYY-MM-DD') AS "climbedOn"
     FROM boardsesh_ticks
     LEFT JOIN board_climb_aliases
       ON board_climb_aliases.board_type = boardsesh_ticks.board_type
@@ -197,17 +207,10 @@ async function findExistingTickKeys(
       AND boardsesh_ticks.board_type = 'moonboard'
       AND boardsesh_ticks.angle = ${MOONBOARD_ANGLE}
       AND COALESCE(board_climb_aliases.canonical_uuid, boardsesh_ticks.climb_uuid) = ANY(ARRAY[${climbUuidArraySql}]::text[])
-      AND boardsesh_ticks.climbed_at = ANY(ARRAY[${climbedAtArraySql}]::timestamp[])
+      AND boardsesh_ticks.climbed_at::date = ANY(ARRAY[${climbedOnArraySql}]::date[])
   `);
 
-  return new Set(
-    rowsOf<ExistingTickRow>(existingResult).map((row) =>
-      existingTickKey({
-        climbUuid: row.climbUuid,
-        climbedAt: row.climbedAt,
-      }),
-    ),
-  );
+  return new Set(rowsOf<ExistingTickRow>(existingResult).map((row) => `${row.climbUuid}:${row.climbedOn}`));
 }
 
 function countSkippedResult(result: MoonBoardImportResult, row: ResolvedMoonBoardLogRow): void {
@@ -289,7 +292,8 @@ export async function importMoonBoardExportData(
     });
   }
 
-  const claimedTickKeys = await findExistingTickKeys(db, userId, resolvedRows);
+  const existingTickDateKeys = await findExistingTickKeys(db, userId, resolvedRows);
+  const claimedImportTickKeys = new Set<string>();
   const recomputeKeys = new Map<string, ClimbStatsKey>();
 
   for (let start = 0; start < resolvedRows.length; start += INSERT_BATCH_SIZE) {
@@ -303,12 +307,17 @@ export async function importMoonBoardExportData(
 
     const rowsToInsert: PendingInsertRow[] = [];
     for (const row of batch) {
-      const rowNaturalKey = existingTickKey(row);
-      if (claimedTickKeys.has(rowNaturalKey)) {
+      if (existingTickDateKeys.has(existingTickDateKey(row))) {
         countSkippedResult(result, row);
         continue;
       }
-      claimedTickKeys.add(rowNaturalKey);
+
+      const rowImportKey = importTickKey(row);
+      if (claimedImportTickKeys.has(rowImportKey)) {
+        countSkippedResult(result, row);
+        continue;
+      }
+      claimedImportTickKeys.add(rowImportKey);
 
       rowsToInsert.push({
         source: row,
