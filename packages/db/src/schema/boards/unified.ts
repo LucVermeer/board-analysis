@@ -595,7 +595,43 @@ export const boardClimbStats = pgTable(
     upstreamAscensionistCount: bigint('upstream_ascensionist_count', { mode: 'number' }),
     boardseshAscensionistCount: bigint('boardsesh_ascensionist_count', { mode: 'number' }),
     difficultyAverage: doublePrecision('difficulty_average'),
+    // quality_average is the MATERIALIZED blend of the single upstream
+    // (manufacturer) quality average and Boardsesh's own native star ratings —
+    // the exact mirror of how ascensionist_count materializes
+    // upstream_ascensionist_count + boardsesh_ascensionist_count. Every writer
+    // that touches either side rewrites this in the same statement, so it stays
+    // in lockstep. The blend (single source of truth: blendedQualityAverageSql
+    // in packages/db/src/queries/climb-stats/quality-blend.ts, reused by the
+    // tick recompute and every upstream upsert):
+    //   quality_average =
+    //     (COALESCE(upstream_quality_average * upstream_ascensionist_count, 0)
+    //      + COALESCE(boardsesh_quality_sum, 0))
+    //     / NULLIF(
+    //         COALESCE(CASE WHEN upstream_quality_average IS NOT NULL
+    //                       THEN upstream_ascensionist_count END, 0)
+    //         + COALESCE(boardsesh_quality_count, 0), 0)
+    //   → NULL when both sides are absent.
+    // Boardsesh-OWNED climbs (board_climbs.user_id IS NOT NULL) have no upstream
+    // side: there quality_average stays a plain AVG over ticks (recompute's
+    // owned branch) and the three columns below are informational only.
     qualityAverage: doublePrecision('quality_average'),
+    // The upstream (manufacturer) quality average, 1-5 normalized — the blend's
+    // first term. Nullable: null means no upstream source ever supplied a
+    // quality for this row. Owned by the upstream stats writers (Aurora sync,
+    // Kilter Grips catalog sync / stats-repair, MoonBoard catalog import); the
+    // tick recompute never writes it. Split out of quality_average by migration
+    // 0158 (initialized := quality_average for non-owned rows by 0159); before
+    // the split, quality_average WAS the raw upstream value on synced climbs.
+    upstreamQualityAverage: doublePrecision('upstream_quality_average'),
+    // The blend's Boardsesh numerator: SUM of one vote per climber — each
+    // climber's LATEST rated native flash/send tick (max climbed_at, tie-break
+    // max id) with quality >= 1 and origin = 'native'. double so the sum stays
+    // fractional-safe (ratings are integers 1-5 today, but the vote basis may
+    // change). Owned by recomputeClimbStats; upstream writers never touch it.
+    boardseshQualitySum: doublePrecision('boardsesh_quality_sum'),
+    // The blend's Boardsesh weight: COUNT of the distinct climbers feeding
+    // boardsesh_quality_sum (one vote per climber). Owned by recomputeClimbStats.
+    boardseshQualityCount: bigint('boardsesh_quality_count', { mode: 'number' }),
     // True once quality_average is on the canonical 1-5 scale. Aurora reports
     // quality on 1-3; Kilter Grips / MoonBoard / Boardsesh ticks are already
     // 1-5. The 1-3→1-5 backfill (migration 0115/0116) and every write path set

@@ -20,12 +20,19 @@ function makeDb() {
   return { queries, handle: handle as unknown as DrizzleDb };
 }
 
+// Recursively stitch drizzle's `queryChunks` AST back into raw SQL text.
+// Nested `sql`…`` fragments (e.g. the blendedQualityAverageSql() interpolation)
+// are themselves chunk objects with their own `queryChunks`, so we must recurse
+// to see their text — a flat pass over the top level would miss the blend.
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: Array<unknown> }).queryChunks ?? [];
-  return chunks
-    .filter((chunk): chunk is { value?: string[] } => typeof chunk === 'object' && chunk !== null)
-    .flatMap((chunk) => chunk.value ?? [])
-    .join('');
+  function walk(node: unknown): string {
+    if (node === null || typeof node !== 'object') return '';
+    const chunk = node as { value?: string[]; queryChunks?: unknown[] };
+    if (Array.isArray(chunk.value)) return chunk.value.join('');
+    if (Array.isArray(chunk.queryChunks)) return chunk.queryChunks.map(walk).join('');
+    return '';
+  }
+  return walk(query);
 }
 
 void describe('recomputeClimbStatsBulk', () => {
@@ -41,16 +48,33 @@ void describe('recomputeClimbStatsBulk', () => {
 
     assert.equal(db.queries.length, 2);
     assert.match(sqlText(db.queries[0]), /INSERT INTO board_climb_stats/);
-    assert.match(sqlText(db.queries[1]), /UPDATE board_climb_stats/);
-    // The counting rule + provenance guard must be present in the UPDATE. Only
-    // imported FLASH/SEND ticks mark a user upstream-represented (an imported
-    // bid must not disqualify a native send).
-    assert.match(sqlText(db.queries[1]), /bool_or\(bt\.origin <> 'native' AND bt\.status IN \('flash','send'\)\)/);
-    assert.match(sqlText(db.queries[1]), /has_send AND NOT has_upstream/);
-    // quality = 0 sentinel excluded; ascensionist = upstream + boardsesh.
-    assert.match(sqlText(db.queries[1]), /AVG\(NULLIF\(bt\.quality, 0\)\)/);
+    const updateSql = sqlText(db.queries[1]);
+    assert.match(updateSql, /UPDATE board_climb_stats/);
+    // The counting rule + provenance guard must be present in the UPDATE. The
+    // guard is FLASH/SEND-scoped: an imported attempt must not disqualify a
+    // native send (upstream counts have no bids).
+    assert.match(updateSql, /bool_or\(bt\.origin <> 'native' AND bt\.status IN \('flash','send'\)\)/);
+    assert.match(updateSql, /has_send AND NOT has_upstream/);
+    // Owned-climb quality: quality = 0 sentinel excluded; ascensionist = upstream + boardsesh.
+    assert.match(updateSql, /AVG\(NULLIF\(bt\.quality, 0\)\)/);
     // Kilter-detached (upstream-deleted) rows must be excluded from the count.
-    assert.match(sqlText(db.queries[1]), /kilter_detached_at IS NULL/);
+    assert.match(updateSql, /kilter_detached_at IS NULL/);
+    // Quality blend — the Boardsesh side (one vote per climber = LATEST rated
+    // native flash/send tick) and the blended non-owned quality_average.
+    assert.match(updateSql, /boardsesh_quality_sum\s*=\s*bq\.bs_quality_sum/);
+    assert.match(updateSql, /boardsesh_quality_count\s*=\s*NULLIF\(bq\.bs_quality_count, 0\)/);
+    // The vote query: native-only, rated, one row per user (latest wins).
+    assert.match(updateSql, /DISTINCT ON \(bt\.board_type, bt\.climb_uuid, bt\.angle, bt\.user_id\)/);
+    assert.match(updateSql, /bt\.origin = 'native'/);
+    assert.match(updateSql, /bt\.quality >= 1/);
+    assert.match(updateSql, /ORDER BY[\s\S]*bt\.climbed_at DESC, bt\.id DESC/);
+    // Non-owned quality_average is the blend (division by the summed weights),
+    // NOT the plain upstream value.
+    assert.match(updateSql, /COALESCE\(s\.upstream_quality_average \* s\.upstream_ascensionist_count, 0\)/);
+    assert.match(
+      updateSql,
+      /CASE WHEN s\.upstream_quality_average IS NOT NULL THEN s\.upstream_ascensionist_count END/,
+    );
   });
 
   void it('dedupes identical keys into a single chunk', async () => {
