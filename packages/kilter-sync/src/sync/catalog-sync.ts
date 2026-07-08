@@ -9,7 +9,7 @@ import {
   boardPlacements,
   type NewBoardClimb,
 } from '@boardsesh/db/schema';
-import { populateDenormalizedColumns } from '@boardsesh/db/queries';
+import { populateDenormalizedColumns, blendedQualityAverageSql } from '@boardsesh/db/queries';
 import { isNoMatchClimb, CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
 
 import type { KilterTokenProvider } from '../api/token-provider';
@@ -596,6 +596,10 @@ async function syncBoardLayoutGroup(
     displayDifficulty: accum.displayDifficulty,
     difficultyAverage: accum.difficultyAverage,
     qualityAverage: accum.qualityAverage,
+    // The manufacturer average also seeds upstream_quality_average (the blend's
+    // upstream term). On a fresh INSERT quality_average == this value because no
+    // Boardsesh votes exist yet; on conflict quality_average is re-blended below.
+    upstreamQualityAverage: accum.qualityAverage,
     // qualityAverage was put on the canonical 1-5 scale by correctGripsQualityAverage
     // in the fold above (Aurora-era 1-3 → 1-5, Grips-era passthrough).
     qualityNormalized: true,
@@ -607,6 +611,21 @@ async function syncBoardLayoutGroup(
     upstreamSyncedAt: new Date().toISOString(),
   }));
   if (statValues.length > 0) {
+    // The NEW upstream count this upsert resolves to: GREATEST of stored and
+    // incoming, so a stale/partial sync can never lower a climb. Defined ONCE and
+    // reused for the count SET, the total, AND the blend weight — a Postgres SET
+    // reads the OLD value of a bare column, so the blend must weight by this NEW
+    // expression. Single source keeps them in lockstep if the count policy changes.
+    // Aurora-origin canonicals have no Grips row (excluded.upstream_quality_average
+    // is null) → preserve the stored upstream quality; Kilter-origin canonicals
+    // clobber with the corrected Grips value.
+    const resolvedUpstreamAscensionistCount = sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`;
+    const blendedQuality = blendedQualityAverageSql({
+      upstreamQualityAverage: sql`COALESCE(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
+      upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
+      boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
+      boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
+    });
     await processBatches(statValues, async (chunk) => {
       await db
         .insert(boardClimbStats)
@@ -614,17 +633,16 @@ async function syncBoardLayoutGroup(
         .onConflictDoUpdate({
           target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
           set: {
-            // upstream_ is the board's single manufacturer count (Kilter Grips
-            // here). Keep the higher of the stored and incoming snapshot so a
-            // stale/partial sync can never lower a climb.
-            upstreamAscensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0))`,
+            // upstream_ is the board's single manufacturer count (Kilter Grips here).
+            upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
             // Total = upstream + the independent Boardsesh count.
-            ascensionistCount: sql`GREATEST(COALESCE(${boardClimbStats.upstreamAscensionistCount}, 0), COALESCE(excluded.upstream_ascensionist_count, 0)) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+            ascensionistCount: sql`${resolvedUpstreamAscensionistCount} + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
             // Kilter-origin canonicals: clobber with Grips values. Aurora-origin
             // canonicals (no Grips display row): excluded is null → keep existing.
             displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
             difficultyAverage: sql`COALESCE(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
-            qualityAverage: sql`COALESCE(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
+            upstreamQualityAverage: sql`COALESCE(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
+            qualityAverage: blendedQuality,
             // quality is corrected to the canonical 1-5 scale on the way in
             // (correctGripsQualityAverage), so a written row is always normalized.
             qualityNormalized: sql`true`,

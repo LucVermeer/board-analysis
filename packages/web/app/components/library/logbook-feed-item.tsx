@@ -704,7 +704,10 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
                   consensusDifficultyName={item.consensusDifficultyName}
                   qualityAverage={item.qualityAverage}
                   difficultyName={item.difficultyName}
-                  quality={item.quality}
+                  // Read-only "User" stars: prefer the effective quality so a
+                  // Kilter-pulled tick shows the climber's own synced rating.
+                  // Edit mode still seeds from raw `item.quality` (see editQuality).
+                  quality={item.effectiveQuality ?? item.quality}
                   attemptCount={item.attemptCount}
                   isEditing={isEditing}
                   editQuality={editQuality}

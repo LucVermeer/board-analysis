@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { recomputeClimbStats as recomputeClimbStatsCore, recomputeClimbStatsBulk } from '@boardsesh/db/queries';
+import { sqlText } from '@boardsesh/db/test-utils';
 import { getWorkerDatabaseUrl, setupWorkerDatabase } from './worker-db';
 import { logger } from '../utils/logger';
 
@@ -116,12 +117,7 @@ describe('recomputeClimbStats', () => {
 
     await recomputeClimbStats('kilter', 'CLIMB-1', 40);
 
-    type DrizzleSql = { queryChunks?: Array<unknown> };
-    const chunks = (capturedQuery as DrizzleSql).queryChunks ?? [];
-    const sql = chunks
-      .filter((c): c is { value?: string[] } => typeof c === 'object' && c !== null)
-      .flatMap((c) => c.value ?? [])
-      .join('');
+    const sql = sqlText(capturedQuery);
 
     // Hard invariants the delete-last-tick path depends on:
     // 1. boardsesh_ascensionist_count defaults to 0 when no senders remain.
@@ -166,12 +162,7 @@ describe('recomputeClimbStats', () => {
 
     await recomputeClimbStats('kilter', 'CLIMB-1', 40);
 
-    type DrizzleSql = { queryChunks?: Array<unknown> };
-    const chunks = (capturedQuery as DrizzleSql).queryChunks ?? [];
-    const sql = chunks
-      .filter((c): c is { value?: string[] } => typeof c === 'object' && c !== null)
-      .flatMap((c) => c.value ?? [])
-      .join('');
+    const sql = sqlText(capturedQuery);
 
     // The agg CTE must compute the averages — Postgres AVG skips NULL inputs,
     // so a single rated tick is enough to populate the column. quality = 0 is a
@@ -179,12 +170,23 @@ describe('recomputeClimbStats', () => {
     expect(sql).toMatch(/AVG\(NULLIF\(bt\.quality, 0\)\)\s+AS avg_quality/);
     expect(sql).toMatch(/AVG\(bt\.difficulty\)\s+AS avg_difficulty/);
 
-    // Each rating column must be guarded by the same boardsesh_owned CASE
-    // expression used for FA, so Aurora's averages survive untouched on
-    // Aurora-synced climbs.
-    expect(sql).toMatch(/quality_average\s*=\s*CASE[\s\S]+?agg\.avg_quality[\s\S]+?s\.quality_average/);
+    // difficulty/display stay ownership-CASE-guarded so Aurora's averages
+    // survive untouched on Aurora-synced climbs.
     expect(sql).toMatch(/difficulty_average\s*=\s*CASE[\s\S]+?agg\.avg_difficulty[\s\S]+?s\.difficulty_average/);
     expect(sql).toMatch(/display_difficulty\s*=\s*CASE[\s\S]+?agg\.avg_difficulty[\s\S]+?s\.display_difficulty/);
+
+    // quality_average is ownership-branched too: OWNED climbs get the plain AVG,
+    // NON-owned climbs get the blend (which weights upstream_quality_average by
+    // the upstream ascent count) — NOT the bare stored quality_average.
+    expect(sql).toMatch(/quality_average\s*=\s*CASE[\s\S]+?agg\.avg_quality[\s\S]+?upstream_quality_average/);
+    // Boardsesh side of the blend: one vote per climber = LATEST rated native
+    // flash/send tick, written to the sum/count columns for NON-owned climbs and
+    // NULLed for owned (never blended).
+    expect(sql).toMatch(/boardsesh_quality_sum\s*=\s*CASE[\s\S]+?bq\.bs_quality_sum/);
+    expect(sql).toMatch(/boardsesh_quality_count\s*=\s*CASE[\s\S]+?NULLIF\(bq\.bs_quality_count, 0\)/);
+    expect(sql).toMatch(/DISTINCT ON \(bt\.user_id\)/);
+    expect(sql).toContain("bt.origin     = 'native'");
+    expect(sql).toMatch(/ORDER BY bt\.user_id, bt\.climbed_at DESC, bt\.id DESC/);
   });
 
   it('emits a [recomputeClimbStats] info log line with prev/new diff when a row was updated', async () => {
@@ -319,11 +321,19 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     boardType: string,
     uuid: string,
     angle: number,
-    opts: { upstream?: number; faUsername?: string | null; faAt?: string | null } = {},
+    opts: {
+      upstream?: number;
+      faUsername?: string | null;
+      faAt?: string | null;
+      // Post-0168 shape: a non-owned synced climb carries its manufacturer
+      // quality in both quality_average and upstream_quality_average.
+      upstreamQuality?: number | null;
+    } = {},
   ) {
+    const upstreamQuality = opts.upstreamQuality ?? null;
     await db.execute(sql`
-      INSERT INTO board_climb_stats (board_type, climb_uuid, angle, upstream_ascensionist_count, ascensionist_count, boardsesh_ascensionist_count, fa_username, fa_at)
-      VALUES (${boardType}, ${uuid}, ${angle}, ${opts.upstream ?? 0}, ${opts.upstream ?? 0}, 0, ${opts.faUsername ?? null}, ${opts.faAt ?? null})
+      INSERT INTO board_climb_stats (board_type, climb_uuid, angle, upstream_ascensionist_count, ascensionist_count, boardsesh_ascensionist_count, fa_username, fa_at, quality_average, upstream_quality_average, quality_normalized)
+      VALUES (${boardType}, ${uuid}, ${angle}, ${opts.upstream ?? 0}, ${opts.upstream ?? 0}, 0, ${opts.faUsername ?? null}, ${opts.faAt ?? null}, ${upstreamQuality}, ${upstreamQuality}, true)
     `);
   }
 
@@ -349,7 +359,9 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
 
   async function statsRow(boardType: string, uuid: string, angle: number) {
     const rows = (await db.execute(sql`
-      SELECT boardsesh_ascensionist_count AS bs, ascensionist_count AS total, fa_username AS fa, fa_at AS fa_at, quality_average AS quality
+      SELECT boardsesh_ascensionist_count AS bs, ascensionist_count AS total, fa_username AS fa, fa_at AS fa_at,
+             quality_average AS quality, upstream_quality_average AS upstream_quality,
+             boardsesh_quality_sum AS bs_quality_sum, boardsesh_quality_count AS bs_quality_count
         FROM board_climb_stats
        WHERE board_type = ${boardType} AND climb_uuid = ${uuid} AND angle = ${angle}
     `)) as unknown as Array<{
@@ -358,6 +370,9 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
       fa: string | null;
       fa_at: string | null;
       quality: number | string | null;
+      upstream_quality: number | string | null;
+      bs_quality_sum: number | string | null;
+      bs_quality_count: number | string | null;
     }>;
     const [row] = Array.isArray(rows) ? rows : (rows as { rows: typeof rows }).rows;
     return row;
@@ -570,6 +585,239 @@ describe('recomputeClimbStats — provenance matrix (real DB)', () => {
     // The 0-quality tick is a legacy sentinel — average is 5, not (0+5)/2.
     expect(Number(row.quality)).toBe(5);
     expect(Number(row.bs)).toBe(2); // both native senders count
+  });
+
+  // --- Quality blend (the PR3 change) ---
+
+  it('native rated tick blends into a non-owned climb’s quality_average', async () => {
+    await seedUser('u-native', 'Nadia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null); // non-owned
+    // Post-0168 shape: upstream quality 4.0 across 10 upstream ascents.
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 2,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    // blend = (4*10 + 2) / (10 + 1) = 42/11.
+    expect(Number(row.quality)).toBeCloseTo(42 / 11, 6);
+    expect(Number(row.upstream_quality)).toBe(4); // upstream term preserved
+    expect(Number(row.bs_quality_sum)).toBe(2);
+    expect(Number(row.bs_quality_count)).toBe(1);
+  });
+
+  it('imported rated tick does NOT blend (already inside upstream_quality_average)', async () => {
+    await seedUser('u-import', 'Ivan');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    await seedTick({
+      ...KEY,
+      userId: 'u-import',
+      status: 'send',
+      origin: 'json_import',
+      quality: 1,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    // Imported rating excluded → quality_average stays the pure upstream 4.0.
+    expect(Number(row.quality)).toBeCloseTo(4, 6);
+    expect(row.bs_quality_sum).toBe(null);
+    expect(row.bs_quality_count).toBe(null);
+  });
+
+  it('a climber re-ticking counts only their LATEST rating (no vote multiplication)', async () => {
+    await seedUser('u-native', 'Nadia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    // Same user, two native rated sends — the later (quality 5) is the vote.
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 2,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 5,
+      climbedAt: '2026-06-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs_quality_sum)).toBe(5); // latest rating only
+    expect(Number(row.bs_quality_count)).toBe(1); // one voter
+    // blend = (4*10 + 5) / (10 + 1) = 45/11.
+    expect(Number(row.quality)).toBeCloseTo(45 / 11, 6);
+  });
+
+  it('a rated ATTEMPT never votes — only flash/send ticks feed bs_quality', async () => {
+    await seedUser('u-native', 'Nadia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    // A native attempt carrying a rating (odd but possible): excluded by the
+    // status IN ('flash','send') filter — no Boardsesh vote materializes.
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'attempt',
+      origin: 'native',
+      quality: 5,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(row.bs_quality_sum).toBe(null);
+    expect(row.bs_quality_count).toBe(null);
+    // quality_average stays the pure upstream 4.0 — an attempt's stars don't blend.
+    expect(Number(row.quality)).toBeCloseTo(4, 6);
+  });
+
+  it('two rated sends sharing climbed_at tie-break on id DESC (later insert wins)', async () => {
+    await seedUser('u-native', 'Nadia');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null);
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 10, upstreamQuality: 4 });
+    // Same user, same climbed_at second — only the serial id orders them. The
+    // second insert (quality 5) has the higher id, so `climbed_at DESC, id DESC`
+    // must pick it; an id ASC (or unordered) implementation would pick the 2.
+    const sharedClimbedAt = '2026-03-01 12:00:00';
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 2,
+      climbedAt: sharedClimbedAt,
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-native',
+      status: 'send',
+      origin: 'native',
+      quality: 5,
+      climbedAt: sharedClimbedAt,
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    expect(Number(row.bs_quality_sum)).toBe(5); // higher-id tick wins the tie
+    expect(Number(row.bs_quality_count)).toBe(1);
+    expect(Number(row.quality)).toBeCloseTo(45 / 11, 6);
+  });
+
+  it('owned climb keeps the plain AVG (blend never applies)', async () => {
+    await seedUser('u-a', 'Ana');
+    await seedUser('u-b', 'Bob');
+    await seedClimb(KEY.boardType, KEY.climbUuid, 'u-a'); // owned
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 0, upstreamQuality: null });
+    await seedTick({
+      ...KEY,
+      userId: 'u-a',
+      status: 'send',
+      origin: 'native',
+      quality: 2,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-b',
+      status: 'send',
+      origin: 'native',
+      quality: 4,
+      climbedAt: '2026-01-02 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    // Plain AVG(2, 4) = 3 — NOT a blend against any upstream term.
+    expect(Number(row.quality)).toBeCloseTo(3, 6);
+    // The blend-input columns are NULL for owned climbs — they're never blended,
+    // so the columns carry one consistent meaning (non-owned only).
+    expect(row.bs_quality_sum).toBe(null);
+    expect(row.bs_quality_count).toBe(null);
+  });
+
+  it('non-owned climb the manufacturer never rated becomes the pure Boardsesh average', async () => {
+    await seedUser('u-a', 'Ana');
+    await seedUser('u-b', 'Bob');
+    await seedClimb(KEY.boardType, KEY.climbUuid, null); // non-owned, no upstream quality
+    // MoonBoard shape: community repeats but no catalog quality (upstream_quality NULL).
+    await seedStats(KEY.boardType, KEY.climbUuid, KEY.angle, { upstream: 50, upstreamQuality: null });
+    await seedTick({
+      ...KEY,
+      userId: 'u-a',
+      status: 'flash',
+      origin: 'native',
+      quality: 3,
+      climbedAt: '2026-01-01 00:00:00',
+    });
+    await seedTick({
+      ...KEY,
+      userId: 'u-b',
+      status: 'send',
+      origin: 'native',
+      quality: 5,
+      climbedAt: '2026-01-02 00:00:00',
+    });
+
+    await recomputeClimbStatsBulk(db, [KEY]);
+
+    const row = await statsRow(KEY.boardType, KEY.climbUuid, KEY.angle);
+    // upstream term drops out (upstream_quality NULL) → pure Boardsesh (3+5)/2 = 4.
+    expect(Number(row.quality)).toBeCloseTo(4, 6);
+    expect(row.upstream_quality).toBe(null);
+    expect(Number(row.bs_quality_sum)).toBe(8);
+    expect(Number(row.bs_quality_count)).toBe(2);
+  });
+
+  it('single-key and bulk agree on the blended quality_average', async () => {
+    await seedUser('u-native', 'Nadia');
+    async function seedBlendFixture(uuid: string) {
+      await seedClimb(KEY.boardType, uuid, null);
+      await seedStats(KEY.boardType, uuid, KEY.angle, { upstream: 7, upstreamQuality: 3 });
+      await seedTick({
+        boardType: KEY.boardType,
+        climbUuid: uuid,
+        angle: KEY.angle,
+        userId: 'u-native',
+        status: 'send',
+        origin: 'native',
+        quality: 5,
+        climbedAt: '2026-03-01 00:00:00',
+      });
+    }
+    await seedBlendFixture('CLIMB-SINGLE-Q');
+    await seedBlendFixture('CLIMB-BULK-Q');
+
+    await recomputeClimbStatsCore(db, KEY.boardType, 'CLIMB-SINGLE-Q', KEY.angle);
+    await recomputeClimbStatsBulk(db, [{ boardType: KEY.boardType, climbUuid: 'CLIMB-BULK-Q', angle: KEY.angle }]);
+
+    const single = await statsRow(KEY.boardType, 'CLIMB-SINGLE-Q', KEY.angle);
+    const bulk = await statsRow(KEY.boardType, 'CLIMB-BULK-Q', KEY.angle);
+    // blend = (3*7 + 5) / (7 + 1) = 26/8 = 3.25.
+    expect(Number(single.quality)).toBeCloseTo(26 / 8, 6);
+    expect(Number(bulk.quality)).toBeCloseTo(Number(single.quality), 9);
+    expect(Number(bulk.bs_quality_sum)).toBe(Number(single.bs_quality_sum));
+    expect(Number(bulk.bs_quality_count)).toBe(Number(single.bs_quality_count));
   });
 
   it('single-key recompute produces the same counting result and returns a diff', async () => {

@@ -31,8 +31,10 @@ export const activityFeedTypeDefs = /* GraphQL */ `
     status: TickStatus!
     "Number of attempts"
     attemptCount: Int!
-    "Quality rating"
+    "Raw per-tick quality rating (1-5). Null for a tick pulled from Kilter, which carries no per-tick quality. Read \`effectiveQuality\` for the value to display."
     quality: Int
+    "Effective quality for display: COALESCE(quality, the climber's own synced star rating for this climb+angle from board_climb_ratings). Both are 1-5 native (no rescaling). Still nullable when neither exists."
+    effectiveQuality: Int
     "Difficulty rating"
     difficulty: Int
     "Human-readable difficulty name"

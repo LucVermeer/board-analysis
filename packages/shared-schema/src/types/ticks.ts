@@ -12,6 +12,12 @@ export type Tick = {
   status: TickStatus;
   attemptCount: number;
   quality: number | null;
+  // COALESCE(quality, the climber's own synced star rating from
+  // board_climb_ratings). What star displays should read — falls back to the
+  // Kilter-synced rating when a pulled tick has no per-tick quality. 1-5 native
+  // (no rescaling); null when neither exists. Populated by read queries;
+  // mutation responses don't compute it.
+  effectiveQuality?: number | null;
   // Raw user grade override; null means "use the climb's consensus grade".
   // See docs/ascents-and-attempts.md.
   difficulty: number | null;

@@ -3,6 +3,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql } from 'drizzle-orm';
 import { boardClimbs, boardClimbStats, boardClimbHolds } from '../src/schema/boards/unified.js';
+import { blendedQualityAverageSql } from '../src/queries/climb-stats/quality-blend.js';
 import {
   uuidv5,
   coordinateToHoldId,
@@ -228,6 +229,10 @@ async function importMoonBoardProblems() {
           // MoonBoard userRating is already on the 1-5 scale — mark normalized
           // so the 1-3→1-5 backfill (0116) and future runs leave it untouched.
           qualityAverage: problem.userRating,
+          // Seed upstream_quality_average with the same manufacturer average (the
+          // blend's upstream term). On a fresh INSERT quality_average == this value
+          // because no Boardsesh votes exist yet; on conflict it re-blends.
+          upstreamQualityAverage: problem.userRating,
           qualityNormalized: true,
           faUsername: null,
           faAt: null,
@@ -273,6 +278,24 @@ async function importMoonBoardProblems() {
 
       // Batch insert stats (upsert to refresh on re-run)
       console.info(`   Inserting ${statsRecords.length} stats...`);
+      // The NEW upstream count this upsert resolves to: monotonic GREATEST of the
+      // stored and incoming snapshot. Defined ONCE and reused for the count SET,
+      // the total, AND the blend weight — a SET expression reads the OLD value of a
+      // bare column, so the blend must weight by this NEW resolved count. Single
+      // source keeps the three in lockstep if the count policy ever changes.
+      const resolvedUpstreamAscensionistCount = sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`;
+      // COALESCE like the catalog importer (import-moonboard-catalog.ts): a
+      // problem whose source userRating is NULL on a re-run must preserve the
+      // stored last-known rating, not clobber it back to NULL. Defined ONCE and
+      // reused by the SET and the blend so the written column and the blend's
+      // upstream term can never disagree.
+      const resolvedUpstreamQualityAverage = sql`coalesce(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`;
+      const blendedQuality = blendedQualityAverageSql({
+        upstreamQualityAverage: resolvedUpstreamQualityAverage,
+        upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
+        boardseshQualitySum: sql`${boardClimbStats.boardseshQualitySum}`,
+        boardseshQualityCount: sql`${boardClimbStats.boardseshQualityCount}`,
+      });
       for (let i = 0; i < statsRecords.length; i += BATCH_SIZE) {
         const batch = statsRecords.slice(i, i + BATCH_SIZE);
         await db
@@ -285,10 +308,14 @@ async function importMoonBoardProblems() {
               benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
               // Upstream is monotonic; the total is rebuilt as upstream + existing
               // Boardsesh so a re-run never clobbers accrued tick counts.
-              upstreamAscensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0))`,
-              ascensionistCount: sql`greatest(coalesce(excluded.upstream_ascensionist_count, 0), coalesce(${boardClimbStats.upstreamAscensionistCount}, 0)) + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+              upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
+              ascensionistCount: sql`${resolvedUpstreamAscensionistCount} + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
               difficultyAverage: sql`excluded.difficulty_average`,
-              qualityAverage: sql`excluded.quality_average`,
+              // Manufacturer average lands in upstream_quality_average (COALESCEd:
+              // an unrated source row preserves the stored last-known rating);
+              // quality_average is the blend of it and Boardsesh's own votes.
+              upstreamQualityAverage: resolvedUpstreamQualityAverage,
+              qualityAverage: blendedQuality,
               qualityNormalized: sql`true`,
               upstreamSyncedAt: sql`excluded.upstream_synced_at`,
             },

@@ -157,6 +157,8 @@ describe('useLogbook', () => {
       is_mirror: false,
       tries: 3,
       quality: 4,
+      // No synced rating in the payload → falls back to the tick's own quality.
+      effectiveQuality: 4,
       difficulty: 10,
       comment: 'Nice climb',
       climbed_at: '2024-01-01',

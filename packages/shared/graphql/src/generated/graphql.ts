@@ -247,6 +247,8 @@ export type AscentFeedItem = {
   difficulty?: Maybe<Scalars['Int']['output']>;
   /** Human-readable difficulty name */
   difficultyName?: Maybe<Scalars['String']['output']>;
+  /** Effective quality for display: COALESCE(quality, the climber's own synced star rating for this climb+angle from board_climb_ratings). Both are 1-5 native (no rescaling). Still nullable when neither exists. */
+  effectiveQuality?: Maybe<Scalars['Int']['output']>;
   /** Encoded hold frames for thumbnail display */
   frames?: Maybe<Scalars['String']['output']>;
   /**
@@ -265,7 +267,7 @@ export type AscentFeedItem = {
   isNoMatch: Scalars['Boolean']['output'];
   /** Layout ID */
   layoutId?: Maybe<Scalars['Int']['output']>;
-  /** Quality rating */
+  /** Raw per-tick quality rating (1-5). Null for a tick pulled from Kilter, which carries no per-tick quality. Read `effectiveQuality` for the value to display. */
   quality?: Maybe<Scalars['Int']['output']>;
   /** Average quality rating from all users */
   qualityAverage?: Maybe<Scalars['Float']['output']>;
@@ -6124,13 +6126,15 @@ export type Tick = {
   downvotes?: Maybe<Scalars['Int']['output']>;
   /** Effective grade for display and aggregation: COALESCE(difficulty, ROUND(consensus_difficulty)). Still nullable when the climb has no consensus yet. */
   effectiveDifficulty?: Maybe<Scalars['Int']['output']>;
+  /** Effective quality for display: COALESCE(quality, the climber's own synced star rating for this climb+angle from board_climb_ratings). Both are 1-5 native (no rescaling). Still nullable when neither exists. Populated by read queries; mutation responses don't compute it. */
+  effectiveQuality?: Maybe<Scalars['Int']['output']>;
   /** Whether this is a benchmark climb */
   isBenchmark: Scalars['Boolean']['output'];
   /** Whether the climb was mirrored */
   isMirror: Scalars['Boolean']['output'];
   /** Layout ID when the climb was attempted */
   layoutId?: Maybe<Scalars['Int']['output']>;
-  /** User's quality rating (1-5) */
+  /** User's quality rating (1-5). Raw per-tick value — null for a tick pulled from Kilter, which carries no per-tick quality. Read `effectiveQuality` for the value to display. */
   quality?: Maybe<Scalars['Int']['output']>;
   /** Session ID if climbed during a session */
   sessionId?: Maybe<Scalars['String']['output']>;
@@ -8697,6 +8701,7 @@ export type GetTicksQuery = {
     status: TickStatus;
     attemptCount: number;
     quality?: number | null;
+    effectiveQuality?: number | null;
     difficulty?: number | null;
     boardseshDifficulty?: number | null;
     boardseshConfidence?: string | null;
@@ -8784,6 +8789,7 @@ export type GetUserAscentsFeedQuery = {
       status: TickStatus;
       attemptCount: number;
       quality?: number | null;
+      effectiveQuality?: number | null;
       difficulty?: number | null;
       difficultyName?: string | null;
       consensusDifficulty?: number | null;
@@ -8823,6 +8829,7 @@ export type GetUserAscentCaptionMatchesQuery = {
     status: TickStatus;
     attemptCount: number;
     quality?: number | null;
+    effectiveQuality?: number | null;
     difficulty?: number | null;
     difficultyName?: string | null;
     consensusDifficulty?: number | null;
@@ -8885,6 +8892,7 @@ export type GetUserGroupedAscentsFeedQuery = {
         status: TickStatus;
         attemptCount: number;
         quality?: number | null;
+        effectiveQuality?: number | null;
         difficulty?: number | null;
         difficultyName?: string | null;
         consensusDifficulty?: number | null;
@@ -14464,6 +14472,7 @@ export const GetTicksDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'quality' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'effectiveQuality' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'boardseshDifficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'boardseshConfidence' } },
@@ -14679,6 +14688,7 @@ export const GetUserAscentsFeedDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'quality' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'effectiveQuality' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },
@@ -14758,6 +14768,7 @@ export const GetUserAscentCaptionMatchesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'quality' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'effectiveQuality' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },
@@ -14862,6 +14873,7 @@ export const GetUserGroupedAscentsFeedDocument = {
                             { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'quality' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'effectiveQuality' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },

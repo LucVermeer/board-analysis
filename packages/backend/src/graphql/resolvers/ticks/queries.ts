@@ -46,6 +46,30 @@ END`;
 // in range. See docs/ascents-and-attempts.md.
 const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
 
+// A tick pulled from Kilter carries no per-tick quality, but the climber's own
+// star rating for that (climb, angle) may already live in board_climb_ratings
+// (kilter-sync writes it there, keyed by board_type/climb_uuid/angle/user_id).
+// Join on the tick's OWN user + raw climb_uuid so a public viewer sees the
+// tick owner's synced rating, and expose it as `effectiveQuality`
+// (COALESCE(quality, rating)) — the same raw-vs-effective split as
+// `difficulty`/`effectiveDifficulty`, so the per-tick `quality` stays the raw
+// user value for edit/optimistic flows. Ratings are already 1–5 native (DB
+// check constraint), so there's nothing to rescale. The unique index
+// `board_climb_ratings_user_climb_angle_idx` on exactly
+// (board_type, climb_uuid, angle, user_id) — declared in
+// packages/db/src/schema/boards/unified.ts — makes this a 1:1 left join that
+// never multiplies rows and is fully index-backed.
+const boardClimbRatingsJoinCondition = and(
+  eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbRatings.boardType),
+  eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbRatings.climbUuid),
+  eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbRatings.angle),
+  eq(dbSchema.boardseshTicks.userId, dbSchema.boardClimbRatings.userId),
+);
+
+const effectiveQualityExpr = sql<
+  number | null
+>`COALESCE(${dbSchema.boardseshTicks.quality}, ${dbSchema.boardClimbRatings.rating})`;
+
 // The validated AscentFeedInput both feeds filter on — inferred from the zod
 // schema so a new filter field can't silently diverge from validation.
 type AscentFeedFilterInput = z.infer<typeof AscentFeedInputSchema>;
@@ -163,6 +187,7 @@ type AscentFeedRow = {
   status: string;
   attemptCount: number;
   quality: number | null;
+  effectiveQuality: number | null;
   difficulty: number | null;
   difficultyName: string | null;
   consensusDifficulty: number | null;
@@ -209,6 +234,7 @@ export const tickQueries = {
         layoutId: dbSchema.boardClimbs.layoutId,
         boardseshDifficulty: boardseshDifficultyExpr,
         boardseshConfidence: boardseshConfidenceExpr,
+        effectiveQuality: effectiveQualityExpr,
       })
       .from(dbSchema.boardseshTicks)
       // Resolve dedup-merged climbs: a tick may point at an alias UUID that was
@@ -233,6 +259,8 @@ export const tickQueries = {
       // Boardsesh grade for this tick's climb at the tick's OWN angle (aliases
       // resolved via the join above). LEFT JOIN so an ungraded climb still returns.
       .leftJoin(dbSchema.boardClimbGrades, BOARDSESH_GRADE_TICK_JOIN)
+      // Synced-rating fallback for quality — see boardClimbRatingsJoinCondition.
+      .leftJoin(dbSchema.boardClimbRatings, boardClimbRatingsJoinCondition)
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
@@ -272,7 +300,7 @@ export const tickQueries = {
     const voteMap = new Map(voteRows.map((v) => [v.entityId, v]));
     const commentMap = new Map(commentRows.map((c) => [c.entityId, Number(c.commentCount)]));
 
-    return results.map(({ tick, layoutId, boardseshDifficulty, boardseshConfidence }) => {
+    return results.map(({ tick, layoutId, boardseshDifficulty, boardseshConfidence, effectiveQuality }) => {
       const votes = voteMap.get(tick.uuid);
       return {
         uuid: tick.uuid,
@@ -284,6 +312,7 @@ export const tickQueries = {
         status: tick.status,
         attemptCount: tick.attemptCount,
         quality: tick.quality,
+        effectiveQuality: effectiveQuality != null ? Number(effectiveQuality) : null,
         difficulty: tick.difficulty,
         isBenchmark: tick.isBenchmark,
         comment: tick.comment,
@@ -329,6 +358,7 @@ export const tickQueries = {
         >`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`,
         boardseshDifficulty: boardseshDifficultyExpr,
         boardseshConfidence: boardseshConfidenceExpr,
+        effectiveQuality: effectiveQualityExpr,
       })
       .from(dbSchema.boardseshTicks)
       // Resolve dedup-merged climbs to their canonical UUID before joining
@@ -359,34 +389,39 @@ export const tickQueries = {
       // Boardsesh grade at the tick's OWN angle (aliases resolved above). LEFT JOIN
       // so an ungraded climb still returns; the grade fields come back NULL.
       .leftJoin(dbSchema.boardClimbGrades, BOARDSESH_GRADE_TICK_JOIN)
+      // Synced-rating fallback for quality — see boardClimbRatingsJoinCondition.
+      .leftJoin(dbSchema.boardClimbRatings, boardClimbRatingsJoinCondition)
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
-    return results.map(({ tick, layoutId, effectiveDifficulty, boardseshDifficulty, boardseshConfidence }) => ({
-      uuid: tick.uuid,
-      userId: tick.userId,
-      boardType: tick.boardType,
-      climbUuid: tick.climbUuid,
-      angle: tick.angle,
-      isMirror: tick.isMirror,
-      status: tick.status,
-      attemptCount: tick.attemptCount,
-      quality: tick.quality,
-      difficulty: tick.difficulty,
-      effectiveDifficulty,
-      boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
-      boardseshConfidence: toConfidenceTier(boardseshConfidence),
-      isBenchmark: tick.isBenchmark,
-      comment: tick.comment,
-      climbedAt: tick.climbedAt,
-      createdAt: tick.createdAt,
-      updatedAt: tick.updatedAt,
-      sessionId: tick.sessionId,
-      auroraType: tick.auroraType,
-      auroraId: tick.auroraId,
-      auroraSyncedAt: tick.auroraSyncedAt,
-      layoutId,
-    }));
+    return results.map(
+      ({ tick, layoutId, effectiveDifficulty, boardseshDifficulty, boardseshConfidence, effectiveQuality }) => ({
+        uuid: tick.uuid,
+        userId: tick.userId,
+        boardType: tick.boardType,
+        climbUuid: tick.climbUuid,
+        angle: tick.angle,
+        isMirror: tick.isMirror,
+        status: tick.status,
+        attemptCount: tick.attemptCount,
+        quality: tick.quality,
+        effectiveQuality: effectiveQuality != null ? Number(effectiveQuality) : null,
+        difficulty: tick.difficulty,
+        effectiveDifficulty,
+        boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
+        boardseshConfidence: toConfidenceTier(boardseshConfidence),
+        isBenchmark: tick.isBenchmark,
+        comment: tick.comment,
+        climbedAt: tick.climbedAt,
+        createdAt: tick.createdAt,
+        updatedAt: tick.updatedAt,
+        sessionId: tick.sessionId,
+        auroraType: tick.auroraType,
+        auroraId: tick.auroraId,
+        auroraSyncedAt: tick.auroraSyncedAt,
+        layoutId,
+      }),
+    );
   },
 
   /**
@@ -461,6 +496,7 @@ export const tickQueries = {
         boardseshConfidence: boardseshConfidenceExpr,
         resolvedIsBenchmark: resolvedBenchmarkExpr,
         qualityAverage: dbSchema.boardClimbStats.qualityAverage,
+        effectiveQuality: effectiveQualityExpr,
       })
       .from(dbSchema.boardseshTicks)
       .leftJoin(dbSchema.userBoards, eq(dbSchema.boardseshTicks.boardId, dbSchema.userBoards.id))
@@ -495,6 +531,8 @@ export const tickQueries = {
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardDifficultyGrades.boardType),
         ),
       )
+      // Synced-rating fallback for quality — see boardClimbRatingsJoinCondition.
+      .leftJoin(dbSchema.boardClimbRatings, boardClimbRatingsJoinCondition)
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
       // Boardsesh grade at the tick's OWN angle (aliases resolved above). LEFT JOIN
       // keeps ungraded ascents; grade fields come back NULL (safe fallback).
@@ -631,6 +669,7 @@ export const tickQueries = {
         boardseshConfidence,
         resolvedIsBenchmark,
         qualityAverage,
+        effectiveQuality,
       }) => {
         const canShowBoard =
           tick.boardId != null && (ctx?.userId === userId || (boardIsPublic === true && boardIsUnlisted !== true));
@@ -650,6 +689,7 @@ export const tickQueries = {
           status: tick.status,
           attemptCount: tick.attemptCount,
           quality: tick.quality,
+          effectiveQuality: effectiveQuality != null ? Number(effectiveQuality) : null,
           difficulty: tick.difficulty,
           difficultyName,
           consensusDifficulty:
@@ -860,6 +900,7 @@ export const tickQueries = {
         boardseshConfidence: boardseshConfidenceExpr,
         resolvedIsBenchmark: resolvedBenchmarkExpr,
         qualityAverage: dbSchema.boardClimbStats.qualityAverage,
+        effectiveQuality: effectiveQualityExpr,
         day: dayExpr.as('day'),
       })
       .from(dbSchema.boardseshTicks)
@@ -898,6 +939,8 @@ export const tickQueries = {
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),
       )
+      // Synced-rating fallback for quality — see boardClimbRatingsJoinCondition.
+      .leftJoin(dbSchema.boardClimbRatings, boardClimbRatingsJoinCondition)
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
       // Boardsesh grade at each tick's OWN angle (aliases resolved above). LEFT
       // JOIN keeps ungraded ticks; grade fields come back NULL (safe fallback).
@@ -926,6 +969,7 @@ export const tickQueries = {
       status: string;
       attemptCount: number;
       quality: number | null;
+      effectiveQuality: number | null;
       difficulty: number | null;
       difficultyName: string | null;
       consensusDifficulty: number | null;
@@ -990,6 +1034,7 @@ export const tickQueries = {
       boardseshConfidence,
       resolvedIsBenchmark,
       qualityAverage,
+      effectiveQuality,
       day,
     } of tickRows) {
       const key = `${tick.climbUuid}-${day}`;
@@ -1014,6 +1059,7 @@ export const tickQueries = {
         status: tick.status,
         attemptCount: tick.attemptCount,
         quality: tick.quality,
+        effectiveQuality: effectiveQuality != null ? Number(effectiveQuality) : null,
         difficulty: tick.difficulty,
         difficultyName,
         consensusDifficulty:
@@ -1066,9 +1112,12 @@ export const tickQueries = {
         group.attemptCount++;
       }
 
-      if (tick.quality !== null) {
-        if (group.bestQuality === null || tick.quality > group.bestQuality) {
-          group.bestQuality = tick.quality;
+      // bestQuality is the highest EFFECTIVE quality in the group, so a
+      // Kilter-pulled tick whose own quality is null still contributes its
+      // synced star rating (item.effectiveQuality) to the group header.
+      if (item.effectiveQuality !== null) {
+        if (group.bestQuality === null || item.effectiveQuality > group.bestQuality) {
+          group.bestQuality = item.effectiveQuality;
         }
       }
 

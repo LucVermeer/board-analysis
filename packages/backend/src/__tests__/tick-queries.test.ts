@@ -96,6 +96,25 @@ const callUserClimbPercentile = (userId: string) =>
     totalActiveUsers: number;
   }>;
 
+const callTicks = (input: { boardType: string; climbUuids?: string[] }, userId: string = TEST_USER_ID) =>
+  tickQueries.ticks(
+    undefined,
+    { input },
+    {
+      connectionId: 'tick-queries-test-conn',
+      isAuthenticated: true,
+      userId,
+      sessionId: undefined,
+      controllerId: undefined,
+      controllerApiKey: undefined,
+    },
+  ) as Promise<Array<{ uuid: string; quality: number | null; effectiveQuality: number | null }>>;
+
+const callUserTicks = (userId: string, boardType: string) =>
+  tickQueries.userTicks(undefined, { userId, boardType }) as Promise<
+    Array<{ uuid: string; quality: number | null; effectiveQuality: number | null }>
+  >;
+
 const insertUser = async (id: string) => {
   await db.execute(sql`
     INSERT INTO "users" (id, email, name, created_at, updated_at)
@@ -196,8 +215,26 @@ const insertBoardClimbGrade = async (params: {
   `);
 };
 
+const insertClimbRating = async (params: {
+  climbUuid: string;
+  rating: number | null;
+  userId?: string;
+  boardType?: string;
+  angle?: number;
+}) => {
+  const userId = params.userId ?? TEST_USER_ID;
+  const boardType = params.boardType ?? 'kilter';
+  const angle = params.angle ?? 40;
+  await db.execute(sql`
+    INSERT INTO board_climb_ratings (board_type, climb_uuid, angle, user_id, rating)
+    VALUES (${boardType}, ${params.climbUuid}, ${angle}, ${userId}, ${params.rating})
+    ON CONFLICT (board_type, climb_uuid, angle, user_id) DO UPDATE SET rating = excluded.rating
+  `);
+};
+
 const cleanup = async () => {
   await db.execute(sql`DELETE FROM user_climb_percentiles WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
+  await db.execute(sql`DELETE FROM board_climb_ratings WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM board_beta_links WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM user_boards WHERE owner_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
@@ -1460,6 +1497,131 @@ describe('tickQueries — behavior fixes', () => {
       const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
       const item = result.items.find((row) => row.uuid === 'tick-bsgrade-aliased');
       expect(item?.boardseshDifficulty).toBeCloseTo(16.3);
+    });
+  });
+
+  // A tick pulled from Kilter carries no per-tick quality, but the climber's
+  // own star rating for that (climb, angle) may already live in
+  // board_climb_ratings. The tick read paths LEFT JOIN it and expose
+  // `effectiveQuality` = COALESCE(quality, rating). Ratings are 1-5 native — no
+  // rescaling. See resolvers/ticks/queries.ts (boardClimbRatingsJoinCondition).
+  describe('synced star-rating fallback (board_climb_ratings) → effectiveQuality', () => {
+    type QualityRow = { uuid: string; quality: number | null; effectiveQuality: number | null };
+    const feedItems = (result: FeedResult) => result.items as unknown as QualityRow[];
+
+    it('userAscentsFeed: null tick quality falls back to the synced rating', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-fallback';
+      await insertClimb(climbUuid, 'Rating Fallback');
+      await insertTick({ uuid: 'tick-rating-null', climbUuid, climbedAt: '2026-05-01 10:00:00', status: 'send' });
+      await insertClimbRating({ climbUuid, rating: 4 });
+
+      const row = feedItems(await callUserAscentsFeed(TEST_USER_ID, { limit: 50 })).find(
+        (item) => item.uuid === 'tick-rating-null',
+      );
+      // Raw quality preserved as null; effective falls back to the 1-5 rating.
+      expect(row?.quality).toBeNull();
+      expect(row?.effectiveQuality).toBe(4);
+    });
+
+    it('userAscentsFeed: a tick with its own quality is unchanged by the rating', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-override';
+      await insertClimb(climbUuid, 'Rating Override');
+      // Tick has its own quality 5; a stale synced rating of 2 must NOT win.
+      await db.execute(sql`
+        INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, attempt_count, quality, climbed_at)
+        VALUES ('tick-rating-own', ${TEST_USER_ID}, 'kilter', ${climbUuid}, 40, 'send', 1, 5, '2026-05-02 10:00:00')
+      `);
+      await insertClimbRating({ climbUuid, rating: 2 });
+
+      const row = feedItems(await callUserAscentsFeed(TEST_USER_ID, { limit: 50 })).find(
+        (item) => item.uuid === 'tick-rating-own',
+      );
+      expect(row?.quality).toBe(5);
+      expect(row?.effectiveQuality).toBe(5);
+    });
+
+    it('userAscentsFeed: no rating row leaves effectiveQuality null', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-absent';
+      await insertClimb(climbUuid, 'Rating Absent');
+      await insertTick({ uuid: 'tick-rating-absent', climbUuid, climbedAt: '2026-05-03 10:00:00', status: 'send' });
+
+      const row = feedItems(await callUserAscentsFeed(TEST_USER_ID, { limit: 50 })).find(
+        (item) => item.uuid === 'tick-rating-absent',
+      );
+      expect(row?.quality).toBeNull();
+      expect(row?.effectiveQuality).toBeNull();
+    });
+
+    it('userAscentsFeed: a rating at a different angle does not apply', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-angle';
+      await insertClimb(climbUuid, 'Rating Angle');
+      // Tick at 40°, rating logged at 30° — the (climb, angle) join must not match.
+      await insertTick({
+        uuid: 'tick-rating-angle',
+        climbUuid,
+        climbedAt: '2026-05-04 10:00:00',
+        status: 'send',
+        angle: 40,
+      });
+      await insertClimbRating({ climbUuid, rating: 3, angle: 30 });
+
+      const row = feedItems(await callUserAscentsFeed(TEST_USER_ID, { limit: 50 })).find(
+        (item) => item.uuid === 'tick-rating-angle',
+      );
+      expect(row?.effectiveQuality).toBeNull();
+    });
+
+    it("userAscentsFeed: another user's rating does not leak into this user's ticks", async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-leak';
+      await insertClimb(climbUuid, 'Rating Leak');
+      await insertTick({ uuid: 'tick-rating-mine', climbUuid, climbedAt: '2026-05-05 10:00:00', status: 'send' });
+      // Only OTHER_USER has a rating for this climb+angle.
+      await insertClimbRating({ climbUuid, rating: 5, userId: OTHER_USER_ID });
+
+      const row = feedItems(await callUserAscentsFeed(TEST_USER_ID, { limit: 50 })).find(
+        (item) => item.uuid === 'tick-rating-mine',
+      );
+      expect(row?.effectiveQuality).toBeNull();
+    });
+
+    it('ticks (own logbook): null tick quality falls back to the synced rating', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-ticks';
+      await insertClimb(climbUuid, 'Rating Ticks');
+      await insertTick({ uuid: 'tick-rating-ticks', climbUuid, climbedAt: '2026-05-06 10:00:00', status: 'send' });
+      await insertClimbRating({ climbUuid, rating: 2 });
+
+      const rows = await callTicks({ boardType: 'kilter' });
+      const row = rows.find((item) => item.uuid === 'tick-rating-ticks');
+      expect(row?.quality).toBeNull();
+      expect(row?.effectiveQuality).toBe(2);
+    });
+
+    it("userTicks (public): null tick quality falls back to the tick OWNER's synced rating", async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-userticks';
+      await insertClimb(climbUuid, 'Rating UserTicks');
+      await insertTick({ uuid: 'tick-rating-public', climbUuid, climbedAt: '2026-05-08 10:00:00', status: 'send' });
+      // The owner's rating applies; another user's rating at the same key must not.
+      await insertClimbRating({ climbUuid, rating: 4 });
+      await insertClimbRating({ climbUuid, rating: 1, userId: OTHER_USER_ID });
+
+      const rows = await callUserTicks(TEST_USER_ID, 'kilter');
+      const row = rows.find((item) => item.uuid === 'tick-rating-public');
+      // Raw quality stays null (edit flows read it); effective is the owner's 4.
+      expect(row?.quality).toBeNull();
+      expect(row?.effectiveQuality).toBe(4);
+    });
+
+    it('userGroupedAscentsFeed: bestQuality reflects the synced rating for a null-quality tick', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-grouped';
+      await insertClimb(climbUuid, 'Rating Grouped');
+      await insertTick({ uuid: 'tick-rating-grp', climbUuid, climbedAt: '2026-05-07 10:00:00', status: 'send' });
+      await insertClimbRating({ climbUuid, rating: 3 });
+
+      const result = await callUserGroupedAscentsFeed(TEST_USER_ID, { limit: 20, offset: 0 });
+      const group = result.groups.find((candidate) => candidate.climbUuid === climbUuid) as
+        | (Group & { bestQuality: number | null })
+        | undefined;
+      expect(group?.bestQuality).toBe(3);
     });
   });
 });

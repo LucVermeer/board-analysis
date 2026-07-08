@@ -132,6 +132,7 @@ export const schemaSQL = `
   CREATE INDEX IF NOT EXISTS "esp32_controllers_api_key_idx" ON "esp32_controllers" ("api_key");
   CREATE INDEX IF NOT EXISTS "esp32_controllers_session_idx" ON "esp32_controllers" ("authorized_session_id");
 
+  DROP TABLE IF EXISTS "board_climb_ratings" CASCADE;
   DROP TABLE IF EXISTS "board_climb_aliases" CASCADE;
   DROP TABLE IF EXISTS "board_climb_stats" CASCADE;
   DROP TABLE IF EXISTS "board_climbs" CASCADE;
@@ -205,6 +206,9 @@ export const schemaSQL = `
     "boardsesh_ascensionist_count" bigint,
     "difficulty_average" double precision,
     "quality_average" double precision,
+    "upstream_quality_average" double precision,
+    "boardsesh_quality_sum" double precision,
+    "boardsesh_quality_count" bigint,
     "quality_normalized" boolean DEFAULT false NOT NULL,
     "fa_username" text,
     "fa_at" timestamp,
@@ -231,6 +235,28 @@ export const schemaSQL = `
     "sync_seq" bigserial NOT NULL,
     PRIMARY KEY ("board_type", "climb_uuid", "angle")
   );
+
+  -- Per-user, per-(board, climb, angle) star rating pulled from the climber's
+  -- own Kilter account. The tick resolvers LEFT JOIN this to fall back to the
+  -- synced rating when a tick's own quality is null. Mirrors board_climb_ratings
+  -- in packages/db/src/schema/boards/unified.ts.
+  CREATE TABLE IF NOT EXISTS "board_climb_ratings" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "board_type" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "angle" integer NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "rating" integer,
+    "difficulty_grade_id" integer,
+    "comment" text DEFAULT '',
+    "weight" double precision,
+    "kilter_id" text,
+    "aurora_id" text,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    CONSTRAINT "board_climb_ratings_rating_range" CHECK ("rating" IS NULL OR ("rating" >= 1 AND "rating" <= 5))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "board_climb_ratings_user_climb_angle_idx" ON "board_climb_ratings" ("board_type", "climb_uuid", "angle", "user_id");
 
   DO $$ BEGIN
     CREATE TYPE tick_status AS ENUM ('flash', 'send', 'attempt');

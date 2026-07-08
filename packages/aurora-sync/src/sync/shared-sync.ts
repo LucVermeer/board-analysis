@@ -25,7 +25,7 @@ import type {
 import { UNIFIED_TABLES } from '../db/table-select';
 import { normalizeQualityTo5, isNoMatchClimb, CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
 import { convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-states';
-import { populateDenormalizedColumns } from '@boardsesh/db/queries';
+import { populateDenormalizedColumns, blendedQualityAverageSql } from '@boardsesh/db/queries';
 import { setterFollows, notifications, userBoardMappings, userFollows } from '@boardsesh/db/schema';
 import { randomUUID } from 'crypto';
 
@@ -521,9 +521,31 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
 
     // Stamp upstream_synced_at only on the stats row — board_climb_stats_history
     // has no such column, so keep it off the shared `values` used for the
-    // history insert below.
+    // history insert below. upstream_quality_average carries the normalized
+    // manufacturer average (== value.qualityAverage) into the blend column; the
+    // base `values.qualityAverage` still feeds the fresh-row INSERT (blend ==
+    // upstream when no Boardsesh votes exist yet) and the history snapshot.
     const nowIso = new Date().toISOString();
-    const statsValues = values.map((value) => ({ ...value, upstreamSyncedAt: nowIso }));
+    const statsValues = values.map((value) => ({
+      ...value,
+      upstreamQualityAverage: value.qualityAverage,
+      upstreamSyncedAt: nowIso,
+    }));
+
+    // The upstream conflict policy (climbStatsUpstreamConflictSet): take the
+    // incoming cursored count verbatim so a legitimate decrease propagates; a
+    // NULL incoming preserves the stored count. Resolved ONCE and reused for the
+    // count SET, the total, AND the blend weight, because a Postgres SET
+    // expression sees the OLD row value of a bare column — the blend must weight
+    // by this NEW upstream count, not the stale stored one. Single source keeps
+    // the three in lockstep: the blend follows the count policy automatically.
+    const upstreamConflictSet = climbStatsUpstreamConflictSet();
+    const blendedQualityAverage = blendedQualityAverageSql({
+      upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+      upstreamAscensionistCount: upstreamConflictSet.upstreamAscensionistCount,
+      boardseshQualitySum: sql`${climbStatsSchema.boardseshQualitySum}`,
+      boardseshQualityCount: sql`${climbStatsSchema.boardseshQualityCount}`,
+    });
 
     await db
       .insert(climbStatsSchema)
@@ -535,10 +557,14 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
           // upstream_ = the board's single manufacturer count; take the incoming
           // cursored value verbatim (not GREATEST) so a legitimate decrease
-          // propagates. See climbStatsUpstreamConflictSet.
-          ...climbStatsUpstreamConflictSet(),
+          // propagates. See climbStatsUpstreamConflictSet. Same object drives the
+          // blend weight above, keeping count and blend in lockstep.
+          ...upstreamConflictSet,
           difficultyAverage: sql`excluded.difficulty_average`,
-          qualityAverage: sql`excluded.quality_average`,
+          // Manufacturer average lands in upstream_quality_average; quality_average
+          // is the blend of it and Boardsesh's own votes.
+          upstreamQualityAverage: sql`excluded.upstream_quality_average`,
+          qualityAverage: blendedQualityAverage,
           qualityNormalized: sql`true`,
           faUsername: sql`excluded.fa_username`,
           faAt: sql`excluded.fa_at`,

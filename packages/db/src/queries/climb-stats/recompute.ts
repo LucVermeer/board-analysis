@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { boardClimbStats } from '../../schema/boards/unified';
 import { rowsOf } from '../util/rows';
+import { blendedQualityAverageSql } from './quality-blend';
 
 // Any drizzle-orm PgDatabase (postgres-js client, the script client, the
 // Neon HTTP client the web app uses) and the PgTransaction handle backend
@@ -45,9 +46,27 @@ type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
  *     next pass. (The one-time 0157 backfill clears the pre-existing
  *     tick-derived crowns this rule used to allow.)
  *
- * quality_average / difficulty_average / display_difficulty: recomputed from
- * flash/send ticks on OWNED climbs only (upstream owns them on synced climbs).
- * quality = 0 is a legacy sentinel — excluded from AVG(quality) via NULLIF.
+ * difficulty_average / display_difficulty: recomputed from flash/send ticks on
+ * OWNED climbs only (upstream owns them on synced climbs).
+ *
+ * quality_average is the materialized BLEND of the upstream quality average and
+ * Boardsesh's native ratings (blendedQualityAverageSql, quality-blend.ts) — the
+ * mirror of how ascensionist_count blends upstream + Boardsesh counts:
+ *   - OWNED climbs (board_climbs.user_id NOT NULL): no upstream side, so
+ *     quality_average stays a plain AVG(NULLIF(quality, 0)) over ALL flash/send
+ *     ticks of any origin. quality = 0 is a legacy sentinel excluded via NULLIF.
+ *   - NON-owned climbs: quality_average = blend(upstream_quality_average,
+ *     upstream_ascensionist_count, boardsesh_quality_sum, boardsesh_quality_count),
+ *     rewritten in the SAME statement that recomputes the Boardsesh terms.
+ *
+ * The recompute OWNS boardsesh_quality_sum / boardsesh_quality_count (the blend's
+ * Boardsesh side), computed as one vote per climber: each climber's LATEST rated
+ * native flash/send tick (max climbed_at, tie-break max id) with quality >= 1 and
+ * origin = 'native'. A climber re-ticking the same climb does NOT multiply their
+ * vote — only their latest rating counts. Imported ratings (aurora_pull /
+ * kilter_pull / json_import) are already reflected in upstream_quality_average and
+ * are deliberately excluded here so they are not double-counted. The recompute
+ * never writes upstream_quality_average (the upstream syncs own it).
  */
 
 export type DiffRow = {
@@ -82,6 +101,16 @@ export async function recomputeClimbStats(
   angle: number,
 ): Promise<DiffRow | undefined> {
   let diff: DiffRow | undefined;
+
+  // Non-owned quality blend: stored upstream terms + the freshly aggregated
+  // Boardsesh vote. s.upstream_* are the OLD/current row values (recompute never
+  // changes them), so the bare column reference is correct here.
+  const singleKeyBlend = blendedQualityAverageSql({
+    upstreamQualityAverage: sql`s.upstream_quality_average`,
+    upstreamAscensionistCount: sql`s.upstream_ascensionist_count`,
+    boardseshQualitySum: sql`bq.bs_quality_sum`,
+    boardseshQualityCount: sql`bq.bs_quality_count`,
+  });
 
   await db.transaction(async (tx) => {
     // Defensive seed: set upstream/boardsesh counts to 0 explicitly so the
@@ -153,6 +182,26 @@ export async function recomputeClimbStats(
           AND bt.status IN ('flash','send')
           AND bt.kilter_detached_at IS NULL
       ),
+      -- The blend's Boardsesh side: one vote per climber = their LATEST rated
+      -- native flash/send tick (max climbed_at, tie-break max id). origin filter
+      -- keeps imported ratings out (they're already in upstream_quality_average).
+      -- Always exactly one row (aggregate over a possibly-empty set).
+      bs_quality AS (
+        SELECT SUM(latest.quality)::double precision AS bs_quality_sum,
+               COUNT(*)::bigint                      AS bs_quality_count
+          FROM (
+            SELECT DISTINCT ON (bt.user_id) bt.quality
+              FROM boardsesh_ticks bt
+             WHERE bt.board_type = ${boardType}
+               AND bt.climb_uuid = ${climbUuid}
+               AND bt.angle      = ${angle}
+               AND bt.origin     = 'native'
+               AND bt.status IN ('flash','send')
+               AND bt.quality IS NOT NULL
+               AND bt.quality >= 1
+             ORDER BY bt.user_id, bt.climbed_at DESC, bt.id DESC
+          ) latest
+      ),
       owner AS (
         SELECT bc.user_id IS NOT NULL AS boardsesh_owned
           FROM board_climbs bc
@@ -164,6 +213,16 @@ export async function recomputeClimbStats(
            SET boardsesh_ascensionist_count = COALESCE(agg.distinct_senders, 0),
                ascensionist_count           = COALESCE(s.upstream_ascensionist_count, 0)
                                             + COALESCE(agg.distinct_senders, 0),
+               -- Boardsesh side of the quality blend (both NULL when no votes).
+               -- Owned climbs are never blended (quality_average is a plain AVG),
+               -- so these blend-input columns are meaningless there — keep them
+               -- NULL so they carry a single consistent meaning (non-owned only).
+               boardsesh_quality_sum        = CASE
+                 WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE) THEN NULL
+                 ELSE bq.bs_quality_sum END,
+               boardsesh_quality_count      = CASE
+                 WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE) THEN NULL
+                 ELSE NULLIF(bq.bs_quality_count, 0) END,
                fa_username = CASE
                  WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
                    THEN agg.first_user
@@ -174,10 +233,12 @@ export async function recomputeClimbStats(
                    THEN agg.first_at
                  ELSE s.fa_at
                END,
+               -- Owned climbs: plain AVG over all ticks. Non-owned: the blend of
+               -- upstream_quality_average and the Boardsesh vote just computed.
                quality_average = CASE
                  WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
                    THEN agg.avg_quality
-                 ELSE s.quality_average
+                 ELSE ${singleKeyBlend}
                END,
                quality_normalized = CASE
                  WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
@@ -194,7 +255,7 @@ export async function recomputeClimbStats(
                    THEN agg.avg_difficulty
                  ELSE s.display_difficulty
                END
-          FROM agg
+          FROM agg, bs_quality bq
          WHERE s.board_type = ${boardType}
            AND s.climb_uuid = ${climbUuid}
            AND s.angle      = ${angle}
@@ -249,6 +310,15 @@ function dedupeKeys(keys: ClimbStatsKey[]): ClimbStatsKey[] {
 export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey[]): Promise<void> {
   const distinct = dedupeKeys(keys);
   if (distinct.length === 0) return;
+
+  // Same non-owned quality blend as the single-key path; s.upstream_* are the
+  // current stored values (this UPDATE never changes them).
+  const bulkBlend = blendedQualityAverageSql({
+    upstreamQualityAverage: sql`s.upstream_quality_average`,
+    upstreamAscensionistCount: sql`s.upstream_ascensionist_count`,
+    boardseshQualitySum: sql`bq.bs_quality_sum`,
+    boardseshQualityCount: sql`bq.bs_quality_count`,
+  });
 
   for (let i = 0; i < distinct.length; i += BULK_CHUNK_SIZE) {
     const chunk = distinct.slice(i, i + BULK_CHUNK_SIZE);
@@ -316,11 +386,37 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
          WHERE bt.status IN ('flash','send')
            AND bt.kilter_detached_at IS NULL
          ORDER BY bt.board_type, bt.climb_uuid, bt.angle, bt.climbed_at ASC
+      ),
+      -- The blend's Boardsesh side, per key: one vote per climber = their LATEST
+      -- rated native flash/send tick (max climbed_at, tie-break max id). origin
+      -- filter keeps imported ratings out (already in upstream_quality_average).
+      bs_quality AS (
+        SELECT latest.board_type, latest.climb_uuid, latest.angle,
+               SUM(latest.quality)::double precision AS bs_quality_sum,
+               COUNT(*)::bigint                      AS bs_quality_count
+          FROM (
+            SELECT DISTINCT ON (bt.board_type, bt.climb_uuid, bt.angle, bt.user_id)
+                   bt.board_type, bt.climb_uuid, bt.angle, bt.quality
+              FROM boardsesh_ticks bt
+              JOIN keys k
+                ON k.board_type = bt.board_type AND k.climb_uuid = bt.climb_uuid AND k.angle = bt.angle
+             WHERE bt.origin = 'native'
+               AND bt.status IN ('flash','send')
+               AND bt.quality IS NOT NULL
+               AND bt.quality >= 1
+             ORDER BY bt.board_type, bt.climb_uuid, bt.angle, bt.user_id, bt.climbed_at DESC, bt.id DESC
+          ) latest
+         GROUP BY latest.board_type, latest.climb_uuid, latest.angle
       )
       UPDATE board_climb_stats s
          SET boardsesh_ascensionist_count = COALESCE(c.distinct_senders, 0),
              ascensionist_count           = COALESCE(s.upstream_ascensionist_count, 0)
                                           + COALESCE(c.distinct_senders, 0),
+             -- Boardsesh side of the quality blend (both NULL when no votes).
+             -- NULL for owned climbs — they're never blended, so these
+             -- blend-input columns carry a single consistent meaning (non-owned).
+             boardsesh_quality_sum        = CASE WHEN owned.boardsesh_owned THEN NULL ELSE bq.bs_quality_sum END,
+             boardsesh_quality_count      = CASE WHEN owned.boardsesh_owned THEN NULL ELSE NULLIF(bq.bs_quality_count, 0) END,
              -- Owned climbs re-derive FA from the earliest tick; non-owned
              -- climbs preserve the manufacturer's stored FA verbatim (never
              -- derived or filled from ticks — see the module doc).
@@ -330,7 +426,9 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
              fa_at       = CASE WHEN owned.boardsesh_owned
                                   THEN sd.first_at
                                   ELSE s.fa_at END,
-             quality_average    = CASE WHEN owned.boardsesh_owned THEN sd.avg_quality    ELSE s.quality_average END,
+             -- Owned climbs: plain AVG. Non-owned: blend of upstream_quality_average
+             -- and the Boardsesh vote (bq), rewritten in this same statement.
+             quality_average    = CASE WHEN owned.boardsesh_owned THEN sd.avg_quality    ELSE ${bulkBlend} END,
              quality_normalized = CASE WHEN owned.boardsesh_owned THEN TRUE              ELSE s.quality_normalized END,
              difficulty_average = CASE WHEN owned.boardsesh_owned THEN sd.avg_difficulty ELSE s.difficulty_average END,
              display_difficulty = CASE WHEN owned.boardsesh_owned THEN sd.avg_difficulty ELSE s.display_difficulty END
@@ -341,6 +439,8 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
           ON sd.board_type = k.board_type AND sd.climb_uuid = k.climb_uuid AND sd.angle = k.angle
         LEFT JOIN first_user fu
           ON fu.board_type = k.board_type AND fu.climb_uuid = k.climb_uuid AND fu.angle = k.angle
+        LEFT JOIN bs_quality bq
+          ON bq.board_type = k.board_type AND bq.climb_uuid = k.climb_uuid AND bq.angle = k.angle
         LEFT JOIN LATERAL (
           SELECT COALESCE(
                    (SELECT bc.user_id IS NOT NULL
