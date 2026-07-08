@@ -1,4 +1,5 @@
 import { eq, and } from 'drizzle-orm';
+import { GraphQLError } from 'graphql';
 import type {
   ConnectionContext,
   UserProfile,
@@ -18,6 +19,7 @@ import {
 } from '../../../validation/schemas';
 import {
   deleteAuroraCredential,
+  DuplicateBoardLinkError,
   saveAuroraCredential,
   type AuroraCredentialStatus as RestAuroraCredentialStatus,
 } from '../../../services/aurora-credentials';
@@ -119,14 +121,23 @@ export const userMutations = {
     // Validate input
     validateInput(SaveAuroraCredentialInputSchema, input, 'input');
 
-    return mapAuroraCredentialStatus(
-      await saveAuroraCredential({
-        userId: ctx.userId!,
-        boardType: input.boardType as AuroraBoardName,
-        username: input.username,
-        password: input.password,
-      }),
-    );
+    try {
+      return mapAuroraCredentialStatus(
+        await saveAuroraCredential({
+          userId: ctx.userId!,
+          boardType: input.boardType as AuroraBoardName,
+          username: input.username,
+          password: input.password,
+        }),
+      );
+    } catch (error) {
+      // Surface the duplicate-link rejection as a client-safe GraphQLError so its
+      // stable code survives Yoga's production error masking.
+      if (error instanceof DuplicateBoardLinkError) {
+        throw new GraphQLError(error.message, { extensions: { code: error.code } });
+      }
+      throw error;
+    }
   },
 
   /**

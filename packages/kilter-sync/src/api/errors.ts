@@ -35,19 +35,18 @@ export class KilterApiError extends Error {
  */
 export function isTransientKilterError(err: unknown): boolean {
   if (!(err instanceof KilterApiError)) {
-    // Unknown error shape — fail open to "transient" so we don't permanently
-    // disable a credential on a TypeError or a parser bug.
-    //
-    // Caveat: there's no error counter or circuit breaker here, so a
-    // persistent programming bug (e.g. a TypeError that throws every
-    // cycle inside syncKilterUserData) will silently burn daemon
-    // cycles without ever flipping syncStatus to 'error'. The
-    // operational signal in that case is Sentry / the daemon's onError
-    // log path — the daemon visibly logs every error per cycle, and
-    // Sentry deduplicates on the exception fingerprint. Adding a real
-    // circuit breaker is tracked as a follow-up; aurora-sync has the
-    // same gap.
-    return true;
+    // Unknown error shape — fail CLOSED to "permanent". A non-KilterApiError
+    // (a TypeError, a parser bug, a raw DB error) is NOT a known-retryable
+    // condition, so classifying it transient hid the live kilter outage:
+    // syncStatus stayed 'active', no error was recorded, and the daemon
+    // re-attempted the same broken cycle forever with nothing user-visible
+    // to show for it. Returning false now escalates to syncStatus='error'
+    // with an observable last_sync_error — but the credential is NOT
+    // abandoned: 'error' stays in the runner's candidate set, so it is still
+    // retried, just on the exponential per-credential backoff (see
+    // credentialRetryReadySql). A real programming bug therefore surfaces
+    // loudly and self-heals once fixed, instead of failing silently.
+    return false;
   }
 
   switch (err.code) {

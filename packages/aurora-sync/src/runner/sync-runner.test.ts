@@ -21,6 +21,7 @@ type SyncRunnerPrivates = {
   maybeRunSharedSync: (boardType: AuroraBoardName, token: string, userId: string) => Promise<void>;
   getActiveCredentials: () => Promise<CredentialRecord[]>;
   getNextCredentialToSync: () => Promise<CredentialRecord | null>;
+  recordSyncFailure: (cred: CredentialRecord, errorMsg: string) => Promise<void>;
 };
 
 const { mockDecrypt, mockEncrypt, mockSignIn, mockSyncUserData, mockSyncSharedData, mockSyncAuroraBoardLocations } =
@@ -175,9 +176,14 @@ describe('SyncRunner login failure handling', () => {
     );
 
     expect(updateStoredToken).toHaveBeenCalledWith('user-123', 'decoy', 'fresh-token');
+    // Success now also advances the attempt clock and clears the general
+    // backoff counter + observability error.
     expect(updateCredentialStatus).toHaveBeenCalledWith('user-123', 'decoy', 'active', null, expect.any(Date), {
       credentialFailureCount: 0,
       lastCredentialFailureAt: null,
+      lastSyncAttemptAt: expect.any(Date),
+      consecutiveFailures: 0,
+      lastSyncError: null,
     });
   });
 
@@ -218,6 +224,8 @@ function baseCredential(): CredentialRecord {
     credentialFailureCount: 0,
     lastCredentialFailureAt: null,
     lastSyncAt: null,
+    lastSyncAttemptAt: null,
+    consecutiveFailures: 0,
   };
 }
 
@@ -324,6 +332,10 @@ describe('SyncRunner per-user fault isolation', () => {
       const syncSingle = vi.spyOn(runnerPrivates, 'syncSingleCredential').mockImplementation(async (cred) => {
         if (cred.userId === 'user-B') throw dbError;
       });
+      // recordSyncFailure would open a real DB connection; stub it and assert it
+      // fires for the failed credential — the deprecated `all` path must stamp
+      // the attempt clock + backoff counter exactly like syncNextUser.
+      const recordSyncFailure = vi.spyOn(runnerPrivates, 'recordSyncFailure').mockResolvedValue(undefined);
 
       const syncPromise = runner.syncAllUsers();
       // syncAllUsers sleeps 10s after each successful credential — fast-forward through them
@@ -341,6 +353,10 @@ describe('SyncRunner per-user fault isolation', () => {
           error: dbError.message,
         },
       ]);
+      // The one failed credential is stamped; the two successes are not (their
+      // scheduler fields are cleared on the success path inside syncSingleCredential).
+      expect(recordSyncFailure).toHaveBeenCalledTimes(1);
+      expect(recordSyncFailure).toHaveBeenCalledWith(credB, dbError.message);
     } finally {
       vi.useRealTimers();
     }
@@ -355,6 +371,9 @@ describe('SyncRunner per-user fault isolation', () => {
 
     const dbError = new Error('Database error [code=23503 constraint=board_walls_user_fk table=board_walls]');
     vi.spyOn(runnerPrivates, 'syncSingleCredential').mockRejectedValue(dbError);
+    // recordSyncFailure would open a real DB connection; stub it and assert it
+    // was invoked (the scheduler/observability stamping is covered separately).
+    const recordSyncFailure = vi.spyOn(runnerPrivates, 'recordSyncFailure').mockResolvedValue(undefined);
 
     const summary = await runner.syncNextUser();
 
@@ -370,5 +389,43 @@ describe('SyncRunner per-user fault isolation', () => {
         },
       ],
     });
+    // Every failure stamps the attempt clock + backoff counter + last error so
+    // the credential rotates out and backs off instead of wedging the queue.
+    expect(recordSyncFailure).toHaveBeenCalledWith(cred, dbError.message);
+  });
+});
+
+describe('SyncRunner.recordSyncFailure', () => {
+  it('stamps the attempt clock, bumps consecutive_failures, and records last_sync_error', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://test:test@localhost:5432/test';
+    const updates: Array<Record<string, unknown>> = [];
+    const dbShim = {
+      update() {
+        return {
+          set(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return { where: () => Promise.resolve() };
+          },
+        };
+      },
+    };
+
+    const runner = new SyncRunner();
+    const runnerPrivates = runner as unknown as SyncRunnerPrivates & {
+      getClient: () => { client: unknown; db: unknown };
+    };
+    vi.spyOn(runnerPrivates, 'getClient').mockReturnValue({ client: {}, db: dbShim });
+
+    await runnerPrivates.recordSyncFailure(createCredential({ userId: 'user-Z' }), 'aurora exploded');
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0].lastSyncAttemptAt).toBeInstanceOf(Date);
+    expect(updates[0].lastSyncError).toBe('aurora exploded');
+    // consecutive_failures is a SQL increment expression (COALESCE(...) + 1),
+    // not a literal, so just assert it is present in the write.
+    expect(updates[0].consecutiveFailures).toBeDefined();
+    // A transient/generic failure must NOT touch the user-facing status/error.
+    expect(updates[0].syncStatus).toBeUndefined();
+    expect(updates[0].syncError).toBeUndefined();
   });
 });

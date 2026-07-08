@@ -49,4 +49,6 @@ export type CredentialRecord = {
   credentialFailureCount: number | null;
   lastCredentialFailureAt: Date | null;
   lastSyncAt: Date | null;
+  lastSyncAttemptAt: Date | null;
+  consecutiveFailures: number | null;
 };

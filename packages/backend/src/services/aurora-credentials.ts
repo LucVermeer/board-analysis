@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, ne, sql } from 'drizzle-orm';
 import { AuroraClimbingClient } from '@boardsesh/aurora-sync/api';
 import { decrypt, encrypt } from '@boardsesh/crypto';
 import { auroraCredentials, boardClimbs, boardseshTicks, userBoardMappings } from '@boardsesh/db/schema';
@@ -40,6 +40,144 @@ export type DeleteAuroraCredentialResult =
 
 export function isAuroraBoardType(value: string | null | undefined): value is AuroraBoardName {
   return !!value && (AURORA_BOARDS as readonly string[]).includes(value);
+}
+
+// Stable machine code carried by every duplicate-link surface (REST 409,
+// GraphQL extension, mobile/web clients) so clients localise off the code
+// rather than the plain-English message.
+export const DUPLICATE_BOARD_LINK_CODE = 'account_already_linked';
+
+/**
+ * Thrown when the upstream board account being linked is already claimed by a
+ * DIFFERENT Boardsesh user. The same upstream identity must map to at most one
+ * ACTIVE Boardsesh owner: owner resolution downstream is LIMIT-1 / global, so a
+ * second claimant's synced ticks would land on the first user. An expired /
+ * abandoned prior claim does NOT block a genuine re-owner — only a live one.
+ */
+export class DuplicateBoardLinkError extends Error {
+  readonly code = DUPLICATE_BOARD_LINK_CODE;
+
+  constructor(message = 'This board account is already linked to another Boardsesh member.') {
+    super(message);
+    this.name = 'DuplicateBoardLinkError';
+  }
+}
+
+// The transaction handle drizzle hands the `db.transaction` callback. Derived so
+// the guard helpers can run on the same tx as the write (consistent read) without
+// an `any`.
+type CredentialTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Advisory-lock namespace for the duplicate board-account-link guards —
+ * `0x4c494e4b` is ASCII "LINK". Two-int form per the repo convention
+ * (`CLIMB_DUPLICATE_LOCK_NAMESPACE` in climb-similarity.ts,
+ * `PUSH_TOKEN_LOCK_NAMESPACE` in push-tokens.ts) so this lock space can't
+ * collide with other advisory-lock callers on the same cluster.
+ *
+ * Why a lock at all: the guards below are SELECT-then-write, which is TOCTOU —
+ * two users linking the same upstream account concurrently can both read "no
+ * conflicting owner" before either INSERT commits, and both links land. A
+ * `SELECT ... FOR UPDATE` can't close that window because in the racing case
+ * there is no row to lock yet. A transaction-scoped advisory lock keyed on the
+ * upstream identity serializes both writers deterministically: the second
+ * blocks until the first commits, then (READ COMMITTED) its conflict SELECT
+ * sees the freshly committed claim and rejects. Auto-released at
+ * COMMIT/ROLLBACK; server-wide, so it covers all backend instances on one DB.
+ *
+ * End-state: a DB-level UNIQUE on the upstream identity —
+ * (board_type, aurora_user_id) on aurora_credentials and
+ * (board_type, board_user_id_text) on user_board_mappings — replaces this lock
+ * entirely. That constraint canNOT be added yet: prod carries one known
+ * duplicate pair (issue #3541) that would fail the migration. Once #3541's
+ * pair is manually resolved, add the partial unique indexes and delete this
+ * lock.
+ */
+const BOARD_LINK_LOCK_NAMESPACE = 0x4c494e4b;
+
+/** Serialize concurrent link attempts for one upstream account (see namespace doc). */
+async function acquireBoardLinkLock(tx: CredentialTransaction, boardType: string, upstreamId: string): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${BOARD_LINK_LOCK_NAMESPACE}, hashtext(${`${boardType}|${upstreamId}`}))`,
+  );
+}
+
+/**
+ * Reject an Aurora-family link when another Boardsesh user already holds this
+ * upstream account (`board_type` + numeric `aurora_user_id`). An 'expired' claim
+ * is skipped — the syncable set is positive (pending/active/error), matching the
+ * sync runners' selection filter — so an abandoned link can't permanently block
+ * the account's genuine owner.
+ */
+async function assertNoConflictingAuroraOwner(
+  tx: CredentialTransaction,
+  input: { userId: string; boardType: string; auroraUserId: number | null | undefined },
+): Promise<void> {
+  // No upstream id means no account identity to collide on — nothing to block.
+  if (input.auroraUserId == null) return;
+  // Take the per-upstream-account lock BEFORE the conflict read, so two
+  // concurrent linkers of the same account run check-then-write serially.
+  await acquireBoardLinkLock(tx, input.boardType, String(input.auroraUserId));
+  const conflicting = await tx
+    .select({ userId: auroraCredentials.userId })
+    .from(auroraCredentials)
+    .where(
+      and(
+        eq(auroraCredentials.boardType, input.boardType),
+        eq(auroraCredentials.auroraUserId, input.auroraUserId),
+        ne(auroraCredentials.userId, input.userId),
+        ne(auroraCredentials.syncStatus, 'expired'),
+      ),
+    )
+    .limit(1);
+
+  if (conflicting.length > 0) {
+    throw new DuplicateBoardLinkError();
+  }
+}
+
+/**
+ * Reject a Kilter link when another Boardsesh user already holds this Keycloak
+ * `sub` (stored on `user_board_mappings.board_user_id_text`). The mapping match
+ * is the core guard; the left-join to `aurora_credentials` mirrors the Aurora
+ * rule so an 'expired' prior claim doesn't block a re-owner. A mapping row with
+ * NO corresponding credentials row (left-join `sync_status` IS NULL) is an
+ * ORPHAN — e.g. the credentials row was deleted manually but the mapping
+ * lingered — and is treated as NON-blocking so the account stays claimable:
+ * `sync_status <> 'expired'` is NULL for an orphan, which drops it from the
+ * conflict set. Only a live claim (pending/active/error) actually blocks.
+ */
+async function assertNoConflictingKilterOwner(
+  tx: CredentialTransaction,
+  input: { userId: string; kilterUserId: string },
+): Promise<void> {
+  // Same TOCTOU serialization as the Aurora guard (see BOARD_LINK_LOCK_NAMESPACE).
+  await acquireBoardLinkLock(tx, KILTER_BOARD_TYPE, input.kilterUserId);
+  const conflicting = await tx
+    .select({ userId: userBoardMappings.userId })
+    .from(userBoardMappings)
+    .leftJoin(
+      auroraCredentials,
+      and(
+        eq(auroraCredentials.userId, userBoardMappings.userId),
+        eq(auroraCredentials.boardType, userBoardMappings.boardType),
+      ),
+    )
+    .where(
+      and(
+        eq(userBoardMappings.boardType, KILTER_BOARD_TYPE),
+        eq(userBoardMappings.boardUserIdText, input.kilterUserId),
+        ne(userBoardMappings.userId, input.userId),
+        // NULL (orphan mapping, no credentials row) and 'expired' both drop out:
+        // `<> 'expired'` is NULL for an orphan and FALSE for expired.
+        ne(auroraCredentials.syncStatus, 'expired'),
+      ),
+    )
+    .limit(1);
+
+  if (conflicting.length > 0) {
+    throw new DuplicateBoardLinkError();
+  }
 }
 
 function decryptUsername(boardType: string, encryptedUsername: string | null, mappingUsername?: string | null): string {
@@ -196,6 +334,14 @@ export async function saveAuroraCredential(input: {
   const encryptedToken = encrypt(loginResponse.token);
 
   await db.transaction(async (tx) => {
+    // Block the link if another Boardsesh user already actively owns this upstream
+    // account. Runs before either the INSERT or UPDATE branch below.
+    await assertNoConflictingAuroraOwner(tx, {
+      userId: input.userId,
+      boardType: input.boardType,
+      auroraUserId: loginResponse.user_id,
+    });
+
     const existingCredential = await tx
       .select({ id: auroraCredentials.id })
       .from(auroraCredentials)
@@ -216,6 +362,14 @@ export async function saveAuroraCredential(input: {
           syncError: null,
           credentialFailureCount: 0,
           lastCredentialFailureAt: null,
+          // Re-linking is a fresh start: clear the backoff scheduler fields too,
+          // otherwise a previously-failing credential stays boxed out of
+          // selection (consecutive_failures + last_sync_attempt_at drive the
+          // backoff window) for up to 6h after the user reconnects — i.e.
+          // reconnecting wouldn't actually resume sync.
+          consecutiveFailures: 0,
+          lastSyncAttemptAt: null,
+          lastSyncError: null,
           updatedAt: now,
         })
         .where(and(eq(auroraCredentials.userId, input.userId), eq(auroraCredentials.boardType, input.boardType)));
@@ -315,6 +469,10 @@ export async function saveKilterCredential(input: {
   const encryptedRefreshToken = encrypt(input.refreshToken);
 
   await db.transaction(async (tx) => {
+    // Block the link if another Boardsesh user already actively owns this Kilter
+    // account. Runs before either the INSERT or UPDATE branch below.
+    await assertNoConflictingKilterOwner(tx, { userId: input.userId, kilterUserId: input.kilterUserId });
+
     const existingCredential = await tx
       .select({ id: auroraCredentials.id })
       .from(auroraCredentials)
@@ -334,6 +492,13 @@ export async function saveKilterCredential(input: {
           syncError: null,
           credentialFailureCount: 0,
           lastCredentialFailureAt: null,
+          // Re-linking is a fresh start: clear the backoff scheduler fields too
+          // (see saveAuroraCredential) so a previously-failing Kilter credential
+          // is immediately selectable again instead of staying inside its
+          // backoff window after the user reconnects.
+          consecutiveFailures: 0,
+          lastSyncAttemptAt: null,
+          lastSyncError: null,
           updatedAt: now,
         })
         .where(and(eq(auroraCredentials.userId, input.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));

@@ -25,7 +25,11 @@ import type {
 import { UNIFIED_TABLES } from '../db/table-select';
 import { normalizeQualityTo5, isNoMatchClimb, CLIMB_CHARACTERISTICS } from '@boardsesh/shared-schema';
 import { convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-states';
-import { populateDenormalizedColumns, blendedQualityAverageSql } from '@boardsesh/db/queries';
+import {
+  populateDenormalizedColumns,
+  blendedQualityAverageSql,
+  snapshotClimbStatsHistoryIfDue,
+} from '@boardsesh/db/queries';
 import { setterFollows, notifications, userBoardMappings, userFollows } from '@boardsesh/db/schema';
 import { randomUUID } from 'crypto';
 
@@ -34,13 +38,6 @@ import { randomUUID } from 'crypto';
 // query-builder surface (`insert`, `select`, `update`, `execute`), so we type
 // against the parent and avoid the `tx as unknown as …` cast at the call site.
 type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
-
-// Synthetic `board_shared_syncs.table_name` row that records the last time we
-// wrote a `board_climb_stats_history` snapshot for this board. The name
-// starts with `__local_` so it can never collide with an Aurora-side table
-// returned in the `shared_syncs` array of a `/sync` response.
-const HISTORY_CURSOR_TABLE_NAME = '__local_climb_stats_history__';
-const HISTORY_SNAPSHOT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type NewClimbInfo = {
   uuid: string;
@@ -475,9 +472,8 @@ export function parseDifficultyFields(item: { difficulty_average: number | null;
   return { difficultyAverage, displayDifficulty };
 }
 
-async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: ClimbStats[], writeHistory: boolean) {
+async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: ClimbStats[]) {
   const climbStatsSchema = UNIFIED_TABLES.climbStats;
-  const climbStatHistorySchema = UNIFIED_TABLES.climbStatsHistory;
 
   await processBatches(data, async (batch) => {
     // Three cooperating writers feed this row: Aurora sync (here), Kilter sync
@@ -519,12 +515,14 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
       };
     });
 
-    // Stamp upstream_synced_at only on the stats row — board_climb_stats_history
-    // has no such column, so keep it off the shared `values` used for the
-    // history insert below. upstream_quality_average carries the normalized
+    // Stamp upstream_synced_at on the stats row (records that a manufacturer
+    // sync just touched it). upstream_quality_average carries the normalized
     // manufacturer average (== value.qualityAverage) into the blend column; the
     // base `values.qualityAverage` still feeds the fresh-row INSERT (blend ==
-    // upstream when no Boardsesh votes exist yet) and the history snapshot.
+    // upstream when no Boardsesh votes exist yet). The weekly
+    // board_climb_stats_history snapshot is written separately at the end of
+    // syncSharedData (a full cross-section, not this per-batch delta) — see
+    // snapshotClimbStatsHistoryIfDue.
     const nowIso = new Date().toISOString();
     const statsValues = values.map((value) => ({
       ...value,
@@ -572,52 +570,7 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           upstreamSyncedAt: sql`excluded.upstream_synced_at`,
         },
       });
-
-    // History snapshot is gated by a per-board cursor in `board_shared_syncs`
-    // so we only append a row every ~7 days. Without this gate the table
-    // would grow up to 24× faster than under the old daily Vercel cron, with
-    // most rows recording zero meaningful change.
-    if (writeHistory) {
-      await db.insert(climbStatHistorySchema).values(values);
-    }
   });
-}
-
-async function isClimbStatsHistorySnapshotDue(db: DrizzleDb, board: AuroraBoardName): Promise<boolean> {
-  const sharedSyncsSchema = UNIFIED_TABLES.sharedSyncs;
-  const rows = await db
-    .select({ lastSynchronizedAt: sharedSyncsSchema.lastSynchronizedAt })
-    .from(sharedSyncsSchema)
-    .where(and(eq(sharedSyncsSchema.boardType, board), eq(sharedSyncsSchema.tableName, HISTORY_CURSOR_TABLE_NAME)));
-  if (rows.length === 0) return true;
-
-  const raw = rows[0].lastSynchronizedAt;
-  // last_synchronized_at is stored as a Postgres timestamp string (no zone);
-  // treat it as UTC for the comparison.
-  const lastMs = Date.parse(`${raw}Z`);
-  if (Number.isNaN(lastMs)) return true;
-  return Date.now() - lastMs >= HISTORY_SNAPSHOT_INTERVAL_MS;
-}
-
-async function markClimbStatsHistorySnapshotDone(db: DrizzleDb, board: AuroraBoardName): Promise<void> {
-  const sharedSyncsSchema = UNIFIED_TABLES.sharedSyncs;
-  // Match the `last_synchronized_at` text format Aurora uses elsewhere in
-  // this table (`YYYY-MM-DD HH:MM:SS.ffffff`, no timezone). It's interpreted
-  // as UTC by `isClimbStatsHistorySnapshotDue` above.
-  const nowText = new Date().toISOString().replace('T', ' ').replace('Z', '');
-  await db
-    .insert(sharedSyncsSchema)
-    .values({
-      boardType: board,
-      tableName: HISTORY_CURSOR_TABLE_NAME,
-      lastSynchronizedAt: nowText,
-    })
-    .onConflictDoUpdate({
-      target: [sharedSyncsSchema.boardType, sharedSyncsSchema.tableName],
-      set: {
-        lastSynchronizedAt: sql`excluded.last_synchronized_at`,
-      },
-    });
 }
 
 async function upsertBetaLinks(db: DrizzleDb, board: AuroraBoardName, data: BetaLink[]) {
@@ -833,7 +786,6 @@ async function upsertSharedTableData(
   tableName: string,
   data: SyncPutFields[],
   log: (message: string) => void,
-  writeClimbStatsHistory: boolean,
 ): Promise<NewClimbInfo[]> {
   switch (tableName) {
     case 'attempts':
@@ -870,7 +822,7 @@ async function upsertSharedTableData(
       await upsertKits(db, boardName, data as Kit[]);
       return [];
     case 'climb_stats':
-      await upsertClimbStats(db, boardName, data as ClimbStats[], writeClimbStatsHistory);
+      await upsertClimbStats(db, boardName, data as ClimbStats[]);
       return [];
     case 'beta_links':
       await upsertBetaLinks(db, boardName, data as BetaLink[]);
@@ -965,16 +917,6 @@ export async function syncSharedData(
     })),
   });
 
-  // Decide once per syncSharedData run whether this is the week's history
-  // snapshot. We commit the cursor at the end (only if we actually wrote
-  // history rows), so a crash mid-loop will retry on the next invocation
-  // rather than silently skip a week.
-  const writeClimbStatsHistory = await isClimbStatsHistorySnapshotDue(db, board);
-  let didWriteClimbStatsHistory = false;
-  if (writeClimbStatsHistory) {
-    log(`[SharedSync] Weekly climb_stats_history snapshot is due for ${board}`);
-  }
-
   const totalResults: Record<string, { synced: number; complete: boolean }> = {};
   const allNewClimbs: NewClimbInfo[] = [];
   let isComplete = false;
@@ -991,18 +933,8 @@ export async function syncSharedData(
         const data = syncResults[tableName];
         if (!Array.isArray(data)) continue;
         log(`[SharedSync] ${tableName}: ${data.length} records`);
-        const newClimbs = await upsertSharedTableData(
-          tx,
-          board,
-          tableName,
-          data as SyncPutFields[],
-          log,
-          writeClimbStatsHistory,
-        );
+        const newClimbs = await upsertSharedTableData(tx, board, tableName, data as SyncPutFields[], log);
         allNewClimbs.push(...newClimbs);
-        if (tableName === 'climb_stats' && writeClimbStatsHistory && data.length > 0) {
-          didWriteClimbStatsHistory = true;
-        }
         if (!totalResults[tableName]) {
           totalResults[tableName] = { synced: 0, complete: false };
         }
@@ -1061,9 +993,20 @@ export async function syncSharedData(
     }`,
   );
 
-  if (didWriteClimbStatsHistory) {
-    await markClimbStatsHistorySnapshotDone(db, board);
-    log(`[SharedSync] Recorded climb_stats_history snapshot timestamp for ${board}`);
+  // Weekly board_climb_stats_history snapshot: a full cross-section of every
+  // climb on the board with ascents, gated by a 7-day per-board watermark.
+  // Replaces the old per-batch delta piggyback, which only captured the tiny
+  // slice of rows a given /sync batch happened to touch. Runs after the sync
+  // loop so it snapshots the freshly-synced counts. A failure here must not
+  // fail the sync (the user/shared data already committed).
+  try {
+    await snapshotClimbStatsHistoryIfDue(db, board, log);
+  } catch (error) {
+    log(
+      `[SharedSync] climb_stats_history snapshot failed for ${board} (sync was OK): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 
   // Close the required_set_ids cursor hole: after the whole run is persisted,

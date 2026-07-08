@@ -29,16 +29,33 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: () => ({ token: 'test-token', isLoading: false, isAuthenticated: true, error: null }),
 }));
 
-vi.mock('@/app/lib/aurora-credentials/client', () => ({
-  getAuroraCredentials: (...args: unknown[]) => mockGetAuroraCredentials(...args),
-  getAuroraUnsyncedCounts: (...args: unknown[]) => mockGetAuroraUnsyncedCounts(...args),
-  saveAuroraCredential: (...args: unknown[]) => mockSaveAuroraCredential(...args),
-  saveKilterCredentialViaPassword: (...args: unknown[]) => mockSaveKilterViaPassword(...args),
-  deleteAuroraCredential: vi.fn(),
-  finalizeKilterCredential: vi.fn(),
-  resolveAuroraBackendTransport: (token: string | null) => token,
-  streamImport: vi.fn(),
-}));
+const mockFinalizeKilterCredential = vi.fn();
+
+vi.mock('@/app/lib/aurora-credentials/client', () => {
+  // Declared inside the factory: vi.mock is hoisted above the module body, so a
+  // top-level class would be in the temporal dead zone when the factory runs.
+  class AuroraBackendError extends Error {
+    status: number;
+    code?: string;
+    constructor(status: number, message: string, code?: string) {
+      super(message);
+      this.name = 'AuroraBackendError';
+      this.status = status;
+      if (code) this.code = code;
+    }
+  }
+  return {
+    AuroraBackendError,
+    getAuroraCredentials: (...args: unknown[]) => mockGetAuroraCredentials(...args),
+    getAuroraUnsyncedCounts: (...args: unknown[]) => mockGetAuroraUnsyncedCounts(...args),
+    saveAuroraCredential: (...args: unknown[]) => mockSaveAuroraCredential(...args),
+    saveKilterCredentialViaPassword: (...args: unknown[]) => mockSaveKilterViaPassword(...args),
+    deleteAuroraCredential: vi.fn(),
+    finalizeKilterCredential: (...args: unknown[]) => mockFinalizeKilterCredential(...args),
+    resolveAuroraBackendTransport: (token: string | null) => token,
+    streamImport: vi.fn(),
+  };
+});
 
 vi.mock('@/app/components/providers/feature-flags-provider', () => ({
   useFeatureFlag: (key: string) => mockFeatureFlags[key],
@@ -49,10 +66,13 @@ vi.mock('next-auth/react', () => ({
   useSession: () => ({ data: { user: { id: 'test-user', name: 'Test User', email: 'test@test.com' } } }),
 }));
 
+let mockSearchParams = new URLSearchParams();
+const mockRouterReplace = vi.fn();
+
 vi.mock('next/navigation', () => ({
   usePathname: () => '/settings',
-  useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => mockSearchParams,
+  useRouter: () => ({ replace: mockRouterReplace }),
 }));
 
 vi.mock('@/app/lib/data-sync/aurora/json-import-stream', () => ({
@@ -69,10 +89,44 @@ describe('AuroraCredentialsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFeatureFlags = {};
+    mockSearchParams = new URLSearchParams();
     mockGetAuroraCredentials.mockResolvedValue({ credentials: [] });
     mockGetAuroraUnsyncedCounts.mockResolvedValue({});
     mockSaveKilterViaPassword.mockResolvedValue({ success: true });
     mockSaveAuroraCredential.mockResolvedValue({ success: true });
+  });
+
+  // The Kilter OAuth browser flow redirects back to /settings with a `?kilter=`
+  // param. A duplicate-account link comes back as `kilter=error` +
+  // `reason=account_already_linked` (the browser path can't return a JSON 409),
+  // and must surface the dedicated copy — not the generic failure string.
+  describe('kilter OAuth callback params', () => {
+    it('shows the duplicate-account message on kilter=error&reason=account_already_linked', async () => {
+      mockSearchParams = new URLSearchParams({ kilter: 'error', reason: 'account_already_linked' });
+
+      render(<AuroraCredentialsSection />);
+
+      await waitFor(() => {
+        expect(mockShowMessage).toHaveBeenCalledWith(
+          tFromCatalog('settings', 'aurora.linkDialog.accountAlreadyLinked'),
+          'error',
+        );
+      });
+      expect(mockFinalizeKilterCredential).not.toHaveBeenCalled();
+    });
+
+    it('shows the generic failure message on kilter=error without a known reason', async () => {
+      mockSearchParams = new URLSearchParams({ kilter: 'error' });
+
+      render(<AuroraCredentialsSection />);
+
+      await waitFor(() => {
+        expect(mockShowMessage).toHaveBeenCalledWith(
+          tFromCatalog('settings', 'aurora.mobile.kilterConnectFailed'),
+          'error',
+        );
+      });
+    });
   });
 
   describe('credential save dispatch', () => {

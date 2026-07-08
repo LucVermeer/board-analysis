@@ -7,6 +7,7 @@ import { applyCorsHeaders } from './cors';
 import { validateToken } from '../middleware/auth';
 import {
   deleteAuroraCredential,
+  DuplicateBoardLinkError,
   getAuroraCredentialStatuses,
   getAuroraUnsyncedCounts,
   saveAuroraCredential,
@@ -81,6 +82,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 function auroraErrorStatus(error: unknown): number {
+  if (error instanceof DuplicateBoardLinkError) return 409;
   if (!isAuroraRequestError(error)) return 500;
   if (error.code === 'invalid_credentials') return 401;
   if (error.code === 'rate_limited') return 429;
@@ -88,10 +90,17 @@ function auroraErrorStatus(error: unknown): number {
 }
 
 function auroraErrorMessage(error: unknown): string {
+  if (error instanceof DuplicateBoardLinkError) return error.message;
   if (!isAuroraRequestError(error)) return 'Failed to save credentials';
   if (error.code === 'invalid_credentials') return 'Invalid Aurora credentials';
   if (error.code === 'rate_limited') return 'Too many login attempts. Please try again later.';
   return 'Aurora is unavailable. Please try again later.';
+}
+
+// Stable machine code for clients to localise off (only the duplicate-link case
+// carries one today).
+function auroraErrorCode(error: unknown): string | undefined {
+  return error instanceof DuplicateBoardLinkError ? error.code : undefined;
 }
 
 export async function handleAuroraCredentials(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -139,7 +148,11 @@ export async function handleAuroraCredentials(req: IncomingMessage, res: ServerR
       sendJson(res, 200, { success: true, credential });
     } catch (error) {
       logger.warn('[AuroraCredentials] Failed to save credentials:', error);
-      sendJson(res, auroraErrorStatus(error), { error: auroraErrorMessage(error) });
+      const code = auroraErrorCode(error);
+      sendJson(res, auroraErrorStatus(error), {
+        error: auroraErrorMessage(error),
+        ...(code ? { code } : {}),
+      });
     }
     return;
   }

@@ -127,6 +127,8 @@ async function saveBoardCredential(input: { boardType: AuroraBoardName; username
 function errorMessageFor(error: unknown, t: TFunction<'settings'>): string {
   if (error instanceof BoardAccountError) {
     switch (error.code) {
+      case 'account_already_linked':
+        return t('aurora.linkDialog.accountAlreadyLinked');
       case 'invalid_credentials':
         return t('aurora.mobile.invalidCredentials');
       case 'not_allowed':

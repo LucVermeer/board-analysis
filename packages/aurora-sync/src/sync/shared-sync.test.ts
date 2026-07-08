@@ -3,15 +3,21 @@ import { notifications, setterFollows, userBoardMappings, userFollows } from '@b
 import type { SyncData } from '../api/sync-api-types';
 import type { SyncOptions } from '../api/types';
 
-const { mockSharedSync, mockPopulateDenormalizedColumns, mockConvertLitUpHolds, mockBlendedQualityAverageSql } =
-  vi.hoisted(() => ({
-    mockSharedSync: vi.fn(),
-    mockPopulateDenormalizedColumns: vi.fn().mockResolvedValue(undefined),
-    mockConvertLitUpHolds: vi.fn().mockReturnValue({}),
-    // Never invoked here (these tests process no climb_stats); stubbed only so
-    // the shared-sync import of blendedQualityAverageSql resolves.
-    mockBlendedQualityAverageSql: vi.fn(),
-  }));
+const {
+  mockSharedSync,
+  mockPopulateDenormalizedColumns,
+  mockConvertLitUpHolds,
+  mockBlendedQualityAverageSql,
+  mockSnapshotHistory,
+} = vi.hoisted(() => ({
+  mockSharedSync: vi.fn(),
+  mockPopulateDenormalizedColumns: vi.fn().mockResolvedValue(undefined),
+  mockConvertLitUpHolds: vi.fn().mockReturnValue({}),
+  // Never invoked here (these tests process no climb_stats); stubbed only so
+  // the shared-sync import of blendedQualityAverageSql resolves.
+  mockBlendedQualityAverageSql: vi.fn(),
+  mockSnapshotHistory: vi.fn().mockResolvedValue({ written: 0, skipped: true }),
+}));
 
 vi.mock('../api/shared-sync-api', () => ({
   sharedSync: mockSharedSync,
@@ -20,6 +26,7 @@ vi.mock('../api/shared-sync-api', () => ({
 vi.mock('@boardsesh/db/queries', () => ({
   populateDenormalizedColumns: mockPopulateDenormalizedColumns,
   blendedQualityAverageSql: mockBlendedQualityAverageSql,
+  snapshotClimbStatsHistoryIfDue: mockSnapshotHistory,
 }));
 
 vi.mock('@boardsesh/board-constants/hold-states', () => ({

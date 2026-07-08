@@ -18,15 +18,24 @@ type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
  * The counting rule (the whole point of the ascent double-count fix):
  *
  *   boardsesh_ascensionist_count = number of DISTINCT users who have ≥1
- *   flash/send tick at the (board, climb, angle) key AND have NO tick at that
- *   key with origin != 'native'.
+ *   UNABSORBED native flash/send tick at the (board, climb, angle) key AND
+ *   have NO flash/send tick at that key with origin != 'native'.
  *
- * A user with any imported tick (aurora_pull / kilter_pull / json_import) at
- * the key is already inside upstream_ascensionist_count, so counting their
- * Boardsesh tick again would double-count the ascent — they contribute 0. A
- * user whose ticks at the key are ALL native (including a native tick that
- * later had kilter_id stamped by push-back) counts. This is a per-user
- * `bool_or(origin <> 'native')` grouping.
+ * A user with any imported flash/send tick (aurora_pull / kilter_pull /
+ * json_import) at the key is already inside upstream_ascensionist_count, so
+ * counting their Boardsesh tick again would double-count the ascent — they
+ * contribute 0.
+ *
+ * Absorption (the push-back double-count guard): a native tick that push-back
+ * sent to Kilter (kilter_id set) keeps counting immediately, but ONLY until the
+ * upstream snapshot has plausibly re-counted it — kilter_synced_at <
+ * board_climb_stats.upstream_synced_at - 48h. Past that window the tick is
+ * "absorbed" into the upstream count, so a user whose ONLY native flash/send
+ * ticks at the key are absorbed stops contributing (else double-count). A fresh
+ * push (within 48h, or synced after the last upstream sync) still counts — the
+ * locked product requirement. Keys never upstream-synced (upstream_synced_at
+ * NULL: MoonBoard, Boardsesh-owned) are never absorbed. This is a per-user
+ * `bool_or(unabsorbed native send) AND NOT bool_or(imported send)` grouping.
  *
  * ascensionist_count stays the materialized sum:
  *   COALESCE(upstream_ascensionist_count, 0) + boardsesh_ascensionist_count.
@@ -139,13 +148,31 @@ export async function recomputeClimbStats(
            AND climb_uuid = ${climbUuid}
            AND angle      = ${angle}
       ),
+      stat AS (
+        SELECT upstream_synced_at
+          FROM board_climb_stats
+         WHERE board_type = ${boardType}
+           AND climb_uuid = ${climbUuid}
+           AND angle      = ${angle}
+      ),
       agg AS (
         SELECT
-          -- Per-user double-count guard: a user counts only when they have a
-          -- flash/send tick AND none of their flash/send ticks at the key are
-          -- imported. Imported ATTEMPTS don't disqualify — upstream ascent
-          -- counts only include sends/logs, so an imported bid never puts the
-          -- user in the upstream number.
+          -- Per-user double-count guard: a user counts only when they have an
+          -- UNABSORBED native flash/send tick AND none of their flash/send
+          -- ticks at the key are imported. Imported ATTEMPTS don't disqualify:
+          -- upstream ascent counts only include sends/logs, so an imported bid
+          -- never puts the user in the upstream number.
+          --
+          -- Absorption (push-back double-count guard): a native tick pushed to
+          -- Kilter (kilter_id set) long enough ago that the upstream snapshot
+          -- has plausibly re-counted it (kilter_synced_at < upstream_synced_at
+          -- - 48h) is dropped from the Boardsesh count — the user is now inside
+          -- upstream_ascensionist_count via that push, so counting the native
+          -- tick too would double-count. A user whose ONLY native sends are
+          -- absorbed stops counting; a fresh push (synced within 48h, or after
+          -- upstream) keeps counting immediately (locked product requirement).
+          -- upstream_synced_at NULL (never upstream-synced: MoonBoard,
+          -- Boardsesh-owned) is never absorbed, so those keep counting.
           (SELECT COUNT(*) FROM (
               SELECT bt_u.user_id
                 FROM boardsesh_ticks bt_u
@@ -154,7 +181,15 @@ export async function recomputeClimbStats(
                  AND bt_u.angle      = ${angle}
                  AND bt_u.kilter_detached_at IS NULL
                GROUP BY bt_u.user_id
-              HAVING bool_or(bt_u.status IN ('flash','send'))
+              HAVING bool_or(
+                       bt_u.origin = 'native' AND bt_u.status IN ('flash','send')
+                       AND NOT (
+                         bt_u.kilter_id IS NOT NULL
+                         AND bt_u.kilter_synced_at IS NOT NULL
+                         AND (SELECT upstream_synced_at FROM stat) IS NOT NULL
+                         AND bt_u.kilter_synced_at < (SELECT upstream_synced_at FROM stat) - interval '48 hours'
+                       )
+                     )
                  AND NOT bool_or(bt_u.origin <> 'native' AND bt_u.status IN ('flash','send'))
             ) counting_users)          AS distinct_senders,
           MIN(bt.climbed_at)           AS first_at,
@@ -343,7 +378,24 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
       ),
       per_user AS (
         SELECT bt.board_type, bt.climb_uuid, bt.angle, bt.user_id,
-               bool_or(bt.status IN ('flash','send')) AS has_send,
+               -- A user counts when they have an UNABSORBED native flash/send
+               -- tick. Absorbed = pushed to Kilter (kilter_id set) long enough
+               -- ago that the upstream snapshot has plausibly re-counted it
+               -- (kilter_synced_at < upstream_synced_at - 48h); such a tick's
+               -- user is already inside upstream_ascensionist_count via the
+               -- push, so counting the native tick too would double-count. A
+               -- fresh push (within 48h, or synced after upstream) still counts
+               -- immediately; upstream_synced_at NULL (MoonBoard / owned) is
+               -- never absorbed. s.upstream_synced_at is constant per key.
+               bool_or(
+                 bt.origin = 'native' AND bt.status IN ('flash','send')
+                 AND NOT (
+                   bt.kilter_id IS NOT NULL
+                   AND bt.kilter_synced_at IS NOT NULL
+                   AND s.upstream_synced_at IS NOT NULL
+                   AND bt.kilter_synced_at < s.upstream_synced_at - interval '48 hours'
+                 )
+               ) AS has_unabsorbed_native_send,
                -- Only imported FLASH/SEND ticks mark a user as upstream-
                -- represented: upstream ascent counts don't include bids, so an
                -- imported attempt must not disqualify a native send.
@@ -351,6 +403,10 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
           FROM boardsesh_ticks bt
           JOIN keys k
             ON k.board_type = bt.board_type AND k.climb_uuid = bt.climb_uuid AND k.angle = bt.angle
+          -- Inner join is safe: the seed INSERT above created a stats row for
+          -- every key, so upstream_synced_at is always available here.
+          JOIN board_climb_stats s
+            ON s.board_type = bt.board_type AND s.climb_uuid = bt.climb_uuid AND s.angle = bt.angle
          -- Kilter-detached rows are upstream-deleted; they must not count nor
          -- keep a user "upstream-represented" (see kilter_detached_at docs).
          WHERE bt.kilter_detached_at IS NULL
@@ -358,7 +414,7 @@ export async function recomputeClimbStatsBulk(db: DrizzleDb, keys: ClimbStatsKey
       ),
       counts AS (
         SELECT board_type, climb_uuid, angle,
-               COUNT(*) FILTER (WHERE has_send AND NOT has_upstream) AS distinct_senders
+               COUNT(*) FILTER (WHERE has_unabsorbed_native_send AND NOT has_upstream) AS distinct_senders
           FROM per_user
          GROUP BY board_type, climb_uuid, angle
       ),

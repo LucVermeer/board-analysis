@@ -3,6 +3,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { and, eq, isNotNull, or, sql } from 'drizzle-orm';
 
 import { auroraCredentials } from '@boardsesh/db/schema';
+import {
+  credentialRetryReadySql,
+  snapshotClimbStatsHistoryIfDue,
+  isWeeklyCursorDue,
+  markWeeklyCursorDone,
+} from '@boardsesh/db/queries';
 import { decrypt, encrypt } from '@boardsesh/crypto';
 import {
   DEFAULT_DAEMON_OPTIONS,
@@ -134,15 +140,14 @@ export class SyncRunner {
         // Leave syncStatus/syncError untouched (a genuine transient must
         // not get flagged 'error' in the UI) and DO NOT touch last_sync_at
         // (that timestamp is the user-facing "last successful sync" — a
-        // failed cycle must never advance it). Stamp last_sync_attempt_at
-        // instead: getNextCredentialToSync orders by it, and
-        // isTransientKilterError fails OPEN — a non-KilterApiError (a DB
-        // error, a programming bug) is classified transient. Without this
-        // stamp, a credential that fails deterministically keeps its
-        // old/NULL attempt time and is re-selected FIRST every cycle,
-        // monopolising the single-user-per-cycle queue and starving every
-        // other user. Stamping the attempt clock rotates it to the back;
-        // it still retries on its next turn.
+        // failed cycle must never advance it). But DO record the failure so
+        // it stops being silent: stamp last_sync_attempt_at (the scheduler's
+        // fairness clock), bump consecutive_failures (drives backoff), and
+        // write last_sync_error (observability — this is how an operator sees
+        // WHY a card that still reads 'active' hasn't actually synced). Before
+        // this, a transient-looping credential advanced NOTHING user-visible:
+        // last_sync_at stayed put, no error was recorded, and the daemon
+        // silently re-attempted it forever. That was the live kilter outage.
         //
         // No data is lost: last_sync_attempt_at is ONLY a scheduling key
         // (which credential to pick next), never a data cursor. Each cycle
@@ -151,11 +156,22 @@ export class SyncRunner {
         // failed cycle are re-applied on the credential's next successful
         // turn. If the pull ever becomes incremental, that watermark needs
         // its own column — it must not piggyback on this attempt clock.
+        const attemptAt = new Date();
         await db
           .update(auroraCredentials)
-          .set({ lastSyncAttemptAt: new Date(), updatedAt: new Date() })
+          .set({
+            lastSyncAttemptAt: attemptAt,
+            consecutiveFailures: sql`COALESCE(${auroraCredentials.consecutiveFailures}, 0) + 1`,
+            lastSyncError: err.message,
+            updatedAt: attemptAt,
+          })
           .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
 
+        this.log(
+          `[KilterSyncRunner] Transient sync failure for user ${cred.userId} (attempt ${
+            (cred.consecutiveFailures ?? 0) + 1
+          }, backing off): ${err.message}`,
+        );
         this.handleError(err, { userId: cred.userId, board: KILTER_BOARD_TYPE });
         summary.failed = 1;
         summary.errors.push({ userId: cred.userId, boardType: KILTER_BOARD_TYPE, error: err.message });
@@ -173,11 +189,27 @@ export class SyncRunner {
       // stays in the candidate set — without the attempt stamp an errored
       // credential with a NULL attempt time would keep sorting first and
       // monopolise the queue. (See the transient branch for the rationale.)
+      // Also bump consecutive_failures + record last_sync_error: an 'error'
+      // credential is still retried, so it must back off; 'unknown'/unknown
+      // throws now land here (fail-closed) and get an observable message.
+      const attemptAt = new Date();
       await db
         .update(auroraCredentials)
-        .set({ syncStatus: status, syncError: err.message, lastSyncAttemptAt: new Date(), updatedAt: new Date() })
+        .set({
+          syncStatus: status,
+          syncError: err.message,
+          lastSyncError: err.message,
+          consecutiveFailures: sql`COALESCE(${auroraCredentials.consecutiveFailures}, 0) + 1`,
+          lastSyncAttemptAt: attemptAt,
+          updatedAt: attemptAt,
+        })
         .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
 
+      this.log(
+        `[KilterSyncRunner] Permanent sync failure for user ${cred.userId} (status=${status}, attempt ${
+          (cred.consecutiveFailures ?? 0) + 1
+        }): ${err.message}`,
+      );
       this.handleError(err, { userId: cred.userId, board: KILTER_BOARD_TYPE });
       summary.failed = 1;
       summary.errors.push({ userId: cred.userId, boardType: KILTER_BOARD_TYPE, error: err.message });
@@ -230,6 +262,10 @@ export class SyncRunner {
         lastSyncAttemptAt: now,
         syncStatus: 'active',
         syncError: null,
+        // Success clears the failure counters so backoff resets and the
+        // observability field stops showing a stale error.
+        consecutiveFailures: 0,
+        lastSyncError: null,
         updatedAt: now,
       })
       .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
@@ -280,10 +316,60 @@ export class SyncRunner {
         applyDeletions: this.config.applyCatalogDeletions ?? true,
         deleteBatchLimit: this.config.deleteBatchLimit,
       });
+
+      // After a fresh catalog pull, run the two weekly board-wide maintenance
+      // jobs (each self-gated by a 7-day watermark, so calling them every
+      // catalog cycle is cheap). A failure in either must not poison the
+      // catalog result — the counts already committed.
+      await this.maybeRepairKilterStats(db, tokenProvider);
+      await this.maybeSnapshotHistory(db);
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error(String(error)), { board });
     } finally {
       this.lastCatalogSyncAt.set(board, Date.now());
+    }
+  }
+
+  // Synthetic board_shared_syncs cursor gating the weekly stats-repair.
+  private static readonly KILTER_STATS_REPAIR_CURSOR = '__local_kilter_stats_repair__';
+
+  /**
+   * Weekly kilter stats-repair (repairKilterCatalogStats with --apply): the
+   * downward count reconciliation + alias-fold drift fix that had no scheduler.
+   * Gated by a 7-day board_shared_syncs watermark, run after the catalog sync
+   * with the same token provider. Errors are swallowed (logged) so a repair
+   * failure never fails the catalog cycle.
+   */
+  private async maybeRepairKilterStats(db: RunnerDb, tokenProvider: KilterTokenProvider): Promise<void> {
+    if (!(await isWeeklyCursorDue(db, KILTER_BOARD_TYPE, SyncRunner.KILTER_STATS_REPAIR_CURSOR))) {
+      return;
+    }
+    this.log('[kilter-stats-repair] weekly reconciliation is due — applying');
+    try {
+      const summary = await repairKilterCatalogStats({
+        db,
+        tokenProvider,
+        apply: true,
+        log: (message) => this.log(message),
+      });
+      // Commit the watermark only on success so a failed repair retries next
+      // cycle instead of skipping the week.
+      await markWeeklyCursorDone(db, KILTER_BOARD_TYPE, SyncRunner.KILTER_STATS_REPAIR_CURSOR);
+      this.log(
+        `[kilter-stats-repair] applied — ${summary.changedKilterRows} count rows, ` +
+          `${summary.formulaRowsRecomputed} formula rows`,
+      );
+    } catch (error) {
+      this.handleError(error instanceof Error ? error : new Error(String(error)), { board: KILTER_BOARD_TYPE });
+    }
+  }
+
+  /** Weekly board_climb_stats_history snapshot for kilter (see item 5). */
+  private async maybeSnapshotHistory(db: RunnerDb): Promise<void> {
+    try {
+      await snapshotClimbStatsHistoryIfDue(db, KILTER_BOARD_TYPE, (message) => this.log(message));
+    } catch (error) {
+      this.handleError(error instanceof Error ? error : new Error(String(error)), { board: KILTER_BOARD_TYPE });
     }
   }
 
@@ -409,11 +495,19 @@ export class SyncRunner {
         syncStatus: auroraCredentials.syncStatus,
         syncError: auroraCredentials.syncError,
         lastSyncAt: auroraCredentials.lastSyncAt,
+        consecutiveFailures: auroraCredentials.consecutiveFailures,
       })
       .from(auroraCredentials)
       .where(
         and(
           eq(auroraCredentials.boardType, KILTER_BOARD_TYPE),
+          // Dead password-era links (encrypted_refresh_token IS NULL) are the
+          // pre-OAuth credentials that can no longer sync. Migration 0171
+          // reconciled the existing ones to sync_status='expired' with an
+          // accurate re-link message; this filter is the explicit, permanent
+          // skip so they never re-enter the hot selection path (and never
+          // spam a per-cycle log). Surfacing a re-link prompt in the UI is a
+          // separate product follow-up.
           isNotNull(auroraCredentials.encryptedRefreshToken),
           // The allowed set is positive (pending/active/error). 'expired'
           // and 'disabled' are excluded by omission — adding explicit
@@ -423,6 +517,10 @@ export class SyncRunner {
             eq(auroraCredentials.syncStatus, 'active'),
             eq(auroraCredentials.syncStatus, 'error'),
           ),
+          // Exponential backoff: skip a credential still inside its
+          // consecutive-failure window so a deterministically-failing user
+          // can't burn a cycle every rotation. See credentialRetryReadySql.
+          credentialRetryReadySql(),
         ),
       )
       // Order by the ATTEMPT clock, not last_sync_at: a credential that
@@ -445,6 +543,7 @@ export class SyncRunner {
         syncStatus: auroraCredentials.syncStatus,
         syncError: auroraCredentials.syncError,
         lastSyncAt: auroraCredentials.lastSyncAt,
+        consecutiveFailures: auroraCredentials.consecutiveFailures,
       })
       .from(auroraCredentials)
       .where(and(eq(auroraCredentials.userId, userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)))

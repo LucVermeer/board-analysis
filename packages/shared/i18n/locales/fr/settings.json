@@ -211,7 +211,8 @@
       "submit": "Lier le compte",
       "submitting": "Liaison...",
       "linkError": "Liaison du compte impossible",
-      "linkSuccess": "Compte {{boardName}} lié. Vos données arriveront sous 12 heures."
+      "linkSuccess": "Compte {{boardName}} lié. Vos données arriveront sous 12 heures.",
+      "accountAlreadyLinked": "Un autre membre de Boardsesh a déjà lié ce compte. S'il est à toi, délie-le d'abord de son compte, puis réessaie."
     },
     "kilterLinkDialog": {
       "title": "Se connecter à Kilter",

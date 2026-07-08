@@ -43,4 +43,5 @@ export type KilterCredentialRecord = {
   syncStatus: string | null;
   syncError: string | null;
   lastSyncAt: Date | null;
+  consecutiveFailures: number | null;
 };

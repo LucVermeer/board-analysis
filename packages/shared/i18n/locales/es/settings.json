@@ -211,7 +211,8 @@
       "submit": "Vincular cuenta",
       "submitting": "Vinculando...",
       "linkError": "No se pudo vincular la cuenta",
-      "linkSuccess": "Cuenta de {{boardName}} vinculada. Tus datos aparecerán en menos de 12 horas."
+      "linkSuccess": "Cuenta de {{boardName}} vinculada. Tus datos aparecerán en menos de 12 horas.",
+      "accountAlreadyLinked": "Otro miembro de Boardsesh ya tiene esta cuenta vinculada. Si es tuya, desvincúlala primero de su cuenta y vuelve a intentarlo."
     },
     "kilterLinkDialog": {
       "title": "Iniciar sesión en Kilter",
