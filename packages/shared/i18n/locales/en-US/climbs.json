@@ -355,7 +355,8 @@
     "loadError": "Couldn't load the grade right now.",
     "byAngle": "Boardsesh grade by angle",
     "updated": "Updated {{when}}",
-    "localGradeLine": "On this board: {{grade}}"
+    "localGradeLine": "On this board: {{grade}}",
+    "logScale": "Log scale"
   },
   "similarClimbs": {
     "loadError": "Couldn't load similar climbs.",

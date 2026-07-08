@@ -355,7 +355,8 @@
     "loadError": "Impossible de charger le grade pour le moment.",
     "byAngle": "Grade Boardsesh par angle",
     "updated": "Mis à jour {{when}}",
-    "localGradeLine": "Sur cette board : {{grade}}"
+    "localGradeLine": "Sur cette board : {{grade}}",
+    "logScale": "Échelle logarithmique"
   },
   "similarClimbs": {
     "loadError": "Impossible de charger les blocs similaires.",

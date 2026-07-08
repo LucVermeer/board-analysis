@@ -355,7 +355,8 @@
     "loadError": "No se pudo cargar el grado ahora mismo.",
     "byAngle": "Grado Boardsesh por ángulo",
     "updated": "Actualizado {{when}}",
-    "localGradeLine": "En este plafón: {{grade}}"
+    "localGradeLine": "En este plafón: {{grade}}",
+    "logScale": "Escala logarítmica"
   },
   "multiboardList": {
     "noClimbsFound": "No se encontraron bloques",
