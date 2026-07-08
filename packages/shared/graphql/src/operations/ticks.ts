@@ -12,6 +12,8 @@ export const GET_TICKS = gql`
       attemptCount
       quality
       difficulty
+      boardseshDifficulty
+      boardseshConfidence
       isBenchmark
       comment
       climbedAt
@@ -31,6 +33,8 @@ export const GET_USER_TICKS = gql`
       attemptCount
       difficulty
       effectiveDifficulty
+      boardseshDifficulty
+      boardseshConfidence
       climbedAt
       layoutId
     }
@@ -65,6 +69,8 @@ type TickFromGetTicks = Pick<
   | 'attemptCount'
   | 'quality'
   | 'difficulty'
+  | 'boardseshDifficulty'
+  | 'boardseshConfidence'
   | 'isBenchmark'
   | 'comment'
   | 'climbedAt'
@@ -74,7 +80,16 @@ type TickFromGetTicks = Pick<
 >;
 type TickFromGetUserTicks = Pick<
   Tick,
-  'climbUuid' | 'angle' | 'status' | 'attemptCount' | 'difficulty' | 'effectiveDifficulty' | 'climbedAt' | 'layoutId'
+  | 'climbUuid'
+  | 'angle'
+  | 'status'
+  | 'attemptCount'
+  | 'difficulty'
+  | 'effectiveDifficulty'
+  | 'boardseshDifficulty'
+  | 'boardseshConfidence'
+  | 'climbedAt'
+  | 'layoutId'
 >;
 type TickFromSaveTick = Pick<
   Tick,
@@ -157,6 +172,8 @@ export const GET_USER_ASCENTS_FEED = gql`
         difficultyName
         consensusDifficulty
         consensusDifficultyName
+        boardseshDifficulty
+        boardseshConfidence
         qualityAverage
         isBenchmark
         isNoMatch
@@ -190,6 +207,11 @@ export type AscentFeedItem = {
   difficultyName: string | null;
   consensusDifficulty: number | null;
   consensusDifficultyName: string | null;
+  // Boardsesh grade (COALESCE(universal, local)) + confidence tier for this
+  // ascent's climb at its angle. Null when no grade row exists; UI keeps the
+  // legacy consensus when null or confidence is 'setter_only'.
+  boardseshDifficulty: number | null;
+  boardseshConfidence: string | null;
   qualityAverage: number | null;
   isBenchmark: boolean;
   isNoMatch: boolean;
@@ -272,6 +294,8 @@ export const GET_USER_ASCENT_CAPTION_MATCHES = gql`
       difficultyName
       consensusDifficulty
       consensusDifficultyName
+      boardseshDifficulty
+      boardseshConfidence
       qualityAverage
       isBenchmark
       isNoMatch
@@ -336,6 +360,8 @@ export const GET_USER_GROUPED_ASCENTS_FEED = gql`
           difficultyName
           consensusDifficulty
           consensusDifficultyName
+          boardseshDifficulty
+          boardseshConfidence
           qualityAverage
           isBenchmark
           isNoMatch

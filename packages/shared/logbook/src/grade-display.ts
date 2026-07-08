@@ -21,6 +21,36 @@ export function deriveLogbookGradeDisplay(
 }
 
 /**
+ * Which crowd-sourced grade a logbook row should display for an ungraded ascent:
+ * the data-science-backed Boardsesh grade when it's available and trusted,
+ * otherwise the legacy community consensus. Pure difficulty-id resolution so both
+ * web and mobile branch the same way behind the app-wide "use Boardsesh grades"
+ * toggle.
+ *
+ * The Boardsesh grade only fills the gap — a climber's own logged grade always
+ * wins upstream of this and is never passed here. Rules:
+ *  - toggle off → always the legacy consensus.
+ *  - Boardsesh grade present AND trusted (`boardseshConfidence !== 'setter_only'`)
+ *    → the rounded Boardsesh grade (the shared scale aligns with integer
+ *    difficulty ids, so rounding lands on a real grade bucket).
+ *  - Boardsesh grade null, or confidence `setter_only` → the legacy consensus.
+ *  - No consensus either → null (the row shows no crowd grade).
+ */
+export function resolveCrowdDifficulty(
+  fields: {
+    boardseshDifficulty?: number | null;
+    boardseshConfidence?: string | null;
+    consensusDifficulty?: number | null;
+  },
+  useBoardseshGrades: boolean,
+): number | null {
+  if (useBoardseshGrades && fields.boardseshDifficulty != null && fields.boardseshConfidence !== 'setter_only') {
+    return Math.round(fields.boardseshDifficulty);
+  }
+  return fields.consensusDifficulty ?? null;
+}
+
+/**
  * Direction of the climber's grade relative to the consensus, for the arrow on
  * the row's consensus sub-line: 'up' = you graded it harder than the crowd,
  * 'down' = softer. Only meaningful when `showConsensusSecondary` is true —

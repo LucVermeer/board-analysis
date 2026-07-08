@@ -20,6 +20,14 @@ export type Tick = {
   // the climb has a grade yet. Populated by read queries; mutation responses
   // (saveTick / updateTick) don't compute it.
   effectiveDifficulty?: number | null;
+  // Boardsesh grade for this tick's climb+angle on the shared difficulty scale
+  // (COALESCE(universal_grade, local_grade)). Null when no grade row exists.
+  // Fills the gap only for ungraded ascents — the user's own tick grade wins;
+  // the UI keeps the legacy consensus when this is null or 'setter_only'.
+  boardseshDifficulty?: number | null;
+  // Boardsesh grade confidence tier ('confirmed' | 'provisional' |
+  // 'setter_only'). Null when no grade row exists.
+  boardseshConfidence?: string | null;
   isBenchmark: boolean;
   comment: string;
   climbedAt: string;

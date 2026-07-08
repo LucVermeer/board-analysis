@@ -26,6 +26,8 @@ type FeedItem = {
   difficultyName: string | null;
   consensusDifficulty: number | null;
   consensusDifficultyName: string | null;
+  boardseshDifficulty: number | null;
+  boardseshConfidence: string | null;
 };
 
 type FeedResult = {
@@ -174,11 +176,32 @@ const insertBoardClimbStats = async (params: {
   `);
 };
 
+const insertBoardClimbGrade = async (params: {
+  climbUuid: string;
+  boardType?: string;
+  angle?: number;
+  localGrade?: number | null;
+  universalGrade?: number | null;
+  confidence?: string;
+}) => {
+  const boardType = params.boardType ?? 'kilter';
+  const angle = params.angle ?? 40;
+  await db.execute(sql`
+    INSERT INTO board_climb_grades (board_type, climb_uuid, angle, local_grade, universal_grade, confidence, ascensionist_count, model_version, coeff_version, computed_at)
+    VALUES (${boardType}, ${params.climbUuid}, ${angle}, ${params.localGrade ?? null}, ${params.universalGrade ?? null}, ${params.confidence ?? 'confirmed'}, 25, 'test-model', 'test-coeff', now())
+    ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET
+      local_grade = excluded.local_grade,
+      universal_grade = excluded.universal_grade,
+      confidence = excluded.confidence
+  `);
+};
+
 const cleanup = async () => {
   await db.execute(sql`DELETE FROM user_climb_percentiles WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM board_beta_links WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM user_boards WHERE owner_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
+  await db.execute(sql`DELETE FROM board_climb_grades WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(
     sql`DELETE FROM board_climb_aliases WHERE alias_uuid LIKE ${CLIMB_PREFIX + '%'} OR canonical_uuid LIKE ${CLIMB_PREFIX + '%'}`,
@@ -1314,6 +1337,129 @@ describe('tickQueries — behavior fixes', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].climbName).toBe('Mega Classic');
+    });
+  });
+
+  // The Boardsesh grade rides along on ascent rows so the UI can fall back to it
+  // for ungraded ascents. COALESCE(universal_grade, local_grade) at the tick's
+  // OWN angle; nullable everywhere (no grade row = keep the legacy grade).
+  describe('userAscentsFeed — Boardsesh grade fallback fields', () => {
+    it('surfaces COALESCE(universal, local) + confidence at the tick angle', async () => {
+      const climbUuid = CLIMB_PREFIX + 'bsgrade-universal';
+      await insertClimb(climbUuid, 'Universal Graded');
+      await insertBoardClimbStats({ climbUuid, displayDifficulty: 15 });
+      // Both grades present at the ticked angle → universal wins.
+      await insertBoardClimbGrade({
+        climbUuid,
+        angle: 40,
+        localGrade: 18.4,
+        universalGrade: 17.9,
+        confidence: 'confirmed',
+      });
+      await insertTick({
+        uuid: 'tick-bsgrade-universal',
+        climbUuid,
+        climbedAt: '2026-07-01 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
+      const item = result.items.find((row) => row.uuid === 'tick-bsgrade-universal');
+      expect(item?.boardseshDifficulty).toBeCloseTo(17.9);
+      expect(item?.boardseshConfidence).toBe('confirmed');
+    });
+
+    it('falls back to local_grade when universal_grade is null', async () => {
+      const climbUuid = CLIMB_PREFIX + 'bsgrade-local';
+      await insertClimb(climbUuid, 'Local Only Graded');
+      await insertBoardClimbGrade({
+        climbUuid,
+        angle: 40,
+        localGrade: 12.0,
+        universalGrade: null,
+        confidence: 'provisional',
+      });
+      await insertTick({
+        uuid: 'tick-bsgrade-local',
+        climbUuid,
+        climbedAt: '2026-07-02 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
+      const item = result.items.find((row) => row.uuid === 'tick-bsgrade-local');
+      expect(item?.boardseshDifficulty).toBeCloseTo(12.0);
+      expect(item?.boardseshConfidence).toBe('provisional');
+    });
+
+    it('returns null grade fields when no board_climb_grades row exists at the tick angle', async () => {
+      const climbUuid = CLIMB_PREFIX + 'bsgrade-none';
+      await insertClimb(climbUuid, 'Ungraded Climb');
+      // Grade computed for a DIFFERENT angle only — the ticked angle has none.
+      await insertBoardClimbGrade({ climbUuid, angle: 20, localGrade: 14, universalGrade: 14 });
+      await insertTick({
+        uuid: 'tick-bsgrade-none',
+        climbUuid,
+        angle: 40,
+        climbedAt: '2026-07-03 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
+      const item = result.items.find((row) => row.uuid === 'tick-bsgrade-none');
+      expect(item?.boardseshDifficulty).toBeNull();
+      expect(item?.boardseshConfidence).toBeNull();
+    });
+
+    it('exposes the fields on userTicks (Tick shape) too', async () => {
+      const climbUuid = CLIMB_PREFIX + 'bsgrade-userticks';
+      await insertClimb(climbUuid, 'UserTicks Graded');
+      await insertBoardClimbGrade({
+        climbUuid,
+        angle: 40,
+        localGrade: 20.0,
+        universalGrade: 19.2,
+        confidence: 'confirmed',
+      });
+      await insertTick({
+        uuid: 'tick-bsgrade-userticks',
+        climbUuid,
+        climbedAt: '2026-07-04 10:00:00',
+        status: 'send',
+      });
+
+      const ticks = (await tickQueries.userTicks(undefined, {
+        userId: TEST_USER_ID,
+        boardType: 'kilter',
+      })) as Array<{ uuid: string; boardseshDifficulty: number | null; boardseshConfidence: string | null }>;
+      const graded = ticks.find((tick) => tick.uuid === 'tick-bsgrade-userticks');
+      expect(graded?.boardseshDifficulty).toBeCloseTo(19.2);
+      expect(graded?.boardseshConfidence).toBe('confirmed');
+    });
+
+    it('names the grade from the canonical climb for an aliased (deduped-away) tick', async () => {
+      const canonicalUuid = CLIMB_PREFIX + 'bsgrade-alias-canonical';
+      const aliasUuid = CLIMB_PREFIX + 'bsgrade-alias-merged';
+      await insertClimb(canonicalUuid, 'Canonical Graded');
+      await insertAlias({ aliasUuid, canonicalUuid });
+      // Grade lives on the canonical UUID; the tick points at the alias.
+      await insertBoardClimbGrade({
+        climbUuid: canonicalUuid,
+        angle: 40,
+        localGrade: 16,
+        universalGrade: 16.3,
+        confidence: 'confirmed',
+      });
+      await insertTick({
+        uuid: 'tick-bsgrade-aliased',
+        climbUuid: aliasUuid,
+        climbedAt: '2026-07-05 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
+      const item = result.items.find((row) => row.uuid === 'tick-bsgrade-aliased');
+      expect(item?.boardseshDifficulty).toBeCloseTo(16.3);
     });
   });
 });

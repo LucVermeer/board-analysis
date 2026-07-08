@@ -204,6 +204,8 @@ function makeItem(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
     difficultyName: '7a/V6',
     consensusDifficulty: 20,
     consensusDifficultyName: '7a/V6',
+    boardseshDifficulty: null,
+    boardseshConfidence: null,
     qualityAverage: 3.5,
     isBenchmark: false,
     isNoMatch: false,

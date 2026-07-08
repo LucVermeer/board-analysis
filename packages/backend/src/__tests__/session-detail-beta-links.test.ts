@@ -161,6 +161,9 @@ function makeTickRow(overrides: {
   boardType?: string;
   angle?: number;
   status?: string;
+  /** Boardsesh grade fields as the sessionDetail select aliases them (top-level). */
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
 }) {
   const boardType = overrides.boardType ?? 'kilter';
   const angle = overrides.angle ?? 40;
@@ -187,6 +190,8 @@ function makeTickRow(overrides: {
     frames: 'p1r1',
     difficultyName: 'V10',
     consensusDifficulty: 10,
+    boardseshDifficulty: overrides.boardseshDifficulty ?? null,
+    boardseshConfidence: overrides.boardseshConfidence ?? null,
     canonicalClimbUuid: overrides.canonicalClimbUuid ?? overrides.climbUuid,
   };
 }
@@ -347,5 +352,28 @@ describe('sessionDetail per-tick betaLinks (tick-scoped to the crew)', () => {
     const byUuid = new Map((result?.ticks ?? []).map((tick) => [tick.uuid, tick] as const));
     expect(byUuid.get('tick-1')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_INSTAGRAM_LINK]);
     expect(byUuid.get('tick-2')?.betaLinks).toEqual([]);
+  });
+
+  it('carries the Boardsesh grade fallback fields onto each session-detail tick (present + null)', async () => {
+    betaLinkTestState.tickRows = [
+      makeTickRow({
+        uuid: 'tick-graded',
+        climbUuid: 'climb-a',
+        climbName: 'Graded Send',
+        boardseshDifficulty: 17.9,
+        boardseshConfidence: 'confirmed',
+      }),
+      // No grade row for this tick's climb+angle → both fields stay null.
+      makeTickRow({ uuid: 'tick-ungraded', climbUuid: 'climb-b', climbName: 'Ungraded Send' }),
+    ];
+    betaLinkTestState.betaLinkRowsByQuery.push([]);
+
+    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
+
+    const byUuid = new Map((result?.ticks ?? []).map((tick) => [tick.uuid, tick] as const));
+    expect(byUuid.get('tick-graded')?.boardseshDifficulty).toBeCloseTo(17.9);
+    expect(byUuid.get('tick-graded')?.boardseshConfidence).toBe('confirmed');
+    expect(byUuid.get('tick-ungraded')?.boardseshDifficulty).toBeNull();
+    expect(byUuid.get('tick-ungraded')?.boardseshConfidence).toBeNull();
   });
 });

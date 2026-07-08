@@ -63,6 +63,55 @@ export const difficultyNameWithFallbackExpr = sql<string | null>`COALESCE(
 export const consensusDifficultyExpr = sql<number | null>`ROUND(${dbSchema.boardClimbStats.displayDifficulty})`;
 
 /**
+ * JOIN condition for the Boardsesh grade table (`board_climb_grades`) on a tick
+ * row, keyed on the tick's OWN angle + board type + the alias-resolved canonical
+ * climb UUID. Mirrors the `board_climb_stats` join the tick queries already do
+ * (`COALESCE(board_climb_aliases.canonical_uuid, boardsesh_ticks.climb_uuid)`),
+ * so a tick pointing at a deduped-away alias UUID still resolves its grade.
+ *
+ * ## Required joins (in order)
+ *
+ * A query using this condition must already have joined:
+ *  1. `boardClimbAliases` — on (climb_uuid = alias_uuid, board_type) so the
+ *     COALESCE below falls back to the tick's own climb UUID for non-aliased ticks.
+ *  2. `boardClimbGrades` via this condition, as a LEFT JOIN — a climb with no
+ *     grade row (MoonBoard, too few ascents) returns NULL grade fields, which is
+ *     the safe-degradation path everywhere (the UI keeps the Aurora grade).
+ *
+ * Example:
+ * ```ts
+ * db.select({ boardseshDifficulty: boardseshDifficultyExpr, boardseshConfidence: boardseshConfidenceExpr })
+ *   .from(boardseshTicks)
+ *   .leftJoin(boardClimbAliases, ...)
+ *   .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
+ * ```
+ */
+export const boardseshGradeTickJoinCondition = and(
+  sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbGrades.climbUuid}`,
+  eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbGrades.boardType),
+  eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbGrades.angle),
+);
+
+/**
+ * Boardsesh grade for the joined `board_climb_grades` row, flattened to a single
+ * value on the shared difficulty scale: the cross-board universal grade when
+ * present, else the within-board local grade. NULL when no grade row is joined.
+ * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoinCondition}).
+ */
+export const boardseshDifficultyExpr = sql<number | null>`COALESCE(
+  ${dbSchema.boardClimbGrades.universalGrade},
+  ${dbSchema.boardClimbGrades.localGrade}
+)`;
+
+/**
+ * Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only')
+ * from the joined `board_climb_grades` row; NULL when no grade row is joined.
+ * The UI keeps the Aurora grade when this is NULL or 'setter_only'.
+ * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoinCondition}).
+ */
+export const boardseshConfidenceExpr = sql<string | null>`${dbSchema.boardClimbGrades.confidence}`;
+
+/**
  * Number of non-deleted comments targeting each tick, as a correlated
  * subquery.
  *

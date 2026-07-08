@@ -227,6 +227,10 @@ export type AscentFeedItem = {
   boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade) for this ascent's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or when boardseshConfidence is 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   /** Name of the climb */
   climbName: Scalars['String']['output'];
   /** UUID of the climb */
@@ -5291,6 +5295,10 @@ export type SessionDetailTick = {
   /** Stored beta videos attached to this climb, batched with the session detail (no live enrichment). Populated by the session-detail query; absent on other selections that reuse this type (e.g. the live SessionStatsUpdated subscription). */
   betaLinks?: Maybe<Array<BetaLink>>;
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale for this tick's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or boardseshConfidence is 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid: Scalars['String']['output'];
   climbedAt: Scalars['String']['output'];
@@ -5396,6 +5404,10 @@ export type SessionFeedTickHighlight = {
   angle: Scalars['Int']['output'];
   attemptCount: Scalars['Int']['output'];
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale for this tick's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or boardseshConfidence is 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid: Scalars['String']['output'];
   climbedAt: Scalars['String']['output'];
@@ -6078,6 +6090,10 @@ export type Tick = {
   boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier: 'confirmed' | 'provisional' | 'setter_only'. Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade), for this climb at the tick's angle. Null when no grade row exists. Fills the gap only for ungraded ascents: the user's own tick grade always wins, and the UI keeps the legacy consensus when this is null or 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   /** UUID of the climb attempted */
   climbUuid: Scalars['String']['output'];
   /** When the climb was attempted (ISO 8601) */
@@ -8668,6 +8684,8 @@ export type GetTicksQuery = {
     attemptCount: number;
     quality?: number | null;
     difficulty?: number | null;
+    boardseshDifficulty?: number | null;
+    boardseshConfidence?: string | null;
     isBenchmark: boolean;
     comment: string;
     climbedAt: string;
@@ -8692,6 +8710,8 @@ export type GetUserTicksQuery = {
     attemptCount: number;
     difficulty?: number | null;
     effectiveDifficulty?: number | null;
+    boardseshDifficulty?: number | null;
+    boardseshConfidence?: string | null;
     climbedAt: string;
     layoutId?: number | null;
   }>;
@@ -8754,6 +8774,8 @@ export type GetUserAscentsFeedQuery = {
       difficultyName?: string | null;
       consensusDifficulty?: number | null;
       consensusDifficultyName?: string | null;
+      boardseshDifficulty?: number | null;
+      boardseshConfidence?: string | null;
       qualityAverage?: number | null;
       isBenchmark: boolean;
       isNoMatch: boolean;
@@ -8791,6 +8813,8 @@ export type GetUserAscentCaptionMatchesQuery = {
     difficultyName?: string | null;
     consensusDifficulty?: number | null;
     consensusDifficultyName?: string | null;
+    boardseshDifficulty?: number | null;
+    boardseshConfidence?: string | null;
     qualityAverage?: number | null;
     isBenchmark: boolean;
     isNoMatch: boolean;
@@ -8851,6 +8875,8 @@ export type GetUserGroupedAscentsFeedQuery = {
         difficultyName?: string | null;
         consensusDifficulty?: number | null;
         consensusDifficultyName?: string | null;
+        boardseshDifficulty?: number | null;
+        boardseshConfidence?: string | null;
         qualityAverage?: number | null;
         isBenchmark: boolean;
         isNoMatch: boolean;
@@ -14425,6 +14451,8 @@ export const GetTicksDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'quality' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardseshDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardseshConfidence' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'isBenchmark' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'climbedAt' } },
@@ -14485,6 +14513,8 @@ export const GetUserTicksDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'effectiveDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardseshDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardseshConfidence' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'climbedAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
               ],
@@ -14639,6 +14669,8 @@ export const GetUserAscentsFeedDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficultyName' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardseshDifficulty' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardseshConfidence' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'isBenchmark' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'isNoMatch' } },
@@ -14716,6 +14748,8 @@ export const GetUserAscentCaptionMatchesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficultyName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardseshDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardseshConfidence' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'isBenchmark' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'isNoMatch' } },
@@ -14818,6 +14852,8 @@ export const GetUserGroupedAscentsFeedDocument = {
                             { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficultyName' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'boardseshDifficulty' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'boardseshConfidence' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'isBenchmark' } },
                             { kind: 'Field', name: { kind: 'Name', value: 'isNoMatch' } },

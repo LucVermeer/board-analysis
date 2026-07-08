@@ -15,6 +15,9 @@ import {
   difficultyNameWithFallbackExpr,
   consensusGradeTable,
   consensusGradeJoinCondition,
+  boardseshDifficultyExpr,
+  boardseshConfidenceExpr,
+  boardseshGradeTickJoinCondition,
 } from '../shared/sql-expressions';
 import type { z } from 'zod';
 import { GetTicksInputSchema, BoardNameSchema, AscentFeedInputSchema } from '../../../validation/schemas';
@@ -155,6 +158,8 @@ type AscentFeedRow = {
   difficultyName: string | null;
   consensusDifficulty: number | null;
   consensusDifficultyName: string | null;
+  boardseshDifficulty: number | null;
+  boardseshConfidence: string | null;
   qualityAverage: number | null;
   isBenchmark: boolean;
   isNoMatch: boolean;
@@ -193,6 +198,8 @@ export const tickQueries = {
       .select({
         tick: dbSchema.boardseshTicks,
         layoutId: dbSchema.boardClimbs.layoutId,
+        boardseshDifficulty: boardseshDifficultyExpr,
+        boardseshConfidence: boardseshConfidenceExpr,
       })
       .from(dbSchema.boardseshTicks)
       // Resolve dedup-merged climbs: a tick may point at an alias UUID that was
@@ -214,6 +221,9 @@ export const tickQueries = {
           eq(dbSchema.boardClimbs.boardType, input.boardType),
         ),
       )
+      // Boardsesh grade for this tick's climb at the tick's OWN angle (aliases
+      // resolved via the join above). LEFT JOIN so an ungraded climb still returns.
+      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
@@ -253,7 +263,7 @@ export const tickQueries = {
     const voteMap = new Map(voteRows.map((v) => [v.entityId, v]));
     const commentMap = new Map(commentRows.map((c) => [c.entityId, Number(c.commentCount)]));
 
-    return results.map(({ tick, layoutId }) => {
+    return results.map(({ tick, layoutId, boardseshDifficulty, boardseshConfidence }) => {
       const votes = voteMap.get(tick.uuid);
       return {
         uuid: tick.uuid,
@@ -276,6 +286,10 @@ export const tickQueries = {
         auroraId: tick.auroraId,
         auroraSyncedAt: tick.auroraSyncedAt,
         layoutId,
+        // Boardsesh grade fallback fields (nullable). COALESCE(universal, local)
+        // is doublePrecision → real JS number, but coerce defensively.
+        boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
+        boardseshConfidence: boardseshConfidence ?? null,
         upvotes: votes ? Number(votes.upvotes) : 0,
         downvotes: votes ? Number(votes.downvotes) : 0,
         commentCount: commentMap.get(tick.uuid) ?? 0,
@@ -304,6 +318,8 @@ export const tickQueries = {
         effectiveDifficulty: sql<
           number | null
         >`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`,
+        boardseshDifficulty: boardseshDifficultyExpr,
+        boardseshConfidence: boardseshConfidenceExpr,
       })
       .from(dbSchema.boardseshTicks)
       // Resolve dedup-merged climbs to their canonical UUID before joining
@@ -331,10 +347,13 @@ export const tickQueries = {
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),
       )
+      // Boardsesh grade at the tick's OWN angle (aliases resolved above). LEFT JOIN
+      // so an ungraded climb still returns; the grade fields come back NULL.
+      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
-    return results.map(({ tick, layoutId, effectiveDifficulty }) => ({
+    return results.map(({ tick, layoutId, effectiveDifficulty, boardseshDifficulty, boardseshConfidence }) => ({
       uuid: tick.uuid,
       userId: tick.userId,
       boardType: tick.boardType,
@@ -346,6 +365,8 @@ export const tickQueries = {
       quality: tick.quality,
       difficulty: tick.difficulty,
       effectiveDifficulty,
+      boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
+      boardseshConfidence: boardseshConfidence ?? null,
       isBenchmark: tick.isBenchmark,
       comment: tick.comment,
       climbedAt: tick.climbedAt,
@@ -427,6 +448,8 @@ export const tickQueries = {
         difficultyName: dbSchema.boardDifficultyGrades.boulderName,
         consensusDifficulty: consensusDifficultyExpr,
         consensusDifficultyName: consensusDifficultyNameExpr,
+        boardseshDifficulty: boardseshDifficultyExpr,
+        boardseshConfidence: boardseshConfidenceExpr,
         resolvedIsBenchmark: resolvedBenchmarkExpr,
         qualityAverage: dbSchema.boardClimbStats.qualityAverage,
       })
@@ -463,7 +486,10 @@ export const tickQueries = {
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardDifficultyGrades.boardType),
         ),
       )
-      .leftJoin(consensusGradeTable, consensusGradeJoinCondition);
+      .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
+      // Boardsesh grade at the tick's OWN angle (aliases resolved above). LEFT JOIN
+      // keeps ungraded ascents; grade fields come back NULL (safe fallback).
+      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition);
 
     // Full conditions including climb name filter (requires JOIN)
     const allConditions = [...tickConditions, ...buildAscentClimbConditions(validatedInput)];
@@ -592,6 +618,8 @@ export const tickQueries = {
         difficultyName,
         consensusDifficulty,
         consensusDifficultyName,
+        boardseshDifficulty,
+        boardseshConfidence,
         resolvedIsBenchmark,
         qualityAverage,
       }) => {
@@ -618,6 +646,8 @@ export const tickQueries = {
           consensusDifficulty:
             consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
           consensusDifficultyName,
+          boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
+          boardseshConfidence: boardseshConfidence ?? null,
           isBenchmark: Boolean(resolvedIsBenchmark),
           isNoMatch: isNoMatchClimb(climbDescription),
           qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
@@ -817,6 +847,8 @@ export const tickQueries = {
         boardIsUnlisted: dbSchema.userBoards.isUnlisted,
         consensusDifficulty: consensusDifficultyExpr,
         consensusDifficultyName: consensusDifficultyNameExpr,
+        boardseshDifficulty: boardseshDifficultyExpr,
+        boardseshConfidence: boardseshConfidenceExpr,
         resolvedIsBenchmark: resolvedBenchmarkExpr,
         qualityAverage: dbSchema.boardClimbStats.qualityAverage,
         day: dayExpr.as('day'),
@@ -858,6 +890,9 @@ export const tickQueries = {
         ),
       )
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
+      // Boardsesh grade at each tick's OWN angle (aliases resolved above). LEFT
+      // JOIN keeps ungraded ticks; grade fields come back NULL (safe fallback).
+      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
       .where(
         and(
           ...groupFilterConditions,
@@ -886,6 +921,8 @@ export const tickQueries = {
       difficultyName: string | null;
       consensusDifficulty: number | null;
       consensusDifficultyName: string | null;
+      boardseshDifficulty: number | null;
+      boardseshConfidence: string | null;
       qualityAverage: number | null;
       isBenchmark: boolean;
       isNoMatch: boolean;
@@ -940,6 +977,8 @@ export const tickQueries = {
       boardIsUnlisted,
       consensusDifficulty,
       consensusDifficultyName,
+      boardseshDifficulty,
+      boardseshConfidence,
       resolvedIsBenchmark,
       qualityAverage,
       day,
@@ -971,6 +1010,8 @@ export const tickQueries = {
         consensusDifficulty:
           consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
         consensusDifficultyName,
+        boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
+        boardseshConfidence: boardseshConfidence ?? null,
         qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
         isBenchmark: Boolean(resolvedIsBenchmark),
         isNoMatch,

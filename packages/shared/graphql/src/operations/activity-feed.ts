@@ -97,6 +97,8 @@ const SESSION_FEED_ITEM_FIELDS = `
     attemptCount
     difficulty
     difficultyName
+    boardseshDifficulty
+    boardseshConfidence
     quality
     isMirror
     isBenchmark
@@ -119,6 +121,8 @@ const SESSION_FEED_ITEM_FIELDS = `
       attemptCount
       difficulty
       difficultyName
+      boardseshDifficulty
+      boardseshConfidence
       quality
       isMirror
       isBenchmark
@@ -173,6 +177,8 @@ export const GET_SESSION_DETAIL = gql`
         attemptCount
         difficulty
         difficultyName
+        boardseshDifficulty
+        boardseshConfidence
         quality
         isMirror
         isBenchmark

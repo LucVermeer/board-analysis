@@ -230,6 +230,10 @@ export type AscentFeedItem = {
   boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade) for this ascent's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or when boardseshConfidence is 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   /** Name of the climb */
   climbName: Scalars['String']['output'];
   /** UUID of the climb */
@@ -5294,6 +5298,10 @@ export type SessionDetailTick = {
   /** Stored beta videos attached to this climb, batched with the session detail (no live enrichment). Populated by the session-detail query; absent on other selections that reuse this type (e.g. the live SessionStatsUpdated subscription). */
   betaLinks?: Maybe<Array<BetaLink>>;
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale for this tick's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or boardseshConfidence is 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid: Scalars['String']['output'];
   climbedAt: Scalars['String']['output'];
@@ -5399,6 +5407,10 @@ export type SessionFeedTickHighlight = {
   angle: Scalars['Int']['output'];
   attemptCount: Scalars['Int']['output'];
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only'). Null when no grade row exists. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale for this tick's climb at its angle. Null when no grade row exists; the UI keeps the legacy consensus when this is null or boardseshConfidence is 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid: Scalars['String']['output'];
   climbedAt: Scalars['String']['output'];
@@ -6081,6 +6093,10 @@ export type Tick = {
   boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
+  /** Boardsesh grade confidence tier: 'confirmed' | 'provisional' | 'setter_only'. Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'. */
+  boardseshConfidence?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade), for this climb at the tick's angle. Null when no grade row exists. Fills the gap only for ungraded ascents: the user's own tick grade always wins, and the UI keeps the legacy consensus when this is null or 'setter_only'. */
+  boardseshDifficulty?: Maybe<Scalars['Float']['output']>;
   /** UUID of the climb attempted */
   climbUuid: Scalars['String']['output'];
   /** When the climb was attempted (ISO 8601) */
@@ -7363,6 +7379,8 @@ export type AscentFeedItemResolvers<
   boardDisplayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardseshConfidence?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  boardseshDifficulty?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -10220,6 +10238,8 @@ export type SessionDetailTickResolvers<
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   betaLinks?: Resolver<Maybe<Array<ResolversTypes['BetaLink']>>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardseshConfidence?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  boardseshDifficulty?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -10343,6 +10363,8 @@ export type SessionFeedTickHighlightResolvers<
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardseshConfidence?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  boardseshDifficulty?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -10714,6 +10736,8 @@ export type TickResolvers<
   auroraType?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardseshConfidence?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  boardseshDifficulty?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   comment?: Resolver<ResolversTypes['String'], ParentType, ContextType>;

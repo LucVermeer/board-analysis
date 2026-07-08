@@ -4,6 +4,11 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { getGradeLabel } from '@boardsesh/db/queries';
 import { rowsFromResult } from '@boardsesh/db/client';
 import { requireAuthenticated, validateInput, isNoMatchClimb } from '../shared/helpers';
+import {
+  boardseshDifficultyExpr,
+  boardseshConfidenceExpr,
+  boardseshGradeTickJoinCondition,
+} from '../shared/sql-expressions';
 import { ActivityFeedInputSchema } from '../../../validation/schemas';
 import { encodeOffsetCursor, decodeOffsetCursor } from '../../../utils/feed-cursor';
 import type {
@@ -500,6 +505,8 @@ export const sessionFeedQueries = {
         frames: dbSchema.boardClimbs.frames,
         difficultyName: dbSchema.boardDifficultyGrades.boulderName,
         consensusDifficulty: dbSchema.boardClimbStats.displayDifficulty,
+        boardseshDifficulty: boardseshDifficultyExpr,
+        boardseshConfidence: boardseshConfidenceExpr,
         // Canonical climb UUID (alias-resolved) so beta links — which are stored
         // against the canonical climb — resolve for ticks pointing at an alias.
         canonicalClimbUuid: sql<string>`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid})`,
@@ -540,6 +547,9 @@ export const sessionFeedQueries = {
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),
       )
+      // Boardsesh grade at each tick's OWN angle (aliases resolved above). LEFT
+      // JOIN keeps ungraded ticks; grade fields come back NULL (safe fallback).
+      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
       .where(tickWhere)
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
@@ -593,6 +603,8 @@ export const sessionFeedQueries = {
         climbedAt: row.tick.climbedAt,
         upvotes: tickVoteMap.get(row.tick.uuid) ?? 0,
         totalAttempts: null,
+        boardseshDifficulty: row.boardseshDifficulty == null ? null : Number(row.boardseshDifficulty),
+        boardseshConfidence: row.boardseshConfidence ?? null,
         betaLinks: betaLinksByTick.get(row.tick.uuid) ?? [],
       };
     });
@@ -1087,6 +1099,8 @@ type TickHighlightRow = {
   attemptCount: number;
   difficulty: number | null;
   consensusDifficulty: number | null;
+  boardseshDifficulty: number | null;
+  boardseshConfidence: string | null;
   difficultyName: string | null;
   quality: number | null;
   isMirror: boolean | null;
@@ -1127,6 +1141,8 @@ function mapTickHighlightRow(row: TickHighlightRow): SessionFeedTickHighlight {
     frames: row.frames,
     setterUsername: row.setterUsername,
     climbedAt: formatFeedTimestamp(row.climbedAt),
+    boardseshDifficulty: row.boardseshDifficulty == null ? null : Number(row.boardseshDifficulty),
+    boardseshConfidence: row.boardseshConfidence ?? null,
   };
 }
 
@@ -1145,6 +1161,8 @@ function tickHighlightSelectSql(groupIdExpression: SQL = sql`NULL::text`) {
     t.attempt_count AS "attemptCount",
     t.difficulty,
     bcs.display_difficulty AS "consensusDifficulty",
+    COALESCE(bcg.universal_grade, bcg.local_grade) AS "boardseshDifficulty",
+    bcg.confidence AS "boardseshConfidence",
     bdg.boulder_name AS "difficultyName",
     t.quality,
     t.is_mirror AS "isMirror",
@@ -1174,6 +1192,10 @@ async function fetchTickHighlightsByUuid(tickUuids: string[]): Promise<Map<strin
       ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
       AND bcs.board_type = t.board_type
       AND bcs.angle = t.angle
+    LEFT JOIN board_climb_grades bcg
+      ON bcg.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
+      AND bcg.board_type = t.board_type
+      AND bcg.angle = t.angle
     WHERE t.uuid IN ${sql`(${sql.join(
       tickUuids.map((uuid) => sql`${uuid}`),
       sql`, `,
@@ -1231,6 +1253,10 @@ async function fetchHardestSendsBatch(
       ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
       AND bcs.board_type = t.board_type
       AND bcs.angle = t.angle
+    LEFT JOIN board_climb_grades bcg
+      ON bcg.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
+      AND bcg.board_type = t.board_type
+      AND bcg.angle = t.angle
     WHERE ranked.rank = 1
   `);
 

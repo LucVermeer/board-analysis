@@ -41,6 +41,10 @@ export const ticksTypeDefs = /* GraphQL */ `
     difficulty: Int
     "Effective grade for display and aggregation: COALESCE(difficulty, ROUND(consensus_difficulty)). Still nullable when the climb has no consensus yet."
     effectiveDifficulty: Int
+    "Boardsesh grade on the shared difficulty scale (COALESCE of the cross-board universal grade and the within-board local grade), for this climb at the tick's angle. Null when no grade row exists. Fills the gap only for ungraded ascents: the user's own tick grade always wins, and the UI keeps the legacy consensus when this is null or 'setter_only'."
+    boardseshDifficulty: Float
+    "Boardsesh grade confidence tier: 'confirmed' | 'provisional' | 'setter_only'. Null when no grade row exists. The UI treats null or 'setter_only' as 'use the legacy consensus'."
+    boardseshConfidence: String
     "Whether this is a benchmark climb"
     isBenchmark: Boolean!
     "User's comment about the climb"
