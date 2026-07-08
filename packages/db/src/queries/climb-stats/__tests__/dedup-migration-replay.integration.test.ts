@@ -5,8 +5,8 @@ import path from 'node:path';
 import postgres from 'postgres';
 
 /**
- * Scratch-Postgres replay of the PR4 dedup lineage (0161 add column, 0162 kilter
- * dedup, 0163 aurora/json dedup). Opt-in: set MIGRATION_REPLAY_DB_URL to a
+ * Scratch-Postgres replay of the PR4 dedup lineage (0163 add column, 0164 kilter
+ * dedup, 0165 aurora/json dedup). Opt-in: set MIGRATION_REPLAY_DB_URL to a
  * throwaway superuser Postgres (a plain `docker run postgres`), e.g.
  *
  *   cd packages/db && MIGRATION_REPLAY_DB_URL=postgres://postgres:postgres@localhost:5433/postgres \
@@ -14,7 +14,7 @@ import postgres from 'postgres';
  *
  * The test creates a throwaway database, builds a MINIMAL schema (only the
  * tables the dedup touches, boardsesh_ticks deliberately WITHOUT
- * kilter_detached_at so migration 0161 exercises the ADD COLUMN), seeds every
+ * kilter_detached_at so migration 0163 exercises the ADD COLUMN), seeds every
  * case, applies the three migration SQL files verbatim, and asserts the outcome:
  * a clean 1:1 pair merges, an ambiguous group is left alone, and a cross-user
  * near-match is never merged.
@@ -54,7 +54,7 @@ const SCHEMA_SQL = `
     PRIMARY KEY (board_type, climb_uuid, angle)
   );
 
-  -- boardsesh_ticks WITHOUT kilter_detached_at (migration 0161 adds it).
+  -- boardsesh_ticks WITHOUT kilter_detached_at (migration 0163 adds it).
   CREATE TABLE boardsesh_ticks (
     id bigserial PRIMARY KEY,
     uuid text NOT NULL UNIQUE,
@@ -119,7 +119,7 @@ const SEED_SQL = `
 
 const suite = REPLAY_URL ? describe : describe.skip;
 
-suite('PR4 dedup migration replay (0161→0163)', () => {
+suite('PR4 dedup migration replay (0163→0165)', () => {
   let admin: postgres.Sql;
   let db: postgres.Sql;
 
@@ -134,9 +134,9 @@ suite('PR4 dedup migration replay (0161→0163)', () => {
     await db.unsafe(SCHEMA_SQL);
     await db.unsafe(SEED_SQL);
     // Apply the migration lineage in order, verbatim.
-    await db.unsafe(migrationSql('0161_kilter_detached_at'));
-    await db.unsafe(migrationSql('0162_kilter_dedup_backfill'));
-    await db.unsafe(migrationSql('0163_aurora_json_dedup_backfill'));
+    await db.unsafe(migrationSql('0163_kilter_detached_at'));
+    await db.unsafe(migrationSql('0164_kilter_dedup_backfill'));
+    await db.unsafe(migrationSql('0165_aurora_json_dedup_backfill'));
   });
 
   after(async () => {
@@ -147,7 +147,7 @@ suite('PR4 dedup migration replay (0161→0163)', () => {
     }
   });
 
-  it('0161 added kilter_detached_at', async () => {
+  it('0163 added kilter_detached_at', async () => {
     const rows = await db`SELECT column_name FROM information_schema.columns
       WHERE table_name='boardsesh_ticks' AND column_name='kilter_detached_at'`;
     assert.equal(rows.length, 1);
@@ -195,11 +195,11 @@ suite('PR4 dedup migration replay (0161→0163)', () => {
   it('records both dedup guard rows (idempotent re-application is a no-op)', async () => {
     const guards = await db`SELECT tag FROM _bs_migration_guards ORDER BY tag`;
     const tags = guards.map((r) => r.tag);
-    assert.ok(tags.includes('0162_kilter_dedup_backfill'));
-    assert.ok(tags.includes('0163_aurora_json_dedup_backfill'));
+    assert.ok(tags.includes('0164_kilter_dedup_backfill'));
+    assert.ok(tags.includes('0165_aurora_json_dedup_backfill'));
     // Re-applying is a no-op (guard short-circuits) and doesn't throw.
-    await db.unsafe(migrationSql('0162_kilter_dedup_backfill'));
-    await db.unsafe(migrationSql('0163_aurora_json_dedup_backfill'));
+    await db.unsafe(migrationSql('0164_kilter_dedup_backfill'));
+    await db.unsafe(migrationSql('0165_aurora_json_dedup_backfill'));
     const still = await db`SELECT count(*)::int AS n FROM boardsesh_ticks WHERE uuid='t1-orig'`;
     assert.equal(still[0].n, 1);
   });
