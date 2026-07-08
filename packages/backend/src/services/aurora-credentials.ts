@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, ne, or } from 'drizzle-orm';
+import { and, count, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { AuroraClimbingClient } from '@boardsesh/aurora-sync/api';
 import { decrypt, encrypt } from '@boardsesh/crypto';
 import { auroraCredentials, boardClimbs, boardseshTicks, userBoardMappings } from '@boardsesh/db/schema';
@@ -69,6 +69,40 @@ export class DuplicateBoardLinkError extends Error {
 type CredentialTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
+ * Advisory-lock namespace for the duplicate board-account-link guards —
+ * `0x4c494e4b` is ASCII "LINK". Two-int form per the repo convention
+ * (`CLIMB_DUPLICATE_LOCK_NAMESPACE` in climb-similarity.ts,
+ * `PUSH_TOKEN_LOCK_NAMESPACE` in push-tokens.ts) so this lock space can't
+ * collide with other advisory-lock callers on the same cluster.
+ *
+ * Why a lock at all: the guards below are SELECT-then-write, which is TOCTOU —
+ * two users linking the same upstream account concurrently can both read "no
+ * conflicting owner" before either INSERT commits, and both links land. A
+ * `SELECT ... FOR UPDATE` can't close that window because in the racing case
+ * there is no row to lock yet. A transaction-scoped advisory lock keyed on the
+ * upstream identity serializes both writers deterministically: the second
+ * blocks until the first commits, then (READ COMMITTED) its conflict SELECT
+ * sees the freshly committed claim and rejects. Auto-released at
+ * COMMIT/ROLLBACK; server-wide, so it covers all backend instances on one DB.
+ *
+ * End-state: a DB-level UNIQUE on the upstream identity —
+ * (board_type, aurora_user_id) on aurora_credentials and
+ * (board_type, board_user_id_text) on user_board_mappings — replaces this lock
+ * entirely. That constraint canNOT be added yet: prod carries one known
+ * duplicate pair (issue #3541) that would fail the migration. Once #3541's
+ * pair is manually resolved, add the partial unique indexes and delete this
+ * lock.
+ */
+const BOARD_LINK_LOCK_NAMESPACE = 0x4c494e4b;
+
+/** Serialize concurrent link attempts for one upstream account (see namespace doc). */
+async function acquireBoardLinkLock(tx: CredentialTransaction, boardType: string, upstreamId: string): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${BOARD_LINK_LOCK_NAMESPACE}, hashtext(${`${boardType}|${upstreamId}`}))`,
+  );
+}
+
+/**
  * Reject an Aurora-family link when another Boardsesh user already holds this
  * upstream account (`board_type` + numeric `aurora_user_id`). An 'expired' claim
  * is skipped — the syncable set is positive (pending/active/error), matching the
@@ -81,6 +115,9 @@ async function assertNoConflictingAuroraOwner(
 ): Promise<void> {
   // No upstream id means no account identity to collide on — nothing to block.
   if (input.auroraUserId == null) return;
+  // Take the per-upstream-account lock BEFORE the conflict read, so two
+  // concurrent linkers of the same account run check-then-write serially.
+  await acquireBoardLinkLock(tx, input.boardType, String(input.auroraUserId));
   const conflicting = await tx
     .select({ userId: auroraCredentials.userId })
     .from(auroraCredentials)
@@ -110,6 +147,8 @@ async function assertNoConflictingKilterOwner(
   tx: CredentialTransaction,
   input: { userId: string; kilterUserId: string },
 ): Promise<void> {
+  // Same TOCTOU serialization as the Aurora guard (see BOARD_LINK_LOCK_NAMESPACE).
+  await acquireBoardLinkLock(tx, KILTER_BOARD_TYPE, input.kilterUserId);
   const conflicting = await tx
     .select({ userId: userBoardMappings.userId })
     .from(userBoardMappings)

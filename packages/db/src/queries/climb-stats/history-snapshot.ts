@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { isWeeklyCursorDue, markWeeklyCursorDone } from '../sync/weekly-gate';
+import { rowsOf } from '../util/rows';
 
 // Any drizzle-orm PgDatabase (postgres-js client, the script client, the Neon
 // HTTP client) and the PgTransaction the runners pass all satisfy this.
@@ -11,15 +12,6 @@ type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 // to the cursor aurora-sync/shared-sync.ts used before this refactor so a board
 // mid-migration keeps its existing 7-day watermark.
 const HISTORY_CURSOR_TABLE_NAME = '__local_climb_stats_history__';
-
-function affectedRowCount(result: unknown): number {
-  if (result && typeof result === 'object') {
-    const raw = result as { count?: number; rowCount?: number };
-    const value = raw.count ?? raw.rowCount;
-    if (value !== undefined) return Number(value);
-  }
-  return 0;
-}
 
 /**
  * True when this board's weekly `board_climb_stats_history` snapshot is due
@@ -64,18 +56,28 @@ export async function snapshotClimbStatsHistoryIfDue(
 
   log?.(`[history-snapshot] weekly board_climb_stats_history snapshot is due for ${boardType}`);
 
+  // The inserted-row count is read back as a normal result ROW (count the
+  // CTE's RETURNING server-side), not from driver metadata: postgres-js puts
+  // the command-tag count on a RowList property while the Neon HTTP client
+  // uses `rowCount`, and drizzle's execute() doesn't normalize the two — a
+  // metadata read can silently be 0 on the wrong driver. A row is a row on
+  // every driver. RETURNING 1 (not *) keeps the wire/CTE payload minimal.
   const result = await db.execute(sql`
-    INSERT INTO board_climb_stats_history
-      (board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
-       ascensionist_count, difficulty_average, quality_average, fa_username, fa_at)
-    SELECT board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
-           ascensionist_count, difficulty_average, quality_average, fa_username, fa_at
-      FROM board_climb_stats
-     WHERE board_type = ${boardType}
-       AND ascensionist_count > 0
+    WITH inserted AS (
+      INSERT INTO board_climb_stats_history
+        (board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
+         ascensionist_count, difficulty_average, quality_average, fa_username, fa_at)
+      SELECT board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
+             ascensionist_count, difficulty_average, quality_average, fa_username, fa_at
+        FROM board_climb_stats
+       WHERE board_type = ${boardType}
+         AND ascensionist_count > 0
+      RETURNING 1
+    )
+    SELECT count(*)::int AS written FROM inserted
   `);
 
-  const written = affectedRowCount(result);
+  const written = Number(rowsOf<{ written: number | string }>(result)[0]?.written ?? 0);
 
   // Commit the watermark only after the insert succeeds, so a crash mid-insert
   // retries next cycle instead of silently skipping a week. (In a transaction

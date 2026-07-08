@@ -154,4 +154,54 @@ describe('duplicate upstream account link guard', () => {
       expect(await mappingRows(USER_B, 'kilter')).toHaveLength(1);
     });
   });
+
+  // The check-then-write guard is TOCTOU by nature: without serialization, two
+  // transactions racing on the same upstream account can both read "no
+  // conflicting owner" before either commits, and both links land. The
+  // pg_advisory_xact_lock taken at the top of each guard (keyed on the
+  // upstream identity) makes the sequence linear, so exactly one of two
+  // PARALLEL linkers must win — the loser blocks on the lock, then sees the
+  // winner's committed claim. These run both saves concurrently on separate
+  // pool connections (backend pool max is 10) against the real DB.
+  describe('concurrent linkers (TOCTOU serialization via advisory lock)', () => {
+    it('exactly one of two parallel Aurora links for the same upstream account wins', async () => {
+      const outcomes = await Promise.allSettled([
+        saveAuroraCredential({ userId: USER_A, boardType: 'tension', username: 'climber-a', password: 'pw' }),
+        saveAuroraCredential({ userId: USER_B, boardType: 'tension', username: 'climber-b', password: 'pw' }),
+      ]);
+
+      const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toBeInstanceOf(DuplicateBoardLinkError);
+
+      // Exactly one credential row claims the upstream account — never both.
+      const claims = await db
+        .select({ userId: auroraCredentials.userId })
+        .from(auroraCredentials)
+        .where(
+          and(eq(auroraCredentials.boardType, 'tension'), eq(auroraCredentials.auroraUserId, TENSION_UPSTREAM_ID)),
+        );
+      expect(claims).toHaveLength(1);
+    });
+
+    it('exactly one of two parallel Kilter links for the same sub wins', async () => {
+      const outcomes = await Promise.allSettled([
+        saveKilterCredential({ userId: USER_A, refreshToken: 'refresh-a', kilterUserId: KILTER_SUB, username: 'a' }),
+        saveKilterCredential({ userId: USER_B, refreshToken: 'refresh-b', kilterUserId: KILTER_SUB, username: 'b' }),
+      ]);
+
+      const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toBeInstanceOf(DuplicateBoardLinkError);
+
+      // Exactly one mapping row claims the Keycloak sub — never both.
+      const claims = await db
+        .select({ userId: userBoardMappings.userId })
+        .from(userBoardMappings)
+        .where(and(eq(userBoardMappings.boardType, 'kilter'), eq(userBoardMappings.boardUserIdText, KILTER_SUB)));
+      expect(claims).toHaveLength(1);
+    });
+  });
 });

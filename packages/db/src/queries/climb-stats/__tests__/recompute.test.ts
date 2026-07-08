@@ -37,10 +37,13 @@ void describe('recomputeClimbStatsBulk', () => {
     const updateSql = sqlText(db.queries[1]);
     assert.match(updateSql, /UPDATE board_climb_stats/);
     // The counting rule + provenance guard must be present in the UPDATE. The
-    // guard is FLASH/SEND-scoped: an imported attempt must not disqualify a
-    // native send (upstream counts have no bids).
+    // upstream-represented flag is scoped to imported FLASH/SEND ticks (an
+    // imported bid must not disqualify a native send — upstream ascent counts
+    // have no bids), and the native side is the absorption-aware flag (a
+    // pushed-back tick the upstream snapshot has plausibly re-counted stops
+    // contributing).
     assert.match(updateSql, /bool_or\(bt\.origin <> 'native' AND bt\.status IN \('flash','send'\)\)/);
-    assert.match(updateSql, /has_send AND NOT has_upstream/);
+    assert.match(updateSql, /has_unabsorbed_native_send AND NOT has_upstream/);
     // Owned-climb quality: quality = 0 sentinel excluded; ascensionist = upstream + boardsesh.
     assert.match(updateSql, /AVG\(NULLIF\(bt\.quality, 0\)\)/);
     // Kilter-detached (upstream-deleted) rows must be excluded from the count.

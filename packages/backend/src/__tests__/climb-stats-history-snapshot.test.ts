@@ -155,11 +155,16 @@ describe('snapshotClimbStatsHistoryIfDue — weekly gate (real DB)', () => {
     // Board B (tension): must NOT be copied by a kilter snapshot.
     await seedStats({ boardType: 'tension', climbUuid: 'T1', angle: 40, ascensionistCount: 9 });
 
-    const first = await snapshotClimbStatsHistoryIfDue(db, 'kilter');
+    const logMessages: string[] = [];
+    const first = await snapshotClimbStatsHistoryIfDue(db, 'kilter', (message) => logMessages.push(message));
 
     // Only the two ascensionist_count > 0 rows are written.
     expect(first.skipped).toBe(false);
     expect(first.written).toBe(2);
+    // The logged count is the real inserted-row count, read back as a result
+    // ROW (count(*) over the insert CTE) rather than driver metadata — it must
+    // never report 0 for a non-empty write, whatever driver ran the statement.
+    expect(logMessages.some((message) => message.includes('appended 2 rows'))).toBe(true);
 
     const kilterHistory = await historyRows('kilter');
     expect(kilterHistory.map((r) => r.climb_uuid)).toEqual(['K1', 'K2']);
