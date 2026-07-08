@@ -39,6 +39,9 @@ vi.mock('@boardsesh/db/queries', () => ({
     const numericQualityAverage = Number(qualityAverage);
     return Number.isFinite(numericQualityAverage) ? Math.round(numericQualityAverage * 5) : 0;
   },
+  // Mirror the real narrowing: known tier passes through, anything else → null.
+  toConfidenceTier: (value: string | null | undefined) =>
+    value === 'confirmed' || value === 'provisional' || value === 'setter_only' ? value : null,
 }));
 
 import { hydrateClimbsByRefs } from '../graphql/resolvers/playlists/helpers/hydrate-climbs';

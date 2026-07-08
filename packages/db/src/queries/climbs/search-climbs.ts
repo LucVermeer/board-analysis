@@ -4,6 +4,7 @@ import { boardClimbs, boardClimbStats, boardClimbGrades } from '../../schema/ind
 import { createClimbFilters } from './create-climb-filters';
 import { getClimbStars } from './climb-stars';
 import { getGradeLabel } from './grade-lookup';
+import { toConfidenceTier } from '../grade-model/constants';
 import {
   normalizeSearchSortBy,
   type BoardRouteParams,
@@ -81,7 +82,7 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
     // COALESCE(universal_grade, local_grade) is doublePrecision → real JS number, but
     // coerce defensively so a stringly-typed driver value can't string-concatenate.
     boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
-    boardseshConfidence: result.boardsesh_confidence ?? null,
+    boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
   };
 }
 

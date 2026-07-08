@@ -49,9 +49,17 @@ async function seedStats(boardType: string, uuid: string, angle: number, display
 }
 
 async function seedGrade(boardType: string, uuid: string, angle: number, universalGrade: number, confidence: string) {
+  // Upsert on the (board_type, climb_uuid, angle) PK — board_climb_grades isn't
+  // in setup.ts's per-file reset list, so an aborted run can leave a row that
+  // would PK-conflict the next run's INSERT. Mirrors insertBoardClimbGrade in
+  // tick-queries.test.ts.
   await db.execute(sql`
     INSERT INTO board_climb_grades (board_type, climb_uuid, angle, local_grade, universal_grade, confidence, model_version, coeff_version)
     VALUES (${boardType}, ${uuid}, ${angle}, ${universalGrade}, ${universalGrade}, ${confidence}, 'test', 'test')
+    ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET
+      local_grade = excluded.local_grade,
+      universal_grade = excluded.universal_grade,
+      confidence = excluded.confidence
   `);
 }
 

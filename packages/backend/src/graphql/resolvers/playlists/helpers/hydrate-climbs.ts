@@ -1,7 +1,7 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { type Climb, type BoardName } from '@boardsesh/shared-schema';
 import { db } from '../../../../db/client';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
 import { boardClimbGrades } from '@boardsesh/db/schema';
 import { UNIFIED_TABLES } from '../../../../db/queries/util/table-select';
 
@@ -161,7 +161,7 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
         row.benchmark_difficulty && row.benchmark_difficulty > 0 ? row.benchmark_difficulty.toString() : null,
       boardType: boardName,
       boardseshDifficulty: row.boardsesh_difficulty == null ? null : Number(row.boardsesh_difficulty),
-      boardseshConfidence: row.boardsesh_confidence ?? null,
+      boardseshConfidence: toConfidenceTier(row.boardsesh_confidence),
     });
   }
 

@@ -439,12 +439,10 @@ export const climbQueries = {
     ctx: ConnectionContext,
   ) => {
     await applyRateLimit(ctx, 60, 'boardsesh-grades-for-angles');
+    // BoardNameSchema is z.enum(SUPPORTED_BOARDS), so validateInput already
+    // rejects any unsupported board — no extra isValidBoardName guard needed.
     validateInput(BoardNameSchema, boardName, 'boardName');
     validateInput(ExternalUUIDSchema, climbUuid, 'climbUuid');
-
-    if (!isValidBoardName(boardName)) {
-      throw new Error(`Invalid board name: ${boardName}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
-    }
 
     const rows = await dbRead
       .select({

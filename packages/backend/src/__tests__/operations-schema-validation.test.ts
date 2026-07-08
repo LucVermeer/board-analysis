@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vite-plus/test';
 import { readFileSync } from 'fs';
-import { buildSchema, parse, validate, type DocumentNode, type GraphQLSchema } from 'graphql';
+import { buildSchema, parse, validate, visit, type DocumentNode, type GraphQLSchema } from 'graphql';
 import { typeDefs } from '@boardsesh/shared-schema';
 import * as publicOperations from '@boardsesh/graphql/operations';
 import * as accountOperations from '@boardsesh/graphql/operations/account';
@@ -37,6 +37,42 @@ function readNativeIosQueueUpdatesOperation(): string {
   }
 
   return queryMatch[1];
+}
+
+// Pull the body of a backtick-template `const NAME = \`...\`` out of a source
+// file. Used to read mobile's SUBSCRIPTION_CLIMB_FIELDS without importing the
+// mobile package (which pulls RN-only deps into this backend test).
+function extractTemplateConst(source: string, constName: string): string {
+  const match = source.match(new RegExp(`${constName}\\s*=\\s*\`([\\s\\S]*?)\``));
+  if (!match?.[1]) {
+    throw new Error(`Could not extract ${constName} template literal from mobile operations.ts`);
+  }
+  return match[1];
+}
+
+function readMobileSubscriptionClimbFields(): string {
+  const mobileOperationsSource = readFileSync(
+    new URL('../../../../packages/mobile/src/lib/graphql/operations.ts', import.meta.url),
+    'utf-8',
+  );
+  return extractTemplateConst(mobileOperationsSource, 'SUBSCRIPTION_CLIMB_FIELDS');
+}
+
+// Collect the field names selected inside every `climb { ... }` selection set of
+// a GraphQL operation document. Both the shared queue-session subscription and a
+// wrapped copy of the mobile fragment feed through this, so parity is compared
+// field-set to field-set with graphql's own parser (no string diffing).
+function climbFieldNames(operationSource: string): Set<string> {
+  const fields = new Set<string>();
+  visit(parse(operationSource), {
+    Field(node) {
+      if (node.name.value !== 'climb' || !node.selectionSet) return;
+      for (const selection of node.selectionSet.selections) {
+        if (selection.kind === 'Field') fields.add(selection.name.value);
+      }
+    },
+  });
+  return fields;
 }
 
 /**
@@ -103,6 +139,55 @@ describe('native iOS queue subscription drift guard', () => {
     expect(normalizeGraphQLOperation(nativeOperation)).toBe(
       normalizeGraphQLOperation(queueSessionOperations.NATIVE_IOS_QUEUE_UPDATES),
     );
+  });
+});
+
+// The mobile app hand-maintains SUBSCRIPTION_CLIMB_FIELDS (a plain
+// string-interpolated selection in packages/mobile/src/lib/graphql/operations.ts,
+// not a shared GraphQL fragment). It is a second maintenance point against the
+// shared queue-session CLIMB_FIELDS: a field added only to the shared fragment
+// would silently drop out of party-mode subscription payloads on mobile, so the
+// queue row and re-opened drawer render with empty grade / quality / rating.
+// This asserts every field the shared QUEUE_UPDATES subscription selects on
+// `climb` is also selected by mobile (superset-or-equal).
+//
+// The deliberately-slim NATIVE_IOS_QUEUE_UPDATES selection is a SEPARATE native
+// decode path and is intentionally NOT part of this parity check — it is guarded
+// against drift by the exact-match test above.
+describe('mobile SUBSCRIPTION_CLIMB_FIELDS is a superset of the shared queue-session climb fragment', () => {
+  // Fields the shared fragment selects that the mobile subscription intentionally
+  // omits. Keep empty unless there is a documented reason a climb field must not
+  // ride the mobile socket; adding one here is an explicit, reviewed exception.
+  const INTENTIONAL_MOBILE_OMISSIONS = new Set<string>();
+
+  const sharedClimbFields = climbFieldNames(queueSessionOperations.QUEUE_UPDATES);
+  // Wrap the bare mobile field list in a `climb { ... }` selection so the same
+  // parser-driven collector applies.
+  const mobileClimbFields = climbFieldNames(`{ climb { ${readMobileSubscriptionClimbFields()} } }`);
+
+  it('both fragments select a non-empty set of climb fields', () => {
+    expect(sharedClimbFields.size).toBeGreaterThan(0);
+    expect(mobileClimbFields.size).toBeGreaterThan(0);
+  });
+
+  it('every shared climb field is present in the mobile fragment', () => {
+    const missing = [...sharedClimbFields].filter(
+      (field) => !mobileClimbFields.has(field) && !INTENTIONAL_MOBILE_OMISSIONS.has(field),
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `mobile SUBSCRIPTION_CLIMB_FIELDS is missing shared queue-session climb fields: ${missing.join(', ')}.\n` +
+          'Add them to packages/mobile/src/lib/graphql/operations.ts, or (with a reason) to INTENTIONAL_MOBILE_OMISSIONS.',
+      );
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('carries the Boardsesh grade fields on both sides', () => {
+    for (const field of ['boardseshDifficulty', 'boardseshConfidence']) {
+      expect(sharedClimbFields.has(field)).toBe(true);
+      expect(mobileClimbFields.has(field)).toBe(true);
+    }
   });
 });
 

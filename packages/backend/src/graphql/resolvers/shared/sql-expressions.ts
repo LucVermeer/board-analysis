@@ -1,4 +1,4 @@
-import { sql, eq, and } from 'drizzle-orm';
+import { sql, eq, and, type SQL } from 'drizzle-orm';
 import { aliasedTable } from 'drizzle-orm/alias';
 import * as dbSchema from '@boardsesh/db/schema';
 import { db } from '../../../db/client';
@@ -63,47 +63,67 @@ export const difficultyNameWithFallbackExpr = sql<string | null>`COALESCE(
 export const consensusDifficultyExpr = sql<number | null>`ROUND(${dbSchema.boardClimbStats.displayDifficulty})`;
 
 /**
- * JOIN condition for the Boardsesh grade table (`board_climb_grades`) on a tick
- * row, keyed on the tick's OWN angle + board type + the alias-resolved canonical
- * climb UUID. Mirrors the `board_climb_stats` join the tick queries already do
- * (`COALESCE(board_climb_aliases.canonical_uuid, boardsesh_ticks.climb_uuid)`),
+ * SINGLE SOURCE OF TRUTH for the Boardsesh grade↔tick JOIN condition on the
+ * `board_climb_grades` table, keyed on the tick's OWN angle + board type + the
+ * alias-resolved canonical climb UUID. Mirrors the `board_climb_stats` join the
+ * tick queries already do (`COALESCE(aliases.canonical_uuid, ticks.climb_uuid)`),
  * so a tick pointing at a deduped-away alias UUID still resolves its grade.
  *
- * ## Required joins (in order)
+ * The three tables are named by the CALLER, so both worlds share one join shape:
+ *  - the Drizzle tick queries pass the real (unaliased) table names
+ *    (`boardsesh_ticks`, `board_climb_grades`, `board_climb_aliases`) — Drizzle
+ *    renders those tables unaliased, so bare table-name qualification resolves;
+ *  - the raw-SQL session-feed queries pass their short aliases (`t`, `bcg`, `bca`).
+ *
+ * Emits identifiers only, no bound params (the three alias strings are internal
+ * constants, never user input), so it composes safely into both a Drizzle
+ * `.leftJoin(table, <this>)` and a raw `sql\`... ON ${<this>}\`` fragment.
+ *
+ * ## Required joins (prerequisite — enforced by the call signature)
  *
  * A query using this condition must already have joined:
- *  1. `boardClimbAliases` — on (climb_uuid = alias_uuid, board_type) so the
- *     COALESCE below falls back to the tick's own climb UUID for non-aliased ticks.
- *  2. `boardClimbGrades` via this condition, as a LEFT JOIN — a climb with no
+ *  1. `board_climb_aliases` — on (alias_uuid = ticks.climb_uuid, same board_type)
+ *     so the COALESCE below falls back to the tick's own climb UUID for
+ *     non-aliased ticks. The caller must name it via `aliases`.
+ *  2. `board_climb_grades` via this condition, as a LEFT JOIN — a climb with no
  *     grade row (MoonBoard, too few ascents) returns NULL grade fields, which is
  *     the safe-degradation path everywhere (the UI keeps the Aurora grade).
  *
- * Example:
+ * Example (Drizzle):
  * ```ts
  * db.select({ boardseshDifficulty: boardseshDifficultyExpr, boardseshConfidence: boardseshConfidenceExpr })
  *   .from(boardseshTicks)
  *   .leftJoin(boardClimbAliases, ...)
- *   .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
+ *   .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoin({
+ *     ticks: 'boardsesh_ticks', grades: 'board_climb_grades', aliases: 'board_climb_aliases',
+ *   }))
  * ```
  *
- * `fetchTickHighlightsByUuid` and `fetchHardestSendsBatch` in
- * `../social/session-feed.ts` duplicate this same condition as raw SQL
- * (`bcg.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND ...`)
- * instead of reusing this constant — those queries hand-alias their tables
- * (t/bca/bcg), which this Drizzle-object-based condition can't target. If
- * the join condition changes here, update those two raw-SQL sites too.
+ * @param ticks   table name/alias for `boardsesh_ticks` ('boardsesh_ticks' or 't')
+ * @param grades  table name/alias for `board_climb_grades` ('board_climb_grades' or 'bcg')
+ * @param aliases table name/alias for `board_climb_aliases` ('board_climb_aliases' or 'bca')
  */
-export const boardseshGradeTickJoinCondition = and(
-  sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbGrades.climbUuid}`,
-  eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbGrades.boardType),
-  eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbGrades.angle),
-);
+export function boardseshGradeTickJoin({
+  ticks,
+  grades,
+  aliases,
+}: {
+  ticks: string;
+  grades: string;
+  aliases: string;
+}): SQL {
+  return sql.raw(
+    `COALESCE(${aliases}.canonical_uuid, ${ticks}.climb_uuid) = ${grades}.climb_uuid` +
+      ` AND ${ticks}.board_type = ${grades}.board_type` +
+      ` AND ${ticks}.angle = ${grades}.angle`,
+  );
+}
 
 /**
  * Boardsesh grade for the joined `board_climb_grades` row, flattened to a single
  * value on the shared difficulty scale: the cross-board universal grade when
  * present, else the within-board local grade. NULL when no grade row is joined.
- * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoinCondition}).
+ * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoin}).
  */
 export const boardseshDifficultyExpr = sql<number | null>`COALESCE(
   ${dbSchema.boardClimbGrades.universalGrade},
@@ -114,14 +134,15 @@ export const boardseshDifficultyExpr = sql<number | null>`COALESCE(
  * Boardsesh grade confidence tier ('confirmed' | 'provisional' | 'setter_only')
  * from the joined `board_climb_grades` row; NULL when no grade row is joined.
  * The UI keeps the Aurora grade when this is NULL or 'setter_only'.
- * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoinCondition}).
+ * Requires the `boardClimbGrades` LEFT JOIN (see {@link boardseshGradeTickJoin}).
  *
  * Plain column reference, not a `sql<...>` wrapper: `confidence` is `.notNull()`
  * on `board_climb_grades` itself, so Drizzle's inferred TS type here is `string`,
  * not `string | null` — but a LEFT JOIN miss still returns `null` at runtime.
- * Every call site applies `?? null` after selecting this, so the narrower
- * compile-time type doesn't hide a real bug; if a future call site consumes
- * this value without that fallback, re-wrap as `sql<string | null>`.
+ * Every call site runs this through `toConfidenceTier` (@boardsesh/db/queries)
+ * before emitting it, which both narrows the value to the {@link ConfidenceTier}
+ * union and folds a LEFT JOIN miss (or an unknown/future tier) to `null`, so the
+ * narrower compile-time type here doesn't hide a real bug.
  */
 export const boardseshConfidenceExpr = dbSchema.boardClimbGrades.confidence;
 

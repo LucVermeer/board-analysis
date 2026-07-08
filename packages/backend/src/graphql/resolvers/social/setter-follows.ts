@@ -3,7 +3,7 @@ import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } 
 import { executeRows } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import {
   FollowSetterInputSchema,
@@ -323,7 +323,7 @@ export const setterFollowQueries = {
             : null,
         boardType: boardName,
         boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
-        boardseshConfidence: result.boardsesh_confidence ?? null,
+        boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
       }));
 
       return { climbs, totalCount, hasMore };
@@ -441,7 +441,7 @@ export const setterFollowQueries = {
               : null,
           boardType: boardName,
           boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
-          boardseshConfidence: result.boardsesh_confidence ?? null,
+          boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
         };
       });
 
@@ -631,7 +631,7 @@ export const setterFollowQueries = {
             : null,
         boardType: boardName,
         boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
-        boardseshConfidence: result.boardsesh_confidence ?? null,
+        boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
       };
     });
 

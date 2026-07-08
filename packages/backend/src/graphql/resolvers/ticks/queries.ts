@@ -8,6 +8,7 @@ import {
 } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
+import { toConfidenceTier } from '@boardsesh/db/queries';
 import { requireAuthenticated, applyRateLimit, validateInput, isNoMatchClimb } from '../shared/helpers';
 import {
   consensusDifficultyNameExpr,
@@ -17,8 +18,16 @@ import {
   consensusGradeJoinCondition,
   boardseshDifficultyExpr,
   boardseshConfidenceExpr,
-  boardseshGradeTickJoinCondition,
+  boardseshGradeTickJoin,
 } from '../shared/sql-expressions';
+
+// The `board_climb_grades` join shape lives in ONE place (boardseshGradeTickJoin).
+// These queries join the real (unaliased) tables, so pass their table names.
+const BOARDSESH_GRADE_TICK_JOIN = boardseshGradeTickJoin({
+  ticks: 'boardsesh_ticks',
+  grades: 'board_climb_grades',
+  aliases: 'board_climb_aliases',
+});
 import type { z } from 'zod';
 import { GetTicksInputSchema, BoardNameSchema, AscentFeedInputSchema } from '../../../validation/schemas';
 import { escapeLikePattern } from '../../../utils/like-pattern';
@@ -223,7 +232,7 @@ export const tickQueries = {
       )
       // Boardsesh grade for this tick's climb at the tick's OWN angle (aliases
       // resolved via the join above). LEFT JOIN so an ungraded climb still returns.
-      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
+      .leftJoin(dbSchema.boardClimbGrades, BOARDSESH_GRADE_TICK_JOIN)
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
@@ -289,7 +298,7 @@ export const tickQueries = {
         // Boardsesh grade fallback fields (nullable). COALESCE(universal, local)
         // is doublePrecision → real JS number, but coerce defensively.
         boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
-        boardseshConfidence: boardseshConfidence ?? null,
+        boardseshConfidence: toConfidenceTier(boardseshConfidence),
         upvotes: votes ? Number(votes.upvotes) : 0,
         downvotes: votes ? Number(votes.downvotes) : 0,
         commentCount: commentMap.get(tick.uuid) ?? 0,
@@ -349,7 +358,7 @@ export const tickQueries = {
       )
       // Boardsesh grade at the tick's OWN angle (aliases resolved above). LEFT JOIN
       // so an ungraded climb still returns; the grade fields come back NULL.
-      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
+      .leftJoin(dbSchema.boardClimbGrades, BOARDSESH_GRADE_TICK_JOIN)
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
@@ -366,7 +375,7 @@ export const tickQueries = {
       difficulty: tick.difficulty,
       effectiveDifficulty,
       boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
-      boardseshConfidence: boardseshConfidence ?? null,
+      boardseshConfidence: toConfidenceTier(boardseshConfidence),
       isBenchmark: tick.isBenchmark,
       comment: tick.comment,
       climbedAt: tick.climbedAt,
@@ -489,7 +498,7 @@ export const tickQueries = {
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
       // Boardsesh grade at the tick's OWN angle (aliases resolved above). LEFT JOIN
       // keeps ungraded ascents; grade fields come back NULL (safe fallback).
-      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition);
+      .leftJoin(dbSchema.boardClimbGrades, BOARDSESH_GRADE_TICK_JOIN);
 
     // Full conditions including climb name filter (requires JOIN)
     const allConditions = [...tickConditions, ...buildAscentClimbConditions(validatedInput)];
@@ -647,7 +656,7 @@ export const tickQueries = {
             consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
           consensusDifficultyName,
           boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
-          boardseshConfidence: boardseshConfidence ?? null,
+          boardseshConfidence: toConfidenceTier(boardseshConfidence),
           isBenchmark: Boolean(resolvedIsBenchmark),
           isNoMatch: isNoMatchClimb(climbDescription),
           qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
@@ -892,7 +901,7 @@ export const tickQueries = {
       .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
       // Boardsesh grade at each tick's OWN angle (aliases resolved above). LEFT
       // JOIN keeps ungraded ticks; grade fields come back NULL (safe fallback).
-      .leftJoin(dbSchema.boardClimbGrades, boardseshGradeTickJoinCondition)
+      .leftJoin(dbSchema.boardClimbGrades, BOARDSESH_GRADE_TICK_JOIN)
       .where(
         and(
           ...groupFilterConditions,
@@ -1011,7 +1020,7 @@ export const tickQueries = {
           consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
         consensusDifficultyName,
         boardseshDifficulty: boardseshDifficulty == null ? null : Number(boardseshDifficulty),
-        boardseshConfidence: boardseshConfidence ?? null,
+        boardseshConfidence: toConfidenceTier(boardseshConfidence),
         qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
         isBenchmark: Boolean(resolvedIsBenchmark),
         isNoMatch,
