@@ -186,10 +186,6 @@ export function foldCatalogStat(
   accumByKey: Map<string, StatAccum>,
   stat: KilterCatalogStat,
   canonicalUuid: string,
-  // Era fallback for the quality-scale correction when the stat row has no
-  // fa_at (~2.6k rated kilter rows, ~64% pre-cutover): the climb's creation
-  // timestamp. Null when the caller doesn't know it → unknown-era passthrough.
-  climbCreatedAt: string | null = null,
 ): void {
   const key = `${canonicalUuid}|${stat.angle}`;
   let accum = accumByKey.get(key);
@@ -208,12 +204,12 @@ export function foldCatalogStat(
     accumByKey.set(key, accum);
   }
   accum.kilterCount += stat.ascentCount;
-  // Kilter Grips reports a MIXED-scale quality average (Aurora-era 1-3 blended
-  // with Grips-era 1-5). correctGripsQualityAverage puts it on the canonical 1-5
-  // scale using the climb's era (fa_at, falling back to the climb's creation
-  // time when the stat row has no FA) and is self-contained on range: unrated
-  // (≤0) and garbage (>5) both come back null, so no further guard is needed.
-  const incomingQuality = correctGripsQualityAverage(stat.qualityAverage, stat.faAt ?? climbCreatedAt);
+  // Kilter Grips' qualityAverage is ALREADY on the 1-5 scale (Kilter migrated
+  // its legacy 1-3 ratings to 1-5 itself), so we store it verbatim —
+  // correctGripsQualityAverage only guards against non-ratings (≤0 / >5 → null).
+  // Do NOT rescale it: an earlier 2q−1 "correction" double-converted every
+  // climb rated ≥3 up to 5 stars (see quality-scale.ts).
+  const incomingQuality = correctGripsQualityAverage(stat.qualityAverage);
   // Difficulty ingest guard: id 1 doesn't exist and 0 is a "no data" sentinel
   // (valid grade ids are ~10-33), so treat anything ≤ 1 as "no grade" → null.
   const incomingDisplayDifficulty = guardDifficulty(stat.currentDifficultyId ?? stat.difficultyAverage);
@@ -253,14 +249,13 @@ export function foldCatalogStatOnce(
   seenSourceStats: Set<string>,
   stat: KilterCatalogStat,
   canonicalUuid: string,
-  climbCreatedAt: string | null = null,
 ): boolean {
   const sourceKey = catalogStatSourceKey(stat);
   if (seenSourceStats.has(sourceKey)) {
     return false;
   }
   seenSourceStats.add(sourceKey);
-  foldCatalogStat(accumByKey, stat, canonicalUuid, climbCreatedAt);
+  foldCatalogStat(accumByKey, stat, canonicalUuid);
   return true;
 }
 
@@ -347,10 +342,6 @@ async function syncBoardLayoutGroup(
 
   // lower(sourceUuid) → canonicalUuid, for routing stats. Spans the whole group.
   const climbUuidToCanonical = new Map<string, string>();
-  // Source-uuid → climb creation timestamp, the era fallback for stats rows
-  // that carry no fa_at (see foldCatalogStat).
-  const createdAtBySourceUuid = new Map<string, string>();
-
   for (const gripsLayoutUuid of gripsLayoutUuids) {
     const climbs = await withToken(state, (token) => fetchLayoutClimbs(token, gripsLayoutUuid));
 
@@ -368,7 +359,6 @@ async function syncBoardLayoutGroup(
       if (!climb.isListed || climb.isDraft || climb.isDeleted) continue;
       result.climbsSeen += 1;
       const lowerUuid = climb.climbUuid.toLowerCase();
-      if (climb.createdAt) createdAtBySourceUuid.set(lowerUuid, climb.createdAt);
 
       // 1. UUID identity — the Grips catalog inherited Aurora's climb UUIDs, so
       //    most incoming climbs already exist as their own canonical. Match on
@@ -579,13 +569,7 @@ async function syncBoardLayoutGroup(
     for (const stat of stats) {
       const canonicalUuid = climbUuidToCanonical.get(stat.climbUuid.toLowerCase());
       if (!canonicalUuid) continue; // stat for a filtered/unknown climb
-      foldCatalogStatOnce(
-        statsByCanonicalAngle,
-        seenSourceStats,
-        stat,
-        canonicalUuid,
-        createdAtBySourceUuid.get(stat.climbUuid.toLowerCase()) ?? null,
-      );
+      foldCatalogStatOnce(statsByCanonicalAngle, seenSourceStats, stat, canonicalUuid);
     }
   }
 
@@ -600,8 +584,8 @@ async function syncBoardLayoutGroup(
     // upstream term). On a fresh INSERT quality_average == this value because no
     // Boardsesh votes exist yet; on conflict quality_average is re-blended below.
     upstreamQualityAverage: accum.qualityAverage,
-    // qualityAverage was put on the canonical 1-5 scale by correctGripsQualityAverage
-    // in the fold above (Aurora-era 1-3 → 1-5, Grips-era passthrough).
+    // qualityAverage is Grips' own 1-5 value, stored verbatim in the fold above
+    // (correctGripsQualityAverage only drops non-ratings).
     qualityNormalized: true,
     faUsername: accum.faUsername,
     faAt: accum.faAt,
@@ -643,8 +627,7 @@ async function syncBoardLayoutGroup(
             difficultyAverage: sql`COALESCE(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
             upstreamQualityAverage: sql`COALESCE(excluded.upstream_quality_average, ${boardClimbStats.upstreamQualityAverage})`,
             qualityAverage: blendedQuality,
-            // quality is corrected to the canonical 1-5 scale on the way in
-            // (correctGripsQualityAverage), so a written row is always normalized.
+            // Grips quality is natively 1-5, so a written row is always normalized.
             qualityNormalized: sql`true`,
             faUsername: sql`COALESCE(excluded.fa_username, ${boardClimbStats.faUsername})`,
             faAt: sql`COALESCE(excluded.fa_at, ${boardClimbStats.faAt})`,
