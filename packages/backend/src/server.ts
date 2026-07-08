@@ -18,6 +18,7 @@ import { handleUserDataExport, handleUserDataExportDownload } from './handlers/u
 import { pruneSyncDeletions } from './services/sync-deletions-prune';
 import { handleAuroraCredentials, handleAuroraCredentialsUnsynced } from './handlers/aurora-credentials';
 import { handleAuroraImport } from './handlers/aurora-import';
+import { handleMoonBoardImport } from './handlers/moonboard-import';
 import {
   handleKilterCredentialsCallback,
   handleKilterCredentialsFinalize,
@@ -365,6 +366,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/api/moonboard-import' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleMoonBoardImport(req, res);
+        return;
+      }
+
       if (pathname === '/api/board-credentials/kilter/handoff' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleKilterCredentialsHandoff(req, res);
         return;
@@ -588,6 +594,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
     logger.info(`  Aurora credentials: ${httpScheme}://0.0.0.0:${PORT}/api/aurora-credentials`);
     logger.info(`  Aurora import: ${httpScheme}://0.0.0.0:${PORT}/api/aurora-import`);
+    logger.info(`  MoonBoard import: ${httpScheme}://0.0.0.0:${PORT}/api/moonboard-import`);
     logger.info(`  Kilter credential OAuth: ${httpScheme}://0.0.0.0:${PORT}/board-credentials/kilter/start`);
     logger.info(`  Kilter credential password: ${httpScheme}://0.0.0.0:${PORT}/api/board-credentials/kilter/password`);
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);

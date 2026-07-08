@@ -296,7 +296,7 @@ export const schemaSQL = `
   END $$;
 
   DO $$ BEGIN
-    CREATE TYPE tick_origin AS ENUM ('native', 'aurora_pull', 'kilter_pull', 'json_import');
+    CREATE TYPE tick_origin AS ENUM ('native', 'aurora_pull', 'kilter_pull', 'json_import', 'moonboard_import');
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $$;
 

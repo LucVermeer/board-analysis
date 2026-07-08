@@ -60,6 +60,29 @@ type ChunkPayload = {
   skipFinalization: boolean;
 };
 
+export type MoonBoardImportCounts = {
+  imported: number;
+  skipped: number;
+  failed: number;
+};
+
+export type MoonBoardImportResult = {
+  ticks?: MoonBoardImportCounts;
+  ascents: MoonBoardImportCounts;
+  attempts: MoonBoardImportCounts;
+  unresolvedClimbs: string[];
+  unresolvedAscentClimbs?: string[];
+  unresolvedAttemptClimbs?: string[];
+  partialError?: string;
+};
+
+export type StrippedMoonBoardExportData = unknown;
+
+export type MoonBoardImportProgressEvent =
+  | { type: 'progress'; step: string; message?: string; current?: number; total?: number }
+  | { type: 'complete'; results: MoonBoardImportResult }
+  | { type: 'error'; error: string };
+
 function endpoint(path: string): string {
   return `${BACKEND_URL.replace(/\/+$/, '')}${path}`;
 }
@@ -425,4 +448,110 @@ export async function streamAuroraImport(
   }
 
   onEvent({ type: 'complete', results: merged });
+}
+
+function parseMoonBoardImportEvent(line: string): MoonBoardImportProgressEvent | null {
+  try {
+    return JSON.parse(line) as MoonBoardImportProgressEvent;
+  } catch {
+    return null;
+  }
+}
+
+async function handleMoonBoardImportEvent(
+  event: MoonBoardImportProgressEvent,
+  onEvent: (event: MoonBoardImportProgressEvent) => void,
+): Promise<
+  { type: 'complete'; result: MoonBoardImportResult } | { type: 'error'; error: string } | { type: 'progress' }
+> {
+  if (event.type === 'complete') {
+    return { type: 'complete', result: event.results };
+  }
+  if (event.type === 'error') {
+    return { type: 'error', error: event.error };
+  }
+  onEvent(event);
+  return { type: 'progress' };
+}
+
+async function readStreamingMoonBoardImportResponse(
+  response: Response,
+  onEvent: (event: MoonBoardImportProgressEvent) => void,
+): Promise<MoonBoardImportResult> {
+  if (!hasReadableBody(response.body)) {
+    return readTextMoonBoardImportResponse(response, onEvent);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: MoonBoardImportResult | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = parseMoonBoardImportEvent(line);
+      if (!event) continue;
+      const eventResult = await handleMoonBoardImportEvent(event, onEvent);
+      if (eventResult.type === 'complete') result = eventResult.result;
+      if (eventResult.type === 'error') throw new Error(eventResult.error);
+    }
+  }
+
+  if (buffer.trim()) {
+    const event = parseMoonBoardImportEvent(buffer);
+    if (event) {
+      const eventResult = await handleMoonBoardImportEvent(event, onEvent);
+      if (eventResult.type === 'complete') result = eventResult.result;
+      if (eventResult.type === 'error') throw new Error(eventResult.error);
+    }
+  }
+
+  if (!result) throw new Error('moonboard_import_interrupted');
+  return result;
+}
+
+async function readTextMoonBoardImportResponse(
+  response: Response,
+  onEvent: (event: MoonBoardImportProgressEvent) => void,
+): Promise<MoonBoardImportResult> {
+  const text = await response.text();
+  let result: MoonBoardImportResult | null = null;
+
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const event = parseMoonBoardImportEvent(line);
+    if (!event) continue;
+    const eventResult = await handleMoonBoardImportEvent(event, onEvent);
+    if (eventResult.type === 'complete') result = eventResult.result;
+    if (eventResult.type === 'error') throw new Error(eventResult.error);
+  }
+
+  if (!result) throw new Error('moonboard_import_interrupted');
+  return result;
+}
+
+export async function streamMoonBoardImport(
+  data: StrippedMoonBoardExportData,
+  onEvent: (event: MoonBoardImportProgressEvent) => void,
+): Promise<void> {
+  const response = await authenticatedFetch(endpoint('/api/moonboard-import'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data }),
+  });
+
+  if (!response.ok) {
+    throw new Error('moonboard_import_failed');
+  }
+
+  const result = await readStreamingMoonBoardImportResponse(response, onEvent);
+  onEvent({ type: 'complete', results: result });
 }

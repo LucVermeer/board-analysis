@@ -1,0 +1,1 @@
+ALTER TYPE "public"."tick_origin" ADD VALUE 'moonboard_import';
