@@ -29,6 +29,8 @@ describe('toLogbookEntry', () => {
       is_mirror: true,
       tries: 1,
       quality: 3,
+      // No synced rating on the source tick → falls back to the tick's own quality.
+      effectiveQuality: 3,
       difficulty: 12,
       comment: 'nice',
       climbed_at: '2026-05-30T00:00:00.000Z',
