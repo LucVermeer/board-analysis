@@ -516,6 +516,17 @@ export function buildImportedClimbRow(args: {
 }
 
 /**
+ * Key for the layout-aware published-climb skip list: a placeholder is only
+ * suppressed when a real catalog climb covers the SAME (layoutId, name) pair —
+ * a same-name catalog climb on another layout is a different climb and must not
+ * block this layout's placeholder (the import's ascents would have nothing to
+ * resolve to). Exported for tests.
+ */
+export function publishedClimbKey(layoutId: number, name: string): string {
+  return `${layoutId}:${name}`;
+}
+
+/**
  * ON CONFLICT policy for the published-placeholder batch. A uuid conflict can
  * only be a placeholder this same user imported before (generateClimbImportUuid
  * hashes userId+board+layout+name+createdAt), and the update flips the stored
@@ -840,30 +851,44 @@ export async function importJsonExportData(
     const publishedClimbs = data.climbs.filter((c) => c.is_draft !== true);
 
     // For published climbs, skip creating a placeholder only when a REAL catalog
-    // climb (user_id IS NULL) already covers the name. We intentionally do NOT
-    // skip on another user's unlisted placeholder (user_id set) — placeholders
-    // are per-user import artifacts, and skipping there would leave this user's
-    // ascents unable to resolve to anything (resolveClimbNames matches a foreign
-    // placeholder neither as catalog nor as this user's own).
+    // climb (user_id IS NULL) already covers the name ON THE SAME LAYOUT. Keying
+    // by (layoutId, name) — not name alone — matters: a same-name catalog climb
+    // on ANOTHER layout is a different climb, and letting it suppress this
+    // layout's placeholder would leave the import's ascents with nothing to
+    // resolve to. We also intentionally do NOT skip on another user's unlisted
+    // placeholder (user_id set) — placeholders are per-user import artifacts, and
+    // skipping there would leave this user's ascents unable to resolve to
+    // anything (resolveClimbNames matches a foreign placeholder neither as
+    // catalog nor as this user's own).
     const publishedNames = publishedClimbs.map((c) => c.name);
-    const existingPublishedNames = new Set<string>();
-    if (publishedNames.length > 0) {
+    const publishedLayoutIds = [
+      ...new Set(
+        publishedClimbs
+          .map((climb) => resolveLayoutName(boardType, climb.layout))
+          .filter((layoutId): layoutId is number => layoutId != null),
+      ),
+    ];
+    const existingPublishedKeys = new Set<string>();
+    if (publishedNames.length > 0 && publishedLayoutIds.length > 0) {
       const chunkSize = 500;
       for (let i = 0; i < publishedNames.length; i += chunkSize) {
         const chunk = publishedNames.slice(i, i + chunkSize);
         const existing = await db
-          .select({ name: boardClimbs.name })
+          .select({ name: boardClimbs.name, layoutId: boardClimbs.layoutId })
           .from(boardClimbs)
           .where(
             and(
               eq(boardClimbs.boardType, boardType),
+              inArray(boardClimbs.layoutId, publishedLayoutIds),
               inArray(boardClimbs.name, chunk),
               eq(boardClimbs.isDraft, false),
               isNull(boardClimbs.userId),
             ),
           );
         for (const row of existing) {
-          if (row.name) existingPublishedNames.add(row.name);
+          if (row.name && row.layoutId != null) {
+            existingPublishedKeys.add(publishedClimbKey(row.layoutId, row.name));
+          }
         }
       }
     }
@@ -905,14 +930,15 @@ export async function importJsonExportData(
     // Build rows for published climbs that don't already exist
     const publishedRows: ClimbRow[] = [];
     for (const climb of publishedClimbs) {
-      if (existingPublishedNames.has(climb.name)) {
-        result.climbs.skipped++;
-        continue;
-      }
-
+      // Resolve the layout FIRST — the skip decision is per (layout, name).
       const layoutId = resolveLayoutName(boardType, climb.layout);
       if (layoutId == null) {
         result.climbs.failed++;
+        continue;
+      }
+
+      if (existingPublishedKeys.has(publishedClimbKey(layoutId, climb.name))) {
+        result.climbs.skipped++;
         continue;
       }
 
@@ -981,7 +1007,10 @@ export async function importJsonExportData(
         for (let i = 0; i < publishedRows.length; i += BATCH_SIZE) {
           const batch = publishedRows.slice(i, i + BATCH_SIZE);
           // Count actual insertions: rows whose uuid already exists are re-imports
-          // (updated in place), reported as skipped rather than imported.
+          // (updated in place), reported as skipped rather than imported. The
+          // SELECT+INSERT pair is not atomic, so these counts are approximate
+          // under concurrent same-user imports; data integrity is unaffected
+          // (the upsert itself is conflict-safe).
           const preExisting = await tx
             .select({ uuid: boardClimbs.uuid })
             .from(boardClimbs)

@@ -5,6 +5,7 @@ import {
   buildJsonImportAscentTickRow,
   generateJsonImportAuroraId,
   importedPlaceholderConflictPolicy,
+  publishedClimbKey,
   type AuroraExportAscent,
 } from './json-import';
 
@@ -124,5 +125,25 @@ describe('importedPlaceholderConflictPolicy', () => {
     expect(Object.keys(policy.set)).toEqual(['isListed']);
     const setSql = dialect.sqlToQuery(policy.set.isListed).sql.toLowerCase();
     expect(setSql).toBe('excluded.is_listed');
+  });
+});
+
+describe('publishedClimbKey (layout-aware skip list)', () => {
+  // Regression: the skip list used to match on name alone, so a same-name
+  // catalog climb on ANOTHER layout suppressed this layout's placeholder and
+  // left the import's ascents unresolvable. Keys are (layoutId, name).
+  it('a same-name catalog climb on another layout does not suppress the placeholder', () => {
+    const existingCatalogKeys = new Set([publishedClimbKey(8, 'Route A')]);
+    // Different layout → no key match → the placeholder is still created.
+    expect(existingCatalogKeys.has(publishedClimbKey(1, 'Route A'))).toBe(false);
+    // Same layout → key match → skipped as before.
+    expect(existingCatalogKeys.has(publishedClimbKey(8, 'Route A'))).toBe(true);
+  });
+
+  it('never collides across layouts or names', () => {
+    expect(publishedClimbKey(1, 'Route A')).not.toBe(publishedClimbKey(11, 'Route A'));
+    expect(publishedClimbKey(1, 'Route A')).not.toBe(publishedClimbKey(1, 'Route B'));
+    // The delimiter keeps numeric prefixes unambiguous (1 + ':1x' vs 11 + 'x').
+    expect(publishedClimbKey(1, ':1x')).not.toBe(publishedClimbKey(11, 'x'));
   });
 });

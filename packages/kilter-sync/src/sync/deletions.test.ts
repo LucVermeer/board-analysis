@@ -306,6 +306,23 @@ describe('reconcileDeletions', () => {
     expect(updates).toHaveLength(0);
   });
 
+  it('direct-uuid fallback: a NULL is_listed match is soft-deleted, not counted as drained', async () => {
+    // is_listed NULL is invisible in search but has never been written
+    // explicitly — a deletion Kilter reports must still write is_listed=false
+    // so the sync trigger fires and offline clients receive the removal.
+    const { db, updates } = mockDb([
+      [], // no alias rows
+      [{ uuid: 'ghost', isListed: null, userId: null }], // direct match, never-written flag
+      [{ count: 1000 }], // live listed count (guard)
+    ]);
+    const report = await reconcileDeletions(db, ['ghost'], true, noop);
+    expect(report.directUuidSoftDeletes).toBe(1);
+    expect(report.alreadyUnlisted).toBe(0);
+    expect(report.unknown).toBe(0);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].set).toEqual({ isListed: false });
+  });
+
   it('direct-uuid fallback: still counts a genuinely never-imported uuid as unknown', async () => {
     // 'ghost' is in neither the alias graph nor board_climbs → stays unknown.
     const { db, updates } = mockDb([

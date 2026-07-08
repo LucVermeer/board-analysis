@@ -786,6 +786,11 @@ export async function healRequiredSetIds(db: DrizzleDb, board: AuroraBoardName, 
         isNotNull(climbsSchema.frames),
       ),
     )
+    // TODO(required-set-ids): un-healable rows (frames referencing holds with no
+    // placement on the climb's layout) stay NULL and would re-occupy this cap on
+    // every run. Prod 2026-07-08: 0 such rows exist; if a population ever
+    // emerges, add a marker column (e.g. required_set_ids_unhealable_at) and
+    // exclude marked rows here so healable stragglers aren't crowded out.
     .limit(REQUIRED_SET_ID_DRAIN_LIMIT);
   if (stragglers.length === 0) return;
   await populateDenormalizedColumns(

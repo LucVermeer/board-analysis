@@ -271,9 +271,14 @@ export async function reconcileDeletions(
   // not just the actionable ones — so a row drained on a prior run is reported
   // as alreadyUnlisted instead of being re-counted as "never-imported (unknown)"
   // on every subsequent cycle:
-  //   - synced (user_id NULL) + still listed → soft-delete, exactly like a lone
-  //     self-canonical;
-  //   - synced + already unlisted → alreadyUnlisted (drained previously);
+  //   - synced (user_id NULL), is_listed true OR NULL → soft-delete, exactly
+  //     like a lone self-canonical. NULL is invisible in search but has never
+  //     been written explicitly — Kilter reporting it deleted must still write
+  //     is_listed = false so the 0144/0146 sync trigger fires and offline
+  //     clients receive the removal (the reverse of the IS NOT TRUE re-list
+  //     rule; the alias-graph classifier likewise only short-circuits on an
+  //     explicit false);
+  //   - synced + explicitly unlisted (false) → alreadyUnlisted (drained);
   //   - user-authored → protectedUserAuthored (never touched, mirrors the
   //     alias-graph protection).
   // Only uuids matched by NEITHER path remain unknown (truly never imported).
@@ -293,7 +298,7 @@ export async function reconcileDeletions(
     for (const row of directRows) {
       if (row.userId != null) {
         report.protectedUserAuthored += 1;
-      } else if (row.isListed === true) {
+      } else if (row.isListed !== false) {
         directSoftDeletes.push(row.uuid);
       } else {
         report.alreadyUnlisted += 1;
