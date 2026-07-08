@@ -18,6 +18,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Your Kilter logbook syncs again — connections that quietly stopped updating now recover on their own, and when something breaks it's recorded instead of pretending everything's fine ([#3557](https://github.com/boardsesh/boardsesh/pull/3557))
+  Linking a board account that's already connected to another Boardsesh member now warns you clearly instead of silently sending your ticks to their logbook
+  Old Kilter connections from before the new sign-in now say "reconnect to sync" instead of a confusing network error
 - Your logbook stops double-counting: if you linked a Kilter or Aurora account, the same send used to show up twice — sometimes hours off. Every send now lands on one tick at the real moment you climbed it ([#3555](https://github.com/boardsesh/boardsesh/pull/3555))
   Sends you delete in the Kilter app disappear here too, and they stop being re-pushed
   Edits you make in Boardsesh survive the next sync instead of being stomped

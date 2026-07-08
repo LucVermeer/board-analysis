@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-08T10:29:27.011Z",
+  "generatedAt": "2026-07-08T10:50:41.956Z",
   "entries": [
+    {
+      "prNumber": 3557,
+      "category": "fixed",
+      "title": "Your Kilter logbook syncs again — connections that quietly stopped updating now recover on their own, and when something breaks it's recorded instead of pretending everything's fine",
+      "mergedAt": "2026-07-08T10:49:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3557",
+      "body": "Linking a board account that's already connected to another Boardsesh member now warns you clearly instead of silently sending your ticks to their logbook\nOld Kilter connections from before the new sign-in now say \"reconnect to sync\" instead of a confusing network error"
+    },
     {
       "prNumber": 3556,
       "category": "new",
