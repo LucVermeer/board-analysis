@@ -380,7 +380,12 @@ final class BoardBleWriteFlowTests: XCTestCase {
     }
 
     // 5
-    func testWatchdogTripRecordsCanSendAtTripFalseAndFailsWritesWithTimeout() {
+    // iOS 26.x "stuck false" signature: the watchdog trips with
+    // canSendWriteWithoutResponse still false and peripheralIsReady never fired.
+    // Rather than cycle the link (which never clears the stuck property and leaves
+    // the wall dark), latch past the gate for this connection and push the parked
+    // write through — the false reading is a lie, the radio takes the write.
+    func testWatchdogTripWithStuckFalseBypassesGateAndCompletesWrite() {
         let hooks = manager.testHooks
         let peripheral = FakeWritablePeripheral(canSendDefault: false, maxWriteValueLength: 20)
         let characteristic = makeCharacteristic(properties: .writeWithoutResponse)
@@ -388,26 +393,99 @@ final class BoardBleWriteFlowTests: XCTestCase {
 
         var completionError: Error?
         var completionTelemetry: BoardBleWriteTelemetry?
+        var completionCount = 0
 
         hooks.sync {
             hooks.setConnection(peripheral: peripheral, characteristic: characteristic)
             manager.write(data: payload) { error, telemetry in
                 completionError = error
                 completionTelemetry = telemetry
+                completionCount += 1
             }
         }
+        // Parked, not written, gate still armed.
         XCTAssertTrue(peripheral.writtenChunks.isEmpty)
+        XCTAssertFalse(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
 
+        // Watchdog trips with canSend STILL false -> latch bypass, resume the
+        // parked write, write the chunk despite the false gate.
         fireLatestOneShot(label: "writeResumeWatchdog")
 
-        XCTAssertEqual(completionError as? BoardBleError, .writeTimedOut)
+        XCTAssertTrue(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+        XCTAssertEqual(peripheral.writtenChunks.count, 1)
+        XCTAssertEqual(completionCount, 0)
+        // No link cycle: the board is not disconnected and the recovery budget is
+        // untouched.
+        XCTAssertTrue(cancelledPeripheralIds.isEmpty)
+        XCTAssertEqual(hooks.sync { hooks.writeStallRecoveries }, 0)
+        XCTAssertNil(scheduler.lastOneShot(label: "writeStallRecoveryWatchdog"))
+        // Poller + watchdog retired by the resume.
+        XCTAssertTrue(scheduler.repeatingTimers[0].cancelled)
+        XCTAssertTrue(scheduler.lastOneShot(label: "writeResumeWatchdog")?.cancelled ?? false)
+
+        // The trailing chunkDelay completes the write successfully.
+        fireLatestOneShot(label: "chunkDelay")
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertNil(completionError)
         XCTAssertEqual(completionTelemetry?.watchdogTripped, true)
         XCTAssertEqual(completionTelemetry?.canSendAtTrip, false)
-        XCTAssertTrue(scheduler.repeatingTimers[0].cancelled)
-        XCTAssertEqual(hooks.sync { hooks.writeStallRecoveries }, 1)
-        XCTAssertEqual(hooks.sync { hooks.writeStallRecoveringPeripheralId }, peripheral.identifier)
-        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier])
-        XCTAssertNotNil(scheduler.lastOneShot(label: "writeStallRecoveryWatchdog"))
+        XCTAssertEqual(completionTelemetry?.lastResumeSource, "bypass")
+    }
+
+    // 5b
+    // Once bypass is latched, later writes on the SAME connection skip the gate
+    // entirely — no park, no watchdog — even with canSend still false.
+    func testBypassLatchMakesSubsequentWritesSkipTheGate() {
+        let hooks = manager.testHooks
+        let peripheral = FakeWritablePeripheral(canSendDefault: false, maxWriteValueLength: 20)
+        let characteristic = makeCharacteristic(properties: .writeWithoutResponse)
+
+        hooks.sync {
+            hooks.setConnection(peripheral: peripheral, characteristic: characteristic)
+            manager.write(data: Data((0 ..< 10).map { UInt8($0) })) { _, _ in }
+        }
+        fireLatestOneShot(label: "writeResumeWatchdog") // latch bypass, write first send
+        fireLatestOneShot(label: "chunkDelay") // complete first send
+        XCTAssertEqual(peripheral.writtenChunks.count, 1)
+        XCTAssertTrue(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+
+        // Second send: writes immediately, no park (hasPendingWriteResume stays
+        // false), canSend never consulted as a gate.
+        let repeatingTimersBefore = scheduler.repeatingTimers.count
+        hooks.sync {
+            manager.write(data: Data((100 ..< 105).map { UInt8($0) })) { _, _ in }
+        }
+        XCTAssertEqual(peripheral.writtenChunks.count, 2)
+        XCTAssertEqual(peripheral.writtenChunks[1].data, Data((100 ..< 105).map { UInt8($0) }))
+        XCTAssertFalse(hooks.sync { hooks.hasPendingWriteResume })
+        // No new poller was armed for the second write.
+        XCTAssertEqual(scheduler.repeatingTimers.count, repeatingTimersBefore)
+    }
+
+    // 5c
+    // A fresh connection re-arms the gate: the bypass latch must not persist
+    // across reconnects, so a healthy new link earns normal backpressure again.
+    func testReconnectClearsBypassLatch() {
+        let hooks = manager.testHooks
+        let peripheral = FakeWritablePeripheral(canSendDefault: false, maxWriteValueLength: 20)
+        let characteristic = makeCharacteristic(properties: .writeWithoutResponse)
+
+        hooks.sync {
+            hooks.setConnection(peripheral: peripheral, characteristic: characteristic)
+            manager.write(data: Data((0 ..< 10).map { UInt8($0) })) { _, _ in }
+        }
+        fireLatestOneShot(label: "writeResumeWatchdog") // latch bypass
+        XCTAssertTrue(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+
+        // Reconnect (new characteristic) clears the latch.
+        hooks.sync { hooks.setConnection(peripheral: peripheral, characteristic: characteristic) }
+        XCTAssertFalse(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+
+        // The next write on the re-armed link parks again on the false gate.
+        hooks.sync {
+            manager.write(data: Data((0 ..< 10).map { UInt8($0) })) { _, _ in }
+        }
+        XCTAssertTrue(hooks.sync { hooks.hasPendingWriteResume })
     }
 
     // 6
@@ -466,9 +544,20 @@ final class BoardBleWriteFlowTests: XCTestCase {
     }
 
     // 8
+    // The recovery-budget boundary is now reached via the poller-missed-flip
+    // route (canSendAtTrip == true): stuck-false (canSendAtTrip == false) latches
+    // the gate bypass instead, so it never cycles the link. This exercises the
+    // remaining handleWriteStall path — beyond budget -> writeRecoveryFailed +
+    // disconnect — with the property reading true at trip.
     func testWatchdogTripBeyondRecoveryBudgetFailsWithRecoveryFailedAndEmitsDisconnect() {
         let hooks = manager.testHooks
-        let peripheral = FakeWritablePeripheral(canSendDefault: false, maxWriteValueLength: 20)
+        // Park read = false; the watchdog's canSendAtTrip read = true (the poller
+        // never observed the flip).
+        let peripheral = FakeWritablePeripheral(
+            canSendDefault: true,
+            canSendScript: [false],
+            maxWriteValueLength: 20
+        )
         let characteristic = makeCharacteristic(properties: .writeWithoutResponse)
         let payload = Data((0 ..< 10).map { UInt8($0) })
 
@@ -492,8 +581,14 @@ final class BoardBleWriteFlowTests: XCTestCase {
                 completionError = error
             }
         }
+        // Parked on the scripted false read; the bypass latch is NOT set.
+        XCTAssertTrue(peripheral.writtenChunks.isEmpty)
+        XCTAssertFalse(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
 
         fireLatestOneShot(label: "writeResumeWatchdog")
+
+        // canSendAtTrip read true -> no bypass -> handleWriteStall -> over budget.
+        XCTAssertFalse(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
 
         XCTAssertEqual(completionError as? BoardBleError, .writeRecoveryFailed)
         XCTAssertEqual(disconnectDeviceId, peripheral.identifier.uuidString)

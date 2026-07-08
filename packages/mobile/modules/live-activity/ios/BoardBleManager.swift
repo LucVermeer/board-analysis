@@ -232,6 +232,18 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     // iOS 26.5 can flip the property without ever delivering the
     // `peripheralIsReady` delegate. Cancelled wherever the watchdog is.
     private var writeResumePoller: BleRepeatingTimer?
+    // Latched when a write watchdog trips while `canSendWriteWithoutResponse` is
+    // STILL false and `peripheralIsReady` never fired — the iOS 26.x "stuck
+    // false" signature (#3230 covered "flips true, delegate silent"; this is the
+    // stricter case where the property itself never recovers). On these boards
+    // the false reading is a lie: the radio can accept the write, but the poller
+    // and delegate never let us past the gate, so every send times out and the
+    // wall stays dark. Once latched, the without-response path stops gating on
+    // the property for THIS connection and writes chunks directly (still paced by
+    // `chunkDelay`). Reset on every fresh connection so a healthy link re-earns
+    // normal backpressure. Fixes iOS 26.5 Kilter home walls that connected but
+    // never lit a climb (write_timeout with canSendAtTrip=false on every send).
+    private var bypassCanSendWriteWithoutResponse = false
     // Telemetry for the request currently being written (#3230). Requests are
     // strictly serial (`isWriting`), so one slot suffices: seeded when a request
     // starts, finalized at whichever settle point delivers its completion.
@@ -1231,6 +1243,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         // Any successful (re)connect closes a write-stall recovery window (#3181)
         // — writes flow normally again from here.
         writeStallRecoveringPeripheralId = nil
+        // A fresh link re-earns normal backpressure: drop any stuck-false gate
+        // bypass so a healthy connection isn't permanently ungated.
+        bypassCanSendWriteWithoutResponse = false
         // Remember the board so the Live Activity lightbulb can reconnect to it
         // by identifier later, no device pick required.
         persistLastConnectedPeripheral(peripheral)
@@ -1556,7 +1571,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
 
         if request.writeType == .withoutResponse {
-            guard peripheral.canSendWriteWithoutResponse else {
+            // `bypassCanSendWriteWithoutResponse` short-circuits the gate on a
+            // connection we've already proven reports the property stuck false
+            // (see the watchdog handler below): keep writing, paced by chunkDelay.
+            guard bypassCanSendWriteWithoutResponse || peripheral.canSendWriteWithoutResponse else {
                 currentWriteTelemetry?.parkCount += 1
                 parkStartedAt = .now()
                 pendingWriteResume = { [weak self] in
@@ -1586,6 +1604,24 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                     let canSendAtTrip = self.connectedPeripheral?.canSendWriteWithoutResponse
                     self.currentWriteTelemetry?.watchdogTripped = true
                     self.currentWriteTelemetry?.canSendAtTrip = canSendAtTrip
+                    // canSendAtTrip == false on a live peripheral is the iOS 26.x
+                    // "stuck false" signature: the property never recovered across
+                    // the whole watchdog window (the poller re-read it every
+                    // writeResumePollInterval and never saw it flip, and
+                    // peripheralIsReady never fired). Cycling the link doesn't
+                    // clear it — it comes back stuck on the fresh connection too —
+                    // so instead latch past the gate for this connection and push
+                    // the parked write through. The false reading is a lie on
+                    // these OS versions; the radio takes the write. First send eats
+                    // one writeResumeTimeout; every later send on this connection
+                    // skips the gate. A vanished peripheral (nil) or a genuine
+                    // missed-flip (true) still falls through to stall recovery.
+                    if canSendAtTrip == false, !self.bypassCanSendWriteWithoutResponse {
+                        self.bypassCanSendWriteWithoutResponse = true
+                        self.logger.error("BLE write stalled: canSendWriteWithoutResponse stuck false across the watchdog window; bypassing the gate for this connection and resuming the write")
+                        self.resumeParkedWrite(source: "bypass")
+                        return
+                    }
                     self.logger.error("BLE write stalled: peripheral never became ready for write-without-response (canSendAtTrip=\(String(describing: canSendAtTrip), privacy: .public)); attempting recovery")
                     self.handleWriteStall()
                 }
@@ -1844,6 +1880,9 @@ extension BoardBleManager {
         func setConnection(peripheral: WritableBlePeripheral?, characteristic: CBCharacteristic?) {
             manager.connectedPeripheral = peripheral
             manager.writeCharacteristic = characteristic
+            // Mirror the production reset in didDiscoverCharacteristicsFor so a
+            // reconnect in a test starts with the gate re-armed.
+            manager.bypassCanSendWriteWithoutResponse = false
         }
 
         /// Set the in-memory board configuration WITHOUT the app-group persistence
@@ -1898,6 +1937,7 @@ extension BoardBleManager {
         var currentTelemetry: BoardBleWriteTelemetry? { manager.currentWriteTelemetry }
         var writeStallRecoveries: Int { manager.writeStallRecoveries }
         var writeStallRecoveringPeripheralId: UUID? { manager.writeStallRecoveringPeripheralId }
+        var bypassCanSendWriteWithoutResponse: Bool { manager.bypassCanSendWriteWithoutResponse }
     }
 
     var testHooks: TestHooks { TestHooks(manager: self) }
