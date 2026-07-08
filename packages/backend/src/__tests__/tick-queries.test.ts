@@ -110,6 +110,11 @@ const callTicks = (input: { boardType: string; climbUuids?: string[] }, userId: 
     },
   ) as Promise<Array<{ uuid: string; quality: number | null; effectiveQuality: number | null }>>;
 
+const callUserTicks = (userId: string, boardType: string) =>
+  tickQueries.userTicks(undefined, { userId, boardType }) as Promise<
+    Array<{ uuid: string; quality: number | null; effectiveQuality: number | null }>
+  >;
+
 const insertUser = async (id: string) => {
   await db.execute(sql`
     INSERT INTO "users" (id, email, name, created_at, updated_at)
@@ -1589,6 +1594,21 @@ describe('tickQueries — behavior fixes', () => {
       const row = rows.find((item) => item.uuid === 'tick-rating-ticks');
       expect(row?.quality).toBeNull();
       expect(row?.effectiveQuality).toBe(2);
+    });
+
+    it('userTicks (public): null tick quality falls back to the tick OWNER\'s synced rating', async () => {
+      const climbUuid = CLIMB_PREFIX + 'rating-userticks';
+      await insertClimb(climbUuid, 'Rating UserTicks');
+      await insertTick({ uuid: 'tick-rating-public', climbUuid, climbedAt: '2026-05-08 10:00:00', status: 'send' });
+      // The owner's rating applies; another user's rating at the same key must not.
+      await insertClimbRating({ climbUuid, rating: 4 });
+      await insertClimbRating({ climbUuid, rating: 1, userId: OTHER_USER_ID });
+
+      const rows = await callUserTicks(TEST_USER_ID, 'kilter');
+      const row = rows.find((item) => item.uuid === 'tick-rating-public');
+      // Raw quality stays null (edit flows read it); effective is the owner's 4.
+      expect(row?.quality).toBeNull();
+      expect(row?.effectiveQuality).toBe(4);
     });
 
     it('userGroupedAscentsFeed: bestQuality reflects the synced rating for a null-quality tick', async () => {

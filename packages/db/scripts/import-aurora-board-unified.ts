@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT, PgTable } from 'drizzle-orm/pg-core';
 import {
   boardAttempts,
@@ -29,6 +29,8 @@ import {
   boardUsers,
   boardWalls,
 } from '../src/schema/boards/unified.js';
+import { boardseshTicks } from '../src/schema/app/ascents.js';
+import { recomputeClimbStatsBulk } from '../src/queries/climb-stats/recompute.js';
 import { normalizeQualityTo5 } from '@boardsesh/shared-schema';
 import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
 import {
@@ -699,6 +701,34 @@ async function main() {
         ) sub
         WHERE c.uuid = sub.uuid AND c.board_type = ${boardName}
       `);
+
+      // Restore the Boardsesh tick-derived stats terms (issue #3540):
+      // clearBoardData hard-deleted every board_climb_stats row and the
+      // climb_stats reinsert above restores only the upstream side, so without
+      // this pass a re-run zeroes boardsesh_ascensionist_count AND the quality
+      // blend's boardsesh_quality_sum/count (leaving quality_average a stale
+      // pure-upstream value). Re-derive them from boardsesh_ticks for every key
+      // with >=1 flash/send tick on this board — recomputeClimbStatsBulk rebuilds
+      // the Boardsesh count, the materialized ascensionist total, the Boardsesh
+      // quality terms and the blended quality_average in one set-based pass, and
+      // its defensive seed re-creates stats rows for tick keys the reinsert
+      // didn't cover. Same transaction, so a crash can't leave the board with
+      // upstream-only stats. DIRECT_AURORA_BOARDS are small (decoy & friends),
+      // so the key set is at most a few thousand. Ticks pointing at climbs the
+      // re-import dropped entirely remain #3540's scope (climb deletion).
+      console.info(`  Recomputing Boardsesh tick-derived stats for ${boardName}...`);
+      const tickKeys = await tx
+        .selectDistinct({
+          boardType: boardseshTicks.boardType,
+          climbUuid: boardseshTicks.climbUuid,
+          angle: boardseshTicks.angle,
+        })
+        .from(boardseshTicks)
+        .where(and(eq(boardseshTicks.boardType, boardName), inArray(boardseshTicks.status, ['flash', 'send'])));
+      if (tickKeys.length > 0) {
+        await recomputeClimbStatsBulk(tx, tickKeys);
+        console.info(`  Recomputed ${tickKeys.length} tick key(s) for ${boardName}`);
+      }
     });
 
     console.info(`Finished importing ${boardName}.`);

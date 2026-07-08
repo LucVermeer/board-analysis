@@ -46,6 +46,15 @@ import { sql, type SQL } from 'drizzle-orm';
  * also changes upstream_ascensionist_count in the same SET must pass the NEW
  * (post-GREATEST) expression here, not the bare column — otherwise the blend
  * weights against the stale count.
+ *
+ * DELIBERATE TRADE — each upstream fragment is interpolated twice (numerator
+ * and denominator), so its SQL text is duplicated in the emitted statement.
+ * That's fine: every caller passes per-row column references or GREATEST/
+ * COALESCE arithmetic over them — cheap, side-effect-free expressions Postgres
+ * evaluates per row either way, never subqueries. Deduplicating would force
+ * every writer's ON CONFLICT SET into a CTE/LATERAL restructure for zero
+ * measurable gain. Keep callers to that contract: don't pass a subquery as a
+ * term; materialize it into a statement-level column (e.g. a CTE) first.
  */
 export function blendedQualityAverageSql(args: {
   upstreamQualityAverage: SQL;
