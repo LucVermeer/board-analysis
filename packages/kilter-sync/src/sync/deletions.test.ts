@@ -71,9 +71,15 @@ describe('classifyKilterDeletions', () => {
     expect(result.skippedCanonicalWithAliases).toBe(1);
   });
 
-  it('counts uuids not present in board_climb_aliases as unknown', () => {
-    const result = classifyKilterDeletions({ loweredUuids: ['ghost'], aliasRows: [], aliasCounts: noCounts });
+  it('counts uuids not present in board_climb_aliases as unknown and returns them for the direct fallback', () => {
+    const result = classifyKilterDeletions({
+      loweredUuids: ['ghost', 'dup'],
+      aliasRows: [aliasRow({ aliasUuid: 'dup', canonicalUuid: 'canon' })],
+      aliasCounts: noCounts,
+    });
+    // 'dup' is a known alias; 'ghost' is not in the graph → unknown + surfaced.
     expect(result.unknown).toBe(1);
+    expect(result.unknownLoweredUuids).toEqual(['ghost']);
   });
 });
 
@@ -250,5 +256,38 @@ describe('reconcileDeletions', () => {
     const report = await reconcileDeletions(db, [], true, noop);
     expect(report.reported).toBe(0);
     expect(deletes).toHaveLength(0);
+  });
+
+  it('direct-uuid fallback: soft-deletes a live climb whose uuid the alias graph never knew', async () => {
+    // 'ghost' is absent from board_climb_aliases (the self-alias gap) but matches
+    // a live synced board_climbs row directly. Selects in order: (1) alias rows
+    // (empty), (2) direct-uuid match, (3) live-listed count.
+    const { db, deletes, updates } = mockDb([
+      [], // no alias rows for 'ghost'
+      [{ uuid: 'ghost' }], // direct board_climbs match
+      [{ count: 1000 }], // live listed count (guard)
+    ]);
+    const report = await reconcileDeletions(db, ['ghost'], true, noop);
+    expect(report.directUuidSoftDeletes).toBe(1);
+    expect(report.softDeletes).toBe(0); // none via the alias graph
+    expect(report.unknown).toBe(0); // resolved directly → no longer unknown
+    expect(report.applied).toBe(true);
+    expect(report.appliedThisRun).toBe(1);
+    expect(deletes).toHaveLength(0); // no alias rows dropped
+    expect(updates).toHaveLength(1);
+    expect(updates[0].set).toEqual({ isListed: false });
+  });
+
+  it('direct-uuid fallback: still counts a genuinely never-imported uuid as unknown', async () => {
+    // 'ghost' is in neither the alias graph nor board_climbs → stays unknown.
+    const { db, updates } = mockDb([
+      [], // no alias rows
+      [], // no direct board_climbs match
+    ]);
+    const report = await reconcileDeletions(db, ['ghost'], false, noop);
+    expect(report.directUuidSoftDeletes).toBe(0);
+    expect(report.unknown).toBe(1);
+    expect(report.applied).toBe(false);
+    expect(updates).toHaveLength(0);
   });
 });

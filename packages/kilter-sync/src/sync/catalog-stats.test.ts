@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { foldCatalogStat, foldCatalogStatOnce } from './catalog-sync';
+import { foldCatalogStat, foldCatalogStatOnce, shouldRelistFoldedCanonical } from './catalog-sync';
 import type { KilterCatalogStat } from '../api/kilter-rest';
 import type { StatAccum } from './catalog-sync';
 
@@ -313,5 +313,28 @@ describe('foldCatalogStat — created_at era fallback', () => {
       null,
     );
     expect(accumByKey.get(`${CANON}|40`)?.qualityAverage).toBe(3.0);
+  });
+});
+
+describe('shouldRelistFoldedCanonical — re-list fold decision', () => {
+  it('re-lists a synced (non-user) canonical that is currently unlisted', () => {
+    expect(shouldRelistFoldedCanonical({ isListed: false, userId: null })).toBe(true);
+    // is_listed can be stored as NULL (never-listed synced row) — still re-list.
+    expect(shouldRelistFoldedCanonical({ isListed: null, userId: null })).toBe(true);
+  });
+
+  it('leaves an already-listed canonical untouched', () => {
+    expect(shouldRelistFoldedCanonical({ isListed: true, userId: null })).toBe(false);
+  });
+
+  it('never re-lists a user-authored canonical, listed or not', () => {
+    expect(shouldRelistFoldedCanonical({ isListed: false, userId: 'user-1' })).toBe(false);
+    expect(shouldRelistFoldedCanonical({ isListed: true, userId: 'user-1' })).toBe(false);
+  });
+
+  it('is a no-op for a canonical created this run (no DB meta entry)', () => {
+    // A canonical inserted earlier in the same run is absent from the existing
+    // meta map — it was just inserted as listed, so there is nothing to re-list.
+    expect(shouldRelistFoldedCanonical(undefined)).toBe(false);
   });
 });
