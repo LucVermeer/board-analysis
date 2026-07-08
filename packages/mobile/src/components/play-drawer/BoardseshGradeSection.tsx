@@ -2,7 +2,6 @@ import { memo, useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
-import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { DumbbellByAngleChart } from './DumbbellByAngleChart';
@@ -11,27 +10,15 @@ import { buildAngleGradeBars } from './community-utils';
 import { useBoardseshGrade, useBoardseshGradesForAngles, useClimbStatsHistory } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
-import { formatRelativeTime } from '../../lib/format-relative-time';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
-import {
-  buildBoardseshGradeView,
-  buildCorrection,
-  isMoonBoard,
-  renderDifficulty,
-  type RenderedGrade,
-} from './boardsesh-grade-utils';
+import { buildBoardseshGradeView, buildCorrection, buildTrustBand, isMoonBoard } from './boardsesh-grade-utils';
 
 type BoardseshGradeSectionProps = {
   climbUuid: string;
   boardName: string;
   angle: number;
 };
-
-/** Capitalise the board slug for prose ("kilter" → "Kilter"). Brand name — not translated. */
-function displayBoardName(boardName: string): string {
-  return boardName.charAt(0).toUpperCase() + boardName.slice(1);
-}
 
 export const BoardseshGradeSection = memo(function BoardseshGradeSection({
   climbUuid,
@@ -149,11 +136,12 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
   const showConfirmedSeal = view.kind === 'confirmed' && view.universal;
   const rangeLabel = view.kind === 'provisional' ? view.rangeLabel : null;
   const count = view.count;
-  const computedAt = view.computedAt;
-  const band = buildBand(view.gradeLow, view.gradeHigh, heroGrade, gradeFormat);
-  // The everywhere grade shows the two-grade span for a provisional read.
+  // Low/high labels for the trust line. When both bounds round to the same grade
+  // there is no real range ("V4–V4"), so we show a single-grade line instead.
+  const band = buildTrustBand(view.gradeLow, view.gradeHigh, heroGrade.label, gradeFormat);
+  // The all-boards grade shows the two-grade span for a provisional read.
   const everywhereLabel = rangeLabel ?? heroGrade.label;
-  // "about ½" for a provisional pill/payoff; "½" when confirmed.
+  // "About ½" for a provisional payoff; "½" when confirmed.
   const amount = correction?.label
     ? provisional
       ? t('boardseshGrade.hero.approx', { amount: correction.label })
@@ -207,7 +195,8 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
           </View>
         </View>
       ) : (
-        // Full correction: [THIS BOARD crowd] → [delta pill] → [EVERYWHERE Boardsesh ✓].
+        // Full correction: [THIS BOARD crowd] → [arrow] → [ALL BOARDS Boardsesh ✓].
+        // The grey→coloured grades + the single payoff sentence carry the delta.
         <View style={styles.correctionRow}>
           <View style={styles.correctionSide}>
             <Text variant="caption1" color={iosSystemColors.systemGray}>
@@ -219,15 +208,6 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
           </View>
 
           <View style={styles.correctionArrow}>
-            {amount && (
-              <View style={styles.pill}>
-                <Text variant="caption1" color={iosSystemColors.systemGray} allowFontScaling={false}>
-                  {t(correction.direction === 'easier' ? 'boardseshGrade.hero.softer' : 'boardseshGrade.hero.stiffer', {
-                    amount,
-                  })}
-                </Text>
-              </View>
-            )}
             <Icon name="arrow.right" size={18} color={iosSystemColors.systemGray} />
           </View>
 
@@ -254,27 +234,26 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
           <Text variant="subheadline" style={styles.flexText}>
             {t(correction.direction === 'easier' ? 'boardseshGrade.payoff.softer' : 'boardseshGrade.payoff.stiffer', {
               amount,
-              board: displayBoardName(boardName),
             })}
           </Text>
         </View>
       )}
 
-      {/* TRUST — owns the sample + band + freshness on one line. */}
+      {/* TRUST — the sample + (only a real) band on one line. A range collapses to
+          a single-grade line when both bounds round to the same grade. */}
       {provisional ? (
         <Text variant="footnote" color={iosSystemColors.systemOrange}>
-          {t('boardseshGrade.trust.provisional', { low: band.low, high: band.high, count })}
+          {band.sameLabel
+            ? t('boardseshGrade.trust.provisionalSingle', { count })
+            : t('boardseshGrade.trust.provisionalRange', { low: band.low, high: band.high, count })}
         </Text>
       ) : (
         <View style={styles.trustRow}>
           <Icon name="check.small" size={14} color={iosSystemColors.systemGreen} />
           <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.flexText}>
-            {t('boardseshGrade.trust.confirmed', {
-              low: band.low,
-              high: band.high,
-              count,
-              when: formatRelativeTime(computedAt),
-            })}
+            {band.sameLabel
+              ? t('boardseshGrade.trust.confirmedSingle', { count })
+              : t('boardseshGrade.trust.confirmedRange', { low: band.low, high: band.high, count })}
           </Text>
         </View>
       )}
@@ -298,19 +277,6 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
     </View>
   );
 });
-
-/** The 95%/likely band labels, falling back to the headline grade when a bound is missing. */
-function buildBand(
-  low: number | null,
-  high: number | null,
-  headline: RenderedGrade,
-  gradeFormat: GradeDisplayFormat,
-): { low: string; high: string } {
-  return {
-    low: (low != null ? renderDifficulty(low, gradeFormat)?.label : null) ?? headline.label,
-    high: (high != null ? renderDifficulty(high, gradeFormat)?.label : null) ?? headline.label,
-  };
-}
 
 const styles = StyleSheet.create({
   container: {
@@ -348,12 +314,6 @@ const styles = StyleSheet.create({
   correctionArrow: {
     alignItems: 'center',
     gap: spacing[1],
-  },
-  pill: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: borderRadius.full,
-    backgroundColor: `${iosSystemColors.systemGray}22`,
   },
   everywhereValue: {
     flexDirection: 'row',

@@ -175,7 +175,10 @@ describe('buildDumbbellAxis', () => {
     expect(axis.minId).toBeLessThanOrEqual(18);
     expect(axis.maxId).toBeGreaterThanOrEqual(24);
     expect(axis.yAxisLabelTexts).toHaveLength(axis.noOfSections + 1);
-    expect(axis.yAxisLabelTexts.every((label) => label.length > 0)).toBe(true);
+    // A V-grade spanning several ids is labelled once; the shown labels never repeat.
+    const shown = axis.yAxisLabelTexts.filter((label) => label.length > 0);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(new Set(shown).size).toBe(shown.length);
     expect(axis.maxValue).toBe(axis.maxId - axis.minId);
   });
 
@@ -191,16 +194,47 @@ describe('buildDumbbellAxis', () => {
     expect(axis.maxId).toBeGreaterThanOrEqual(24);
   });
 
-  it('steps by two ids and labels fewer gridlines on a wide span', () => {
+  it('labels every whole V-grade once across the range — no duplicates, no skipped grades', () => {
+    // Crowd + Boardsesh at V0 (12) and V6 (22); after ±2 padding the window
+    // covers V0…V8. The old id-stepped axis rendered "V0, V0, V1, V3, V4, V5,
+    // V6, V8" — V0 duplicated, V2 and V7 skipped. The fixed axis shows each
+    // whole grade exactly once, in order.
     const rows = buildDumbbellByAngleModel(
-      [bsRow({ angle: 20, universalGrade: 12 }), bsRow({ angle: 45, universalGrade: 26 })],
+      [
+        bsRow({ angle: 20, universalGrade: 12, gradeLow: 12, gradeHigh: 12 }),
+        bsRow({ angle: 45, universalGrade: 22, gradeLow: 22, gradeHigh: 22 }),
+      ],
+      [
+        crowdBar({ angle: 20, difficulty: 12, gradeName: 'V0' }),
+        crowdBar({ angle: 45, difficulty: 22, gradeName: 'V6' }),
+      ],
+      'v-grade',
+    );
+    const axis = buildDumbbellAxis(rows, 'v-grade');
+    const shown = axis.yAxisLabelTexts.filter((label) => label.length > 0);
+    expect(new Set(shown).size).toBe(shown.length); // no repeats
+    expect(shown).toEqual(['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8']); // even, no gaps
+    // Marker geometry invariant: a grade float plots at `grade - minId` in the span.
+    expect(axis.maxValue).toBe(axis.maxId - axis.minId);
+    expect(axis.yAxisLabelTexts).toHaveLength(axis.noOfSections + 1);
+  });
+
+  it('thins labels to every other grade on a very wide span but never repeats one', () => {
+    // A window spanning ~V0…V16 has too many grades to label each; the axis
+    // keeps every other, plus the top grade, and still shows no duplicates.
+    const rows = buildDumbbellByAngleModel(
+      [
+        bsRow({ angle: 20, universalGrade: 12, gradeLow: 12, gradeHigh: 12 }),
+        bsRow({ angle: 45, universalGrade: 33, gradeLow: 33, gradeHigh: 33 }),
+      ],
       [],
       'v-grade',
     );
     const axis = buildDumbbellAxis(rows, 'v-grade');
-    expect(axis.step).toBe(2);
-    expect(axis.maxValue).toBe(axis.step * axis.noOfSections);
-    expect(axis.maxId).toBe(axis.minId + axis.maxValue);
+    const shown = axis.yAxisLabelTexts.filter((label) => label.length > 0);
+    expect(new Set(shown).size).toBe(shown.length);
+    expect(shown.length).toBeLessThan(axis.noOfSections); // thinned, not one per gridline
+    expect(shown[shown.length - 1]).toBe('V16'); // top grade kept
   });
 
   it('returns a safe default window for an empty model', () => {

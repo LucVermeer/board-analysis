@@ -76,6 +76,23 @@ function boundLabel(value: number, gradeFormat: GradeDisplayFormat): string | nu
 }
 
 /**
+ * The low/high grade labels for the trust line, falling back to the headline
+ * grade when a bound is missing. `sameLabel` is true when both bounds round to
+ * the SAME displayed grade — the caller then drops the range (a "V4–V4" reads
+ * as a bug) and shows a single-grade trust line instead.
+ */
+export function buildTrustBand(
+  low: number | null,
+  high: number | null,
+  headlineLabel: string,
+  gradeFormat: GradeDisplayFormat,
+): { low: string; high: string; sameLabel: boolean } {
+  const lowLabel = (low != null ? boundLabel(low, gradeFormat) : null) ?? headlineLabel;
+  const highLabel = (high != null ? boundLabel(high, gradeFormat) : null) ?? headlineLabel;
+  return { low: lowLabel, high: highLabel, sameLabel: lowLabel === highLabel };
+}
+
+/**
  * Build the display model for a climb+angle's Boardsesh grade.
  * `grade` is null when the nightly job has no row yet (falls back to setter-only).
  */

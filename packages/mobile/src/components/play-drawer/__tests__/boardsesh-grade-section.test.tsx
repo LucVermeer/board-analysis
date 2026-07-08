@@ -99,8 +99,8 @@ describe('BoardseshGradeSection', () => {
     hookState.history = undefined;
   });
 
-  it('leads with the correction: this-board crowd → delta pill → everywhere grade + seal + trust + chart', () => {
-    // Crowd calls it V6 (22) at 40°; cross-board grade is V5 (20) — everywhere it's a grade easier.
+  it('leads with the correction: this-board crowd → arrow → all-boards grade + seal + trust + chart', () => {
+    // Crowd calls it V6 (22) at 40°; cross-board grade is V5 (20) — across all boards it's a grade easier.
     hookState.grade = grade({ universalGrade: 20 });
     hookState.history = [historyEntry(40, 22, 205), historyEntry(20, 21, 50)];
     hookState.angleRows = [angleRow(40, 20), angleRow(20, 19)];
@@ -110,11 +110,26 @@ describe('BoardseshGradeSection', () => {
 
     expect(text).toContain('boardseshGrade.hero.thisBoard');
     expect(text).toContain('boardseshGrade.hero.everywhere');
-    expect(text).toContain('boardseshGrade.hero.softer'); // delta pill
+    // The delta now reads only from the arrow + the single payoff sentence — no pill.
+    expect(container.querySelector('[data-icon="arrow.right"]')).not.toBeNull();
     expect(text).toContain('boardseshGrade.payoff.softer');
-    expect(text).toContain('boardseshGrade.trust.confirmed');
+    // gradeLow 19 (V4) / gradeHigh 21 (V5) round apart → the ranged trust line.
+    expect(text).toContain('boardseshGrade.trust.confirmedRange');
     expect(container.querySelector('[data-icon="checkmark.seal.fill"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="dumbbell"]')).not.toBeNull();
+  });
+
+  it('collapses the confirmed trust line to a single grade when both bounds round together', () => {
+    // gradeLow 20 and gradeHigh 20 both render V5 — no real range, so no "V5–V5".
+    hookState.grade = grade({ universalGrade: 20, gradeLow: 20, gradeHigh: 20 });
+    hookState.history = [historyEntry(40, 22, 205)];
+    hookState.angleRows = [angleRow(40, 20)];
+
+    const { container } = renderSection();
+    const text = container.textContent ?? '';
+
+    expect(text).toContain('boardseshGrade.trust.confirmedSingle');
+    expect(text).not.toContain('boardseshGrade.trust.confirmedRange');
   });
 
   it('renders provisional in the amber, no-seal path with the likely range', () => {
@@ -125,10 +140,10 @@ describe('BoardseshGradeSection', () => {
     const { container } = renderSection();
     const text = container.textContent ?? '';
 
-    expect(text).toContain('boardseshGrade.trust.provisional');
-    expect(text).toContain('V5–V6'); // the two-grade range shown as the everywhere grade
+    expect(text).toContain('boardseshGrade.trust.provisionalRange');
+    expect(text).toContain('V5–V6'); // the two-grade range shown as the all-boards grade
     expect(container.querySelector('[data-icon="checkmark.seal.fill"]')).toBeNull();
-    expect(text).not.toContain('boardseshGrade.trust.confirmed');
+    expect(text).not.toContain('boardseshGrade.trust.confirmedRange');
   });
 
   it('shows a muted setter call with no comparison or chart for setter_only', () => {
@@ -155,8 +170,8 @@ describe('BoardseshGradeSection', () => {
 
     expect(text).toContain('boardseshGrade.hero.thisBoardOnly');
     expect(text).toContain('boardseshGrade.localOnlyNote');
-    // No correction: no delta pill, no payoff sentence.
-    expect(text).not.toContain('boardseshGrade.hero.softer');
+    // No correction: no arrow, no payoff sentence.
+    expect(container.querySelector('[data-icon="arrow.right"]')).toBeNull();
     expect(text).not.toContain('boardseshGrade.payoff');
   });
 
@@ -169,9 +184,8 @@ describe('BoardseshGradeSection', () => {
     const text = container.textContent ?? '';
 
     expect(text).toContain('boardseshGrade.matchesBoard');
-    // The "matches this board" note is the single "same" line — no duplicate payoff row.
+    // The "matches this board" note is the single "same" line — no arrow, no payoff row.
+    expect(container.querySelector('[data-icon="arrow.right"]')).toBeNull();
     expect(text).not.toContain('boardseshGrade.payoff');
-    expect(text).not.toContain('boardseshGrade.hero.softer');
-    expect(text).not.toContain('boardseshGrade.hero.stiffer');
   });
 });

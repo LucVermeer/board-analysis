@@ -4,6 +4,7 @@ import {
   buildBoardseshGradeView,
   buildBoardseshGradeSummary,
   buildCorrection,
+  buildTrustBand,
   formatHalfGrades,
   renderDifficulty,
   isMoonBoard,
@@ -203,6 +204,33 @@ describe('buildCorrection', () => {
     expect(buildCorrection(14, 13, 'v-grade')?.direction).toBe('equal');
     const view = buildBoardseshGradeView('kilter', makeGrade({ universalGrade: 13 }), 'v-grade');
     expect(buildBoardseshGradeSummary(view, { crowdLabel: 'V1' })).toBe('V1 ✓');
+  });
+});
+
+describe('buildTrustBand', () => {
+  it('reports a real range when the bounds render different labels', () => {
+    // 18 = 6b/V4, 22 = 7a/V6.
+    expect(buildTrustBand(18, 22, 'V5', 'v-grade')).toEqual({ low: 'V4', high: 'V6', sameLabel: false });
+  });
+
+  it('collapses to a single grade when two different ids render the SAME label', () => {
+    // 10 (4a) and 12 (4c) are different ids that both render "V0" — a "V0–V0"
+    // range reads as a bug (this is the "V4+–V4+" the review flagged), so
+    // sameLabel is true and the caller shows one grade.
+    expect(buildTrustBand(10, 12, 'V0', 'v-grade')).toEqual({ low: 'V0', high: 'V0', sameLabel: true });
+  });
+
+  it('collapses to a single grade when both bounds are the same id', () => {
+    expect(buildTrustBand(20, 20, 'V5', 'v-grade')).toEqual({ low: 'V5', high: 'V5', sameLabel: true });
+  });
+
+  it('keeps a half-grade range when the labels differ by a "+" step', () => {
+    // 20 = 6c/V5 renders "V5"; 21 = 6c+/V5 renders "V5+" — a real range.
+    expect(buildTrustBand(20, 21, 'V5', 'v-grade')).toEqual({ low: 'V5', high: 'V5+', sameLabel: false });
+  });
+
+  it('falls back to the headline label when a bound is missing', () => {
+    expect(buildTrustBand(null, null, 'V7', 'v-grade')).toEqual({ low: 'V7', high: 'V7', sameLabel: true });
   });
 });
 

@@ -353,40 +353,42 @@
     "moonboardTitle": "Todavía sin estandarizar",
     "moonboardBody": "Aún no tenemos datos de grado de la comunidad para MoonBoard. Registra tus encadenes en Moon con Boardsesh para ayudar a desbloquearlo.",
     "loadError": "No se pudo cargar el grado ahora mismo.",
-    "byAngle": "Grado Boardsesh por ángulo",
+    "byAngle": "Cómo cuesta según el ángulo",
     "summaryLocal": "local",
     "matchesBoard": "Coincide con el grado de este plafón",
     "localOnlyNote": "Todavía no hay suficientes encadenes entre plafones para estandarizar.",
     "setterCall": "Criterio del setter",
     "hero": {
       "thisBoard": "Este plafón",
-      "everywhere": "En todas partes",
+      "everywhere": "Todos los plafones",
       "thisBoardOnly": "Solo este plafón",
-      "softer": "{{amount}} más blando",
-      "stiffer": "{{amount}} más duro",
-      "approx": "unos {{amount}}"
+      "approx": "Unos {{amount}}"
     },
     "payoff": {
-      "softer": "{{amount}} más blando de lo que dice este plafón {{board}}.",
-      "stiffer": "{{amount}} más duro de lo que dice este plafón {{board}}."
+      "softer": "{{amount}} más blando de lo que dice este plafón.",
+      "stiffer": "{{amount}} más duro de lo que dice este plafón."
     },
     "trust": {
-      "confirmed_one": "95% encadenan {{low}}–{{high}} · {{count}} encadene · actualizado {{when}}",
-      "confirmed_other": "95% encadenan {{low}}–{{high}} · {{count}} encadenes · actualizado {{when}}",
-      "provisional_one": "Probablemente {{low}}–{{high}} · solo {{count}} encadene",
-      "provisional_other": "Probablemente {{low}}–{{high}} · solo {{count}} encadenes",
+      "confirmedSingle_one": "Confirmado · {{count}} encadene",
+      "confirmedSingle_other": "Confirmado · {{count}} encadenes",
+      "confirmedRange_one": "Normalmente {{low}}–{{high}} · {{count}} encadene",
+      "confirmedRange_other": "Normalmente {{low}}–{{high}} · {{count}} encadenes",
+      "provisionalSingle_one": "Aún asentándose · {{count}} encadene",
+      "provisionalSingle_other": "Aún asentándose · {{count}} encadenes",
+      "provisionalRange_one": "Aún asentándose · probablemente {{low}}–{{high}} · {{count}} encadene",
+      "provisionalRange_other": "Aún asentándose · probablemente {{low}}–{{high}} · {{count}} encadenes",
       "setter": "Menos de 3 encadenes para estandarizar"
     },
     "dumbbell": {
-      "legendBoardsesh": "En todas partes (Boardsesh)",
+      "legendBoardsesh": "Todos los plafones (Boardsesh)",
       "legendCrowd": "Este plafón (comunidad)",
       "legendSize": "Punto más grande = más encadenes",
-      "tapCaption_one": "{{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadene",
-      "tapCaption_other": "{{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadenes",
+      "tapCaption_one": "{{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadene",
+      "tapCaption_other": "{{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadenes",
       "tapCaptionAgree_one": "{{angle}}° · la comunidad y Boardsesh coinciden · {{grade}} · {{count}} encadene",
       "tapCaptionAgree_other": "{{angle}}° · la comunidad y Boardsesh coinciden · {{grade}} · {{count}} encadenes",
-      "singleAngle_one": "A {{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadene",
-      "singleAngle_other": "A {{angle}}° · este plafón {{crowd}} · en todas partes {{boardsesh}} · {{count}} encadenes",
+      "singleAngle_one": "A {{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadene",
+      "singleAngle_other": "A {{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadenes",
       "crowdOnlyNote": "Todavía no hay suficientes encadenes entre plafones para comparar por ángulo."
     }
   },

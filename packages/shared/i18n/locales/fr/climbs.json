@@ -353,40 +353,42 @@
     "moonboardTitle": "Pas encore standardisé",
     "moonboardBody": "Nous n'avons pas encore de données de grade communautaires pour le MoonBoard. Enregistre tes croix Moon sur Boardsesh pour aider à le débloquer.",
     "loadError": "Impossible de charger le grade pour le moment.",
-    "byAngle": "Grade Boardsesh par angle",
+    "byAngle": "Sa difficulté selon l'angle",
     "summaryLocal": "local",
     "matchesBoard": "Correspond au grade de cette board",
     "localOnlyNote": "Pas encore assez de croix inter-boards pour standardiser.",
     "setterCall": "Avis de l'ouvreur",
     "hero": {
       "thisBoard": "Cette board",
-      "everywhere": "Partout",
+      "everywhere": "Toutes les boards",
       "thisBoardOnly": "Cette board seulement",
-      "softer": "{{amount}} plus souple",
-      "stiffer": "{{amount}} plus dur",
-      "approx": "environ {{amount}}"
+      "approx": "Environ {{amount}}"
     },
     "payoff": {
-      "softer": "{{amount}} plus souple que ce que dit cette board {{board}}.",
-      "stiffer": "{{amount}} plus dur que ce que dit cette board {{board}}."
+      "softer": "{{amount}} plus souple que ce que dit cette board.",
+      "stiffer": "{{amount}} plus dur que ce que dit cette board."
     },
     "trust": {
-      "confirmed_one": "95% enchaînent {{low}}–{{high}} · {{count}} croix · mis à jour {{when}}",
-      "confirmed_other": "95% enchaînent {{low}}–{{high}} · {{count}} croix · mis à jour {{when}}",
-      "provisional_one": "Sans doute {{low}}–{{high}} · seulement {{count}} croix",
-      "provisional_other": "Sans doute {{low}}–{{high}} · seulement {{count}} croix",
+      "confirmedSingle_one": "Confirmé · {{count}} croix",
+      "confirmedSingle_other": "Confirmé · {{count}} croix",
+      "confirmedRange_one": "En général {{low}}–{{high}} · {{count}} croix",
+      "confirmedRange_other": "En général {{low}}–{{high}} · {{count}} croix",
+      "provisionalSingle_one": "Encore en train de se caler · {{count}} croix",
+      "provisionalSingle_other": "Encore en train de se caler · {{count}} croix",
+      "provisionalRange_one": "Encore en train de se caler · sans doute {{low}}–{{high}} · {{count}} croix",
+      "provisionalRange_other": "Encore en train de se caler · sans doute {{low}}–{{high}} · {{count}} croix",
       "setter": "Moins de 3 croix pour standardiser"
     },
     "dumbbell": {
-      "legendBoardsesh": "Partout (Boardsesh)",
+      "legendBoardsesh": "Toutes les boards (Boardsesh)",
       "legendCrowd": "Cette board (communauté)",
       "legendSize": "Point plus grand = plus de croix",
-      "tapCaption_one": "{{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
-      "tapCaption_other": "{{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
+      "tapCaption_one": "{{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
+      "tapCaption_other": "{{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
       "tapCaptionAgree_one": "{{angle}}° · communauté et Boardsesh d'accord · {{grade}} · {{count}} croix",
       "tapCaptionAgree_other": "{{angle}}° · communauté et Boardsesh d'accord · {{grade}} · {{count}} croix",
-      "singleAngle_one": "À {{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
-      "singleAngle_other": "À {{angle}}° · cette board {{crowd}} · partout {{boardsesh}} · {{count}} croix",
+      "singleAngle_one": "À {{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
+      "singleAngle_other": "À {{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
       "crowdOnlyNote": "Pas encore assez de croix inter-boards pour comparer par angle."
     }
   },

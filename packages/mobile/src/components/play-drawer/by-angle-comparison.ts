@@ -13,6 +13,7 @@ import type { BoardseshGradeAtAngle } from '@boardsesh/graphql/operations';
 import {
   renderDifficulty,
   clampDifficultyId,
+  GRADE_BY_ID,
   MIN_DIFFICULTY_ID,
   MAX_DIFFICULTY_ID,
 } from '../../lib/boardsesh-grade-display';
@@ -168,23 +169,33 @@ export type DumbbellAxis = {
   minId: number;
   /** Integer grade id at the axis top. */
   maxId: number;
-  /** Grade ids per gridline section (1, or 2 for a wide span). */
-  step: number;
-  /** Number of gridline sections. */
+  /** Number of gridline sections (one per grade id: `maxId - minId`). */
   noOfSections: number;
   /** Plotted-unit span (a grade float shifted by `minId` never exceeds this). */
   maxValue: number;
-  /** Tick labels bottom→top, one per section boundary (`noOfSections + 1`). */
+  /** Tick labels bottom→top, one per section boundary (`noOfSections + 1`); a
+   *  V-grade spanning several ids is labelled once, the rest blank. */
   yAxisLabelTexts: string[];
 };
 
-// Above this many grades of span, one gridline per grade crowds the axis, so
-// we label every other grade instead.
-const DENSE_SPAN_THRESHOLD = 8;
+// Above this many distinct V-grades in the window, one label per grade crowds
+// the axis text, so we thin the labels to every other grade (the gridlines
+// themselves stay one-per-id).
+const DENSE_LABEL_THRESHOLD = 9;
 
 /**
  * Build the shared Y axis from the dumbbell rows. Falls back to a small window
  * around V0 when there are no plottable values (an empty/degenerate model).
+ *
+ * One gridline per grade id (step 1). V-grades span a VARIABLE number of ids
+ * (V0 = 4a/4b/4c, three ids; V2 = 5c, one id), so an id step wider than 1 would
+ * jump over the single-id grades and land the ticks on a duplicated/uneven set
+ * of V labels ("V0, V0, V1, V3, V5…"). Stepping by one id visits every grade;
+ * we then label only the FIRST id of each whole V-grade (V0, V1, V2…), blanking
+ * the rest, so each whole grade is labelled exactly once with no repeats and no
+ * gaps — even though the shown label follows the viewer's format (a "6c+/V5" id
+ * keyed under V5). `maxValue === maxId - minId` keeps the linear marker geometry
+ * (`localY`) exact — a grade float plots at `grade - minId` in the axis span.
  */
 export function buildDumbbellAxis(rows: DumbbellAngleRow[], gradeFormat: GradeDisplayFormat): DumbbellAxis {
   const values: number[] = [];
@@ -207,26 +218,43 @@ export function buildDumbbellAxis(rows: DumbbellAngleRow[], gradeFormat: GradeDi
     maxId = Math.min(MAX_DIFFICULTY_ID, minId + 2);
     minId = Math.max(MIN_DIFFICULTY_ID, maxId - 2);
   }
+  // maxId is already clamped to the hardest real grade, so the top tick renders
+  // a truthful label — no overflow correction needed at step 1.
 
-  const step = maxId - minId > DENSE_SPAN_THRESHOLD ? 2 : 1;
-  const noOfSections = Math.ceil((maxId - minId) / step);
-  const maxValue = step * noOfSections;
-  // Round the window up to an exact multiple of the step so every marker sits
-  // inside the plot. Normally we grow the top upward, but that can push maxId
-  // past MAX_DIFFICULTY_ID and the top tick would render a clamped, over-read
-  // label (e.g. id 34 → "V16"). When it would overflow, pin the top to the
-  // hardest real grade and grow the window downward instead, preserving the
-  // maxId − minId === maxValue invariant the marker geometry relies on.
-  maxId = minId + maxValue;
-  if (maxId > MAX_DIFFICULTY_ID) {
-    maxId = MAX_DIFFICULTY_ID;
-    minId = maxId - maxValue;
+  const noOfSections = maxId - minId;
+  const maxValue = noOfSections;
+
+  // Label the first id of each whole V-grade, blanking the rest — so a grade
+  // spanning several ids (V0 = 4a/4b/4c) is labelled once, at its lowest id.
+  // Dedup keys on the whole V-grade (`v_grade`), not the formatted label, so the
+  // axis reads V0, V1, V2… rather than the format's finer V5 / V5+ steps.
+  // `distinctIndices` collects the label positions so a wide window can thin them.
+  const yAxisLabelTexts: string[] = [];
+  const distinctIndices: number[] = [];
+  let lastVGrade: string | null = null;
+  for (let index = 0; index <= noOfSections; index++) {
+    const id = minId + index;
+    const vGrade = GRADE_BY_ID.get(id)?.v_grade ?? null;
+    const label = renderDifficulty(id, gradeFormat)?.label ?? '';
+    if (label && vGrade && vGrade !== lastVGrade) {
+      yAxisLabelTexts.push(label);
+      distinctIndices.push(index);
+      lastVGrade = vGrade;
+    } else {
+      yAxisLabelTexts.push('');
+    }
   }
 
-  const yAxisLabelTexts = Array.from(
-    { length: noOfSections + 1 },
-    (_, index) => renderDifficulty(minId + index * step, gradeFormat)?.label ?? '',
-  );
+  // Wide window: thin to every other distinct grade so the axis text stays
+  // legible, always keeping the top grade so the range reads end to end.
+  if (distinctIndices.length > DENSE_LABEL_THRESHOLD) {
+    const keep = new Set<number>();
+    for (let i = 0; i < distinctIndices.length; i += 2) keep.add(distinctIndices[i]);
+    keep.add(distinctIndices[distinctIndices.length - 1]);
+    for (const index of distinctIndices) {
+      if (!keep.has(index)) yAxisLabelTexts[index] = '';
+    }
+  }
 
-  return { minId, maxId, step, noOfSections, maxValue, yAxisLabelTexts };
+  return { minId, maxId, noOfSections, maxValue, yAxisLabelTexts };
 }
