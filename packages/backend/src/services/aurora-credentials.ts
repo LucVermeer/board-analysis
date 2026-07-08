@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, count, eq, isNull, ne, sql } from 'drizzle-orm';
 import { AuroraClimbingClient } from '@boardsesh/aurora-sync/api';
 import { decrypt, encrypt } from '@boardsesh/crypto';
 import { auroraCredentials, boardClimbs, boardseshTicks, userBoardMappings } from '@boardsesh/db/schema';
@@ -140,8 +140,12 @@ async function assertNoConflictingAuroraOwner(
  * Reject a Kilter link when another Boardsesh user already holds this Keycloak
  * `sub` (stored on `user_board_mappings.board_user_id_text`). The mapping match
  * is the core guard; the left-join to `aurora_credentials` mirrors the Aurora
- * rule so an 'expired' prior claim doesn't block a re-owner. A missing credential
- * row (NULL status) still blocks — `isNull` keeps the row.
+ * rule so an 'expired' prior claim doesn't block a re-owner. A mapping row with
+ * NO corresponding credentials row (left-join `sync_status` IS NULL) is an
+ * ORPHAN — e.g. the credentials row was deleted manually but the mapping
+ * lingered — and is treated as NON-blocking so the account stays claimable:
+ * `sync_status <> 'expired'` is NULL for an orphan, which drops it from the
+ * conflict set. Only a live claim (pending/active/error) actually blocks.
  */
 async function assertNoConflictingKilterOwner(
   tx: CredentialTransaction,
@@ -164,7 +168,9 @@ async function assertNoConflictingKilterOwner(
         eq(userBoardMappings.boardType, KILTER_BOARD_TYPE),
         eq(userBoardMappings.boardUserIdText, input.kilterUserId),
         ne(userBoardMappings.userId, input.userId),
-        or(isNull(auroraCredentials.syncStatus), ne(auroraCredentials.syncStatus, 'expired')),
+        // NULL (orphan mapping, no credentials row) and 'expired' both drop out:
+        // `<> 'expired'` is NULL for an orphan and FALSE for expired.
+        ne(auroraCredentials.syncStatus, 'expired'),
       ),
     )
     .limit(1);
@@ -356,6 +362,14 @@ export async function saveAuroraCredential(input: {
           syncError: null,
           credentialFailureCount: 0,
           lastCredentialFailureAt: null,
+          // Re-linking is a fresh start: clear the backoff scheduler fields too,
+          // otherwise a previously-failing credential stays boxed out of
+          // selection (consecutive_failures + last_sync_attempt_at drive the
+          // backoff window) for up to 6h after the user reconnects — i.e.
+          // reconnecting wouldn't actually resume sync.
+          consecutiveFailures: 0,
+          lastSyncAttemptAt: null,
+          lastSyncError: null,
           updatedAt: now,
         })
         .where(and(eq(auroraCredentials.userId, input.userId), eq(auroraCredentials.boardType, input.boardType)));
@@ -478,6 +492,13 @@ export async function saveKilterCredential(input: {
           syncError: null,
           credentialFailureCount: 0,
           lastCredentialFailureAt: null,
+          // Re-linking is a fresh start: clear the backoff scheduler fields too
+          // (see saveAuroraCredential) so a previously-failing Kilter credential
+          // is immediately selectable again instead of staying inside its
+          // backoff window after the user reconnects.
+          consecutiveFailures: 0,
+          lastSyncAttemptAt: null,
+          lastSyncError: null,
           updatedAt: now,
         })
         .where(and(eq(auroraCredentials.userId, input.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));

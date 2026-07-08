@@ -105,6 +105,25 @@ describe('duplicate upstream account link guard', () => {
 
       expect(await mappingRows(USER_B, 'tension')).toHaveLength(1);
     });
+
+    it('resets the backoff scheduler fields when a previously-failing credential is re-linked', async () => {
+      await saveAuroraCredential({ userId: USER_A, boardType: 'tension', username: 'climber-a', password: 'pw1' });
+      // Model a run of failures that boxed the credential out of selection.
+      await db
+        .update(auroraCredentials)
+        .set({ consecutiveFailures: 9, lastSyncError: 'boom', lastSyncAttemptAt: new Date(), syncStatus: 'error' })
+        .where(and(eq(auroraCredentials.userId, USER_A), eq(auroraCredentials.boardType, 'tension')));
+
+      await saveAuroraCredential({ userId: USER_A, boardType: 'tension', username: 'climber-a', password: 'pw2' });
+
+      const [row] = await auroraRows(USER_A, 'tension');
+      // Re-linking must clear the backoff clock so the reconnected account is
+      // immediately selectable — not stuck inside a 6-hour window.
+      expect(row.consecutiveFailures).toBe(0);
+      expect(row.lastSyncError).toBeNull();
+      expect(row.lastSyncAttemptAt).toBeNull();
+      expect(row.syncStatus).toBe('pending');
+    });
   });
 
   describe('Kilter (saveKilterCredential)', () => {
@@ -152,6 +171,40 @@ describe('duplicate upstream account link guard', () => {
       ).resolves.toBeUndefined();
 
       expect(await mappingRows(USER_B, 'kilter')).toHaveLength(1);
+    });
+
+    it('does not block a new owner when the prior mapping is orphaned (no credentials row)', async () => {
+      // A mapping row lingers for the sub but the credentials row was deleted
+      // (manual cleanup, partial state). The left-join sync_status is NULL —
+      // treated as NON-blocking so the account stays claimable.
+      await db.insert(userBoardMappings).values({
+        userId: USER_A,
+        boardType: 'kilter',
+        boardUserIdText: KILTER_SUB,
+        boardUsername: 'orphan-a',
+      });
+
+      await expect(
+        saveKilterCredential({ userId: USER_B, refreshToken: 'refresh-b', kilterUserId: KILTER_SUB, username: 'b' }),
+      ).resolves.toBeUndefined();
+
+      expect(await mappingRows(USER_B, 'kilter')).toHaveLength(1);
+    });
+
+    it('resets the backoff scheduler fields when a previously-failing Kilter credential is re-linked', async () => {
+      await saveKilterCredential({ userId: USER_A, refreshToken: 'refresh-1', kilterUserId: KILTER_SUB });
+      await db
+        .update(auroraCredentials)
+        .set({ consecutiveFailures: 5, lastSyncError: 'boom', lastSyncAttemptAt: new Date(), syncStatus: 'error' })
+        .where(and(eq(auroraCredentials.userId, USER_A), eq(auroraCredentials.boardType, 'kilter')));
+
+      await saveKilterCredential({ userId: USER_A, refreshToken: 'refresh-2', kilterUserId: KILTER_SUB });
+
+      const [row] = await auroraRows(USER_A, 'kilter');
+      expect(row.consecutiveFailures).toBe(0);
+      expect(row.lastSyncError).toBeNull();
+      expect(row.lastSyncAttemptAt).toBeNull();
+      expect(row.syncStatus).toBe('pending');
     });
   });
 
