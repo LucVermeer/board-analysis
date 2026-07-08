@@ -56,33 +56,41 @@ export async function snapshotClimbStatsHistoryIfDue(
 
   log?.(`[history-snapshot] weekly board_climb_stats_history snapshot is due for ${boardType}`);
 
-  // The inserted-row count is read back as a normal result ROW (count the
-  // CTE's RETURNING server-side), not from driver metadata: postgres-js puts
-  // the command-tag count on a RowList property while the Neon HTTP client
-  // uses `rowCount`, and drizzle's execute() doesn't normalize the two — a
-  // metadata read can silently be 0 on the wrong driver. A row is a row on
-  // every driver. RETURNING 1 (not *) keeps the wire/CTE payload minimal.
-  const result = await db.execute(sql`
-    WITH inserted AS (
-      INSERT INTO board_climb_stats_history
-        (board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
-         ascensionist_count, difficulty_average, quality_average, fa_username, fa_at)
-      SELECT board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
-             ascensionist_count, difficulty_average, quality_average, fa_username, fa_at
-        FROM board_climb_stats
-       WHERE board_type = ${boardType}
-         AND ascensionist_count > 0
-      RETURNING 1
-    )
-    SELECT count(*)::int AS written FROM inserted
-  `);
+  // The INSERT and the watermark commit run in ONE transaction so they are
+  // both-or-neither. If the process crashes between them, an uncommitted
+  // transaction rolls back entirely: the next cycle re-runs the snapshot
+  // cleanly instead of appending a SECOND weekly cross-section on top of the
+  // first (a duplicate week pollutes the grade backtest in gates.ts, which
+  // assumes one snapshot per board per week). A partial insert with no
+  // watermark would otherwise re-insert every cycle until a full run happened
+  // to complete both statements.
+  const written = await db.transaction(async (tx) => {
+    // The inserted-row count is read back as a normal result ROW (count the
+    // CTE's RETURNING server-side), not from driver metadata: postgres-js puts
+    // the command-tag count on a RowList property while the Neon HTTP client
+    // uses `rowCount`, and drizzle's execute() doesn't normalize the two — a
+    // metadata read can silently be 0 on the wrong driver. A row is a row on
+    // every driver. RETURNING 1 (not *) keeps the wire/CTE payload minimal.
+    const result = await tx.execute(sql`
+      WITH inserted AS (
+        INSERT INTO board_climb_stats_history
+          (board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
+           ascensionist_count, difficulty_average, quality_average, fa_username, fa_at)
+        SELECT board_type, climb_uuid, angle, display_difficulty, benchmark_difficulty,
+               ascensionist_count, difficulty_average, quality_average, fa_username, fa_at
+          FROM board_climb_stats
+         WHERE board_type = ${boardType}
+           AND ascensionist_count > 0
+        RETURNING 1
+      )
+      SELECT count(*)::int AS written FROM inserted
+    `);
 
-  const written = Number(rowsOf<{ written: number | string }>(result)[0]?.written ?? 0);
+    const insertedCount = Number(rowsOf<{ written: number | string }>(result)[0]?.written ?? 0);
+    await markWeeklyCursorDone(tx, boardType, HISTORY_CURSOR_TABLE_NAME);
+    return insertedCount;
+  });
 
-  // Commit the watermark only after the insert succeeds, so a crash mid-insert
-  // retries next cycle instead of silently skipping a week. (In a transaction
-  // both roll back together; standalone, the insert is already durable.)
-  await markWeeklyCursorDone(db, boardType, HISTORY_CURSOR_TABLE_NAME);
   log?.(`[history-snapshot] ${boardType}: appended ${written} rows to board_climb_stats_history`);
 
   return { written, skipped: false };

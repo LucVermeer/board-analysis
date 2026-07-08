@@ -202,4 +202,34 @@ describe('snapshotClimbStatsHistoryIfDue — weekly gate (real DB)', () => {
     // The earlier kilter snapshot is unaffected by the tension pass.
     expect(await historyRows('kilter')).toHaveLength(1);
   });
+
+  it('is both-or-neither: a crash between the INSERT and the watermark rolls both back', async () => {
+    await seedStats({ boardType: 'kilter', climbUuid: 'K1', angle: 40, ascensionistCount: 5 });
+
+    // Model a crash in the window snapshotClimbStatsHistoryIfDue now closes: it
+    // runs the history INSERT and the watermark write in ONE transaction, so an
+    // interruption before commit rolls BOTH back. Here we replicate that exact
+    // two-statement transaction and throw before commit; Postgres discards the
+    // whole transaction, leaving no partial state. Without the transaction the
+    // INSERT would already be durable and the next cycle would append a
+    // duplicate weekly cross-section (polluting the grade backtest in gates.ts).
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`
+          INSERT INTO board_climb_stats_history
+            (board_type, climb_uuid, angle, ascensionist_count)
+          SELECT board_type, climb_uuid, angle, ascensionist_count
+            FROM board_climb_stats
+           WHERE board_type = 'kilter' AND ascensionist_count > 0
+        `);
+        await markWeeklyCursorDone(tx, 'kilter', HISTORY_CURSOR_TABLE_NAME);
+        throw new Error('simulated crash after watermark, before commit');
+      }),
+    ).rejects.toThrow('simulated crash');
+
+    // Neither side survived: no history rows and the cursor never advanced, so
+    // the next real snapshot is still due and re-runs cleanly.
+    expect(await historyRows('kilter')).toHaveLength(0);
+    expect(await isClimbStatsHistorySnapshotDue(db, 'kilter')).toBe(true);
+  });
 });
