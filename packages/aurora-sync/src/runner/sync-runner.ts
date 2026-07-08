@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq, ne, and, or, isNotNull, sql } from 'drizzle-orm';
 
 import { auroraCredentials } from '@boardsesh/db/schema/auth';
+import { credentialRetryReadySql, selfHealStaleClimbStats } from '@boardsesh/db/queries';
 import { syncUserData } from '../sync/user-sync';
 import { syncSharedData } from '../sync/shared-sync';
 import {
@@ -35,6 +36,13 @@ const MAX_CREDENTIAL_FAILURES = 2;
 type CredentialFailureUpdate = {
   credentialFailureCount?: number;
   lastCredentialFailureAt?: Date | null;
+  // Scheduler/observability fields (distinct from the invalid-credential
+  // counter above): the attempt clock, the general consecutive-failure count
+  // that drives backoff, and the last error message. Set on the success path
+  // to reset them; failures stamp them via recordSyncFailure().
+  lastSyncAttemptAt?: Date;
+  consecutiveFailures?: number;
+  lastSyncError?: string | null;
 };
 
 export class SyncRunner {
@@ -43,6 +51,11 @@ export class SyncRunner {
   private client: RunnerClient | null = null;
   private db: RunnerDb | null = null;
   private lastSharedSyncAt = new Map<string, number>();
+  // In-memory hourly gate for the recompute self-heal. Resets to 0 on process
+  // start, so the FIRST daemon cycle after a deploy runs the self-heal
+  // immediately — exactly catching the debounced recomputes that the deploy's
+  // restart dropped (the whole point of the self-heal).
+  private lastSelfHealAt = 0;
 
   constructor(config: SyncRunnerConfig = {}) {
     this.config = config;
@@ -112,6 +125,16 @@ export class SyncRunner {
     } catch (error) {
       results.failed++;
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      // Stamp the scheduler + observability fields on EVERY failure, whatever
+      // path inside syncSingleCredential threw (transient login, invalid
+      // credential, decryption). syncSingleCredential's own error branches set
+      // the user-facing sync_status/sync_error where appropriate; this always
+      // advances last_sync_attempt_at (so the credential rotates out of the
+      // front of the queue instead of being re-picked first every cycle),
+      // bumps consecutive_failures (backoff), and records last_sync_error.
+      // Without this the transient-login path advanced NOTHING and wedged the
+      // whole board's sync — the aurora starvation bug.
+      await this.recordSyncFailure(cred, errorMsg);
       results.errors.push({
         userId: cred.userId,
         boardType: cred.boardType,
@@ -125,6 +148,29 @@ export class SyncRunner {
     }
 
     return results;
+  }
+
+  /**
+   * Record a failed sync attempt on the credential's scheduler fields. Runs on
+   * every user-sync failure regardless of which inner branch threw. Touches
+   * ONLY the attempt clock, the consecutive-failure counter (backoff), and the
+   * observability error — NOT sync_status/sync_error, which the specific error
+   * branches own (a transient failure must not flip the card to 'error'). The
+   * counter is incremented in SQL so it is correct even if two paths update the
+   * row in one cycle (e.g. recordInvalidCredentialFailure + this).
+   */
+  private async recordSyncFailure(cred: CredentialRecord, errorMsg: string): Promise<void> {
+    const { db } = this.getClient();
+    const attemptAt = new Date();
+    await db
+      .update(auroraCredentials)
+      .set({
+        lastSyncAttemptAt: attemptAt,
+        consecutiveFailures: sql`COALESCE(${auroraCredentials.consecutiveFailures}, 0) + 1`,
+        lastSyncError: errorMsg,
+        updatedAt: attemptAt,
+      })
+      .where(and(eq(auroraCredentials.userId, cred.userId), eq(auroraCredentials.boardType, cred.boardType)));
   }
 
   /** @deprecated Use syncNextUser() instead to avoid IP blocking */
@@ -199,6 +245,10 @@ export class SyncRunner {
       await runDaemonLoop(
         async () => {
           await this.syncNextUser();
+          // Self-heal is a daemon-wide concern (not per-credential), gated
+          // hourly. Runs after the per-user sync so a fresh tick's recompute
+          // has had its chance first.
+          await this.maybeSelfHealRecomputes();
         },
         resolved,
         {
@@ -242,8 +292,17 @@ export class SyncRunner {
     const credentials = await db
       .select()
       .from(auroraCredentials)
-      .where(this.syncableCredentialsFilter())
-      .orderBy(sql`${auroraCredentials.lastSyncAt} ASC NULLS FIRST`)
+      // Order by the ATTEMPT clock (bumped on EVERY attempt), not last_sync_at
+      // (bumped only on success). Ordering by last_sync_at let one
+      // persistently-failing credential — whose last_sync_at never advances —
+      // sort to the FRONT every cycle and monopolise the single-user-per-cycle
+      // queue, wedging every other user's sync (and, via the shared-sync
+      // piggyback, the whole board's catalog: Touchstone went 5 months stale).
+      // With the attempt clock a failure rotates to the back, and the backoff
+      // predicate below skips it entirely until its window elapses, so a
+      // healthy credential is picked next and its token drives shared sync.
+      .where(and(this.syncableCredentialsFilter(), credentialRetryReadySql()))
+      .orderBy(sql`${auroraCredentials.lastSyncAttemptAt} ASC NULLS FIRST`)
       .limit(1);
 
     return credentials.length > 0 ? (credentials[0] as CredentialRecord) : null;
@@ -300,9 +359,15 @@ export class SyncRunner {
     const { client } = this.getClient();
     this.log(`[SyncRunner] Syncing user ${cred.userId} for ${boardType}...`);
     await syncUserData(client, boardType, token, cred.auroraUserId, cred.userId, undefined, this.log.bind(this));
-    await this.updateCredentialStatus(cred.userId, cred.boardType, 'active', null, new Date(), {
+    const succeededAt = new Date();
+    await this.updateCredentialStatus(cred.userId, cred.boardType, 'active', null, succeededAt, {
       credentialFailureCount: 0,
       lastCredentialFailureAt: null,
+      // Success advances the attempt clock too (they coincide on a clean
+      // cycle) and clears the backoff counter + observability error.
+      lastSyncAttemptAt: succeededAt,
+      consecutiveFailures: 0,
+      lastSyncError: null,
     });
 
     // Piggyback shared sync onto user sync — the user's fresh token
@@ -355,6 +420,35 @@ export class SyncRunner {
     }
   }
 
+  private static readonly SELF_HEAL_COOLDOWN_MS = 60 * 60 * 1000;
+
+  /**
+   * Hourly recompute self-heal. The saveTick recompute is debounced in-process
+   * with setTimeout, so a deploy drops any recompute still pending — leaving a
+   * flash/send tick's updated_at ahead of the board_climb_stats row it feeds.
+   * This bulk-recomputes those stale keys (one bounded batch per pass) so the
+   * ascensionist counts self-correct instead of waiting for the next tick on
+   * the same climb. A failure never breaks the daemon cycle.
+   */
+  private async maybeSelfHealRecomputes(): Promise<void> {
+    const now = Date.now();
+    if (this.lastSelfHealAt !== 0 && now - this.lastSelfHealAt < SyncRunner.SELF_HEAL_COOLDOWN_MS) {
+      return;
+    }
+    // Stamp before running so a slow/erroring pass doesn't re-fire next cycle.
+    this.lastSelfHealAt = now;
+    try {
+      const { db } = this.getClient();
+      const { keysHealed } = await selfHealStaleClimbStats(db);
+      if (keysHealed > 0) {
+        this.log(`[SyncRunner] Recompute self-heal: re-derived ${keysHealed} stale climb-stat key(s)`);
+      }
+    } catch (error) {
+      this.handleError(error instanceof Error ? error : new Error(String(error)), {});
+      this.log(`[SyncRunner] Recompute self-heal failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async syncLocations(
     board: AuroraLocationBoardName | 'all',
   ): Promise<LocationSyncSummary | Record<AuroraLocationBoardName, LocationSyncSummary>> {
@@ -394,6 +488,18 @@ export class SyncRunner {
 
     if (credentialFailureUpdate.lastCredentialFailureAt !== undefined) {
       updateData.lastCredentialFailureAt = credentialFailureUpdate.lastCredentialFailureAt;
+    }
+
+    if (credentialFailureUpdate.lastSyncAttemptAt !== undefined) {
+      updateData.lastSyncAttemptAt = credentialFailureUpdate.lastSyncAttemptAt;
+    }
+
+    if (credentialFailureUpdate.consecutiveFailures !== undefined) {
+      updateData.consecutiveFailures = credentialFailureUpdate.consecutiveFailures;
+    }
+
+    if (credentialFailureUpdate.lastSyncError !== undefined) {
+      updateData.lastSyncError = credentialFailureUpdate.lastSyncError;
     }
 
     await db

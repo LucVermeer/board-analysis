@@ -80,6 +80,7 @@ function credential(overrides: Partial<KilterCredentialRecord> = {}): KilterCred
     syncStatus: 'active',
     syncError: null,
     lastSyncAt: null,
+    consecutiveFailures: 0,
     ...overrides,
   };
 }
@@ -136,11 +137,14 @@ describe('SyncRunner.syncNextUser', () => {
     });
     // Exactly one UPDATE at the end of the cycle setting syncStatus active.
     // Success advances BOTH clocks: last_sync_at (user-facing "last synced")
-    // and last_sync_attempt_at (scheduler fairness clock).
+    // and last_sync_attempt_at (scheduler fairness clock), and clears the
+    // backoff counter + observability error.
     const activeUpdate = updates.find((u) => u.set.syncStatus === 'active');
     expect(activeUpdate?.set).toMatchObject({
       syncStatus: 'active',
       syncError: null,
+      consecutiveFailures: 0,
+      lastSyncError: null,
     });
     expect(activeUpdate?.set.lastSyncAt).toBeInstanceOf(Date);
     expect(activeUpdate?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
@@ -170,25 +174,31 @@ describe('SyncRunner.syncNextUser', () => {
       boardType: 'kilter',
       error: 'keycloak timed out',
     });
-    // No syncStatus write — transient errors leave the credential alone.
+    // No syncStatus write — transient errors leave the user-facing card alone.
     expect(updates.find((u) => u.set.syncStatus !== undefined)).toBeUndefined();
     // last_sync_attempt_at IS stamped (with a real Date — not null) so the
     // credential rotates to the back of the `last_sync_attempt_at ASC NULLS
     // FIRST` queue instead of monopolising it — but last_sync_at (the
     // user-facing "last successful sync") must NOT advance on a failed cycle.
-    expect(updates.find((u) => u.set.lastSyncAttemptAt !== undefined)?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
+    const attemptUpdate = updates.find((u) => u.set.lastSyncAttemptAt !== undefined);
+    expect(attemptUpdate?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
     expect(updates.find((u) => u.set.lastSyncAt !== undefined)).toBeUndefined();
+    // The failure is no longer silent: the message is recorded (observability)
+    // and the consecutive-failure counter is bumped (backoff) even though the
+    // status stays untouched. This is the fix for the live kilter outage.
+    expect(attemptUpdate?.set.lastSyncError).toBe('keycloak timed out');
+    expect(attemptUpdate?.set.consecutiveFailures).toBeDefined();
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
-  it('fail-open DB error (non-KilterApiError) stamps last_sync_attempt_at, never last_sync_at (anti-starvation)', async () => {
-    // This is the poison-pill regression guard. A PostgresError thrown from
-    // syncKilterUserData is NOT a KilterApiError, so isTransientKilterError
-    // fails open to transient. Before the fix the credential kept its NULL
-    // attempt time and was re-selected FIRST every cycle, starving all
-    // others. It must stamp last_sync_attempt_at (to rotate) while leaving
-    // syncStatus AND last_sync_at untouched — a cycle that failed before
-    // applying data must not look like a fresh successful sync in the UI.
+  it('fail-CLOSED DB error (non-KilterApiError) → syncStatus=error, records last_sync_error, never last_sync_at', async () => {
+    // A non-KilterApiError (a PostgresError, a TypeError) is now fail-CLOSED:
+    // isTransientKilterError returns false, so the cycle escalates to
+    // syncStatus='error' with an observable last_sync_error instead of
+    // silently re-attempting forever (the live kilter outage). The credential
+    // is NOT abandoned — 'error' stays selectable, so it retries on backoff —
+    // but last_sync_at (the user-facing "last successful sync") must NOT
+    // advance on a cycle that failed before applying data.
     const runner = new SyncRunner();
     const privates = runner as unknown as SyncRunnerPrivates;
     const { db, updates } = createDbShim();
@@ -207,8 +217,11 @@ describe('SyncRunner.syncNextUser', () => {
     const summary = await runner.syncNextUser();
 
     expect(summary.failed).toBe(1);
-    expect(updates.find((u) => u.set.syncStatus !== undefined)).toBeUndefined();
-    expect(updates.find((u) => u.set.lastSyncAttemptAt !== undefined)?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
+    const errorUpdate = updates.find((u) => u.set.syncStatus === 'error');
+    expect(errorUpdate?.set.syncStatus).toBe('error');
+    expect(errorUpdate?.set.lastSyncError).toContain('duplicate key value');
+    expect(errorUpdate?.set.consecutiveFailures).toBeDefined();
+    expect(errorUpdate?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
     expect(updates.find((u) => u.set.lastSyncAt !== undefined)).toBeUndefined();
   });
 
@@ -230,6 +243,11 @@ describe('SyncRunner.syncNextUser', () => {
     expect(summary.failed).toBe(1);
     const errorUpdate = updates.find((u) => u.set.syncStatus === 'error');
     expect(errorUpdate?.set).toMatchObject({ syncStatus: 'error', syncError: 'something broke' });
+    // Permanent failures also record the observability error + bump the
+    // backoff counter (an 'error' credential is still retried, so it must
+    // back off).
+    expect(errorUpdate?.set.lastSyncError).toBe('something broke');
+    expect(errorUpdate?.set.consecutiveFailures).toBeDefined();
     expect(errorUpdate?.set.lastSyncAttemptAt).toBeInstanceOf(Date);
     expect(errorUpdate?.set.lastSyncAt).toBeUndefined();
   });
@@ -337,7 +355,7 @@ describe('SyncRunner.syncNextUser', () => {
     expect((expiredUpdate?.set.syncError as string) ?? '').toContain('must reconnect');
   });
 
-  it('treats a generic non-KilterApiError as transient (fail-open)', async () => {
+  it('treats a generic non-KilterApiError as permanent (fail-closed) → syncStatus=error', async () => {
     const runner = new SyncRunner();
     const privates = runner as unknown as SyncRunnerPrivates;
     const { db, updates } = createDbShim();
@@ -349,7 +367,29 @@ describe('SyncRunner.syncNextUser', () => {
     const summary = await runner.syncNextUser();
 
     expect(summary.failed).toBe(1);
-    // No syncStatus write — generic errors are transient by design.
-    expect(updates.find((u) => u.set.syncStatus !== undefined)).toBeUndefined();
+    // Fail-closed: an unknown throw escalates to a visible 'error' with the
+    // message recorded, instead of silently retrying as 'active' forever.
+    const errorUpdate = updates.find((u) => u.set.syncStatus === 'error');
+    expect(errorUpdate?.set.syncStatus).toBe('error');
+    expect(errorUpdate?.set.lastSyncError).toBe('something parsed wrong');
+  });
+
+  it('resets consecutive_failures + last_sync_error to healthy on the next success', async () => {
+    // A credential that had been failing (consecutiveFailures: 3) recovers:
+    // the success path must zero the backoff counter and clear the error.
+    const runner = new SyncRunner();
+    const privates = runner as unknown as SyncRunnerPrivates;
+    const { db, updates } = createDbShim();
+    vi.spyOn(privates, 'getClient').mockReturnValue({ client: {}, db });
+    vi.spyOn(privates, 'getNextCredentialToSync').mockResolvedValue(credential({ consecutiveFailures: 3 }));
+
+    mockRefreshAccessToken.mockResolvedValue({ access_token: 'tok', expires_in: 300, token_type: 'Bearer' });
+    mockSyncKilterUserData.mockResolvedValue(undefined);
+
+    await runner.syncNextUser();
+
+    const activeUpdate = updates.find((u) => u.set.syncStatus === 'active');
+    expect(activeUpdate?.set.consecutiveFailures).toBe(0);
+    expect(activeUpdate?.set.lastSyncError).toBeNull();
   });
 });

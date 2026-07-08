@@ -70,20 +70,24 @@ describe('isTransientKilterError', () => {
     expect(isTransientKilterError(new KilterApiError('http', '???'))).toBe(false);
   });
 
-  it('fails open to transient for a raw Error (non-KilterApiError)', () => {
-    expect(isTransientKilterError(new Error('something else broke'))).toBe(true);
+  it('fails CLOSED to permanent for a raw Error (non-KilterApiError)', () => {
+    // Fail-closed: an unknown error shape is NOT a known-retryable condition,
+    // so it escalates to syncStatus='error' (with an observable message)
+    // rather than silently retrying as 'active' forever — the live kilter
+    // outage. It is still retried on backoff, just not silently.
+    expect(isTransientKilterError(new Error('something else broke'))).toBe(false);
   });
 
-  it('fails open to transient for a thrown string', () => {
-    expect(isTransientKilterError('boom')).toBe(true);
+  it('fails closed to permanent for a thrown string', () => {
+    expect(isTransientKilterError('boom')).toBe(false);
   });
 
-  it('fails open to transient for a thrown number', () => {
-    expect(isTransientKilterError(42)).toBe(true);
+  it('fails closed to permanent for a thrown number', () => {
+    expect(isTransientKilterError(42)).toBe(false);
   });
 
-  it('fails open to transient for null/undefined', () => {
-    expect(isTransientKilterError(null)).toBe(true);
-    expect(isTransientKilterError(undefined)).toBe(true);
+  it('fails closed to permanent for null/undefined', () => {
+    expect(isTransientKilterError(null)).toBe(false);
+    expect(isTransientKilterError(undefined)).toBe(false);
   });
 });
