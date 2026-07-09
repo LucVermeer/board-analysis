@@ -32,13 +32,22 @@ enum BoardBleEncoding {
     /// to write-with-response made boards whose ATT ack never arrives stall on
     /// every write — the status LED lights but the climb never displays.
     ///
-    /// Only the original MoonBoard LED box needs write-with-response: its UART RX
-    /// characteristic advertises only `.write`, and CoreBluetooth SILENTLY DROPS a
-    /// `.withoutResponse` write to a characteristic that lacks the property (which
-    /// left the MoonBoard wall dark on iOS while Android — whose GATT stack sends
-    /// no-response writes regardless — worked). So for MoonBoard, and only
+    /// Only the original MoonBoard LED box needs write-with-response UP FRONT: its
+    /// UART RX characteristic advertises only `.write`, and CoreBluetooth SILENTLY
+    /// DROPS a `.withoutResponse` write to a characteristic that lacks the property
+    /// (which left the MoonBoard wall dark on iOS while Android — whose GATT stack
+    /// sends no-response writes regardless — worked). So for MoonBoard, and only
     /// MoonBoard, fall back to `.withResponse` whenever `.writeWithoutResponse` is
     /// absent.
+    ///
+    /// Aurora boxes that ALSO advertise only `.write` (some Kilter-built
+    /// controllers) are handled the other way round — behaviourally, not here:
+    /// `BoardBleManager` still starts them on without-response, and only switches
+    /// this connection to with-response once a write demonstrably stalls on that
+    /// `.write`-only characteristic (see `forceWriteWithResponse`). Deciding it
+    /// up-front from the property bit is exactly what regressed the fleet in #3228
+    /// (a stale GATT cache can drop the bit on a healthy board), so this function
+    /// deliberately keeps Aurora on without-response regardless of the bit.
     static func preferredWriteType(
         for properties: CBCharacteristicProperties,
         boardName: String?

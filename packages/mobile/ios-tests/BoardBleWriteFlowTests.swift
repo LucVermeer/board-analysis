@@ -189,6 +189,18 @@ final class BoardBleWriteFlowTests: XCTestCase {
         )
     }
 
+    private func kilterConfiguration() -> BoardBleConfiguration {
+        BoardBleConfiguration(
+            boardName: "kilter",
+            layoutId: 1,
+            sizeId: 1,
+            apiLevel: nil,
+            deviceName: nil,
+            colorOverrides: [:],
+            numRows: nil
+        )
+    }
+
     /// Fire the most recently scheduled one-shot with `label`, on the BLE queue.
     private func fireLatestOneShot(label: String) {
         manager.testHooks.sync {
@@ -488,6 +500,100 @@ final class BoardBleWriteFlowTests: XCTestCase {
             manager.write(data: Data((0 ..< 10).map { UInt8($0) })) { _, _ in }
         }
         XCTAssertTrue(hooks.sync { hooks.hasPendingWriteResume })
+    }
+
+    // 5d
+    // A Kilter box whose RX characteristic advertises ONLY `.write` (no
+    // `.writeWithoutResponse` bit — the original MoonBoard box's signature, and
+    // some Kilter-built controllers). The app starts it on without-response
+    // (Aurora default), the write parks and the watchdog trips with canSend stuck
+    // false. Because the characteristic can't take a no-response write at all,
+    // switch THIS connection to write-with-response instead of bypassing the gate,
+    // and remember the board so a reconnect skips the stall.
+    func testWatchdogTripOnWriteOnlyCharacteristicSwitchesToWriteWithResponse() {
+        let hooks = manager.testHooks
+        let peripheral = FakeWritablePeripheral(canSendDefault: false, maxWriteValueLength: 20)
+        let characteristic = makeCharacteristic(properties: .write)
+        let payload = Data((0 ..< 10).map { UInt8($0) })
+
+        var completionError: Error?
+        var completionTelemetry: BoardBleWriteTelemetry?
+        var completionCount = 0
+
+        hooks.sync {
+            hooks.setConfiguration(kilterConfiguration())
+            hooks.setConnection(peripheral: peripheral, characteristic: characteristic)
+            manager.write(data: payload) { error, telemetry in
+                completionError = error
+                completionTelemetry = telemetry
+                completionCount += 1
+            }
+        }
+        // Started on the Aurora without-response path: parked on the false gate,
+        // neither latch set yet.
+        XCTAssertTrue(peripheral.writtenChunks.isEmpty)
+        XCTAssertFalse(hooks.sync { hooks.forceWriteWithResponse })
+        XCTAssertFalse(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+
+        // Watchdog trips with canSend STILL false -> `.write`-only characteristic
+        // -> switch to write-with-response and fire the chunk on that path.
+        fireLatestOneShot(label: "writeResumeWatchdog")
+
+        XCTAssertTrue(hooks.sync { hooks.forceWriteWithResponse })
+        // Did NOT take the stuck-false bypass (that keeps without-response).
+        XCTAssertFalse(hooks.sync { hooks.bypassCanSendWriteWithoutResponse })
+        // The board is remembered for next time.
+        XCTAssertTrue(hooks.sync { hooks.writeWithResponsePeripheralIds.contains(peripheral.identifier) })
+        // The chunk went out WITH response, paced on the ack watchdog (no chunkDelay).
+        XCTAssertEqual(peripheral.writtenChunks.count, 1)
+        XCTAssertEqual(peripheral.writtenChunks[0].type, .withResponse)
+        XCTAssertNotNil(scheduler.lastOneShot(label: "writeAckWatchdog"))
+        XCTAssertEqual(completionCount, 0)
+        // No link cycle: not disconnected, recovery budget untouched.
+        XCTAssertTrue(cancelledPeripheralIds.isEmpty)
+        XCTAssertEqual(hooks.sync { hooks.writeStallRecoveries }, 0)
+
+        // The board's ack completes the write.
+        hooks.fireWriteAck(error: nil)
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertNil(completionError)
+        XCTAssertEqual(completionTelemetry?.watchdogTripped, true)
+        XCTAssertEqual(completionTelemetry?.canSendAtTrip, false)
+        XCTAssertEqual(completionTelemetry?.lastResumeSource, "withResponse")
+    }
+
+    // 5e
+    // Once a board is learned to need write-with-response, a reconnect starts it
+    // on that path immediately — no repeat of the one-time without-response stall.
+    func testLearnedWriteWithResponsePersistsAcrossReconnect() {
+        let hooks = manager.testHooks
+        let peripheral = FakeWritablePeripheral(canSendDefault: false, maxWriteValueLength: 20)
+        let characteristic = makeCharacteristic(properties: .write)
+
+        // First connection: learn via the stall -> switch -> ack.
+        hooks.sync {
+            hooks.setConfiguration(kilterConfiguration())
+            hooks.setConnection(peripheral: peripheral, characteristic: characteristic)
+            manager.write(data: Data((0 ..< 10).map { UInt8($0) })) { _, _ in }
+        }
+        fireLatestOneShot(label: "writeResumeWatchdog")
+        hooks.fireWriteAck(error: nil)
+        XCTAssertTrue(hooks.sync { hooks.forceWriteWithResponse })
+
+        // Reconnect to the same board: the latch is re-seeded from the learned set
+        // straight away.
+        hooks.sync { hooks.setConnection(peripheral: peripheral, characteristic: characteristic) }
+        XCTAssertTrue(hooks.sync { hooks.forceWriteWithResponse })
+
+        // A fresh write goes out with-response with NO park — even though canSend
+        // is still false, the without-response gate is never consulted.
+        let writtenBefore = peripheral.writtenChunks.count
+        hooks.sync {
+            manager.write(data: Data((100 ..< 110).map { UInt8($0) })) { _, _ in }
+        }
+        XCTAssertEqual(peripheral.writtenChunks.count, writtenBefore + 1)
+        XCTAssertEqual(peripheral.writtenChunks.last?.type, .withResponse)
+        XCTAssertFalse(hooks.sync { hooks.hasPendingWriteResume })
     }
 
     // 6
