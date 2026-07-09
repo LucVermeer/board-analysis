@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-09T03:03:46.748Z",
+  "generatedAt": "2026-07-09T05:31:32.181Z",
   "entries": [
+    {
+      "prNumber": 3581,
+      "category": "new",
+      "title": "Hitting a Bluetooth wall? Bug reports now have an \"I'm having Bluetooth trouble\" toggle — flip it and we'll spot the boards around you so we can work out why yours won't connect.",
+      "mergedAt": "2026-07-09T05:30:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3581"
+    },
+    {
+      "prNumber": 3580,
+      "category": "fixed",
+      "title": "Kilter and Tension boards with newer write-only BLE boxes light reliably after the first rescue, without slowing down healthy boards.",
+      "mergedAt": "2026-07-09T05:30:33Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3580"
+    },
     {
       "prNumber": 3577,
       "category": "fixed",
@@ -1172,6 +1186,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-09T13:02:42+10:00",
+      "sha": "6e5a1d9c158c1cf2afbd7843d7ad7263e2e3c8f7",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "9ebca93545e80eb0a591916a7b31bbc14c890f55",
+        "ios": "aac685712580583a6455d5e28bba59ad4956de31"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-08T18:09:19+10:00",

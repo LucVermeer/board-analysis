@@ -6,8 +6,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-09
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ### New
 
+- Hitting a Bluetooth wall? Bug reports now have an "I'm having Bluetooth trouble" toggle — flip it and we'll spot the boards around you so we can work out why yours won't connect. ([#3581](https://github.com/boardsesh/boardsesh/pull/3581))
 - Turn on "Show Boardsesh grades" in Settings to see every climb on one cross-board grade, built from real sends across every board. ([#3565](https://github.com/boardsesh/boardsesh/pull/3565))
   The Boardsesh grade section in the play drawer now shows the grade at a glance when collapsed, how confident it is, and how it shifts by wall angle.
   Logged a send without grading it? We'll show the Boardsesh grade — your own grade always stays put when you set one.
@@ -18,6 +23,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Kilter and Tension boards with newer write-only BLE boxes light reliably after the first rescue, without slowing down healthy boards. ([#3580](https://github.com/boardsesh/boardsesh/pull/3580))
 - Using an early-2025 Kilter LED box on iPhone? It would connect but the holds stayed dark no matter which climb you picked. Now it lights up like it should — pick a climb and the wall comes on. ([#3577](https://github.com/boardsesh/boardsesh/pull/3577))
 
 ## 2026-07-08
