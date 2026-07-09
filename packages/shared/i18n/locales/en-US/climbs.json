@@ -346,6 +346,7 @@
     "localLabel": "On this board",
     "localScopeNote": "On this board's scale — not comparable across boards yet",
     "universalComparison": "Tension scale: {{grade}}",
+    "geometryEstimate": "From the holds: {{grade}}",
     "confirmedSubline_one": "Confirmed by {{count}} send",
     "confirmedSubline_other": "Confirmed by {{count}} sends",
     "provisionalSubline_one": "Still settling — {{count}} send in",

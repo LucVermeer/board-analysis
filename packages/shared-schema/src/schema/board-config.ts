@@ -73,6 +73,8 @@ export const boardConfigTypeDefs = /* GraphQL */ `
     localGrade: Float
     "Cross-board standardized grade (Tension-anchored); null when unanchorable"
     universalGrade: Float
+    "Geometry (Climb2Vec) grade estimate from the hold layout alone, independent of crowd data; null when unscored"
+    contentGrade: Float
     "Low end of the 95% band on the surfaced grade"
     gradeLow: Float
     "High end of the 95% band on the surfaced grade"
@@ -99,6 +101,8 @@ export const boardConfigTypeDefs = /* GraphQL */ `
     localGrade: Float
     "Cross-board standardized grade (Tension-anchored); null when unanchorable"
     universalGrade: Float
+    "Geometry (Climb2Vec) grade estimate from the hold layout alone, independent of crowd data; null when unscored"
+    contentGrade: Float
     "Low end of the 95% band on the surfaced grade"
     gradeLow: Float
     "High end of the 95% band on the surfaced grade"

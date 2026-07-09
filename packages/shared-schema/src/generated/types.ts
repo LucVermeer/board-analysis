@@ -632,6 +632,8 @@ export type BoardseshGrade = {
   computedAt: Scalars['String']['output'];
   /** Confidence tier: confirmed | provisional | setter_only */
   confidence: Scalars['String']['output'];
+  /** Geometry (Climb2Vec) grade estimate from the hold layout alone, independent of crowd data; null when unscored */
+  contentGrade?: Maybe<Scalars['Float']['output']>;
   /** High end of the 95% band on the surfaced grade */
   gradeHigh?: Maybe<Scalars['Float']['output']>;
   /** Low end of the 95% band on the surfaced grade */
@@ -659,6 +661,8 @@ export type BoardseshGradeForAngle = {
   computedAt: Scalars['String']['output'];
   /** Confidence tier: confirmed | provisional | setter_only */
   confidence: Scalars['String']['output'];
+  /** Geometry (Climb2Vec) grade estimate from the hold layout alone, independent of crowd data; null when unscored */
+  contentGrade?: Maybe<Scalars['Float']['output']>;
   /** High end of the 95% band on the surfaced grade */
   gradeHigh?: Maybe<Scalars['Float']['output']>;
   /** Low end of the 95% band on the surfaced grade */
@@ -7658,6 +7662,7 @@ export type BoardseshGradeResolvers<
   ascensionistCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   computedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   confidence?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  contentGrade?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   gradeHigh?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   gradeLow?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   localGrade?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
@@ -7674,6 +7679,7 @@ export type BoardseshGradeForAngleResolvers<
   ascensionistCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   computedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   confidence?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  contentGrade?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   gradeHigh?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   gradeLow?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   localGrade?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;

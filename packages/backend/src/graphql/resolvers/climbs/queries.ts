@@ -413,8 +413,17 @@ export const climbQueries = {
         ascensionistCount: dbSchema.boardClimbGrades.ascensionistCount,
         modelVersion: dbSchema.boardClimbGrades.modelVersion,
         computedAt: dbSchema.boardClimbGrades.computedAt,
+        contentGrade: dbSchema.boardClimbEmbeddings.contentPrior,
       })
       .from(dbSchema.boardClimbGrades)
+      .leftJoin(
+        dbSchema.boardClimbEmbeddings,
+        and(
+          eq(dbSchema.boardClimbEmbeddings.boardType, dbSchema.boardClimbGrades.boardType),
+          eq(dbSchema.boardClimbEmbeddings.climbUuid, dbSchema.boardClimbGrades.climbUuid),
+          eq(dbSchema.boardClimbEmbeddings.angle, dbSchema.boardClimbGrades.angle),
+        ),
+      )
       .where(
         and(
           eq(dbSchema.boardClimbGrades.boardType, boardName),
@@ -455,8 +464,17 @@ export const climbQueries = {
         ascensionistCount: dbSchema.boardClimbGrades.ascensionistCount,
         modelVersion: dbSchema.boardClimbGrades.modelVersion,
         computedAt: dbSchema.boardClimbGrades.computedAt,
+        contentGrade: dbSchema.boardClimbEmbeddings.contentPrior,
       })
       .from(dbSchema.boardClimbGrades)
+      .leftJoin(
+        dbSchema.boardClimbEmbeddings,
+        and(
+          eq(dbSchema.boardClimbEmbeddings.boardType, dbSchema.boardClimbGrades.boardType),
+          eq(dbSchema.boardClimbEmbeddings.climbUuid, dbSchema.boardClimbGrades.climbUuid),
+          eq(dbSchema.boardClimbEmbeddings.angle, dbSchema.boardClimbGrades.angle),
+        ),
+      )
       .where(
         and(eq(dbSchema.boardClimbGrades.boardType, boardName), eq(dbSchema.boardClimbGrades.climbUuid, climbUuid)),
       )

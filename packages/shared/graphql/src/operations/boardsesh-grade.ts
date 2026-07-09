@@ -5,6 +5,7 @@ export const BOARDSESH_GRADE = gql`
     boardseshGrade(boardName: $boardName, climbUuid: $climbUuid, angle: $angle) {
       localGrade
       universalGrade
+      contentGrade
       gradeLow
       gradeHigh
       confidence
@@ -18,6 +19,7 @@ export const BOARDSESH_GRADE = gql`
 export type BoardseshGrade = {
   localGrade: number | null;
   universalGrade: number | null;
+  contentGrade?: number | null;
   gradeLow: number | null;
   gradeHigh: number | null;
   confidence: string;
@@ -42,6 +44,7 @@ export const BOARDSESH_GRADES_FOR_ANGLES = gql`
       angle
       localGrade
       universalGrade
+      contentGrade
       gradeLow
       gradeHigh
       confidence
@@ -56,6 +59,7 @@ export type BoardseshGradeAtAngle = {
   angle: number;
   localGrade: number | null;
   universalGrade: number | null;
+  contentGrade?: number | null;
   gradeLow: number | null;
   gradeHigh: number | null;
   confidence: string;
