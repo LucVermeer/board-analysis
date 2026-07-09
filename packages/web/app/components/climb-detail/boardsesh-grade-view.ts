@@ -12,9 +12,15 @@ export const BOARDSESH_GRADE_CONFIDENCE = {
 
 /**
  * A resolved grade view.
- * - `scope: 'universal'` — comparable across boards (universalGrade present).
- * - `scope: 'local'` — this-board-only scale (universalGrade null, localGrade
- *   present; happens on the small boards like grasshopper/decoy/soill/touchstone).
+ * - `scope: 'local'` — board-native community estimate. This is the primary
+ *   climb-detail grade because users are looking at a climb on its own board.
+ * - `scope: 'universal'` — fallback for malformed/future rows where a universal
+ *   grade exists without a local grade.
+ * - `comparisonDifficultyId` — optional Tension-anchored comparison grade. It is
+ *   secondary context, not the primary grade.
+ * - `hasUniversalGrade` — true when the row is standardized across boards even
+ *   if the rounded universal value matches the primary grade and needs no extra
+ *   comparison line.
  * `difficultyId` is the primary grade rounded to the nearest Aurora difficulty id.
  */
 export type BoardseshGradeView =
@@ -24,6 +30,8 @@ export type BoardseshGradeView =
       kind: 'confirmed';
       scope: 'universal' | 'local';
       difficultyId: number;
+      comparisonDifficultyId: number | null;
+      hasUniversalGrade: boolean;
       ascensionistCount: number;
     }
   | {
@@ -32,6 +40,8 @@ export type BoardseshGradeView =
       difficultyId: number;
       lowDifficultyId: number;
       highDifficultyId: number;
+      comparisonDifficultyId: number | null;
+      hasUniversalGrade: boolean;
       /** True when the rounded low/high bounds differ — render as a range. */
       isRange: boolean;
       ascensionistCount: number;
@@ -51,6 +61,29 @@ function roundToDifficultyId(value: number): number {
   return Math.round(value);
 }
 
+function rangeForPrimaryGrade(
+  grade: BoardseshGrade,
+  primary: number,
+  scope: 'local' | 'universal',
+): { low: number | null; high: number | null } {
+  if (grade.gradeLow == null || grade.gradeHigh == null) {
+    return { low: null, high: null };
+  }
+  if (scope === 'local' && grade.universalGrade != null) {
+    const universalOffset = grade.universalGrade - primary;
+    return { low: grade.gradeLow - universalOffset, high: grade.gradeHigh - universalOffset };
+  }
+  return { low: grade.gradeLow, high: grade.gradeHigh };
+}
+
+function comparisonDifficultyIdFor(grade: BoardseshGrade, primaryDifficultyId: number): number | null {
+  if (grade.universalGrade == null || grade.localGrade == null) {
+    return null;
+  }
+  const universalDifficultyId = roundToDifficultyId(grade.universalGrade);
+  return universalDifficultyId === primaryDifficultyId ? null : universalDifficultyId;
+}
+
 /**
  * Decide which Boardsesh-grade tier to render and pre-round every float to a
  * difficulty id. Returns `null` only when there is genuinely nothing to show —
@@ -66,23 +99,27 @@ export function deriveBoardseshGradeView({ boardName, grade }: DeriveBoardseshGr
     return { kind: 'setterOnly' };
   }
 
-  // Primary grade: universal when comparable across boards, else this-board local.
-  const primary = grade.universalGrade ?? grade.localGrade;
+  const primary = grade.localGrade ?? grade.universalGrade;
   if (primary == null) {
     return { kind: 'setterOnly' };
   }
-  const scope: 'universal' | 'local' = grade.universalGrade != null ? 'universal' : 'local';
+  const scope: 'universal' | 'local' = grade.localGrade != null ? 'local' : 'universal';
   const difficultyId = roundToDifficultyId(primary);
+  const comparisonDifficultyId = scope === 'local' ? comparisonDifficultyIdFor(grade, difficultyId) : null;
+  const hasUniversalGrade = grade.universalGrade != null;
 
   if (grade.confidence === BOARDSESH_GRADE_CONFIDENCE.provisional) {
-    const lowDifficultyId = grade.gradeLow != null ? roundToDifficultyId(grade.gradeLow) : difficultyId;
-    const highDifficultyId = grade.gradeHigh != null ? roundToDifficultyId(grade.gradeHigh) : difficultyId;
+    const range = rangeForPrimaryGrade(grade, primary, scope);
+    const lowDifficultyId = range.low != null ? roundToDifficultyId(range.low) : difficultyId;
+    const highDifficultyId = range.high != null ? roundToDifficultyId(range.high) : difficultyId;
     return {
       kind: 'provisional',
       scope,
       difficultyId,
       lowDifficultyId,
       highDifficultyId,
+      comparisonDifficultyId,
+      hasUniversalGrade,
       isRange: lowDifficultyId !== highDifficultyId,
       ascensionistCount: grade.ascensionistCount,
     };
@@ -93,6 +130,8 @@ export function deriveBoardseshGradeView({ boardName, grade }: DeriveBoardseshGr
     kind: 'confirmed',
     scope,
     difficultyId,
+    comparisonDifficultyId,
+    hasUniversalGrade,
     ascensionistCount: grade.ascensionistCount,
   };
 }

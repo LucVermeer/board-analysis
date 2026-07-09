@@ -345,6 +345,7 @@
     "universalLabel": "Grade Boardsesh",
     "localLabel": "Sur cette board",
     "localScopeNote": "Sur l'échelle de cette board — pas encore comparable d'une board à l'autre",
+    "universalComparison": "Échelle Tension : {{grade}}",
     "confirmedSubline_one": "Confirmé par {{count}} croix",
     "confirmedSubline_other": "Confirmé par {{count}} croix",
     "provisionalSubline_one": "Encore en train de se caler — {{count}} croix enregistrée",
