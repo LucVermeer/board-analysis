@@ -31,6 +31,7 @@ import {
   OFFSET_LOO_MAX_DELTA,
   applyIsotonicAngleConstraint,
   type AngleGradeRow,
+  applyDisplayDeltaHygiene,
   buildAngleSurfaceSql,
   buildBacktestSampleSql,
   buildBoardOffsetSampleSql,
@@ -39,14 +40,18 @@ import {
   buildSigmaWithinSql,
   buildTauSampleSql,
   computePosteriorGrade,
+  createDisplayDeltaHygieneStats,
   estimateAngleSurface,
   estimateBoardOffsets,
   estimateEchoFractions,
   estimateSigmaWithin,
   estimateTauSquared,
   evaluateBacktest,
+  evaluateDisplayDeltaHygiene,
   evaluateFingerprintGate,
   evaluateResidualGapGate,
+  mergeDisplayDeltaHygieneStats,
+  recordDisplayDeltaHygiene,
   shouldPublish,
   GATE_NO_SHOCK_MAX_MOVE,
   GATE_NO_SHOCK_MIN_ASCENTS,
@@ -55,6 +60,7 @@ import {
   type BoardOffsetSampleRow,
   type ClimbAngleObservation,
   type EchoRateRow,
+  type DisplayDeltaHygieneStats,
   type GateResult,
   type GradeCoefficients,
   type SigmaWithinRow,
@@ -290,10 +296,15 @@ async function computeBoard(
   db: Db,
   boardType: string,
   coefficients: GradeCoefficients,
-): Promise<{ computed: ComputedRow[]; isotonicStats: { movedRows: number; residualInversions: number } }> {
+): Promise<{
+  computed: ComputedRow[];
+  isotonicStats: { movedRows: number; residualInversions: number };
+  displayDeltaHygieneStats: DisplayDeltaHygieneStats;
+}> {
   const pooledEvidence = await loadPooledFingerprintEvidence(db, boardType);
   const computed: ComputedRow[] = [];
   const isotonicStats = { movedRows: 0, residualInversions: 0 };
+  const displayDeltaHygieneStats = createDisplayDeltaHygieneStats();
   let lastClimbUuid = '';
   for (;;) {
     const rows = rowsOf<StatsRow>(
@@ -359,9 +370,20 @@ async function computeBoard(
 
       // Emit one output row per angle THIS climb actually has.
       const ownAngles = new Set(group.map((row) => row.angle));
+      // Grade evidence may be pooled across duplicate fingerprints, but hygiene
+      // compares against this emitted row's own upstream display label.
+      const ownDisplayDifficultyByAngle = new Map(
+        group.map((row) => [row.angle, row.display_difficulty === null ? null : Number(row.display_difficulty)]),
+      );
       for (let i = 0; i < angleRows.length; i++) {
         if (!ownAngles.has(angleRows[i].angle)) continue;
-        const posterior = adjusted[i];
+        const hygiene = applyDisplayDeltaHygiene({
+          boardType,
+          displayDifficulty: ownDisplayDifficultyByAngle.get(angleRows[i].angle) ?? null,
+          posterior: adjusted[i],
+        });
+        recordDisplayDeltaHygiene(displayDeltaHygieneStats, hygiene);
+        const posterior = hygiene.posterior;
         computed.push({
           climbUuid: group[0].climb_uuid,
           angle: angleRows[i].angle,
@@ -387,7 +409,7 @@ async function computeBoard(
     lastClimbUuid = effective[effective.length - 1].climb_uuid;
     if (isFinalPage) break;
   }
-  return { computed, isotonicStats };
+  return { computed, isotonicStats, displayDeltaHygieneStats };
 }
 
 /** No-shock gate evaluated in memory on the freshly computed rows. */
@@ -565,15 +587,16 @@ async function validateOnly(db: Db): Promise<void> {
     );
   }
   for (const boardType of CROWD_MEAN_BOARDS) {
-    const { computed, isotonicStats } = await computeBoard(db, boardType, coefficients);
+    const { computed, isotonicStats, displayDeltaHygieneStats } = await computeBoard(db, boardType, coefficients);
     const noShock = evaluateNoShock(computed);
     const fingerprint = evaluateFingerprintConsistency(computed);
+    const displayDeltaHygiene = evaluateDisplayDeltaHygiene(displayDeltaHygieneStats);
     const tiers = computed.reduce<Record<string, number>>((acc, row) => {
       acc[row.confidence] = (acc[row.confidence] ?? 0) + 1;
       return acc;
     }, {});
     console.log(
-      `[grades]   ${boardType}: ${computed.length} rows, tiers=${JSON.stringify(tiers)}; isotonic moved ${isotonicStats.movedRows} rows (${isotonicStats.residualInversions} residual inversions); no_shock ${noShock.passed ? 'PASS' : 'FAIL'} (${noShock.detail}); fingerprint ${fingerprint.passed ? 'PASS' : 'FAIL'} (${fingerprint.detail})`,
+      `[grades]   ${boardType}: ${computed.length} rows, tiers=${JSON.stringify(tiers)}; isotonic moved ${isotonicStats.movedRows} rows (${isotonicStats.residualInversions} residual inversions); no_shock ${noShock.passed ? 'PASS' : 'FAIL'} (${noShock.detail}); fingerprint ${fingerprint.passed ? 'PASS' : 'FAIL'} (${fingerprint.detail}); display_delta_hygiene ${displayDeltaHygiene.passed ? 'PASS' : 'FAIL'} (${displayDeltaHygiene.detail})`,
     );
   }
   console.log('[grades] validate-only done (nothing written).');
@@ -635,21 +658,31 @@ async function main(): Promise<void> {
 
     // Compute all boards up front so the in-memory gates see the whole run.
     const computedByBoard = new Map<string, ComputedRow[]>();
+    const displayDeltaHygieneStats = createDisplayDeltaHygieneStats();
     for (const boardType of CROWD_MEAN_BOARDS) {
       console.log(`[grades] computing ${boardType}…`);
-      const { computed, isotonicStats } = await computeBoard(db, boardType, coefficients);
+      const {
+        computed,
+        isotonicStats,
+        displayDeltaHygieneStats: boardDisplayDeltaHygieneStats,
+      } = await computeBoard(db, boardType, coefficients);
+      mergeDisplayDeltaHygieneStats(displayDeltaHygieneStats, boardDisplayDeltaHygieneStats);
       computedByBoard.set(boardType, computed);
       console.log(
-        `[grades]   ${computed.length} climb+angle rows (isotonic moved ${isotonicStats.movedRows}, ${isotonicStats.residualInversions} residual inversions)`,
+        `[grades]   ${computed.length} climb+angle rows (isotonic moved ${isotonicStats.movedRows}, ${isotonicStats.residualInversions} residual inversions; display-delta hygiene downgraded ${boardDisplayDeltaHygieneStats.downgradedRows})`,
       );
     }
     const allComputed = [...computedByBoard.values()].flat();
     const noShockGate = evaluateNoShock(allComputed);
     const fingerprintGate = evaluateFingerprintConsistency(allComputed);
-    gates.push(noShockGate, fingerprintGate);
+    const displayDeltaHygieneGate = evaluateDisplayDeltaHygiene(displayDeltaHygieneStats);
+    gates.push(noShockGate, fingerprintGate, displayDeltaHygieneGate);
     console.log(`[grades]   no_shock: ${noShockGate.passed ? 'PASS' : 'FAIL'} — ${noShockGate.detail}`);
     console.log(
       `[grades]   fingerprint_consistency: ${fingerprintGate.passed ? 'PASS' : 'FAIL'} — ${fingerprintGate.detail}`,
+    );
+    console.log(
+      `[grades]   display_delta_hygiene: ${displayDeltaHygieneGate.passed ? 'PASS' : 'FAIL'} — ${displayDeltaHygieneGate.detail}`,
     );
 
     await recordGateResults(db, coefficients, gates);

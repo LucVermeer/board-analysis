@@ -221,6 +221,25 @@ a binding cap can leave a residual inversion, which the run counts and logs).
 Display-only pass-through rows carry no evidence and don't participate.
 Implementation: `isotonic.ts`.
 
+### Kilter display-delta hygiene (v1.2)
+
+Kilter has a small data-quality tail where the upstream displayed grade appears
+mixed-scale or corrupted: the crowd mean is normal, but the label sits near the
+scale floor or several grades away from the standardized result. The model does
+not repair those source rows and does not clamp the computed grade back toward
+the suspect label. Instead, after blending and isotonic projection, any Kilter
+row that would be `confirmed` is downgraded to `provisional` when:
+
+```
+round(universal_grade) - round(display_difficulty) < -3
+round(universal_grade) - round(display_difficulty) >  1
+```
+
+The local/universal grade and confidence band stay unchanged; only the tier is
+lowered so the UI stops presenting an outlier as settled. The nightly run logs
+and persists how many rows were downgraded. Implementation:
+`applyDisplayDeltaHygiene` in `hygiene.ts`.
+
 ### Duplicate climbs share one identity
 
 Climbs with the same `hold_fingerprint` are the same physical problem listed
@@ -263,11 +282,11 @@ Estimator: `estimateBoardOffsets`.
 
 ### Confidence tiers
 
-| Tier          | Condition                   | UI                                 |
-| ------------- | --------------------------- | ---------------------------------- |
-| `confirmed`   | n ≥ 20 and `post_sd` ≤ 0.35 | grade, "confirmed by N sends"      |
-| `provisional` | 3 ≤ n < 20                  | grade with a visible ± band        |
-| `setter_only` | n < 3                       | no Boardsesh number, setter's call |
+| Tier          | Condition                                                                                           | UI                                 |
+| ------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `confirmed`   | n ≥ 20 and `post_sd` ≤ 0.35, unless Kilter display-delta hygiene downgrades the row                  | grade, "confirmed by N sends"      |
+| `provisional` | 3 ≤ n < 20, or a confirmed Kilter row tripped the v1.2 display-delta hygiene rule                    | grade with a visible ± band        |
+| `setter_only` | n < 3                                                                                               | no Boardsesh number, setter's call |
 
 ### Publish hysteresis
 
@@ -289,6 +308,7 @@ fails**. Results persist to `board_grade_coefficients` (kind `gate_results`).
 | `no_shock`                | no ≥50-ascent climb's local grade moves >1.0 from its raw mean                                                                    | yes                 | the prior is overpowering established grades (also enforced by a clamp inside the blend itself; the gate catches regressions) |
 | `fingerprint_consistency` | ≤1% of duplicate-fingerprint groups disagree by >1 grade at the same angle                                                        | yes                 | evidence for one physical problem is being split badly                                                                        |
 | `residual_paired_gap`     | shared-user mean gap vs fitted offset ≤ 0.3 after the Kilter offset                                                               | withholds universal | the "constant offset" story is wrong; local grades still publish, universal grades don't                                      |
+| `display_delta_hygiene`   | reports Kilter rows downgraded from `confirmed` to `provisional` for rounded universal-display delta outside [-3, +1]             | no (repaired)       | source labels likely contain mixed-scale/corrupt display values; the grade publishes, but not as confirmed                    |
 | honesty report            | reports `corr(grade, display)` and mean \|Δ\| per board                                                                           | no (report only)    | a board whose numbers never leave the label is dressing the label as a data product; UI copy must say so                      |
 
 The backtest replays `board_climb_stats_history` (5.4M snapshots): for series
