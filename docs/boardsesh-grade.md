@@ -418,9 +418,17 @@ These are real and we'd rather state them than paper over them.
 - **Stage 2 — rater and behavior evidence.** Implemented in v2.0 with capped
   per-user rater bias, weak native behavior outcomes, de-echoed crowd means,
   held-out Tension benchmark gates, and report-only Moon bridge readiness.
-- **Stage 3 — hold-feature content prior.** A gradient-boosted model over hold
-  features to give the cold tail a prior before any ascents exist. The
-  `content_prior` column on `board_climb_grades` is reserved for this.
+- **Stage 3 — hold-geometry content model ("Climb2Vec").** A learned per-climb
+  representation over hold geometry gives the cold tail a prior before any
+  ascents exist (into the reserved `content_prior` column), and the same
+  embedding powers climb similarity and style recommendations. It enters the
+  blend as one more `DeherdedGradeSignal` (§3), under the no-shock clamp, and is
+  the only path to grading MoonBoard (no crowd mean, no bridge users). Full
+  design + phased rollout: `docs/climb2vec.md`. **Groundwork shipped:** the
+  generated per-hold feature substrate (`board_hold_features` — geometry +
+  de-confounded behavioral difficulty per placement, refreshed nightly by
+  `scripts/refresh-hold-features.ts`), which also refills the dormant
+  `user_hold_classifications` layer with algorithmic data.
 
 ### Running it
 

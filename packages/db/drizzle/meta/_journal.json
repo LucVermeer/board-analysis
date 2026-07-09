@@ -1219,6 +1219,13 @@
       "when": 1783556904000,
       "tag": "0173_clear_moonboard_catalog_fa",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1783574725645,
+      "tag": "0174_yielding_paibok",
+      "breakpoints": true
     }
   ]
 }
