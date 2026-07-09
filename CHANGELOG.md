@@ -12,6 +12,10 @@ manual changes). See docs/mobile-ota-updates.md.
   The Boardsesh grade section in the play drawer now shows the grade at a glance when collapsed, how confident it is, and how it shifts by wall angle.
   Logged a send without grading it? We'll show the Boardsesh grade — your own grade always stays put when you set one.
 
+### Improved
+
+- Import your MoonBoard CSV logbook into Boardsesh from connected apps, with sends, flashes, attempts, projects, and fails matched at 40 degrees. ([#3571](https://github.com/boardsesh/boardsesh/pull/3571))
+
 ## 2026-07-08
 
 ### App update

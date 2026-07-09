@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-09T00:16:28.326Z",
+  "generatedAt": "2026-07-09T00:23:47.697Z",
   "entries": [
+    {
+      "prNumber": 3571,
+      "category": "improved",
+      "title": "Import your MoonBoard CSV logbook into Boardsesh from connected apps, with sends, flashes, attempts, projects, and fails matched at 40 degrees.",
+      "mergedAt": "2026-07-09T00:18:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3571"
+    },
     {
       "prNumber": 3565,
       "category": "new",
