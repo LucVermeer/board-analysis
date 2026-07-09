@@ -90,6 +90,14 @@ export interface ClimbAngleObservation {
   difficultyAverage: number | null;
   displayDifficulty: number | null;
   ascensionistCount: number;
+  /**
+   * Optional Climb2Vec geometry content-model grade estimate (from
+   * board_climb_embeddings). Used only in the cold tail — when there is no crowd
+   * mean AND no cross-angle prior — so it never overrules crowd evidence.
+   */
+  contentPrior?: number | null;
+  /** The content model's held-out RMSE → the CI on a content-driven grade. */
+  contentSd?: number | null;
 }
 
 /** Result of the closed-form empirical-Bayes blend for one climb+angle. */
