@@ -75,466 +75,281 @@ The following repo guidance was copied from CLAUDE.md so Codex reads it from AGE
 
 ## Project Overview
 
-Boardsesh is a monorepo containing a Next.js 16 application for controlling standardized interactive climbing training boards (Kilter, Tension). It adds missing functionality to boards using Aurora Climbing's software, including queue management and real-time collaborative control.
+Boardsesh is a monorepo. Next.js 16 web app + React Native (Expo) mobile app for controlling Kilter / Tension / MoonBoard climbing boards. Adds queue management and real-time collaborative control on top of Aurora Climbing's software.
 
 ## Project Rules
 
-- We are slowly moving away from running rest-apis and backend operations in the next.js service, instead packages/backend should implement all backends, ideally using graphql
-- Work autonomously end-to-end. Backend + frontend + deploy + QA. Never stop at "the API is ready but the UI isn't updated."
-- Use subagents (always Opus) for all grunt work. Pair every implementation subagent with a QA/reviewer subagent.
-- Work high-level: divide work, subagents execute, you orchestrate and fix issues.
-- No AI-generated images ever. Real photos or diagrams only.
-- No buzzwords. Concrete numbers and simple language.
-- No unnecessary check-ins. Default to action. Full autonomy except no data deletion without asking.
-- Do not leave completed code or documentation changes local-only. Unless the user explicitly opts out, publish validated changes in a pull request and share the PR with the user.
+- Backend work belongs in `packages/backend` (GraphQL), not in the Next.js app. We are slowly moving REST/server logic out of `packages/web`.
+- Work autonomously end-to-end: backend + frontend + QA. Don't stop at "API is ready but UI isn't updated."
+- Use subagents (always Opus) for grunt work. Pair every implementation subagent with a QA/reviewer subagent.
+- No AI-generated images. Real photos or diagrams only.
+- No buzzwords. Concrete numbers, plain language.
+- Default to action. Full autonomy except no data deletion without asking.
 
-## GitHub Issue Fix Workflow
+## PR Lifecycle (mandatory)
 
-When fixing a GitHub issue, follow this sequence:
+We'll always create a PR, never asks if a PR should be created, open as a draft. After every PR is created, **always** subscribe to PR feedback until the PR is merged or closed.
 
-1. **Work in a fresh git worktree branched off the latest `main`.** Fetch `origin/main` first; do not branch from whatever HEAD happens to be.
-2. **Plan the fix before implementing.** Produce an explicit plan of the change before writing code.
-3. **After implementing, make sure the pre-commit hook passes.** If it fails, fix the underlying issue rather than bypassing it (no `--no-verify`).
-4. **Write the QA plan to a notes file before starting the dev server.** Always create `.boardsesh/qa-notes.md` (the default path the orchestrator auto-detects) with the concrete QA plan: the specific pages/flows to exercise, what correct behavior looks like, and the edge cases worth poking at. The orchestrator surfaces the file's contents inside the running app via `/api/internal/dev-metadata`, so the user can read the plan in the browser while testing. If you have a reason to put the notes somewhere else, start the server with `vp run dev -- --qa-notes-file <path>` (alias: `--qa-plan-file`). Never start the dev server for a GitHub-issue fix without a QA notes file — running it bare drops the in-app QA context the user expects.
-5. **Start the dev server with `vp run dev`** so the user can test the fix in the browser. The orchestrator picks up `.boardsesh/qa-notes.md` automatically; confirm in the startup output that it logged `[dev] QA notes: <path>`.
-6. **Tell the user the dev server URL in a single message** as soon as the server is up. Report whatever URL the server actually prints (typically `http://localhost:3000`) and mention that the QA plan is loaded into the app from `.boardsesh/qa-notes.md`. Don't paste the full QA plan into chat — it's already in the file you wrote and surfaced in-app.
-7. **Always open a PR** for the GitHub issue once the fix is implemented and validated.
-
-This applies to any request framed as "fix issue #N", "this GH issue", "the bug from <issue link>", or similar. It does not apply to ad-hoc edits or feature work the user requested directly without referencing an issue. If the user explicitly opts out of any step for a given task, respect that for the current task only — the default still holds next time.
-
-## Database Hosting (Railway)
-
-We host PostgreSQL on Railway. **Treat Railway as a portable stepping stone, not a permanent marriage.** Railway is currently better gravity than Neon (simpler, less magical, closer to "Docker + Postgres") but it is still a platform. The whole point of leaving Neon was to escape platform gravity — don't accidentally re-create it.
-
-When making infrastructure or backend changes:
-
-- **Keep Postgres vanilla.** Use standard PostgreSQL features. Don't reach for Railway-only addons, Railway-managed extensions, or Railway-flavoured wrappers. Anything you write should run unchanged on a `docker run postgres:17` instance.
-- **No Railway-specific service assumptions in app code.** No `RAILWAY_*` env vars threaded into business logic. No code paths that branch on the deploy target. The app should not be able to tell Railway from a self-hosted box from a developer laptop.
-- **Use standard Docker builds.** No Railway-only build steps, no `railway.toml`-encoded behaviour the app depends on. The Dockerfile should build and run anywhere.
-- **Keep migrations in-repo.** All schema changes live in `packages/db/drizzle/` and run via `bunx drizzle-kit generate` + `vp run db:migrate`. Never use Railway's UI / dashboard to mutate schema.
-- **`pg_dump` / `pg_restore` is the exit plan.** A vanilla logical dump must be sufficient to lift-and-shift Postgres to another host. If you ever need a Railway-specific tool to extract data, you've taken a wrong turn — back out.
-- **Keep object storage, video, and analytics deliberately portable.** Same rule for any other service we add: prefer S3-compatible APIs, OpenTelemetry-shaped exporters, standard connection strings. Avoid platform-specific managed primitives where a portable equivalent exists.
-
-The migration runbook (`docs/neon-migration.md`) documents how to move off Neon. Future migrations off Railway should be similarly straightforward — that's the test for whether we're staying portable.
-
-## Documentation
-
-Before working on a specific part of the codebase, check the `docs/` directory for relevant documentation:
-
-- `docs/websocket-implementation.md` - WebSocket party session architecture, connection flow, failure states and recovery mechanisms
-- `docs/ai-design-guidelines.md` - Comprehensive UI design guidelines, patterns, and tokens for redesigning components
-
-**Important:**
-
-- Read the relevant documentation first to understand the architecture and design decisions before making changes
-- When making significant changes to documented systems, update the corresponding documentation to keep it in sync
+- **CI failures**: diagnose and push a fix. Retry until green. If a failure is genuinely out of scope, explain and block on the user.
+- **Merge conflicts**: rebase on `main` and `git push --force-with-lease` — don't ask first.
+- **Review feedback**: fix minor, cosmetic, and style comments autonomously and push. For correctness disagreements, architectural changes, or ambiguous instructions, use `AskUserQuestion` before acting.
+- **Release notes**: every PR description must include the `## Release Notes` section from the PR template. Write in climber voice — describe what the user gets, not what the code does. Internal-only changes (refactor, CI, deps, tests) get `none`.
+- **Ready to merge signal**: once CI is green, no unresolved review comments remain, and there are no conflicts, remove the draft status from the PR marking it ready for review.
 
 ## Monorepo Structure
 
 ```
 /packages/
-  /web/           # Next.js web application
-  /backend/       # WebSocket backend for party mode (graphql-ws)
-  /shared-schema/ # Shared GraphQL schema and TypeScript types
-  /db/            # Shared database schema, client, and migrations (drizzle)
+  /web/             # Next.js web application
+  /mobile/          # React Native (Expo) mobile application
+  /backend/         # WebSocket backend for party mode (graphql-ws)
+  /shared-schema/   # Shared GraphQL schema and TypeScript types
+  /shared/
+    /play-view/     # Play-drawer logic (queue nav, tick utils, grade display)
+    /queue/         # Queue state machine (reducer, types, event utils)
+    /board-config/  # Board metadata, hold maps, angle tables
+    /board-constants/ # Grade colours, difficulty bands
+    /board-react/   # Renderer-agnostic BoardProvider + logbook/tick hooks (useSaveTick/useUpdateTick/useDeleteTick)
+    /offline-sync/  # Offline sync engine: mutation outbox + drainer, pull client, SQLite DDL (platform I/O injected)
+    /profile-stats/ # Pure climbing-stats aggregation for the You page / profile (chart builders, deriveProfileViewModel)
+    /ble-protocol/  # Bluetooth LED control protocol
+  /db/              # Shared database schema, client, migrations (drizzle)
 ```
+
+## Shared Packages (Web ↔ Mobile)
+
+Code reuse between web and mobile is the highest priority when adding cross-platform features. Before writing platform-specific logic, check whether the same behaviour already exists on the other side and extract the shared part into `packages/shared/`.
+
+- **One responsibility per package.** Name packages after what they do (`@boardsesh/queue`, `@boardsesh/play-view`). No mega-`@boardsesh/shared`.
+- **Default to pure TS; renderer-agnostic React goes in dedicated `*-react` packages.** Most shared packages stay pure TS (types, pure functions, constants, state machines) with no React at all. When web and mobile would genuinely share React hooks / context / reducers, put them in a `@boardsesh/*-react` package (e.g. `@boardsesh/queue-react`, `@boardsesh/board-react`) that lists `react` as a `peerDependency`. Such packages must stay renderer-agnostic — **no** `react-dom`, `next`, DOM globals, or MUI (web); **no** `react-native` host components or Expo APIs (mobile). Inject every platform I/O (GraphQL clients, storage, navigation, toasts) as parameters.
+- **No circular deps.** Shared packages may depend on other shared packages, never on `web`, `mobile`, or `backend`.
+- **Extract, don't duplicate.** When porting a web feature to mobile, pull the business logic into a shared package and update web to import from it in the same PR.
+- **Tests live next to the code** in `src/__tests__/`.
 
 ## Commands
 
-### Development Setup
+Toolchain is [Vite+](https://viteplus.dev) (`vp`). **Never use `bun run`, `bunx`, or `npx` for validation** — they bypass the unified config and can mutate `bun.lock`. The only sanctioned non-`vp` invocations are `bunx drizzle-kit generate` (migrations) and `bun run backend:start` (prod backend).
 
-The development database uses a **pre-built Docker image** (`ghcr.io/boardsesh/boardsesh-dev-db`) that already contains all Kilter, Tension, and MoonBoard board data, a test user, and social seed data with migrations applied. This means `vp run db:up` is fast — it just pulls the image, starts containers, and runs any newer migrations.
+Use `vp check` or `vp run typecheck` to validate — **not** `vp run build` (build interferes with the dev server). `vp check` runs lint + format (the staged pre-commit hook calls `vp check --fix`). Run `vp run typecheck` before pushing.
 
-```bash
-# Install Vite+ CLI (one-time, manages Node.js, linting, formatting, testing)
-curl -fsSL https://vite.plus | bash
+Common commands:
 
-# Environment files are in packages/web/:
-# .env.local contains generic config (tracked in git)
-# .env.development.local contains secrets (NOT tracked in git)
+- `vp check` — format + lint (canonical validation; pre-commit)
+- `vp test` / `vp test run --reporter=agent` — tests (always use `--reporter=agent` to save context)
+- `vp test run --project web|backend|mobile` — scope tests. **`--project` MUST come after `run`.** `vp test --project mobile run` (flag before `run`) silently treats the name as a filename filter and runs ~1 file — a false green. Prefer the footgun-proof aliases `vp run test:mobile` / `vp run test:web`.
+- `vp run dev` — start DB + backend + web
+- `vp run dev:mobile` — start mobile dev server (Metro)
+- `vp run db:up` / `vp run db:migrate` / `vp run db:studio`
+- `vp run build`, `vp run typecheck` (+ `:web`, `:backend`, `:mobile`, `:db`, `:shared`)
+- `vp run check:i18n` — fails on hardcoded English strings under `packages/web/app/`
+- `vp run check:mobile-bundle` — headless Metro bundle check (Linux-safe)
+- `vp run check:mobile-simulator`, `vp run mobile:screenshot` — macOS only
+- `vp run mobile:ios` — local Expo iOS build with the shared Boardsesh Xcode cache
+- `vp run mobile:publish` — EAS Update for current branch
+- `vp run test:e2e` — Playwright; auto-starts the dev DB + web server
 
-# Note: VERCEL_URL is automatically set by Vercel for deployments
-# For local development, the app defaults to http://localhost:3000
+### Database
 
-# Install all dependencies (from root)
-vp install
+- `bunx drizzle-kit generate` from `packages/db/` to create migrations. **Never hand-write migration SQL** — it must be in `_journal.json`, which `drizzle-kit generate` updates for you.
+- Dev DB is a pre-built image (`ghcr.io/boardsesh/boardsesh-dev-db`) with all board data, a test user (`test@boardsesh.com` / `test`), and seed data. Reset: `docker compose down -v && vp run db:up`.
 
-# Install Git hooks (runs vp staged on commit)
-vp config
+### Database hosting (Railway)
 
-# Start everything (databases, backend, web)
-# First run pulls the pre-built image (~1GB) with all board data included.
-# Subsequent runs start in seconds.
-# Test user: test@boardsesh.com / test
-vp run dev
-```
+We host Postgres on Railway but treat it as portable — anything we write should run on a `docker run postgres:17`. No Railway-specific addons, env vars, build steps, or schema mutations via dashboard. `pg_dump`/`pg_restore` must be sufficient to lift-and-shift. Same rule for object storage / video / analytics: prefer S3-compatible APIs, OpenTelemetry exporters, standard connection strings. Exit runbook: `docs/neon-migration.md`.
 
-#### Pre-built database image
+## GitHub Issue Fix Workflow
 
-The `boardsesh-dev-db` image is published to GHCR and contains PostgreSQL 17 + PostGIS with all Kilter/Tension/MoonBoard board data pre-loaded, a test user (`test@boardsesh.com` / `test`), social seed data (fake users, follows, ticks, comments, notifications), and all drizzle migrations applied. It is rebuilt automatically when files in `packages/db/docker/`, `packages/db/scripts/`, `packages/db/src/schema/`, `packages/db/drizzle/`, or `packages/db/package.json` change on main.
+When the request references an issue ("fix issue #N", "this GH issue", a bug link):
 
-- **Pull directly**: `docker pull ghcr.io/boardsesh/boardsesh-dev-db:latest`
-- **Reset your local database**: `docker compose down -v && vp run db:up`
-- **Build locally** (e.g. to test Dockerfile changes): `docker compose up -d --build postgres`
+1. **Work in a fresh git worktree branched off the latest `main`.** Fetch `origin/main` first.
+2. **Plan before implementing.**
+3. **Pre-commit hook must pass** — fix underlying issues, no `--no-verify`.
+4. **Write a QA notes file before starting the dev server.** `.boardsesh/qa-notes.md` is the default path the orchestrator auto-detects and surfaces in-app via `/api/internal/dev-metadata`. Include the specific pages/flows to exercise, expected behaviour, and edge cases. For an alternate path, pass `vp run dev -- --qa-notes-file <path>`. **Never start the dev server for an issue fix without QA notes.**
+5. **Start the dev server with `vp run dev`** (web) or `vp run dev:mobile` (mobile). Confirm the startup log shows `[dev] QA notes: <path>`. For mobile, the orchestrator surfaces QA notes in the `DevMetadataPanel` (More tab); Metro output is tee'd to `.boardsesh/mobile-metro.log`.
+6. **Tell the user the URL in one message** — whatever the server prints (typically `http://localhost:3000`). Don't paste the QA plan into chat; it's already in the file and the app.
+7. **Always open a PR** once validated.
 
-### Common Commands (from root)
+Ad-hoc edits and direct feature requests don't trigger this workflow. If the user opts out of a step, respect that for the current task only.
 
-This project uses [Vite+](https://viteplus.dev) (`vp`) as its unified toolchain for testing, linting, formatting, type checking, and task running. Most commands use `vp` directly or `vp run` for tasks defined in the root `vite.config.ts`.
+## Documentation
 
-- `vp check` - Run format, lint, and type checks (this is the canonical validation command and what runs in pre-commit)
-- `vp test` - Run all tests
-- `vp test run` - Run tests once without watch mode
-- `vp lint` - Lint all packages
-- `vp fmt` - Format all files with Oxfmt
-- `vp run dev` - Start development databases, backend, and web server
-- `vp run dev:mobile` - Start the React Native (Expo) Metro dev server
-- `vp run mobile:android-shots` - Boot an Android emulator, run the app against Metro, and capture screenshots via adb (Linux/KVM friendly). One-time setup: `vp run mobile:android-doctor`. Full guide: `docs/android-emulator-screenshots.md`
-- `vp run mobile:ios-shots` - Boot an iOS simulator, run the app against Metro, and capture screenshots via `xcrun simctl` (macOS only). Full guide: `docs/ios-simulator-screenshots.md`
-- `vp run dev:backend` - Start database and backend only
-- `vp run dev:web` - Start database and web server only
-- `vp run db:up` - Start development databases and run migrations only
-- `vp run build` - Build all packages (dependency graph handles ordering and parallelism)
-- `vp run build:web` - Build web package and its dependencies
-- `vp run build:backend` - Build backend package and its dependencies
-- `vp run typecheck` - Type check all packages (builds dependencies first)
-- `vp run typecheck:web` - Type check web package only
-- `vp run typecheck:backend` - Type check backend package only
-- `vp run typecheck:db` - Type check db package only
-- `vp run typecheck:shared` - Type check shared-schema package only
-- `vp run check:i18n` - Scan `packages/web/app/**/*.tsx` for hardcoded user-facing English strings. Runs in CI on every PR; fails the build if a new untranslated string is introduced. Run `bun packages/web/scripts/check-untranslated-strings.ts --fix` to bulk-insert `// i18n-ignore-next-line` markers above existing violations.
-- `bun run backend:start` - Start backend in production mode
+Read relevant `docs/` before working on the matching area; update docs when the system changes.
 
-### Running E2E Tests
-
-- `vp run test:e2e` - Full Playwright run: brings up the pre-built dev DB, exports the seeded test user, and runs every spec in `packages/web/e2e/`. Playwright's `webServer` config auto-starts `vp run dev` (backend + web) for you.
-- `vp run test:e2e:setup` - Only bring up the dev DB. Useful when iterating on a single spec: after setup, run `bun run --filter=@boardsesh/web test:e2e -- e2e/<spec>.spec.ts` (or use `test:e2e:ui` for the Playwright UI).
-- The seeded test user is `test@boardsesh.com` / `test`, exported as `TEST_USER_EMAIL`/`TEST_USER_PASSWORD` by the script so screenshot specs (`help-screenshots`, `layout-screenshots`) run end-to-end without 1Password.
-
-### Database Commands (run from root or packages/db/)
-
-- `vp run db:migrate` - Start dev DB and apply migrations
-- `vp run db:studio` - Start dev DB and open Drizzle Studio for database exploration
-- From packages/db: `bunx drizzle-kit generate` - Generate new migrations
-
-### Creating Database Migrations
-
-**IMPORTANT**: Always use `bunx drizzle-kit generate` from `packages/db/` to create new migrations. This command:
-
-1. Detects schema changes in `packages/db/src/schema/`
-2. Generates the SQL migration file in `packages/db/drizzle/`
-3. Automatically adds the migration to `packages/db/drizzle/meta/_journal.json`
-
-**Never manually create migration SQL files** without adding them to `_journal.json`. The journal tracks which migrations drizzle-kit should run - migrations missing from the journal will be silently skipped during deployment.
-
-```bash
-# From packages/db directory:
-bunx drizzle-kit generate
-
-# Then apply locally to test:
-vp run db:migrate
-```
+- `docs/websocket-implementation.md` — WebSocket party session architecture
+- `docs/boardsesh-grade.md` — Boardsesh grade: the data-science-backed universal climb grade (data sources + quirks, the empirical-Bayes model and every coefficient, validation gates, limitations, rejected alternatives, contributor roadmap)
+- `docs/ai-design-guidelines.md` — Velvet Send design system (mobile-canonical: palette, typography, tokens, Liquid Glass / Material variants; web still on the legacy rose/sage palette, pending migration)
+- `docs/live-activity-push-testing.md` — APNs Live Activity push testing
+- `docs/logging.md` — backend structured logger (winston)
+- `docs/mobile-sheets-vs-routes.md` — mobile: which surface to use (bottom sheet vs route), with the decision tree + the hard rules (incl. why `fullScreenModal` breaks the iOS 26 native tab bar)
 
 ## Architecture Overview
 
-### Routing Pattern
+### Web routing
 
-The app uses deeply nested dynamic routes:
+Deeply nested dynamic routes: `/[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/...`. Routes mirror `/api/v1/...`. Board names: `kilter`, `tension`. Next.js App Router — prefer server components wherever possible (queue/realtime components are necessarily client).
 
-```
-/[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/...
-```
+### Key components
 
-- Routes mirror the API structure at `/api/v1/...`
-- Board names: "kilter", "tension"
-- All route segments are required for board-specific pages
+- **BoardProvider** (`packages/web/app/components/board-provider-context.tsx`) — auth, sessions, logbook, IndexedDB.
+- **QueueProvider** (`packages/web/app/components/queue-control/queue-context.tsx`) — climb queue (reducer), search, GraphQL-WS sync.
 
-We are using next.js app router, it's important we try to use server side components as much as possible.
+### Data flow
 
-### Key Architectural Components
+- Server components fetch initial data.
+- Client components use React Query.
+- API: `/api/internal/...` for server-side ops; `/api/v1/[board]/proxy/...` for Aurora proxies.
+- State: Context + `useReducer` for complex state; URL params as source of truth for board config.
 
-#### Context Providers
+### Integration points
 
-1. **BoardProvider** (`packages/web/app/components/board-provider-context.tsx`)
-   - Manages authentication and user sessions
-   - Handles logbook entries and ascent tracking
-   - Uses IndexedDB for offline persistence
+Web Bluetooth (board LEDs), GraphQL-WS backend, Redis (pub/sub for multi-instance), IndexedDB (client persistence), Aurora API (user sync).
 
-2. **QueueProvider** (`packages/web/app/components/queue-control/queue-context.tsx`)
-   - Manages climb queue with reducer pattern
-   - Integrates with search results and suggestions
-   - Syncs with backend via GraphQL subscriptions
+### Types
 
-#### Data Flow
-
-1. **Server Components**: Initial data fetching in page components
-2. **Client Components**: Interactive features with React Query (`@tanstack/react-query`) for data fetching
-3. **API Routes**: Two patterns:
-   - `/api/internal/...` - Server-side data operations
-   - `/api/v1/[board]/proxy/...` - Aurora API proxies
-4. **State Management**: React Context + useReducer for complex state
-
-### Database Schema
-
-- Separate tables for each board type (kilter*\*, tension*\*)
-- Key entities: climbs, holds, layouts, sizes, sets, user_syncs
-- Stats tracking with history tables
-- See `packages/db/src/schema/` for full schema (re-exported via `packages/web/app/lib/db/schema.ts`)
-
-### Key Integration Points
-
-1. **Web Bluetooth**: Board LED control via Web Bluetooth API
-2. **GraphQL-WS Backend**: Real-time collaboration via WebSocket GraphQL subscriptions
-3. **Redis**: Pub/sub for multi-instance backend scaling
-4. **IndexedDB**: Offline storage for auth and queue state
-5. **Aurora API**: External API integration for user data sync
-
-### Type System
-
-- Core types in `packages/web/app/lib/types.ts`
-- Shared types in `packages/shared-schema/src/types.ts`
-- GraphQL schema in `packages/shared-schema/src/schema.ts`
-- Zod schemas for API validation
-- Strict TypeScript configuration
+Web types in `packages/web/app/lib/types.ts`; shared types in `packages/shared-schema/src/types.ts`; GraphQL schema in `packages/shared-schema/src/schema.ts`. Zod for API validation.
 
 ### Testing
 
-- Tests use Vitest via Vite+ (`vp test`)
-- Run `vp test run --reporter=agent` for CI-friendly output
-- Run `vp test --project web` to run only web tests
-- Run `vp test --project backend` to run only backend tests
-- Backend tests auto-start a postgres+redis docker stack via `packages/backend/docker-compose.test.yml` (idempotent, left running between runs). Set `SKIP_TEST_INFRA=1` to skip orchestration; set `CI=1` to rely on caller-provided services.
-- `packages/db` uses Node.js native test runner (`tsx --test`), not Vitest
+Vitest via `vp test`. Backend tests auto-start postgres+redis via `packages/backend/docker-compose.test.yml`; set `SKIP_TEST_INFRA=1` to skip, `CI=1` for caller-provided services. `packages/db` uses Node's native test runner (`tsx --test`).
 
 ## Development Guidelines
 
 ### Important rules
 
-- **Validation must go through `vp` — never `bun run`, `bunx`, or `npx`.** This repo's toolchain is Vite+ (`vp`). For lint, format, typecheck, test, build, and dev, use `vp` and `vp run` exclusively. Do not invoke `bun run check`, `bun run lint`, `bun run test`, `bun run --filter=... typecheck`, `bunx tsc`, `npx eslint`, etc. — they bypass the unified config, can mutate `bun.lock`, and skip the typecheck/lint settings wired into `vite.config.ts`. The only sanctioned non-`vp` invocations are: (a) `bunx drizzle-kit generate` for migrations (no `vp` wrapper exists), and (b) `bun run backend:start` for production backend startup. If you find yourself reaching for `bun run` or `bunx` for anything else, stop and use the `vp` equivalent.
-- **Use `vp check` or `vp run typecheck` instead of `vp run build` for validation** - Running build interferes with the local dev server and `bunx` commands can mess with lock files. `vp check` runs lint + format (the staged pre-commit hook calls `vp check --fix`). TypeScript type checking is run separately via `vp run typecheck` and in the typecheck CI job — `lint.options.typeCheck` is intentionally off in `vite.config.ts` because oxlint's type-aware mode surfaces a backlog of pre-existing violations across bundled assets and unrelated files. Run `vp run typecheck` (or one of `vp run typecheck:web|backend|db|shared`) before pushing.
-- Always try to use server side rendering wherever possibe. But do note that for some parts such as the QueueList and related components, thats impossible, so dont try to force SSR there.
-- Always use MUI (Material UI) components and their properties.
-- Try to avoid use of the style property
-- Always use design tokens from `packages/web/app/theme/theme-config.ts` for colors, spacing, and other design values - never use hardcoded values
-- Always use CSS media queries for mobile/responsive design
-- For rendering avoid JavaScript breakpoint detection & Grid.useBreakpoint()
-- While we work together, be careful to remove any code you no longer use, so we dont end up with lots of deadcode
-- Prefer skeleton or shadow content for loading states. Use spinners only when representative placeholder content is not reasonably possible, such as a single indeterminate action with no stable content shape.
-- **Dark mode uses white input fields** — This is intentional for contrast. All input components (TextField, Select, Autocomplete, etc.) have white backgrounds in dark mode via `darkTokens.semantic.inputSurface`. Do not change them to dark backgrounds.
-- **Never use `any` type** - The `no-explicit-any` lint rule is set to `deny` across all packages. Use `unknown`, proper types, or `as unknown as SpecificType` for type assertions. No exceptions - `any` defeats the purpose of TypeScript
-- **Never hardcode user-facing strings** - All visible text must come from the i18n catalogs in `packages/shared/i18n/locales/`. See the Internationalisation section below for the call-site pattern. CI runs `vp run check:i18n` on every PR, which fails the build if a `.tsx` file under `packages/web/app/` introduces a hardcoded English string. Pre-existing violations are silenced with `// i18n-ignore-next-line` (or `{/* i18n-ignore-next-line */}`) comments — chip away at these by translating them and removing the marker.
-- **Variable names must describe their contents** - No single-letter aliases (`r`, `x`, `s`) or vague placeholders (`data`, `info`, `latest`, `temp`, `value`) outside of tight loops or well-known math conventions. The name should tell the next reader what's inside without forcing them to scroll back to the declaration. Prefer destructuring at the use site over a generic alias — `const { queue, currentClimb } = stateRef.current` reads better than `const s = stateRef.current` followed by `s.queue` / `s.currentClimb`.
+- **Never use `any`.** `typescript/no-explicit-any` is `deny` everywhere. Use `unknown` or `as unknown as T`.
+- **Validation goes through `vp` only** (see Commands above).
+- Always prefer server-side rendering. Queue/realtime components are the exception — don't force SSR there.
+- **Web uses MUI.** Always MUI components and props. Avoid the `style` prop. Always use design tokens from `packages/web/app/theme/theme-config.ts` for colours/spacing — no hardcoded values.
+- Use CSS media queries for responsive design. Avoid JS breakpoint detection (`Grid.useBreakpoint()`).
+- Remove dead code as you go.
+- **Dark mode uses white input fields.** Intentional for contrast (`darkTokens.semantic.inputSurface`). Do not change.
+- **Never hardcode user-facing strings** in `packages/web/app/**/*.tsx` — all visible text via i18n catalogs. CI runs `vp run check:i18n` and `vp run check:i18n:orphans`. Mark unresolvable dynamic lookups with `// i18n-keep namespace.dotted.key`.
+- **Variable names describe contents.** No single-letter aliases (`r`, `x`, `s`) or vague placeholders (`data`, `info`, `temp`, `value`) outside tight loops. Destructure at the use site instead of generic aliases.
+- **Drizzle ORM over raw SQL.** Use `db.select/insert/update/delete()`. Raw `sql` from `drizzle-orm` only when the query genuinely can't be expressed otherwise. Importing `sql` from `@/app/lib/db/db` (raw Neon HTTP client) is lint-blocked.
+- **IndexedDB only for client-side storage.** `localStorage`/`sessionStorage` are lint-blocked (`no-restricted-globals`). Use `packages/web/app/lib/user-preferences-db.ts` for simple key-value or create a domain-specific `*-db.ts` (see `tab-navigation-db.ts`, `onboarding-db.ts`). Always SSR-guard with `typeof window === 'undefined'`. One-time `localStorage` migration code is the only legitimate exception — mark with `// oxlint-disable-next-line no-restricted-globals`.
 
 ### Internationalisation
 
-Boardsesh ships English (`en-US`) at root paths, Spanish (`es`) at `/es/*`, and French (`fr`) at `/fr/*`. The i18n stack is `i18next` + `react-i18next` with JSON catalogs under `packages/shared/i18n/locales/<locale>/<namespace>.json` (`@boardsesh/i18n`, shared by web and mobile). Locale detection is path-based — middleware (`packages/web/middleware.ts`) reads the locale prefix, rewrites the URL internally, and sets the `x-boardsesh-locale` request header.
+Supported locales: `en-US` (root), `es` (`/es/*`), `fr`. Path-based detection via middleware (`packages/web/middleware.ts`). Catalogs in `packages/shared/i18n/locales/<locale>/<namespace>.json` (`@boardsesh/i18n`, shared by web and mobile). Namespaces: `common`, `marketing`, `auth`, and friends — add new ones to `ALL_NAMESPACES` in `packages/shared/i18n/src/config.ts` (web re-exports it as `SEED_NAMESPACES`; mobile ships the `MOBILE_NAMESPACES` subset).
 
-**Adding new copy**
+- **Add every new key to every locale.** `catalog-completeness.test.ts` in `@boardsesh/i18n` enforces parity per namespace.
+- Server: `const { t } = await getServerTranslation('marketing')`.
+- Client: `const { t } = useTranslation('marketing')`.
+- Internal links: `<LocaleLink>` from `@/app/components/i18n/locale-link` (not raw `next/link`). MUI: `<MuiLink component={LocaleLink} href="...">`.
+- Page metadata: use `createPageMetadata({ title, description, path, locale })` for hreflang alternates.
+- Inline formatting with multiple tags: react-i18next `<Trans>` (see `app/legal/legal-content.tsx`).
+- Use ICU placeholders: `"greeting": "Hello {{name}}"`.
+- **Don't translate** code samples in `<pre>` blocks, brand names (Boardsesh, Kilter, Tension, MoonBoard), or user-generated content.
+- Linter hard-fails on `t(variable)` / `t('a' + b)` — use string literals or template literals only.
 
-- Add the key to every locale's catalog: `packages/shared/i18n/locales/<locale>/<namespace>.json` for `en-US`, `es`, and `fr`. `catalog-completeness.test.ts` in `@boardsesh/i18n` enforces per-namespace parity, so a key added to English only fails CI.
-- Pick the right namespace — `common` (shared chrome), `marketing` (about/help/docs/legal/privacy/home), `auth`, `climbs`, and friends; the full list is `ALL_NAMESPACES` in `packages/shared/i18n/src/config.ts`. Add a new namespace there (web re-exports the list as `SEED_NAMESPACES`; add it to `MOBILE_NAMESPACES` too if mobile needs it) and create `<locale>/<namespace>.json` files for each supported locale.
-- Spanish and French strings follow fixed glossaries: `docs/i18n-spanish-glossary.md` and `docs/i18n-french-glossary.md`.
-- Use ICU-style placeholders for interpolation: `"greeting": "Hello {{name}}"`.
+Adding a new locale: update `SUPPORTED_LOCALES` and friends in `packages/shared/i18n/src/config.ts`, add catalog dir, language switcher, sitemap.
 
-**Server components**
+**Spanish terminology:** Spanish translations follow a fixed glossary. Most importantly, a climbing board is **"plafón"** (masculine — _el plafón_, plural _plafones_), never "tabla"/"tablero"/"tabla de escalada" or raw English "board"; fix article/adjective agreement when you swap the word. Brand product names ("Kilter Board", "Tension Board", "MoonBoard") stay as-is. Full terminology, grammar rules, and exceptions: **`docs/i18n-spanish-glossary.md`** — follow it for every Spanish string you add.
 
-```ts
-import { getServerTranslation } from '@/app/lib/i18n/server';
+**French terminology:** French translations follow a fixed glossary too. Most importantly, a climbing send is never **« envoyer »** — French climbers don't "send" a climb. The send status/verb is **« Enchaîné » / enchaîner**, the noun send is **« la croix »** (invariable: _dix croix_; « faire la croix » = tick it in the logbook), and lighting a climb on the wall is **« allumer »**, not « envoyer ». Attempts on a climb are « essais », never « tentatives ». Full terminology and exceptions: **`docs/i18n-french-glossary.md`** — follow it for every French string you add.
 
-export default async function Page() {
-  const { t } = await getServerTranslation('marketing');
-  return <h1>{t('about.headerTitle')}</h1>;
-}
-```
+### Copy & microcopy
 
-**Client components** (`'use client'`)
+- Describe what the user gets, not what the feature does.
+- Active verbs in CTAs. "See the feed", "Build a playlist", not "Go to..." / "View your...".
+- Climber voice: "sends", "crew", "beta", "project" over "hub", "platform", "all-in-one solution".
+- Empty states / error messages carry the voice too. "No one's here yet" over "No data available."
+- Frame migrations and warnings around what users gain, not lose.
+- Avoid AI-writing tells: em dash overuse, "not only X but Y", triple parallel structures, bolded-keyword-colon-explanation bullets, generic adjectives ("seamless", "comprehensive"). See https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
 
-```tsx
-import { useTranslation } from 'react-i18next';
+### Trademark usage (Kilter, Tension, MoonBoard)
 
-export default function Foo() {
-  const { t } = useTranslation('marketing');
-  return <span>{t('home.hero.title')}</span>;
-}
-```
+- Capitalise correctly: **MoonBoard**, **Kilter**, **Tension**.
+- Describe compatibility, not branding: "Works with Kilter" not "Kilter app". "One app for your boards" not "One app for Kilter".
+- Never imply endorsement of Aurora, Moon Climbing, or any manufacturer. See `/legal` and `LEGAL.md`.
 
-**Internal links** must preserve the active locale — use `<LocaleLink>` (from `@/app/components/i18n/locale-link`), not raw `next/link`. For MUI links: `<MuiLink component={LocaleLink} href="/docs">`. External links (`https://`, `mailto:`) and `router.push()` calls are unaffected for now (locale-preserving navigation helpers for `router.push` are a follow-up).
+## SEO for new web pages
 
-**Page metadata** must use the locale-aware helper — `createPageMetadata` already populates `alternates.languages` (every supported locale plus x-default) when given a `path`:
+Decide up front: is this a search surface (landing, public board, climb view, public profile, public setter, public playlist) or a utility surface (`/auth`, `/settings`, `/join`, `/notifications`, session flows, `/play/...`)? Default utility pages to `robots: { index: false, follow: true }`.
 
-```ts
-export async function generateMetadata() {
-  const { t, locale } = await getServerTranslation('marketing');
-  return createPageMetadata({
-    title: t('metadata.foo.title'),
-    description: t('metadata.foo.description'),
-    path: '/foo',
-    locale,
-  });
-}
-```
+For indexable pages:
 
-**Inline formatting** (`<strong>`, `<em>`, links inside a paragraph) — prefer splitting into label/body keys for simple cases. For prose with multiple inline tags, use react-i18next's `<Trans components={{ em: <em />, strong: <strong /> }}>` so translators see the sentence as one unit. See `packages/web/app/legal/legal-content.tsx` for the `<Trans>` pattern.
+- Unique `title`, `description`, `alternates.canonical`, OG + Twitter metadata. No generic titles like `Profile | Boardsesh` — lead with what people search for (`Marco's Kilter Sessions | Boardsesh`).
+- First server-rendered HTML must contain meaningful copy: one `h1`, descriptive paragraphs, crawlable links. No indexable spinner-only pages.
+- Canonicalise filtered/sorted/paginated variants to the clean base URL. Canonicalise `/play/...` to the equivalent `/view/...`.
+- Reachable via real `<a href>` / `Link href` — not `router.push` or click-handlers on `<div>`s. ≥2–3 internal links per page with descriptive anchor text.
+- JSON-LD where it fits: `Organization`/`WebSite` (homepage), `BreadcrumbList` (hierarchies), `ProfilePage` (profiles).
+- Update `packages/web/app/sitemap.ts` when adding a new public page type. Real content timestamps, not `new Date()`.
+- Keep trademark wording compatible-not-affiliative.
 
-**Adding a new page**
+## Mobile Development (packages/mobile/)
 
-- Make it reachable at `/path` (English) and the locale-prefixed variants (`/es/path`, `/fr/path`). Verify in the dev server.
-- Use `generateMetadata` with the pattern above so hreflang alternates are emitted.
-- Add the URL to `packages/web/app/sitemap.ts` if it should be indexable — sitemap entries automatically get per-locale variants.
+React Native + Expo SDK 57, React Native 0.86, Expo Router 57.
 
-**Adding a new locale**
+### Stack
 
-Touch all of: `SUPPORTED_LOCALES` and `LOCALE_HTML_LANG`/`LOCALE_OG`/`LOCALE_LABELS` in `packages/shared/i18n/src/config.ts`, every catalog directory under `packages/shared/i18n/locales/`, the language switcher options, and the sitemap. `detectLocale` (`packages/web/app/lib/i18n/detect-locale.ts`) iterates `SUPPORTED_LOCALES` and needs no edit — adding the locale to the shared config is sufficient for routing. Don't ship a partial locale — middleware will rewrite paths but pages will fall back to English everywhere.
+- **Routing**: `packages/mobile/app/` (Expo Router file-based)
+- **Components**: `packages/mobile/src/components/` (native RN, no MUI)
+- **Theme**: `packages/mobile/src/providers/theme-provider.tsx` (iOS system colors, spacing, radii)
+- **Providers**: `packages/mobile/src/providers/` (auth, i18n, query, queue, theme)
+- **Shared packages**: `@boardsesh/ble-protocol`, `@boardsesh/board-config`, `@boardsesh/board-constants`, `@boardsesh/queue`, `@boardsesh/shared-schema`
+- **Bundler**: Metro via `packages/mobile/metro.config.js` (watches monorepo root)
 
-**Don't translate** code samples in `<pre>` blocks (e.g. `app/docs/docs-client.tsx`), brand names ("Boardsesh", "Kilter", "Tension", "MoonBoard"), or user-generated content (climb names, comments, usernames). Trademark phrasing in CLAUDE.md still applies.
+### Mobile vs. web
 
-A handful of style rules are enforced as oxlint errors so they fail `vp check`. See `.oxlintrc.json` for the exact rule names and config; the current lint-enforced set includes `typescript/no-explicit-any` (no `any`), `no-nested-ternary`, `no-restricted-globals` (no `localStorage` / `sessionStorage`), and `no-restricted-imports` (no raw Neon `sql` client from `@/app/lib/db/db`).
+- **Lint via `vp check`** — runs for mobile just like other packages. Use `vp run typecheck:mobile` for type-only checks.
+- **Own i18n provider** at `packages/mobile/src/providers/i18n-provider.tsx`. No web i18n rules apply.
+- **No web dev-server workflow** — use `vp run dev:mobile` (Metro) instead. The QA-notes-into-`/api/internal/dev-metadata` flow is web-only; on mobile the `DevMetadataPanel` (More tab) reads `.boardsesh/qa-notes.md` via env injection.
+- **Styling**: `StyleSheet.create` + theme provider. No MUI, no `style`-prop avoidance rule.
+- **Dev mode**: `__DEV__` global, not `process.env.NODE_ENV`.
+- **Storage**: `expo-secure-store` for credentials, not IndexedDB.
+- **Navigation**: Expo Router, not Next.js App Router.
 
-### Copy & Microcopy
+### Validation sequence
 
-When writing user-facing text, follow these rules:
+After mobile changes:
 
-- Describe what the user gets, not what the feature does. "Line up your climbs before you get to the gym" is better than "Organize climbs into collections for your sessions."
-- Users opened the app for a reason. Don't ask "Ready to climb?" when you can say "Get on the wall."
-- If a sentence has three commas, it's a feature list in disguise. Pick the strongest point or break it up.
-- Write like a climber talks. "Sends", "crew", "beta", "project" over "hub", "platform", "all-in-one solution."
-- Empty states, error messages, and button labels carry the voice too. "No one's here yet" over "No data available."
-- Use active verbs in CTAs. "See the feed", "Build a playlist", "Start climbing." Avoid "Go to..." and "View your..."
-- Frame migrations and warnings around what users gain, not what they lose.
-- Watch for AI-writing tells: em dash overuse, "not only X but Y" constructions, triple parallel structures, bolded-keyword-colon-explanation bullets, and generic adjectives like "seamless" or "comprehensive." See https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+1. `vp run typecheck:mobile` — always.
+2. `vp run test:mobile` (or `vp test run --project mobile`) — always. Do **not** use `vp test --project mobile run` — the flag-before-`run` order runs ~1 file (false green).
+3. `vp run check:mobile-bundle` — Metro bundle check (Linux-safe; highest-value).
+4. `vp run check:mobile-simulator` — macOS only; skips on Linux.
+5. `vp run mobile:screenshot` — macOS only.
 
-## SEO for New Pages
+### Mobile performance checklist (PR review)
 
-When adding a new route in `packages/web/app/`, decide up front whether it is a search surface or a utility surface. Do not let every page default to "indexable".
+For any list, provider, gesture, or board-art change, confirm:
 
-### Decide if the page should rank
+- **List virtualized?** `FlashList` / `BottomSheetFlatList`, never `.map()` in a `ScrollView`. Any `loadMore` is one page per end-reach, not a drain-until-`hasMore`.
+- **Row memoized & `renderItem` deps clean?** Row is `React.memo`'d; `renderItem` is a `useCallback` whose deps have **no array `.length`** and **no inline closures**; `keyExtractor` hoisted.
+- **Provider value memoized & state/actions split?** Context `value` is `useMemo`'d; a volatile array (logbook, reducer state, roster) is not bundled with the stable callbacks consumers depend on. Enforced for `packages/mobile/**` + `packages/shared/**` by `react/jsx-no-constructed-context-values` (error).
+- **Per-row hook O(1)?** Reads a pre-built index (`Map`), never `array.filter`/scan per row.
+- **Worklet `runOnJS` gated?** No `runOnJS(setState)` per frame — gate on a value change; mirror read JS values into shared values instead of listing them in the gesture `useMemo` deps.
+- **New effect bounded?** No unbounded `loadMore` loops or per-frame state churn.
 
-- Treat landing pages, public board pages, climb view pages, public profiles, public setter pages, and public playlists as SEO surfaces by default.
-- Treat `/auth`, `/settings`, `/join`, `/notifications`, session utilities, and similar signed-in flows as non-SEO surfaces by default.
-- Treat alternate experiences like `/play/...` as duplicate or utility surfaces unless there is a strong reason to index them separately.
-- If a page is private, auth-gated, ephemeral, or only useful inside an active session, default to `robots: { index: false, follow: true }`.
+Full rationale + repo examples: `docs/react-native-performance.md`.
 
-### Metadata requirements
+### Local iOS builds
 
-- Every indexable page must define a unique `title`, `description`, canonical URL via `alternates.canonical`, Open Graph metadata, and Twitter metadata.
-- Every non-indexable page must set an explicit `robots` directive instead of relying on default behavior.
-- Avoid generic metadata like `Profile | Boardsesh`, `Playlist | Boardsesh`, `Play Mode | Boardsesh`, or `View details and climbs`.
-- Prefer title formats like `Topic or Entity | Boardsesh`.
-- Lead titles with the thing people actually search for, then the brand.
-- Match search intent naturally in titles and descriptions. Descriptive phrases like `Kilter Board app alternative` are okay when the page clearly states Boardsesh is a compatible alternative and not the official Kilter app.
+Use `vp run mobile:ios` for local `packages/mobile` iOS builds instead of raw `expo run:ios`. The wrapper points generated `packages/mobile/ios/build` at a shared cache under `~/Library/Caches/boardsesh/xcode/packages-mobile-ios/build`, so separate git worktrees reuse the same Xcode build products. Override with `BOARDSESH_IOS_BUILD_CACHE_DIR=/path/to/cache` only when deliberately isolating a cache. Do not pass `--no-build-cache`; it clears iOS derived data and defeats the shared-cache workflow.
 
-Good examples:
+### App Store screenshots (cached dev-client + Metro)
 
-- `Kilter Board App Alternative | Boardsesh`
-- `MoonBoard Screenshot Import | Boardsesh`
-- `Marco's Kilter Sessions | Boardsesh`
+`vp run mobile:screenshots` (`scripts/mobile-screenshots.ts`) drives Maestro over iOS simulators. The app it installs is a Debug **dev-client** that loads its JS from **Metro** at runtime — the screenshot behaviour (`EXPO_PUBLIC_SCREENSHOT_MODE`, theme, locale, workout) is baked into the Metro JS bundle, **not** the native binary. So the native `.app` is reusable: only the JS regenerates per run.
 
-Bad examples:
+- Pass `--app-path <Boardsesh.app>` to install a prebuilt/cached app (CI's common path). Without it, the script builds one via `vp run mobile:build-sim-app` (`scripts/mobile-build-sim-app.ts` → `expo prebuild` + `pod install` + `xcodebuild build -sdk iphonesimulator -configuration Debug`; **not** `expo run:ios`, whose launch step hangs in CI). Use `--clean` for a deterministic from-scratch build.
+- The default Apple capture is `--devices common --locales all`: iPhone 16 Pro Max, iPhone 14 Plus, and iPhone 16 Pro for app locales `en-US`, `es`, and `fr`. The Spanish app locale is written to both App Store Connect folders, `es-ES` and `es-MX`.
+- `.github/workflows/mobile-screenshots-ios.yml` caches the `.app` (`actions/cache`) keyed on **native inputs only**: `packages/mobile/app.config.ts`, `plugins/**`, `modules/**`, `package.json`, `patches/**`, and the root `package.json` (which pins `@expo/cli` / `react-native-screens`), plus `runner.os`/`runner.arch`. JS/TS-only and web-only changes (including `bun.lock` churn) are a cache hit and skip the ~30-min native build; any native-input change busts the key and rebuilds. Bump the `-v1-` salt to force a rebuild. A native-dep change must invalidate the key — when adding native config, confirm it's covered by one of those globs.
 
-- `Home | Boardsesh`
-- `Profile | Boardsesh`
-- `Play Mode | Boardsesh`
+### Android emulator screenshots (local, dev-client + Metro)
 
-### First-render content requirements
+For quick ad-hoc shots of the live app on an Android emulator (the fast KVM path on Linux/Intel), `vp run mobile:android-shots` (`scripts/mobile-android-shots.ts`) boots an x86*64 emulator, installs a cached **dev-client** APK (`com.boardsesh.app.dev`, universal `arm64-v8a`+`x86_64`), starts Metro, and captures with `adb exec-out screencap`. Same `EXPO_PUBLIC_SCREENSHOT*_`env as iOS; the deep-link scheme is`com.boardsesh.app://`for both variants (only the package differs). The APK comes from the latest`rn-android-dev-_`release (or a local Gradle fallback). One-time setup:`vp run mobile:android-doctor`(bootstraps the SDK + JDK 21 under`~/.cache/boardsesh/`). Full guide: `docs/android-emulator-screenshots.md`. This is distinct from `vp run mobile:screenshots --platform android`, which installs a standalone store APK with bundled JS.
 
-- If a page should rank, the first server-rendered HTML must include meaningful public content.
-- Ship one clear `h1`, one or more descriptive paragraphs, and crawlable internal links near the top of the page.
-- Put primary copy above heavy widgets, drawers, or client-only controls.
-- Do not ship an indexable page whose first render is only a spinner, app shell, board canvas, or client-fetched placeholder.
-- If the important content can only be loaded client-side, either move the summary content into a server component or mark the page `noindex`.
+### OTA preview distribution
 
-### Canonical and noindex defaults
+Two preview paths, by audience:
 
-- Canonicalize filtered, sorted, paginated, and query-param variants to the clean base page unless the variant is intentionally indexable as its own document.
-- Canonicalize alternate experiences to the primary route. In this app, `/play/...` should normally point to the equivalent `/view/...` route.
-- Keep private, auth-gated, utility, and session-entry routes out of the index.
-- Do not let duplicate numeric and slug-based URLs compete if one is the preferred public route.
+- **Per-PR self-hosted channels (store / TestFlight binary).** Every PR with RN changes can publish its JS bundle to a `pr-<number>` channel on our expo-open-ota server. A tester with the `tester` role switches to it in-app (More → Development → OTA Channel Switcher → type `pr-<number>`) — no per-tester build. Same-repo PRs auto-publish on every push; fork PRs are triggered by a maintainer's `/ota-preview` comment (or `workflow_dispatch`). Token exposure is gated by the `ota-preview` GitHub environment. Channels are torn down on PR close + a daily sweep; S3 growth is bounded by a `pr-` bucket lifecycle rule. Workflow: `.github/workflows/mobile-ota-preview.yml` (sweep: `mobile-ota-preview-sweep.yml`). See `docs/mobile-ota-updates.md`.
+- **EAS dev-client preview build (native-change testing).** `vp run mobile:preview-build` produces an installable `.ipa`/`.apk` dev-client; JS updates ride the EAS free tier via `vp run mobile:publish` (defaults to the current git branch; point a channel with `bunx eas-cli@16 channel:edit preview-N --branch <branch>`). Use this when a change is **native** — a `pr-<number>` OTA can't reach the store binary across a fingerprint change. This path is no longer auto-published in CI; publish locally. `EXPO_TOKEN` required.
 
-### Internal linking requirements
+A new preview build is only needed when native deps change (new Expo plugin, new native module, SDK bump). JS/TS changes ride OTA.
 
-- Important public pages must be reachable through crawlable `Link href` or `<a href>` links.
-- Do not rely on `router.push`, clickable cards built from `div`s, or button-only flows for key SEO destinations.
-- Every new indexable page should have at least 2 to 3 meaningful internal links to or from other public pages.
-- Use descriptive anchor text like `Browse Kilter climbs`, `Migrate from the old Kilter app`, or `Open Marco's profile` instead of generic text like `Click here` or `Learn more`.
+### OTA production distribution (self-hosted expo-open-ota)
 
-### Structured data defaults
+Production/TestFlight builds use **self-hosted** OTA, not EAS hosting — see `docs/mobile-ota-updates.md`. TestFlight/Play builds (bare `expo prebuild`) bake in `EXPO_UPDATES_CHANNEL: production` and point `updates.url` at our expo-open-ota server (`EXPO_UPDATES_URL`). Production OTAs **auto-publish on every push to `main`** via `.github/workflows/mobile-ota-production.yml` (manual: `vp run mobile:publish -- --channel production`; runs `eoas publish`, needs `EXPO_UPDATES_URL` + `EXPO_TOKEN`). Preview builds stay on the EAS free tier (above). One-time infra: `vp run mobile:ota-setup` (run with no arg for the runbook).
 
-- Use JSON-LD when the page type clearly supports it.
-- Homepage: consider `Organization` and `WebSite`.
-- Page hierarchies: consider `BreadcrumbList`.
-- Public profile-like pages: consider `ProfilePage`.
-- Only add structured data that matches the visible content on the page.
-- Validate rich-result markup before shipping when relevant.
-
-### Sitemap inclusion
-
-- Review sitemap generation whenever you add a new public page type.
-- Add only public, canonical, indexable URLs to the sitemap.
-- Keep utility, duplicate, filtered, query-param, and auth-only routes out of the sitemap.
-- Use real content timestamps where possible instead of setting every entry to the current time.
-
-### Boardsesh-specific examples
-
-- Public board pages, climb view pages, migration pages, and search-focused landing pages are SEO surfaces.
-- Settings, auth, session-join flows, notifications, and alternate `/play/...` views are non-SEO surfaces by default.
-- If you add a new public page type, update the sitemap implementation in `packages/web/app/sitemap.ts` or its replacement sitemap handlers in the same change.
-- Prefer server components for page summaries and metadata generation wherever possible.
-- Reconcile keyword targeting with trademark-safe wording: describe compatibility and alternatives clearly, but never imply endorsement or affiliation.
-
-### Pre-ship SEO checklist
-
-- Is this page supposed to rank?
-- Does it have unique metadata and a canonical URL?
-- Does the first server-rendered HTML contain useful copy without hydration?
-- Should it be `noindex` instead?
-- Can crawlers reach it through normal links?
-- Should it be added to the sitemap?
-- If trademarked board names are used, is the wording descriptive and non-affiliative?
-
-### Trademark Usage (Kilter, Tension, MoonBoard)
-
-- Always capitalize correctly: **MoonBoard** (not Moonboard), **Kilter**, **Tension**
-- Use names to describe compatibility, not to brand Boardsesh: "Works with Kilter" not "Kilter app"
-- Prefer "your" to signal the user's hardware: "One app for your boards" not "One app for Kilter"
-- Never imply endorsement or affiliation with Aurora Climbing, Moon Climbing, or any manufacturer
-- See `/legal` route and `LEGAL.md` for the full trademark disclaimer
-
-### Component Structure
-
-- Server Components by default
-- Client Components only when needed (interactivity, browser APIs)
-- Feature-based organization in `packages/web/app/components/`
-
-### API Development
-
-- Follow existing REST patterns
-- Use Zod for request/response validation
-- Implement both internal and proxy endpoints as needed
-
-### Database Queries: Prefer Drizzle ORM
-
-**Always use Drizzle ORM query builder** (`db.select()`, `db.insert()`, `db.update()`, `db.delete()`) for database operations. Only fall back to raw SQL (`sql` template literals from `drizzle-orm`) when the query genuinely cannot be expressed with the query builder (complex JOINs with type casts, window functions, CTEs, EXISTS subqueries, complex aggregations).
-
-- Importing `sql` from `@/app/lib/db/db` (the raw Neon HTTP client) is blocked by lint (`no-restricted-imports`). Use Drizzle's `db` instance instead (`getDb()` or `dbz`).
-- When raw SQL is necessary, use `db.execute(sql`...`)` with Drizzle's `sql` from `drizzle-orm` — not the Neon HTTP client directly.
-- Both are safe from SQL injection (parameterized), but Drizzle gives you type safety and schema awareness.
-
-### Client-Side Storage: IndexedDB Only
-
-All client-side persistence must use IndexedDB via the `idb` package. Bare `localStorage` and `sessionStorage` references are blocked by lint (`no-restricted-globals`); the only legitimate uses are one-time migration code that reads old data and deletes it, plus a couple of e2e test affordances that need synchronous reads at render time. Mark those sites with `// oxlint-disable-next-line no-restricted-globals` and a short reason. Do not bypass the rule by writing `window.localStorage` / `window.sessionStorage` — write the bare global and disable the rule explicitly so the exception is greppable.
-
-- **Simple key-value preferences** (e.g., view mode, party mode): Use the shared utility at `packages/web/app/lib/user-preferences-db.ts` which provides `getPreference<T>(key)`, `setPreference(key, value)`, and `removePreference(key)`.
-- **Domain-specific data** (e.g., recent searches, session history, onboarding status): Create a dedicated `*-db.ts` file in `packages/web/app/lib/` following the established pattern (lazy `dbPromise` init, SSR guard, try-catch error handling). See `tab-navigation-db.ts` or `onboarding-db.ts` for examples.
-- All IndexedDB access must be guarded with `typeof window === 'undefined'` checks for SSR compatibility.
-- When migrating a value from `localStorage` to IndexedDB, include one-time migration logic that reads the old key, writes to IndexedDB, and deletes the localStorage key. See `user-preferences-db.ts` (`getPreference` fallback), `recent-searches-storage.ts`, and `party-profile-db.ts` for examples.
-
-### State Management
-
-- URL parameters as source of truth for board configuration
-- Context for cross-component state
-- IndexedDB for persistence
-
-### Mobile Considerations
-
-- iOS Safari lacks Web Bluetooth support
-- Recommend Bluefy browser for iOS users
-- Progressive enhancement for core features
+runtimeVersion uses the **`fingerprint`** policy (a hash of the native project), so a JS-only change keeps the same fingerprint and the OTA lands, while any native change yields a new fingerprint that old binaries won't pull (no `appVersion` footgun, no manual `version` bump for OTA compatibility). **Fingerprint parity is the one rule:** the OTA publish must resolve `app.config.ts` to the same config the native build did, so `mobile-ota-production.yml` mirrors the native workflows' env (guarded by `scripts/mobile-ci-env-parity.test.ts`) and publishes per-platform (iOS without `GOOGLE_MAPS_API_KEY`, Android with it — the key perturbs both fingerprints). Resolve a fingerprint with `bunx expo-updates runtimeversion:resolve --platform ios|android`.
