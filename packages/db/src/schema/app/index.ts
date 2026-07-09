@@ -23,6 +23,7 @@ export * from './recommendation-stats';
 export * from './climb-grades';
 export * from './hold-features';
 export * from './climb-embeddings';
+export * from './climb-similar';
 export * from './integration-exports';
 export * from './location-sync';
 export * from './sync-deletions';

@@ -78,6 +78,7 @@ def score(model, y_mean, max_holds, pid_vocab, hand_coef, foot_coef, rows, out_p
                 record = {
                     "climbUuid": row["climbUuid"],
                     "angle": row["angle"],
+                    "layoutId": row.get("layoutId"),
                     "contentPrior": round(float(grade[i]), 4),
                     "contentSd": round(content_sd, 4),
                     "embedding": [round(float(x), 5) for x in emb[i]],
