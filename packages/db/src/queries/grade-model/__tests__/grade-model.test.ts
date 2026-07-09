@@ -23,8 +23,15 @@ import {
   type TauSampleRow,
 } from '../coefficients';
 import { evaluateBacktest, evaluateFingerprintGate, evaluateResidualGapGate, type BacktestSampleRow } from '../gates';
+import {
+  applyDisplayDeltaHygiene,
+  createDisplayDeltaHygieneStats,
+  evaluateDisplayDeltaHygiene,
+  mergeDisplayDeltaHygieneStats,
+  recordDisplayDeltaHygiene,
+} from '../hygiene';
 import { CONFIDENCE, DEFAULT_ECHO_FRACTION } from '../constants';
-import type { ClimbAngleObservation, GradeCoefficients } from '../types';
+import type { ClimbAngleObservation, GradeCoefficients, PosteriorGrade } from '../types';
 
 function makeCoefficients(overrides: Partial<GradeCoefficients> = {}): GradeCoefficients {
   return {
@@ -57,6 +64,18 @@ function observation(partial: Partial<ClimbAngleObservation>): ClimbAngleObserva
     difficultyAverage: null,
     displayDifficulty: null,
     ascensionistCount: 0,
+    ...partial,
+  };
+}
+
+function posterior(partial: Partial<PosteriorGrade>): PosteriorGrade {
+  return {
+    localGrade: 20,
+    universalGrade: 19,
+    gradeLow: 18.5,
+    gradeHigh: 19.5,
+    confidence: CONFIDENCE.confirmed,
+    postSd: 0.25,
     ...partial,
   };
 }
@@ -242,6 +261,129 @@ void describe('shouldPublish', () => {
       true,
     );
     assert.equal(shouldPublish({ localGrade: 21, universalGrade: 19.5, confidence: CONFIDENCE.confirmed }, next), true);
+  });
+});
+
+void describe('applyDisplayDeltaHygiene', () => {
+  void test('downgrades confirmed Kilter rows outside the rounded universal-display band', () => {
+    const high = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: 10,
+      posterior: posterior({ universalGrade: 14 }),
+    });
+    assert.equal(high.downgraded, true);
+    assert.equal(high.checked, true);
+    assert.equal(high.skippedMissingUniversal, false);
+    assert.equal(high.roundedDelta, 4);
+    assert.equal(high.posterior.confidence, CONFIDENCE.provisional);
+    assert.equal(high.posterior.universalGrade, 14);
+
+    const low = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: 20,
+      posterior: posterior({ universalGrade: 16 }),
+    });
+    assert.equal(low.downgraded, true);
+    assert.equal(low.checked, true);
+    assert.equal(low.roundedDelta, -4);
+    assert.equal(low.posterior.confidence, CONFIDENCE.provisional);
+  });
+
+  void test('keeps boundary deltas confirmed', () => {
+    const lowerBoundary = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: 20,
+      posterior: posterior({ universalGrade: 17 }),
+    });
+    const upperBoundary = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: 20,
+      posterior: posterior({ universalGrade: 21 }),
+    });
+    assert.equal(lowerBoundary.downgraded, false);
+    assert.equal(lowerBoundary.checked, true);
+    assert.equal(lowerBoundary.roundedDelta, -3);
+    assert.equal(lowerBoundary.posterior.confidence, CONFIDENCE.confirmed);
+    assert.equal(upperBoundary.downgraded, false);
+    assert.equal(upperBoundary.checked, true);
+    assert.equal(upperBoundary.roundedDelta, 1);
+    assert.equal(upperBoundary.posterior.confidence, CONFIDENCE.confirmed);
+  });
+
+  void test('leaves non-Kilter, non-confirmed, and incomplete rows unchanged', () => {
+    const nonKilter = applyDisplayDeltaHygiene({
+      boardType: 'tension',
+      displayDifficulty: 10,
+      posterior: posterior({ universalGrade: 14 }),
+    });
+    const provisional = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: 10,
+      posterior: posterior({ confidence: CONFIDENCE.provisional, universalGrade: 14 }),
+    });
+    const noUniversal = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: 10,
+      posterior: posterior({ universalGrade: null }),
+    });
+    const noDisplay = applyDisplayDeltaHygiene({
+      boardType: 'kilter',
+      displayDifficulty: null,
+      posterior: posterior({ universalGrade: 14 }),
+    });
+    assert.equal(nonKilter.downgraded, false);
+    assert.equal(provisional.downgraded, false);
+    assert.equal(noUniversal.downgraded, false);
+    assert.equal(noUniversal.checked, false);
+    assert.equal(noUniversal.skippedMissingUniversal, true);
+    assert.equal(noDisplay.downgraded, false);
+    assert.equal(noDisplay.skippedMissingUniversal, false);
+  });
+
+  void test('records report-only hygiene gate metrics', () => {
+    const left = createDisplayDeltaHygieneStats();
+    const right = createDisplayDeltaHygieneStats();
+    recordDisplayDeltaHygiene(
+      left,
+      applyDisplayDeltaHygiene({
+        boardType: 'kilter',
+        displayDifficulty: 10,
+        posterior: posterior({ universalGrade: 14 }),
+      }),
+    );
+    recordDisplayDeltaHygiene(
+      right,
+      applyDisplayDeltaHygiene({
+        boardType: 'kilter',
+        displayDifficulty: 20,
+        posterior: posterior({ universalGrade: 16 }),
+      }),
+    );
+    mergeDisplayDeltaHygieneStats(left, right);
+    const gate = evaluateDisplayDeltaHygiene(left);
+    assert.equal(gate.passed, true);
+    assert.equal(gate.metrics.checkedRows, 2);
+    assert.equal(gate.metrics.skippedMissingUniversalRows, 0);
+    assert.equal(gate.metrics.downgradedRows, 2);
+    assert.equal(gate.metrics.minDelta, -4);
+    assert.equal(gate.metrics.maxDelta, 4);
+  });
+
+  void test('reports skipped hygiene when Kilter universal grades are unavailable', () => {
+    const stats = createDisplayDeltaHygieneStats();
+    recordDisplayDeltaHygiene(
+      stats,
+      applyDisplayDeltaHygiene({
+        boardType: 'kilter',
+        displayDifficulty: 10,
+        posterior: posterior({ universalGrade: null }),
+      }),
+    );
+    const gate = evaluateDisplayDeltaHygiene(stats);
+    assert.equal(gate.passed, true);
+    assert.equal(gate.metrics.checkedRows, 0);
+    assert.equal(gate.metrics.skippedMissingUniversalRows, 1);
+    assert.match(gate.detail, /not checked/);
   });
 });
 

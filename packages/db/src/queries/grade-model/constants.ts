@@ -8,7 +8,7 @@
  */
 
 /** Blend/tier/hysteresis logic version, stored on every published row. */
-export const GRADE_MODEL_VERSION = 'v1.1'; // v1.1: per-climb isotonic angle constraint
+export const GRADE_MODEL_VERSION = 'v1.2'; // v1.2: Kilter display-delta hygiene
 
 /**
  * Boards whose upstream `difficulty_average` is a live crowd mean (fractional,
@@ -67,6 +67,15 @@ export const CONFIRMED_MAX_POST_SD = 0.35;
  * kills nightly jitter without hiding real movement.
  */
 export const PUBLISH_HYSTERESIS_GRADE = 0.5;
+
+/**
+ * Kilter upstream has a small tail of confirmed rows whose display grade is
+ * clearly mixed-scale or corrupted. Keep the computed grade but never call that
+ * row confirmed when its rounded universal grade is outside this display delta.
+ */
+export const KILTER_DISPLAY_DELTA_HYGIENE_BOARD = 'kilter';
+export const KILTER_DISPLAY_DELTA_MIN = -3;
+export const KILTER_DISPLAY_DELTA_MAX = 1;
 
 /**
  * Fallback echo fraction: the share of logged grades that are quick-log
