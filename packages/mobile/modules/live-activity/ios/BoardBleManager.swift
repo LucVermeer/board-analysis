@@ -244,6 +244,27 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     // normal backpressure. Fixes iOS 26.5 Kilter home walls that connected but
     // never lit a climb (write_timeout with canSendAtTrip=false on every send).
     private var bypassCanSendWriteWithoutResponse = false
+    // Latched when a without-response write stalls (watchdog trips, canSendAtTrip
+    // false, peripheralIsReady never fired) AND the RX characteristic advertises
+    // only `.write` — no `.writeWithoutResponse` bit. That is the original
+    // MoonBoard box's signature, and some Kilter-built controller boxes advertise
+    // the same way: CoreBluetooth SILENTLY DROPS every `.withoutResponse` write to
+    // such a characteristic, so the wall connects but never lights (a fast, fake
+    // "success" on iOS 26.x once the stuck-false gate is bypassed). Once latched,
+    // this connection sends on the ack-paced write-WITH-response path instead.
+    // Reset on every fresh connection, then re-seeded from
+    // `writeWithResponsePeripheralIds` so a board already proven to need it skips
+    // the stall on reconnect. Crucially BEHAVIOUR-driven, not property-driven: the
+    // without-response path is always tried first on a board we haven't learned,
+    // so a healthy board (or one whose `.writeWithoutResponse` bit is missing only
+    // because of a stale GATT cache) is never wrongly forced onto with-response —
+    // it just never trips the stall. This is what makes re-enabling with-response
+    // for Aurora safe after the #3228 property-driven attempt regressed the fleet.
+    private var forceWriteWithResponse = false
+    // Boards (by peripheral identifier) proven this session to need
+    // write-with-response. In-memory only: a re-learn on the next launch is cheap
+    // and avoids a stale decision sticking after a firmware update or box swap.
+    private var writeWithResponsePeripheralIds: Set<UUID> = []
     // Telemetry for the request currently being written (#3230). Requests are
     // strictly serial (`isWriting`), so one slot suffices: seeded when a request
     // starts, finalized at whichever settle point delivers its completion.
@@ -740,10 +761,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        let writeType = BoardBleEncoding.preferredWriteType(
-            for: characteristic.properties,
-            boardName: configuration?.boardName
-        )
+        let writeType = resolvedWriteType(for: characteristic)
         let chunkSize = BoardBleEncoding.effectiveChunkSize(
             negotiatedMaxWriteLength: peripheral.maximumWriteValueLength(for: writeType),
             writeType: writeType,
@@ -1246,6 +1264,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         // A fresh link re-earns normal backpressure: drop any stuck-false gate
         // bypass so a healthy connection isn't permanently ungated.
         bypassCanSendWriteWithoutResponse = false
+        // Re-seed the with-response latch from what we've learned this session: a
+        // board previously proven to accept only write-with-response starts on that
+        // path immediately (no repeat of the one-time without-response stall);
+        // every other board starts on without-response and only switches if it
+        // actually stalls, so this never wrongly forces a healthy board.
+        forceWriteWithResponse = writeWithResponsePeripheralIds.contains(peripheral.identifier)
         // Remember the board so the Live Activity lightbulb can reconnect to it
         // by identifier later, no device pick required.
         persistLastConnectedPeripheral(peripheral)
@@ -1436,12 +1460,29 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         drainWaiters.signalAll()
     }
 
+    /// The write type for THIS connection. Defaults to
+    /// `BoardBleEncoding.preferredWriteType` (Aurora → without-response, MoonBoard
+    /// → property-driven), but once `forceWriteWithResponse` is latched — because a
+    /// without-response write demonstrably stalled on a `.write`-only characteristic
+    /// (or a prior connection to this board already learned that) — Aurora also
+    /// takes write-with-response. Guarded on `.write` so a characteristic that
+    /// advertises neither write flavour can't be pushed onto a path it can't take.
+    private func resolvedWriteType(for characteristic: CBCharacteristic) -> CBCharacteristicWriteType {
+        if forceWriteWithResponse, characteristic.properties.contains(.write) {
+            return .withResponse
+        }
+        return BoardBleEncoding.preferredWriteType(
+            for: characteristic.properties,
+            boardName: configuration?.boardName
+        )
+    }
+
     private func connectionDiagnosticsOnBleQueue(
         peripheral: WritableBlePeripheral,
         characteristic: CBCharacteristic
     ) -> BoardBleConnectionDiagnostics {
         let properties = characteristic.properties
-        let writeType = BoardBleEncoding.preferredWriteType(for: properties, boardName: configuration?.boardName)
+        let writeType = resolvedWriteType(for: characteristic)
         return BoardBleConnectionDiagnostics(
             characteristicProperties: Int(properties.rawValue),
             supportsWriteWithoutResponse: properties.contains(.writeWithoutResponse),
@@ -1570,7 +1611,13 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        if request.writeType == .withoutResponse {
+        // Effective write type: honour the request's own type, but also route to
+        // write-with-response when this connection has been latched onto it
+        // (`forceWriteWithResponse`) — a parked without-response write that trips
+        // the stall watchdog below switches mid-flight without re-queuing.
+        let sendWithResponse = request.writeType == .withResponse
+            || (forceWriteWithResponse && characteristic.properties.contains(.write))
+        if !sendWithResponse {
             // `bypassCanSendWriteWithoutResponse` short-circuits the gate on a
             // connection we've already proven reports the property stuck false
             // (see the watchdog handler below): keep writing, paced by chunkDelay.
@@ -1616,7 +1663,34 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                     // one writeResumeTimeout; every later send on this connection
                     // skips the gate. A vanished peripheral (nil) or a genuine
                     // missed-flip (true) still falls through to stall recovery.
-                    if canSendAtTrip == false, !self.bypassCanSendWriteWithoutResponse {
+                    if canSendAtTrip == false, !self.bypassCanSendWriteWithoutResponse, !self.forceWriteWithResponse {
+                        // Split the two iOS failure modes by the characteristic's OWN
+                        // advertised properties. A characteristic that advertises only
+                        // `.write` (no `.writeWithoutResponse` bit) genuinely cannot take a
+                        // no-response write — CoreBluetooth silently drops it — so bypassing
+                        // the gate would just fire more writes into the void. That is the
+                        // original MoonBoard box's signature, and some Kilter-built controller
+                        // boxes advertise the same way. Switch THIS connection to the
+                        // ack-paced write-with-response path (and remember the board so a
+                        // reconnect skips this stall). Reaching here proves without-response
+                        // already failed, so this can never degrade a board it would have
+                        // worked on.
+                        if let characteristic = self.writeCharacteristic,
+                           characteristic.properties.contains(.write),
+                           !characteristic.properties.contains(.writeWithoutResponse) {
+                            if let peripheral = self.connectedPeripheral {
+                                self.writeWithResponsePeripheralIds.insert(peripheral.identifier)
+                            }
+                            self.forceWriteWithResponse = true
+                            self.logger.error("BLE write stalled: RX characteristic advertises only .write; switching this connection to write-with-response")
+                            self.resumeParkedWrite(source: "withResponse")
+                            return
+                        }
+                        // The characteristic DOES advertise `.writeWithoutResponse` but the
+                        // property is stuck false — the iOS 26.x flow-control bug on an
+                        // otherwise-normal board. Latch past the gate and keep
+                        // write-without-response; the radio takes the write even though the
+                        // flag lies.
                         self.bypassCanSendWriteWithoutResponse = true
                         self.logger.error("BLE write stalled: canSendWriteWithoutResponse stuck false across the watchdog window; bypassing the gate for this connection and resuming the write")
                         self.resumeParkedWrite(source: "bypass")
@@ -1641,9 +1715,11 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        // Write-WITH-response path (e.g. the original MoonBoard LED box, whose
-        // UART RX characteristic advertises only `.write`). CoreBluetooth would
-        // silently drop a `.withoutResponse` write to it — so pace on the
+        // Write-WITH-response path: the original MoonBoard LED box (whose UART RX
+        // characteristic advertises only `.write`), and any Aurora box latched onto
+        // it via `forceWriteWithResponse` after without-response stalled on the same
+        // `.write`-only signature. CoreBluetooth would silently drop a
+        // `.withoutResponse` write to such a characteristic — so pace on the
         // `didWriteValueFor` ack instead of `canSendWriteWithoutResponse` /
         // `peripheralIsReady`. The ack is itself the backpressure signal, so the
         // fixed `chunkDelay` isn't needed here.
@@ -1881,8 +1957,14 @@ extension BoardBleManager {
             manager.connectedPeripheral = peripheral
             manager.writeCharacteristic = characteristic
             // Mirror the production reset in didDiscoverCharacteristicsFor so a
-            // reconnect in a test starts with the gate re-armed.
+            // reconnect in a test starts with the gate re-armed and the
+            // with-response latch re-seeded from what the session has learned.
             manager.bypassCanSendWriteWithoutResponse = false
+            if let identifier = peripheral?.identifier {
+                manager.forceWriteWithResponse = manager.writeWithResponsePeripheralIds.contains(identifier)
+            } else {
+                manager.forceWriteWithResponse = false
+            }
         }
 
         /// Set the in-memory board configuration WITHOUT the app-group persistence
@@ -1938,6 +2020,8 @@ extension BoardBleManager {
         var writeStallRecoveries: Int { manager.writeStallRecoveries }
         var writeStallRecoveringPeripheralId: UUID? { manager.writeStallRecoveringPeripheralId }
         var bypassCanSendWriteWithoutResponse: Bool { manager.bypassCanSendWriteWithoutResponse }
+        var forceWriteWithResponse: Bool { manager.forceWriteWithResponse }
+        var writeWithResponsePeripheralIds: Set<UUID> { manager.writeWithResponsePeripheralIds }
     }
 
     var testHooks: TestHooks { TestHooks(manager: self) }
