@@ -60,17 +60,37 @@ pgvector needed at ~10⁵ climbs/board (it stays a drop-in later swap, same
 
 ## Phased rollout (Kilter-first; each phase stacks on the last)
 
-| #     | Phase                                             | Ships                                                                                                                                    |
-| ----- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** | **Hold-feature substrate** ✅ (this PR)           | `board_hold_features` + nightly `refresh-hold-features.ts`; shadow-fills `user_hold_classifications`.                                    |
-| 1     | Climb2Vec training + validation (offline PyTorch) | Trained encoder + grade/embedding export; grade accuracy vs the MoonBoardRNN benchmark + a GBM baseline; kNN duplicate-retrieval sanity. |
-| 2     | `content_prior` into the blend                    | Geometry-informed grades on sparse/new Kilter climbs.                                                                                    |
-| 3     | Embedding similarity                              | `board_climb_embeddings` + top-K neighbors; upgrades `similarClimbs` (Jaccard fallback).                                                 |
-| 4     | "Also sent" item-item CF                          | Co-send neighbors from `boardsesh_ticks` + a climb-detail rail.                                                                          |
-| 5     | Style / anti-style recs                           | Per-user style centroids → "recommended in your style" / "train your anti-style".                                                        |
-| 6     | Generalize to Tension + MoonBoard                 | First-ever MoonBoard grades (`content_only`); multi-board similarity.                                                                    |
+| #      | Phase                                           | Ships                                                                                                                                                                                                                                         |
+| ------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0**  | **Hold-feature substrate** ✅ (#3584)           | `board_hold_features` + nightly `refresh-hold-features.ts`; shadow-fills `user_hold_classifications`.                                                                                                                                         |
+| **1a** | **Training matrix + offline eval** ✅ (this PR) | `extract-training-matrix.ts` + `ml/climb2vec/` (Deep Sets encoder, GBM/ridge baselines, leakage-free eval). Feasibility numbers below.                                                                                                        |
+| 1b     | Content-model export ✅ (this PR)               | `board_climb_embeddings` + score extract + `train_export.py` + `load-content-model.ts` + weekly `refresh-content-model.yml`. Tuning (ordinal/contrastive) iterates here.                                                                      |
+| **2**  | **`content_prior` into the blend** ✅ (this PR) | Cold-tail grades use the geometry estimate: `content_prior` enters `computePosteriorGrade` Regime 3 (no crowd, no cross-angle prior) as `provisional`, persisted to `board_climb_grades.content_prior`. Gate-safe (never touches crowd rows). |
+| **3a** | **Similarity data layer** ✅ (this PR)          | `board_climb_similar` + numpy top-K (`similarity_export.py`) + `load-similarity.ts`, folded into the content-model workflow. Blending into the `similarClimbs` resolver/UI (Jaccard fallback) is a focused follow-up.                         |
+| 4      | "Also sent" item-item CF                        | Co-send neighbors from `boardsesh_ticks` + a climb-detail rail.                                                                                                                                                                               |
+| 5      | Style / anti-style recs                         | Per-user style centroids → "recommended in your style" / "train your anti-style".                                                                                                                                                             |
+| 6      | Generalize to Tension + MoonBoard               | First-ever MoonBoard grades (`content_only`); multi-board similarity.                                                                                                                                                                         |
 
-## Phase 0 — the hold-feature substrate (shipped here)
+## Phase 1a — offline feasibility (Kilter, 29,748 held-out-by-climb observations)
+
+Grade accuracy on held-out climbs, leakage-free (hold effects fit on train only;
+label = crowd `difficulty_average`, in Aurora units ≈ 2 per V-grade → MAE 1.4 ≈
+~0.7 V-grade). Full method + how to reproduce: `ml/climb2vec/README.md`.
+
+| model                    | exact | within ±1 | MAE      |
+| ------------------------ | ----- | --------- | -------- |
+| ridge (linear content)   | 17.4% | 48.2%     | 1.93     |
+| GBM (aggregate features) | 23.8% | 59.8%     | **1.42** |
+| Deep Sets (Climb2Vec)    | 19.9% | 56.8%     | 1.55     |
+
+Similarity — nearest-neighbour grade agreement (mean |Δgrade|, lower better): the
+Deep Sets embedding scores **2.60** vs **3.74** random, while a raw geometry vector
+is no better than random (3.74). So geometry predicts grade well enough for a
+`content_prior`, and the learned embedding is a real similarity space (the value
+the GBM can't provide). The Deep Sets grade head still trails the GBM by ~0.13 MAE
+— Phase 1b (ordinal head, contrastive objective, tuning, full catalog) closes it.
+
+## Phase 0 — the hold-feature substrate (#3584)
 
 `board_hold_features` (`packages/db/src/schema/app/hold-features.ts`) holds one
 row per placement, regenerated nightly by

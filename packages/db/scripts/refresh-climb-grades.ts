@@ -328,8 +328,38 @@ interface ComputedRow {
   confidence: ConfidenceTier;
   ascensionistCount: number;
   postSd: number | null;
+  /** Climb2Vec content-model grade estimate for this row (persisted to content_prior); null when unscored. */
+  contentPrior: number | null;
   rawAverage: number | null;
   holdFingerprint: string | null;
+}
+
+interface ContentPriorEntry {
+  contentPrior: number;
+  contentSd: number | null;
+}
+
+function contentPriorKey(climbUuid: string, angle: number): string {
+  return `${climbUuid} ${angle}`;
+}
+
+/** Load the Climb2Vec content-model estimates (board_climb_embeddings) for a board. */
+async function loadContentPriors(db: Db, boardType: string): Promise<Map<string, ContentPriorEntry>> {
+  const rows = rowsOf<{ climb_uuid: string; angle: number; content_prior: number | null; content_sd: number | null }>(
+    await db.execute(sql`
+      SELECT climb_uuid, angle, content_prior, content_sd
+      FROM board_climb_embeddings
+      WHERE board_type = ${boardType} AND content_prior IS NOT NULL
+    `),
+  );
+  const map = new Map<string, ContentPriorEntry>();
+  for (const row of rows) {
+    map.set(contentPriorKey(row.climb_uuid, Number(row.angle)), {
+      contentPrior: Number(row.content_prior),
+      contentSd: row.content_sd === null ? null : Number(row.content_sd),
+    });
+  }
+  return map;
 }
 
 interface PooledAngleEvidence {
@@ -549,13 +579,18 @@ async function computeBoard(
   boardType: string,
   coefficients: GradeCoefficients,
   stage2Evidence: Stage2EvidenceMap = new Map(),
-  options: { applyStage2?: boolean } = { applyStage2: true },
+  options: { applyStage2?: boolean; contentPriors?: Map<string, ContentPriorEntry> } = { applyStage2: true },
 ): Promise<{
   computed: ComputedRow[];
   isotonicStats: { movedRows: number; residualInversions: number };
   displayDeltaHygieneStats: DisplayDeltaHygieneStats;
 }> {
   const pooledEvidence = await loadPooledFingerprintEvidence(db, boardType);
+  const contentPriors = options.contentPriors ?? new Map<string, ContentPriorEntry>();
+  const contentFor = (climbUuid: string, angle: number): { contentPrior: number | null; contentSd: number | null } => {
+    const entry = contentPriors.get(contentPriorKey(climbUuid, angle));
+    return { contentPrior: entry?.contentPrior ?? null, contentSd: entry?.contentSd ?? null };
+  };
   const computed: ComputedRow[] = [];
   const isotonicStats = { movedRows: 0, residualInversions: 0 };
   const displayDeltaHygieneStats = createDisplayDeltaHygieneStats();
@@ -601,6 +636,7 @@ async function computeBoard(
             difficultyAverage: pooled.pooledAverage,
             displayDifficulty: pooled.pooledDisplay,
             ascensionistCount: pooled.pooledCount,
+            ...contentFor(group[0].climb_uuid, pooled.angle),
           }))
         : group.map((row) => ({
             boardType,
@@ -609,6 +645,7 @@ async function computeBoard(
             difficultyAverage: row.difficulty_average === null ? null : Number(row.difficulty_average),
             displayDifficulty: row.display_difficulty === null ? null : Number(row.display_difficulty),
             ascensionistCount: Number(row.ascensionist_count),
+            ...contentFor(row.climb_uuid, row.angle),
           }));
       const observations = rawObservations.map((observation) =>
         options.applyStage2 === false
@@ -666,6 +703,7 @@ async function computeBoard(
           confidence: posterior.confidence,
           ascensionistCount: angleRows[i].ascensionistCount,
           postSd: posterior.postSd,
+          contentPrior: contentFor(group[0].climb_uuid, angleRows[i].angle).contentPrior,
           rawAverage: angleRows[i].observedMean,
           holdFingerprint: group[0].hold_fingerprint,
         });
@@ -821,6 +859,7 @@ async function upsertGrades(
           gradeHigh: sql`EXCLUDED.grade_high`,
           confidence: sql`EXCLUDED.confidence`,
           ascensionistCount: sql`EXCLUDED.ascensionist_count`,
+          contentPrior: sql`EXCLUDED.content_prior`,
           modelVersion: sql`EXCLUDED.model_version`,
           coeffVersion: sql`EXCLUDED.coeff_version`,
           computedAt: sql`now()`,
@@ -868,6 +907,7 @@ async function upsertGrades(
       gradeHigh: row.gradeHigh,
       confidence: row.confidence,
       ascensionistCount: row.ascensionistCount,
+      contentPrior: row.contentPrior,
       modelVersion: GRADE_MODEL_VERSION,
       coeffVersion: coefficients.coeffVersion,
     });
@@ -1028,11 +1068,15 @@ async function validateOnly(db: Db, allowEmptyBacktest: boolean): Promise<void> 
   }
   const computedByBoard = new Map<string, ComputedRow[]>();
   for (const boardType of CROWD_MEAN_BOARDS) {
+    const contentPriors = await loadContentPriors(db, boardType);
     const { computed, isotonicStats, displayDeltaHygieneStats } = await computeBoard(
       db,
       boardType,
       coefficients,
       stage2Evidence,
+      {
+        contentPriors,
+      },
     );
     computedByBoard.set(boardType, computed);
     const noShock = evaluateNoShock(computed);
@@ -1155,11 +1199,12 @@ async function main(): Promise<void> {
     const displayDeltaHygieneStats = createDisplayDeltaHygieneStats();
     for (const boardType of CROWD_MEAN_BOARDS) {
       console.log(`[grades] computing ${boardType}…`);
+      const contentPriors = await loadContentPriors(db, boardType);
       const {
         computed,
         isotonicStats,
         displayDeltaHygieneStats: boardDisplayDeltaHygieneStats,
-      } = await computeBoard(db, boardType, coefficients, stage2Evidence);
+      } = await computeBoard(db, boardType, coefficients, stage2Evidence, { contentPriors });
       mergeDisplayDeltaHygieneStats(displayDeltaHygieneStats, boardDisplayDeltaHygieneStats);
       computedByBoard.set(boardType, computed);
       console.log(

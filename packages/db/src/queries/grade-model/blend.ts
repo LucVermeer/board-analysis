@@ -152,6 +152,7 @@ export function computePosteriorGrade(
 
   let localGrade: number | null;
   let postSd: number | null;
+  let contentDriven = false;
   if (target.difficultyAverage !== null && nEff > 0) {
     const seSquared = (sigma * sigma) / nEff;
     if (prior !== null && priorVariance !== null) {
@@ -170,6 +171,14 @@ export function computePosteriorGrade(
   } else if (prior !== null && priorVariance !== null) {
     localGrade = prior.mean;
     postSd = Math.sqrt(priorVariance);
+  } else if (target.contentPrior != null && Number.isFinite(target.contentPrior)) {
+    // Cold tail: no crowd mean, no cross-angle prior. Use the Climb2Vec geometry
+    // estimate with its held-out RMSE as the CI. This branch requires
+    // difficultyAverage === null, so content can never move an established crowd —
+    // it only replaces the bare setter number with a geometry-informed grade.
+    localGrade = target.contentPrior;
+    postSd = target.contentSd != null && Number.isFinite(target.contentSd) ? target.contentSd : null;
+    contentDriven = true;
   } else if (target.displayDifficulty !== null) {
     // Setter's number, no independent evidence: pass it through with no CI.
     localGrade = target.displayDifficulty;
@@ -185,7 +194,10 @@ export function computePosteriorGrade(
     };
   }
 
-  const confidence = assignTier(target.ascensionistCount, postSd);
+  // Content-driven cold-tail grades carry model evidence + a CI, so they surface as
+  // provisional (with a band) rather than the bare setter_only assignTier would give
+  // an n<3 climb.
+  const confidence = contentDriven ? CONFIDENCE.provisional : assignTier(target.ascensionistCount, postSd);
   const offsetEntry = coefficients.boardOffset[target.boardType];
   const isUniversalBoard = (UNIVERSAL_BOARDS as readonly string[]).includes(target.boardType);
   const universalGrade = isUniversalBoard && offsetEntry ? localGrade + offsetEntry.offset : null;

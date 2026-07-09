@@ -134,3 +134,12 @@ fastlane/test_output/
 # Local-only board-data exports (e.g. the MoonBoard 2024 problems JSON). Large
 # raw data files are imported via the db CLIs, never committed to the repo.
 packages/db/data/
+
+# Climb2Vec offline training artifacts (never commit extracts/venv/models)
+ml/climb2vec/data/
+ml/climb2vec/.venv/
+ml/climb2vec/artifacts/
+
+# Python bytecode
+__pycache__/
+*.pyc
