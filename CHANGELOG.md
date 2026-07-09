@@ -4,6 +4,14 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-09
+
+### New
+
+- Turn on "Show Boardsesh grades" in Settings to see every climb on one cross-board grade, built from real sends across every board. ([#3565](https://github.com/boardsesh/boardsesh/pull/3565))
+  The Boardsesh grade section in the play drawer now shows the grade at a glance when collapsed, how confident it is, and how it shifts by wall angle.
+  Logged a send without grading it? We'll show the Boardsesh grade — your own grade always stays put when you set one.
+
 ## 2026-07-08
 
 ### App update
@@ -18,6 +26,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Kilter logbook sync no longer stalls for climbers who cleared a star rating ([#3570](https://github.com/boardsesh/boardsesh/pull/3570))
+- Kilter star ratings are honest again — climbs that suddenly all looked like 5‑star classics go back to their real ratings ([#3567](https://github.com/boardsesh/boardsesh/pull/3567))
 - Your Kilter logbook syncs again — connections that quietly stopped updating now recover on their own, and when something breaks it's recorded instead of pretending everything's fine ([#3557](https://github.com/boardsesh/boardsesh/pull/3557))
   Linking a board account that's already connected to another Boardsesh member now warns you clearly instead of silently sending your ticks to their logbook
   Old Kilter connections from before the new sign-in now say "reconnect to sync" instead of a confusing network error

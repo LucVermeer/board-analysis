@@ -1,6 +1,28 @@
 {
-  "generatedAt": "2026-07-08T10:50:41.956Z",
+  "generatedAt": "2026-07-09T00:16:28.326Z",
   "entries": [
+    {
+      "prNumber": 3565,
+      "category": "new",
+      "title": "Turn on \"Show Boardsesh grades\" in Settings to see every climb on one cross-board grade, built from real sends across every board.",
+      "mergedAt": "2026-07-09T00:15:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3565",
+      "body": "The Boardsesh grade section in the play drawer now shows the grade at a glance when collapsed, how confident it is, and how it shifts by wall angle.\nLogged a send without grading it? We'll show the Boardsesh grade — your own grade always stays put when you set one."
+    },
+    {
+      "prNumber": 3570,
+      "category": "fixed",
+      "title": "Kilter logbook sync no longer stalls for climbers who cleared a star rating",
+      "mergedAt": "2026-07-08T23:07:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3570"
+    },
+    {
+      "prNumber": 3567,
+      "category": "fixed",
+      "title": "Kilter star ratings are honest again — climbs that suddenly all looked like 5‑star classics go back to their real ratings",
+      "mergedAt": "2026-07-08T21:49:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3567"
+    },
     {
       "prNumber": 3557,
       "category": "fixed",
