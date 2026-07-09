@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- See how hard a climb looks from its holds — every Boardsesh grade now shows a second estimate computed purely from a climb's hold layout, right next to the community grade, so you can compare the two. ([#3592](https://github.com/boardsesh/boardsesh/pull/3592))
+- Sharper grades on climbs almost no one has logged yet — the new hold-shape model estimates a grade (with a range) from a climb's holds, so brand-new and rarely-climbed problems show a real number instead of just the setter's guess. ([#3589](https://github.com/boardsesh/boardsesh/pull/3589))
 - Hitting a Bluetooth wall? Bug reports now have an "I'm having Bluetooth trouble" toggle — flip it and we'll spot the boards around you so we can work out why yours won't connect. ([#3581](https://github.com/boardsesh/boardsesh/pull/3581))
 - Turn on "Show Boardsesh grades" in Settings to see every climb on one cross-board grade, built from real sends across every board. ([#3565](https://github.com/boardsesh/boardsesh/pull/3565))
   The Boardsesh grade section in the play drawer now shows the grade at a glance when collapsed, how confident it is, and how it shifts by wall angle.

@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-09T07:36:06.790Z",
+  "generatedAt": "2026-07-09T14:02:08.859Z",
   "entries": [
+    {
+      "prNumber": 3592,
+      "category": "new",
+      "title": "See how hard a climb looks from its holds — every Boardsesh grade now shows a second estimate computed purely from a climb's hold layout, right next to the community grade, so you can compare the two.",
+      "mergedAt": "2026-07-09T14:00:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3592"
+    },
+    {
+      "prNumber": 3589,
+      "category": "new",
+      "title": "Sharper grades on climbs almost no one has logged yet — the new hold-shape model estimates a grade (with a range) from a climb's holds, so brand-new and rarely-climbed problems show a real number instead of just the setter's guess.",
+      "mergedAt": "2026-07-09T07:59:44Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3589"
+    },
     {
       "prNumber": 3579,
       "category": "fixed",
@@ -1200,6 +1214,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-09T17:35:09+10:00",
+      "sha": "d7e9b853a60583cf464ad5dbc777bddc3955c263",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "49a581a48aae87150bcdddcd5dc0b3b4914b76ea"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-09T15:30:44+10:00",
