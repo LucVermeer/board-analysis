@@ -1,66 +1,95 @@
-// Pure view-model builder for the play drawer's "Boardsesh grade" section.
-// Turns the nightly data-science grade (floats on the shared difficulty scale,
-// where 10 = 4a/V0 and one unit is one Font letter step) into a display model:
-// which confidence tier to show, the formatted grade label + colour, and whether
-// the grade is cross-board (universal) or scoped to this board only (local).
+// Pure view-model builders for the play drawer's "Boardsesh grade" section.
+//
+// The section leads with the CROSS-BOARD CORRECTION: what this board's crowd
+// calls a climb (its community grade at the current angle) versus what it climbs
+// everywhere (the nightly data-science Boardsesh grade). These helpers turn the
+// grade floats (on the shared difficulty scale, where 10 = 4a/V0 and one unit is
+// one Font letter step) into a display model: which confidence tier to show, the
+// formatted labels + colours, whether the grade is cross-board (universal), and
+// the magnitude + direction of the correction.
 //
 // Kept free of React so it unit-tests without a renderer.
-import { formatGrade, type GradeDisplayFormat } from '@boardsesh/play-view';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
-import { BOULDER_GRADES, type BoulderGrade } from '@boardsesh/board-constants/boulder-grade-mapping';
+import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import type { BoardseshGrade } from '@boardsesh/graphql/operations';
+import {
+  renderDifficulty,
+  clampDifficultyId,
+  GRADE_BY_ID,
+  MIN_DIFFICULTY_ID,
+  MAX_DIFFICULTY_ID,
+  type RenderedGrade,
+} from '../../lib/boardsesh-grade-display';
 
-const GRADE_BY_ID = new Map<number, BoulderGrade>(BOULDER_GRADES.map((grade) => [grade.difficulty_id, grade]));
+// Re-exported for existing/back-compat call sites — the difficulty-scale
+// primitives now live in lib/boardsesh-grade-display.ts (a lib must not
+// import from components, so they moved there; this file, a component-tree
+// helper, imports them like any other consumer).
+export { renderDifficulty, clampDifficultyId, GRADE_BY_ID, MIN_DIFFICULTY_ID, MAX_DIFFICULTY_ID, type RenderedGrade };
 
-// The difficulty scale the data-science grade shares with Aurora's ids.
-const MIN_DIFFICULTY_ID = BOULDER_GRADES[0].difficulty_id;
-const MAX_DIFFICULTY_ID = BOULDER_GRADES[BOULDER_GRADES.length - 1].difficulty_id;
+// Compact status markers for the collapsed-header teaser. Not user-facing
+// prose (glyphs, not words), so they stay out of i18n.
+const TEASER_ARROW = '▸';
+const TEASER_CONFIRMED = '✓';
+const TEASER_PROVISIONAL = '~';
 
 /** MoonBoard has no standardized community grade in our feed yet. */
 export function isMoonBoard(boardName: string): boolean {
   return boardName.toLowerCase() === 'moonboard';
 }
 
-/** `'universal'` = one grade across every board; `'local'` = this board only. */
-export type GradeScope = 'universal' | 'local';
-
-export type RenderedGrade = {
-  /** Formatted label per the user's grade preference (e.g. "V5", "6c"). */
-  label: string;
-  /** Hex colour for the grade, consistent with the play drawer header. */
-  color: string;
-};
-
 export type BoardseshGradeView =
   | { kind: 'moonboard' }
-  | { kind: 'setterOnly' }
-  | { kind: 'confirmed'; scope: GradeScope; grade: RenderedGrade; count: number }
+  | {
+      kind: 'setterOnly';
+      /** The setter's grade to show muted ("Setter's call: V4"), or null when there's none at all. */
+      grade: RenderedGrade | null;
+      count: number;
+    }
+  | {
+      kind: 'confirmed';
+      /** True = cross-board (universal) grade; false = scoped to this board only. */
+      universal: boolean;
+      grade: RenderedGrade;
+      /** Raw primary grade float (drives the correction delta + chart reference line). */
+      gradeValue: number;
+      gradeLow: number | null;
+      gradeHigh: number | null;
+      count: number;
+      computedAt: string;
+    }
   | {
       kind: 'provisional';
-      scope: GradeScope;
+      universal: boolean;
       grade: RenderedGrade;
+      gradeValue: number;
       /** Non-null when the low/high bounds round to different grades ("V5–V6"). */
       rangeLabel: string | null;
+      gradeLow: number | null;
+      gradeHigh: number | null;
       count: number;
+      computedAt: string;
     };
-
-function clampDifficultyId(value: number): number {
-  return Math.min(MAX_DIFFICULTY_ID, Math.max(MIN_DIFFICULTY_ID, Math.round(value)));
-}
-
-/** Round a float difficulty to the nearest grade and render its label + colour. */
-export function renderDifficulty(value: number, gradeFormat: GradeDisplayFormat): RenderedGrade | null {
-  const grade = GRADE_BY_ID.get(clampDifficultyId(value));
-  if (!grade) return null;
-  return {
-    label: formatGrade(grade.difficulty_name, gradeFormat) ?? grade.v_grade,
-    color: getGradeColor(grade.difficulty_name) ?? DEFAULT_GRADE_COLOR,
-  };
-}
 
 /** The label a bound rounds to, used to decide whether a range spans two grades. */
 function boundLabel(value: number, gradeFormat: GradeDisplayFormat): string | null {
   return renderDifficulty(value, gradeFormat)?.label ?? null;
+}
+
+/**
+ * The low/high grade labels for the trust line, falling back to the headline
+ * grade when a bound is missing. `sameLabel` is true when both bounds round to
+ * the SAME displayed grade — the caller then drops the range (a "V4–V4" reads
+ * as a bug) and shows a single-grade trust line instead.
+ */
+export function buildTrustBand(
+  low: number | null,
+  high: number | null,
+  headlineLabel: string,
+  gradeFormat: GradeDisplayFormat,
+): { low: string; high: string; sameLabel: boolean } {
+  const lowLabel = (low != null ? boundLabel(low, gradeFormat) : null) ?? headlineLabel;
+  const highLabel = (high != null ? boundLabel(high, gradeFormat) : null) ?? headlineLabel;
+  return { low: lowLabel, high: highLabel, sameLabel: lowLabel === highLabel };
 }
 
 /**
@@ -73,22 +102,29 @@ export function buildBoardseshGradeView(
   gradeFormat: GradeDisplayFormat,
 ): BoardseshGradeView {
   if (isMoonBoard(boardName)) return { kind: 'moonboard' };
-  if (!grade) return { kind: 'setterOnly' };
+  if (!grade) return { kind: 'setterOnly', grade: null, count: 0 };
 
   // Prefer the cross-board universal grade; fall back to the board-local grade
   // (small boards that never earn a universal number).
-  const scope: GradeScope = grade.universalGrade != null ? 'universal' : 'local';
+  const universal = grade.universalGrade != null;
   const primary = grade.universalGrade ?? grade.localGrade;
+  const rendered = primary != null ? renderDifficulty(primary, gradeFormat) : null;
 
-  if (grade.confidence === 'setter_only' || primary == null) {
-    return { kind: 'setterOnly' };
+  if (grade.confidence === 'setter_only' || primary == null || !rendered) {
+    return { kind: 'setterOnly', grade: rendered, count: grade.ascensionistCount };
   }
 
-  const rendered = renderDifficulty(primary, gradeFormat);
-  if (!rendered) return { kind: 'setterOnly' };
-
   if (grade.confidence === 'confirmed') {
-    return { kind: 'confirmed', scope, grade: rendered, count: grade.ascensionistCount };
+    return {
+      kind: 'confirmed',
+      universal,
+      grade: rendered,
+      gradeValue: primary,
+      gradeLow: grade.gradeLow,
+      gradeHigh: grade.gradeHigh,
+      count: grade.ascensionistCount,
+      computedAt: grade.computedAt,
+    };
   }
 
   // Everything else ('provisional', or any unexpected value) reads as still
@@ -102,5 +138,109 @@ export function buildBoardseshGradeView(
     }
   }
 
-  return { kind: 'provisional', scope, grade: rendered, rangeLabel, count: grade.ascensionistCount };
+  return {
+    kind: 'provisional',
+    universal,
+    grade: rendered,
+    gradeValue: primary,
+    rangeLabel,
+    gradeLow: grade.gradeLow,
+    gradeHigh: grade.gradeHigh,
+    count: grade.ascensionistCount,
+    computedAt: grade.computedAt,
+  };
+}
+
+/** Direction of the crowd grade relative to the cross-board Boardsesh grade. */
+export type DeltaDirection = 'easier' | 'stiffer' | 'equal';
+
+export type BoardseshCorrection = {
+  /** The crowd's community grade at this angle ("This board"). */
+  crowd: RenderedGrade;
+  /** Correction magnitude in V-grade steps (a multiple of ½), 0 when they agree. */
+  steps: number;
+  /** Magnitude label for the pill ("½", "1", "1½"), or null when the grades agree. */
+  label: string | null;
+  /** Which way the crowd sits relative to everywhere: `easier` = everywhere is
+   *  easier than the crowd calls it (crowd over-grades); `stiffer` = the reverse. */
+  direction: DeltaDirection;
+};
+
+/**
+ * Render a ½-step magnitude as a compact label: 0.5 → "½", 1 → "1", 1.5 → "1½".
+ * Returns null for a zero (or negative) magnitude.
+ */
+export function formatHalfGrades(steps: number): string | null {
+  if (steps <= 0) return null;
+  const whole = Math.floor(steps);
+  const hasHalf = steps - whole >= 0.5;
+  const label = `${whole > 0 ? whole : ''}${hasHalf ? '½' : ''}`;
+  return label.length ? label : null;
+}
+
+/**
+ * The correction between the crowd's grade at this angle and the cross-board
+ * Boardsesh grade. Agreement is decided by the LABEL each side renders under the
+ * viewer's grade format — not the raw id delta — so two ids that fall in the same
+ * displayed V-grade read as "matches this board". When the labels differ, the
+ * magnitude comes from the id delta (one id step is one Font letter, i.e. half a
+ * V-grade), so it reads in ½-grades. Null when there's no crowd grade at this
+ * angle (nothing to correct against).
+ */
+export function buildCorrection(
+  crowdDifficulty: number | null,
+  boardseshValue: number,
+  gradeFormat: GradeDisplayFormat,
+): BoardseshCorrection | null {
+  if (crowdDifficulty == null) return null;
+  const crowd = renderDifficulty(crowdDifficulty, gradeFormat);
+  if (!crowd) return null;
+
+  // Gate agreement on the LABEL the hero actually shows, not the id delta. Some
+  // V-grades cover multiple ids that collapse to one label — V0 (4a/4b/4c) and V1
+  // (5a/5b), whose Font members never take a "+" suffix — so a crowd id and a
+  // Boardsesh id can differ yet render the identical label. When the two displayed
+  // labels match it "matches this board" — no pill, no payoff — even if the ids
+  // differ, which keeps the hero in step with the collapsed teaser (it gates the
+  // same way on the label).
+  const boardsesh = renderDifficulty(boardseshValue, gradeFormat);
+  if (boardsesh && crowd.label === boardsesh.label) {
+    return { crowd, steps: 0, label: null, direction: 'equal' };
+  }
+
+  const idDelta = clampDifficultyId(crowdDifficulty) - clampDifficultyId(boardseshValue);
+  const steps = Math.abs(idDelta) / 2;
+  const direction: DeltaDirection = idDelta > 0 ? 'easier' : idDelta < 0 ? 'stiffer' : 'equal';
+  return { crowd, steps, label: formatHalfGrades(steps), direction };
+}
+
+/**
+ * Collapsed-header teaser for the Boardsesh grade section — a compact plain
+ * string leading with the correction. When a crowd label is supplied and it
+ * differs from the confirmed cross-board grade, shows "{crowd} ▸ {bs} ✓"; a
+ * confident cross-board grade alone reads "{bs} ✓"; provisional "{bs} ~";
+ * local-only "{bs} · {localWord}". Null for moonboard / setter-only.
+ */
+export function buildBoardseshGradeSummary(
+  view: BoardseshGradeView,
+  options?: { crowdLabel?: string | null; localWord?: string },
+): string | null {
+  const crowdLabel = options?.crowdLabel ?? null;
+  const localWord = options?.localWord;
+
+  switch (view.kind) {
+    case 'confirmed': {
+      const bs = view.grade.label;
+      if (!view.universal) return localWord ? `${bs} · ${localWord}` : bs;
+      if (crowdLabel && crowdLabel !== bs) return `${crowdLabel} ${TEASER_ARROW} ${bs} ${TEASER_CONFIRMED}`;
+      return `${bs} ${TEASER_CONFIRMED}`;
+    }
+    case 'provisional': {
+      const bs = view.rangeLabel ?? view.grade.label;
+      if (!view.universal && localWord) return `${bs} · ${localWord}`;
+      return `${bs} ${TEASER_PROVISIONAL}`;
+    }
+    default:
+      return null;
+  }
 }

@@ -26,7 +26,6 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, View, type ColorValue 
 import { BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import {
   boardHistoryEntryKey,
   useBoardHistoryPagination,
@@ -49,6 +48,7 @@ import { useBoardPresenceControls } from '../../providers/board-presence-provide
 import { track } from '../../lib/analytics';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { offlineAwareRequest } from '../../lib/graphql/offline-request';
 import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
 import { boardPresenceClimbToClimb } from '../../lib/board-presence/presence-climb';
@@ -187,7 +187,13 @@ function NowOnTheWallPanelComponent(
   const insets = useSafeAreaInsets();
   const { systemColors, brandColors } = useTheme();
   const { showToast } = useToast();
+  // `formatGrade` still renders the board-wide aggregate grade tiles (hardest / top
+  // grade), which aren't a single climb's grade; `resolveGrade` swaps the per-climb
+  // grades (hero, history rows, hardest send) to the Boardsesh grade when the toggle
+  // is on. BoardPresenceClimb / BoardPresenceHardestSend carry no Boardsesh grade
+  // today, so those fall back to the legacy grade until the backend stamps them.
   const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   const boardConfigRef = useRef(boardConfig);
   boardConfigRef.current = boardConfig;
   const boardConfigSignature = useMemo(() => boardConfigActionSignature(boardConfig), [boardConfig]);
@@ -471,8 +477,9 @@ function NowOnTheWallPanelComponent(
 
   const renderHistoryItem = useCallback(
     ({ item }: { item: BoardPresenceClimb }) => {
-      const formattedGrade = item.grade ? formatGrade(item.grade) : null;
-      const gradeColor = getGradeColor(item.grade ?? '') ?? DEFAULT_GRADE_COLOR;
+      const resolvedGrade = resolveGrade({ difficulty: item.grade ?? '' });
+      const formattedGrade = item.grade ? resolvedGrade.label : null;
+      const gradeColor = resolvedGrade.color;
 
       if (canUseInteractiveRows && rowBoard) {
         return (
@@ -510,7 +517,7 @@ function NowOnTheWallPanelComponent(
       rowBoard,
       systemColors.label,
       systemColors.secondaryLabel,
-      formatGrade,
+      resolveGrade,
       handleInteractiveClimbPress,
       handleInteractiveAddToQueue,
       handleInteractiveOpenPlaylist,
@@ -532,8 +539,13 @@ function NowOnTheWallPanelComponent(
         )
       : false;
 
-  const listHeader = useMemo(
-    () => (
+  const listHeader = useMemo(() => {
+    // Per-climb grades under the "Show Boardsesh grades" toggle. resolveGrade with
+    // an empty difficulty yields the default colour + empty label, so these are
+    // safe to compute even when there's no current climb / hardest send.
+    const heroGrade = resolveGrade({ difficulty: currentClimb?.grade ?? '' });
+    const hardestSendGrade = resolveGrade({ difficulty: stats?.hardestSend?.grade ?? '' });
+    return (
       <View>
         {canUseInteractiveRows && rowBoard && currentClimb ? (
           <InteractiveHeroRow
@@ -544,8 +556,8 @@ function NowOnTheWallPanelComponent(
             secondaryColor={systemColors.secondaryLabel}
             accentColor={brandColors.warning}
             surfaceColor={systemColors.secondaryBackground}
-            formattedGrade={currentClimb.grade ? formatGrade(currentClimb.grade) : null}
-            gradeColor={getGradeColor(currentClimb.grade ?? '') ?? DEFAULT_GRADE_COLOR}
+            formattedGrade={currentClimb.grade ? heroGrade.label : null}
+            gradeColor={heroGrade.color}
             isActionLoading={heroActionLoading}
             onPress={onClimbPress ? handleInteractiveClimbPress : undefined}
             onAddToQueue={handleInteractiveAddToQueue}
@@ -560,8 +572,8 @@ function NowOnTheWallPanelComponent(
             secondaryColor={systemColors.secondaryLabel}
             accentColor={brandColors.warning}
             surfaceColor={systemColors.secondaryBackground}
-            formattedGrade={currentClimb?.grade ? formatGrade(currentClimb.grade) : null}
-            gradeColor={getGradeColor(currentClimb?.grade ?? '') ?? DEFAULT_GRADE_COLOR}
+            formattedGrade={currentClimb?.grade ? heroGrade.label : null}
+            gradeColor={heroGrade.color}
           />
         )}
         {stats ? (
@@ -606,8 +618,8 @@ function NowOnTheWallPanelComponent(
                 secondaryColor={systemColors.secondaryLabel}
                 surfaceColor={systemColors.secondaryBackground}
                 crownColor={brandColors.warning}
-                formattedGrade={formatGrade(stats.hardestSend.grade) ?? stats.hardestSend.grade}
-                gradeColor={getGradeColor(stats.hardestSend.grade) ?? DEFAULT_GRADE_COLOR}
+                formattedGrade={hardestSendGrade.label}
+                gradeColor={hardestSendGrade.color}
               />
             ) : null}
           </View>
@@ -618,26 +630,26 @@ function NowOnTheWallPanelComponent(
           </Text>
         ) : null}
       </View>
-    ),
-    [
-      currentClimb,
-      boardConfig,
-      stats,
-      visibleHistory.length,
-      systemColors,
-      brandColors.warning,
-      formatGrade,
-      t,
-      canUseInteractiveRows,
-      rowBoard,
-      handleInteractiveClimbPress,
-      handleInteractiveAddToQueue,
-      handleInteractiveOpenPlaylist,
-      handleInteractiveOpenActions,
-      heroActionLoading,
-      onClimbPress,
-    ],
-  );
+    );
+  }, [
+    currentClimb,
+    boardConfig,
+    stats,
+    visibleHistory.length,
+    systemColors,
+    brandColors.warning,
+    formatGrade,
+    resolveGrade,
+    t,
+    canUseInteractiveRows,
+    rowBoard,
+    handleInteractiveClimbPress,
+    handleInteractiveAddToQueue,
+    handleInteractiveOpenPlaylist,
+    handleInteractiveOpenActions,
+    heroActionLoading,
+    onClimbPress,
+  ]);
 
   const listEmpty = useMemo(
     () => (

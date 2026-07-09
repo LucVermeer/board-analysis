@@ -4,22 +4,21 @@ import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { useBoardseshGrade } from '../../lib/graphql/hooks';
+import { DumbbellByAngleChart } from './DumbbellByAngleChart';
+import { buildDumbbellByAngleModel } from './by-angle-comparison';
+import { buildAngleGradeBars } from './community-utils';
+import { useBoardseshGrade, useBoardseshGradesForAngles, useClimbStatsHistory } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
-import { buildBoardseshGradeView, isMoonBoard, type GradeScope } from './boardsesh-grade-utils';
+import { buildBoardseshGradeView, buildCorrection, buildTrustBand, isMoonBoard } from './boardsesh-grade-utils';
 
 type BoardseshGradeSectionProps = {
   climbUuid: string;
   boardName: string;
   angle: number;
 };
-
-// Locale-neutral math symbol shown after a provisional single grade to signal it
-// may still shift by a grade. Not user-facing prose, so it stays out of i18n.
-const APPROX_SYMBOL = '±';
 
 export const BoardseshGradeSection = memo(function BoardseshGradeSection({
   climbUuid,
@@ -46,11 +45,30 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
     [boardName, grade, gradeFormat],
   );
 
-  const scopeLabel = useCallback(
-    (scope: GradeScope) =>
-      scope === 'universal' ? t('boardseshGrade.universalLabel') : t('boardseshGrade.localLabel'),
-    [t],
+  // Progressive enhancement — the crowd (community) series feeds the hero's
+  // "this board" number and the dumbbell's rings. Loading/error render nothing;
+  // the section's own loading/error stays owned by the singular grade above.
+  const { data: history } = useClimbStatsHistory(boardName, moonboard ? null : climbUuid);
+  const crowdBars = useMemo(() => buildAngleGradeBars(history, gradeFormat), [history, gradeFormat]);
+  const crowdDifficulty = useMemo(
+    () => crowdBars.find((bar) => bar.angle === angle)?.difficulty ?? null,
+    [crowdBars, angle],
   );
+
+  // The cross-board Boardsesh series per angle → the dumbbell's diamonds.
+  const { data: angleRows } = useBoardseshGradesForAngles(boardName, climbUuid, { enabled: !moonboard });
+  const dumbbellRows = useMemo(
+    () => buildDumbbellByAngleModel(angleRows ?? [], crowdBars, gradeFormat),
+    [angleRows, crowdBars, gradeFormat],
+  );
+
+  // The correction only exists for a real cross-board grade with a crowd number
+  // at this angle. Setter-only / moonboard / local-only never carry one.
+  const correction = useMemo(() => {
+    if (view.kind !== 'confirmed' && view.kind !== 'provisional') return null;
+    if (!view.universal) return null;
+    return buildCorrection(crowdDifficulty, view.gradeValue, gradeFormat);
+  }, [view, crowdDifficulty, gradeFormat]);
 
   const handleRetry = useCallback(() => {
     void Haptics.selectionAsync();
@@ -90,68 +108,175 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
 
   if (view.kind === 'setterOnly') {
     return (
-      <View style={styles.row}>
-        <Icon name="flag" size={20} color={iosSystemColors.systemGray} />
-        <Text variant="subheadline" color={iosSystemColors.systemGray} style={styles.flexText}>
-          {t('boardseshGrade.setterOnly')}
-        </Text>
-      </View>
-    );
-  }
-
-  if (view.kind === 'confirmed') {
-    return (
-      <View style={styles.gradeRow}>
-        <Text variant="largeTitle" style={[styles.gradeValue, { color: view.grade.color }]}>
-          {view.grade.label}
-        </Text>
-        <View style={styles.gradeMeta}>
-          <View style={styles.scopeRow}>
-            <Icon name="checkmark.circle.fill" size={16} color={iosSystemColors.systemGreen} />
-            <Text variant="subheadline">{scopeLabel(view.scope)}</Text>
-          </View>
-          <Text variant="footnote" color={iosSystemColors.systemGray}>
-            {t('boardseshGrade.confirmedSubline', { count: view.count })}
+      <View style={styles.container}>
+        <View style={styles.setterHero}>
+          <Text variant="caption1" color={iosSystemColors.systemGray}>
+            {t('boardseshGrade.setterCall')}
           </Text>
-          {view.scope === 'local' && (
-            <Text variant="caption1" color={iosSystemColors.systemGray}>
-              {t('boardseshGrade.localScopeNote')}
+          {view.grade && (
+            <Text variant="title1" style={[styles.gradeValue, styles.setterGrade]}>
+              {view.grade.label}
             </Text>
           )}
         </View>
+        <Text variant="footnote" color={iosSystemColors.systemGray}>
+          {t('boardseshGrade.trust.setter')}
+        </Text>
       </View>
     );
   }
 
-  // Provisional: a range spanning two grades, else the single grade with a subtle ±.
+  // Confirmed / provisional from here down. Everything the hero + trust rows
+  // need is projected off the narrowed `view` here in the main body — the JSX
+  // below reads only these primitives, so TS's narrowing survives (it drops
+  // inside nested closures) and the render stays a flat, memo-clean tree.
+  const provisional = view.kind === 'provisional';
+  const universal = view.universal;
+  const heroGrade = view.grade;
+  const showConfirmedSeal = view.kind === 'confirmed' && view.universal;
+  const rangeLabel = view.kind === 'provisional' ? view.rangeLabel : null;
+  const count = view.count;
+  // Low/high labels for the trust line. When both bounds round to the same grade
+  // there is no real range ("V4–V4"), so we show a single-grade line instead.
+  const band = buildTrustBand(view.gradeLow, view.gradeHigh, heroGrade.label, gradeFormat);
+  // The all-boards grade shows the two-grade span for a provisional read.
+  const everywhereLabel = rangeLabel ?? heroGrade.label;
+  // "About ½" for a provisional payoff; "½" when confirmed.
+  const amount = correction?.label
+    ? provisional
+      ? t('boardseshGrade.hero.approx', { amount: correction.label })
+      : correction.label
+    : null;
+
+  const seal = showConfirmedSeal ? (
+    <Icon name="checkmark.seal.fill" size={22} color={iosSystemColors.systemGreen} />
+  ) : null;
+
   return (
-    <View style={styles.gradeRow}>
-      <View style={styles.provisionalValue}>
-        <Text variant="largeTitle" style={[styles.gradeValue, { color: view.grade.color }]}>
-          {view.rangeLabel ?? view.grade.label}
-        </Text>
-        {!view.rangeLabel && (
-          <Text variant="callout" color={iosSystemColors.systemGray} style={styles.approx}>
-            {APPROX_SYMBOL}
-          </Text>
-        )}
-      </View>
-      <View style={styles.gradeMeta}>
-        <Text variant="subheadline">{scopeLabel(view.scope)}</Text>
-        <Text variant="footnote" color={iosSystemColors.systemGray}>
-          {t('boardseshGrade.provisionalSubline', { count: view.count })}
-        </Text>
-        {view.scope === 'local' && (
+    <View style={styles.container}>
+      {/* HERO — leads left→right with the cross-board correction. */}
+      {!universal ? (
+        // Local-only: no cross-board number yet — one centred grade, no comparison.
+        <View style={styles.singleHero}>
           <Text variant="caption1" color={iosSystemColors.systemGray}>
-            {t('boardseshGrade.localScopeNote')}
+            {t('boardseshGrade.hero.thisBoardOnly')}
           </Text>
-        )}
-      </View>
+          <Text variant="largeTitle" style={[styles.gradeValue, { color: heroGrade.color }]}>
+            {everywhereLabel}
+          </Text>
+          <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.centered}>
+            {t('boardseshGrade.localOnlyNote')}
+          </Text>
+        </View>
+      ) : correction && correction.direction === 'equal' ? (
+        // Crowd rounds equal to the cross-board grade: drop the comparison, say so.
+        <View style={styles.singleHero}>
+          <View style={styles.everywhereValue}>
+            <Text variant="largeTitle" style={[styles.gradeValue, { color: heroGrade.color }]}>
+              {everywhereLabel}
+            </Text>
+            {seal}
+          </View>
+          <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.centered}>
+            {t('boardseshGrade.matchesBoard')}
+          </Text>
+        </View>
+      ) : !correction ? (
+        // No crowd grade at this angle: show the cross-board grade alone.
+        <View style={styles.singleHero}>
+          <Text variant="caption1" color={iosSystemColors.systemGray}>
+            {t('boardseshGrade.hero.everywhere')}
+          </Text>
+          <View style={styles.everywhereValue}>
+            <Text variant="largeTitle" style={[styles.gradeValue, { color: heroGrade.color }]}>
+              {everywhereLabel}
+            </Text>
+            {seal}
+          </View>
+        </View>
+      ) : (
+        // Full correction: [THIS BOARD crowd] → [arrow] → [ALL BOARDS Boardsesh ✓].
+        // The grey→coloured grades + the single payoff sentence carry the delta.
+        <View style={styles.correctionRow}>
+          <View style={styles.correctionSide}>
+            <Text variant="caption1" color={iosSystemColors.systemGray}>
+              {t('boardseshGrade.hero.thisBoard')}
+            </Text>
+            <Text variant="title1" style={[styles.gradeValue, styles.crowdGrade]}>
+              {correction.crowd.label}
+            </Text>
+          </View>
+
+          <View style={styles.correctionArrow}>
+            <Icon name="arrow.right" size={18} color={iosSystemColors.systemGray} />
+          </View>
+
+          <View style={styles.correctionSide}>
+            <Text variant="caption1" color={iosSystemColors.systemGray}>
+              {t('boardseshGrade.hero.everywhere')}
+            </Text>
+            <View style={styles.everywhereValue}>
+              <Text variant="largeTitle" style={[styles.gradeValue, { color: heroGrade.color }]}>
+                {everywhereLabel}
+              </Text>
+              {seal}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* PAYOFF — softer/stiffer voice, in one line under the hero. Suppressed on
+          the equal tier: the hero's "matches this board" note already says it, so
+          a payoff row here would just repeat it. */}
+      {correction && correction.direction !== 'equal' && (
+        <View style={styles.payoffRow}>
+          <View style={[styles.accentBar, { backgroundColor: brandColors.primary }]} />
+          <Text variant="subheadline" style={styles.flexText}>
+            {t(correction.direction === 'easier' ? 'boardseshGrade.payoff.softer' : 'boardseshGrade.payoff.stiffer', {
+              amount,
+            })}
+          </Text>
+        </View>
+      )}
+
+      {/* TRUST — the sample + (only a real) band on one line. A range collapses to
+          a single-grade line when both bounds round to the same grade. */}
+      {provisional ? (
+        <Text variant="footnote" color={iosSystemColors.systemOrange}>
+          {band.sameLabel
+            ? t('boardseshGrade.trust.provisionalSingle', { count })
+            : t('boardseshGrade.trust.provisionalRange', { low: band.low, high: band.high, count })}
+        </Text>
+      ) : (
+        <View style={styles.trustRow}>
+          <Icon name="check.small" size={14} color={iosSystemColors.systemGreen} />
+          <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.flexText}>
+            {band.sameLabel
+              ? t('boardseshGrade.trust.confirmedSingle', { count })
+              : t('boardseshGrade.trust.confirmedRange', { low: band.low, high: band.high, count })}
+          </Text>
+        </View>
+      )}
+
+      {/* DUMBBELL — crowd rings vs Boardsesh diamonds, one per angle. */}
+      {dumbbellRows.length >= 1 && (
+        <View style={styles.histogram}>
+          <DumbbellByAngleChart
+            rows={dumbbellRows}
+            headlineGrade={view.gradeValue}
+            gradeFormat={gradeFormat}
+            accessibilityLabel={t('boardseshGrade.byAngle')}
+          />
+        </View>
+      )}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
+  container: {
+    gap: spacing[3],
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -160,31 +285,67 @@ const styles = StyleSheet.create({
   flexText: {
     flex: 1,
   },
-  gradeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
+  centered: {
+    textAlign: 'center',
   },
   gradeValue: {
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
   },
-  provisionalValue: {
+  // HERO — correction row
+  correctionRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 2,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[2],
   },
-  approx: {
-    marginTop: spacing[1],
+  correctionSide: {
+    alignItems: 'center',
+    gap: spacing[1],
   },
-  gradeMeta: {
-    flex: 1,
-    gap: 2,
+  crowdGrade: {
+    color: iosSystemColors.systemGray,
   },
-  scopeRow: {
+  correctionArrow: {
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  everywhereValue: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
+  },
+  // HERO — single-grade layouts (local-only / matches / no-crowd)
+  singleHero: {
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  // HERO — setter-only
+  setterHero: {
+    gap: spacing[1],
+  },
+  setterGrade: {
+    color: iosSystemColors.systemGray,
+  },
+  // PAYOFF
+  payoffRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[2],
+  },
+  accentBar: {
+    width: 2,
+    alignSelf: 'stretch',
+    borderRadius: 1,
+  },
+  // TRUST
+  trustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  histogram: {
+    gap: spacing[2],
   },
   skeleton: {
     borderRadius: borderRadius.md,

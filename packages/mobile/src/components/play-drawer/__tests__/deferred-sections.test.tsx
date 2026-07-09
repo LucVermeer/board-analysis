@@ -11,6 +11,11 @@ const deferred = vi.hoisted(() => ({
 
 const flags = vi.hoisted(() => ({ boardseshGrade: false }));
 
+const boardseshGradeQuery = vi.hoisted(() => ({
+  calls: [] as Array<{ boardName: string; climbUuid: string | null; angle: number; enabled: boolean | undefined }>,
+  data: undefined as unknown,
+}));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
@@ -71,6 +76,18 @@ vi.mock('../../../providers/feature-flags-provider', () => ({
   useBoardseshGradeEnabled: () => flags.boardseshGrade,
 }));
 
+vi.mock('../../../lib/graphql/hooks', () => ({
+  useBoardseshGrade: (boardName: string, climbUuid: string | null, angle: number, options?: { enabled?: boolean }) => {
+    boardseshGradeQuery.calls.push({ boardName, climbUuid, angle, enabled: options?.enabled });
+    return { data: boardseshGradeQuery.data };
+  },
+  useClimbStatsHistory: () => ({ data: undefined }),
+}));
+
+vi.mock('../../../hooks/use-grade-format', () => ({
+  useGradeFormat: () => ({ gradeFormat: 'v_grade' }),
+}));
+
 import { DeferredSections } from '../DeferredSections';
 
 const climb = {
@@ -102,6 +119,8 @@ describe('DeferredSections', () => {
     deferred.ready = false;
     deferred.calls = [];
     flags.boardseshGrade = false;
+    boardseshGradeQuery.calls = [];
+    boardseshGradeQuery.data = undefined;
   });
 
   it('keeps Beta videos eager while heavier sections wait for scroll and interaction readiness', () => {

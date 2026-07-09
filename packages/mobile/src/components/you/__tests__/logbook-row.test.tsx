@@ -11,6 +11,11 @@ import type { AscentFeedItem } from '@boardsesh/graphql/operations';
 // decisions + the row's label formatting are exercised end-to-end.
 const swipeable = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
 const a11y = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+// Controls the app-wide "Show Boardsesh grades" toggle for the row. Default OFF
+// so the existing consensus-fallback tests are unaffected; the Boardsesh-grade
+// block flips it per case. resolveCrowdDifficultyId (@boardsesh/logbook, via the
+// real boardsesh-grade-display lib) is exercised for real off this flag.
+const boardsesh = vi.hoisted(() => ({ active: false }));
 
 vi.mock('react-native', () => ({
   View: (props: { children?: ReactNode } & Record<string, unknown>) => {
@@ -118,6 +123,9 @@ vi.mock('../../../hooks/use-grade-format', () => ({
     formatGradeByDifficultyId: (id: number | null | undefined) => (id != null ? `V${id}` : null),
   }),
 }));
+vi.mock('../../../hooks/use-display-grade', () => ({
+  useBoardseshGradesActive: () => boardsesh.active,
+}));
 vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({
   getBoardConfigForPlaylist: () => ({ boardName: 'kilter', layoutId: 1, sizeId: 1, setIds: [1] }),
 }));
@@ -179,6 +187,7 @@ function iconNames(container: HTMLElement): string[] {
 beforeEach(() => {
   swipeable.props = null;
   a11y.props = null;
+  boardsesh.active = false;
 });
 
 describe('LogbookRow — grade column', () => {
@@ -219,6 +228,76 @@ describe('LogbookRow — grade column', () => {
     expect(icons).not.toContain('people');
     expect(icons).not.toContain('chevron.up');
     expect(icons).not.toContain('chevron.down');
+  });
+});
+
+describe('LogbookRow — Boardsesh grade fallback', () => {
+  it('keeps the climber’s own grade big and shows the Boardsesh grade as the crowd secondary when active', () => {
+    boardsesh.active = true;
+    // User graded V18; Boardsesh grade (trusted) is V22 and no legacy consensus.
+    const { container, getByText } = renderRow(
+      ascent({ difficulty: 18, difficultyName: '18', boardseshDifficulty: 22, boardseshConfidence: 'confirmed' }),
+    );
+
+    // The logger's own grade always wins as the big grade.
+    getByText('V18');
+    // Boardsesh grade fills the crowd side as the small secondary.
+    getByText('V22');
+    const icons = iconNames(container);
+    expect(icons.filter((name) => name === 'people')).toHaveLength(1);
+    // 18 < 22 → you found it softer than the Boardsesh grade → arrow down.
+    expect(icons).toContain('chevron.down');
+    expect(icons).not.toContain('chevron.up');
+  });
+
+  it('shows the Boardsesh grade as the big grade (with the people marker) for an ungraded tick when active', () => {
+    boardsesh.active = true;
+    const { container, getByText, queryByText } = renderRow(
+      ascent({
+        consensusDifficulty: 25,
+        consensusDifficultyName: '25',
+        boardseshDifficulty: 20,
+        boardseshConfidence: 'confirmed',
+      }),
+    );
+
+    // Boardsesh grade replaces the legacy consensus as the crowd grade shown.
+    getByText('V20');
+    expect(queryByText('V25')).toBeNull();
+    const icons = iconNames(container);
+    expect(icons.filter((name) => name === 'people')).toHaveLength(1);
+    expect(icons).not.toContain('chevron.up');
+    expect(icons).not.toContain('chevron.down');
+  });
+
+  it('shows the legacy consensus for an ungraded tick when the toggle is off', () => {
+    boardsesh.active = false;
+    const { getByText, queryByText } = renderRow(
+      ascent({
+        consensusDifficulty: 25,
+        consensusDifficultyName: '25',
+        boardseshDifficulty: 20,
+        boardseshConfidence: 'confirmed',
+      }),
+    );
+
+    getByText('V25');
+    expect(queryByText('V20')).toBeNull();
+  });
+
+  it('never uses a setter_only Boardsesh grade — falls back to the consensus even when active', () => {
+    boardsesh.active = true;
+    const { getByText, queryByText } = renderRow(
+      ascent({
+        consensusDifficulty: 25,
+        consensusDifficultyName: '25',
+        boardseshDifficulty: 20,
+        boardseshConfidence: 'setter_only',
+      }),
+    );
+
+    getByText('V25');
+    expect(queryByText('V20')).toBeNull();
   });
 });
 

@@ -352,7 +352,45 @@
     "setterOnly": "Setter's call — not enough sends yet.",
     "moonboardTitle": "Not standardized yet",
     "moonboardBody": "We don't have community grade data for MoonBoard yet. Log your Moon sends on Boardsesh to help unlock it.",
-    "loadError": "Couldn't load the grade right now."
+    "loadError": "Couldn't load the grade right now.",
+    "byAngle": "How it climbs by angle",
+    "summaryLocal": "local",
+    "matchesBoard": "Matches the old grade",
+    "localOnlyNote": "Not enough cross-board sends yet to standardize.",
+    "setterCall": "Setter's call",
+    "hero": {
+      "thisBoard": "Old grade",
+      "everywhere": "Boardsesh grade",
+      "thisBoardOnly": "Boardsesh grade",
+      "approx": "About {{amount}}"
+    },
+    "payoff": {
+      "softer": "{{amount}} softer than the old grade.",
+      "stiffer": "{{amount}} stiffer than the old grade."
+    },
+    "trust": {
+      "confirmedSingle_one": "Confirmed · {{count}} send",
+      "confirmedSingle_other": "Confirmed · {{count}} sends",
+      "confirmedRange_one": "Usually {{low}}–{{high}} · {{count}} send",
+      "confirmedRange_other": "Usually {{low}}–{{high}} · {{count}} sends",
+      "provisionalSingle_one": "Still settling · {{count}} send",
+      "provisionalSingle_other": "Still settling · {{count}} sends",
+      "provisionalRange_one": "Still settling · likely {{low}}–{{high}} · {{count}} send",
+      "provisionalRange_other": "Still settling · likely {{low}}–{{high}} · {{count}} sends",
+      "setter": "Fewer than 3 sends to standardize"
+    },
+    "dumbbell": {
+      "legendBoardsesh": "Boardsesh grade",
+      "legendCrowd": "Old grade",
+      "legendSize": "Bigger dot = more sends",
+      "tapCaption_one": "{{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} send",
+      "tapCaption_other": "{{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} sends",
+      "tapCaptionAgree_one": "{{angle}}° · both grades agree · {{grade}} · {{count}} send",
+      "tapCaptionAgree_other": "{{angle}}° · both grades agree · {{grade}} · {{count}} sends",
+      "singleAngle_one": "At {{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} send",
+      "singleAngle_other": "At {{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} sends",
+      "crowdOnlyNote": "Not enough cross-board sends yet to compare by angle."
+    }
   },
   "similarClimbs": {
     "loadError": "Couldn't load similar climbs.",

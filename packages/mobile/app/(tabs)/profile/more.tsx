@@ -34,8 +34,13 @@ import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useSessionRecordingPreference } from '../../../src/lib/session-recording-preference';
 import { setSessionRecordingEnabled } from '../../../src/lib/analytics';
 import { useShowPlaylistTagsPreference } from '../../../src/lib/show-playlist-tags-preference';
+import { useBoardseshGradesPreference } from '../../../src/lib/boardsesh-grades-preference';
 import { useToast } from '../../../src/providers/toast-provider';
-import { useFeatureFlag, useOfflineDownloadsEnabled } from '../../../src/providers/feature-flags-provider';
+import {
+  useFeatureFlag,
+  useOfflineDownloadsEnabled,
+  useBoardseshGradeEnabled,
+} from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
 
@@ -62,6 +67,8 @@ export default function MoreScreen() {
   const { enabled: sessionRecordingEnabled, setEnabled: setSessionRecordingPreference } =
     useSessionRecordingPreference();
   const { enabled: showPlaylistTags, setEnabled: setShowPlaylistTags } = useShowPlaylistTagsPreference();
+  const { enabled: showBoardseshGrades, setEnabled: setShowBoardseshGrades } = useBoardseshGradesPreference();
+  const boardseshGradeFlagEnabled = useBoardseshGradeEnabled();
   const { showToast } = useToast();
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
   // Off until the Connect IQ watch app ships — nothing to pair to before then.
@@ -350,7 +357,9 @@ export default function MoreScreen() {
     ],
   });
 
-  // Display options — show playlist tags toggle.
+  // Display options — show playlist tags toggle, plus the Boardsesh grades
+  // toggle when the `boardsesh-grade` flag is on (the row itself is the
+  // opt-in; the flag gates whether it's offered at all).
   sections.push({
     key: 'displayOptions',
     title: t('mobile.more.displayOptions.title'),
@@ -366,6 +375,21 @@ export default function MoreScreen() {
           setShowPlaylistTags(next);
         },
       },
+      ...(boardseshGradeFlagEnabled
+        ? [
+            {
+              kind: 'toggle' as const,
+              key: 'boardseshGrades',
+              label: t('mobile.more.displayOptions.boardseshGrades'),
+              subtitle: t('mobile.more.displayOptions.boardseshGradesDescription'),
+              value: showBoardseshGrades,
+              onValueChange: (next: boolean) => {
+                hapticSelection();
+                setShowBoardseshGrades(next);
+              },
+            },
+          ]
+        : []),
     ],
   });
 

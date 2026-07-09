@@ -2,14 +2,13 @@ import { memo, useCallback, useMemo } from 'react';
 import { ScrollView, View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName, SimilarClimb } from '@boardsesh/shared-schema';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import * as Haptics from 'expo-haptics';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ClimbListThumbnail } from '../ClimbListThumbnail';
 import { buildClimbStub, formatByline, rankBySizeCompatibility } from './similar-climbs-utils';
 import { useSimilarClimbs } from '../../lib/graphql/hooks';
-import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { useTheme } from '../../providers/theme-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -39,7 +38,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
   const { brandColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   const { data: climbs, isLoading, isError, refetch } = useSimilarClimbs(boardName, climbUuid, layoutId, angle);
 
   // Wall-compatible climbs rank first; incompatible ones are dimmed and last.
@@ -98,8 +97,9 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroller}>
       {ranked.map(({ climb: similar, compatible }) => {
-        const gradeColor = getGradeColor(similar.difficultyName) ?? DEFAULT_GRADE_COLOR;
-        const formattedGrade = formatGrade(similar.difficultyName) ?? similar.difficultyName ?? '';
+        // SimilarClimb carries no Boardsesh grade today, so `resolveGrade` falls
+        // back to the legacy label + colour — lights up once the backend stamps them.
+        const { label: formattedGrade, color: gradeColor } = resolveGrade({ difficulty: similar.difficultyName });
         const byline = formatByline(similar, tClimbs);
         return (
           <Pressable

@@ -1,0 +1,106 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+
+// The one dependency under test: the row renders exactly the label + colour that
+// `resolveGrade` returns (the app-wide "Show Boardsesh grades" swap), instead of
+// computing the legacy grade colour itself. A controllable stub lets us assert the
+// wiring without the flag/preference plumbing (covered by use-display-grade's tests).
+const resolveGrade = vi.fn();
+
+vi.mock('react-native', () => ({
+  StyleSheet: { create: (styles: unknown) => styles },
+  View: ({ children }: { children?: ReactNode }) => createElement('div', {}, children),
+}));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock('../../hooks/use-display-grade', () => ({
+  useDisplayGrade: () => ({ boardseshActive: true, resolveGrade }),
+}));
+
+vi.mock('../../hooks/use-ascent-status', () => ({
+  useAscentStatus: () => null,
+}));
+
+vi.mock('../../providers/theme-provider', () => ({
+  useTheme: () => ({ systemColors: { secondaryLabel: '#8E8E93' } }),
+}));
+
+vi.mock('../../lib/format-climb-stats', () => ({
+  formatSends: () => 'sends',
+  formatQuality: () => '4.5',
+}));
+
+// Text → a span carrying its variant + flattened style colour, so we can find the
+// grade (the only variant="title3") and read the colour applied to it.
+vi.mock('../Text', () => ({
+  Text: ({ children, style, variant }: { children?: ReactNode; style?: unknown; variant?: string }) => {
+    const flattened = Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style ?? {});
+    return createElement(
+      'span',
+      { 'data-variant': variant, 'data-color': (flattened as { color?: string }).color },
+      children,
+    );
+  },
+}));
+
+vi.mock('../ClimbListThumbnail', () => ({
+  ClimbListThumbnail: () => null,
+  THUMBNAIL_WIDTH: 60,
+  THUMBNAIL_HEIGHT: 80,
+}));
+
+vi.mock('../Icon', () => ({ Icon: () => null }));
+vi.mock('../ClimbAttributeIcons', () => ({ ClimbAttributeIcons: () => null }));
+vi.mock('../ClimbPlaylistChips', () => ({ ClimbPlaylistChips: () => null }));
+
+import { ClimbListItemContent } from '../ClimbListItemContent';
+
+const baseClimb = {
+  uuid: 'c1',
+  name: 'Test Climb',
+  frames: 'p1r1',
+  difficulty: '6b/V4',
+  quality_average: '4.5',
+  ascensionist_count: 10,
+  boardseshDifficulty: 20,
+  boardseshConfidence: 'confirmed',
+};
+
+const gradeNode = (container: HTMLElement) => container.querySelector('[data-variant="title3"]');
+
+describe('ClimbListItemContent grade', () => {
+  beforeEach(() => resolveGrade.mockReset());
+
+  it('renders the label + colour resolveGrade returns (Boardsesh grade when active)', () => {
+    resolveGrade.mockReturnValue({ label: 'V5', color: '#abcdef', isBoardsesh: true });
+    const { container } = render(
+      <ClimbListItemContent climb={baseClimb} boardName="kilter" layoutId={1} sizeId={1} setIds="1" angle={40} />,
+    );
+    const node = gradeNode(container);
+    expect(node?.textContent).toBe('V5');
+    expect(node?.getAttribute('data-color')).toBe('#abcdef');
+  });
+
+  it('falls back to the legacy label + colour resolveGrade returns', () => {
+    resolveGrade.mockReturnValue({ label: 'V4', color: '#111111', isBoardsesh: false });
+    const { container } = render(
+      <ClimbListItemContent climb={baseClimb} boardName="kilter" layoutId={1} sizeId={1} setIds="1" angle={40} />,
+    );
+    const node = gradeNode(container);
+    expect(node?.textContent).toBe('V4');
+    expect(node?.getAttribute('data-color')).toBe('#111111');
+  });
+
+  it('passes the climb (with its Boardsesh grade fields) to resolveGrade', () => {
+    resolveGrade.mockReturnValue({ label: 'V4', color: '#111111', isBoardsesh: false });
+    render(<ClimbListItemContent climb={baseClimb} boardName="kilter" layoutId={1} sizeId={1} setIds="1" angle={40} />);
+    expect(resolveGrade).toHaveBeenCalledWith(
+      expect.objectContaining({ difficulty: '6b/V4', boardseshDifficulty: 20, boardseshConfidence: 'confirmed' }),
+    );
+  });
+});

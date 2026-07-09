@@ -2,11 +2,10 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from './Text';
 import { ClimbListThumbnail, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from './ClimbListThumbnail';
 import { formatSends, formatQuality } from '../lib/format-climb-stats';
-import { useGradeFormat } from '../hooks/use-grade-format';
+import { useDisplayGrade } from '../hooks/use-display-grade';
 import { useAscentStatus } from '../hooks/use-ascent-status';
 import { useTheme } from '../providers/theme-provider';
 import { Icon } from './Icon';
@@ -45,6 +44,21 @@ export type ClimbListItemClimb = {
   is_no_match?: boolean | null;
   benchmark_difficulty?: string | null;
   characteristics?: string[] | null;
+  // Boardsesh grade (data-science difficulty + confidence), carried on every climb
+  // from PR #3554. Optional + permissive so both the web-schema `Climb` and the
+  // `@boardsesh/queue` `Climb` satisfy this shape; `resolveGrade` renders the
+  // Boardsesh grade in their place when the "Show Boardsesh grades" toggle is on.
+  //
+  // INVARIANT (enforced at the callers, not here): set these two fields ONLY when
+  // `difficulty` above is a COMMUNITY/CONSENSUS grade — NEVER a user's own logged
+  // ascent grade. `resolveGrade` swaps in the Boardsesh grade unconditionally when
+  // the toggle is on, so it cannot tell the two apart; a caller that renders a
+  // climber's own logged grade would silently violate the hard rule (a user grade
+  // always wins) if it populated these. Such callers MUST omit them — see
+  // `sessionTickToClimb`, which carries the Boardsesh fields only for an ungraded
+  // tick and drops them the moment a logged grade is present.
+  boardseshDifficulty?: number | null;
+  boardseshConfidence?: string | null;
 };
 
 type ClimbListItemContentProps = {
@@ -150,11 +164,14 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   showPlaylistChips = false,
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   const { systemColors } = useTheme();
 
-  const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
-  const formattedGrade = formatGrade(climb.difficulty);
+  // One O(1) resolve per row: the Boardsesh grade (label + colour) when the "Show
+  // Boardsesh grades" toggle is on and a trusted one exists, else the legacy
+  // Aurora grade. `resolveGrade` is the stable callback from `useDisplayGrade`
+  // (called once above), so it never re-derives per render beyond this call.
+  const { label: formattedGrade, color: gradeColor } = resolveGrade(climb);
 
   // Subtitle parts: sends · quality★ · setter (each dropped when absent). A
   // caller-supplied override wins outright — a string replaces the line, null
@@ -236,7 +253,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
           <View style={styles.iconGradeRow}>
             {gradeIsConsensus ? <Icon name="people" size={13} color={systemColors.secondaryLabel} /> : null}
             <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
-              {formattedGrade ?? climb.difficulty}
+              {formattedGrade}
             </Text>
           </View>
           {consensusGrade ? (

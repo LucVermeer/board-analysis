@@ -7,6 +7,7 @@ vi.mock('../playlists/board-details-for-playlist', () => ({
 
 import { getBoardConfigForPlaylist } from '../playlists/board-details-for-playlist';
 import { sessionTickToClimb, navigateToSessionClimb } from '../session-tick-mapping';
+import { resolveDisplayGrade } from '../boardsesh-grade-display';
 
 const mockedGetBoardConfig = vi.mocked(getBoardConfigForPlaylist);
 
@@ -90,6 +91,115 @@ describe('sessionTickToClimb', () => {
     expect(climb?.name).toBe('');
     expect(climb?.difficulty).toBe('');
     expect(climb?.setter_username).toBe('');
+  });
+
+  // The Boardsesh grade only fills in for an UNGRADED tick (`difficulty == null`,
+  // the same signal SessionTickRow's frameless path uses). A logged/consensus
+  // grade always wins, so the fields must be dropped when one is present — else
+  // ClimbListItemContent's unconditional swap would override the user's grade.
+  it('carries the Boardsesh grade fields for an ungraded tick (difficulty == null)', () => {
+    const climb = sessionTickToClimb(
+      makeTick({ frames: 'p1', difficulty: null, boardseshDifficulty: 20, boardseshConfidence: 'confirmed' }),
+    );
+    expect(climb?.boardseshDifficulty).toBe(20);
+    expect(climb?.boardseshConfidence).toBe('confirmed');
+  });
+
+  it('OMITS the Boardsesh grade fields when the tick has a logged grade (difficulty set)', () => {
+    const climb = sessionTickToClimb(
+      makeTick({ frames: 'p1', difficulty: 12, boardseshDifficulty: 20, boardseshConfidence: 'confirmed' }),
+    );
+    expect(climb).not.toHaveProperty('boardseshDifficulty');
+    expect(climb).not.toHaveProperty('boardseshConfidence');
+    expect(climb?.boardseshDifficulty).toBeUndefined();
+  });
+});
+
+// End-to-end grade resolution for the FRAMED session-tick path: the climb built
+// by `sessionTickToClimb` is rendered through `resolveDisplayGrade` — the exact
+// pure resolver `ClimbListItemContent` calls via `useDisplayGrade`. The
+// `useBoardseshGrades` argument mirrors `useBoardseshGradesActive` (flag AND the
+// climber's "Show Boardsesh grades" preference), so `true` == toggle ON.
+describe('sessionTickToClimb → resolveDisplayGrade (framed path grade)', () => {
+  const gradeFormat = 'v-grade' as const;
+  function resolveFramedGrade(tick: SessionDetailTick, useBoardseshGrades: boolean) {
+    const climb = sessionTickToClimb(tick);
+    if (!climb) throw new Error('expected a framed climb');
+    return resolveDisplayGrade(climb, { useBoardseshGrades, gradeFormat });
+  }
+
+  it('(a) ungraded framed tick + toggle ON → renders the Boardsesh grade', () => {
+    // 20 = 6c/V5; the ungraded legacy label is blank, so the swap is observable.
+    const tick = makeTick({
+      frames: 'p1',
+      difficulty: null,
+      difficultyName: null,
+      boardseshDifficulty: 20,
+      boardseshConfidence: 'confirmed',
+    });
+    expect(resolveFramedGrade(tick, true)).toEqual({
+      label: 'V5',
+      color: expect.stringMatching(/^#/),
+      isBoardsesh: true,
+    });
+  });
+
+  it('(b) ungraded framed tick + toggle OFF → legacy grade, never Boardsesh', () => {
+    const tick = makeTick({
+      frames: 'p1',
+      difficulty: null,
+      difficultyName: '6b/V4',
+      boardseshDifficulty: 20,
+      boardseshConfidence: 'confirmed',
+    });
+    expect(resolveFramedGrade(tick, false)).toEqual({
+      label: 'V4',
+      color: expect.stringMatching(/^#/),
+      isBoardsesh: false,
+    });
+  });
+
+  it('(c) GRADED framed tick + toggle ON → renders the USER grade, NOT the Boardsesh grade', () => {
+    // The critical user-grade-wins case: the logger graded V4; the Boardsesh grade
+    // (V5) is present on the tick but must be dropped so it can never override.
+    const tick = makeTick({
+      frames: 'p1',
+      difficulty: 12,
+      difficultyName: '6b/V4',
+      boardseshDifficulty: 20,
+      boardseshConfidence: 'confirmed',
+    });
+    const display = resolveFramedGrade(tick, true);
+    expect(display).toEqual({ label: 'V4', color: expect.stringMatching(/^#/), isBoardsesh: false });
+    expect(display.label).not.toBe('V5');
+  });
+
+  it('(d) ungraded framed tick with a setter_only or null Boardsesh grade → legacy, never Boardsesh', () => {
+    const setterOnly = makeTick({
+      frames: 'p1',
+      difficulty: null,
+      difficultyName: '6b/V4',
+      boardseshDifficulty: 27,
+      boardseshConfidence: 'setter_only',
+    });
+    expect(resolveFramedGrade(setterOnly, true)).toEqual({
+      label: 'V4',
+      color: expect.stringMatching(/^#/),
+      isBoardsesh: false,
+    });
+
+    const noGrade = makeTick({
+      frames: 'p1',
+      difficulty: null,
+      difficultyName: '6b/V4',
+      boardseshDifficulty: null,
+      boardseshConfidence: null,
+    });
+    expect(resolveFramedGrade(noGrade, true)).toEqual({
+      label: 'V4',
+      color: expect.stringMatching(/^#/),
+      isBoardsesh: false,
+    });
   });
 });
 

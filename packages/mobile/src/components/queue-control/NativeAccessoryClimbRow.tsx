@@ -1,7 +1,7 @@
 import { StyleSheet, View, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import type { Climb } from '@boardsesh/queue';
-import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { spacing } from '../../theme/tokens';
@@ -83,12 +83,14 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
 export function NativeAccessoryClimbRow({ climb, placement, width }: NativeAccessoryClimbRowProps) {
   const { boardConfig } = useDrawerHost();
   const { systemColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   const { openGesture } = useAccessoryClimbTap();
 
   const showThumbnail = placement === 'regular' && boardConfig !== null;
   const rowHeight = placement === 'inline' ? glassSize.inline : glassSize.standard;
-  const currentFormattedGrade = formatGrade(climb.difficulty);
+  // The platter shows a plain (non-colorized) grade; only the label swaps to the
+  // Boardsesh grade when the toggle is on and a trusted one exists.
+  const currentFormattedGrade = resolveGrade(climb).label;
 
   return (
     <View style={[styles.row, { width, height: rowHeight }]}>

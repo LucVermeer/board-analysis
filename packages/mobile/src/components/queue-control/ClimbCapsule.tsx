@@ -7,12 +7,12 @@
 import { useMemo, type ReactNode } from 'react';
 import { View, StyleSheet, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
+import { DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { Climb } from '@boardsesh/queue';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH, glassSize } from '../../theme/layout';
 import { spacing } from '../../theme/tokens';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
-import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { Text } from '../Text';
 import { MarqueeText } from '../MarqueeText';
 import { useTheme } from '../../providers/theme-provider';
@@ -82,7 +82,7 @@ export function ClimbCapsule({
 }: ClimbCapsuleProps) {
   const { systemColors, brandColors } = useTheme();
   const { boardConfig } = useDrawerHost();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
   const { openGesture, currentItem } = useAccessoryClimbTap();
   // Connection state drives the leading control + the "you have control" glow.
   // Read from the single source so the bar can't disagree with the drawer bulb.
@@ -97,15 +97,15 @@ export function ClimbCapsule({
   // Only "you are driving the wall" lights the bar up.
   const connected = boardConnection === 'connectedByMe';
 
+  // Boardsesh grade (label + colour) when the toggle is on and a trusted one
+  // exists, else the legacy Aurora grade — the same treatment as the list rows.
   const grades = useMemo(() => {
-    const currentColor = currentClimb
-      ? (getGradeColor(currentClimb.difficulty) ?? DEFAULT_GRADE_COLOR)
-      : DEFAULT_GRADE_COLOR;
+    const resolved = currentClimb ? resolveGrade(currentClimb) : null;
     return {
-      current: currentClimb ? formatGrade(currentClimb.difficulty) : null,
-      currentColor,
+      current: resolved?.label ?? null,
+      currentColor: resolved?.color ?? DEFAULT_GRADE_COLOR,
     };
-  }, [currentClimb, formatGrade]);
+  }, [currentClimb, resolveGrade]);
 
   if (!currentClimb) return null;
 

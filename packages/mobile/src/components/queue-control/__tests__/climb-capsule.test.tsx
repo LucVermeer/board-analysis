@@ -147,11 +147,18 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 // only renders it when boardConfig is set (null here), so stub it out.
 vi.mock('../AccessoryClimbThumbnail', () => ({ AccessoryClimbThumbnail: () => null }));
 
-// formatGrade prefixes so the displayed grade is distinguishable from the raw
-// difficulty key used for colour lookup.
-vi.mock('../../../hooks/use-grade-format', () => ({
-  useGradeFormat: () => ({
-    formatGrade: (difficulty: string | null | undefined) => (difficulty ? `${difficulty} 6C` : null),
+// The capsule renders whatever `resolveGrade` returns (the app-wide "Show Boardsesh
+// grades" swap). Stub it to the legacy behaviour: label = formatGrade output
+// ("<difficulty> 6C"), colour = the mocked grade hue (#FF0000 for V6, else default),
+// so the colorization assertions below hold under the new resolver.
+vi.mock('../../../hooks/use-display-grade', () => ({
+  useDisplayGrade: () => ({
+    boardseshActive: false,
+    resolveGrade: (climb: { difficulty?: string | null }) => ({
+      label: climb.difficulty ? `${climb.difficulty} 6C` : null,
+      color: climb.difficulty === 'V6' ? '#FF0000' : '#808080',
+      isBoardsesh: false,
+    }),
   }),
 }));
 

@@ -1,13 +1,12 @@
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { BoardDriverAvatar } from '../BoardDriverAvatar';
 import { readableTextColor } from '../../grade/grade-chip-colors';
 import { useTheme } from '../../../providers/theme-provider';
-import { useGradeFormat } from '../../../hooks/use-grade-format';
+import { useDisplayGrade } from '../../../hooks/use-display-grade';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import type { WallKioskTypeScale } from './wall-kiosk-type';
 
@@ -38,13 +37,17 @@ function WallIdentityBlockComponent({
 }: WallIdentityBlockProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
+  const { resolveGrade } = useDisplayGrade();
 
   if (!climb) return null;
 
   const name = climb.name?.trim() || '';
-  const grade = climb.grade ? formatGrade(climb.grade) : null;
-  const gradeColor = getGradeColor(climb.grade ?? '') ?? DEFAULT_GRADE_COLOR;
+  // BoardPresenceClimb carries no Boardsesh grade today, so `resolveGrade` falls
+  // back to the legacy label + colour — the kiosk lights up the Boardsesh grade
+  // once the backend stamps presence climbs.
+  const resolvedGrade = resolveGrade({ difficulty: climb.grade ?? '' });
+  const grade = climb.grade ? resolvedGrade.label : null;
+  const gradeColor = resolvedGrade.color;
   const gradeTextColor = readableTextColor(gradeColor);
   const setter = climb.setter?.trim();
   const litBy = climb.sentByDisplayName?.trim() || null;

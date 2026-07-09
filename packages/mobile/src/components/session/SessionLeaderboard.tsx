@@ -14,6 +14,8 @@ import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useBoardseshGradesActive } from '../../hooks/use-display-grade';
+import { resolveCrowdDifficultyId, GRADE_BY_ID, clampDifficultyId } from '../../lib/boardsesh-grade-display';
 
 type SessionLeaderboardProps = {
   participants: SessionFeedParticipant[];
@@ -33,19 +35,27 @@ export function SessionLeaderboard({ participants, ticks }: SessionLeaderboardPr
   const { t } = useTranslation('session');
   const { t: tYou } = useTranslation('you');
   const { brandColors } = useTheme();
+  const boardseshActive = useBoardseshGradesActive();
 
   // Each climber's hardest grade (max difficulty among their sends/flashes).
+  // The logger's OWN grade wins; only an ungraded tick falls back to the crowd
+  // grade (the Boardsesh grade when the app-wide toggle is on and it's trusted),
+  // so an ungraded send still counts toward — and names — their hardest.
   const hardestByUser = useMemo(() => {
     const best = new Map<string, Hardest>();
     for (const tick of ticks) {
       if (tick.status === 'attempt') continue;
-      const difficulty = tick.difficulty ?? -1;
+      const crowdDifficulty = tick.difficulty == null ? resolveCrowdDifficultyId(tick, boardseshActive) : null;
+      const difficulty = tick.difficulty ?? crowdDifficulty ?? -1;
+      const name =
+        crowdDifficulty != null
+          ? (GRADE_BY_ID.get(clampDifficultyId(crowdDifficulty))?.difficulty_name ?? null)
+          : (tick.difficultyName ?? null);
       const prev = best.get(tick.userId);
-      if (!prev || difficulty > prev.difficulty)
-        best.set(tick.userId, { difficulty, name: tick.difficultyName ?? null });
+      if (!prev || difficulty > prev.difficulty) best.set(tick.userId, { difficulty, name });
     }
     return best;
-  }, [ticks]);
+  }, [ticks, boardseshActive]);
 
   const ranked = useMemo(
     () =>

@@ -352,7 +352,45 @@
     "setterOnly": "Criterio del setter — todavía no hay suficientes encadenes.",
     "moonboardTitle": "Todavía sin estandarizar",
     "moonboardBody": "Aún no tenemos datos de grado de la comunidad para MoonBoard. Registra tus encadenes en Moon con Boardsesh para ayudar a desbloquearlo.",
-    "loadError": "No se pudo cargar el grado ahora mismo."
+    "loadError": "No se pudo cargar el grado ahora mismo.",
+    "byAngle": "Cómo cuesta según el ángulo",
+    "summaryLocal": "local",
+    "matchesBoard": "Coincide con el grado anterior",
+    "localOnlyNote": "Todavía no hay suficientes encadenes entre plafones para estandarizar.",
+    "setterCall": "Criterio del setter",
+    "hero": {
+      "thisBoard": "Grado anterior",
+      "everywhere": "Grado Boardsesh",
+      "thisBoardOnly": "Grado Boardsesh",
+      "approx": "Unos {{amount}}"
+    },
+    "payoff": {
+      "softer": "{{amount}} más blando que el grado anterior.",
+      "stiffer": "{{amount}} más duro que el grado anterior."
+    },
+    "trust": {
+      "confirmedSingle_one": "Confirmado · {{count}} encadene",
+      "confirmedSingle_other": "Confirmado · {{count}} encadenes",
+      "confirmedRange_one": "Normalmente {{low}}–{{high}} · {{count}} encadene",
+      "confirmedRange_other": "Normalmente {{low}}–{{high}} · {{count}} encadenes",
+      "provisionalSingle_one": "Aún asentándose · {{count}} encadene",
+      "provisionalSingle_other": "Aún asentándose · {{count}} encadenes",
+      "provisionalRange_one": "Aún asentándose · probablemente {{low}}–{{high}} · {{count}} encadene",
+      "provisionalRange_other": "Aún asentándose · probablemente {{low}}–{{high}} · {{count}} encadenes",
+      "setter": "Menos de 3 encadenes para estandarizar"
+    },
+    "dumbbell": {
+      "legendBoardsesh": "Grado Boardsesh",
+      "legendCrowd": "Grado anterior",
+      "legendSize": "Punto más grande = más encadenes",
+      "tapCaption_one": "{{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadene",
+      "tapCaption_other": "{{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadenes",
+      "tapCaptionAgree_one": "{{angle}}° · ambos grados coinciden · {{grade}} · {{count}} encadene",
+      "tapCaptionAgree_other": "{{angle}}° · ambos grados coinciden · {{grade}} · {{count}} encadenes",
+      "singleAngle_one": "A {{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadene",
+      "singleAngle_other": "A {{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadenes",
+      "crowdOnlyNote": "Todavía no hay suficientes encadenes entre plafones para comparar por ángulo."
+    }
   },
   "multiboardList": {
     "noClimbsFound": "No se encontraron bloques",

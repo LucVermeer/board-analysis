@@ -352,7 +352,45 @@
     "setterOnly": "Avis de l'ouvreur — pas encore assez de croix.",
     "moonboardTitle": "Pas encore standardisé",
     "moonboardBody": "Nous n'avons pas encore de données de grade communautaires pour le MoonBoard. Enregistre tes croix Moon sur Boardsesh pour aider à le débloquer.",
-    "loadError": "Impossible de charger le grade pour le moment."
+    "loadError": "Impossible de charger le grade pour le moment.",
+    "byAngle": "Sa difficulté selon l'angle",
+    "summaryLocal": "local",
+    "matchesBoard": "Correspond à l'ancien grade",
+    "localOnlyNote": "Pas encore assez de croix inter-boards pour standardiser.",
+    "setterCall": "Avis de l'ouvreur",
+    "hero": {
+      "thisBoard": "Ancien grade",
+      "everywhere": "Grade Boardsesh",
+      "thisBoardOnly": "Grade Boardsesh",
+      "approx": "Environ {{amount}}"
+    },
+    "payoff": {
+      "softer": "{{amount}} plus souple que l'ancien grade.",
+      "stiffer": "{{amount}} plus dur que l'ancien grade."
+    },
+    "trust": {
+      "confirmedSingle_one": "Confirmé · {{count}} croix",
+      "confirmedSingle_other": "Confirmé · {{count}} croix",
+      "confirmedRange_one": "En général {{low}}–{{high}} · {{count}} croix",
+      "confirmedRange_other": "En général {{low}}–{{high}} · {{count}} croix",
+      "provisionalSingle_one": "Encore en train de se caler · {{count}} croix",
+      "provisionalSingle_other": "Encore en train de se caler · {{count}} croix",
+      "provisionalRange_one": "Encore en train de se caler · sans doute {{low}}–{{high}} · {{count}} croix",
+      "provisionalRange_other": "Encore en train de se caler · sans doute {{low}}–{{high}} · {{count}} croix",
+      "setter": "Moins de 3 croix pour standardiser"
+    },
+    "dumbbell": {
+      "legendBoardsesh": "Grade Boardsesh",
+      "legendCrowd": "Ancien grade",
+      "legendSize": "Point plus grand = plus de croix",
+      "tapCaption_one": "{{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "tapCaption_other": "{{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "tapCaptionAgree_one": "{{angle}}° · les deux grades sont d'accord · {{grade}} · {{count}} croix",
+      "tapCaptionAgree_other": "{{angle}}° · les deux grades sont d'accord · {{grade}} · {{count}} croix",
+      "singleAngle_one": "À {{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "singleAngle_other": "À {{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "crowdOnlyNote": "Pas encore assez de croix inter-boards pour comparer par angle."
+    }
   },
   "similarClimbs": {
     "loadError": "Impossible de charger les blocs similaires.",

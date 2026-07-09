@@ -9,10 +9,14 @@ import { LogbookSection } from './LogbookSection';
 import { SimilarClimbsSection } from './SimilarClimbsSection';
 import { CommunitySection } from './CommunitySection';
 import { BoardseshGradeSection } from './BoardseshGradeSection';
+import { buildBoardseshGradeView, buildBoardseshGradeSummary, isMoonBoard } from './boardsesh-grade-utils';
+import { buildAngleGradeBars } from './community-utils';
 import { BetaVideosSection } from './BetaVideosSection';
 import { useAuth } from '../../providers/auth-provider';
 import { useBoardseshGradeEnabled } from '../../providers/feature-flags-provider';
 import { useTheme } from '../../providers/theme-provider';
+import { useBoardseshGrade, useClimbStatsHistory } from '../../lib/graphql/hooks';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
 
@@ -56,6 +60,7 @@ export const DeferredSections = memo(function DeferredSections({
   const { t: tClimbs } = useTranslation('climbs');
   const { isAuthenticated } = useAuth();
   const { brandColors } = useTheme();
+  const { gradeFormat } = useGradeFormat();
   const boardseshGradeEnabled = useBoardseshGradeEnabled();
 
   const handleAddBetaVideoPress = useCallback(() => {
@@ -81,6 +86,25 @@ export const DeferredSections = memo(function DeferredSections({
     if (attempts > 0) return t('mobile.logbook.attemptsOnly', { attempts });
     return null;
   }, [climb.userAscents, climb.userAttempts, t]);
+
+  // Grade shown next to the collapsed Boardsesh grade header. Lifted up here
+  // (rather than read from BoardseshGradeSection) because that section
+  // unmounts while collapsed — React Query dedupes this fetch with the
+  // section's identical-key one once it expands, so this costs no extra request.
+  const moonboard = isMoonBoard(boardName);
+  const boardseshReady = boardseshGradeEnabled && !moonboard && readyToRender;
+  const { data: boardseshGrade } = useBoardseshGrade(boardName, climb.uuid, angle, {
+    enabled: boardseshReady,
+  });
+  // The crowd grade at this angle turns the teaser into the correction "V4 ▸ V3+ ✓".
+  // React Query dedupes this with CommunitySection's identical fetch, so it costs
+  // no extra request; it stays null until loaded and the teaser drops the "V4 ▸".
+  const { data: history } = useClimbStatsHistory(boardName, boardseshReady ? climb.uuid : null);
+  const boardseshSummary = useMemo(() => {
+    const view = buildBoardseshGradeView(boardName, boardseshGrade ?? null, gradeFormat);
+    const crowdLabel = buildAngleGradeBars(history, gradeFormat).find((bar) => bar.angle === angle)?.gradeName ?? null;
+    return buildBoardseshGradeSummary(view, { crowdLabel, localWord: tClimbs('boardseshGrade.summaryLocal') });
+  }, [boardName, boardseshGrade, gradeFormat, history, angle, tClimbs]);
 
   if (!enabled) {
     return null;
@@ -123,6 +147,17 @@ export const DeferredSections = memo(function DeferredSections({
             />
           </CollapsibleSection>
 
+          {boardseshGradeEnabled && (
+            <CollapsibleSection
+              title={tClimbs('boardseshGrade.title')}
+              summary={boardseshSummary}
+              defaultExpanded
+              persistKey="boardseshGrade"
+            >
+              <BoardseshGradeSection climbUuid={climb.uuid} boardName={boardName} angle={angle} />
+            </CollapsibleSection>
+          )}
+
           <CollapsibleSection title={t('mobile.community.title')} defaultExpanded persistKey="community">
             <CommunitySection
               climbUuid={climb.uuid}
@@ -131,12 +166,6 @@ export const DeferredSections = memo(function DeferredSections({
               ascensionistCount={climb.ascensionist_count}
             />
           </CollapsibleSection>
-
-          {boardseshGradeEnabled && (
-            <CollapsibleSection title={tClimbs('boardseshGrade.title')} defaultExpanded persistKey="boardseshGrade">
-              <BoardseshGradeSection climbUuid={climb.uuid} boardName={boardName} angle={angle} />
-            </CollapsibleSection>
-          )}
 
           <CollapsibleSection title={t('mobile.similarClimbs.title')} persistKey="similarClimbs">
             <SimilarClimbsSection
