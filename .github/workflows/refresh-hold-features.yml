@@ -1,0 +1,55 @@
+name: Refresh Hold Features
+
+# Nightly: regenerate the per-hold feature substrate (board_hold_features) for the
+# Climb2Vec content model — geometry features + a de-confounded behavioral
+# difficulty per placement — and shadow-write user_hold_classifications under a
+# system user. Idempotent (every write is an upsert). Runs at 06:15 UTC, between
+# the recommendations refresh (06:00) and the grade refresh (06:30) that will
+# eventually consume the content_prior these features feed.
+on:
+  schedule:
+    - cron: '15 6 * * *' # 06:15 UTC daily (off-peak)
+  workflow_dispatch:
+    inputs:
+      board:
+        description: 'Board to refresh (default kilter)'
+        required: false
+        default: 'kilter'
+      dry_run:
+        description: 'Compute + log only, write nothing'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: refresh-hold-features
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # DATABASE_URL must be a WRITABLE connection.
+    environment: Production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Refresh hold features
+        working-directory: packages/db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: >-
+          node --import tsx scripts/refresh-hold-features.ts
+          --board=${{ github.event.inputs.board || 'kilter' }}
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
