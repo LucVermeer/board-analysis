@@ -39,9 +39,10 @@ data problem rather than a matter of opinion. The reference point is theCrag's
 GRAID, which applies Whole-History Rating to per-user ascent outcomes — we use a
 different backbone (see §6) because our per-user data is far sparser than theirs.
 
-The v1 model is deliberately small: `GROUP BY` aggregates, two coefficient
-tables, and one closed-form empirical-Bayes blend, all in TypeScript. No MCMC,
-no IRT, no neural net. It ships behind the `boardsesh-grade` feature flag.
+The model is deliberately small: `GROUP BY` aggregates, frozen coefficient
+rows, capped per-user evidence, and one closed-form empirical-Bayes blend, all
+in TypeScript. No MCMC, no IRT, no neural net. It ships behind the
+`boardsesh-grade` feature flag.
 
 ## 2. Data sources and their verified quirks
 
@@ -57,7 +58,7 @@ MoonBoard**: fractional, and it moves as ascents accumulate.
 
 - **MoonBoard is the exception.** Moon's feed carries only integer labels —
   `difficulty_average == display_difficulty == benchmark` byte-for-byte. There
-  is no crowd mean to model, so Moon gets no computed grade in v1 (§5).
+  is no crowd mean to model, so Moon gets no computed grade yet (§5).
 - **Zero shrinkage upstream.** A one-ascent "grade" is one person's opinion
   surfaced raw. On Kilter, 34% of climb+angle rows have exactly one ascent and
   70% have four or fewer. The ≥20-ascent head is already stable (p90 lifetime
@@ -94,8 +95,9 @@ label is right" vote. A synced exact-echo is treated as "no opinion expressed"
 - **Kilter's `benchmark_difficulty` column is not curation** — 164k rows, it is
   not a hand-picked reference set and must not be treated as one.
 - **Moon benchmarks are circular** in our feed (they equal the label).
-- **No Moon standardization is possible in v1**: zero users have ≥3 graded sends
-  on both Moon and another board, so there is no bridge to anchor Moon against.
+- **No Moon standardization is publishable yet**: the feed has no crowd mean,
+  and live paired-user coverage is still below the bridge threshold, so Moon
+  remains report-only until the data grows.
 
 ### Structure and hygiene
 
@@ -126,9 +128,8 @@ label is right" vote. A synced exact-echo is treated as "no opinion expressed"
   Tension's top user is 33% of expressed opinions and tick-weighting would cut
   `σ_within` from 1.74 to 1.38 — one person's tight personal dispersion faking
   ~26% more confidence in every Tension crowd mean. On Kilter (top user 5.7%)
-  the choice barely matters (1.55 vs 1.52). Reproduce all three checks with
-  `node --import tsx packages/db/scripts/analyze-grader-concentration.ts`
-  (read-only).
+  the choice barely matters (1.55 vs 1.52). The read-only reproduction script is
+  `packages/db/scripts/analyze-grader-concentration.ts`.
 - Drafts and unlisted climbs are excluded from the pipeline.
 
 ## 3. The model
@@ -240,14 +241,53 @@ lowered so the UI stops presenting an outlier as settled. The nightly run logs
 and persists how many rows were downgraded. Implementation:
 `applyDisplayDeltaHygiene` in `hygiene.ts`.
 
+### Capped rater and behavior evidence (v2.0)
+
+Stage 2 adds two per-user signals before the EB blend, but keeps them bounded
+so they cannot overpower the upstream crowd aggregate they often feed.
+
+**Rater model.** For every user × gym/board location, we estimate a shrunk bias
+against the current crowd mean. Native Boardsesh grade ticks count as explicit
+opinions, including exact display matches. Synced exact-display echoes count as
+zero opinion because they are likely quick-log auto-fills; synced non-echo
+grades count at `0.25`. Biases need at least 3 effective opinions, shrink toward
+zero with a 12-opinion prior, and clamp to ±1 grade. The climb-level rater
+signal is capped to ±0.5 grade from the raw crowd mean and at 5 effective
+opinions.
+
+**Behavior model.** Native flash/send/attempt outcomes are converted into a
+weak grade signal after fitting shrunk user ability from successful ticks.
+Behavior only publishes for boards whose **used** native rows are broad enough
+after the high-traffic and ability filters (≥100 users, ≥500 outcomes, top user
+≤3% of outcomes). Outcome buckets need support and cannot be dominated by one
+user before they are used. The climb-level behavior signal is capped to ±0.35
+grade from the raw crowd mean and at 2 effective opinions.
+
+**De-echoed crowd mean.** The crowd mean point estimate is gently moved away
+from display by dividing the observed display delta by `(1 − λ)`, but only when
+there is enough independent evidence and only up to ±0.75 grade from the
+observed mean. If the de-echo step is not eligible, the raw crowd mean stands.
+
+Rater and behavior coefficients are fit on training rows. Prediction evidence
+is then built separately, with Tension benchmark holdout rows allowed in
+prediction but excluded from fitting. For normal published rows, per-user rater
+bias and behavior ability are applied leave-target-out so the target climb does
+not help calibrate the user signal used to grade that same target.
+
+All three signals are blended into the observation's `difficultyAverage` before
+the existing cross-angle prior, isotonic projection, no-shock gate, and
+hysteresis. The visible ascent count and confidence-tier thresholds still use
+the upstream raw ascent count, so Stage 2 cannot make a thin climb look like a
+head climb.
+
 ### Duplicate climbs share one identity
 
-Climbs with the same `hold_fingerprint` are the same physical problem listed
-under different UUIDs. The pipeline treats a duplicate group as ONE climb: per
-angle an n-weighted pooled mean/count (and averaged display), and every member
-uses the group's full angle set as its cross-angle evidence — so members get
-identical posteriors by construction. Before pooling, 44% of Kilter duplicate
-groups disagreed by more than a grade.
+Climbs with the same `(layout_id, hold_fingerprint)` are the same physical
+problem listed under different UUIDs. The pipeline treats a duplicate group as
+ONE climb: per angle an n-weighted pooled mean/count (and averaged display),
+pooled Stage 2 evidence, and every member uses the group's full angle set as
+its cross-angle evidence — so members get identical posteriors by construction.
+Before pooling, 44% of Kilter duplicate groups disagreed by more than a grade.
 
 ### Grade × angle surface
 
@@ -282,11 +322,11 @@ Estimator: `estimateBoardOffsets`.
 
 ### Confidence tiers
 
-| Tier          | Condition                                                                                           | UI                                 |
-| ------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `confirmed`   | n ≥ 20 and `post_sd` ≤ 0.35, unless Kilter display-delta hygiene downgrades the row                  | grade, "confirmed by N sends"      |
-| `provisional` | 3 ≤ n < 20, or a confirmed Kilter row tripped the v1.2 display-delta hygiene rule                    | grade with a visible ± band        |
-| `setter_only` | n < 3                                                                                               | no Boardsesh number, setter's call |
+| Tier          | Condition                                                                           | UI                                 |
+| ------------- | ----------------------------------------------------------------------------------- | ---------------------------------- |
+| `confirmed`   | n ≥ 20 and `post_sd` ≤ 0.35, unless Kilter display-delta hygiene downgrades the row | grade, "confirmed by N sends"      |
+| `provisional` | 3 ≤ n < 20, or a confirmed Kilter row tripped the v1.2 display-delta hygiene rule   | grade with a visible ± band        |
+| `setter_only` | n < 3                                                                               | no Boardsesh number, setter's call |
 
 ### Publish hysteresis
 
@@ -301,15 +341,20 @@ Coefficients are refit weekly and frozen between refits. Every nightly run
 evaluates the gates first and **writes zero grade rows if any blocking gate
 fails**. Results persist to `board_grade_coefficients` (kind `gate_results`).
 
-| Gate                      | Threshold                                                                                                                         | Blocks?             | What a failure means                                                                                                          |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `tail_backtest`           | multi-angle shrunk MAE must not exceed raw MAE (+0.01 tolerance), n ≥ 100; improvement % reported against an aspirational 20% bar | yes                 | the blend makes sparse grades worse than doing nothing                                                                        |
-| `head_holdout`            | single-angle shrunk MAE must not exceed raw MAE (+0.01), n ≥ 100                                                                  | yes                 | the model regressed the rows where it is supposed to be a no-op                                                               |
-| `no_shock`                | no ≥50-ascent climb's local grade moves >1.0 from its raw mean                                                                    | yes                 | the prior is overpowering established grades (also enforced by a clamp inside the blend itself; the gate catches regressions) |
-| `fingerprint_consistency` | ≤1% of duplicate-fingerprint groups disagree by >1 grade at the same angle                                                        | yes                 | evidence for one physical problem is being split badly                                                                        |
-| `residual_paired_gap`     | shared-user mean gap vs fitted offset ≤ 0.3 after the Kilter offset                                                               | withholds universal | the "constant offset" story is wrong; local grades still publish, universal grades don't                                      |
-| `display_delta_hygiene`   | reports Kilter rows downgraded from `confirmed` to `provisional` for rounded universal-display delta outside [-3, +1]             | no (repaired)       | source labels likely contain mixed-scale/corrupt display values; the grade publishes, but not as confirmed                    |
-| honesty report            | reports `corr(grade, display)` and mean \|Δ\| per board                                                                           | no (report only)    | a board whose numbers never leave the label is dressing the label as a data product; UI copy must say so                      |
+| Gate                             | Threshold                                                                                                                         | Blocks?             | What a failure means                                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `tail_backtest`                  | multi-angle shrunk MAE must not exceed raw MAE (+0.01 tolerance), n ≥ 100; improvement % reported against an aspirational 20% bar | yes                 | the blend makes sparse grades worse than doing nothing                                                                        |
+| `head_holdout`                   | single-angle shrunk MAE must not exceed raw MAE (+0.01), n ≥ 100                                                                  | yes                 | the model regressed the rows where it is supposed to be a no-op                                                               |
+| `behavior_eligibility`           | reports how many board behavior models pass the Stage 2 coverage guard                                                            | no (report only)    | behavior data is too concentrated or sparse on some boards, so their outcome signal is ignored                                |
+| `moon_bridge_readiness`          | reports Moon paired-user coverage and candidate offset stability                                                                  | no (report only)    | Moon still lacks a publishable bridge; this deliberately does not block Kilter/Tension grades                                 |
+| `deherded_tension_benchmark`     | held-out Tension benchmark Stage 2 MAE must not exceed Stage 1 MAE by >0.01, n ≥ 100; display MAE is reported only                | yes                 | rater/behavior/de-echo evidence made the benchmark set worse than the existing model                                          |
+| `deherded_tension_calibration`   | held-out Tension benchmark 95% interval coverage must land in [85%, 98%], n ≥ 100                                                 | yes                 | Stage 2 uncertainty is materially under- or over-confident                                                                    |
+| `deherded_segment_no_regression` | no grade-band, angle, or traffic segment with ≥50 rows may regress by >0.05 MAE vs Stage 1                                        | yes                 | the aggregate benchmark score hid a segment-level regression                                                                  |
+| `no_shock`                       | no ≥50-ascent climb's local grade moves >1.0 from its raw mean                                                                    | yes                 | the prior is overpowering established grades (also enforced by a clamp inside the blend itself; the gate catches regressions) |
+| `fingerprint_consistency`        | ≤1% of duplicate-fingerprint groups disagree by >1 grade at the same angle                                                        | yes                 | evidence for one physical problem is being split badly                                                                        |
+| `residual_paired_gap`            | shared-user mean gap vs fitted offset ≤ 0.3 after the Kilter offset                                                               | withholds universal | the "constant offset" story is wrong; local grades still publish, universal grades don't                                      |
+| `display_delta_hygiene`          | reports Kilter rows downgraded from `confirmed` to `provisional` for rounded universal-display delta outside [-3, +1]             | no (repaired)       | source labels likely contain mixed-scale/corrupt display values; the grade publishes, but not as confirmed                    |
+| honesty report                   | reports `corr(grade, display)` and mean \|Δ\| per board                                                                           | no (report only)    | a board whose numbers never leave the label is dressing the label as a data product; UI copy must say so                      |
 
 The backtest replays `board_climb_stats_history` (5.4M snapshots): for series
 that later reached ≥50 ascents (their final mean ≈ truth), it takes the
@@ -325,74 +370,80 @@ win big; what it must never do is lose. On the 2026-07-07 prod run the blend
 beat raw by 2.5% on the multi-angle subset (MAE 0.592 vs 0.607) and exactly
 matched it on single-angle rows. The 20% figure remains in the gate output as
 an aspirational bar so refits that help or hurt stay visible run over run; a
-de-herded evaluation (predicting held-out Tension benchmarks) is the Stage-2
+de-herded evaluation (predicting held-out Tension benchmarks) is the Stage 2
 way to raise it honestly.
+
+The Stage 2 benchmark split withholds 20% of Tension benchmarks from rater and
+behavior fitting using a stable climb+angle hash. The withheld rows are still
+allowed to produce prediction evidence; only coefficient fitting is withheld.
+The withheld rows are scored against a true Stage 1 compute path with all Stage
+2 transforms disabled, and against the Stage 2 model. Display grade remains a
+report-only yardstick because benchmarks are curated labels, and requiring the
+model to beat the display label itself would reject any useful non-label signal.
 
 ## 5. Known limitations
 
 These are real and we'd rather state them than paper over them.
 
-- **Moon is not standardized.** No crowd mean (label-only feed), no bridge users
-  to any other board, circular benchmarks. Moon shows its native grade plus "not
-  standardized yet." The unlock is Moon logbook growth — more logged Moon sends
-  create both a crowd mean and shared users.
+- **Moon is not standardized.** No crowd mean (label-only feed), circular
+  benchmarks, and paired-user coverage below the bridge threshold. Moon shows
+  its native grade plus "not standardized yet." The unlock is Moon logbook
+  growth — more logged Moon sends create shared users for the bridge report.
 - **Small boards aren't universalized.** Decoy, Grasshopper, So iLL, and
   Touchstone have no anchor, so they get a within-board grade with no
   cross-board claim.
 - **Mirrors inherit the base grade.** The aggregates carry no mirror dimension,
   so a mirrored climb reads at its base orientation's grade. Documented, not
   fixed.
-- **Anchoring / herding attenuates deviations.** Because loggers anchor to the
-  displayed grade, the crowd mean drifts less than true disagreement would
-  warrant. v1 applies the (1 − λ) de-attenuation to the _standard error_ but
-  does **not** de-attenuate the point estimate itself — inflating the deviation
-  is easy to get wrong and could manufacture movement on thin evidence, so we
-  chose the conservative option and left it for Stage 2's rater model.
+- **Anchoring / herding is only partially corrected.** Stage 2 de-echoes the
+  crowd point estimate and adds rater/behavior evidence, but every step is
+  capped. That is intentional: the data is still sparse and self-selected, so a
+  bounded correction is preferable to manufacturing movement from thin ticks.
 - **Single-angle sparse climbs gain little.** With one angle and few ascents the
   posterior is essentially the raw mean. The model's tail value is cross-angle
   pooling; a lone sparse angle has nothing to pool with.
 
 ## 6. Rejected alternatives
 
-| Alternative               | Why not (for v1)                                                                                                                                                                                                                                                                        |
+| Alternative               | Why not                                                                                                                                                                                                                                                                                 |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Full Bayesian / MCMC      | Upstream gives us aggregate means, not per-ascent variances. Without the underlying distributions there's nothing for a sampler to condition on that the closed-form EB blend doesn't already capture — the cost buys no extra signal.                                                  |
 | WHR / IRT as the backbone | Per-user outcomes cover only ~14% of the Kilter catalog. theCrag's GRAID works because it has dense per-user ascent data; ours is too sparse to carry a rating system as the primary estimator. Ticks are a coefficient factory (variance, cross-board offset), not a grading backbone. |
-| CNN content model         | Deferred, not rejected. A gradient-boosted model on hold features is the cheaper, more credible Stage-3 version (`content_prior` column is already reserved, NULL in v1).                                                                                                               |
+| CNN content model         | Deferred, not rejected. A gradient-boosted model on hold features is the cheaper, more credible Stage 3 version (`content_prior` column is already reserved, NULL in v2).                                                                                                               |
 
 ## 7. Contributing
 
 ### The roadmap
 
-- **Stage 2 — ordinal rater model.** Model per-rater bias on an ordinal scale
-  with echo ticks down-weighted, so the point estimate can be de-attenuated
-  safely. Add a behavioral flash/attempt Rasch signal from tick outcomes, which
-  is anchoring-immune (whether someone flashed a climb doesn't depend on the
-  displayed number).
+- **Stage 2 — rater and behavior evidence.** Implemented in v2.0 with capped
+  per-user rater bias, weak native behavior outcomes, de-echoed crowd means,
+  held-out Tension benchmark gates, and report-only Moon bridge readiness.
 - **Stage 3 — hold-feature content prior.** A gradient-boosted model over hold
   features to give the cold tail a prior before any ascents exist. The
   `content_prior` column on `board_climb_grades` is reserved for this.
 
 ### Running it
 
-Unit tests (Node's native runner via tsx):
+Unit tests:
 
 ```
-node --import tsx --test packages/db/src/queries/grade-model/__tests__/grade-model.test.ts
+vp run test:db
 ```
 
 The pipeline locally, against the dev DB (or a read-only prod `DB_URL`):
 
 ```
-node --import tsx packages/db/scripts/refresh-climb-grades.ts --validate-only
-node --import tsx packages/db/scripts/refresh-climb-grades.ts --dry-run
-node --import tsx packages/db/scripts/refresh-climb-grades.ts --refit-coefficients
+vp run db:refresh-climb-grades -- --validate-only
+vp run db:refresh-climb-grades -- --dry-run
+vp run db:refresh-climb-grades -- --refit-coefficients
 ```
 
 - `--validate-only` refits coefficients in memory, runs every gate against live
-  data, prints per-board tier counts and the honesty report, and writes nothing.
-  It works even before the grade tables exist (e.g. prod pre-migration).
-- `--dry-run` evaluates and records gates but writes no grade rows.
+  data, prints per-board tier counts, writes nothing, and exits nonzero if a
+  blocking gate fails. It works even before the grade tables exist (e.g. prod
+  pre-migration).
+- `--dry-run` evaluates gates through the normal publish path but writes no
+  coefficients, gate results, or grade rows.
 - `--refit-coefficients` forces a weekly refit instead of reusing the frozen set.
 - A bare run reuses frozen coefficients if they're under a week old, else refits.
 
@@ -400,12 +451,13 @@ node --import tsx packages/db/scripts/refresh-climb-grades.ts --refit-coefficien
 
 - `board_climb_grades` — one row per climb+angle: `local_grade`,
   `universal_grade` (NULL when unanchorable), `grade_low`/`grade_high`,
-  `confidence`, `ascensionist_count` snapshot, `content_prior` (NULL in v1),
+  `confidence`, `ascensionist_count` snapshot, `content_prior` (NULL in v2),
   `model_version`, `coeff_version`.
 - `board_grade_coefficients` — versioned coefficient rows keyed by
   `(coeff_version, kind, key)`. Kinds: `echo_fraction`, `sigma_within`,
-  `tau_squared`, `angle_offset`, `board_offset`, and `gate_results` (per-run
-  pass/fail + metrics). Plain table, `pg_dump`-portable.
+  `tau_squared`, `angle_offset`, `board_offset`, `rater_model`,
+  `behavior_model`, `bridge_readiness`, and `gate_results` (per-run pass/fail +
+  metrics). Plain table, `pg_dump`-portable.
 - Climb and tick/session GraphQL payloads (`climb`, `searchClimbs`, `ticks`,
   `sessionGroupedFeed`, `sessionDetail`, and friends) each embed
   `boardseshDifficulty` (`COALESCE(universal_grade, local_grade)`) and
