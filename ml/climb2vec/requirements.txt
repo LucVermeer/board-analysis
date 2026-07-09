@@ -1,0 +1,6 @@
+# Offline Climb2Vec training/eval deps. Kept minimal and CPU-only so the pipeline
+# runs anywhere; it never ships to prod (serving is pure TS, per docs/climb2vec.md).
+numpy>=1.26
+scikit-learn>=1.4
+# torch is optional — only needed for the Deep Sets encoder (evaluate.py --model deepsets).
+# Install separately: pip install torch --index-url https://download.pytorch.org/whl/cpu
