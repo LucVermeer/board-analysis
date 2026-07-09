@@ -52,6 +52,9 @@ function makeCoefficients(overrides: Partial<GradeCoefficients> = {}): GradeCoef
       kilter: { offset: -1.2, sd: 0.4, users: 50, looMaxDelta: 0.1 },
       tension: { offset: 0, sd: 0, users: 0, looMaxDelta: 0 },
     },
+    raterModel: {},
+    behaviorModel: {},
+    bridgeReadiness: {},
     ...overrides,
   };
 }

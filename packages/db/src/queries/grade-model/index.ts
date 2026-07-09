@@ -5,3 +5,7 @@ export * from './coefficients';
 export * from './gates';
 export * from './hygiene';
 export * from './isotonic';
+export * from './raters';
+export * from './behavior';
+export * from './bridges';
+export * from './deherded';

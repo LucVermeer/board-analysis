@@ -8,7 +8,7 @@
  */
 
 /** Blend/tier/hysteresis logic version, stored on every published row. */
-export const GRADE_MODEL_VERSION = 'v1.2'; // v1.2: Kilter display-delta hygiene
+export const GRADE_MODEL_VERSION = 'v2.0'; // v2.0: capped Stage 2 rater/behavior evidence + benchmark gates
 
 /**
  * Boards whose upstream `difficulty_average` is a live crowd mean (fractional,
@@ -122,3 +122,36 @@ export const GATE_BACKTEST_REGRESSION_TOLERANCE = 0.01; // shrunk MAE may not ex
 export const GATE_NO_SHOCK_MAX_MOVE = 1.0; // no ≥50-ascent climb moves further than this from its raw mean
 export const GATE_NO_SHOCK_MIN_ASCENTS = 50;
 export const GATE_RESIDUAL_PAIRED_GAP = 0.3; // shared-user Kilter/Tension gap after offset
+
+/** Stage 2 evidence caps. These keep per-user ticks from overpowering the upstream aggregate they often feed. */
+export const STAGE2_DEECHO_MAX_MOVE = 0.75;
+export const STAGE2_RATER_MAX_MOVE = 0.5;
+export const STAGE2_RATER_MAX_EFFECTIVE_N = 5;
+export const STAGE2_BEHAVIOR_MAX_MOVE = 0.35;
+export const STAGE2_BEHAVIOR_MAX_EFFECTIVE_N = 2;
+export const STAGE2_USER_BIAS_PRIOR_WEIGHT = 12;
+export const STAGE2_USER_BIAS_MIN_EFFECTIVE_N = 3;
+export const STAGE2_USER_BIAS_MAX_ABS = 1;
+export const STAGE2_SYNCED_NON_ECHO_WEIGHT = 0.25;
+
+/** De-herded Tension benchmark validation. */
+export const TENSION_BENCHMARK_HOLDOUT_MODULUS = 5;
+export const TENSION_BENCHMARK_HOLDOUT_REMAINDER = 0;
+export const GATE_BENCHMARK_MIN_ROWS = 100;
+export const GATE_BENCHMARK_REGRESSION_TOLERANCE = 0.01;
+export const GATE_BENCHMARK_SEGMENT_TOLERANCE = 0.05;
+export const GATE_BENCHMARK_SEGMENT_MIN_ROWS = 50;
+export const GATE_BENCHMARK_MIN_COVERAGE = 0.85;
+export const GATE_BENCHMARK_MAX_COVERAGE = 0.98;
+
+/** Behavior publishing is only allowed where native outcome coverage is broad enough. */
+export const BEHAVIOR_MIN_USERS = 100;
+export const BEHAVIOR_MIN_OUTCOMES = 500;
+export const BEHAVIOR_MAX_TOP_USER_SHARE = 0.03;
+export const BEHAVIOR_MIN_BUCKET_USERS = 10;
+export const BEHAVIOR_MAX_BUCKET_TOP_USER_SHARE = 0.2;
+
+/** Moon bridge remains report-only until there is real paired-user coverage. */
+export const MOON_BRIDGE_MIN_USERS = 50;
+export const MOON_BRIDGE_MIN_SENDS_PER_BOARD = 10;
+export const MOON_BRIDGE_MAX_LOO_DELTA = 0.25;

@@ -15,7 +15,7 @@
  *
  * Model spec and the reasoning behind every threshold: docs/boardsesh-grade.md.
  *
- * Run locally: `node --import tsx packages/db/scripts/refresh-climb-grades.ts`
+ * Run locally: `vp run db:refresh-climb-grades --`
  * Flags: --refit-coefficients (force a refit), --dry-run (gates + stats only),
  * --validate-only (read-only gates report, works without the grade tables),
  * --allow-empty-backtest (dev DBs without stats history: skip the backtest
@@ -34,36 +34,62 @@ import {
   applyDisplayDeltaHygiene,
   buildAngleSurfaceSql,
   buildBacktestSampleSql,
+  buildBehaviorEvidence,
+  buildBehaviorSampleSql,
   buildBoardOffsetSampleSql,
   buildEchoRatesSql,
   buildHonestyCheckSql,
+  buildMoonBridgeSampleSql,
+  buildRaterEvidence,
+  buildRaterSampleSql,
   buildSigmaWithinSql,
   buildTauSampleSql,
+  buildTensionBenchmarkHoldoutSql,
   computePosteriorGrade,
   createDisplayDeltaHygieneStats,
+  deherdCrowdMean,
   estimateAngleSurface,
+  estimateBehaviorModels,
   estimateBoardOffsets,
   estimateEchoFractions,
+  estimateRaterModels,
+  evaluateMoonBridgeReadiness,
   estimateSigmaWithin,
   estimateTauSquared,
   evaluateBacktest,
   evaluateDisplayDeltaHygiene,
   evaluateFingerprintGate,
+  evaluateTensionBenchmarkHoldout,
+  echoFractionFor,
+  effectiveN,
   evaluateResidualGapGate,
   mergeDisplayDeltaHygieneStats,
+  moonBridgeReadinessGate,
   recordDisplayDeltaHygiene,
   shouldPublish,
   GATE_NO_SHOCK_MAX_MOVE,
   GATE_NO_SHOCK_MIN_ASCENTS,
+  STAGE2_BEHAVIOR_MAX_EFFECTIVE_N,
+  STAGE2_BEHAVIOR_MAX_MOVE,
+  STAGE2_DEECHO_MAX_MOVE,
+  STAGE2_RATER_MAX_EFFECTIVE_N,
+  STAGE2_RATER_MAX_MOVE,
   type AngleSurfaceRow,
   type BacktestSampleRow,
+  type BehaviorSampleRow,
   type BoardOffsetSampleRow,
   type ClimbAngleObservation,
   type EchoRateRow,
   type DisplayDeltaHygieneStats,
   type GateResult,
   type GradeCoefficients,
+  type MoonBridgeSampleRow,
+  type RaterSampleRow,
   type SigmaWithinRow,
+  type Stage2Evidence,
+  type Stage2EvidenceMap,
+  type TensionBenchmarkHoldoutRow,
+  type TensionBenchmarkPrediction,
   type TauSampleRow,
 } from '../src/queries/grade-model/index.js';
 import { rowsOf } from '../src/queries/util/rows.js';
@@ -109,6 +135,9 @@ async function loadFrozenCoefficients(db: Db): Promise<GradeCoefficients | null>
     tauSquared: {},
     angleOffset: {},
     boardOffset: {},
+    raterModel: {},
+    behaviorModel: {},
+    bridgeReadiness: {},
   };
   // Payload shapes are documented per `kind` on the boardGradeCoefficients
   // schema; the writer below is the only producer, so shape-by-kind casts are
@@ -124,6 +153,12 @@ async function loadFrozenCoefficients(db: Db): Promise<GradeCoefficients | null>
       coefficients.angleOffset[row.key] = row.payload as GradeCoefficients['angleOffset'][string];
     } else if (row.kind === 'board_offset') {
       coefficients.boardOffset[row.key] = row.payload as GradeCoefficients['boardOffset'][string];
+    } else if (row.kind === 'rater_model') {
+      coefficients.raterModel[row.key] = row.payload as GradeCoefficients['raterModel'][string];
+    } else if (row.kind === 'behavior_model') {
+      coefficients.behaviorModel[row.key] = row.payload as GradeCoefficients['behaviorModel'][string];
+    } else if (row.kind === 'bridge_readiness') {
+      coefficients.bridgeReadiness[row.key] = row.payload as GradeCoefficients['bridgeReadiness'][string];
     }
   }
   return coefficients;
@@ -134,7 +169,8 @@ async function refitCoefficients(
   options: { persist: boolean } = { persist: true },
 ): Promise<GradeCoefficients> {
   console.log('[grades] refitting coefficients…');
-  const coeffVersion = new Date().toISOString().slice(0, 10);
+  const coeffVersion = new Date().toISOString();
+  await db.execute(sql`SET max_parallel_workers_per_gather = 0`);
 
   const echoRows = rowsOf<EchoRateRow>(await db.execute(buildEchoRatesSql()));
   const echoFraction = estimateEchoFractions(echoRows);
@@ -151,6 +187,19 @@ async function refitCoefficients(
   const offsetRows = rowsOf<BoardOffsetSampleRow>(await db.execute(buildBoardOffsetSampleSql()));
   const { kilter } = estimateBoardOffsets(offsetRows);
 
+  const raterRows = rowsOf<RaterSampleRow>(
+    await db.execute(buildRaterSampleSql({ excludeTensionBenchmarkHoldout: true })),
+  );
+  const raterModel = estimateRaterModels(raterRows);
+
+  const behaviorRows = rowsOf<BehaviorSampleRow>(
+    await db.execute(buildBehaviorSampleSql({ excludeTensionBenchmarkHoldout: true })),
+  );
+  const behaviorModel = estimateBehaviorModels(behaviorRows);
+
+  const moonBridgeRows = rowsOf<MoonBridgeSampleRow>(await db.execute(buildMoonBridgeSampleSql()));
+  const moonBridgeReadiness = evaluateMoonBridgeReadiness(moonBridgeRows);
+
   const coefficients: GradeCoefficients = {
     coeffVersion,
     echoFraction,
@@ -158,6 +207,9 @@ async function refitCoefficients(
     tauSquared,
     angleOffset,
     boardOffset: { [ANCHOR_BOARD]: { offset: 0, sd: 0, users: 0, looMaxDelta: 0 } },
+    raterModel,
+    behaviorModel,
+    bridgeReadiness: { moonboard: moonBridgeReadiness },
   };
   if (kilter && kilter.looMaxDelta <= OFFSET_LOO_MAX_DELTA) {
     coefficients.boardOffset.kilter = kilter;
@@ -183,20 +235,29 @@ async function refitCoefficients(
       key: board,
       payload,
     })),
+    ...Object.entries(raterModel).map(([board, payload]) => ({ kind: 'rater_model', key: board, payload })),
+    ...Object.entries(behaviorModel).map(([board, payload]) => ({ kind: 'behavior_model', key: board, payload })),
+    ...Object.entries(coefficients.bridgeReadiness).map(([board, payload]) => ({
+      kind: 'bridge_readiness',
+      key: board,
+      payload,
+    })),
   ];
   if (!options.persist) {
     console.log(`[grades] coefficients ${coeffVersion} (in-memory only): λ=${JSON.stringify(echoFraction)}`);
     return coefficients;
   }
-  for (const row of rows) {
-    await db
-      .insert(boardGradeCoefficients)
-      .values({ coeffVersion, kind: row.kind, key: row.key, payload: row.payload })
-      .onConflictDoUpdate({
-        target: [boardGradeCoefficients.coeffVersion, boardGradeCoefficients.kind, boardGradeCoefficients.key],
-        set: { payload: row.payload },
-      });
-  }
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      await tx
+        .insert(boardGradeCoefficients)
+        .values({ coeffVersion, kind: row.kind, key: row.key, payload: row.payload })
+        .onConflictDoUpdate({
+          target: [boardGradeCoefficients.coeffVersion, boardGradeCoefficients.kind, boardGradeCoefficients.key],
+          set: { payload: row.payload },
+        });
+    }
+  });
   console.log(
     `[grades] coefficients ${coeffVersion}: λ=${JSON.stringify(echoFraction)}, boards with angle surface: ${Object.keys(angleOffset).join(', ') || 'none'}`,
   );
@@ -205,6 +266,7 @@ async function refitCoefficients(
 
 interface StatsRow {
   climb_uuid: string;
+  layout_id: number;
   angle: number;
   difficulty_average: number | null;
   display_difficulty: number | null;
@@ -213,7 +275,9 @@ interface StatsRow {
 }
 
 interface ComputedRow {
+  boardType: string;
   climbUuid: string;
+  layoutId: number;
   angle: number;
   localGrade: number | null;
   universalGrade: number | null;
@@ -233,60 +297,206 @@ interface PooledAngleEvidence {
   pooledDisplay: number | null;
 }
 
+interface PooledFingerprintEvidence {
+  layoutId: number;
+  holdFingerprint: string;
+  climbUuids: string[];
+  angles: PooledAngleEvidence[];
+}
+
+async function loadStage2Evidence(db: Db, coefficients: GradeCoefficients): Promise<Stage2EvidenceMap> {
+  await db.execute(sql`SET max_parallel_workers_per_gather = 0`);
+  const raterTrainingRows = rowsOf<RaterSampleRow>(
+    await db.execute(buildRaterSampleSql({ excludeTensionBenchmarkHoldout: true })),
+  );
+  const raterPredictionRows = rowsOf<RaterSampleRow>(
+    await db.execute(buildRaterSampleSql({ excludeTensionBenchmarkHoldout: false })),
+  );
+  const raterEvidence = buildRaterEvidence(raterPredictionRows, coefficients.raterModel, raterTrainingRows);
+  const behaviorTrainingRows = rowsOf<BehaviorSampleRow>(
+    await db.execute(buildBehaviorSampleSql({ excludeTensionBenchmarkHoldout: true })),
+  );
+  const behaviorPredictionRows = rowsOf<BehaviorSampleRow>(
+    await db.execute(buildBehaviorSampleSql({ excludeTensionBenchmarkHoldout: false })),
+  );
+  return buildBehaviorEvidence(behaviorPredictionRows, coefficients.behaviorModel, raterEvidence, behaviorTrainingRows);
+}
+
+function clampDelta(delta: number, maxAbsDelta: number): number {
+  return Math.min(maxAbsDelta, Math.max(-maxAbsDelta, delta));
+}
+
+function finiteNumber(value: number | null): value is number {
+  return value !== null && Number.isFinite(value);
+}
+
+function applyCappedStage2Evidence(
+  observation: ClimbAngleObservation,
+  coefficients: GradeCoefficients,
+  evidence: Stage2Evidence | undefined,
+): ClimbAngleObservation {
+  if (!finiteNumber(observation.difficultyAverage)) return observation;
+
+  const echoFraction = echoFractionFor(coefficients, observation.boardType);
+  const rawEffectiveN = effectiveN(observation.ascensionistCount, echoFraction);
+  const deherded = deherdCrowdMean(
+    {
+      observedMean: observation.difficultyAverage,
+      displayGrade: observation.displayDifficulty,
+      echoFraction,
+      independentWeight: rawEffectiveN,
+    },
+    { maxMoveFromObserved: STAGE2_DEECHO_MAX_MOVE },
+  );
+
+  const signals: Array<{ grade: number; weight: number }> = [
+    {
+      grade: finiteNumber(deherded.grade) ? deherded.grade : observation.difficultyAverage,
+      weight: Math.max(1, rawEffectiveN),
+    },
+  ];
+
+  if (evidence?.raterMean !== null && evidence?.raterMean !== undefined && evidence.raterEffectiveN > 0) {
+    signals.push({
+      grade:
+        observation.difficultyAverage +
+        clampDelta(evidence.raterMean - observation.difficultyAverage, STAGE2_RATER_MAX_MOVE),
+      weight: Math.min(STAGE2_RATER_MAX_EFFECTIVE_N, evidence.raterEffectiveN),
+    });
+  }
+
+  if (evidence?.behaviorMean !== null && evidence?.behaviorMean !== undefined && evidence.behaviorEffectiveN > 0) {
+    signals.push({
+      grade:
+        observation.difficultyAverage +
+        clampDelta(evidence.behaviorMean - observation.difficultyAverage, STAGE2_BEHAVIOR_MAX_MOVE),
+      weight: Math.min(STAGE2_BEHAVIOR_MAX_EFFECTIVE_N, evidence.behaviorEffectiveN),
+    });
+  }
+
+  const weightTotal = signals.reduce((total, signal) => total + signal.weight, 0);
+  const modeledAverage =
+    weightTotal > 0
+      ? signals.reduce((total, signal) => total + signal.grade * signal.weight, 0) / weightTotal
+      : observation.difficultyAverage;
+
+  return { ...observation, difficultyAverage: modeledAverage };
+}
+
+function withoutStage2Coefficients(coefficients: GradeCoefficients): GradeCoefficients {
+  return {
+    ...coefficients,
+    raterModel: {},
+    behaviorModel: {},
+    bridgeReadiness: {},
+  };
+}
+
+function fingerprintGroupKey(layoutId: number, holdFingerprint: string): string {
+  return `${layoutId}\u0000${holdFingerprint}`;
+}
+
+function pooledStage2Evidence(
+  boardType: string,
+  pooled: PooledFingerprintEvidence | undefined,
+  angle: number,
+  stage2Evidence: Stage2EvidenceMap,
+): Stage2Evidence | undefined {
+  if (!pooled) return undefined;
+  let raterWeighted = 0;
+  let raterEffectiveN = 0;
+  let behaviorWeighted = 0;
+  let behaviorEffectiveN = 0;
+  for (const climbUuid of pooled.climbUuids) {
+    const evidence = stage2Evidence.get(`${boardType}\u0000${climbUuid}\u0000${angle}`);
+    if (evidence?.raterMean !== null && evidence?.raterMean !== undefined && evidence.raterEffectiveN > 0) {
+      raterWeighted += evidence.raterMean * evidence.raterEffectiveN;
+      raterEffectiveN += evidence.raterEffectiveN;
+    }
+    if (evidence?.behaviorMean !== null && evidence?.behaviorMean !== undefined && evidence.behaviorEffectiveN > 0) {
+      behaviorWeighted += evidence.behaviorMean * evidence.behaviorEffectiveN;
+      behaviorEffectiveN += evidence.behaviorEffectiveN;
+    }
+  }
+  if (raterEffectiveN === 0 && behaviorEffectiveN === 0) return undefined;
+  return {
+    raterMean: raterEffectiveN > 0 ? raterWeighted / raterEffectiveN : null,
+    raterEffectiveN,
+    behaviorMean: behaviorEffectiveN > 0 ? behaviorWeighted / behaviorEffectiveN : null,
+    behaviorEffectiveN,
+  };
+}
+
 /**
- * Duplicate climbs (same hold_fingerprint = same physical problem under
- * different UUIDs) must not split their crowd evidence — measured on prod,
- * 44% of Kilter duplicate groups disagreed by >1 grade before pooling. A
+ * Duplicate climbs (same layout_id + hold_fingerprint = same physical problem
+ * under different UUIDs) must not split their crowd evidence — measured on
+ * prod, 44% of Kilter duplicate groups disagreed by >1 grade before pooling. A
  * fingerprint group is treated as ONE climb: per angle an n-weighted pooled
- * mean/count and averaged display, and every member uses the group's full
- * angle set as its cross-angle evidence — so members produce identical
- * posteriors by construction.
+ * mean/count and averaged display, and every member uses the group's full angle
+ * set as its cross-angle evidence — so members produce identical posteriors by
+ * construction.
  */
-async function loadPooledFingerprintEvidence(db: Db, boardType: string): Promise<Map<string, PooledAngleEvidence[]>> {
+async function loadPooledFingerprintEvidence(
+  db: Db,
+  boardType: string,
+): Promise<Map<string, PooledFingerprintEvidence>> {
   // Two-step shape on purpose: finding duplicate fingerprints over the small
   // board_climbs table first keeps the stats join tiny — the single-pass
   // GROUP BY ... HAVING COUNT(DISTINCT) variant exhausted shared memory on prod.
   const rows = rowsOf<{
+    layout_id: number;
     hold_fingerprint: string;
     angle: number;
     pooled_average: number | null;
     pooled_count: number;
     pooled_display: number | null;
+    climb_uuids: string[];
   }>(
     await db.execute(sql`
       WITH duplicate_fingerprints AS (
-        SELECT hold_fingerprint
+        SELECT layout_id, hold_fingerprint
         FROM board_climbs
         WHERE board_type = ${boardType}
           AND hold_fingerprint IS NOT NULL
           AND is_listed = true
           AND COALESCE(is_draft, false) = false
-        GROUP BY hold_fingerprint
+        GROUP BY layout_id, hold_fingerprint
         HAVING COUNT(*) >= 2
       )
-      SELECT bc.hold_fingerprint, s.angle,
+      SELECT bc.layout_id, bc.hold_fingerprint, s.angle,
              SUM(s.difficulty_average * s.ascensionist_count) FILTER (WHERE s.difficulty_average IS NOT NULL AND s.ascensionist_count > 0)
                / NULLIF(SUM(s.ascensionist_count) FILTER (WHERE s.difficulty_average IS NOT NULL AND s.ascensionist_count > 0), 0)
                AS pooled_average,
              COALESCE(SUM(s.ascensionist_count), 0)::int AS pooled_count,
-             AVG(s.display_difficulty) AS pooled_display
+             AVG(s.display_difficulty) AS pooled_display,
+             ARRAY_AGG(DISTINCT bc.uuid) AS climb_uuids
       FROM duplicate_fingerprints df
-      JOIN board_climbs bc ON bc.hold_fingerprint = df.hold_fingerprint AND bc.board_type = ${boardType}
+      JOIN board_climbs bc
+        ON bc.layout_id = df.layout_id
+       AND bc.hold_fingerprint = df.hold_fingerprint
+       AND bc.board_type = ${boardType}
       JOIN board_climb_stats s ON s.board_type = bc.board_type AND s.climb_uuid = bc.uuid
       WHERE bc.is_listed = true AND COALESCE(bc.is_draft, false) = false
-      GROUP BY bc.hold_fingerprint, s.angle
+      GROUP BY bc.layout_id, bc.hold_fingerprint, s.angle
     `),
   );
-  const pooled = new Map<string, PooledAngleEvidence[]>();
+  const pooled = new Map<string, PooledFingerprintEvidence>();
   for (const row of rows) {
-    const list = pooled.get(row.hold_fingerprint) ?? [];
-    list.push({
+    const key = fingerprintGroupKey(Number(row.layout_id), row.hold_fingerprint);
+    const group = pooled.get(key) ?? {
+      layoutId: Number(row.layout_id),
+      holdFingerprint: row.hold_fingerprint,
+      climbUuids: [],
+      angles: [],
+    };
+    group.angles.push({
       angle: Number(row.angle),
       pooledAverage: row.pooled_average === null ? null : Number(row.pooled_average),
       pooledCount: Number(row.pooled_count),
       pooledDisplay: row.pooled_display === null ? null : Number(row.pooled_display),
     });
-    pooled.set(row.hold_fingerprint, list);
+    group.climbUuids = Array.from(new Set([...group.climbUuids, ...row.climb_uuids]));
+    pooled.set(key, group);
   }
   return pooled;
 }
@@ -296,6 +506,8 @@ async function computeBoard(
   db: Db,
   boardType: string,
   coefficients: GradeCoefficients,
+  stage2Evidence: Stage2EvidenceMap = new Map(),
+  options: { applyStage2?: boolean } = { applyStage2: true },
 ): Promise<{
   computed: ComputedRow[];
   isotonicStats: { movedRows: number; residualInversions: number };
@@ -309,7 +521,7 @@ async function computeBoard(
   for (;;) {
     const rows = rowsOf<StatsRow>(
       await db.execute(sql`
-        SELECT s.climb_uuid, s.angle, s.difficulty_average, s.display_difficulty,
+        SELECT s.climb_uuid, bc.layout_id, s.angle, s.difficulty_average, s.display_difficulty,
                COALESCE(s.ascensionist_count, 0)::int AS ascensionist_count,
                bc.hold_fingerprint
         FROM board_climb_stats s
@@ -336,9 +548,11 @@ async function computeBoard(
       if (group.length === 0) return;
       // Duplicated fingerprint → the whole group's pooled angle set stands in
       // for this climb's own rows (same physical problem, shared evidence).
-      const fingerprintEvidence = group[0].hold_fingerprint ? pooledEvidence.get(group[0].hold_fingerprint) : undefined;
-      const observations: ClimbAngleObservation[] = fingerprintEvidence
-        ? fingerprintEvidence.map((pooled) => ({
+      const fingerprintEvidence = group[0].hold_fingerprint
+        ? pooledEvidence.get(fingerprintGroupKey(Number(group[0].layout_id), group[0].hold_fingerprint))
+        : undefined;
+      const rawObservations: ClimbAngleObservation[] = fingerprintEvidence
+        ? fingerprintEvidence.angles.map((pooled) => ({
             boardType,
             climbUuid: group[0].climb_uuid,
             angle: pooled.angle,
@@ -354,15 +568,29 @@ async function computeBoard(
             displayDifficulty: row.display_difficulty === null ? null : Number(row.display_difficulty),
             ascensionistCount: Number(row.ascensionist_count),
           }));
+      const observations = rawObservations.map((observation) =>
+        options.applyStage2 === false
+          ? observation
+          : applyCappedStage2Evidence(
+              observation,
+              coefficients,
+              fingerprintEvidence
+                ? pooledStage2Evidence(observation.boardType, fingerprintEvidence, observation.angle, stage2Evidence)
+                : stage2Evidence.get(
+                    `${observation.boardType}\u0000${observation.climbUuid}\u0000${observation.angle}`,
+                  ),
+            ),
+      );
       // Posteriors for the full angle set first (pooled set may be wider than
       // this member's own angles), then the per-climb isotonic projection —
       // grades may not decrease as the wall gets steeper (see isotonic.ts;
       // The Enchiridion @30° > @35° was the motivating inversion).
+      const rawObservationByAngle = new Map(rawObservations.map((observation) => [observation.angle, observation]));
       const angleRows: AngleGradeRow[] = observations.map((target) => ({
         angle: target.angle,
         posterior: computePosteriorGrade(target, observations, coefficients),
-        observedMean: target.difficultyAverage,
-        ascensionistCount: target.ascensionistCount,
+        observedMean: rawObservationByAngle.get(target.angle)?.difficultyAverage ?? null,
+        ascensionistCount: rawObservationByAngle.get(target.angle)?.ascensionistCount ?? target.ascensionistCount,
       }));
       const { adjusted, residualInversions, movedRows } = applyIsotonicAngleConstraint(angleRows);
       isotonicStats.movedRows += movedRows;
@@ -385,7 +613,9 @@ async function computeBoard(
         recordDisplayDeltaHygiene(displayDeltaHygieneStats, hygiene);
         const posterior = hygiene.posterior;
         computed.push({
+          boardType,
           climbUuid: group[0].climb_uuid,
+          layoutId: Number(group[0].layout_id),
           angle: angleRows[i].angle,
           localGrade: posterior.localGrade,
           universalGrade: posterior.universalGrade,
@@ -437,7 +667,7 @@ function evaluateFingerprintConsistency(computed: ComputedRow[]): GateResult {
   const groups = new Map<string, { min: number; max: number; uuids: Set<string> }>();
   for (const row of computed) {
     if (!row.holdFingerprint || row.localGrade === null) continue;
-    const key = `${row.holdFingerprint}:${row.angle}`;
+    const key = `${row.boardType}:${row.layoutId}:${row.holdFingerprint}:${row.angle}`;
     const group = groups.get(key) ?? { min: row.localGrade, max: row.localGrade, uuids: new Set<string>() };
     group.min = Math.min(group.min, row.localGrade);
     group.max = Math.max(group.max, row.localGrade);
@@ -452,6 +682,57 @@ function evaluateFingerprintConsistency(computed: ComputedRow[]): GateResult {
     if (group.max - group.min > 1.0) violations += 1;
   }
   return evaluateFingerprintGate({ violations, groups: multiGroups });
+}
+
+function computedRowKey(climbUuid: string, angle: number): string {
+  return `${climbUuid}\u0000${angle}`;
+}
+
+function indexComputedRows(rows: ComputedRow[]): Map<string, ComputedRow> {
+  const indexed = new Map<string, ComputedRow>();
+  for (const row of rows) indexed.set(computedRowKey(row.climbUuid, row.angle), row);
+  return indexed;
+}
+
+function buildBenchmarkPredictions(
+  holdoutRows: TensionBenchmarkHoldoutRow[],
+  stage1Computed: ComputedRow[],
+  stage2Computed: ComputedRow[],
+): TensionBenchmarkPrediction[] {
+  const stage1ByKey = indexComputedRows(stage1Computed);
+  const stage2ByKey = indexComputedRows(stage2Computed);
+  return holdoutRows.map((row) => {
+    const stage1 = stage1ByKey.get(computedRowKey(row.climb_uuid, Number(row.angle)));
+    const stage2 = stage2ByKey.get(computedRowKey(row.climb_uuid, Number(row.angle)));
+    return {
+      climbUuid: row.climb_uuid,
+      angle: Number(row.angle),
+      displayDifficulty: Number(row.display_difficulty),
+      benchmarkDifficulty: Number(row.benchmark_difficulty),
+      ascensionistCount: Number(row.ascensionist_count),
+      stage1Grade: stage1?.universalGrade ?? stage1?.localGrade ?? null,
+      stage1Low: stage1?.gradeLow ?? null,
+      stage1High: stage1?.gradeHigh ?? null,
+      stage2Grade: stage2?.universalGrade ?? stage2?.localGrade ?? null,
+      stage2Low: stage2?.gradeLow ?? null,
+      stage2High: stage2?.gradeHigh ?? null,
+    };
+  });
+}
+
+function evaluateBehaviorEligibility(coefficients: GradeCoefficients): GateResult {
+  let eligibleBoards = 0;
+  let modeledBoards = 0;
+  for (const model of Object.values(coefficients.behaviorModel)) {
+    modeledBoards += 1;
+    if (model.eligible) eligibleBoards += 1;
+  }
+  return {
+    gate: 'behavior_eligibility',
+    passed: true,
+    detail: `${eligibleBoards} of ${modeledBoards} behavior models eligible for Stage 2 evidence`,
+    metrics: { eligibleBoards, modeledBoards },
+  };
 }
 
 async function upsertGrades(
@@ -564,6 +845,10 @@ async function recordGateResults(db: Db, coefficients: GradeCoefficients, gates:
   });
 }
 
+function blockingGates(gates: GateResult[]): GateResult[] {
+  return gates.filter((gate) => !gate.passed && gate.gate !== 'residual_paired_gap');
+}
+
 /**
  * Read-only validation against a database that may not have the grade tables
  * yet (e.g. prod before the migration lands): refit coefficients in memory,
@@ -572,25 +857,47 @@ async function recordGateResults(db: Db, coefficients: GradeCoefficients, gates:
  */
 async function validateOnly(db: Db): Promise<void> {
   const coefficients = await refitCoefficients(db, { persist: false });
+  const baselineCoefficients = withoutStage2Coefficients(coefficients);
+  const stage2Evidence = await loadStage2Evidence(db, coefficients);
+  const gates: GateResult[] = [];
   console.log('[grades] validate-only: running gates against live data…');
   const backtestRows = rowsOf<BacktestSampleRow>(await db.execute(buildBacktestSampleSql(BACKTEST_SAMPLE_LIMIT)));
   const backtest = evaluateBacktest(backtestRows, coefficients);
+  gates.push(backtest.tailGate, backtest.headGate);
   console.log(`[grades]   tail_backtest: ${backtest.tailGate.passed ? 'PASS' : 'FAIL'} — ${backtest.tailGate.detail}`);
   console.log(`[grades]   head_holdout: ${backtest.headGate.passed ? 'PASS' : 'FAIL'} — ${backtest.headGate.detail}`);
+  const behaviorGate = evaluateBehaviorEligibility(coefficients);
+  gates.push(behaviorGate);
+  console.log(`[grades]   behavior_eligibility: ${behaviorGate.passed ? 'PASS' : 'FAIL'} — ${behaviorGate.detail}`);
+  const moonReadiness = coefficients.bridgeReadiness.moonboard;
+  if (moonReadiness) {
+    const moonGate = moonBridgeReadinessGate(moonReadiness);
+    gates.push(moonGate);
+    console.log(`[grades]   moon_bridge_readiness: ${moonGate.passed ? 'PASS' : 'FAIL'} — ${moonGate.detail}`);
+  }
   const kilterOffset = coefficients.boardOffset.kilter;
   if (kilterOffset) {
     const offsetRows = rowsOf<BoardOffsetSampleRow>(await db.execute(buildBoardOffsetSampleSql()));
     const residualGate = evaluateResidualGapGate(offsetRows, kilterOffset.offset);
+    gates.push(residualGate);
     console.log(`[grades]   residual_paired_gap: ${residualGate.passed ? 'PASS' : 'FAIL'} — ${residualGate.detail}`);
     console.log(
       `[grades]   kilter offset ${kilterOffset.offset.toFixed(2)} ± ${kilterOffset.sd.toFixed(2)} (${kilterOffset.users} users, LOO max Δ ${kilterOffset.looMaxDelta.toFixed(3)})`,
     );
   }
+  const computedByBoard = new Map<string, ComputedRow[]>();
   for (const boardType of CROWD_MEAN_BOARDS) {
-    const { computed, isotonicStats, displayDeltaHygieneStats } = await computeBoard(db, boardType, coefficients);
+    const { computed, isotonicStats, displayDeltaHygieneStats } = await computeBoard(
+      db,
+      boardType,
+      coefficients,
+      stage2Evidence,
+    );
+    computedByBoard.set(boardType, computed);
     const noShock = evaluateNoShock(computed);
     const fingerprint = evaluateFingerprintConsistency(computed);
     const displayDeltaHygiene = evaluateDisplayDeltaHygiene(displayDeltaHygieneStats);
+    gates.push(noShock, fingerprint, displayDeltaHygiene);
     const tiers = computed.reduce<Record<string, number>>((acc, row) => {
       acc[row.confidence] = (acc[row.confidence] ?? 0) + 1;
       return acc;
@@ -598,6 +905,23 @@ async function validateOnly(db: Db): Promise<void> {
     console.log(
       `[grades]   ${boardType}: ${computed.length} rows, tiers=${JSON.stringify(tiers)}; isotonic moved ${isotonicStats.movedRows} rows (${isotonicStats.residualInversions} residual inversions); no_shock ${noShock.passed ? 'PASS' : 'FAIL'} (${noShock.detail}); fingerprint ${fingerprint.passed ? 'PASS' : 'FAIL'} (${fingerprint.detail}); display_delta_hygiene ${displayDeltaHygiene.passed ? 'PASS' : 'FAIL'} (${displayDeltaHygiene.detail})`,
     );
+  }
+  const baselineTension = await computeBoard(db, 'tension', baselineCoefficients, new Map(), { applyStage2: false });
+  const holdoutRows = rowsOf<TensionBenchmarkHoldoutRow>(await db.execute(buildTensionBenchmarkHoldoutSql()));
+  const benchmarkPredictions = buildBenchmarkPredictions(
+    holdoutRows,
+    baselineTension.computed,
+    computedByBoard.get('tension') ?? [],
+  );
+  const benchmarkGates = evaluateTensionBenchmarkHoldout(benchmarkPredictions);
+  gates.push(...benchmarkGates);
+  for (const gate of benchmarkGates) {
+    console.log(`[grades]   ${gate.gate}: ${gate.passed ? 'PASS' : 'FAIL'} — ${gate.detail}`);
+  }
+  const blocking = blockingGates(gates);
+  if (blocking.length > 0) {
+    console.error(`[grades] validate-only blocking gate(s) failed: ${blocking.map((gate) => gate.gate).join(', ')}`);
+    process.exitCode = 1;
   }
   console.log('[grades] validate-only done (nothing written).');
 }
@@ -612,10 +936,26 @@ async function main(): Promise<void> {
       await validateOnly(db);
       return;
     }
-    const coefficients = (!forceRefit && (await loadFrozenCoefficients(db))) || (await refitCoefficients(db));
+    let coefficients =
+      (!forceRefit && (await loadFrozenCoefficients(db))) || (await refitCoefficients(db, { persist: !dryRun }));
+    if (!forceRefit && Object.keys(coefficients.raterModel).length === 0) {
+      console.log('[grades] latest frozen coefficients do not include Stage 2 models; refitting.');
+      coefficients = await refitCoefficients(db, { persist: !dryRun });
+    }
+    const baselineCoefficients = withoutStage2Coefficients(coefficients);
+    const stage2Evidence = await loadStage2Evidence(db, coefficients);
     console.log(`[grades] using coefficients ${coefficients.coeffVersion} (model ${GRADE_MODEL_VERSION})`);
 
     const gates: GateResult[] = [];
+    const behaviorGate = evaluateBehaviorEligibility(coefficients);
+    gates.push(behaviorGate);
+    console.log(`[grades]   behavior_eligibility: ${behaviorGate.passed ? 'PASS' : 'FAIL'} — ${behaviorGate.detail}`);
+    const moonReadiness = coefficients.bridgeReadiness.moonboard;
+    if (moonReadiness) {
+      const moonGate = moonBridgeReadinessGate(moonReadiness);
+      gates.push(moonGate);
+      console.log(`[grades]   moon_bridge_readiness: ${moonGate.passed ? 'PASS' : 'FAIL'} — ${moonGate.detail}`);
+    }
 
     // Pre-write gates: history backtest + cross-board residual.
     console.log('[grades] running backtest gate…');
@@ -665,7 +1005,7 @@ async function main(): Promise<void> {
         computed,
         isotonicStats,
         displayDeltaHygieneStats: boardDisplayDeltaHygieneStats,
-      } = await computeBoard(db, boardType, coefficients);
+      } = await computeBoard(db, boardType, coefficients, stage2Evidence);
       mergeDisplayDeltaHygieneStats(displayDeltaHygieneStats, boardDisplayDeltaHygieneStats);
       computedByBoard.set(boardType, computed);
       console.log(
@@ -677,6 +1017,15 @@ async function main(): Promise<void> {
     const fingerprintGate = evaluateFingerprintConsistency(allComputed);
     const displayDeltaHygieneGate = evaluateDisplayDeltaHygiene(displayDeltaHygieneStats);
     gates.push(noShockGate, fingerprintGate, displayDeltaHygieneGate);
+    const baselineTension = await computeBoard(db, 'tension', baselineCoefficients, new Map(), { applyStage2: false });
+    const holdoutRows = rowsOf<TensionBenchmarkHoldoutRow>(await db.execute(buildTensionBenchmarkHoldoutSql()));
+    const benchmarkPredictions = buildBenchmarkPredictions(
+      holdoutRows,
+      baselineTension.computed,
+      computedByBoard.get('tension') ?? [],
+    );
+    const benchmarkGates = evaluateTensionBenchmarkHoldout(benchmarkPredictions);
+    gates.push(...benchmarkGates);
     console.log(`[grades]   no_shock: ${noShockGate.passed ? 'PASS' : 'FAIL'} — ${noShockGate.detail}`);
     console.log(
       `[grades]   fingerprint_consistency: ${fingerprintGate.passed ? 'PASS' : 'FAIL'} — ${fingerprintGate.detail}`,
@@ -684,19 +1033,28 @@ async function main(): Promise<void> {
     console.log(
       `[grades]   display_delta_hygiene: ${displayDeltaHygieneGate.passed ? 'PASS' : 'FAIL'} — ${displayDeltaHygieneGate.detail}`,
     );
+    for (const gate of benchmarkGates) {
+      console.log(`[grades]   ${gate.gate}: ${gate.passed ? 'PASS' : 'FAIL'} — ${gate.detail}`);
+    }
+
+    const blocking = blockingGates(gates);
+    if (dryRun) {
+      if (blocking.length > 0) {
+        console.error(
+          `[grades] dry-run blocking gate(s) failed: ${blocking.map((gate) => gate.gate).join(', ')} — nothing written.`,
+        );
+        process.exitCode = 1;
+      }
+      console.log('[grades] dry run — no coefficients, gates, or grade rows written.');
+      return;
+    }
 
     await recordGateResults(db, coefficients, gates);
-
-    const blocking = gates.filter((gate) => !gate.passed && gate.gate !== 'residual_paired_gap');
     if (blocking.length > 0) {
       console.error(
         `[grades] blocking gate(s) failed: ${blocking.map((gate) => gate.gate).join(', ')} — no grades written.`,
       );
       process.exitCode = 1;
-      return;
-    }
-    if (dryRun) {
-      console.log('[grades] dry run — gates recorded, no grades written.');
       return;
     }
 

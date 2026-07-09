@@ -189,6 +189,12 @@ export default defineConfig({
         // flags with `vp run db:dedupe-beta-links -- --apply`.
         cache: false,
       },
+      'db:refresh-climb-grades': {
+        command: 'bun run --filter=@boardsesh/db db:refresh-climb-grades',
+        // No db:up dependency: this often targets a remote DB_URL and supports
+        // read-only validation/dry-runs before writing published grade rows.
+        cache: false,
+      },
       'test:db': {
         command: 'bun run --filter=@boardsesh/db test',
       },

@@ -1,5 +1,58 @@
 import type { ConfidenceTier, GradeBandKey } from './constants';
 
+export interface RaterBiasCoefficient {
+  bias: number;
+  shrinkage: number;
+  effectiveN: number;
+  rawVotes: number;
+  weightedResidual: number;
+}
+
+export interface RaterModelCoefficient {
+  boardType: string;
+  biases: Record<string, RaterBiasCoefficient>;
+  summary: {
+    expressedVotes: number;
+    users: number;
+    locations: number;
+    topUserShare: number;
+  };
+}
+
+export type BehaviorOutcomeBucket = 'flash' | 'send_2_3' | 'send_4_plus' | 'attempt_1_3' | 'attempt_4_plus';
+
+export interface BehaviorModelCoefficient {
+  boardType: string;
+  boardMean: number;
+  outcomeOffset: Partial<Record<BehaviorOutcomeBucket, number>>;
+  eligible: boolean;
+  summary: {
+    users: number;
+    outcomes: number;
+    topUserShare: number;
+    usedUsers: number;
+    usedOutcomes: number;
+    usedTopUserShare: number;
+  };
+}
+
+export interface Stage2Evidence {
+  raterMean: number | null;
+  raterEffectiveN: number;
+  behaviorMean: number | null;
+  behaviorEffectiveN: number;
+}
+
+export interface MoonBridgeReadiness {
+  boardType: 'moonboard';
+  bridgeUsers: number;
+  requiredUsers: number;
+  minSendsPerBoard: number;
+  candidateOffset: number | null;
+  looMaxDelta: number | null;
+  publishable: boolean;
+}
+
 /** Frozen coefficient set the nightly re-blend runs against. */
 export interface GradeCoefficients {
   coeffVersion: string;
@@ -21,6 +74,12 @@ export interface GradeCoefficients {
    * entry never publish a universal grade.
    */
   boardOffset: Record<string, { offset: number; sd: number; users: number; looMaxDelta: number }>;
+  /** Stage 2 shrunk per-user/location rater bias models, per board. */
+  raterModel: Record<string, RaterModelCoefficient>;
+  /** Stage 2 anchoring-resistant behavior outcome models, per board. */
+  behaviorModel: Record<string, BehaviorModelCoefficient>;
+  /** Report-only bridge readiness for boards that are not yet publishable. */
+  bridgeReadiness: Record<string, MoonBridgeReadiness>;
 }
 
 /** One climb+angle observation from board_climb_stats, ready to blend. */
