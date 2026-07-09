@@ -355,18 +355,18 @@
     "loadError": "Impossible de charger le grade pour le moment.",
     "byAngle": "Sa difficulté selon l'angle",
     "summaryLocal": "local",
-    "matchesBoard": "Correspond au grade de cette board",
+    "matchesBoard": "Correspond à l'ancien grade",
     "localOnlyNote": "Pas encore assez de croix inter-boards pour standardiser.",
     "setterCall": "Avis de l'ouvreur",
     "hero": {
-      "thisBoard": "Cette board",
-      "everywhere": "Toutes les boards",
-      "thisBoardOnly": "Cette board seulement",
+      "thisBoard": "Ancien grade",
+      "everywhere": "Grade Boardsesh",
+      "thisBoardOnly": "Grade Boardsesh",
       "approx": "Environ {{amount}}"
     },
     "payoff": {
-      "softer": "{{amount}} plus souple que ce que dit cette board.",
-      "stiffer": "{{amount}} plus dur que ce que dit cette board."
+      "softer": "{{amount}} plus souple que l'ancien grade.",
+      "stiffer": "{{amount}} plus dur que l'ancien grade."
     },
     "trust": {
       "confirmedSingle_one": "Confirmé · {{count}} croix",
@@ -380,15 +380,15 @@
       "setter": "Moins de 3 croix pour standardiser"
     },
     "dumbbell": {
-      "legendBoardsesh": "Toutes les boards (Boardsesh)",
-      "legendCrowd": "Cette board (communauté)",
+      "legendBoardsesh": "Grade Boardsesh",
+      "legendCrowd": "Ancien grade",
       "legendSize": "Point plus grand = plus de croix",
-      "tapCaption_one": "{{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
-      "tapCaption_other": "{{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
-      "tapCaptionAgree_one": "{{angle}}° · communauté et Boardsesh d'accord · {{grade}} · {{count}} croix",
-      "tapCaptionAgree_other": "{{angle}}° · communauté et Boardsesh d'accord · {{grade}} · {{count}} croix",
-      "singleAngle_one": "À {{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
-      "singleAngle_other": "À {{angle}}° · cette board {{crowd}} · toutes les boards {{boardsesh}} · {{count}} croix",
+      "tapCaption_one": "{{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "tapCaption_other": "{{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "tapCaptionAgree_one": "{{angle}}° · les deux grades sont d'accord · {{grade}} · {{count}} croix",
+      "tapCaptionAgree_other": "{{angle}}° · les deux grades sont d'accord · {{grade}} · {{count}} croix",
+      "singleAngle_one": "À {{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
+      "singleAngle_other": "À {{angle}}° · ancien grade {{crowd}} · grade Boardsesh {{boardsesh}} · {{count}} croix",
       "crowdOnlyNote": "Pas encore assez de croix inter-boards pour comparer par angle."
     }
   },

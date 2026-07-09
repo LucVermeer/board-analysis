@@ -355,18 +355,18 @@
     "loadError": "Couldn't load the grade right now.",
     "byAngle": "How it climbs by angle",
     "summaryLocal": "local",
-    "matchesBoard": "Matches this board's grade",
+    "matchesBoard": "Matches the old grade",
     "localOnlyNote": "Not enough cross-board sends yet to standardize.",
     "setterCall": "Setter's call",
     "hero": {
-      "thisBoard": "This board",
-      "everywhere": "All boards",
-      "thisBoardOnly": "This board only",
+      "thisBoard": "Old grade",
+      "everywhere": "Boardsesh grade",
+      "thisBoardOnly": "Boardsesh grade",
       "approx": "About {{amount}}"
     },
     "payoff": {
-      "softer": "{{amount}} softer than this board calls it.",
-      "stiffer": "{{amount}} stiffer than this board calls it."
+      "softer": "{{amount}} softer than the old grade.",
+      "stiffer": "{{amount}} stiffer than the old grade."
     },
     "trust": {
       "confirmedSingle_one": "Confirmed · {{count}} send",
@@ -380,15 +380,15 @@
       "setter": "Fewer than 3 sends to standardize"
     },
     "dumbbell": {
-      "legendBoardsesh": "All boards (Boardsesh)",
-      "legendCrowd": "This board (crowd)",
+      "legendBoardsesh": "Boardsesh grade",
+      "legendCrowd": "Old grade",
       "legendSize": "Bigger dot = more sends",
-      "tapCaption_one": "{{angle}}° · this board {{crowd}} · all boards {{boardsesh}} · {{count}} send",
-      "tapCaption_other": "{{angle}}° · this board {{crowd}} · all boards {{boardsesh}} · {{count}} sends",
-      "tapCaptionAgree_one": "{{angle}}° · crowd & Boardsesh agree · {{grade}} · {{count}} send",
-      "tapCaptionAgree_other": "{{angle}}° · crowd & Boardsesh agree · {{grade}} · {{count}} sends",
-      "singleAngle_one": "At {{angle}}° · this board {{crowd}} · all boards {{boardsesh}} · {{count}} send",
-      "singleAngle_other": "At {{angle}}° · this board {{crowd}} · all boards {{boardsesh}} · {{count}} sends",
+      "tapCaption_one": "{{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} send",
+      "tapCaption_other": "{{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} sends",
+      "tapCaptionAgree_one": "{{angle}}° · both grades agree · {{grade}} · {{count}} send",
+      "tapCaptionAgree_other": "{{angle}}° · both grades agree · {{grade}} · {{count}} sends",
+      "singleAngle_one": "At {{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} send",
+      "singleAngle_other": "At {{angle}}° · old grade {{crowd}} · Boardsesh grade {{boardsesh}} · {{count}} sends",
       "crowdOnlyNote": "Not enough cross-board sends yet to compare by angle."
     }
   },

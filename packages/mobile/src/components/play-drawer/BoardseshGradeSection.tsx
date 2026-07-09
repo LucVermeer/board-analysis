@@ -261,11 +261,6 @@ export const BoardseshGradeSection = memo(function BoardseshGradeSection({
       {/* DUMBBELL — crowd rings vs Boardsesh diamonds, one per angle. */}
       {dumbbellRows.length >= 1 && (
         <View style={styles.histogram}>
-          {dumbbellRows.length >= 2 && (
-            <Text variant="footnote" color={iosSystemColors.systemGray}>
-              {t('boardseshGrade.byAngle')}
-            </Text>
-          )}
           <DumbbellByAngleChart
             rows={dumbbellRows}
             headlineGrade={view.gradeValue}

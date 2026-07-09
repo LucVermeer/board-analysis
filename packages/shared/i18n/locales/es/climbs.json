@@ -355,18 +355,18 @@
     "loadError": "No se pudo cargar el grado ahora mismo.",
     "byAngle": "Cómo cuesta según el ángulo",
     "summaryLocal": "local",
-    "matchesBoard": "Coincide con el grado de este plafón",
+    "matchesBoard": "Coincide con el grado anterior",
     "localOnlyNote": "Todavía no hay suficientes encadenes entre plafones para estandarizar.",
     "setterCall": "Criterio del setter",
     "hero": {
-      "thisBoard": "Este plafón",
-      "everywhere": "Todos los plafones",
-      "thisBoardOnly": "Solo este plafón",
+      "thisBoard": "Grado anterior",
+      "everywhere": "Grado Boardsesh",
+      "thisBoardOnly": "Grado Boardsesh",
       "approx": "Unos {{amount}}"
     },
     "payoff": {
-      "softer": "{{amount}} más blando de lo que dice este plafón.",
-      "stiffer": "{{amount}} más duro de lo que dice este plafón."
+      "softer": "{{amount}} más blando que el grado anterior.",
+      "stiffer": "{{amount}} más duro que el grado anterior."
     },
     "trust": {
       "confirmedSingle_one": "Confirmado · {{count}} encadene",
@@ -380,15 +380,15 @@
       "setter": "Menos de 3 encadenes para estandarizar"
     },
     "dumbbell": {
-      "legendBoardsesh": "Todos los plafones (Boardsesh)",
-      "legendCrowd": "Este plafón (comunidad)",
+      "legendBoardsesh": "Grado Boardsesh",
+      "legendCrowd": "Grado anterior",
       "legendSize": "Punto más grande = más encadenes",
-      "tapCaption_one": "{{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadene",
-      "tapCaption_other": "{{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadenes",
-      "tapCaptionAgree_one": "{{angle}}° · la comunidad y Boardsesh coinciden · {{grade}} · {{count}} encadene",
-      "tapCaptionAgree_other": "{{angle}}° · la comunidad y Boardsesh coinciden · {{grade}} · {{count}} encadenes",
-      "singleAngle_one": "A {{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadene",
-      "singleAngle_other": "A {{angle}}° · este plafón {{crowd}} · todos los plafones {{boardsesh}} · {{count}} encadenes",
+      "tapCaption_one": "{{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadene",
+      "tapCaption_other": "{{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadenes",
+      "tapCaptionAgree_one": "{{angle}}° · ambos grados coinciden · {{grade}} · {{count}} encadene",
+      "tapCaptionAgree_other": "{{angle}}° · ambos grados coinciden · {{grade}} · {{count}} encadenes",
+      "singleAngle_one": "A {{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadene",
+      "singleAngle_other": "A {{angle}}° · grado anterior {{crowd}} · grado Boardsesh {{boardsesh}} · {{count}} encadenes",
       "crowdOnlyNote": "Todavía no hay suficientes encadenes entre plafones para comparar por ángulo."
     }
   },
