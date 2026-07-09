@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-09T05:31:32.181Z",
+  "generatedAt": "2026-07-09T07:17:29.107Z",
   "entries": [
+    {
+      "prNumber": 3586,
+      "category": "fixed",
+      "title": "Kilter boards that show up as just \"Kilter Board\" now light up on the first tap instead of taking a couple of tries.",
+      "mergedAt": "2026-07-09T07:14:42Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3586"
+    },
     {
       "prNumber": 3581,
       "category": "new",
@@ -1186,6 +1193,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-09T15:30:44+10:00",
+      "sha": "ce4d9f0f1f45f57ba2c874dcaf1f03e861c43c50",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "6489cf6a721a87a6816f987540dba74f70b88d71"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-09T13:02:42+10:00",
