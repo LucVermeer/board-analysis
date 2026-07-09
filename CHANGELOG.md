@@ -23,6 +23,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- _(User-facing benefit ships via #3577's note in the same 2.2.2 build; this is a robustness hardening of that fix.)_ ([#3579](https://github.com/boardsesh/boardsesh/pull/3579))
 - Kilter boards that show up as just "Kilter Board" now light up on the first tap instead of taking a couple of tries. ([#3586](https://github.com/boardsesh/boardsesh/pull/3586))
 - Kilter and Tension boards with newer write-only BLE boxes light reliably after the first rescue, without slowing down healthy boards. ([#3580](https://github.com/boardsesh/boardsesh/pull/3580))
 - Using an early-2025 Kilter LED box on iPhone? It would connect but the holds stayed dark no matter which climb you picked. Now it lights up like it should — pick a climb and the wall comes on. ([#3577](https://github.com/boardsesh/boardsesh/pull/3577))

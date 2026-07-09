@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-09T07:17:29.107Z",
+  "generatedAt": "2026-07-09T07:36:06.790Z",
   "entries": [
+    {
+      "prNumber": 3579,
+      "category": "fixed",
+      "title": "_(User-facing benefit ships via #3577's note in the same 2.2.2 build; this is a robustness hardening of that fix.)_",
+      "mergedAt": "2026-07-09T07:35:10Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3579"
+    },
     {
       "prNumber": 3586,
       "category": "fixed",
