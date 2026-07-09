@@ -36,7 +36,7 @@ Each claim is tagged so you can tell evidence from inheritance:
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------- |
 | Same protocol as Aurora app?                  | **Yes.** Identical service/characteristic UUIDs and advertised-service scan filter.              | ✅      |
 | BLE library                                   | `flutter_blue_plus`                                                                              | ✅      |
-| Writes LED data to                            | RX char `6E400002-…` (Nordic UART RX), **Write Without Response**                                | ✅      |
+| Writes LED data to                            | RX char `6E400002-…` (Nordic UART RX); write type derived from the characteristic (see §6.5)     | 🔁      |
 | Subscribes to board notifications?            | **No.** TX char `6E400003-…` does **not** appear anywhere in the binary — the app is write-only. | ✅      |
 | Negotiates MTU?                               | **Yes** (`requestMtu` / `BmMtuChangeRequest`) — new vs. the Aurora-app spec.                     | ✅      |
 | Picks which board?                            | Ranks scan results, reads RSSI per device (`BmReadRssiResult`) to surface the nearest.           | ✅ / ❓ |
@@ -244,7 +244,8 @@ Colour comes from the placement role's 6-hex LED colour (`_colorFromHex`); unkno
 ### 6.5 Multi-part + transport chunking
 
 - LED records are packed into frames; when a frame would exceed 255 payload bytes a new frame is started. One frame → `Single`; many → `First` / `Middle…` / `Last`.
-- All frames are concatenated, then the byte stream is split into BLE writes. The classic transport size is **20 bytes/write**; with this app's negotiated MTU each `writeWithoutResponse` can be larger. ✅ Write type is **Write Without Response** (`, writeWithoutResponse: …`).
+- All frames are concatenated, then the byte stream is split into BLE writes. The classic transport size is **20 bytes/write**; with this app's negotiated MTU each write can be larger.
+- 🔁 **Write type is derived from the characteristic, not hardcoded.** The `, writeWithoutResponse: …` string in the binary is `flutter_blue_plus`'s `CharacteristicProperties.toString()` field — it reports the RX characteristic's advertised *capability*, not the write mode the app actually issues. `flutter_blue_plus`'s `write()` **defaults to write-with-response**; a caller opts into without-response explicitly. So this single cross-platform stack follows whatever the box advertises: without-response on the common `bleCharProperties=12` box, and with-response on the write-only `bleCharProperties=8` box (whose `.writeWithoutResponse` bit is absent). That is why the official app lights **both** box generations on iOS. See the two-generation split and the iOS silent-drop consequence in `AURORA_BLUETOOTH_PROTOCOL_SPEC.md` §9 (Write Properties).
 
 > **Boardsesh implementation note (#3230):** Boardsesh follows this app's MTU-negotiated chunking, but clamps the without-response chunk to **[20, 244]** (ATT 247) — iOS-26.5 field telemetry showed write failures clustering at the full ATT 512. Android requests ATT 247 explicitly (`requestMTU(247)`); iOS clamps whatever CoreBluetooth auto-negotiated. See `effectiveChunkSizeForMtu` in `packages/shared/ble-protocol/src/transport.ts` and its Swift twin `BoardBleEncoding.effectiveChunkSize`.
 
