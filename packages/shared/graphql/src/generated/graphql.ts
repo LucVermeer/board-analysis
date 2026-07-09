@@ -629,6 +629,8 @@ export type BoardseshGrade = {
   computedAt: Scalars['String']['output'];
   /** Confidence tier: confirmed | provisional | setter_only */
   confidence: Scalars['String']['output'];
+  /** Geometry (Climb2Vec) grade estimate from the hold layout alone, independent of crowd data; null when unscored */
+  contentGrade?: Maybe<Scalars['Float']['output']>;
   /** High end of the 95% band on the surfaced grade */
   gradeHigh?: Maybe<Scalars['Float']['output']>;
   /** Low end of the 95% band on the surfaced grade */
@@ -656,6 +658,8 @@ export type BoardseshGradeForAngle = {
   computedAt: Scalars['String']['output'];
   /** Confidence tier: confirmed | provisional | setter_only */
   confidence: Scalars['String']['output'];
+  /** Geometry (Climb2Vec) grade estimate from the hold layout alone, independent of crowd data; null when unscored */
+  contentGrade?: Maybe<Scalars['Float']['output']>;
   /** High end of the 95% band on the surfaced grade */
   gradeHigh?: Maybe<Scalars['Float']['output']>;
   /** Low end of the 95% band on the surfaced grade */
@@ -6790,6 +6794,7 @@ export type BoardseshGradeQuery = {
     __typename?: 'BoardseshGrade';
     localGrade?: number | null;
     universalGrade?: number | null;
+    contentGrade?: number | null;
     gradeLow?: number | null;
     gradeHigh?: number | null;
     confidence: string;
@@ -6811,6 +6816,7 @@ export type BoardseshGradesForAnglesQuery = {
     angle: number;
     localGrade?: number | null;
     universalGrade?: number | null;
+    contentGrade?: number | null;
     gradeLow?: number | null;
     gradeHigh?: number | null;
     confidence: string;
@@ -9572,6 +9578,7 @@ export const BoardseshGradeDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'localGrade' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'universalGrade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'contentGrade' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'gradeLow' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'gradeHigh' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'confidence' } },
@@ -9629,6 +9636,7 @@ export const BoardseshGradesForAnglesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'localGrade' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'universalGrade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'contentGrade' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'gradeLow' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'gradeHigh' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'confidence' } },

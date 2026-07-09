@@ -110,6 +110,11 @@ export default function BoardseshGradeSection({ boardName, climbUuid, angle }: B
       ? t('boardseshGrade.confirmedSubline', { count: view.ascensionistCount })
       : t('boardseshGrade.provisionalSubline', { count: view.ascensionistCount });
 
+  // The hold-geometry (Climb2Vec) grade estimate, shown alongside the community
+  // grade so climbers can see both ways of estimating difficulty.
+  const geometryName = grade?.contentGrade == null ? null : difficultyNameFor(Math.round(grade.contentGrade));
+  const geometryLabel = geometryName == null ? null : formatGrade(geometryName);
+
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: `${themeTokens.spacing[3]}px`, py: 1 }}>
       <Typography
@@ -145,6 +150,11 @@ export default function BoardseshGradeSection({ boardName, climbUuid, angle }: B
         {view.scope === 'local' && !view.hasUniversalGrade && (
           <Typography component="span" variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', mt: '2px' }}>
             {t('boardseshGrade.localScopeNote')}
+          </Typography>
+        )}
+        {geometryLabel && (
+          <Typography component="span" variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', mt: '2px' }}>
+            {t('boardseshGrade.geometryEstimate', { grade: geometryLabel })}
           </Typography>
         )}
       </Box>
