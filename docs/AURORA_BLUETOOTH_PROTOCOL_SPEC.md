@@ -54,7 +54,7 @@ The protocol is built on top of the **Nordic UART Service (NUS)**, a widely-used
 | ------------------------ | -------------------------------------- | ------------------------------------------------------------------- |
 | **Aurora Board Service** | `4488B571-7806-4DF6-BCFF-A2897E4953FF` | Primary advertisement service UUID; used to filter BLE scan results |
 | **Nordic UART Service**  | `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` | Data transport service (NUS)                                        |
-| **RX Characteristic**    | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | App writes LED commands here (Write Without Response)               |
+| **RX Characteristic**    | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | App writes LED commands here (write type per characteristic — see §9) |
 | **TX Characteristic**    | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | Board sends data to app (Notify)                                    |
 | **CCCD**                 | `00002902-0000-1000-8000-00805f9b34fb` | Client Characteristic Configuration Descriptor                      |
 
@@ -461,7 +461,10 @@ Each 20-byte chunk is written to the RX characteristic as a separate GATT write 
 
 ### Write Properties
 
-- **Write type**: Write Without Response (implied by Nordic UART RX characteristic)
+- **Write type depends on the controller-box generation** — it is a property of the box's advertised characteristic, not a protocol invariant. Two generations exist in the field:
+  - The common box (field telemetry `bleCharProperties=12`, API level 3) advertises **both** `.write` (bit 8) and `.writeWithoutResponse` (bit 4), and is driven with **Write Without Response**.
+  - A mid-2025 Kilter-built box (field telemetry `bleCharProperties=8`, API level 2) advertises **only** `.write` — the `.writeWithoutResponse` bit is absent. On iOS, CoreBluetooth **silently drops** a write-without-response to a characteristic that lacks the no-response property, so this box stays dark on a client that hardcodes without-response. An interoperable iOS client must fall back to **write-with-response** (pacing on the GATT write ack) whenever the RX characteristic doesn't advertise `.writeWithoutResponse`. Android's GATT stack issues no-response writes regardless of the advertised property, so the same write call works on both generations there — which is why this defect is iOS-only.
+  - The `bleCharProperties` / API-level correlation is clean and stable per-connect (8↔v2, 12↔v3), distinguishing a genuine hardware generation from a stale iOS GATT cache (which flickers between the two). This is the same characteristic-capability gating the MoonBoard spec already documents for the RedBearLab box (`MOONBOARD_BLUETOOTH_PROTOCOL_SPEC.md` §5.4).
 - Each chunk is enqueued as a separate `writeCharacteristic()` command
 - The command queue ensures serial execution with GATT write completion callbacks
 
