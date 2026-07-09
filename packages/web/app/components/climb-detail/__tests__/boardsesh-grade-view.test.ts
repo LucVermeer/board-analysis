@@ -43,12 +43,49 @@ describe('deriveBoardseshGradeView', () => {
     });
   });
 
-  it('rounds the universal grade for a confirmed tier', () => {
+  it('uses the local grade as primary and keeps universal as comparison', () => {
     const view = deriveBoardseshGradeView({
       boardName: 'kilter',
-      grade: grade({ universalGrade: 20.4, localGrade: 19, confidence: 'confirmed', ascensionistCount: 88 }),
+      grade: grade({ localGrade: 22.03, universalGrade: 21.03, confidence: 'confirmed', ascensionistCount: 127 }),
     });
-    expect(view).toEqual({ kind: 'confirmed', scope: 'universal', difficultyId: 20, ascensionistCount: 88 });
+    expect(view).toEqual({
+      kind: 'confirmed',
+      scope: 'local',
+      difficultyId: 22,
+      comparisonDifficultyId: 21,
+      hasUniversalGrade: true,
+      ascensionistCount: 127,
+    });
+  });
+
+  it('uses the local grade as primary for Tension too', () => {
+    const view = deriveBoardseshGradeView({
+      boardName: 'tension',
+      grade: grade({ localGrade: 20.6, universalGrade: 19.6, confidence: 'confirmed', ascensionistCount: 88 }),
+    });
+    expect(view).toEqual({
+      kind: 'confirmed',
+      scope: 'local',
+      difficultyId: 21,
+      comparisonDifficultyId: 20,
+      hasUniversalGrade: true,
+      ascensionistCount: 88,
+    });
+  });
+
+  it('omits the comparison when local and universal round to the same grade', () => {
+    const view = deriveBoardseshGradeView({
+      boardName: 'kilter',
+      grade: grade({ localGrade: 20.4, universalGrade: 20.2, confidence: 'confirmed' }),
+    });
+    expect(view).toEqual({
+      kind: 'confirmed',
+      scope: 'local',
+      difficultyId: 20,
+      comparisonDifficultyId: null,
+      hasUniversalGrade: true,
+      ascensionistCount: 42,
+    });
   });
 
   it('falls back to the local grade when universal is null (local scope)', () => {
@@ -56,13 +93,21 @@ describe('deriveBoardseshGradeView', () => {
       boardName: 'grasshopper',
       grade: grade({ universalGrade: null, localGrade: 17.6, confidence: 'confirmed' }),
     });
-    expect(view).toEqual({ kind: 'confirmed', scope: 'local', difficultyId: 18, ascensionistCount: 42 });
+    expect(view).toEqual({
+      kind: 'confirmed',
+      scope: 'local',
+      difficultyId: 18,
+      comparisonDifficultyId: null,
+      hasUniversalGrade: false,
+      ascensionistCount: 42,
+    });
   });
 
-  it('flags a provisional range when the rounded bounds differ', () => {
+  it('flags a provisional range on the local scale when the rounded bounds differ', () => {
     const view = deriveBoardseshGradeView({
       boardName: 'tension',
       grade: grade({
+        localGrade: 21.5,
         universalGrade: 20.5,
         gradeLow: 20,
         gradeHigh: 22,
@@ -72,10 +117,12 @@ describe('deriveBoardseshGradeView', () => {
     });
     expect(view).toEqual({
       kind: 'provisional',
-      scope: 'universal',
-      difficultyId: 21,
-      lowDifficultyId: 20,
-      highDifficultyId: 22,
+      scope: 'local',
+      difficultyId: 22,
+      lowDifficultyId: 21,
+      highDifficultyId: 23,
+      comparisonDifficultyId: 21,
+      hasUniversalGrade: true,
       isRange: true,
       ascensionistCount: 6,
     });
@@ -85,14 +132,37 @@ describe('deriveBoardseshGradeView', () => {
     const view = deriveBoardseshGradeView({
       boardName: 'tension',
       grade: grade({
-        universalGrade: 20,
-        gradeLow: 19.8,
-        gradeHigh: 20.2,
+        localGrade: 20,
+        universalGrade: 19,
+        gradeLow: 18.8,
+        gradeHigh: 19.2,
         confidence: 'provisional',
         ascensionistCount: 3,
       }),
     });
-    expect(view).toMatchObject({ kind: 'provisional', isRange: false, lowDifficultyId: 20, highDifficultyId: 20 });
+    expect(view).toMatchObject({
+      kind: 'provisional',
+      isRange: false,
+      lowDifficultyId: 20,
+      highDifficultyId: 20,
+      comparisonDifficultyId: 19,
+      hasUniversalGrade: true,
+    });
+  });
+
+  it('falls back to universal when local is missing on a future malformed row', () => {
+    const view = deriveBoardseshGradeView({
+      boardName: 'kilter',
+      grade: grade({ universalGrade: 20.4, localGrade: null, confidence: 'confirmed' }),
+    });
+    expect(view).toEqual({
+      kind: 'confirmed',
+      scope: 'universal',
+      difficultyId: 20,
+      comparisonDifficultyId: null,
+      hasUniversalGrade: true,
+      ascensionistCount: 42,
+    });
   });
 
   it('treats a missing primary grade as setterOnly', () => {

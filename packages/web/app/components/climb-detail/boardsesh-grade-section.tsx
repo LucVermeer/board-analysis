@@ -102,6 +102,8 @@ export default function BoardseshGradeSection({ boardName, climbUuid, angle }: B
   }
 
   const scopeLabel = view.scope === 'universal' ? t('boardseshGrade.universalLabel') : t('boardseshGrade.localLabel');
+  const comparisonName = view.comparisonDifficultyId == null ? null : difficultyNameFor(view.comparisonDifficultyId);
+  const comparisonLabel = comparisonName == null ? null : formatGrade(comparisonName);
 
   const subline =
     view.kind === 'confirmed'
@@ -135,7 +137,12 @@ export default function BoardseshGradeSection({ boardName, climbUuid, angle }: B
         <Typography component="span" variant="body2" color="text.secondary">
           {subline}
         </Typography>
-        {view.scope === 'local' && (
+        {comparisonLabel && (
+          <Typography component="span" variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', mt: '2px' }}>
+            {t('boardseshGrade.universalComparison', { grade: comparisonLabel })}
+          </Typography>
+        )}
+        {view.scope === 'local' && !view.hasUniversalGrade && (
           <Typography component="span" variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', mt: '2px' }}>
             {t('boardseshGrade.localScopeNote')}
           </Typography>

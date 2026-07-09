@@ -345,6 +345,7 @@
     "universalLabel": "Grado Boardsesh",
     "localLabel": "En este plafón",
     "localScopeNote": "En la escala de este plafón — todavía no comparable entre plafones",
+    "universalComparison": "Escala Tension: {{grade}}",
     "confirmedSubline_one": "Confirmado con {{count}} encadene",
     "confirmedSubline_other": "Confirmado con {{count}} encadenes",
     "provisionalSubline_one": "Aún asentándose — {{count}} encadene registrado",
