@@ -16,6 +16,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 - Import your MoonBoard CSV logbook into Boardsesh from connected apps, with sends, flashes, attempts, projects, and fails matched at 40 degrees. ([#3571](https://github.com/boardsesh/boardsesh/pull/3571))
 
+### Fixed
+
+- Using an early-2025 Kilter LED box on iPhone? It would connect but the holds stayed dark no matter which climb you picked. Now it lights up like it should — pick a climb and the wall comes on. ([#3577](https://github.com/boardsesh/boardsesh/pull/3577))
+
 ## 2026-07-08
 
 ### App update

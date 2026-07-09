@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-09T00:23:47.697Z",
+  "generatedAt": "2026-07-09T03:03:46.748Z",
   "entries": [
+    {
+      "prNumber": 3577,
+      "category": "fixed",
+      "title": "Using an early-2025 Kilter LED box on iPhone? It would connect but the holds stayed dark no matter which climb you picked. Now it lights up like it should — pick a climb and the wall comes on.",
+      "mergedAt": "2026-07-09T03:02:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3577"
+    },
     {
       "prNumber": 3571,
       "category": "improved",
