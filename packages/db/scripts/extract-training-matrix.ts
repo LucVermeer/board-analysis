@@ -126,6 +126,10 @@ async function main(): Promise<void> {
     `[extract] board=${options.board} minAscents=${options.minAscents} angle=${options.angle ?? 'all'} → ${options.out}`,
   );
   try {
+    // Score mode sorts the full catalog; disable parallel-worker shared-memory
+    // segments so a big sort can't exhaust the server's /dev/shm (matches the
+    // grade pipeline's guard). Session-scoped on the single script connection.
+    await db.execute(sql`SET max_parallel_workers_per_gather = 0`);
     const [features, stats, holdsByClimb] = await Promise.all([
       loadFeatures(db, options.board),
       loadStats(db, options),
