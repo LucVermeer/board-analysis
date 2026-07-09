@@ -20,22 +20,22 @@ session_type` already accommodates inferred solo sessions for later.
 
 ## Code map
 
-| Piece                              | Location                                                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Provider abstraction + Strava impl | `packages/backend/src/integrations/{types,strava,registry}.ts`                                                |
-| Credential store + token refresh   | `packages/backend/src/integrations/credentials.ts`                                                            |
-| Export/claim/dedupe service        | `packages/backend/src/integrations/export-service.ts`                                                         |
-| Signed handoff/state tokens        | `packages/backend/src/integrations/state.ts`                                                                  |
-| Browser OAuth HTTP handlers        | `packages/backend/src/handlers/integrations-oauth.ts`                                                         |
-| GraphQL resolvers                  | `packages/backend/src/graphql/resolvers/integrations/`                                                        |
-| DB tables                          | `packages/db/src/schema/auth/integration-credentials.ts`, `packages/db/src/schema/app/integration-exports.ts` |
-| Mobile registry + orchestration    | `packages/mobile/src/lib/integrations/`                                                                       |
-| HealthKit native module            | `packages/mobile/modules/health-workouts/` (+ `plugins/with-healthkit.js`)                                    |
-| Mobile UI                          | `packages/mobile/src/components/integrations/`, `app/(tabs)/profile/integrations.tsx`                         |
-| Board account REST handlers        | `packages/backend/src/handlers/aurora-{credentials,import}.ts`, `kilter-credentials-oauth.ts`                 |
-| Board account services             | `packages/backend/src/services/aurora-credentials.ts`, `board-credential-state.ts`                            |
-| Shared Aurora JSON importer        | `packages/aurora-sync/src/sync/json-import.ts`, `packages/shared-schema/src/aurora-import.ts`                 |
-| Mobile board account UI/client     | `packages/mobile/src/components/integrations/BoardAccountsSection.tsx`, `src/lib/aurora-credentials.ts`       |
+| Piece                              | Location                                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Provider abstraction + Strava impl | `packages/backend/src/integrations/{types,strava,registry}.ts`                                                       |
+| Credential store + token refresh   | `packages/backend/src/integrations/credentials.ts`                                                                   |
+| Export/claim/dedupe service        | `packages/backend/src/integrations/export-service.ts`                                                                |
+| Signed handoff/state tokens        | `packages/backend/src/integrations/state.ts`                                                                         |
+| Browser OAuth HTTP handlers        | `packages/backend/src/handlers/integrations-oauth.ts`                                                                |
+| GraphQL resolvers                  | `packages/backend/src/graphql/resolvers/integrations/`                                                               |
+| DB tables                          | `packages/db/src/schema/auth/integration-credentials.ts`, `packages/db/src/schema/app/integration-exports.ts`        |
+| Mobile registry + orchestration    | `packages/mobile/src/lib/integrations/`                                                                              |
+| HealthKit native module            | `packages/mobile/modules/health-workouts/` (+ `plugins/with-healthkit.js`)                                           |
+| Mobile UI                          | `packages/mobile/src/components/integrations/`, `app/(tabs)/profile/integrations.tsx`                                |
+| Board account REST handlers        | `packages/backend/src/handlers/aurora-{credentials,import}.ts`, `moonboard-import.ts`, `kilter-credentials-oauth.ts` |
+| Board account services             | `packages/backend/src/services/aurora-credentials.ts`, `moonboard-import.ts`, `board-credential-state.ts`            |
+| Shared import parsers              | `packages/aurora-sync/src/sync/json-import.ts`, `packages/shared-schema/src/{aurora,moonboard}-import.ts`            |
+| Mobile board account UI/client     | `packages/mobile/src/components/integrations/BoardAccountsSection.tsx`, `src/lib/aurora-credentials.ts`              |
 
 ## Mobile availability and flags
 
@@ -178,9 +178,14 @@ allowlist.
 
 - `POST /api/aurora-import` streams newline-delimited progress events while
   importing Aurora JSON export chunks through the shared importer.
+- `POST /api/moonboard-import` streams newline-delimited progress events while
+  importing a stripped MoonBoard CSV export. MoonBoard logs are saved at 40°;
+  Project/Fail rows become attempts, and Session Flash rows become sends with
+  one attempt. The importer resolves Moon problem ids against the deterministic
+  MoonBoard catalog UUIDs and canonical aliases before writing ticks.
 
-The JSON import parser is shared with web so mobile previews and server-side
-validation agree on board mismatches, missing users, and item counts.
+The JSON and CSV import parsers are shared with web/mobile so previews and
+server-side validation agree on missing users, board mismatches, and item counts.
 
 ## Adding a provider
 

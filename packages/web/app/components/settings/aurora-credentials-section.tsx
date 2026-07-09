@@ -58,6 +58,14 @@ import {
   type AuroraExportPreview,
   type StrippedExportData,
 } from '@/app/lib/data-sync/aurora/parse-aurora-export';
+import {
+  parseMoonBoardExportCsvForImport,
+  streamMoonBoardImport,
+  type MoonBoardExportPreview,
+  type MoonBoardImportProgress as MoonBoardProgress,
+  type MoonBoardImportResult,
+  type StrippedMoonBoardExportData,
+} from '@/app/lib/data-sync/moonboard/csv-import-stream';
 import { AURORA_BOARDS, type AuroraBoardName } from '@boardsesh/shared-schema';
 import styles from './aurora-credentials-section.module.css';
 
@@ -110,6 +118,55 @@ function buildKilterDataRequestMailto(
   const body = t('aurora.kilterEmail.body', { name, email });
 
   return `mailto:peter@auroraclimbing.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+const MOONBOARD_SUPPORT_EMAIL = 'moonboardsupport@moonclimbing.com';
+
+function buildMoonBoardDataRequestMailto(t: TFunction<'settings'>): string {
+  const subject = t('aurora.moonboard.email.subject');
+  return `mailto:${MOONBOARD_SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
+}
+
+function totalMoonBoardImported(result: MoonBoardImportResult): number {
+  return result.ascents.imported + result.attempts.imported;
+}
+
+function moonBoardUnresolvedClimbs(result: MoonBoardImportResult): string[] {
+  return [
+    ...new Set([
+      ...result.unresolvedClimbs,
+      ...(result.unresolvedAscentClimbs ?? []),
+      ...(result.unresolvedAttemptClimbs ?? []),
+    ]),
+  ].sort();
+}
+
+function getMoonBoardProgressLabel(t: TFunction<'settings'>, progress: MoonBoardProgress | null): string {
+  if (!progress) return t('aurora.moonboard.csvImport.steps.resolving');
+  switch (progress.step) {
+    case 'ascents':
+      return t('aurora.moonboard.csvImport.steps.ascents');
+    case 'attempts':
+      return t('aurora.moonboard.csvImport.steps.attempts');
+    case 'dedup':
+      return t('aurora.moonboard.csvImport.steps.dedup');
+    case 'resolving':
+      return t('aurora.moonboard.csvImport.steps.resolving');
+    case 'importing':
+      return t('aurora.moonboard.csvImport.steps.importing');
+    case 'recomputing':
+      return t('aurora.moonboard.csvImport.steps.recomputing');
+    default:
+      return t('aurora.moonboard.csvImport.steps.importing');
+  }
+}
+
+function getMoonBoardImportErrorMessage(t: TFunction<'settings'>, error: unknown): string {
+  const errorCode = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  if (errorCode === 'moonboard_import_interrupted') {
+    return t('aurora.moonboard.csvImport.interrupted');
+  }
+  return t('aurora.moonboard.csvImport.failed');
 }
 
 // Localise a link failure. The duplicate-account rejection carries a stable
@@ -346,6 +403,50 @@ export function BoardCredentialCard({
   );
 }
 
+type MoonBoardCredentialCardProps = {
+  onImportCsv: () => void;
+  onRequestData: () => void;
+  requestDataHref: string;
+  isImporting: boolean;
+};
+
+function MoonBoardCredentialCard({
+  onImportCsv,
+  onRequestData,
+  requestDataHref,
+  isImporting,
+}: MoonBoardCredentialCardProps) {
+  const { t } = useTranslation('settings');
+
+  return (
+    <Card className={styles.credentialCard}>
+      <CardContent>
+        <div className={styles.cardHeader}>
+          <Typography variant="h5" sx={{ margin: 0 }}>
+            {t('aurora.moonboard.title')}
+          </Typography>
+        </div>
+        <Typography variant="body2" component="span" color="text.secondary" className={styles.notConnectedText}>
+          {t('aurora.moonboard.copy')}
+        </Typography>
+        <div className={styles.buttonRowStacked}>
+          <Button
+            variant="contained"
+            startIcon={isImporting ? <CircularProgress size={16} /> : <FileUploadOutlined />}
+            onClick={onImportCsv}
+            disabled={isImporting}
+          >
+            {t('aurora.moonboard.import')}
+          </Button>
+          <Button variant="outlined" startIcon={<EmailOutlined />} href={requestDataHref} onClick={onRequestData}>
+            {t('aurora.moonboard.requestData')}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ImportProgressSteps({ progress }: { progress: ImportProgress | null }) {
   const { t } = useTranslation('settings');
   const stepLabels = getStepLabels(t);
@@ -416,6 +517,14 @@ export default function AuroraCredentialsSection() {
   const [importError, setImportError] = useState<string | null>(null);
   const receivedCompleteRef = useRef(false);
   const handledKilterCompletionRef = useRef<string | null>(null);
+  const moonBoardFileInputRef = useRef<HTMLInputElement>(null);
+  const [moonBoardImportPreview, setMoonBoardImportPreview] = useState<MoonBoardExportPreview | null>(null);
+  const [moonBoardImportData, setMoonBoardImportData] = useState<StrippedMoonBoardExportData | null>(null);
+  const [moonBoardImportPhase, setMoonBoardImportPhase] = useState<ImportPhase | null>(null);
+  const [moonBoardImportProgress, setMoonBoardImportProgress] = useState<MoonBoardProgress | null>(null);
+  const [moonBoardImportResult, setMoonBoardImportResult] = useState<MoonBoardImportResult | null>(null);
+  const [moonBoardImportError, setMoonBoardImportError] = useState<string | null>(null);
+  const receivedMoonBoardCompleteRef = useRef(false);
 
   const fetchCredentials = async () => {
     setCredentialsLoadError(false);
@@ -731,6 +840,140 @@ export default function AuroraCredentialsSection() {
     resetImportState();
   };
 
+  const resetMoonBoardImportState = () => {
+    setMoonBoardImportPhase(null);
+    setMoonBoardImportProgress(null);
+    setMoonBoardImportPreview(null);
+    setMoonBoardImportData(null);
+    setMoonBoardImportResult(null);
+    setMoonBoardImportError(null);
+  };
+
+  const handleMoonBoardImportClick = () => {
+    moonBoardFileInputRef.current?.click();
+  };
+
+  const handleMoonBoardRequestDataClick = () => {
+    if (!navigator.clipboard) return;
+
+    void navigator.clipboard.writeText(t('aurora.moonboard.email.body')).then(
+      () => showMessage(t('aurora.moonboard.requestDataDialog.title'), 'success'),
+      () => showMessage(t('aurora.mobile.requestDataCopyFailed'), 'error'),
+    );
+  };
+
+  const handleMoonBoardFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const maxSizeBytes = 200 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      showMessage(t('aurora.import.tooLarge'), 'error');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      void (async () => {
+        try {
+          const csv = typeof reader.result === 'string' ? reader.result : '';
+          const parsed = await parseMoonBoardExportCsvForImport(csv);
+          setMoonBoardImportData(parsed.data);
+          setMoonBoardImportPreview(parsed.preview);
+          setMoonBoardImportPhase('preview');
+        } catch (error) {
+          const message =
+            error instanceof Error && error.message === 'moonboard_parser_unavailable'
+              ? t('aurora.moonboard.csvImport.parserUnavailable')
+              : t('aurora.moonboard.csvImport.parseError');
+          showMessage(message, 'error');
+          resetMoonBoardImportState();
+        }
+      })();
+    };
+    reader.onerror = () => {
+      showMessage(t('aurora.import.readError'), 'error');
+      resetMoonBoardImportState();
+    };
+    reader.readAsText(file);
+
+    event.target.value = '';
+  };
+
+  const handleMoonBoardImportConfirm = async () => {
+    if (!moonBoardImportData) return;
+
+    setMoonBoardImportPhase('importing');
+    setMoonBoardImportProgress(null);
+    setMoonBoardImportPreview(null);
+    setMoonBoardImportResult(null);
+    setMoonBoardImportError(null);
+    receivedMoonBoardCompleteRef.current = false;
+
+    try {
+      const transport = resolveAuroraBackendTransport(authToken);
+      if (!transport) throw new Error('moonboard_import_endpoint_unavailable');
+
+      await streamMoonBoardImport(
+        moonBoardImportData,
+        (event) => {
+          switch (event.type) {
+            case 'progress':
+              setMoonBoardImportProgress({
+                step: event.step,
+                message: 'message' in event ? event.message : undefined,
+                current: 'current' in event ? event.current : undefined,
+                total: 'total' in event ? event.total : undefined,
+              });
+              break;
+            case 'complete':
+              receivedMoonBoardCompleteRef.current = true;
+              setMoonBoardImportResult(event.results);
+              setMoonBoardImportPhase('complete');
+              showMessage(
+                event.results.partialError
+                  ? t('aurora.moonboard.csvImport.partialWarning')
+                  : t('aurora.moonboard.csvImport.successCount', { count: totalMoonBoardImported(event.results) }),
+                event.results.partialError ? 'warning' : 'success',
+              );
+              break;
+            case 'error': {
+              receivedMoonBoardCompleteRef.current = true;
+              const importErrorMessage = getMoonBoardImportErrorMessage(t, event.error);
+              setMoonBoardImportError(importErrorMessage);
+              setMoonBoardImportPhase('error');
+              showMessage(importErrorMessage, 'error');
+              break;
+            }
+          }
+        },
+        {
+          backendUrl: transport.backendUrl,
+          authToken: transport.authToken,
+        },
+      );
+
+      if (!receivedMoonBoardCompleteRef.current) {
+        setMoonBoardImportError(t('aurora.moonboard.csvImport.interrupted'));
+        setMoonBoardImportPhase('error');
+        showMessage(t('aurora.moonboard.csvImport.interruptedShort'), 'error');
+      }
+    } catch (error) {
+      const message = getMoonBoardImportErrorMessage(t, error);
+      setMoonBoardImportError(message);
+      setMoonBoardImportPhase('error');
+      showMessage(message, 'error');
+    } finally {
+      setMoonBoardImportData(null);
+    }
+  };
+
+  const handleMoonBoardImportDialogClose = () => {
+    if (moonBoardImportPhase === 'importing') return;
+    resetMoonBoardImportState();
+  };
+
   const getCredentialForBoard = (boardType: AuroraBoardName) => {
     return credentials.find((credential) => credential.boardType === boardType) || null;
   };
@@ -754,6 +997,12 @@ export default function AuroraCredentialsSection() {
   const isImporting = importPhase === 'importing';
   const isImportDialogOpen =
     importPhase === 'preview' || importPhase === 'importing' || importPhase === 'complete' || importPhase === 'error';
+  const isMoonBoardImporting = moonBoardImportPhase === 'importing';
+  const isMoonBoardImportDialogOpen =
+    moonBoardImportPhase === 'preview' ||
+    moonBoardImportPhase === 'importing' ||
+    moonBoardImportPhase === 'complete' ||
+    moonBoardImportPhase === 'error';
 
   const getImportDialogTitle = () => {
     switch (importPhase) {
@@ -770,7 +1019,24 @@ export default function AuroraCredentialsSection() {
     }
   };
 
+  const getMoonBoardImportDialogTitle = () => {
+    switch (moonBoardImportPhase) {
+      case 'preview':
+        return t('aurora.moonboard.importDialog.previewTitle');
+      case 'importing':
+        return t('aurora.moonboard.importDialog.importingTitle');
+      case 'complete':
+        return t('aurora.moonboard.importDialog.completeTitle');
+      case 'error':
+        return t('aurora.moonboard.importDialog.errorTitle');
+      default:
+        return '';
+    }
+  };
+
   const importingBoardName = importingBoard ? importingBoard.charAt(0).toUpperCase() + importingBoard.slice(1) : '';
+  const moonBoardProgressLabel = getMoonBoardProgressLabel(t, moonBoardImportProgress);
+  const moonBoardUnresolvedNames = moonBoardImportResult ? moonBoardUnresolvedClimbs(moonBoardImportResult) : [];
 
   if (loading) {
     return (
@@ -821,6 +1087,12 @@ export default function AuroraCredentialsSection() {
           </Typography>
 
           <Stack spacing={2} className={styles.cardsContainer}>
+            <MoonBoardCredentialCard
+              onImportCsv={handleMoonBoardImportClick}
+              onRequestData={handleMoonBoardRequestDataClick}
+              requestDataHref={buildMoonBoardDataRequestMailto(t)}
+              isImporting={isMoonBoardImporting}
+            />
             {cardConfigs.map(({ key, boardType, variant }) => {
               // The legacy "Kilter (Aurora)" card never owns the linked-account state —
               // that belongs to the new card.
@@ -853,6 +1125,16 @@ export default function AuroraCredentialsSection() {
         accept=".json"
         onChange={handleFileSelected}
         aria-label={t('aurora.import.fileLabel')}
+        hidden
+      />
+
+      {/* Hidden file input for MoonBoard CSV import */}
+      <input
+        ref={moonBoardFileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleMoonBoardFileSelected}
+        aria-label={t('aurora.moonboard.csvImport.fileLabel')}
         hidden
       />
 
@@ -1059,6 +1341,166 @@ export default function AuroraCredentialsSection() {
         {(importPhase === 'complete' || importPhase === 'error') && (
           <DialogActions>
             <Button variant="contained" onClick={handleImportDialogClose}>
+              {t('aurora.import.dialog.close')}
+            </Button>
+          </DialogActions>
+        )}
+      </Dialog>
+
+      {/* MoonBoard CSV Import Dialog */}
+      <Dialog
+        open={isMoonBoardImportDialogOpen}
+        onClose={handleMoonBoardImportDialogClose}
+        maxWidth="sm"
+        fullWidth
+        disableEscapeKeyDown={isMoonBoardImporting}
+      >
+        <DialogTitle>{getMoonBoardImportDialogTitle()}</DialogTitle>
+        <DialogContent>
+          {moonBoardImportPhase === 'preview' && moonBoardImportPreview && (
+            <>
+              <Typography variant="body2" color="text.secondary" className={styles.modalDescription}>
+                {moonBoardImportPreview.username
+                  ? t('aurora.moonboard.importDialog.previewIntroWithUser', {
+                      username: moonBoardImportPreview.username,
+                    })
+                  : t('aurora.moonboard.importDialog.previewIntro')}
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importDialog.rows', { count: moonBoardImportPreview.rows })}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importDialog.sends', { count: moonBoardImportPreview.sends })}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importDialog.flashes', { count: moonBoardImportPreview.flashes })}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importDialog.attempts', {
+                      count: moonBoardImportPreview.attempts,
+                    })}
+                  />
+                </ListItem>
+                {moonBoardImportPreview.projects > 0 && (
+                  <ListItem>
+                    <ListItemText
+                      primary={t('aurora.moonboard.importDialog.projects', {
+                        count: moonBoardImportPreview.projects,
+                      })}
+                    />
+                  </ListItem>
+                )}
+                {moonBoardImportPreview.fails > 0 && (
+                  <ListItem>
+                    <ListItemText
+                      primary={t('aurora.moonboard.importDialog.fails', { count: moonBoardImportPreview.fails })}
+                    />
+                  </ListItem>
+                )}
+              </List>
+              <MuiAlert severity="info" className={styles.unsyncedAlert}>
+                {t('aurora.moonboard.importDialog.angleNote', { angle: moonBoardImportPreview.angle })}
+              </MuiAlert>
+              <Typography variant="body2" color="text.secondary">
+                {t('aurora.moonboard.importDialog.previewNote')}
+              </Typography>
+            </>
+          )}
+
+          {moonBoardImportPhase === 'importing' && (
+            <Stack spacing={2} alignItems="center" sx={{ py: 2 }}>
+              <CircularProgress />
+              <Typography variant="body2" color="text.secondary">
+                {moonBoardProgressLabel}
+                {moonBoardImportProgress?.current != null && moonBoardImportProgress.total != null
+                  ? ` (${moonBoardImportProgress.current} / ${moonBoardImportProgress.total})`
+                  : ''}
+              </Typography>
+              {moonBoardImportProgress?.current != null && moonBoardImportProgress.total != null ? (
+                <LinearProgress
+                  variant="determinate"
+                  value={(moonBoardImportProgress.current / moonBoardImportProgress.total) * 100}
+                  sx={{ width: '100%' }}
+                />
+              ) : (
+                <LinearProgress variant="indeterminate" sx={{ width: '100%' }} />
+              )}
+            </Stack>
+          )}
+
+          {moonBoardImportPhase === 'complete' && moonBoardImportResult && (
+            <>
+              {moonBoardImportResult.partialError && (
+                <MuiAlert severity="warning" className={styles.unsyncedAlert}>
+                  <AlertTitle>{t('aurora.moonboard.importResults.partialTitle')}</AlertTitle>
+                  {t('aurora.moonboard.importResults.partialBody')}
+                </MuiAlert>
+              )}
+              <List dense>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importResults.ascents')}
+                    secondary={t('aurora.moonboard.importResults.ascentsSummary', moonBoardImportResult.ascents)}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('aurora.moonboard.importResults.attempts')}
+                    secondary={t('aurora.moonboard.importResults.attemptsSummary', moonBoardImportResult.attempts)}
+                  />
+                </ListItem>
+              </List>
+              {moonBoardUnresolvedNames.length > 0 && (
+                <MuiAlert severity="warning" className={styles.unsyncedAlert}>
+                  <AlertTitle>
+                    {t('aurora.moonboard.importResults.unresolvedTitle', { count: moonBoardUnresolvedNames.length })}
+                  </AlertTitle>
+                  <div className={styles.unresolvedList}>
+                    {moonBoardUnresolvedNames.slice(0, 20).map((name) => (
+                      <Typography key={name} variant="body2">
+                        {name}
+                      </Typography>
+                    ))}
+                    {moonBoardUnresolvedNames.length > 20 && (
+                      <Typography variant="body2" color="text.secondary">
+                        {t('aurora.import.results.unresolvedMore', {
+                          count: moonBoardUnresolvedNames.length - 20,
+                        })}
+                      </Typography>
+                    )}
+                  </div>
+                </MuiAlert>
+              )}
+            </>
+          )}
+
+          {moonBoardImportPhase === 'error' && moonBoardImportError && (
+            <MuiAlert severity="error">
+              <AlertTitle>{t('aurora.moonboard.importDialog.errorTitle')}</AlertTitle>
+              {moonBoardImportError}
+            </MuiAlert>
+          )}
+        </DialogContent>
+
+        {moonBoardImportPhase === 'preview' && (
+          <DialogActions>
+            <Button onClick={handleMoonBoardImportDialogClose}>{t('aurora.import.dialog.cancel')}</Button>
+            <Button variant="contained" onClick={handleMoonBoardImportConfirm}>
+              {t('aurora.import.dialog.confirm')}
+            </Button>
+          </DialogActions>
+        )}
+        {(moonBoardImportPhase === 'complete' || moonBoardImportPhase === 'error') && (
+          <DialogActions>
+            <Button variant="contained" onClick={handleMoonBoardImportDialogClose}>
               {t('aurora.import.dialog.close')}
             </Button>
           </DialogActions>

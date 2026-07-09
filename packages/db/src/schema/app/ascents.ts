@@ -35,13 +35,21 @@ export const tickStatusEnum = pgEnum('tick_status', ['flash', 'send', 'attempt']
  *   Already inside upstream_ascensionist_count.
  * - json_import: imported from an Aurora account export JSON. Already inside
  *   upstream_ascensionist_count.
+ * - moonboard_import: imported from a MoonBoard account export CSV. Already
+ *   inside upstream_ascensionist_count.
  *
  * The tick recompute counts a user toward boardsesh_ascensionist_count only
  * when ALL their ticks at a (board, climb, angle) key are 'native' — a user
  * with any imported tick is already represented in the upstream count, so
  * counting them again would double-count the ascent.
  */
-export const tickOriginEnum = pgEnum('tick_origin', ['native', 'aurora_pull', 'kilter_pull', 'json_import']);
+export const tickOriginEnum = pgEnum('tick_origin', [
+  'native',
+  'aurora_pull',
+  'kilter_pull',
+  'json_import',
+  'moonboard_import',
+]);
 
 /**
  * Aurora table type for sync
@@ -185,6 +193,6 @@ export const boardseshTicks = pgTable(
 export type BoardseshTick = typeof boardseshTicks.$inferSelect;
 export type NewBoardseshTick = typeof boardseshTicks.$inferInsert;
 export type TickStatus = 'flash' | 'send' | 'attempt';
-export type TickOrigin = 'native' | 'aurora_pull' | 'kilter_pull' | 'json_import';
+export type TickOrigin = 'native' | 'aurora_pull' | 'kilter_pull' | 'json_import' | 'moonboard_import';
 export type AuroraTableType = 'ascents' | 'bids';
 export type KilterTableType = 'logs' | 'attempts';

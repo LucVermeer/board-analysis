@@ -9,4 +9,5 @@ export * from './beta-video-url';
 export * from './caption-climb-match';
 export * from './image-sizes';
 export * from './aurora-import';
+export * from './moonboard-import';
 export * from './instagram-caption-parse';

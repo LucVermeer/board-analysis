@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   saveKilterViaPassword: vi.fn(() => Promise.resolve()),
   deleteAurora: vi.fn(),
   streamImport: vi.fn(),
+  streamMoonBoardImport: vi.fn(),
+  parseMoonBoardCsv: vi.fn(),
+  pickDocument: vi.fn(),
+  fileText: vi.fn(),
   showToast: vi.fn(),
   openURL: vi.fn((_url: string) => Promise.resolve()),
   setClipboard: vi.fn((_text: string) => Promise.resolve()),
@@ -28,6 +32,16 @@ vi.mock('../../../lib/aurora-credentials', () => ({
   saveKilterCredentialViaPassword: mocks.saveKilterViaPassword,
   deleteAuroraCredential: mocks.deleteAurora,
   streamAuroraImport: mocks.streamImport,
+  streamMoonBoardImport: mocks.streamMoonBoardImport,
+}));
+
+vi.mock('@boardsesh/shared-schema', () => ({
+  AURORA_BOARDS: ['kilter', 'tension'],
+  parseAuroraExportJson: vi.fn(() => ({
+    data: { user: { username: 'aurora' }, ascents: [], attempts: [], circuits: [], climbs: [] },
+    preview: { username: 'aurora', ascents: 0, attempts: 0, circuits: 0, climbs: 0 },
+  })),
+  parseMoonBoardExportCsv: mocks.parseMoonBoardCsv,
 }));
 
 type MutationOptions = {
@@ -86,7 +100,20 @@ vi.mock('react-native', () => ({
   Linking: { openURL: mocks.openURL },
 }));
 
-vi.mock('expo-file-system', () => ({ File: class File {} }));
+vi.mock('expo-document-picker', () => ({ getDocumentAsync: mocks.pickDocument }));
+vi.mock('expo-file-system', () => ({
+  File: class File {
+    private readonly uri: string;
+
+    constructor(uri: string) {
+      this.uri = uri;
+    }
+
+    text() {
+      return mocks.fileText(this.uri);
+    }
+  },
+}));
 vi.mock('expo-clipboard', () => ({ setStringAsync: mocks.setClipboard }));
 
 vi.mock('react-i18next', () => ({
@@ -215,6 +242,18 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     mocks.showToast.mockReset();
     mocks.openURL.mockReset().mockResolvedValue(undefined);
     mocks.setClipboard.mockReset().mockResolvedValue(undefined);
+    mocks.streamMoonBoardImport.mockReset().mockResolvedValue(undefined);
+    mocks.parseMoonBoardCsv.mockReset().mockReturnValue({
+      data: { rows: [{ problemId: 123 }] },
+      preview: { username: 'moonuser', rows: 3, sends: 1, flashes: 1, attempts: 2, projects: 1, fails: 0, angle: 40 },
+    });
+    mocks.pickDocument.mockReset().mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file://moonboard.csv', size: 128 }],
+    });
+    mocks.fileText
+      .mockReset()
+      .mockResolvedValue('ProblemId,Grade,Tries,Attempts,Rating,Date\n123,6B+,Send,1,3,2026-01-01');
     mocks.confirm.mockReset().mockResolvedValue(true);
     mocks.flags = {};
     mocks.credentials = [];
@@ -242,17 +281,23 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(mailto).not.toContain('body=');
   });
 
-  it('opens the Discord hand-off dialog from "Import data" and links to Discord', () => {
+  it('opens a CSV picker and shows the MoonBoard preview from the selected file', async () => {
     const { container } = render(<BoardAccountsSection />);
-    // Dialog starts closed, so the Discord CTA is not rendered yet.
-    expect(button(container, 'aurora.moonboard.importDialog.discordCta')).toBeNull();
 
     fireEvent.click(button(container, 'aurora.moonboard.import')!);
-    const discordButton = button(container, 'aurora.moonboard.importDialog.discordCta');
-    expect(discordButton).not.toBeNull();
 
-    fireEvent.click(discordButton!);
-    expect(mocks.openURL).toHaveBeenCalledWith('https://discord.gg/YXA8GsXfQK');
+    await waitFor(() => {
+      expect(mocks.pickDocument).toHaveBeenCalledWith({
+        type: ['text/csv', 'text/plain', 'application/vnd.ms-excel'],
+        copyToCacheDirectory: true,
+      });
+      expect(mocks.fileText).toHaveBeenCalledWith('file://moonboard.csv');
+      expect(mocks.parseMoonBoardCsv).toHaveBeenCalledWith(
+        'ProblemId,Grade,Tries,Attempts,Rating,Date\n123,6B+,Send,1,3,2026-01-01',
+      );
+      expect(button(container, 'aurora.import.dialog.confirm')).not.toBeNull();
+      expect(container.textContent).toContain('aurora.moonboard.importDialog.flashes');
+    });
   });
 
   it('copies the letter but leaves email unopened when the dialog is dismissed', async () => {
@@ -286,22 +331,58 @@ describe('BoardAccountsSection — MoonBoard card', () => {
     expect(mocks.openURL).not.toHaveBeenCalled();
   });
 
-  it('shows a Discord-specific error toast when the Discord link fails to open', async () => {
-    mocks.openURL.mockReset().mockRejectedValueOnce(new Error('no discord handler'));
+  it('streams the MoonBoard import after preview confirmation', async () => {
+    mocks.streamMoonBoardImport.mockImplementation(
+      async (_data: unknown, onEvent: (event: { type: 'complete'; results: unknown }) => void) => {
+        onEvent({
+          type: 'complete',
+          results: {
+            ascents: { imported: 1, skipped: 0, failed: 0 },
+            attempts: { imported: 2, skipped: 0, failed: 0 },
+            unresolvedClimbs: [],
+          },
+        });
+      },
+    );
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.import')!);
-    fireEvent.click(button(container, 'aurora.moonboard.importDialog.discordCta')!);
     await waitFor(() => {
-      expect(mocks.showToast).toHaveBeenCalledWith('aurora.moonboard.importDialog.openFailed', 'error');
+      expect(button(container, 'aurora.import.dialog.confirm')).not.toBeNull();
+    });
+
+    fireEvent.click(button(container, 'aurora.import.dialog.confirm')!);
+
+    await waitFor(() => {
+      expect(mocks.streamMoonBoardImport).toHaveBeenCalledWith({ rows: [{ problemId: 123 }] }, expect.any(Function));
+      expect(mocks.showToast).toHaveBeenCalledWith('aurora.moonboard.csvImport.successCount', 'success');
     });
   });
 
-  it('closes the import dialog via the Close button', () => {
+  it('shows the localized failed copy when the MoonBoard import stream rejects', async () => {
+    mocks.streamMoonBoardImport.mockRejectedValueOnce(new Error('moonboard_import_failed'));
     const { container } = render(<BoardAccountsSection />);
     fireEvent.click(button(container, 'aurora.moonboard.import')!);
-    expect(button(container, 'aurora.moonboard.importDialog.discordCta')).not.toBeNull();
+    await waitFor(() => {
+      expect(button(container, 'aurora.import.dialog.confirm')).not.toBeNull();
+    });
 
-    fireEvent.click(button(container, 'actions.close')!);
-    expect(button(container, 'aurora.moonboard.importDialog.discordCta')).toBeNull();
+    fireEvent.click(button(container, 'aurora.import.dialog.confirm')!);
+
+    await waitFor(() => {
+      expect(mocks.showToast).toHaveBeenCalledWith('aurora.moonboard.csvImport.failed', 'error');
+      expect(container.textContent).toContain('aurora.moonboard.csvImport.failed');
+    });
+    expect(container.textContent).not.toContain('aurora.moonboard.csvImport.interrupted');
+  });
+
+  it('closes the MoonBoard preview dialog via the Cancel button', async () => {
+    const { container } = render(<BoardAccountsSection />);
+    fireEvent.click(button(container, 'aurora.moonboard.import')!);
+    await waitFor(() => {
+      expect(button(container, 'actions.cancel')).not.toBeNull();
+    });
+
+    fireEvent.click(button(container, 'actions.cancel')!);
+    expect(button(container, 'aurora.import.dialog.confirm')).toBeNull();
   });
 });

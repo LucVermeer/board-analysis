@@ -42,12 +42,26 @@ import {
   saveAuroraCredential,
   saveKilterCredentialViaPassword,
   streamAuroraImport,
+  streamMoonBoardImport,
   type AuroraCredentialStatus,
+  type MoonBoardImportProgressEvent,
+  type MoonBoardImportResult,
+  type StrippedMoonBoardExportData,
   type UnsyncedCounts,
 } from '../../lib/aurora-credentials';
 
 type ImportPhase = 'preview' | 'importing' | 'complete' | 'error';
 type ImportStep = 'climbs' | 'resolving' | 'dedup' | 'ascents' | 'attempts' | 'circuits';
+type MoonBoardExportPreview = {
+  username?: string;
+  rows: number;
+  sends: number;
+  flashes: number;
+  attempts: number;
+  projects: number;
+  fails: number;
+  angle: number;
+};
 
 // Kilter renders two cards: `kilterAurora` for the legacy Aurora-built app (JSON
 // import + data request) and `kilterNew` for the new Kilter Grips account, which
@@ -60,6 +74,22 @@ type ImportProgress = {
   total?: number;
 };
 
+type MoonBoardProgress = {
+  step: string;
+  message?: string;
+  current?: number;
+  total?: number;
+};
+
+type ParsedMoonBoardExport = {
+  data: StrippedMoonBoardExportData;
+  preview: MoonBoardExportPreview;
+};
+
+type MoonBoardSharedSchemaModule = {
+  parseMoonBoardExportCsv?: (csv: string) => unknown | Promise<unknown>;
+};
+
 const MAX_IMPORT_SIZE_BYTES = 200 * 1024 * 1024;
 const IMPORT_RESULT_LIMIT = 8;
 const AURORA_CREDENTIALS_QUERY_KEY = ['auroraCredentials'] as const;
@@ -67,7 +97,6 @@ const AURORA_UNSYNCED_QUERY_KEY = ['auroraCredentials', 'unsynced'] as const;
 
 // MoonBoard isn't an Aurora board, so it has no credential/sync flow.
 const MOONBOARD_SUPPORT_EMAIL = 'moonboardsupport@moonclimbing.com';
-const MOONBOARD_DISCORD_URL = 'https://discord.gg/YXA8GsXfQK';
 
 function boardDisplayName(boardType: AuroraBoardName): string {
   return boardType.charAt(0).toUpperCase() + boardType.slice(1);
@@ -83,6 +112,51 @@ function getUnsyncedCount(counts: UnsyncedCounts | undefined, boardType: AuroraB
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+function readString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim().length > 0) return value;
+  }
+  return undefined;
+}
+
+function normalizeMoonBoardParsedExport(parsed: unknown): ParsedMoonBoardExport {
+  if (!isRecord(parsed) || !('data' in parsed) || !isRecord(parsed.preview)) {
+    throw new Error('moonboard_parser_invalid_result');
+  }
+
+  const preview = parsed.preview;
+  return {
+    data: parsed.data,
+    preview: {
+      username: readString(preview, ['username', 'userName']),
+      rows: readNumber(preview, ['rows', 'rowCount', 'entries', 'totalRows']) ?? 0,
+      sends: readNumber(preview, ['sends', 'ascents', 'sendCount']) ?? 0,
+      flashes: readNumber(preview, ['flashes', 'flashCount']) ?? 0,
+      attempts: readNumber(preview, ['attempts', 'attemptCount']) ?? 0,
+      projects: readNumber(preview, ['projects', 'projectCount']) ?? 0,
+      fails: readNumber(preview, ['fails', 'failures', 'failCount']) ?? 0,
+      angle: readNumber(preview, ['angle', 'boardAngle']) ?? 40,
+    },
+  };
+}
+
+async function parseMoonBoardCsvForImport(csv: string): Promise<ParsedMoonBoardExport> {
+  const sharedSchema = (await import('@boardsesh/shared-schema')) as unknown as MoonBoardSharedSchemaModule;
+  if (typeof sharedSchema.parseMoonBoardExportCsv !== 'function') {
+    throw new Error('moonboard_parser_unavailable');
+  }
+  return normalizeMoonBoardParsedExport(await sharedSchema.parseMoonBoardExportCsv(csv));
 }
 
 // The i18n keys must stay literal in each builder (the linter hard-fails on
@@ -112,6 +186,48 @@ function buildMoonBoardDataRequestMailto(t: TFunction<'settings'>): string {
 
 function totalImported(result: ImportResult): number {
   return result.climbs.imported + result.ascents.imported + result.attempts.imported + result.circuits.imported;
+}
+
+function totalMoonBoardImported(result: MoonBoardImportResult): number {
+  return result.ascents.imported + result.attempts.imported;
+}
+
+function moonBoardUnresolvedClimbs(result: MoonBoardImportResult): string[] {
+  return [
+    ...new Set([
+      ...result.unresolvedClimbs,
+      ...(result.unresolvedAscentClimbs ?? []),
+      ...(result.unresolvedAttemptClimbs ?? []),
+    ]),
+  ].sort();
+}
+
+function getMoonBoardProgressLabel(t: TFunction<'settings'>, progress: MoonBoardProgress | null): string {
+  if (!progress) return t('aurora.moonboard.csvImport.steps.resolving');
+  switch (progress.step) {
+    case 'ascents':
+      return t('aurora.moonboard.csvImport.steps.ascents');
+    case 'attempts':
+      return t('aurora.moonboard.csvImport.steps.attempts');
+    case 'dedup':
+      return t('aurora.moonboard.csvImport.steps.dedup');
+    case 'resolving':
+      return t('aurora.moonboard.csvImport.steps.resolving');
+    case 'importing':
+      return t('aurora.moonboard.csvImport.steps.importing');
+    case 'recomputing':
+      return t('aurora.moonboard.csvImport.steps.recomputing');
+    default:
+      return t('aurora.moonboard.csvImport.steps.importing');
+  }
+}
+
+function getMoonBoardImportErrorMessage(t: TFunction<'settings'>, error: unknown): string {
+  const errorCode = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  if (errorCode === 'moonboard_import_interrupted') {
+    return t('aurora.moonboard.csvImport.interrupted');
+  }
+  return t('aurora.moonboard.csvImport.failed');
 }
 
 // Kilter links via the password grant (`/api/board-credentials/kilter/password`);
@@ -519,14 +635,25 @@ export function BoardAccountsSection() {
 // heavy BoardAccountsSection parent re-renders.
 const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
   const { t } = useTranslation('settings');
-  const { t: tCommon } = useTranslation('common');
   const { systemColors } = useTheme();
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<MoonBoardExportPreview | null>(null);
+  const [importData, setImportData] = useState<StrippedMoonBoardExportData | null>(null);
+  const [importPhase, setImportPhase] = useState<ImportPhase | null>(null);
+  const [importProgress, setImportProgress] = useState<MoonBoardProgress | null>(null);
+  const [importResult, setImportResult] = useState<MoonBoardImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
-  const openImportDialog = useCallback(() => setImportDialogOpen(true), []);
-  const closeImportDialog = useCallback(() => setImportDialogOpen(false), []);
+  const resetImport = useCallback(() => {
+    if (importPhase === 'importing') return;
+    setImportPreview(null);
+    setImportData(null);
+    setImportPhase(null);
+    setImportProgress(null);
+    setImportResult(null);
+    setImportError(null);
+  }, [importPhase]);
 
   const handleRequestData = useCallback(() => {
     // The GDPR letter is too long to encode into the mailto: body reliably, so
@@ -558,11 +685,93 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
     void openRequest();
   }, [confirm, showToast, t]);
 
-  const handleOpenDiscord = useCallback(() => {
-    void Linking.openURL(MOONBOARD_DISCORD_URL).catch(() => {
-      showToast(t('aurora.moonboard.importDialog.openFailed'), 'error');
-    });
+  const handleImportPress = useCallback(() => {
+    void (async () => {
+      try {
+        const DocumentPicker = await import('expo-document-picker');
+        const document = await DocumentPicker.getDocumentAsync({
+          type: ['text/csv', 'text/plain', 'application/vnd.ms-excel'],
+          copyToCacheDirectory: true,
+        });
+        if (document.canceled) return;
+
+        const asset = document.assets[0];
+        if (!asset) return;
+        if (asset.size != null && asset.size > MAX_IMPORT_SIZE_BYTES) {
+          showToast(t('aurora.import.tooLarge'), 'error');
+          return;
+        }
+
+        const csv = await new File(asset.uri).text();
+        const parsed = await parseMoonBoardCsvForImport(csv);
+        setImportData(parsed.data);
+        setImportPreview(parsed.preview);
+        setImportPhase('preview');
+        setImportProgress(null);
+        setImportResult(null);
+        setImportError(null);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message === 'moonboard_parser_unavailable'
+            ? t('aurora.moonboard.csvImport.parserUnavailable')
+            : t('aurora.moonboard.csvImport.parseError');
+        showToast(message, 'error');
+        setImportPreview(null);
+        setImportData(null);
+        setImportPhase(null);
+      }
+    })();
   }, [showToast, t]);
+
+  const handleImportConfirm = useCallback(() => {
+    if (!importData) return;
+
+    setImportPhase('importing');
+    setImportProgress(null);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError(null);
+
+    void (async () => {
+      try {
+        await streamMoonBoardImport(importData, (event: MoonBoardImportProgressEvent) => {
+          if (event.type === 'progress') {
+            setImportProgress({
+              step: event.step,
+              message: 'message' in event ? event.message : undefined,
+              current: 'current' in event ? event.current : undefined,
+              total: 'total' in event ? event.total : undefined,
+            });
+            return;
+          }
+
+          if (event.type === 'complete') {
+            setImportResult(event.results);
+            setImportPhase('complete');
+            showToast(
+              event.results.partialError
+                ? t('aurora.moonboard.csvImport.partialWarning')
+                : t('aurora.moonboard.csvImport.successCount', { count: totalMoonBoardImported(event.results) }),
+              event.results.partialError ? 'warning' : 'success',
+            );
+            return;
+          }
+
+          const importErrorMessage = getMoonBoardImportErrorMessage(t, event.error);
+          setImportError(importErrorMessage);
+          setImportPhase('error');
+          showToast(importErrorMessage, 'error');
+        });
+      } catch (error) {
+        const importErrorMessage = getMoonBoardImportErrorMessage(t, error);
+        setImportError(importErrorMessage);
+        setImportPhase('error');
+        showToast(importErrorMessage, 'error');
+      } finally {
+        setImportData(null);
+      }
+    })();
+  }, [importData, showToast, t]);
 
   return (
     <View
@@ -587,7 +796,9 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
           icon="upload"
           variant="outlined"
           size="small"
-          onPress={openImportDialog}
+          loading={importPhase === 'importing'}
+          disabled={importPhase === 'importing'}
+          onPress={handleImportPress}
         />
         <Button
           title={t('aurora.moonboard.requestData')}
@@ -598,29 +809,162 @@ const MoonBoardAccountCard = memo(function MoonBoardAccountCard() {
         />
       </View>
 
-      <Modal visible={importDialogOpen} transparent animationType="fade" onRequestClose={closeImportDialog}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: systemColors.secondaryBackground }]}>
-            <Text variant="headline" style={styles.modalTitle}>
-              {t('aurora.moonboard.importDialog.title')}
-            </Text>
-            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.modalCopy}>
-              {t('aurora.moonboard.importDialog.body')}
-            </Text>
-            <View style={styles.modalActions}>
-              <Button title={tCommon('actions.close')} variant="text" role="cancel" onPress={closeImportDialog} />
-              <Button
-                title={t('aurora.moonboard.importDialog.discordCta')}
-                icon="open.external"
-                onPress={handleOpenDiscord}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <MoonBoardImportDialog
+        visible={importPhase !== null}
+        phase={importPhase}
+        preview={importPreview}
+        progress={importProgress}
+        result={importResult}
+        error={importError}
+        systemColors={systemColors}
+        onCancel={resetImport}
+        onConfirm={handleImportConfirm}
+      />
     </View>
   );
 });
+
+type MoonBoardImportDialogProps = {
+  visible: boolean;
+  phase: ImportPhase | null;
+  preview: MoonBoardExportPreview | null;
+  progress: MoonBoardProgress | null;
+  result: MoonBoardImportResult | null;
+  error: string | null;
+  systemColors: ReturnType<typeof useTheme>['systemColors'];
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+function MoonBoardImportDialog({
+  visible,
+  phase,
+  preview,
+  progress,
+  result,
+  error,
+  systemColors,
+  onCancel,
+  onConfirm,
+}: MoonBoardImportDialogProps) {
+  const { t } = useTranslation('settings');
+  const { t: tCommon } = useTranslation('common');
+  let title = t('aurora.moonboard.importDialog.errorTitle');
+  if (phase === 'preview') {
+    title = t('aurora.moonboard.importDialog.previewTitle');
+  } else if (phase === 'importing') {
+    title = t('aurora.moonboard.importDialog.importingTitle');
+  } else if (phase === 'complete') {
+    title = t('aurora.moonboard.importDialog.completeTitle');
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={phase === 'importing' ? undefined : onCancel}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.modalCard, styles.importModalCard, { backgroundColor: systemColors.secondaryBackground }]}>
+          <Text variant="headline" style={styles.modalTitle}>
+            {title}
+          </Text>
+
+          {phase === 'preview' && preview ? (
+            <>
+              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.modalCopy}>
+                {preview.username
+                  ? t('aurora.moonboard.importDialog.previewIntroWithUser', { username: preview.username })
+                  : t('aurora.moonboard.importDialog.previewIntro')}
+              </Text>
+              <View style={[styles.summaryBox, { backgroundColor: systemColors.tertiaryBackground }]}>
+                <SummaryLine label={t('aurora.moonboard.importDialog.rows', { count: preview.rows })} />
+                <SummaryLine label={t('aurora.moonboard.importDialog.sends', { count: preview.sends })} />
+                <SummaryLine label={t('aurora.moonboard.importDialog.flashes', { count: preview.flashes })} />
+                <SummaryLine label={t('aurora.moonboard.importDialog.attempts', { count: preview.attempts })} />
+                {preview.projects > 0 ? (
+                  <SummaryLine label={t('aurora.moonboard.importDialog.projects', { count: preview.projects })} />
+                ) : null}
+                {preview.fails > 0 ? (
+                  <SummaryLine label={t('aurora.moonboard.importDialog.fails', { count: preview.fails })} />
+                ) : null}
+                <SummaryLine label={t('aurora.moonboard.importDialog.angleNote', { angle: preview.angle })} />
+              </View>
+              <Text variant="footnote" color={systemColors.secondaryLabel}>
+                {t('aurora.moonboard.importDialog.previewNote')}
+              </Text>
+              <View style={styles.modalActions}>
+                <Button title={tCommon('actions.cancel')} variant="text" role="cancel" onPress={onCancel} />
+                <Button title={t('aurora.import.dialog.confirm')} icon="upload" onPress={onConfirm} />
+              </View>
+            </>
+          ) : null}
+
+          {phase === 'importing' ? (
+            <View style={styles.importProgressBlock}>
+              <ActivityIndicator />
+              <Text variant="subheadline" color={systemColors.secondaryLabel}>
+                {getMoonBoardProgressLabel(t, progress)}
+                {progress?.current != null && progress.total != null ? ` (${progress.current}/${progress.total})` : ''}
+              </Text>
+            </View>
+          ) : null}
+
+          {phase === 'complete' && result ? (
+            <>
+              <ScrollView style={styles.resultScroll}>
+                <MoonBoardImportResultSummary result={result} />
+              </ScrollView>
+              <View style={styles.modalActions}>
+                <Button title={tCommon('actions.done')} onPress={onCancel} />
+              </View>
+            </>
+          ) : null}
+
+          {phase === 'error' ? (
+            <>
+              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.modalCopy}>
+                {error ?? t('aurora.moonboard.csvImport.interrupted')}
+              </Text>
+              <View style={styles.modalActions}>
+                <Button title={tCommon('actions.close')} onPress={onCancel} />
+              </View>
+            </>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function MoonBoardImportResultSummary({ result }: { result: MoonBoardImportResult }) {
+  const { t } = useTranslation('settings');
+  const { systemColors } = useTheme();
+  const unresolvedNames = moonBoardUnresolvedClimbs(result);
+
+  return (
+    <View style={styles.resultList}>
+      <ResultLine
+        title={t('aurora.moonboard.importResults.ascents')}
+        summary={t('aurora.moonboard.importResults.ascentsSummary', result.ascents)}
+      />
+      <ResultLine
+        title={t('aurora.moonboard.importResults.attempts')}
+        summary={t('aurora.moonboard.importResults.attemptsSummary', result.attempts)}
+      />
+      {result.partialError ? (
+        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.resultWarning}>
+          {t('aurora.moonboard.importResults.partialBody')}
+        </Text>
+      ) : null}
+      <UnresolvedList
+        title={t('aurora.moonboard.importResults.unresolvedTitle', { count: unresolvedNames.length })}
+        names={unresolvedNames}
+      />
+    </View>
+  );
+}
 
 type BoardAccountSkeletonCardProps = {
   isLast: boolean;
