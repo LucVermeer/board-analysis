@@ -60,16 +60,16 @@ pgvector needed at ~10⁵ climbs/board (it stays a drop-in later swap, same
 
 ## Phased rollout (Kilter-first; each phase stacks on the last)
 
-| #      | Phase                                           | Ships                                                                                                                                  |
-| ------ | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **0**  | **Hold-feature substrate** ✅ (#3584)           | `board_hold_features` + nightly `refresh-hold-features.ts`; shadow-fills `user_hold_classifications`.                                  |
-| **1a** | **Training matrix + offline eval** ✅ (this PR) | `extract-training-matrix.ts` + `ml/climb2vec/` (Deep Sets encoder, GBM/ridge baselines, leakage-free eval). Feasibility numbers below. |
-| 1b     | Climb2Vec grade/embedding export                | Ordinal head + contrastive objective + tuning on the full catalog; export `content_prior` + embeddings.                                |
-| 2      | `content_prior` into the blend                  | Geometry-informed grades on sparse/new Kilter climbs.                                                                                  |
-| 3      | Embedding similarity                            | `board_climb_embeddings` + top-K neighbors; upgrades `similarClimbs` (Jaccard fallback).                                               |
-| 4      | "Also sent" item-item CF                        | Co-send neighbors from `boardsesh_ticks` + a climb-detail rail.                                                                        |
-| 5      | Style / anti-style recs                         | Per-user style centroids → "recommended in your style" / "train your anti-style".                                                      |
-| 6      | Generalize to Tension + MoonBoard               | First-ever MoonBoard grades (`content_only`); multi-board similarity.                                                                  |
+| #      | Phase                                           | Ships                                                                                                                                                                    |
+| ------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **0**  | **Hold-feature substrate** ✅ (#3584)           | `board_hold_features` + nightly `refresh-hold-features.ts`; shadow-fills `user_hold_classifications`.                                                                    |
+| **1a** | **Training matrix + offline eval** ✅ (this PR) | `extract-training-matrix.ts` + `ml/climb2vec/` (Deep Sets encoder, GBM/ridge baselines, leakage-free eval). Feasibility numbers below.                                   |
+| 1b     | Content-model export ✅ (this PR)               | `board_climb_embeddings` + score extract + `train_export.py` + `load-content-model.ts` + weekly `refresh-content-model.yml`. Tuning (ordinal/contrastive) iterates here. |
+| 2      | `content_prior` into the blend                  | Geometry-informed grades on sparse/new Kilter climbs.                                                                                                                    |
+| 3      | Embedding similarity                            | `board_climb_embeddings` + top-K neighbors; upgrades `similarClimbs` (Jaccard fallback).                                                                                 |
+| 4      | "Also sent" item-item CF                        | Co-send neighbors from `boardsesh_ticks` + a climb-detail rail.                                                                                                          |
+| 5      | Style / anti-style recs                         | Per-user style centroids → "recommended in your style" / "train your anti-style".                                                                                        |
+| 6      | Generalize to Tension + MoonBoard               | First-ever MoonBoard grades (`content_only`); multi-board similarity.                                                                                                    |
 
 ## Phase 1a — offline feasibility (Kilter, 29,748 held-out-by-climb observations)
 

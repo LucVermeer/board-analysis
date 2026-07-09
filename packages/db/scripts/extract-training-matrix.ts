@@ -34,6 +34,15 @@ interface Options {
   minAscents: number;
   angle: number | null;
   limit: number | null;
+  /** Score mode: emit EVERY listed (climb, angle) with holds — no ascent/label gate — for model scoring. */
+  scoreAll: boolean;
+}
+
+/** The ascent/label gate for training; empty in score mode (grade everything). */
+function gradeGate(options: Options) {
+  return options.scoreAll
+    ? sql``
+    : sql`AND st.ascensionist_count >= ${options.minAscents} AND st.difficulty_average IS NOT NULL`;
 }
 
 function toNumber(value: unknown): number {
@@ -55,15 +64,14 @@ async function loadStats(db: Db, options: Options): Promise<ClimbStatLite[]> {
   const angleFilter = options.angle === null ? sql`` : sql`AND st.angle = ${options.angle}`;
   const limitClause = options.limit === null ? sql`` : sql`LIMIT ${options.limit}`;
   return (await db.execute(sql`
-    SELECT st.climb_uuid AS climb_uuid, st.angle AS angle, st.difficulty_average AS label,
-           st.ascensionist_count AS n, c.layout_id AS layout_id, c.hold_fingerprint AS fingerprint
+    SELECT st.climb_uuid AS climb_uuid, st.angle AS angle, COALESCE(st.difficulty_average, 0) AS label,
+           COALESCE(st.ascensionist_count, 0) AS n, c.layout_id AS layout_id, c.hold_fingerprint AS fingerprint
     FROM board_climb_stats st
     JOIN board_climbs c ON c.uuid = st.climb_uuid
     WHERE st.board_type = ${options.board}
       AND c.is_listed = true
       AND COALESCE(c.is_draft, false) = false
-      AND st.ascensionist_count >= ${options.minAscents}
-      AND st.difficulty_average IS NOT NULL
+      ${gradeGate(options)}
       ${angleFilter}
     ORDER BY st.climb_uuid, st.angle
     ${limitClause}
@@ -81,8 +89,7 @@ async function loadHoldsByClimb(db: Db, options: Options): Promise<Map<string, H
         WHERE st.board_type = ${options.board}
           AND c.is_listed = true
           AND COALESCE(c.is_draft, false) = false
-          AND st.ascensionist_count >= ${options.minAscents}
-          AND st.difficulty_average IS NOT NULL
+          ${gradeGate(options)}
       )
   `)) as unknown as Array<{ climb_uuid: string; placement_id: number; hold_state: string }>;
   const byClimb = new Map<string, HoldLite[]>();
@@ -108,6 +115,7 @@ function parseArgs(argv: string[]): Options {
     minAscents: get('--min-ascents') ? Number(get('--min-ascents')) : DEFAULT_MIN_ASCENTS,
     angle: angleArg ? Number(angleArg) : null,
     limit: limitArg ? Number(limitArg) : null,
+    scoreAll: argv.includes('--score'),
   };
 }
 
