@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-11
+
+### Fixed
+
+- Fixed the log-ascent sheet popping back open uninvited after connecting to a board ([#3595](https://github.com/boardsesh/boardsesh/pull/3595))
+
 ## 2026-07-09
 
 ### App update
