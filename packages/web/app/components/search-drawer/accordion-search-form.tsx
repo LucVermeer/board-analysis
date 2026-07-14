@@ -13,6 +13,7 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
+import Shuffle from '@mui/icons-material/Shuffle';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { GradeRangePicker, type GradeRangeChangeMeta } from '@/app/components/grade-picker/grade-range-picker';
@@ -301,8 +302,21 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               <MenuItem value="creation">{t('list.sort.creation')}</MenuItem>
               <MenuItem value="random">{t('list.sort.random')}</MenuItem>
             </MuiSelect>
-            {/* Direction is meaningless for a random shuffle, so hide it. */}
-            {uiSearchParams.sortBy !== 'random' && (
+            {/* For random, direction is meaningless — swap the asc/desc select for a
+                reshuffle button. A button is required (not re-picking Random in the
+                MuiSelect): onChange only fires when the value changes, so re-selecting
+                the current value would never mint a new seed. onClick fires every time. */}
+            {uiSearchParams.sortBy === 'random' ? (
+              <MuiButton
+                variant="outlined"
+                size="small"
+                className={styles.fullWidth}
+                startIcon={<Shuffle />}
+                onClick={() => updateFilters({ sortSeed: newSortSeed() })}
+              >
+                {t('list.sort.reshuffle')}
+              </MuiButton>
+            ) : (
               <MuiSelect
                 value={uiSearchParams.sortOrder}
                 onChange={(e) => updateFilters({ sortOrder: e.target.value })}

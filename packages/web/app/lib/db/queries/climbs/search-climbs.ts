@@ -141,8 +141,11 @@ export async function cachedSearchClimbs(
   options?: { cacheable?: boolean },
 ): Promise<{ climbs: Climb[]; hasMore: boolean }> {
   // MoonBoard list data is still being actively imported/curated, so bypass
-  // the server cache there to surface new climbs immediately.
-  const cacheable = (options?.cacheable ?? !userId) && params.board_name !== 'moonboard';
+  // the server cache there to surface new climbs immediately. Random sort also
+  // bypasses: each shuffle carries a unique ~31-bit seed, so caching per seed is a
+  // 0%-hit-rate entry that only bloats the Next.js data cache.
+  const cacheable =
+    (options?.cacheable ?? !userId) && params.board_name !== 'moonboard' && searchParams.sortBy !== 'random';
 
   const setIdsStr = [...params.set_ids].sort((a, b) => a - b).join(',');
   const searchParamsJson = buildClimbSearchParamsJson(searchParams);

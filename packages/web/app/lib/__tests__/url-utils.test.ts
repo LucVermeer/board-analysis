@@ -105,6 +105,14 @@ describe('searchParamsToUrlParams', () => {
     expect(urlParamsToSearchParams(url).sortSeed).toBe('');
   });
 
+  it('drops a non-numeric or oversized sort seed from a crafted URL', () => {
+    // Digits-only, matching the backend zod contract; anything else → empty.
+    expect(urlParamsToSearchParams(new URLSearchParams('sortSeed=abc')).sortSeed).toBe('');
+    expect(urlParamsToSearchParams(new URLSearchParams('sortSeed=1;DROP')).sortSeed).toBe('');
+    expect(urlParamsToSearchParams(new URLSearchParams(`sortSeed=${'9'.repeat(33)}`)).sortSeed).toBe('');
+    expect(urlParamsToSearchParams(new URLSearchParams('sortSeed=42')).sortSeed).toBe('42');
+  });
+
   it('should handle holds filter correctly', () => {
     const result = searchParamsToUrlParams({
       ...DEFAULT_SEARCH_PARAMS,

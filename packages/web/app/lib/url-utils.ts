@@ -46,6 +46,14 @@ export function parseQueryParamInt(params: URLSearchParams, key: string): number
   return Number.isFinite(num) ? num : undefined;
 }
 
+// Random-sort seed: digits only, bounded to 32 chars (matches the GraphQL zod
+// contract). Anything else — including a crafted URL — collapses to the empty
+// default, so the DB falls back to its constant salt rather than salting md5
+// with arbitrary text.
+function normalizeSortSeed(raw: string | null): string {
+  return raw && /^\d{1,32}$/.test(raw) ? raw : DEFAULT_SEARCH_PARAMS.sortSeed || '';
+}
+
 // ---------- Board route params ----------
 
 export function parseBoardRouteParams<T extends BoardRouteParameters>(
@@ -324,7 +332,9 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     minRating: normalizeMinRatingFilter(Number(urlParams.get('minRating') ?? DEFAULT_SEARCH_PARAMS.minRating)),
     sortBy: (urlParams.get('sortBy') ?? DEFAULT_SEARCH_PARAMS.sortBy) as SearchRequestPagination['sortBy'],
     sortOrder: (urlParams.get('sortOrder') ?? DEFAULT_SEARCH_PARAMS.sortOrder) as 'asc' | 'desc',
-    sortSeed: urlParams.get('sortSeed') ?? DEFAULT_SEARCH_PARAMS.sortSeed,
+    // Digits-only, matching the GraphQL zod contract — the SSR path passes this
+    // straight to the DB md5 salt, so drop anything a crafted URL puts here.
+    sortSeed: normalizeSortSeed(urlParams.get('sortSeed')),
     name: urlParams.get('name') ?? DEFAULT_SEARCH_PARAMS.name,
     onlyClassics: urlParams.get('onlyClassics') === 'true',
     onlyTallClimbs: urlParams.get('onlyTallClimbs') === 'true',

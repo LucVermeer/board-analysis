@@ -54,6 +54,7 @@
       "quality": "Quality",
       "creation": "Creation",
       "random": "Random",
+      "reshuffle": "Shuffle again",
       "ascending": "Asc",
       "descending": "Desc"
     }
