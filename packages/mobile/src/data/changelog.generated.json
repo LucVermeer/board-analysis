@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-14T09:51:35.654Z",
+  "generatedAt": "2026-07-14T19:44:19.128Z",
   "entries": [
+    {
+      "prNumber": 3601,
+      "category": "new",
+      "title": "Shuffle the list — a new **Random** sort mixes up your climbs so you're not stuck scrolling the same popular sends every session. Tap it again for a fresh shuffle.",
+      "mergedAt": "2026-07-14T19:43:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3601"
+    },
     {
       "prNumber": 3600,
       "category": "fixed",

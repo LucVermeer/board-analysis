@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-14
 
+### New
+
+- Shuffle the list — a new **Random** sort mixes up your climbs so you're not stuck scrolling the same popular sends every session. Tap it again for a fresh shuffle. ([#3601](https://github.com/boardsesh/boardsesh/pull/3601))
+
 ### Fixed
 
 - Log a tick from a climb's long-press menu on the player screen without the tick sheet snapping shut before you can save it. ([#3600](https://github.com/boardsesh/boardsesh/pull/3600))
