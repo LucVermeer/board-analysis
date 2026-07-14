@@ -181,6 +181,33 @@ describe('useClimbActions colours and dispatch', () => {
     expect(onAfterAction).toHaveBeenCalledTimes(1);
   });
 
+  it('tick.run opens the root LogAscent sheet and fires onAfterAction by default', () => {
+    const onAfterAction = vi.fn();
+    const { result } = renderHook(() =>
+      useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false, onAfterAction }),
+    );
+    result.current.find((action) => action.id === 'tick')?.run();
+    expect(openers.openLogAscent).toHaveBeenCalledWith(
+      expect.objectContaining({ climbUuid: 'climb-1', boardName: 'kilter', angle: 40 }),
+    );
+    expect(onAfterAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('tick.run calls onTick (in-tree) instead of the root sheet when provided', () => {
+    const onTick = vi.fn();
+    const onAfterAction = vi.fn();
+    const { result } = renderHook(() =>
+      useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false, onTick, onAfterAction }),
+    );
+    result.current.find((action) => action.id === 'tick')?.run();
+    // Same climb/board snapshot the root path uses, so a live queue change can't retarget it.
+    expect(onTick).toHaveBeenCalledWith(climb, kilterBoard);
+    // The play drawer's own in-tree sheet takes over — the root opener (which would
+    // pop the /play modal) is skipped, but the reaction menu still dismisses.
+    expect(openers.openLogAscent).not.toHaveBeenCalled();
+    expect(onAfterAction).toHaveBeenCalledTimes(1);
+  });
+
   it('share.run opens the native share sheet', () => {
     const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
     result.current.find((action) => action.id === 'share')?.run();

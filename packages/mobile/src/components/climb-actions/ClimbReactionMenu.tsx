@@ -45,6 +45,12 @@ type ClimbReactionMenuProps = {
    *  stacks above the `/play` modal (#3505). Receives the climb/board snapshot the
    *  menu was opened for. */
   onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
+  /** When provided, the "Tick" action runs this instead of opening the root
+   *  LogAscent sheet — the play drawer passes its own in-tree opener so the tick
+   *  sheet stacks above the `/play` modal. Without it, presenting the root sheet
+   *  forces UIKit to dismiss `/play` and the tick sheet closes immediately.
+   *  Receives the climb/board snapshot the menu was opened for. */
+  onTick?: (climb: Climb, boardConfig: BoardConfig) => void;
   /** Read once at the app root (resolved) and passed in, so the mount-time enter
    *  animation uses the real value rather than useReduceMotion's conservative default. */
   reduceMotion: boolean;
@@ -87,6 +93,7 @@ export function ClimbReactionMenu({
   isAuthenticated,
   onEditEntry,
   onAddBetaVideo,
+  onTick,
   reduceMotion,
   onClose,
 }: ClimbReactionMenuProps) {
@@ -140,6 +147,7 @@ export function ClimbReactionMenu({
     onAfterAction: dismiss,
     onSelectPlaylist: openPlaylist,
     onAddBetaVideo,
+    onTick,
   });
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
