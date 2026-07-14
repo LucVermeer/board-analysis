@@ -283,8 +283,10 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               value={uiSearchParams.sortBy}
               onChange={(e) => {
                 const sortBy = e.target.value;
-                // Picking (or re-picking) Random mints a fresh seed for a new
-                // shuffle; switching away clears it so it drops out of the URL.
+                // Picking (or re-picking) Random mints a fresh seed for a new shuffle.
+                // Switching away clears it with '' (not undefined): updateFilters drops
+                // undefined values, so only the empty-string sentinel actually removes a
+                // prior seed from the URL. Mobile clears with undefined (plain spread).
                 updateFilters(sortBy === 'random' ? { sortBy, sortSeed: newSortSeed() } : { sortBy, sortSeed: '' });
               }}
               className={styles.fullWidth}

@@ -138,8 +138,9 @@ export const ClimbSearchInputSchema = z.object({
   minRating: z.number().min(0).max(5).optional(),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  // Seed for the 'random' sort; bounded so it can't bloat the md5 salt.
-  sortSeed: z.string().max(32).optional(),
+  // Seed for the 'random' sort. Digits only (newSortSeed emits an integer string)
+  // and bounded, so it can't bloat the md5 salt or carry anything unexpected.
+  sortSeed: z.string().max(32).regex(/^\d+$/).optional(),
   name: z.string().max(200).optional(),
   setter: z.array(z.string().max(100)).optional(),
   setterId: z.number().int().optional(),
