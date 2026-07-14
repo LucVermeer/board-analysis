@@ -3,11 +3,12 @@ import { asc } from 'drizzle-orm';
 import * as dbSchema from '@boardsesh/db/schema';
 
 // Mock the read client: capture what the resolver selects and feed it canned
-// rows. The chain mirrors dbRead.select().from().where().orderBy().
+// rows. The chain mirrors dbRead.select().from().leftJoin().where().orderBy().
 const { selectRows, dbReadMock } = vi.hoisted(() => {
   const state: { rows: unknown[] } = { rows: [] };
   const chain = {
     from: vi.fn(() => chain),
+    leftJoin: vi.fn(() => chain),
     where: vi.fn(() => chain),
     orderBy: vi.fn(async () => state.rows),
   };
