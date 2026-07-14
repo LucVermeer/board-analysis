@@ -125,8 +125,11 @@ export type SearchRequest = {
   minAscents: number;
   minGrade: number;
   minRating: number;
-  sortBy: 'ascents' | 'difficulty' | 'name' | 'quality' | 'popular' | 'creation';
+  sortBy: 'ascents' | 'difficulty' | 'name' | 'quality' | 'popular' | 'creation' | 'random';
   sortOrder: 'asc' | 'desc';
+  // Seed for the 'random' sort; empty for every other sort. Keeps a shuffle stable
+  // across paginated fetches (see newSortSeed / md5(uuid || seed) in the DB query).
+  sortSeed?: string;
   name: string;
   onlyClassics: boolean;
   onlyTallClimbs: boolean;

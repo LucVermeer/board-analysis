@@ -29,6 +29,7 @@ import {
   type ClimbBoardFilterState,
   SORT_OPTIONS,
   GRADE_ACCURACY_VALUES,
+  newSortSeed,
   type BoardSearchConfig,
 } from '@boardsesh/climb-filters';
 import { Text } from './Text';
@@ -264,6 +265,7 @@ export function ClimbFilterSheet({
       name: t('mobile.filter.sort.name'),
       popular: t('mobile.filter.sort.popular'),
       creation: t('mobile.filter.sort.creation'),
+      random: t('mobile.filter.sort.random'),
     }),
     [t],
   );
@@ -348,7 +350,16 @@ export function ClimbFilterSheet({
     [updateLocalFilters],
   );
 
-  const handleSortByChange = useCallback((sortBy: SortOption) => setFiltersPatch({ sortBy }), [setFiltersPatch]);
+  const handleSortByChange = useCallback(
+    (sortBy: SortOption) =>
+      // Tapping (or re-tapping) Random mints a fresh seed for a new shuffle;
+      // any other sort clears the seed so it never lingers in the search input.
+      setFiltersPatch(sortBy === 'random' ? { sortBy, sortSeed: newSortSeed() } : { sortBy, sortSeed: undefined }),
+    [setFiltersPatch],
+  );
+  // Explicit reshuffle affordance (mirrors web's "Shuffle again" button) so a new
+  // shuffle is discoverable without knowing that re-tapping the Random chip works.
+  const handleReshuffle = useCallback(() => setFiltersPatch({ sortSeed: newSortSeed() }), [setFiltersPatch]);
   const handleSortOrderChange = useCallback(
     (sortOrder: string) => setFiltersPatch({ sortOrder: sortOrder as SortOrder }),
     [setFiltersPatch],
@@ -953,17 +964,34 @@ export function ClimbFilterSheet({
                   />
                 ))}
               </View>
-              <View style={styles.subsectionGap} />
-              <Text variant="footnote" style={styles.subsectionLabel}>
-                {t('mobile.filter.sortOrderLabel')}
-              </Text>
-              <SegmentedControl
-                options={sortOrderOptions}
-                selectedKey={localFilters.sortOrder}
-                onSelect={handleSortOrderChange}
-                textVariant="footnote"
-                trackColor={trackColor}
-              />
+              {/* For random, direction is meaningless — swap the asc/desc control for
+                  an explicit reshuffle button (re-tapping the Random chip also works). */}
+              {localFilters.sortBy === 'random' ? (
+                <>
+                  <View style={styles.subsectionGap} />
+                  <Button
+                    title={t('mobile.filter.sort.reshuffle')}
+                    onPress={handleReshuffle}
+                    variant="tonal"
+                    size="medium"
+                    icon="shuffle"
+                  />
+                </>
+              ) : (
+                <>
+                  <View style={styles.subsectionGap} />
+                  <Text variant="footnote" style={styles.subsectionLabel}>
+                    {t('mobile.filter.sortOrderLabel')}
+                  </Text>
+                  <SegmentedControl
+                    options={sortOrderOptions}
+                    selectedKey={localFilters.sortOrder}
+                    onSelect={handleSortOrderChange}
+                    textVariant="footnote"
+                    trackColor={trackColor}
+                  />
+                </>
+              )}
             </CollapsibleSection>
           </View>
         </BottomSheetScrollView>

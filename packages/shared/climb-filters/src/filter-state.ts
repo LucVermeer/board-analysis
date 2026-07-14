@@ -1,10 +1,21 @@
 import type { ClimbSearchInput } from '@boardsesh/shared-schema';
 
-export const SORT_OPTIONS = ['ascents', 'quality', 'difficulty', 'name', 'popular', 'creation'] as const;
+export const SORT_OPTIONS = ['ascents', 'quality', 'difficulty', 'name', 'popular', 'creation', 'random'] as const;
 export type SortOption = (typeof SORT_OPTIONS)[number];
 
 export const SORT_ORDERS = ['asc', 'desc'] as const;
 export type SortOrder = (typeof SORT_ORDERS)[number];
+
+/**
+ * Fresh seed for the `random` sort. A random 31-bit integer as a string, shared
+ * by web and mobile so both generate seeds identically. The seed salts a
+ * deterministic order (Postgres `md5(uuid || seed)`, SQLite arithmetic mixer) so
+ * OFFSET-paginated infinite scroll stays stable across pages for one shuffle,
+ * while re-selecting `random` yields a new seed (a fresh shuffle).
+ */
+export function newSortSeed(): string {
+  return String(1 + Math.floor(Math.random() * 2147483646));
+}
 
 // Ordered from no-filter through loosest to tightest so UIs that iterate
 // this list render the natural progression (Off → Loose → Moderate → Tight).
@@ -26,6 +37,9 @@ export type StatusFilter = (typeof STATUS_FILTER_VALUES)[number];
 export type ClimbFilterState = {
   sortBy: SortOption;
   sortOrder: SortOrder;
+  // Seed for the `random` sort, set when the user picks Random (see newSortSeed).
+  // Undefined for every other sort; cleared when switching away from random.
+  sortSeed?: string;
   minGrade?: number;
   maxGrade?: number;
   minAscents?: number;
@@ -162,6 +176,7 @@ export function toClimbSearchInput(
     sortOrder: state.sortOrder,
   };
 
+  if (state.sortBy === 'random' && state.sortSeed) input.sortSeed = state.sortSeed;
   if (state.minGrade != null) input.minGrade = state.minGrade;
   if (state.maxGrade != null) input.maxGrade = state.maxGrade;
   if (state.minAscents != null) input.minAscents = state.minAscents;

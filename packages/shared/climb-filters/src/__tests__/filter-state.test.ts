@@ -6,6 +6,7 @@ import {
   flagsToStatus,
   applyStatusChange,
   toClimbSearchInput,
+  newSortSeed,
   type ClimbFilterState,
   type BoardSearchConfig,
   type SearchPagination,
@@ -104,6 +105,18 @@ describe('statusToFlags / flagsToStatus', () => {
   });
 });
 
+describe('newSortSeed', () => {
+  it('returns a positive integer string within the 31-bit range', () => {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const seed = newSortSeed();
+      expect(seed).toMatch(/^\d+$/);
+      const value = Number(seed);
+      expect(value).toBeGreaterThanOrEqual(1);
+      expect(value).toBeLessThanOrEqual(2147483647);
+    }
+  });
+});
+
 describe('toClimbSearchInput', () => {
   it('produces a minimal search input for the default state', () => {
     expect(toClimbSearchInput(DEFAULT_CLIMB_FILTER_STATE, board, pagination)).toEqual({
@@ -154,6 +167,23 @@ describe('toClimbSearchInput', () => {
       showOnlyAttempted: true,
       showOnlyCompleted: true,
     });
+  });
+
+  it('threads the random sort seed only when sorting randomly', () => {
+    const withSeed = toClimbSearchInput(
+      { ...DEFAULT_CLIMB_FILTER_STATE, sortBy: 'random', sortSeed: '4242' },
+      board,
+      pagination,
+    );
+    expect(withSeed).toMatchObject({ sortBy: 'random', sortSeed: '4242' });
+
+    // A stale seed on a non-random sort is dropped.
+    const nonRandom = toClimbSearchInput(
+      { ...DEFAULT_CLIMB_FILTER_STATE, sortBy: 'quality', sortSeed: '4242' },
+      board,
+      pagination,
+    );
+    expect(nonRandom.sortSeed).toBeUndefined();
   });
 
   it('maps status=drafts to onlyDrafts', () => {

@@ -85,6 +85,34 @@ describe('searchParamsToUrlParams', () => {
     expect(params).toContain('sortOrder=asc');
   });
 
+  it('round-trips the random sort seed through the URL', () => {
+    const url = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      sortBy: 'random',
+      sortSeed: '4242',
+    });
+    expect(url.toString()).toContain('sortBy=random');
+    expect(url.toString()).toContain('sortSeed=4242');
+
+    const parsed = urlParamsToSearchParams(url);
+    expect(parsed.sortBy).toBe('random');
+    expect(parsed.sortSeed).toBe('4242');
+  });
+
+  it('omits an empty sort seed from the URL and parses back to the default', () => {
+    const url = searchParamsToUrlParams({ ...DEFAULT_SEARCH_PARAMS, sortSeed: '' });
+    expect(url.toString()).not.toContain('sortSeed');
+    expect(urlParamsToSearchParams(url).sortSeed).toBe('');
+  });
+
+  it('drops a non-numeric or oversized sort seed from a crafted URL', () => {
+    // Digits-only, matching the backend zod contract; anything else → empty.
+    expect(urlParamsToSearchParams(new URLSearchParams('sortSeed=abc')).sortSeed).toBe('');
+    expect(urlParamsToSearchParams(new URLSearchParams('sortSeed=1;DROP')).sortSeed).toBe('');
+    expect(urlParamsToSearchParams(new URLSearchParams(`sortSeed=${'9'.repeat(33)}`)).sortSeed).toBe('');
+    expect(urlParamsToSearchParams(new URLSearchParams('sortSeed=42')).sortSeed).toBe('42');
+  });
+
   it('should handle holds filter correctly', () => {
     const result = searchParamsToUrlParams({
       ...DEFAULT_SEARCH_PARAMS,

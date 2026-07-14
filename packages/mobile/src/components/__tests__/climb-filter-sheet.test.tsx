@@ -214,6 +214,7 @@ vi.mock('@boardsesh/climb-filters', () => ({
   applyStatusChange: (_filters: unknown, status: string) => ({ status }),
   normalizeRetiredStatus: (filters: unknown) => filters,
   toClimbSearchInput: () => ({}),
+  newSortSeed: () => '424242',
   mergeBoardFilters: (input: unknown) => input,
   formatMinAscentsFilterCount: (count: number) => String(count),
   countFilteredHolds: (holdsFilter?: Record<string, unknown>) => Object.keys(holdsFilter ?? {}).length,
@@ -667,5 +668,31 @@ describe('ClimbFilterSheet rows without a board config', () => {
 
     const rowStyle = JSON.parse(setters.getAttribute('data-style') ?? 'null');
     expect(rowStyle ?? []).not.toContainEqual({ opacity: 0.4 });
+  });
+});
+
+describe('ClimbFilterSheet random sort', () => {
+  it('shows a reshuffle button for random and mints a fresh seed on tap', () => {
+    const onApply = vi.fn();
+    // Start already on random with an old seed; the reshuffle button must overwrite it.
+    const { getByText } = renderFilterSheet({
+      onApply,
+      currentFilters: { ...currentFilters, sortBy: 'random', sortSeed: 'old' },
+    });
+
+    fireEvent.click(getByText('mobile.filter.sort.reshuffle'));
+    fireEvent.click(getByText('mobile.filter.showCount12'));
+
+    const applied = onApply.mock.calls.at(-1)?.[0] as ClimbFilters;
+    expect(applied.sortBy).toBe('random');
+    // newSortSeed is mocked to '424242', so the stale 'old' seed is replaced.
+    expect(applied.sortSeed).toBe('424242');
+  });
+
+  it('does not show the reshuffle button for a non-random sort', () => {
+    const { queryByText } = renderFilterSheet({
+      currentFilters: { ...currentFilters, sortBy: 'quality' },
+    });
+    expect(queryByText('mobile.filter.sort.reshuffle')).toBeNull();
   });
 });

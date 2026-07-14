@@ -53,6 +53,8 @@
       "name": "Nom",
       "quality": "Qualité",
       "creation": "Création",
+      "random": "Aléatoire",
+      "reshuffle": "Mélanger à nouveau",
       "ascending": "Asc",
       "descending": "Desc"
     }
@@ -665,7 +667,9 @@
         "difficulty": "Difficulté",
         "name": "Nom",
         "popular": "Populaires",
-        "creation": "Plus récentes"
+        "creation": "Plus récentes",
+        "random": "Aléatoire",
+        "reshuffle": "Mélanger à nouveau"
       },
       "sortOrderLabel": "Sens",
       "sortOrder": {

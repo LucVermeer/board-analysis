@@ -13,6 +13,7 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
+import Shuffle from '@mui/icons-material/Shuffle';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { GradeRangePicker, type GradeRangeChangeMeta } from '@/app/components/grade-picker/grade-range-picker';
@@ -27,7 +28,7 @@ import type { BoardDetails } from '@/app/lib/types';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { track } from '@/app/lib/analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { describeGradeFilter } from '@boardsesh/climb-filters';
+import { describeGradeFilter, newSortSeed } from '@boardsesh/climb-filters';
 import {
   getQualityPanelSummary,
   getStatusPanelSummary,
@@ -281,7 +282,14 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
           <div className={styles.sortRow}>
             <MuiSelect
               value={uiSearchParams.sortBy}
-              onChange={(e) => updateFilters({ sortBy: e.target.value })}
+              onChange={(e) => {
+                const sortBy = e.target.value;
+                // Picking (or re-picking) Random mints a fresh seed for a new shuffle.
+                // Switching away clears it with '' (not undefined): updateFilters drops
+                // undefined values, so only the empty-string sentinel actually removes a
+                // prior seed from the URL. Mobile clears with undefined (plain spread).
+                updateFilters(sortBy === 'random' ? { sortBy, sortSeed: newSortSeed() } : { sortBy, sortSeed: '' });
+              }}
               className={styles.fullWidth}
               size="small"
               MenuProps={{ disableScrollLock: true }}
@@ -292,17 +300,34 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               <MenuItem value="name">{t('list.sort.name')}</MenuItem>
               <MenuItem value="quality">{t('list.sort.quality')}</MenuItem>
               <MenuItem value="creation">{t('list.sort.creation')}</MenuItem>
+              <MenuItem value="random">{t('list.sort.random')}</MenuItem>
             </MuiSelect>
-            <MuiSelect
-              value={uiSearchParams.sortOrder}
-              onChange={(e) => updateFilters({ sortOrder: e.target.value })}
-              className={styles.fullWidth}
-              size="small"
-              MenuProps={{ disableScrollLock: true }}
-            >
-              <MenuItem value="desc">{t('list.sort.descending')}</MenuItem>
-              <MenuItem value="asc">{t('list.sort.ascending')}</MenuItem>
-            </MuiSelect>
+            {/* For random, direction is meaningless — swap the asc/desc select for a
+                reshuffle button. A button is required (not re-picking Random in the
+                MuiSelect): onChange only fires when the value changes, so re-selecting
+                the current value would never mint a new seed. onClick fires every time. */}
+            {uiSearchParams.sortBy === 'random' ? (
+              <MuiButton
+                variant="outlined"
+                size="small"
+                className={styles.fullWidth}
+                startIcon={<Shuffle />}
+                onClick={() => updateFilters({ sortSeed: newSortSeed() })}
+              >
+                {t('list.sort.reshuffle')}
+              </MuiButton>
+            ) : (
+              <MuiSelect
+                value={uiSearchParams.sortOrder}
+                onChange={(e) => updateFilters({ sortOrder: e.target.value })}
+                className={styles.fullWidth}
+                size="small"
+                MenuProps={{ disableScrollLock: true }}
+              >
+                <MenuItem value="desc">{t('list.sort.descending')}</MenuItem>
+                <MenuItem value="asc">{t('list.sort.ascending')}</MenuItem>
+              </MuiSelect>
+            )}
           </div>
         </div>
       )}

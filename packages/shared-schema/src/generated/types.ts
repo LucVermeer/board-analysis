@@ -945,10 +945,12 @@ export type ClimbSearchInput = {
   showOnlyCompleted?: InputMaybe<Scalars['Boolean']['input']>;
   /** Size ID */
   sizeId: Scalars['Int']['input'];
-  /** Field to sort by ('ascents', 'difficulty', 'name', 'quality', 'popular') */
+  /** Field to sort by ('ascents', 'difficulty', 'name', 'quality', 'popular', 'creation', 'random') */
   sortBy?: InputMaybe<Scalars['String']['input']>;
   /** Sort direction ('asc' or 'desc') */
   sortOrder?: InputMaybe<Scalars['String']['input']>;
+  /** Seed for the 'random' sort; keeps OFFSET pagination stable across pages for one shuffle */
+  sortSeed?: InputMaybe<Scalars['String']['input']>;
   /** Restrict results using this drawn zone */
   zoneBox?: InputMaybe<ZoneBoxInput>;
   /** How the zone should match climb holds. Defaults to allHolds when omitted. */

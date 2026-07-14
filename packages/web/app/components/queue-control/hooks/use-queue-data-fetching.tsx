@@ -92,6 +92,7 @@ export const useQueueDataFetching = ({
       minRating: normalizeMinRatingFilter(searchParams.minRating) || undefined,
       sortBy: searchParams.sortBy || 'ascents',
       sortOrder: searchParams.sortOrder || 'desc',
+      sortSeed: searchParams.sortSeed || undefined,
       name: searchParams.name || undefined,
       setter: searchParams.settername && searchParams.settername.length > 0 ? searchParams.settername : undefined,
       onlyTallClimbs: searchParams.onlyTallClimbs || undefined,

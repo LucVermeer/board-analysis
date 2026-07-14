@@ -135,6 +135,8 @@ export type ClimbSearchInput = {
   minRating?: number;
   sortBy?: string;
   sortOrder?: string;
+  // Seed for the 'random' sort, keeping OFFSET pagination stable across pages.
+  sortSeed?: string;
   name?: string;
   setter?: string[];
   setterId?: number;

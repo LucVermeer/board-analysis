@@ -409,4 +409,68 @@ describe('isOfflineSearchSupported', () => {
     ).toBe(false);
     expect(isOfflineSearchSupported(makeInput({ holdsFilter: { hold_5: { STARTING: 'include' } } }))).toBe(false);
   });
+
+  // Random needs no un-synced tables, so it stays offline-supported.
+  it('supports the random sort offline', () => {
+    expect(isOfflineSearchSupported(makeInput({ sortBy: 'random', sortSeed: '42' }))).toBe(true);
+  });
+});
+
+describe('searchClimbsLocal: random sort', () => {
+  let db: TestSqliteDb;
+
+  // 24 climbs with varied 32-char hex-ish uuids. The two low/high index nibbles
+  // land on positions the mixer samples (1 and 7), so every uuid is unique AND
+  // hashes to a distinct key (a plain period-16 fill would collide i with i+16).
+  const HEX = '0123456789abcdef';
+  const climbUuids = Array.from({ length: 24 }, (_unused, climbIndex) => {
+    const chars = Array.from({ length: 32 }, (_char, position) => HEX[(climbIndex * 7 + position * 13) % 16]);
+    chars[0] = HEX[climbIndex % 16];
+    chars[6] = HEX[Math.floor(climbIndex / 16) % 16];
+    return chars.join('');
+  });
+
+  beforeEach(async () => {
+    db = createTestDatabase();
+    await ensureMutationQueueTable(db);
+    await runMigrations(db);
+    for (const uuid of climbUuids) {
+      await insertClimb(db, { uuid });
+      await insertStat(db, { climbUuid: uuid, ascensionistCount: 1 });
+    }
+  });
+
+  const orderFor = async (sortSeed: string): Promise<string[]> => {
+    // Two pages drain the full set; concatenation is the flat shuffle order.
+    const page0 = await searchClimbsLocal(db, makeInput({ sortBy: 'random', sortSeed, pageSize: 12 }));
+    const page1 = await searchClimbsLocal(db, makeInput({ sortBy: 'random', sortSeed, pageSize: 12, page: 1 }));
+    return [...uuids(page0), ...uuids(page1)];
+  };
+
+  it('is deterministic for a fixed seed and paginates without gaps or dupes', async () => {
+    const first = await orderFor('12345');
+    const second = await orderFor('12345');
+    expect(second).toEqual(first);
+    // Every climb appears exactly once across the two pages.
+    expect(new Set(first).size).toBe(climbUuids.length);
+    expect([...first].sort()).toEqual([...climbUuids].sort());
+  });
+
+  it('falls back to a stable order for an empty/absent seed (Number("") === 0 guard)', async () => {
+    // An empty-string seed must not throw or pin to seed 0 differently than absent —
+    // both take the fallback seed, so the two orders match.
+    const emptySeed = await searchClimbsLocal(db, makeInput({ sortBy: 'random', sortSeed: '', pageSize: 24 }));
+    const noSeed = await searchClimbsLocal(db, makeInput({ sortBy: 'random', pageSize: 24 }));
+    expect(uuids(emptySeed)).toEqual(uuids(noSeed));
+    expect(uuids(emptySeed).length).toBe(climbUuids.length);
+  });
+
+  it('reshuffles across seeds (more than one distinct order)', async () => {
+    const orders = await Promise.all(['1', '7', '99', '2026', '31337'].map((seed) => orderFor(seed)));
+    const distinct = new Set(orders.map((order) => order.join(',')));
+    expect(distinct.size).toBeGreaterThan(1);
+    // A shuffle is not the default ascents/uuid order (uuid DESC tiebreak).
+    const ascentsOrder = uuids(await searchClimbsLocal(db, makeInput({ pageSize: 24 })));
+    expect(orders.every((order) => order.join(',') === ascentsOrder.join(','))).toBe(false);
+  });
 });

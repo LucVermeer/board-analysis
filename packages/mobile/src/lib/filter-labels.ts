@@ -53,6 +53,7 @@ export function buildSortLabel(t: TFunction<'climbs'>): (sortBy: string) => stri
     name: t('mobile.filter.sort.name'),
     popular: t('mobile.filter.sort.popular'),
     creation: t('mobile.filter.sort.creation'),
+    random: t('mobile.filter.sort.random'),
   };
   return (sortBy: string) => sortLabels[sortBy as SortOption];
 }

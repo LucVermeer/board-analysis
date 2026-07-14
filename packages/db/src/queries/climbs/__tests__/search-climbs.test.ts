@@ -19,6 +19,8 @@ void describe('getStatsDrivenSort', () => {
     assert.equal(getStatsDrivenSort('ascents', 'asc'), null);
     assert.equal(getStatsDrivenSort('quality', 'asc'), null);
     assert.equal(getStatsDrivenSort('creation', 'desc'), null);
+    // Random never uses the indexed path — it routes to the standard search.
+    assert.equal(getStatsDrivenSort('random', 'desc'), null);
   });
 });
 
@@ -145,8 +147,19 @@ void describe('normalizeSearchSortBy', () => {
     assert.equal(normalizeSearchSortBy('newest'), 'creation');
   });
 
+  void it('keeps the random sort key', () => {
+    assert.equal(normalizeSearchSortBy('random'), 'random');
+  });
+
   void it('normalizes sortBy while mapping raw search input', () => {
     assert.equal(mapSearchInputToParams({ sortBy: 'published_at' }).sortBy, 'creation');
     assert.equal(mapSearchInputToParams({ sortBy: 'unknown' }).sortBy, 'creation');
+  });
+
+  void it('threads the random sort seed through mapSearchInputToParams', () => {
+    assert.equal(mapSearchInputToParams({ sortBy: 'random', sortSeed: '12345' }).sortSeed, '12345');
+    // Empty / absent seed collapses to undefined so the query falls back to the constant salt.
+    assert.equal(mapSearchInputToParams({ sortBy: 'random', sortSeed: '' }).sortSeed, undefined);
+    assert.equal(mapSearchInputToParams({ sortBy: 'random' }).sortSeed, undefined);
   });
 });

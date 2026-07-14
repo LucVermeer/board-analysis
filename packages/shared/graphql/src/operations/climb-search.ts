@@ -141,6 +141,7 @@ export type ClimbSearchInputVariables = {
     minRating?: number;
     sortBy?: string;
     sortOrder?: string;
+    sortSeed?: string;
     name?: string;
     setter?: string[];
     onlyTallClimbs?: boolean;
