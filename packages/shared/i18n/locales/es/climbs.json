@@ -668,7 +668,8 @@
         "name": "Nombre",
         "popular": "Populares",
         "creation": "Más recientes",
-        "random": "Aleatorio"
+        "random": "Aleatorio",
+        "reshuffle": "Mezclar de nuevo"
       },
       "sortOrderLabel": "Dirección",
       "sortOrder": {

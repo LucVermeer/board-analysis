@@ -450,6 +450,14 @@ async function runStandardSearch(
   // Random sort: hash the uuid with a per-search seed so one shuffle is stable
   // across OFFSET-paginated pages, while a new seed reshuffles. Empty seed falls
   // back to a constant salt (md5 is never NULL, so pagination is still stable).
+  //
+  // Perf: md5(uuid || seed) is non-SARGable — no index satisfies it, so this is a
+  // full scan + sort of the filtered set (the whole board when unfiltered). That's
+  // inherent to "shuffle everything"; the LIMIT keeps the returned rows small but
+  // the sort still touches every matching row. It bypasses the SSR cache (see the
+  // web cachedSearchClimbs guard), so each request re-sorts. Acceptable at current
+  // catalog sizes; if it ever bites, gate on a filter threshold or a sampling
+  // strategy (e.g. TABLESAMPLE / a precomputed random column) rather than md5.
   const randomOrderExpr =
     sortBy === 'random' ? sql`md5(${boardClimbs.uuid} || ${searchParams.sortSeed || 'boardsesh'})` : null;
 

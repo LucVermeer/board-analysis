@@ -668,7 +668,8 @@
         "name": "Name",
         "popular": "Popular",
         "creation": "Newest",
-        "random": "Random"
+        "random": "Random",
+        "reshuffle": "Shuffle again"
       },
       "sortOrderLabel": "Order",
       "sortOrder": {

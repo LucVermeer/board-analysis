@@ -357,6 +357,9 @@ export function ClimbFilterSheet({
       setFiltersPatch(sortBy === 'random' ? { sortBy, sortSeed: newSortSeed() } : { sortBy, sortSeed: undefined }),
     [setFiltersPatch],
   );
+  // Explicit reshuffle affordance (mirrors web's "Shuffle again" button) so a new
+  // shuffle is discoverable without knowing that re-tapping the Random chip works.
+  const handleReshuffle = useCallback(() => setFiltersPatch({ sortSeed: newSortSeed() }), [setFiltersPatch]);
   const handleSortOrderChange = useCallback(
     (sortOrder: string) => setFiltersPatch({ sortOrder: sortOrder as SortOrder }),
     [setFiltersPatch],
@@ -961,8 +964,20 @@ export function ClimbFilterSheet({
                   />
                 ))}
               </View>
-              {/* Direction is meaningless for a random shuffle, so hide it. */}
-              {localFilters.sortBy !== 'random' && (
+              {/* For random, direction is meaningless — swap the asc/desc control for
+                  an explicit reshuffle button (re-tapping the Random chip also works). */}
+              {localFilters.sortBy === 'random' ? (
+                <>
+                  <View style={styles.subsectionGap} />
+                  <Button
+                    title={t('mobile.filter.sort.reshuffle')}
+                    onPress={handleReshuffle}
+                    variant="tonal"
+                    size="medium"
+                    icon="shuffle"
+                  />
+                </>
+              ) : (
                 <>
                   <View style={styles.subsectionGap} />
                   <Text variant="footnote" style={styles.subsectionLabel}>

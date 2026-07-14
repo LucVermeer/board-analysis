@@ -67,6 +67,7 @@ export const iconMap = {
 
   // Climb/Board
   mirror: { ios: 'arrow.triangle.2.circlepath', android: 'sync' },
+  shuffle: { ios: 'shuffle', android: 'shuffle-variant' },
   lightbulb: { ios: 'lightbulb', android: 'lightbulb-on-outline' },
   'lightbulb.fill': { ios: 'lightbulb.fill', android: 'lightbulb-on' },
   'lightbulb.slash': { ios: 'lightbulb.slash', android: 'lightbulb-off' },

@@ -199,14 +199,19 @@ if (!EXPLAIN_DB_URL) {
 
       const seededA = await uuidsFor('12345');
       const seededAgain = await uuidsFor('12345');
-      const differentSeed = await uuidsFor('99999');
       const ascents = (await searchClimbs(db, PARAMS, { page: 0, pageSize: 15, sortBy: 'ascents' })).climbs.map(
         (c) => c.uuid,
       );
 
       assert.deepEqual(seededAgain, seededA, 'same seed must produce the same order');
-      assert.notDeepEqual(differentSeed, seededA, 'a different seed must reshuffle');
       assert.notDeepEqual(seededA, ascents, 'random must not match the popularity order');
+
+      // Reshuffle across several seeds and expect a spread of distinct orders. A pair
+      // of seeds could collide by chance; a whole set collapsing to <3 orders would not.
+      const seeds = ['1', '7', '99', '2026', '31337'];
+      const orders = new Set<string>();
+      for (const seed of seeds) orders.add((await uuidsFor(seed)).join(','));
+      assert.ok(orders.size >= 3, `expected ≥3 distinct orders across ${seeds.length} seeds, got ${orders.size}`);
 
       // md5(uuid || seed) ASC, uuid DESC keeps pages disjoint under OFFSET pagination.
       const page0 = await uuidsFor('777', 0);
