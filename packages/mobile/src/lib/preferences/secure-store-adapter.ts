@@ -7,6 +7,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 import type { KeyValueStorage } from '@boardsesh/key-value-storage';
+import { SECURE_STORE_WRITE_OPTIONS } from '../secure-store-options';
 
 export const secureStorePreferences: KeyValueStorage = {
   async get<T>(key: string): Promise<T | null> {
@@ -22,7 +23,7 @@ export const secureStorePreferences: KeyValueStorage = {
     }
   },
   async set<T>(key: string, value: T): Promise<void> {
-    await SecureStore.setItemAsync(key, JSON.stringify(value));
+    await SecureStore.setItemAsync(key, JSON.stringify(value), SECURE_STORE_WRITE_OPTIONS);
   },
   async remove(key: string): Promise<void> {
     await SecureStore.deleteItemAsync(key);

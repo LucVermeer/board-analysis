@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { SORT_OPTIONS, STATUS_FILTER_VALUES, normalizeRetiredStatus } from '@boardsesh/climb-filters';
 import type { ClimbFilters } from './climb-filter-types';
 import { getFilterKey } from './filter-key';
+import { SECURE_STORE_WRITE_OPTIONS } from './secure-store-options';
 
 export { getFilterKey };
 
@@ -106,7 +107,7 @@ export async function addRecentFilter(label: string, filters: ClimbFilters, sear
     };
 
     const updated = [newEntry, ...deduplicated].slice(0, MAX_ITEMS);
-    await SecureStore.setItemAsync(RECENT_FILTERS_KEY, JSON.stringify(updated));
+    await SecureStore.setItemAsync(RECENT_FILTERS_KEY, JSON.stringify(updated), SECURE_STORE_WRITE_OPTIONS);
   } catch {
     // Storage failure is non-critical
   }

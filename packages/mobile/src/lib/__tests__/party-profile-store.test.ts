@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('expo-secure-store', () => {
   let storage: Record<string, string> = {};
   return {
+    AFTER_FIRST_UNLOCK: 'after-first-unlock',
     getItemAsync: vi.fn(async (key: string) => storage[key] ?? null),
     setItemAsync: vi.fn(async (key: string, value: string) => {
       storage[key] = value;
@@ -109,6 +110,9 @@ describe('getOrCreatePartyProfileIdSync', () => {
     expect(secureStore.setItem).toHaveBeenCalledWith(
       'boardsesh_party_profile',
       JSON.stringify({ id: 'generated-uuid' }),
+      // Background reads (analytics bootstrap runs before first unlock) must not
+      // reject — the sync write carries AFTER_FIRST_UNLOCK like every other writer.
+      { keychainAccessible: 'after-first-unlock' },
     );
   });
 

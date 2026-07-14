@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { randomUUID } from 'expo-crypto';
 import type { PartyProfile, PartyProfileStorage } from '@boardsesh/party-profile';
+import { SECURE_STORE_WRITE_OPTIONS } from './secure-store-options';
 
 const PARTY_PROFILE_KEY = 'boardsesh_party_profile';
 
@@ -17,7 +18,7 @@ export const partyProfileStorage: PartyProfileStorage = {
     }
   },
   async set(profile: PartyProfile): Promise<void> {
-    await SecureStore.setItemAsync(PARTY_PROFILE_KEY, JSON.stringify(profile));
+    await SecureStore.setItemAsync(PARTY_PROFILE_KEY, JSON.stringify(profile), SECURE_STORE_WRITE_OPTIONS);
   },
 };
 
@@ -40,7 +41,7 @@ export function getOrCreatePartyProfileIdSync(generateId: () => string = randomU
       if (typeof parsed.id === 'string' && parsed.id.length > 0) return parsed.id;
     }
     const created: PartyProfile = { id: generateId() };
-    SecureStore.setItem(PARTY_PROFILE_KEY, JSON.stringify(created));
+    SecureStore.setItem(PARTY_PROFILE_KEY, JSON.stringify(created), SECURE_STORE_WRITE_OPTIONS);
     return created.id;
   } catch (error) {
     // Dev-only: this failing means the PostHog bootstrap silently falls back to

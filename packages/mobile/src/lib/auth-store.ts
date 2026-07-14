@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { SECURE_STORE_WRITE_OPTIONS } from './secure-store-options';
 
 const JWT_KEY = 'boardsesh_jwt';
 const REFRESH_TOKEN_KEY = 'boardsesh_refresh_token';
@@ -18,9 +19,9 @@ export async function getTokenExpiresAt(): Promise<Date | null> {
 }
 
 export async function storeTokens(jwt: string, refreshToken: string, expiresAt: string): Promise<void> {
-  await SecureStore.setItemAsync(JWT_KEY, jwt);
-  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
-  await SecureStore.setItemAsync(EXPIRES_AT_KEY, expiresAt);
+  await SecureStore.setItemAsync(JWT_KEY, jwt, SECURE_STORE_WRITE_OPTIONS);
+  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken, SECURE_STORE_WRITE_OPTIONS);
+  await SecureStore.setItemAsync(EXPIRES_AT_KEY, expiresAt, SECURE_STORE_WRITE_OPTIONS);
 }
 
 export async function clearTokens(): Promise<void> {
