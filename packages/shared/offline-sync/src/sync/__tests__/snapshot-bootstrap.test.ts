@@ -1016,6 +1016,55 @@ describe('pullSync onScopeDownloadComplete', () => {
     expect(info.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('reports method "snapshot" when the import and the completing delta pull land in different cycles', async () => {
+    // Cycle 1 bootstraps the scope but dies mid-delta (connectivity drop on the
+    // stats pull) — markBootstrapDone has been persisted, but the scope never
+    // reaches the tail, so no completion event fires. Cycle 2 is a fresh
+    // pullSync whose in-memory bootstrap state is empty; the one-and-only
+    // completion event it emits must still read the persisted marker and
+    // attribute the download to the snapshot, not the trailing delta.
+    const filePath = join(workDir, 'cross-cycle-snapshot.db');
+    buildArtifact({
+      filePath,
+      climbs: [{ uuid: 'c1', compatibleSizeIds: [5] }],
+      stats: [{ climbUuid: 'c1', angle: 40 }],
+      climbsWatermark: CLIMBS_WATERMARK,
+      statsWatermark: STATS_WATERMARK,
+    });
+    const source = makeSnapshotSource({ manifest: makeManifest([makeEntry()]), fileForEntry: () => filePath });
+    const onScopeDownloadComplete = vi.fn();
+
+    const run1 = makeGraphqlFetch();
+    const failingStatsFetch = (async <T>(query: string, variables?: Record<string, unknown>): Promise<T> => {
+      if (query.includes('syncClimbStats')) throw new Error('network dropped mid-delta');
+      return run1.fetch<T>(query, variables);
+    }) as GraphqlFetchMock;
+    await expect(
+      pullSync(db, noopQueryClient(), failingStatsFetch, {
+        enabledBoards: ['kilter:1:5'],
+        snapshotSource: source,
+        onScopeDownloadComplete,
+      }),
+    ).rejects.toThrow('network dropped mid-delta');
+    expect(onScopeDownloadComplete).not.toHaveBeenCalled();
+    // The bootstrap itself committed before the delta died.
+    expect(await db.getFirstAsync('SELECT value FROM sync_meta WHERE key = ?', ['bootstrap-done:kilter:1:5'])).toEqual({
+      value: '1',
+    });
+
+    const run2 = makeGraphqlFetch();
+    await pullSync(db, noopQueryClient(), run2.fetch, {
+      enabledBoards: ['kilter:1:5'],
+      snapshotSource: source,
+      onScopeDownloadComplete,
+    });
+
+    expect(onScopeDownloadComplete).toHaveBeenCalledTimes(1);
+    const info = onScopeDownloadComplete.mock.calls[0][0] as { scopeKey: string; method: string };
+    expect(info.scopeKey).toBe('kilter:1:5');
+    expect(info.method).toBe('snapshot');
+  });
+
   it('reports method "paged" when no snapshotSource is configured (pure paged crawl)', async () => {
     const { fetch } = makeGraphqlFetch();
     const onScopeDownloadComplete = vi.fn();
