@@ -103,7 +103,9 @@ export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination
       minRating: searchParams.minRating,
       sortBy: searchParams.sortBy,
       sortOrder: searchParams.sortOrder,
-      sortSeed: searchParams.sortSeed,
+      // Only key on a non-empty seed. Random bypasses this cache entirely, so this
+      // just stops a stale `sortSeed` on a non-random URL from sharding the key.
+      ...(searchParams.sortSeed ? { sortSeed: searchParams.sortSeed } : {}),
       name: searchParams.name,
       settername: searchParams.settername,
       onlyTallClimbs: searchParams.onlyTallClimbs,

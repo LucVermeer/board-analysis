@@ -193,6 +193,28 @@ if (!EXPLAIN_DB_URL) {
       );
     });
 
+    void it('random sort is deterministic per seed, reshuffles across seeds, and paginates without overlap', async () => {
+      const uuidsFor = async (sortSeed: string, page = 0) =>
+        (await searchClimbs(db, PARAMS, { page, pageSize: 15, sortBy: 'random', sortSeed })).climbs.map((c) => c.uuid);
+
+      const seededA = await uuidsFor('12345');
+      const seededAgain = await uuidsFor('12345');
+      const differentSeed = await uuidsFor('99999');
+      const ascents = (await searchClimbs(db, PARAMS, { page: 0, pageSize: 15, sortBy: 'ascents' })).climbs.map(
+        (c) => c.uuid,
+      );
+
+      assert.deepEqual(seededAgain, seededA, 'same seed must produce the same order');
+      assert.notDeepEqual(differentSeed, seededA, 'a different seed must reshuffle');
+      assert.notDeepEqual(seededA, ascents, 'random must not match the popularity order');
+
+      // md5(uuid || seed) ASC, uuid DESC keeps pages disjoint under OFFSET pagination.
+      const page0 = await uuidsFor('777', 0);
+      const page1 = await uuidsFor('777', 1);
+      const overlap = page0.filter((uuid) => page1.includes(uuid));
+      assert.equal(overlap.length, 0, 'pages 0 and 1 must not overlap for a fixed seed');
+    });
+
     void it('count without stats filters drops the board_climb_stats LEFT JOIN (PG join elimination)', async () => {
       const { text, params } = buildCountSql({ page: 0, pageSize: 20 });
       const nodes = await explainNodes(text, params, false);

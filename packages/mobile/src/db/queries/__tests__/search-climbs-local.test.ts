@@ -456,6 +456,15 @@ describe('searchClimbsLocal: random sort', () => {
     expect([...first].sort()).toEqual([...climbUuids].sort());
   });
 
+  it('falls back to a stable order for an empty/absent seed (Number("") === 0 guard)', async () => {
+    // An empty-string seed must not throw or pin to seed 0 differently than absent —
+    // both take the fallback seed, so the two orders match.
+    const emptySeed = await searchClimbsLocal(db, makeInput({ sortBy: 'random', sortSeed: '', pageSize: 24 }));
+    const noSeed = await searchClimbsLocal(db, makeInput({ sortBy: 'random', pageSize: 24 }));
+    expect(uuids(emptySeed)).toEqual(uuids(noSeed));
+    expect(uuids(emptySeed).length).toBe(climbUuids.length);
+  });
+
   it('reshuffles across seeds (more than one distinct order)', async () => {
     const orders = await Promise.all(['1', '7', '99', '2026', '31337'].map((seed) => orderFor(seed)));
     const distinct = new Set(orders.map((order) => order.join(',')));

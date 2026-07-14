@@ -426,8 +426,10 @@ export async function searchClimbsLocal(db: OfflineDatabase, input: ClimbSearchI
   // Random uses the seeded mixer (order direction is meaningless); every other
   // sort uses its column + direction. Both keep the c.uuid DESC secondary tiebreak.
   const isRandom = sortBy === 'random';
+  // Number('') is 0 (not NaN), so guard on the raw string too — an empty/absent
+  // seed falls back to 1 rather than silently pinning every shuffle to seed 0.
   const seedInt = Number(input.sortSeed);
-  const randomSeedBind = Number.isFinite(seedInt) ? Math.trunc(seedInt) : 1;
+  const randomSeedBind = input.sortSeed && Number.isFinite(seedInt) ? Math.trunc(seedInt) : 1;
   const orderBy = isRandom
     ? `${RANDOM_ORDER_EXPR} ASC, c.uuid DESC`
     : `${sortColumnSql(sortBy)} ${sortOrder}, c.uuid DESC`;
