@@ -90,6 +90,7 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const minRating = normalizeMinRatingFilter(safeInput.minRating ?? DEFAULT_SEARCH_PARAMS.minRating);
   const sortBy = safeInput.sortBy ?? DEFAULT_SEARCH_PARAMS.sortBy;
   const sortOrder = safeInput.sortOrder ?? DEFAULT_SEARCH_PARAMS.sortOrder;
+  const sortSeed = safeInput.sortSeed ?? DEFAULT_SEARCH_PARAMS.sortSeed;
   const name = safeInput.name ?? DEFAULT_SEARCH_PARAMS.name;
   const onlyClassics = safeInput.onlyClassics ?? DEFAULT_SEARCH_PARAMS.onlyClassics;
   const onlyTallClimbs = safeInput.onlyTallClimbs ?? DEFAULT_SEARCH_PARAMS.onlyTallClimbs;
@@ -135,6 +136,9 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   }
   if (sortOrder !== DEFAULT_SEARCH_PARAMS.sortOrder) {
     params.sortOrder = sortOrder;
+  }
+  if (sortSeed && sortSeed !== DEFAULT_SEARCH_PARAMS.sortSeed) {
+    params.sortSeed = sortSeed;
   }
   if (name && name !== DEFAULT_SEARCH_PARAMS.name) {
     params.name = name;
@@ -227,6 +231,7 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   minAscents: 0,
   sortBy: 'ascents',
   sortOrder: 'desc',
+  sortSeed: '',
   name: '',
   onlyClassics: false,
   onlyTallClimbs: false,
@@ -317,13 +322,9 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     minAscents: normalizeMinAscentsFilter(Number(urlParams.get('minAscents') ?? DEFAULT_SEARCH_PARAMS.minAscents)),
     minGrade: Number(urlParams.get('minGrade') ?? DEFAULT_SEARCH_PARAMS.minGrade),
     minRating: normalizeMinRatingFilter(Number(urlParams.get('minRating') ?? DEFAULT_SEARCH_PARAMS.minRating)),
-    sortBy: (urlParams.get('sortBy') ?? DEFAULT_SEARCH_PARAMS.sortBy) as
-      | 'ascents'
-      | 'difficulty'
-      | 'name'
-      | 'quality'
-      | 'popular',
+    sortBy: (urlParams.get('sortBy') ?? DEFAULT_SEARCH_PARAMS.sortBy) as SearchRequestPagination['sortBy'],
     sortOrder: (urlParams.get('sortOrder') ?? DEFAULT_SEARCH_PARAMS.sortOrder) as 'asc' | 'desc',
+    sortSeed: urlParams.get('sortSeed') ?? DEFAULT_SEARCH_PARAMS.sortSeed,
     name: urlParams.get('name') ?? DEFAULT_SEARCH_PARAMS.name,
     onlyClassics: urlParams.get('onlyClassics') === 'true',
     onlyTallClimbs: urlParams.get('onlyTallClimbs') === 'true',

@@ -33,8 +33,11 @@ export type ClimbSearchParams = {
   page?: number;
   pageSize?: number;
   // Sorting
-  sortBy?: 'ascents' | 'difficulty' | 'name' | 'quality' | 'popular' | 'creation' | (string & {});
+  sortBy?: 'ascents' | 'difficulty' | 'name' | 'quality' | 'popular' | 'creation' | 'random' | (string & {});
   sortOrder?: 'asc' | 'desc' | (string & {});
+  // Seed for the 'random' sort. Salts md5(uuid || sortSeed) so a shuffle stays
+  // stable across OFFSET-paginated pages; a new seed reshuffles.
+  sortSeed?: string;
   // Filters
   gradeAccuracy?: number;
   minGrade?: number;
@@ -90,6 +93,7 @@ export type ClimbSearchInputLike = {
   minRating?: number | null;
   sortBy?: string | null;
   sortOrder?: string | null;
+  sortSeed?: string | null;
   name?: string | null;
   // GraphQL field is `setter`; web field is `settername`. Accept both — the
   // mapper picks `settername` if present, otherwise `setter`.
@@ -119,6 +123,7 @@ const SEARCH_SORT_ALIASES: Record<string, NonNullable<ClimbSearchParams['sortBy'
   quality: 'quality',
   popular: 'popular',
   creation: 'creation',
+  random: 'random',
   created_at: 'creation',
   published_at: 'creation',
 };
@@ -160,6 +165,7 @@ export function mapSearchInputToParams(input: ClimbSearchInputLike): ClimbSearch
     minRating: input.minRating || undefined,
     sortBy: normalizeSearchSortBy(input.sortBy),
     sortOrder: input.sortOrder || 'desc',
+    sortSeed: input.sortSeed || undefined,
     name: input.name || undefined,
     settername: setter && setter.length > 0 ? setter : undefined,
     onlyBenchmarks: input.onlyBenchmarks ?? undefined,

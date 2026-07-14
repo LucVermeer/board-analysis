@@ -161,10 +161,12 @@ export const climbTypeDefs = /* GraphQL */ `
     minAscents: Int
     "Minimum quality rating"
     minRating: Float
-    "Field to sort by ('ascents', 'difficulty', 'name', 'quality', 'popular')"
+    "Field to sort by ('ascents', 'difficulty', 'name', 'quality', 'popular', 'creation', 'random')"
     sortBy: String
     "Sort direction ('asc' or 'desc')"
     sortOrder: String
+    "Seed for the 'random' sort; keeps OFFSET pagination stable across pages for one shuffle"
+    sortSeed: String
     "Filter by climb name (partial match)"
     name: String
     "Filter by setter usernames"

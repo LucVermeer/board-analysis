@@ -447,6 +447,12 @@ async function runStandardSearch(
 
   const sortColumn = allowedSortColumns[sortBy] || sql`${boardClimbs.createdAt}`;
 
+  // Random sort: hash the uuid with a per-search seed so one shuffle is stable
+  // across OFFSET-paginated pages, while a new seed reshuffles. Empty seed falls
+  // back to a constant salt (md5 is never NULL, so pagination is still stable).
+  const randomOrderExpr =
+    sortBy === 'random' ? sql`md5(${boardClimbs.uuid} || ${searchParams.sortSeed || 'boardsesh'})` : null;
+
   const whereConditions = [
     ...filters.getClimbWhereConditions(),
     // Draft climbs may have NULL compatible_size_ids (denormalized columns not yet populated),
@@ -487,7 +493,11 @@ async function runStandardSearch(
     boardsesh_confidence: boardClimbGrades.confidence,
   };
 
-  const orderByClause = sortOrder === 'asc' ? sql`${sortColumn} ASC NULLS FIRST` : sql`${sortColumn} DESC NULLS LAST`;
+  const orderByClause = randomOrderExpr
+    ? sql`${randomOrderExpr} ASC`
+    : sortOrder === 'asc'
+      ? sql`${sortColumn} ASC NULLS FIRST`
+      : sql`${sortColumn} DESC NULLS LAST`;
 
   // LEFT JOIN preserves climbs without stats (they get NULL stats columns).
   const coreQuery = db

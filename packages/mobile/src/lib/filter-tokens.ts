@@ -98,6 +98,7 @@ export function getActiveFilterTokens({
           patchFilters({
             sortBy: DEFAULT_CLIMB_FILTER_STATE.sortBy,
             sortOrder: DEFAULT_CLIMB_FILTER_STATE.sortOrder,
+            sortSeed: undefined,
           }),
       });
     }

@@ -27,7 +27,7 @@ import type { BoardDetails } from '@/app/lib/types';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { track } from '@/app/lib/analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { describeGradeFilter } from '@boardsesh/climb-filters';
+import { describeGradeFilter, newSortSeed } from '@boardsesh/climb-filters';
 import {
   getQualityPanelSummary,
   getStatusPanelSummary,
@@ -281,7 +281,12 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
           <div className={styles.sortRow}>
             <MuiSelect
               value={uiSearchParams.sortBy}
-              onChange={(e) => updateFilters({ sortBy: e.target.value })}
+              onChange={(e) => {
+                const sortBy = e.target.value;
+                // Picking (or re-picking) Random mints a fresh seed for a new
+                // shuffle; switching away clears it so it drops out of the URL.
+                updateFilters(sortBy === 'random' ? { sortBy, sortSeed: newSortSeed() } : { sortBy, sortSeed: '' });
+              }}
               className={styles.fullWidth}
               size="small"
               MenuProps={{ disableScrollLock: true }}
@@ -292,17 +297,21 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               <MenuItem value="name">{t('list.sort.name')}</MenuItem>
               <MenuItem value="quality">{t('list.sort.quality')}</MenuItem>
               <MenuItem value="creation">{t('list.sort.creation')}</MenuItem>
+              <MenuItem value="random">{t('list.sort.random')}</MenuItem>
             </MuiSelect>
-            <MuiSelect
-              value={uiSearchParams.sortOrder}
-              onChange={(e) => updateFilters({ sortOrder: e.target.value })}
-              className={styles.fullWidth}
-              size="small"
-              MenuProps={{ disableScrollLock: true }}
-            >
-              <MenuItem value="desc">{t('list.sort.descending')}</MenuItem>
-              <MenuItem value="asc">{t('list.sort.ascending')}</MenuItem>
-            </MuiSelect>
+            {/* Direction is meaningless for a random shuffle, so hide it. */}
+            {uiSearchParams.sortBy !== 'random' && (
+              <MuiSelect
+                value={uiSearchParams.sortOrder}
+                onChange={(e) => updateFilters({ sortOrder: e.target.value })}
+                className={styles.fullWidth}
+                size="small"
+                MenuProps={{ disableScrollLock: true }}
+              >
+                <MenuItem value="desc">{t('list.sort.descending')}</MenuItem>
+                <MenuItem value="asc">{t('list.sort.ascending')}</MenuItem>
+              </MuiSelect>
+            )}
           </div>
         </div>
       )}

@@ -103,6 +103,7 @@ export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination
       minRating: searchParams.minRating,
       sortBy: searchParams.sortBy,
       sortOrder: searchParams.sortOrder,
+      sortSeed: searchParams.sortSeed,
       name: searchParams.name,
       settername: searchParams.settername,
       onlyTallClimbs: searchParams.onlyTallClimbs,
