@@ -53,6 +53,12 @@ vi.mock('@/app/components/providers/auth-modal-provider', () => ({
   useAuthModal: () => ({ openAuthModal: vi.fn() }),
 }));
 
+// Deterministic seed so the reshuffle assertion isn't probabilistic.
+vi.mock('@boardsesh/climb-filters', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@boardsesh/climb-filters')>()),
+  newSortSeed: () => '999',
+}));
+
 vi.mock('../search-climb-name-input', () => ({
   default: () => null,
 }));
@@ -360,5 +366,32 @@ describe('AccordionSearchForm — quality filter controls', () => {
       tapChip('V6');
       expect(mockSetLastUsedGrade).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('AccordionSearchForm — random sort', () => {
+  beforeEach(() => {
+    mockUpdateFilters.mockClear();
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
+  });
+
+  it('shows "Shuffle again" for random and mints a fresh seed on click', () => {
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, sortBy: 'random', sortSeed: '5' };
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sort' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shuffle again' }));
+
+    // newSortSeed is mocked to '999', so a click replaces the stale '5' seed —
+    // MuiButton onClick fires every click (unlike MuiSelect onChange, which is
+    // exactly why re-selecting Random in the dropdown couldn't reshuffle).
+    expect(mockUpdateFilters).toHaveBeenCalledWith({ sortSeed: '999' });
+  });
+
+  it('hides "Shuffle again" for a non-random sort', () => {
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, sortBy: 'quality' };
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sort' }));
+    expect(screen.queryByRole('button', { name: 'Shuffle again' })).toBeNull();
   });
 });

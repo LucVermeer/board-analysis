@@ -48,20 +48,27 @@ const SORT_ALIASES: Record<string, string> = {
 };
 
 // Deterministic seeded shuffle for the offline `random` sort. SQLite has no
-// md5(), so mix a weighted sum of a few spread-out uuid characters with the
-// per-search seed (`?`) via a multiplicative hash mod a large prime. COALESCE
-// guards positions past a short uuid's end (unicode('') is NULL). This won't
-// reproduce the server's md5 order byte-for-byte — an accepted offline gap, like
-// the ASCII-collation note above — but it's stable per seed so OFFSET pagination
-// doesn't reshuffle mid-scroll.
+// md5(), so mix a weighted sum of uuid characters with the per-search seed (`?`)
+// via a multiplicative hash mod a large prime. Sample every ~3rd position across
+// the string (not just a handful) so uuids sharing a common prefix/segment — e.g.
+// a timestamp-ordered v1 uuid — still land on distinct positions and don't
+// cluster. COALESCE guards positions past a short uuid's end (unicode('') is
+// NULL). This won't reproduce the server's md5 order byte-for-byte — an accepted
+// offline gap, like the ASCII-collation note above — but it's stable per seed so
+// OFFSET pagination doesn't reshuffle mid-scroll.
 const RANDOM_ORDER_EXPR = `(
   (COALESCE(unicode(substr(c.uuid, 1, 1)), 0) * 131
-   + COALESCE(unicode(substr(c.uuid, 7, 1)), 0) * 137
-   + COALESCE(unicode(substr(c.uuid, 13, 1)), 0) * 139
-   + COALESCE(unicode(substr(c.uuid, 19, 1)), 0) * 149
-   + COALESCE(unicode(substr(c.uuid, 25, 1)), 0) * 151
-   + COALESCE(unicode(substr(c.uuid, 31, 1)), 0) * 157
-   + LENGTH(c.uuid) * 163
+   + COALESCE(unicode(substr(c.uuid, 4, 1)), 0) * 137
+   + COALESCE(unicode(substr(c.uuid, 7, 1)), 0) * 139
+   + COALESCE(unicode(substr(c.uuid, 10, 1)), 0) * 149
+   + COALESCE(unicode(substr(c.uuid, 13, 1)), 0) * 151
+   + COALESCE(unicode(substr(c.uuid, 16, 1)), 0) * 157
+   + COALESCE(unicode(substr(c.uuid, 19, 1)), 0) * 163
+   + COALESCE(unicode(substr(c.uuid, 22, 1)), 0) * 167
+   + COALESCE(unicode(substr(c.uuid, 25, 1)), 0) * 173
+   + COALESCE(unicode(substr(c.uuid, 28, 1)), 0) * 179
+   + COALESCE(unicode(substr(c.uuid, 31, 1)), 0) * 181
+   + LENGTH(c.uuid) * 191
    + ?) * 2654435761
 ) % 2147483647`;
 
