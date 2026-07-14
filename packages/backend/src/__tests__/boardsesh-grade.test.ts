@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 // Mock the read client: capture what the resolver selects and feed it canned
-// rows. The chain mirrors dbRead.select().from().where().limit().
+// rows. The chain mirrors dbRead.select().from().leftJoin().where().limit().
 const { selectRows, dbReadMock } = vi.hoisted(() => {
   const state: { rows: unknown[] } = { rows: [] };
   const chain = {
     from: vi.fn(() => chain),
+    leftJoin: vi.fn(() => chain),
     where: vi.fn(() => chain),
     limit: vi.fn(async () => state.rows),
   };
