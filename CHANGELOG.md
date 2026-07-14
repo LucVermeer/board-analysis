@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-14
+
+### Fixed
+
+- Log a tick from a climb's long-press menu on the player screen without the tick sheet snapping shut before you can save it. ([#3600](https://github.com/boardsesh/boardsesh/pull/3600))
+
 ## 2026-07-11
 
 ### Fixed

@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-11T01:45:42.821Z",
+  "generatedAt": "2026-07-14T09:51:35.654Z",
   "entries": [
+    {
+      "prNumber": 3600,
+      "category": "fixed",
+      "title": "Log a tick from a climb's long-press menu on the player screen without the tick sheet snapping shut before you can save it.",
+      "mergedAt": "2026-07-14T09:50:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3600"
+    },
     {
       "prNumber": 3595,
       "category": "fixed",
