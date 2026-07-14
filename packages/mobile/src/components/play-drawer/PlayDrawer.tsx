@@ -232,6 +232,10 @@ export function PlayDrawer({
   // Pinned climb/board the reaction menu opened the beta sheet for; null falls back
   // to the live displayedClimb (the "+" button path). See #3505.
   const [betaVideoTarget, setBetaVideoTarget] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  // Pinned climb/board the reaction menu opened the tick sheet for; null falls back
+  // to the live displayedClimb (the FAB path). Mirrors betaVideoTarget so a party-
+  // session queue/angle change mid-menu can't retarget the sheet.
+  const [tickTarget, setTickTarget] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
@@ -658,6 +662,17 @@ export function PlayDrawer({
     setAddBetaVideoOpen(true);
   }, []);
 
+  // Reaction-menu tick: open the drawer's OWN in-tree tick sheet (it stacks above
+  // the `/play` modal) instead of the root LogAscent sheet, which mounts behind
+  // `/play` — presenting it dismisses `/play` and the tick sheet closes on its own.
+  // Pin the climb/board the menu was opened for so a mid-menu queue change can't
+  // retarget it. QuickTickOpened is tracked by useClimbActions (source climb_actions).
+  const handleOpenTickForClimb = useCallback((targetClimb: Climb, targetBoardConfig: BoardConfig) => {
+    resetZoomRef.current?.();
+    setTickTarget({ climb: targetClimb, boardConfig: targetBoardConfig });
+    setIsTickBarActive(true);
+  }, []);
+
   // Don't clear betaVideoTarget here: the sheet is still animating out and reads
   // from it, so nulling it mid-dismiss would swap the shown climb for a frame. The
   // next open overwrites it (the "+" path to null, the reaction path to its snapshot).
@@ -672,11 +687,14 @@ export function PlayDrawer({
       // Hand the reaction menu the drawer's OWN beta opener so the share-your-beta
       // sheet presents inside the `/play` modal (above it) rather than the root
       // sheet, which can't stack over the fullScreenModal (#3505).
-      onOpenClimbActions(displayedClimb, undefined, { onAddBetaVideo: handleOpenAddBetaVideoForClimb });
+      onOpenClimbActions(displayedClimb, undefined, {
+        onAddBetaVideo: handleOpenAddBetaVideoForClimb,
+        onTick: handleOpenTickForClimb,
+      });
       return;
     }
     setActiveSubDrawer('actions');
-  }, [onOpenClimbActions, displayedClimb, handleOpenAddBetaVideoForClimb]);
+  }, [onOpenClimbActions, displayedClimb, handleOpenAddBetaVideoForClimb, handleOpenTickForClimb]);
 
   const handleScrollTowardBelowFold = useCallback(() => {
     setBelowFoldContentRequested(true);
@@ -705,6 +723,8 @@ export function PlayDrawer({
   const handleTickFabPress = useCallback(() => {
     resetZoomRef.current?.();
     trackTickOpened();
+    // Null target → the in-tree tick sheet tracks the live displayedClimb.
+    setTickTarget(null);
     setIsTickBarActive(true);
   }, [trackTickOpened]);
 
@@ -1046,26 +1066,33 @@ export function PlayDrawer({
       {/* Tick sheet — a 60% sub-drawer so the climb image stays visible while
           logging. Presents over the player route. The displayedClimb guard stays;
           the host is mounted on first open. */}
-      {mountLogAscent && displayedClimb && (
-        <LogAscentSheet
-          visible={isTickBarActive}
-          onClose={handleTickBarDismiss}
-          climbUuid={displayedClimb.uuid}
-          boardName={boardName}
-          angle={angle}
-          isMirror={isMirrored}
-          isBenchmark={displayedClimb.benchmark_difficulty != null}
-          layoutId={layoutId}
-          sizeId={sizeId}
-          setIds={setIds}
-          sessionId={sessionId}
-          // The tick picker opens on the Boardsesh grade (when the toggle is on and
-          // a trusted one exists) instead of the Aurora consensus, so a logged grade
-          // defaults to what the app now shows. Only the DEFAULT changes — the saved
-          // tick value stays on the Aurora scale and null until the climber picks.
-          consensusGradeName={resolveTickDefaultGradeName(displayedClimb, boardseshActive) ?? displayedClimb.difficulty}
-        />
-      )}
+      {mountLogAscent &&
+        displayedClimb &&
+        (() => {
+          // The reaction-menu path pins its own climb/board snapshot; the FAB path
+          // leaves tickTarget null and tracks the live displayedClimb + active board.
+          const tickClimb = tickTarget?.climb ?? displayedClimb;
+          return (
+            <LogAscentSheet
+              visible={isTickBarActive}
+              onClose={handleTickBarDismiss}
+              climbUuid={tickClimb.uuid}
+              boardName={tickTarget?.boardConfig.boardName ?? boardName}
+              angle={tickTarget?.boardConfig.angle ?? angle}
+              isMirror={isMirrored}
+              isBenchmark={tickClimb.benchmark_difficulty != null}
+              layoutId={tickTarget?.boardConfig.layoutId ?? layoutId}
+              sizeId={tickTarget?.boardConfig.sizeId ?? sizeId}
+              setIds={tickTarget?.boardConfig.setIds ?? setIds}
+              sessionId={sessionId}
+              // The tick picker opens on the Boardsesh grade (when the toggle is on and
+              // a trusted one exists) instead of the Aurora consensus, so a logged grade
+              // defaults to what the app now shows. Only the DEFAULT changes — the saved
+              // tick value stays on the Aurora scale and null until the climber picks.
+              consensusGradeName={resolveTickDefaultGradeName(tickClimb, boardseshActive) ?? tickClimb.difficulty}
+            />
+          );
+        })()}
 
       {/* BLE controls (Re-light / Turn off all lights / Disconnect), opened by the
           lightbulb long-press. Hosted here so it presents ABOVE the player route

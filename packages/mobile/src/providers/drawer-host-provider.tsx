@@ -62,6 +62,13 @@ export type OpenClimbActionsOptions = {
    *  above the `/play` fullScreenModal (a root-tree sheet can't — see #3505). It
    *  receives the climb/board snapshot the menu was opened for. */
   onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
+  /** When set, the "Tick" action runs this instead of opening the root LogAscent
+   *  sheet. The play drawer passes its own in-tree opener so the tick sheet stacks
+   *  above the `/play` transparentModal — the root sheet mounts BEHIND it, and
+   *  presenting it forces UIKit to dismiss `/play`, dragging the tick sheet down
+   *  with it (the "tick sheet closes immediately" bug). Same fix shape as
+   *  `onAddBetaVideo` (#3505). Receives the climb/board snapshot the menu opened for. */
+  onTick?: (climb: Climb, boardConfig: BoardConfig) => void;
 };
 
 export type LogAscentInput = {
@@ -327,6 +334,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     boardConfig: BoardConfig;
     onEditEntry?: () => void;
     onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
+    onTick?: (climb: Climb, boardConfig: BoardConfig) => void;
   } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
@@ -515,6 +523,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         boardConfig,
         onEditEntry: options?.onEditEntry,
         onAddBetaVideo: options?.onAddBetaVideo,
+        onTick: options?.onTick,
       });
     },
     [],
@@ -905,6 +914,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
             isAuthenticated={isAuthenticated}
             onEditEntry={climbActions.onEditEntry}
             onAddBetaVideo={climbActions.onAddBetaVideo}
+            onTick={climbActions.onTick}
             reduceMotion={reduceMotion}
             onClose={closeClimbActions}
           />

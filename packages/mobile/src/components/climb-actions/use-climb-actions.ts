@@ -81,6 +81,16 @@ type UseClimbActionsArgs = {
    * the menu is open can't retarget it. Omit it and beta opens the root sheet.
    */
   onAddBetaVideo?: (climb: Climb, boardConfig: BoardConfig) => void;
+  /**
+   * In-tree opener for the "Tick" action. The play drawer passes its own opener
+   * so the tick sheet stacks above the `/play` transparentModal. The root
+   * `openLogAscent` sheet mounts BEHIND `/play`; presenting it forces UIKit to
+   * dismiss `/play`, dragging the tick sheet down with it — the "tick sheet
+   * closes immediately" bug. Same fix shape as `onAddBetaVideo` (#3505). Receives
+   * the same `climb`/`boardConfig` snapshot the fallback path uses. Omit it and
+   * ticking opens the root sheet (correct off `/play`, where nothing conflicts).
+   */
+  onTick?: (climb: Climb, boardConfig: BoardConfig) => void;
 };
 
 // Mirrors web's constructClimbInfoUrl: Kilter no longer has a public app URL.
@@ -99,6 +109,7 @@ export function useClimbActions({
   onAfterAction,
   onSelectPlaylist,
   onAddBetaVideo,
+  onTick,
 }: UseClimbActionsArgs): ClimbActionItem[] {
   const { t } = useTranslation('climbs');
   const router = useRouter();
@@ -231,17 +242,25 @@ export function useClimbActions({
       color: successColor,
       run: () => {
         track(SHARED_EVENTS.QuickTickOpened, { climbUuid: climb.uuid, layoutId, source: 'climb_actions' });
-        openLogAscent({
-          climbUuid: climb.uuid,
-          boardName,
-          angle,
-          isMirror: false,
-          isBenchmark: !!climb.benchmark_difficulty,
-          layoutId,
-          sizeId,
-          setIds,
-          consensusGradeName: climb.difficulty,
-        });
+        // In-tree opener (play drawer) stacks the tick sheet above the `/play`
+        // modal; the root sheet can't — presenting it dismisses `/play` and the
+        // tick sheet closes immediately. Both take the climb/board snapshot so a
+        // live queue change can't retarget it.
+        if (onTick) {
+          onTick(climb, boardConfig);
+        } else {
+          openLogAscent({
+            climbUuid: climb.uuid,
+            boardName,
+            angle,
+            isMirror: false,
+            isBenchmark: !!climb.benchmark_difficulty,
+            layoutId,
+            sizeId,
+            setIds,
+            consensusGradeName: climb.difficulty,
+          });
+        }
         after();
       },
     });
@@ -362,6 +381,7 @@ export function useClimbActions({
     onEditEntry,
     onSelectPlaylist,
     onAddBetaVideo,
+    onTick,
     after,
     t,
     actionColors,
