@@ -31,6 +31,7 @@ import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer'
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
+import { safeExternalHref } from '@/app/lib/safe-external-url';
 import {
   GET_GYM,
   DELETE_GYM,
@@ -176,17 +177,17 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
                   </MuiTypography>
                 </Box>
               )}
-              {gym.website && (
+              {safeExternalHref(gym.website) && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                   <LanguageOutlined sx={{ fontSize: 16, color: 'var(--neutral-400)' }} />
                   <MuiLink
-                    href={gym.website}
+                    href={safeExternalHref(gym.website) ?? undefined}
                     target="_blank"
                     rel="noopener noreferrer"
                     variant="body2"
                     underline="hover"
                   >
-                    {gym.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    {(gym.website ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '')}
                   </MuiLink>
                 </Box>
               )}

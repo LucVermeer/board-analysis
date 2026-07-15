@@ -11,7 +11,7 @@ import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import TvOutlined from '@mui/icons-material/TvOutlined';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';
-import type { Gym, GymKiosk, UserBoard } from '@boardsesh/shared-schema';
+import type { Gym, UserBoard } from '@boardsesh/shared-schema';
 import {
   GET_GYM_BY_SLUG,
   GET_GYM_BOARDS,
@@ -19,30 +19,19 @@ import {
   type GetGymBySlugQueryResponse,
   type GetGymBoardsQueryResponse,
   type GetGymKioskQueryResponse,
+  type GymKioskOperationResult,
 } from '@boardsesh/graphql/operations';
+import { boardTypeLabel } from '@boardsesh/board-constants';
 import { getServerAuthToken } from '@/app/lib/auth/server-auth';
 import { executeAuthenticatedGraphQL } from '@/app/lib/graphql/server-graphql';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata, createNoIndexMetadata, absoluteUrl } from '@/app/lib/seo/metadata';
+import { safeExternalHref } from '@/app/lib/safe-external-url';
 import { themeTokens } from '@/app/theme/theme-config';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import GymPageManageButton from './gym-page-manage-button';
-
-// Brand display names — proper nouns, not translated copy.
-// TODO: this map is duplicated across board-detail, board cards, and the manage
-// Boards tab — extract a shared helper (e.g. @boardsesh/board-constants) instead
-// of adding another copy.
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  kilter: 'Kilter',
-  tension: 'Tension',
-  moonboard: 'MoonBoard',
-  decoy: 'Decoy',
-  touchstone: 'Touchstone',
-  grasshopper: 'Grasshopper',
-  soill: 'So iLL',
-};
 
 type GymRouteProps = {
   params: Promise<{ gym_slug: string }>;
@@ -58,7 +47,10 @@ const fetchGymBySlug = cache(async (slug: string, token: string | undefined): Pr
   }
 });
 
-async function fetchDefaultKiosk(gymSlug: string, token: string | undefined): Promise<GymKiosk | null> {
+async function fetchDefaultKiosk(
+  gymSlug: string,
+  token: string | undefined,
+): Promise<GymKioskOperationResult | null> {
   try {
     const response = await executeAuthenticatedGraphQL<GetGymKioskQueryResponse>(
       GET_GYM_KIOSK,
@@ -120,6 +112,9 @@ export default async function GymPage(props: GymRouteProps) {
   const [kiosk, boards] = await Promise.all([fetchDefaultKiosk(gym_slug, token), fetchGymBoards(gym.uuid, token)]);
 
   const logoSrc = gym.logoUrl ?? gym.imageUrl ?? null;
+  // Render-side XSS guard: only http(s) URLs become clickable (legacy rows may
+  // predate the backend's GymWebsiteSchema scheme check).
+  const websiteHref = safeExternalHref(gym.website);
 
   const jsonLd = gym.isPublic
     ? {
@@ -129,7 +124,7 @@ export default async function GymPage(props: GymRouteProps) {
         url: absoluteUrl(`/gym/${gym_slug}`),
         ...(gym.description ? { description: gym.description } : {}),
         ...(gym.address ? { address: gym.address } : {}),
-        ...(gym.website ? { sameAs: gym.website } : {}),
+        ...(websiteHref ? { sameAs: websiteHref } : {}),
         ...(logoSrc ? { image: logoSrc } : {}),
       }
     : null;
@@ -192,9 +187,9 @@ export default async function GymPage(props: GymRouteProps) {
               {t('gymPage.seeOnTheWall')}
             </Button>
           )}
-          {gym.website && (
+          {websiteHref && (
             <MuiLink
-              href={gym.website}
+              href={websiteHref}
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
@@ -241,7 +236,7 @@ export default async function GymPage(props: GymRouteProps) {
                     {board.name}
                   </Typography>
                   <Typography component="span" variant="body2" color="text.secondary">
-                    {`${BOARD_TYPE_LABELS[board.boardType] ?? board.boardType} · ${board.angle}°`}
+                    {`${boardTypeLabel(board.boardType)} · ${board.angle}°`}
                   </Typography>
                 </MuiLink>
               </Box>

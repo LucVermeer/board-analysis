@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import List from '@mui/material/List';
@@ -32,27 +32,10 @@ import {
   type LinkBoardToGymMutationVariables,
 } from '@boardsesh/graphql/operations';
 import type { UserBoard } from '@boardsesh/shared-schema';
+import { boardTypeLabel } from '@boardsesh/board-constants';
 import { themeTokens } from '@/app/theme/theme-config';
 import { canManageGymBoards, canUnlinkBoard, linkableBoards } from './gym-board-permissions';
 import type { GymManageTabProps } from './tab-props';
-
-// Brand display names — proper nouns, not translated copy.
-// TODO: this map is duplicated across board-detail, board cards, and the public
-// gym page — extract a shared helper (e.g. @boardsesh/board-constants) instead
-// of adding a seventh copy.
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  kilter: 'Kilter',
-  tension: 'Tension',
-  moonboard: 'MoonBoard',
-  decoy: 'Decoy',
-  touchstone: 'Touchstone',
-  grasshopper: 'Grasshopper',
-  soill: 'So iLL',
-};
-
-function boardTypeLabel(boardType: string): string {
-  return BOARD_TYPE_LABELS[boardType] ?? boardType;
-}
 
 function VisibilityChip({ board }: { board: Pick<UserBoard, 'isPublic' | 'isUnlisted'> }) {
   const { t } = useTranslation('kiosk');
@@ -79,6 +62,9 @@ export default function GymBoardsTab({ gym }: GymManageTabProps) {
   // owning the board. Editors (canEdit) still see the list, read-only.
   const canLinkBoards = canManageGymBoards(gym, viewerUserId);
 
+  // Link and unlink are the SAME backend mutation — LINK_BOARD_TO_GYM with
+  // gymUuid: null performs the unlink. Two instances only so each direction
+  // gets its own success/error toast copy.
   const linkMutation = useEntityMutation<LinkBoardToGymMutationResponse, LinkBoardToGymMutationVariables>(
     LINK_BOARD_TO_GYM,
     { successMessage: t('manage.boards.linked'), errorMessage: t('manage.boards.linkFailed') },
@@ -118,11 +104,15 @@ export default function GymBoardsTab({ gym }: GymManageTabProps) {
     }
   };
 
-  const handleLink = async (boardUuid: string) => {
+  // Returns whether the link succeeded so the dialog only drops the candidate
+  // on an actual success (useEntityMutation resolves null on failure).
+  const handleLink = async (boardUuid: string): Promise<boolean> => {
     const result = await linkMutation.execute({ input: { boardUuid, gymUuid: gym.uuid } });
     if (result) {
       await fetchBoards();
+      return true;
     }
+    return false;
   };
 
   return (
@@ -242,7 +232,8 @@ type AddBoardDialogProps = {
   viewerUserId: string | null;
   linkedBoardUuids: Set<string>;
   onClose: () => void;
-  onLink: (boardUuid: string) => Promise<void>;
+  /** Resolves true when the link mutation succeeded. */
+  onLink: (boardUuid: string) => Promise<boolean>;
 };
 
 function AddBoardDialog({ open, gymUuid, viewerUserId, linkedBoardUuids, onClose, onLink }: AddBoardDialogProps) {
@@ -250,6 +241,16 @@ function AddBoardDialog({ open, gymUuid, viewerUserId, linkedBoardUuids, onClose
   const { token } = useWsAuthToken();
   const [candidates, setCandidates] = useState<UserBoard[] | null>(null);
   const [linkingUuid, setLinkingUuid] = useState<string | null>(null);
+
+  // The candidates fetch runs once per dialog open. `linkedBoardUuids` changes
+  // after every successful link (the parent refetches gymBoards), so reading it
+  // through a ref keeps it out of the effect deps — otherwise each link would
+  // re-fetch myBoards and blank the open dialog behind a spinner. While the
+  // dialog is open the list is maintained optimistically in handleLinkClick.
+  const linkedBoardUuidsRef = useRef(linkedBoardUuids);
+  useEffect(() => {
+    linkedBoardUuidsRef.current = linkedBoardUuids;
+  }, [linkedBoardUuids]);
 
   useEffect(() => {
     if (!open || !token) return;
@@ -264,7 +265,7 @@ function AddBoardDialog({ open, gymUuid, viewerUserId, linkedBoardUuids, onClose
         if (cancelled) return;
         // ownerId, not isOwned — myBoards includes followed boards, and isOwned
         // is the physical-ownership column, not the account that may link it.
-        setCandidates(linkableBoards(data.myBoards.boards, gymUuid, linkedBoardUuids, viewerUserId));
+        setCandidates(linkableBoards(data.myBoards.boards, gymUuid, linkedBoardUuidsRef.current, viewerUserId));
       } catch (error) {
         console.error('Failed to load your boards:', error);
         if (!cancelled) setCandidates([]);
@@ -273,13 +274,16 @@ function AddBoardDialog({ open, gymUuid, viewerUserId, linkedBoardUuids, onClose
     return () => {
       cancelled = true;
     };
-  }, [open, token, gymUuid, linkedBoardUuids, viewerUserId]);
+  }, [open, token, gymUuid, viewerUserId]);
 
   const handleLinkClick = async (boardUuid: string) => {
     setLinkingUuid(boardUuid);
     try {
-      await onLink(boardUuid);
-      setCandidates((prev) => (prev === null ? prev : prev.filter((board) => board.uuid !== boardUuid)));
+      const linked = await onLink(boardUuid);
+      // Keep the candidate on failure so the user can retry without reopening.
+      if (linked) {
+        setCandidates((prev) => (prev === null ? prev : prev.filter((board) => board.uuid !== boardUuid)));
+      }
     } finally {
       setLinkingUuid(null);
     }
