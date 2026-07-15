@@ -106,6 +106,7 @@ Read relevant `docs/` before working on the matching area; update docs when the 
 
 - `docs/websocket-implementation.md` — WebSocket party session architecture
 - `docs/boardsesh-grade.md` — Boardsesh grade: the data-science-backed universal climb grade (data sources + quirks, the empirical-Bayes model and every coefficient, validation gates, limitations, rejected alternatives, contributor roadmap)
+- `docs/board-snapshots.md` — nightly SQLite board-catalog snapshots (export job, client bootstrap, ops runbook); `docs/board-snapshots-dataset.md` — the same snapshots as a public downloadable dataset
 - `docs/ai-design-guidelines.md` — Velvet Send design system (mobile-canonical: palette, typography, tokens, Liquid Glass / Material variants; web still on the legacy rose/sage palette, pending migration)
 - `docs/live-activity-push-testing.md` — APNs Live Activity push testing
 - `docs/logging.md` — backend structured logger (winston)
