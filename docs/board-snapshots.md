@@ -220,6 +220,16 @@ pre-import empty result set.
 
 ## Mobile wiring
 
+- **Per-connection ATTACH invariant (BOARDSESH-AA)**: expo-sqlite's
+  `withExclusiveTransactionAsync` runs its task on a **new native connection**
+  (`useNewConnection: true`), and SQLite `ATTACH`es are per-connection — anything attached on the
+  main connection does not exist inside the task. The bootstrap therefore attaches, verifies, and
+  imports entirely on the transaction's own connection (`snapshot-bootstrap.ts`, see the
+  COMMIT → ATTACH → `BEGIN EXCLUSIVE` bracket). The node test double mirrors this: a **file-backed**
+  `createTestDatabase(path)` opens a separate connection for exclusive transactions, so any suite
+  exercising ATTACH/temp-table/PRAGMA state inside a transaction must be file-backed — the
+  in-memory double's same-connection transactions are what let this bug ship at 100% test green.
+
 - **`EXPO_PUBLIC_SNAPSHOT_BASE_URL`** (`packages/mobile/src/lib/env.ts`) — base URL for
   `<base>/manifest.json`; each manifest entry carries its own absolute artifact URL, so this constant is
   only used for the manifest fetch. There is deliberately **no production fallback**: if the env var is

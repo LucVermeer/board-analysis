@@ -468,9 +468,21 @@ async function verifySnapshotMeta(db: SqlExecutor): Promise<void> {
  * checks it, verifies the meta, then in ONE exclusive transaction imports the
  * scoped climbs + stats, reconciles stale scoped rows absent from the artifact,
  * and stamps both resume checkpoints at the scoped imported-row watermarks.
- * ATTACH/DETACH bracket the transaction (SQLite forbids ATTACH inside one).
  * A wipe that starts (or completes) mid-import rolls the transaction back and
  * throws SnapshotWipedError — no rows, no checkpoints.
+ *
+ * CONNECTION INVARIANT (BOARDSESH-AA): expo-sqlite's
+ * `withExclusiveTransactionAsync` runs its task on a NEW native connection
+ * (`useNewConnection: true`), and SQLite ATTACHes are per-connection — an
+ * ATTACH issued on the main connection does not exist inside the task. So
+ * EVERYTHING that touches the snapshot alias (attach, quick_check, meta
+ * verification, watermarks, reconcile, import) runs inside the task, on the
+ * transaction's own connection. SQLite forbids ATTACH inside a transaction and
+ * the expo wrapper opens a deferred BEGIN before the task runs, so the task
+ * first COMMITs that empty transaction, attaches in autocommit mode, then opens
+ * the real `BEGIN EXCLUSIVE` — which the wrapper's trailing COMMIT/ROLLBACK
+ * closes. The wrapper tears the connection down afterwards, which implicitly
+ * detaches the artifact on every path (success, import failure, or wipe).
  */
 export async function bootstrapScopeFromSnapshot(params: {
   db: OfflineDatabase;
@@ -489,28 +501,38 @@ export async function bootstrapScopeFromSnapshot(params: {
   // a wipe cycle that completes during the integrity checks is caught.
   const startEpoch = getWipeEpoch();
 
-  let attached = false;
+  let watermarks: Record<SnapshotTableName, SyncCheckpoint> | null = null;
   try {
-    // Defensive detach first: a failed DETACH from a previous scope in this run
-    // (swallowed in the finally below) would leave the alias attached and make
-    // this ATTACH fail for every remaining scope. Clearing it here confines a
-    // DETACH failure to its own scope.
-    await db.execAsync(`DETACH DATABASE ${SNAPSHOT_ALIAS}`).catch(() => {});
-    await db.execAsync(`ATTACH DATABASE '${filePath.replace(/'/g, "''")}' AS ${SNAPSHOT_ALIAS}`);
-    attached = true;
-
-    const integrity = await db.getAllAsync<{ quick_check: string }>(`PRAGMA ${SNAPSHOT_ALIAS}.quick_check`);
-    if (integrity.length !== 1 || integrity[0].quick_check !== 'ok') {
-      throw new Error(`snapshot bootstrap: quick_check failed: ${integrity.map((row) => row.quick_check).join('; ')}`);
-    }
-
-    await verifySnapshotMeta(db);
-    const watermarks = await scopedWatermarks(db, scope);
-
-    if (isSigningOut() || getWipeEpoch() !== startEpoch) throw new SnapshotWipedError();
-
     await db.withExclusiveTransactionAsync(async (txn) => {
-      if (isSigningOut() || getWipeEpoch() !== startEpoch) throw new SnapshotWipedError();
+      // Close the wrapper's (empty, deferred) transaction so ATTACH is legal,
+      // then re-open below. Every throw in this autocommit window must restore
+      // an open transaction first — the wrapper's unconditional ROLLBACK would
+      // otherwise itself fail and mask the real error (which the caller
+      // dispatches on, e.g. SnapshotSchemaStaleError vs a counted failure).
+      await txn.execAsync('COMMIT');
+      try {
+        await txn.execAsync(`ATTACH DATABASE '${filePath.replace(/'/g, "''")}' AS ${SNAPSHOT_ALIAS}`);
+
+        const integrity = await txn.getAllAsync<{ quick_check: string }>(`PRAGMA ${SNAPSHOT_ALIAS}.quick_check`);
+        if (integrity.length !== 1 || integrity[0].quick_check !== 'ok') {
+          throw new Error(
+            `snapshot bootstrap: quick_check failed: ${integrity.map((row) => row.quick_check).join('; ')}`,
+          );
+        }
+
+        await verifySnapshotMeta(txn);
+        watermarks = await scopedWatermarks(txn, scope);
+
+        if (isSigningOut() || getWipeEpoch() !== startEpoch) throw new SnapshotWipedError();
+
+        // The import can take seconds on a big layout; don't let a concurrent
+        // write on the app's main connection fail it with SQLITE_BUSY.
+        await txn.execAsync('PRAGMA busy_timeout = 5000');
+        await txn.execAsync('BEGIN EXCLUSIVE');
+      } catch (preTransactionError) {
+        await txn.execAsync('BEGIN').catch(() => {});
+        throw preTransactionError;
+      }
 
       await reconcileScope(txn, scope, watermarks);
       await importScope(txn, scope, onSchemaDrift);
@@ -534,11 +556,15 @@ export async function bootstrapScopeFromSnapshot(params: {
           : watermarks.board_climb_stats;
       await rewindDeletionsCheckpoint(txn, minWatermark);
     });
-
-    return { climbsWatermark: watermarks.board_climbs, statsWatermark: watermarks.board_climb_stats };
   } finally {
-    if (attached) {
-      await db.execAsync(`DETACH DATABASE ${SNAPSHOT_ALIAS}`).catch(() => {});
-    }
+    // On expo the wrapper's connection teardown already detached; this covers
+    // same-connection OfflineDatabase implementations (the node test double's
+    // in-memory mode), where the alias would otherwise leak across scopes.
+    await db.execAsync(`DETACH DATABASE ${SNAPSHOT_ALIAS}`).catch(() => {});
   }
+
+  // Unreachable null: the transaction either set watermarks or threw.
+  if (!watermarks) throw new Error('snapshot bootstrap: transaction completed without watermarks');
+  const finalWatermarks: Record<SnapshotTableName, SyncCheckpoint> = watermarks;
+  return { climbsWatermark: finalWatermarks.board_climbs, statsWatermark: finalWatermarks.board_climb_stats };
 }

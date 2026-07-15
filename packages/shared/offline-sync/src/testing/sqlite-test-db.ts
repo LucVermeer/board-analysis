@@ -22,10 +22,12 @@ function normalizeParams(params: (SqlBindValue | SqlBindValue[])[]): SqlBindValu
 
 class NodeSqliteAdapter {
   private readonly db: DatabaseSync;
+  private readonly location: string;
   private inTransaction = false;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, location: string) {
     this.db = db;
+    this.location = location;
   }
 
   async execAsync(source: string): Promise<void> {
@@ -53,13 +55,43 @@ class NodeSqliteAdapter {
   }
 
   async withExclusiveTransactionAsync(task: (txn: NodeSqliteAdapter) => Promise<void>): Promise<void> {
-    // node:sqlite has no separate transaction connection; model the contract with
-    // BEGIN/COMMIT on this connection and roll back on failure. Nesting is guarded
-    // because our code never nests exclusive transactions.
     if (this.inTransaction) {
       await task(this);
       return;
     }
+
+    // File-backed databases mirror expo-sqlite EXACTLY: withExclusiveTransactionAsync
+    // opens a NEW native connection (`useNewConnection: true`) for the task, so
+    // per-connection state from the main connection — ATTACHed databases, temp
+    // tables, PRAGMAs — is NOT visible inside it, and the wrapper's shape is
+    // BEGIN → task → COMMIT (ROLLBACK on throw) → close. Snapshot bootstrap
+    // shipped with an ATTACH the transaction couldn't see because the old
+    // same-connection model here hid the difference (Sentry BOARDSESH-AA) —
+    // suites exercising cross-connection behaviour must use a file-backed DB.
+    if (this.location !== ':memory:') {
+      const transactionDb = new DatabaseSync(this.location);
+      const transactionAdapter = new NodeSqliteAdapter(transactionDb, this.location);
+      transactionAdapter.inTransaction = true;
+      let taskError: unknown;
+      try {
+        transactionDb.exec('BEGIN');
+        await task(transactionAdapter);
+        transactionDb.exec('COMMIT');
+      } catch (error) {
+        // Mirror expo: ROLLBACK runs unconditionally; if it throws (no open
+        // transaction), THAT error propagates and masks the task's — the exact
+        // behaviour bootstrap's restore-BEGIN guard exists for.
+        transactionDb.exec('ROLLBACK');
+        taskError = error;
+      } finally {
+        transactionDb.close();
+      }
+      if (taskError) throw taskError;
+      return;
+    }
+
+    // In-memory databases can't be opened from a second connection; model the
+    // contract with BEGIN/COMMIT on this connection and roll back on failure.
     this.inTransaction = true;
     this.db.exec('BEGIN');
     try {
@@ -80,9 +112,16 @@ class NodeSqliteAdapter {
 
 export type TestSqliteDb = NodeSqliteAdapter & OfflineDatabase;
 
-/** Opens a fresh in-memory database adapted to the OfflineDatabase surface. */
-export function createTestDatabase(): TestSqliteDb {
-  const adapter = new NodeSqliteAdapter(new DatabaseSync(':memory:'));
+/**
+ * Opens a database adapted to the OfflineDatabase surface. Defaults to
+ * in-memory; pass a file path to get expo-faithful exclusive-transaction
+ * semantics (the task runs on a SEPARATE connection — see
+ * withExclusiveTransactionAsync above). Any suite touching ATTACH, temp
+ * tables, or per-connection PRAGMAs inside a transaction must be file-backed
+ * or it tests semantics the device doesn't have.
+ */
+export function createTestDatabase(location: string = ':memory:'): TestSqliteDb {
+  const adapter = new NodeSqliteAdapter(new DatabaseSync(location), location);
   // The adapter's variadic methods satisfy OfflineDatabase's overload pair
   // behaviorally; cast through unknown so call sites get the interface type.
   return adapter as unknown as TestSqliteDb;
