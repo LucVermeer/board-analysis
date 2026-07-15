@@ -150,6 +150,37 @@ describe('rankSessionClimbers', () => {
     expect(ranked[0].userId).toBe('user-1');
   });
 
+  it('surfaces the most recent send identity when name or avatar changed mid-session', () => {
+    const history: BoardPresenceClimb[] = [
+      makeClimb({
+        seq: 1,
+        climbUuid: 'climb-a',
+        sentByUserId: 'user-1',
+        sentByDisplayName: 'Old Name',
+        sentByAvatarUrl: 'https://example.com/old.png',
+        sentAt: new Date(NOW.getTime() - 60 * 60_000).toISOString(),
+      }),
+      makeClimb({
+        seq: 2,
+        climbUuid: 'climb-b',
+        sentByUserId: 'user-1',
+        sentByDisplayName: 'New Name',
+        sentByAvatarUrl: 'https://example.com/new.png',
+        sentAt: new Date(NOW.getTime() - 5 * 60_000).toISOString(),
+      }),
+    ];
+
+    const ranked = rankSessionClimbers(history, { now: NOW });
+
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]).toMatchObject({
+      userId: 'user-1',
+      displayName: 'New Name',
+      avatarUrl: 'https://example.com/new.png',
+      sendCount: 2,
+    });
+  });
+
   it('carries avatarUrl through and defaults to null when absent', () => {
     const history: BoardPresenceClimb[] = [
       makeClimb({
