@@ -15,6 +15,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixes a bug where the app could sign you out or get stuck loading after being backgrounded on a locked iPhone. ([#3612](https://github.com/boardsesh/boardsesh/pull/3612))
+- Reorder climbs in a playlist and the new order sticks. ([#3652](https://github.com/boardsesh/boardsesh/pull/3652))
 - Downloading a board for offline use now completes in seconds instead of minutes — the app grabs a pre-built copy of the catalog instead of crawling it climb by climb. (This fixes the fast path so it actually kicks in.) ([#3618](https://github.com/boardsesh/boardsesh/pull/3618))
 
 ## 2026-07-14

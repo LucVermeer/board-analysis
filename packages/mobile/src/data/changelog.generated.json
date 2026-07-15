@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-15T21:16:58.165Z",
+  "generatedAt": "2026-07-15T23:51:12.061Z",
   "entries": [
+    {
+      "prNumber": 3612,
+      "category": "fixed",
+      "title": "Fixes a bug where the app could sign you out or get stuck loading after being backgrounded on a locked iPhone.",
+      "mergedAt": "2026-07-15T23:50:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3612"
+    },
+    {
+      "prNumber": 3652,
+      "category": "fixed",
+      "title": "Reorder climbs in a playlist and the new order sticks.",
+      "mergedAt": "2026-07-15T23:06:38Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3652"
+    },
     {
       "prNumber": 3625,
       "category": "new",
