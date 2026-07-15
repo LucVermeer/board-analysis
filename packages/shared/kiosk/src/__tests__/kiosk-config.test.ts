@@ -162,6 +162,28 @@ describe('KioskLayoutSchema (strict writer)', () => {
       expect(parsed.error.issues.some((issue) => issue.path.join('.') === 'leaderboard.boardUuid')).toBe(true);
     }
   });
+
+  // The epic's forward-compat contract: later PRs add fields (a slot `variant`,
+  // a top-level theme, rail styling) ADDITIVELY, without a version bump. That
+  // only works if the writer schema strips unknown keys instead of rejecting
+  // them — a future `.strict()`/strictObject hardening would silently break the
+  // contract, so this test pins the stripping behaviour at every nesting level.
+  it('strips unknown keys at every nesting level instead of rejecting them', () => {
+    const layout = KioskLayoutSchema.parse({
+      version: KIOSK_LAYOUT_VERSION,
+      theme: 'dark',
+      boards: [{ boardUuid: BOARD_A, variant: 'compact' }],
+      leaderboard: { boardUuid: BOARD_A, period: 'week', style: 'minimal' },
+    });
+    expect(layout).not.toHaveProperty('theme');
+    expect(layout.boards[0]).not.toHaveProperty('variant');
+    expect(layout.leaderboard).not.toHaveProperty('style');
+    expect(layout).toEqual({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [slot(BOARD_A)],
+      leaderboard: { boardUuid: BOARD_A, period: 'week' },
+    });
+  });
 });
 
 describe('parseKioskLayoutLenient (forward-compat reader)', () => {
@@ -208,6 +230,56 @@ describe('parseKioskLayoutLenient (forward-compat reader)', () => {
     const result = parseKioskLayoutLenient({ version: KIOSK_LAYOUT_VERSION, boards, leaderboard: null });
     expect(result.layout.boards).toHaveLength(MAX_KIOSK_BOARDS);
     expect(result.droppedBoardCount).toBe(overBy);
+  });
+
+  // Forward-compat contract (see the strict-schema counterpart above): a slot
+  // written by a NEWER client carrying an additive field must survive a lenient
+  // read on older JS — kept, with the unknown field stripped, not dropped.
+  it('keeps a slot carrying an unknown additive field, stripped', () => {
+    const result = parseKioskLayoutLenient({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [{ boardUuid: BOARD_A, variant: 'compact' }],
+      leaderboard: null,
+    });
+    expect(result.layout.boards).toEqual([slot(BOARD_A)]);
+    expect(result.layout.boards[0]).not.toHaveProperty('variant');
+    expect(result.droppedBoardCount).toBe(0);
+  });
+
+  it('repairs a combined duplicate + invalid + over-cap board list to exactly MAX_KIOSK_BOARDS', () => {
+    // 7 stored slots: 1 invalid, 1 duplicate, and 5 unique valid boards (one past
+    // the cap). Invalid-drop and dedupe happen before the cap, so exactly the
+    // first MAX_KIOSK_BOARDS unique valid boards survive.
+    const result = parseKioskLayoutLenient({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [
+        slot(BOARD_A),
+        { boardUuid: 'not-a-uuid' },
+        slot(BOARD_A),
+        slot(BOARD_B),
+        slot(BOARD_C),
+        slot(BOARD_D),
+        slot(BOARD_E),
+      ],
+      leaderboard: null,
+    });
+    expect(result.layout.boards.map((each) => each.boardUuid)).toEqual([BOARD_A, BOARD_B, BOARD_C, BOARD_D]);
+    expect(result.layout.boards).toHaveLength(MAX_KIOSK_BOARDS);
+    expect(result.droppedBoardCount).toBe(3);
+  });
+
+  it('widens a single-board rail to all boards when its board was dropped by the cap', () => {
+    // The rail names the 5th unique board, which the cap drops — the rail must
+    // not keep a dangling reference; it widens to all boards instead.
+    const result = parseKioskLayoutLenient({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [slot(BOARD_A), slot(BOARD_B), slot(BOARD_C), slot(BOARD_D), slot(BOARD_E)],
+      leaderboard: { boardUuid: BOARD_E, period: 'week' },
+    });
+    expect(result.layout.boards.map((each) => each.boardUuid)).toEqual([BOARD_A, BOARD_B, BOARD_C, BOARD_D]);
+    expect(result.layout.leaderboard).toEqual({ boardUuid: null, period: 'week' });
+    expect(result.droppedLeaderboard).toBe(true);
+    expect(result.droppedBoardCount).toBe(1);
   });
 
   it('treats a non-array boards field as an empty board list', () => {
