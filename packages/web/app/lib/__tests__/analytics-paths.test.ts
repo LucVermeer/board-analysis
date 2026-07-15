@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { analyticsPathname, isAdminAnalyticsUrl, stripAnalyticsLocalePrefix } from '../analytics-paths';
+import {
+  analyticsPathname,
+  isAdminAnalyticsUrl,
+  isEmbedAnalyticsUrl,
+  stripAnalyticsLocalePrefix,
+} from '../analytics-paths';
 
 describe('analyticsPathname', () => {
   it('keeps only the pathname for absolute and relative URLs', () => {
@@ -34,5 +39,27 @@ describe('isAdminAnalyticsUrl', () => {
     expect(isAdminAnalyticsUrl('/b/admin')).toBe(false);
     expect(isAdminAnalyticsUrl('/fr/admin_panel')).toBe(false);
     expect(isAdminAnalyticsUrl('/?next=/admin')).toBe(false);
+  });
+});
+
+describe('isEmbedAnalyticsUrl', () => {
+  it('matches embed widget paths — no analytics inside third-party iframes', () => {
+    expect(isEmbedAnalyticsUrl('/embed')).toBe(true);
+    expect(isEmbedAnalyticsUrl('/embed/board/abc?x=1')).toBe(true);
+    expect(isEmbedAnalyticsUrl('https://boardsesh.com/embed/gym/abc/leaderboard?period=day')).toBe(true);
+  });
+
+  it('is case-insensitive, mirroring the case-insensitive header matchers', () => {
+    // Next's header source patterns compile case-insensitively, so
+    // /EMBED/board/x receives the frameable embed headers — the analytics
+    // suppression must cover the same set of paths.
+    expect(isEmbedAnalyticsUrl('/EMBED/board/abc')).toBe(true);
+    expect(isEmbedAnalyticsUrl('/Embed/gym/abc/leaderboard')).toBe(true);
+  });
+
+  it('does not match lookalikes or the kiosk (kiosk keeps first-party telemetry)', () => {
+    expect(isEmbedAnalyticsUrl('/embedded')).toBe(false);
+    expect(isEmbedAnalyticsUrl('/kiosk/some-gym')).toBe(false);
+    expect(isEmbedAnalyticsUrl('/?next=/embed/board/abc')).toBe(false);
   });
 });

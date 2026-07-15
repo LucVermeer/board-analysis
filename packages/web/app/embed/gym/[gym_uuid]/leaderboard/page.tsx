@@ -19,15 +19,13 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import type { Gym } from '@boardsesh/shared-schema';
-import type { Locale } from '@/app/lib/i18n/config';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
 import I18nProvider from '@/app/components/providers/i18n-provider';
-import KioskThemeScope from '@/app/components/kiosk/kiosk-theme-scope';
-import KioskRetryScreen from '@/app/components/kiosk/kiosk-retry-screen';
 import EmbedShell from '@/app/components/kiosk/embed/embed-shell';
 import EmbedLeaderboard from '@/app/components/kiosk/embed/embed-leaderboard';
+import EmbedRetryState from '@/app/components/kiosk/embed/embed-retry';
 import {
   embedAttributionHref,
   parseEmbedLeaderboardPeriod,
@@ -79,26 +77,17 @@ export async function generateMetadata(props: EmbedGymLeaderboardRouteProps): Pr
   });
 }
 
-function EmbedRetryScreen({ locale }: { locale: Locale }) {
-  return (
-    <I18nProvider locale={locale} namespaces={['common', 'kiosk']}>
-      <KioskThemeScope gym={{}}>
-        <KioskRetryScreen />
-      </KioskThemeScope>
-    </I18nProvider>
-  );
-}
-
 export default async function EmbedGymLeaderboardPage(props: EmbedGymLeaderboardRouteProps) {
   const [{ gym_uuid }, searchParams] = await Promise.all([props.params, props.searchParams]);
 
   const gymResult = await fetchPublicGym(gym_uuid);
 
-  // Transient failure (backend blip): the self-healing retry screen, exactly
-  // like the kiosk — an embed on a gym's website is unattended too, and a
-  // 404'd iframe would stay dead until a visitor reloads the host page.
+  // Transient failure (backend blip): the self-healing retry screen inside
+  // the embed shell (attribution bar stays up) — an embed on a gym's website
+  // is as unattended as a TV, and a 404'd iframe would stay dead until a
+  // visitor reloads the host page.
   if (gymResult.status === 'error') {
-    return <EmbedRetryScreen locale={await getLocale()} />;
+    return <EmbedRetryState locale={await getLocale()} />;
   }
 
   const publicGym = gymResult.gym;
@@ -114,7 +103,7 @@ export default async function EmbedGymLeaderboardPage(props: EmbedGymLeaderboard
   // renders the retry screen too.
   const boardsResult = await fetchGymBoardsForEmbed(gym_uuid);
   if (boardsResult.status === 'error') {
-    return <EmbedRetryScreen locale={await getLocale()} />;
+    return <EmbedRetryState locale={await getLocale()} />;
   }
 
   const period = parseEmbedLeaderboardPeriod(searchParams.period);

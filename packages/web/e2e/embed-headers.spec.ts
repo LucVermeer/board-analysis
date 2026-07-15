@@ -81,6 +81,32 @@ test.describe('embed security headers', () => {
     expect(headerValue(response, 'x-frame-options')).toBe('SAMEORIGIN');
   });
 
+  test('/embed exact (no child segment) keeps the frame-denying default, without the embed CSP', async ({
+    request,
+  }) => {
+    // The exclusion regex `(?!embed/)` only skips paths with the trailing
+    // slash, so bare /embed matches the SAMEORIGIN rule; the embed rule uses
+    // `:path+` so it does NOT also match — one response must never carry the
+    // contradictory XFO SAMEORIGIN + frame-ancestors * pair.
+    const response = await request.get('/embed', { maxRedirects: 0 });
+    expect(headerValue(response, 'x-frame-options')).toBe('SAMEORIGIN');
+    expect(headerValue(response, 'content-security-policy') ?? '').not.toContain('frame-ancestors');
+    // The middleware still treats it as an embed path (no cookies).
+    expect(setCookieValues(response)).toEqual([]);
+  });
+
+  test('case-drifted embed paths stay cookieless (header matchers are case-insensitive)', async ({ request }) => {
+    // Next compiles header `source` patterns case-INsensitively, so
+    // /EMBED/board/x gets the frameable embed headers. The middleware
+    // carve-out must therefore be case-insensitive too — otherwise this
+    // request would run the full pipeline and the ?session= branch would
+    // Set-Cookie on a frameable response.
+    const response = await request.get('/EMBED/board/x?session=abc', { maxRedirects: 0 });
+    expect(headerValue(response, 'content-security-policy')).toContain('frame-ancestors *');
+    expect(headerValue(response, 'x-frame-options')).toBeUndefined();
+    expect(setCookieValues(response)).toEqual([]);
+  });
+
   test('locale-prefixed embed paths 308 to the un-prefixed embed path, cookieless', async ({ request }) => {
     const spanishResponse = await request.get('/es/embed/board/x', { maxRedirects: 0 });
     expect(spanishResponse.status()).toBe(308);

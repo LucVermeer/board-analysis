@@ -10,6 +10,12 @@
   padding: var(--spacing-8);
 }
 
+/* Embed variant: fill the shell's content cell (which already budgets for the
+ * attribution bar) instead of the whole viewport. */
+.containerFill {
+  height: 100%;
+}
+
 .title {
   font-size: var(--kiosk-font-hero);
   font-weight: 700;

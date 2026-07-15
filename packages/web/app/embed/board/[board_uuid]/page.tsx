@@ -20,9 +20,8 @@ import I18nProvider from '@/app/components/providers/i18n-provider';
 import { buildBoardSlotData } from '@/app/components/kiosk/board-slot-data';
 import BoardSlot from '@/app/components/kiosk/board-slot/board-slot';
 import KioskPresenceHub from '@/app/components/kiosk/presence/kiosk-presence-hub';
-import KioskThemeScope from '@/app/components/kiosk/kiosk-theme-scope';
-import KioskRetryScreen from '@/app/components/kiosk/kiosk-retry-screen';
 import EmbedShell from '@/app/components/kiosk/embed/embed-shell';
+import EmbedRetryState from '@/app/components/kiosk/embed/embed-retry';
 import {
   embedAttributionHref,
   resolveEmbedBrandGym,
@@ -82,19 +81,12 @@ export default async function EmbedBoardPage(props: EmbedBoardRouteProps) {
 
   const boardResult = await fetchEmbeddableBoard(board_uuid);
 
-  // Transient failure (backend blip): the self-healing retry screen, exactly
-  // like the kiosk — an embed on a gym's website is unattended too, and a
-  // 404'd iframe would stay dead until a visitor reloads the host page.
-  // Unbranded theme: the branding lives in the payload we failed to fetch.
+  // Transient failure (backend blip): the self-healing retry screen inside
+  // the embed shell (attribution bar stays up) — an embed on a gym's website
+  // is as unattended as a TV, and a 404'd iframe would stay dead until a
+  // visitor reloads the host page.
   if (boardResult.status === 'error') {
-    const retryLocale = await getLocale();
-    return (
-      <I18nProvider locale={retryLocale} namespaces={['common', 'kiosk']}>
-        <KioskThemeScope gym={{}}>
-          <KioskRetryScreen />
-        </KioskThemeScope>
-      </I18nProvider>
-    );
+    return <EmbedRetryState locale={await getLocale()} />;
   }
 
   const board = boardResult.board;

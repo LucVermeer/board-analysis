@@ -20,19 +20,34 @@ export function middleware(request: NextRequest) {
   }
 
   // /embed/** — iframe widgets for gym websites: display-only, cookieless,
-  // anonymous. Bypass BEFORE locale detection so no sticky-locale cookie (or
-  // any other cookie) is ever set on an embed response, and no locale
-  // redirect/rewrite can move the request off the /embed/** path that the
-  // next.config.mjs `frame-ancestors *` header rule matches on.
-  if (pathname === '/embed' || pathname.startsWith('/embed/')) {
-    return NextResponse.next();
+  // anonymous. Bypass BEFORE the ?session= branch and locale detection so no
+  // sticky-locale/session cookie (or any other cookie) is ever set on an
+  // embed response, and no locale redirect/rewrite can move the request off
+  // the /embed/** path that the next.config.mjs `frame-ancestors *` header
+  // rule matches on.
+  //
+  // Case-INsensitive on purpose: next.config `headers()` sources compile
+  // case-insensitively, so /EMBED/board/x already receives the frameable
+  // embed headers — this carve-out must cover the same set of paths or a
+  // case-drifted request (e.g. /EMBED/...?session=abc) would run the full
+  // pipeline and could Set-Cookie on a frameable response.
+  const lowercasePathname = pathname.toLowerCase();
+  if (lowercasePathname === '/embed' || lowercasePathname.startsWith('/embed/')) {
+    // Embeds render en-US only: overwrite the locale request header instead
+    // of forwarding it, so a crafted client-supplied x-boardsesh-locale can't
+    // pick the rendered locale (everywhere else the middleware overwrites
+    // this header; the carve-out must too).
+    const embedRequestHeaders = new Headers(request.headers);
+    embedRequestHeaders.set(LOCALE_HEADER, DEFAULT_LOCALE);
+    return NextResponse.next({ request: { headers: embedRequestHeaders } });
   }
 
   // Locale-prefixed embed URLs are 308'd to the un-prefixed path: headers()
   // matches the ORIGINAL request path, so /es/embed/** would dodge the embed
   // header rule and be served frame-DENYING X-Frame-Options: SAMEORIGIN.
-  // Embeds are en-US-only by design.
-  const localePrefixedEmbed = pathname.match(/^\/(es|fr)\/embed\//);
+  // Embeds are en-US-only by design. Case-insensitive to match the
+  // case-insensitive header rules (see above).
+  const localePrefixedEmbed = pathname.match(/^\/(es|fr)\/embed\//i);
   if (localePrefixedEmbed) {
     const unprefixedEmbedUrl = request.nextUrl.clone();
     unprefixedEmbedUrl.pathname = pathname.slice(localePrefixedEmbed[1].length + 1);

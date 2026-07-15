@@ -100,7 +100,12 @@ const nextConfig = {
         // The middleware 308s locale-prefixed /es|fr/embed/** to the
         // un-prefixed path because this matcher sees the ORIGINAL request
         // path — a prefixed variant would fall into the SAMEORIGIN rule above.
-        source: '/embed/:path*',
+        // `:path+` (one or more segments), NOT `:path*`: the exclusion regex
+        // above only skips paths starting `embed/` (with slash), so a bare
+        // `/embed` matches the SAMEORIGIN rule — with `:path*` it would match
+        // BOTH rules and ship contradictory XFO + frame-ancestors on one
+        // response. `/embed` exact is not a route; it stays frame-denying.
+        source: '/embed/:path+',
         headers: [
           { key: 'Content-Security-Policy', value: 'frame-ancestors *' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },

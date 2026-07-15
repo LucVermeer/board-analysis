@@ -26,3 +26,20 @@ export function isAdminAnalyticsUrl(url: string, baseUrl = DEFAULT_ANALYTICS_BAS
   const pathname = stripAnalyticsLocalePrefix(analyticsPathname(url, baseUrl));
   return pathname === '/admin' || pathname.startsWith('/admin/');
 }
+
+/**
+ * /embed/** — iframe widgets running INSIDE third-party gym websites. Those
+ * visitors never saw Boardsesh, its privacy policy, or any consent surface,
+ * so no analytics (PostHog pageviews/web-vitals, Vercel Analytics, Speed
+ * Insights) may capture there — GDPR/ePrivacy consent can't be assumed from
+ * an embedded widget. First-party surfaces (including /kiosk/**) keep their
+ * telemetry.
+ *
+ * Case-insensitive and locale-stripped to cover every path variant the
+ * middleware carve-out and the case-insensitive header matchers accept
+ * (e.g. /EMBED/board/x).
+ */
+export function isEmbedAnalyticsUrl(url: string, baseUrl = DEFAULT_ANALYTICS_BASE_URL): boolean {
+  const pathname = stripAnalyticsLocalePrefix(analyticsPathname(url, baseUrl)).toLowerCase();
+  return pathname === '/embed' || pathname.startsWith('/embed/');
+}
