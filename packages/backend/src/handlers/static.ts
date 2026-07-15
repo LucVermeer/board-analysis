@@ -209,6 +209,13 @@ export async function handleStaticGymLogo(
 ): Promise<void> {
   if (!applyCorsHeaders(req, res)) return;
 
+  // Logos render on unauthenticated kiosk/embed surfaces. The upload allowlist
+  // already guarantees the stored Content-Type is a raster image type (never
+  // image/svg+xml), so a spoofed SVG payload is served as e.g. image/png —
+  // inert in an <img>. nosniff closes the residual risk of a client/proxy
+  // content-sniffing its way to executing it anyway.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
   // Security: validate filename to prevent path traversal
   if (!fileName || fileName !== path.basename(fileName)) {
     res.writeHead(400, { 'Content-Type': 'application/json' });

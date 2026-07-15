@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import Busboy from 'busboy';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { mkdir, writeFile, unlink, access } from 'fs/promises';
+import { mkdir, writeFile, unlink } from 'fs/promises';
 import { eq, and, isNull } from 'drizzle-orm';
 import { applyCorsHeaders } from './cors';
 import { validateToken } from '../middleware/auth';
@@ -66,17 +66,22 @@ function extractAuthTokenFromHeader(req: IncomingMessage): string | null {
 }
 
 /**
- * Delete existing local logo files for a gym (all extensions).
+ * Delete a gym's local (dev) logo files. Called AFTER the new logo is written,
+ * with `keepExt` set to the new file's extension — so a failed replacement never
+ * destroys the existing logo. A missing file (ENOENT) is the expected case;
+ * anything else is a real failure and gets logged (the new logo is already
+ * saved, so this is non-fatal).
  */
-async function deleteExistingLocalLogos(gymUuid: string): Promise<void> {
-  const extensions = ['jpg', 'png', 'gif', 'webp'];
+async function deleteExistingLocalLogos(gymUuid: string, keepExt?: string): Promise<void> {
+  const extensions = ['jpg', 'png', 'gif', 'webp'].filter((ext) => ext !== keepExt);
   for (const ext of extensions) {
     const filePath = path.join(GYM_LOGOS_DIR, `${gymUuid}.${ext}`);
     try {
-      await access(filePath);
       await unlink(filePath);
-    } catch {
-      // File doesn't exist, ignore
+    } catch (unlinkError) {
+      if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`Failed to delete stale local gym logo ${filePath}:`, unlinkError);
+      }
     }
   }
 }
@@ -221,10 +226,18 @@ export async function handleGymLogoUpload(req: IncomingMessage, res: ServerRespo
         return;
       }
 
-      // Validate file was uploaded
+      // Validate file was uploaded and is non-empty (an empty multipart part
+      // would otherwise write a zero-byte logo and return 200)
       if (!fileBuffer || !mimeType) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'No file uploaded' }));
+        resolve();
+        return;
+      }
+
+      if (fileBuffer.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Uploaded file is empty' }));
         resolve();
         return;
       }
@@ -269,20 +282,19 @@ export async function handleGymLogoUpload(req: IncomingMessage, res: ServerRespo
       const logoFileName = `${gymUuid}.${ext}`;
       let logoUrl: string;
 
+      // Write the new logo FIRST, then clean up stale other-extension files.
+      // A same-extension re-upload overwrites its key in place, so the existing
+      // logo is only ever removed once its replacement is durably saved — a
+      // failed upload can't leave the gym logo-less while gyms.logo_url still
+      // points at a deleted object.
       try {
         if (useS3) {
-          // Remove any prior logo (other extensions) so a re-upload can't leave
-          // a stale file at a different key.
-          await deleteGymLogosFromS3(gymUuid);
-
           const s3Key = `gym-logos/${logoFileName}`;
           await uploadToS3(fileBuffer, s3Key, mimeType);
           // Backend-relative URL — we proxy the bytes from S3 ourselves, so no
           // public-read ACL is required.
           logoUrl = buildStaticGymLogoUrl(logoFileName, randomUUID());
         } else {
-          await deleteExistingLocalLogos(gymUuid);
-
           const filePath = path.join(GYM_LOGOS_DIR, logoFileName);
           await writeFile(filePath, fileBuffer);
           logoUrl = buildStaticGymLogoUrl(logoFileName, randomUUID());
@@ -293,6 +305,15 @@ export async function handleGymLogoUpload(req: IncomingMessage, res: ServerRespo
         res.end(JSON.stringify({ error: 'Failed to save gym logo' }));
         resolve();
         return;
+      }
+
+      // Best-effort stale-extension cleanup (the helpers keep the new file and
+      // log real failures). A leftover stale-ext file is unreferenced — the
+      // stored logoUrl points at the new key — so failure here is non-fatal.
+      if (useS3) {
+        await deleteGymLogosFromS3(gymUuid, ext);
+      } else {
+        await deleteExistingLocalLogos(gymUuid, ext);
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });

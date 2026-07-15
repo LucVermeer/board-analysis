@@ -173,6 +173,17 @@ async function requireBoardEditAccess(
 }
 
 /**
+ * The single gate for exposing a board's numeric presence-channel id
+ * (userBoards.id, the `UserBoard.boardId` field feeding boardNowPlaying):
+ * public boards expose it to everyone; private boards only to viewers with
+ * board-level edit access. Every surface returning a UserBoard MUST use this —
+ * a diverging inline computation could leak a private board's live channel.
+ */
+function boardPresenceChannelId(board: { id: number; isPublic: boolean }, canEdit: boolean): number | null {
+  return board.isPublic || canEdit ? board.id : null;
+}
+
+/**
  * Enrich a board row with computed fields (counts, names, follow status).
  */
 async function enrichBoard(
@@ -304,10 +315,7 @@ async function enrichBoard(
     commentCount: Number(commentStats?.count || 0),
     isFollowedByMe,
     gymId: board.gymId ?? null,
-    // Numeric board-presence channel id. Exposed only when the board is public
-    // or the viewer can edit it, so private boards never leak a live channel to
-    // anon kiosk/embed surfaces.
-    boardId: board.isPublic || canEdit ? board.id : null,
+    boardId: boardPresenceChannelId(board, canEdit),
     gymUuid: gymInfo?.uuid ?? null,
     gymName: gymInfo?.name ?? null,
     distanceMeters: distanceMeters ?? null,
@@ -499,10 +507,7 @@ async function enrichBoards(
       commentCount: commentMap.get(board.uuid) || 0,
       isFollowedByMe: followedSet.has(board.uuid),
       gymId: board.gymId ?? null,
-      // Numeric board-presence channel id. Exposed only when the board is public
-      // or the viewer can edit it, so private boards never leak a live channel to
-      // anon kiosk/embed surfaces.
-      boardId: board.isPublic || canEdit ? board.id : null,
+      boardId: boardPresenceChannelId(board, canEdit),
       gymUuid: gym?.uuid ?? null,
       gymName: gym?.name ?? null,
       distanceMeters: distanceMeters ?? null,
@@ -801,7 +806,11 @@ export const socialBoardQueries = {
    * `boardId` (presence channel) via the shared enrichBoards visibility rule.
    */
   gymBoards: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx, 20, 'gymBoards');
+    // 30/min matches the board-presence anon family this query feeds
+    // (boardNowPlaying/boardPresenceStats/boardConnection) — several kiosk
+    // displays behind one gym NAT re-enumerating after a network blip share
+    // one anonymous IP bucket.
+    await applyRateLimit(ctx, 30, 'gymBoards');
     validateInput(UUIDSchema, gymUuid, 'gymUuid');
 
     const viewerId = ctx.isAuthenticated ? ctx.userId : undefined;
@@ -907,8 +916,8 @@ export const socialBoardQueries = {
           commentCount: 0,
           isFollowedByMe: false,
           gymId: null,
-          // Anonymous caller: only public boards expose their presence channel id.
-          boardId: board.isPublic ? board.id : null,
+          // Anonymous caller: no edit access, so only public boards expose it.
+          boardId: boardPresenceChannelId(board, false),
           gymUuid: null,
           gymName: null,
           distanceMeters: null,

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { once } from 'node:events';
-import { rm } from 'node:fs/promises';
+import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { sql } from 'drizzle-orm';
@@ -13,6 +13,35 @@ const validateTokenMock = vi.hoisted(() => vi.fn());
 vi.mock('../middleware/auth', () => ({
   validateToken: validateTokenMock,
 }));
+
+// Pass-through wrapper around the real storage module with per-test control
+// switches, so the S3 code path (unreachable in the test env, which has no S3
+// configured) can be exercised without real S3: `forceS3` flips isS3Configured,
+// `uploadError` makes uploadToS3 fail, and every stale-logo cleanup call is
+// recorded to assert write-first ordering.
+const s3Control = vi.hoisted(() => ({
+  forceS3: false,
+  uploadError: null as Error | null,
+  deleteCalls: [] as Array<{ gymUuid: string; keepExt?: string }>,
+}));
+
+vi.mock('../storage/s3', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../storage/s3')>();
+  return {
+    ...actual,
+    isS3Configured: () => s3Control.forceS3 || actual.isS3Configured(),
+    uploadToS3: async (...args: Parameters<typeof actual.uploadToS3>) => {
+      if (s3Control.uploadError) throw s3Control.uploadError;
+      if (s3Control.forceS3) return { url: `stub://${args[1]}`, key: args[1] }; // never touch real S3 from tests
+      return actual.uploadToS3(...args);
+    },
+    deleteGymLogosFromS3: async (targetGymUuid: string, keepExt?: string) => {
+      s3Control.deleteCalls.push({ gymUuid: targetGymUuid, keepExt });
+      if (s3Control.forceS3) return; // never touch real S3 from tests
+      return actual.deleteGymLogosFromS3(targetGymUuid, keepExt);
+    },
+  };
+});
 
 const { db } = await import('../db/client');
 const { handleGymLogoUpload, getGymLogosDir } = await import('../handlers/gym-logos');
@@ -132,6 +161,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.clearAllMocks();
+  s3Control.forceS3 = false;
+  s3Control.uploadError = null;
+  s3Control.deleteCalls = [];
   await removeUploadedLogos();
 });
 
@@ -314,6 +346,96 @@ describe('POST /api/gym-logos', () => {
       // must be rejected before any fs/S3 access.
       const response = await fetch(`${baseUrl}/static/gym-logos/sub/logo.jpg`);
       expect(response.status).toBe(400);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('rejects a request with no file part (400)', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, { token: 'owner', gymUuid, omitFile: true });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error?: string };
+      expect(body.error).toBe('No file uploaded');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('rejects a zero-byte file (400)', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, {
+        token: 'owner',
+        gymUuid,
+        blob: new Blob([], { type: 'image/png' }),
+        fileName: 'empty.png',
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error?: string };
+      expect(body.error).toBe('Uploaded file is empty');
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('cleans up the stale old-extension file after an extension-switch re-upload', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const jpegResponse = await uploadLogo(baseUrl, { token: 'owner', gymUuid });
+      expect(jpegResponse.status).toBe(200);
+      const jpgPath = path.join(getGymLogosDir(), `${gymUuid}.jpg`);
+      await access(jpgPath); // old jpg exists
+
+      const pngResponse = await uploadLogo(baseUrl, {
+        token: 'owner',
+        gymUuid,
+        blob: new Blob([JPEG_BYTES], { type: 'image/png' }),
+        fileName: 'logo.png',
+      });
+      expect(pngResponse.status).toBe(200);
+      const pngBody = (await pngResponse.json()) as { logoUrl?: string };
+      expect(pngBody.logoUrl).toContain(`.png`);
+
+      // New png is served; stale jpg was removed after the successful write.
+      const staticResponse = await fetch(`${baseUrl}${pngBody.logoUrl}`);
+      expect(staticResponse.status).toBe(200);
+      await expect(access(jpgPath)).rejects.toThrow();
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('preserves the existing logo when the replacement upload fails (S3 write-first ordering)', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    s3Control.forceS3 = true;
+    s3Control.uploadError = new Error('s3 unavailable');
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, { token: 'owner', gymUuid });
+      expect(response.status).toBe(500);
+      // The stale-logo cleanup must never run before the new object is written —
+      // a failed replacement leaves the existing logo (and its stored logoUrl)
+      // fully intact.
+      expect(s3Control.deleteCalls).toEqual([]);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('cleans up other extensions only after a successful S3 write, keeping the new one', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    s3Control.forceS3 = true; // upload succeeds via the stub; cleanup is recorded, not executed
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, { token: 'owner', gymUuid });
+      expect(response.status).toBe(200);
+      // Exactly one cleanup, after the write, preserving the new extension.
+      expect(s3Control.deleteCalls).toEqual([{ gymUuid, keepExt: 'jpg' }]);
     } finally {
       await closeServer(server);
     }
