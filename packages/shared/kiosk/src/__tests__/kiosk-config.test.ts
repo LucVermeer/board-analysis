@@ -187,8 +187,29 @@ describe('KioskLayoutSchema (strict writer)', () => {
 });
 
 describe('parseKioskLayoutLenient (forward-compat reader)', () => {
-  it('returns the empty layout for an unknown top-level version', () => {
-    const result = parseKioskLayoutLenient({ version: 999, boards: [slot(BOARD_A)], leaderboard: null });
+  it('returns the empty layout for an unknown top-level version, reporting the discarded config', () => {
+    // The wholesale discard must not read as "nothing dropped": callers surface
+    // these flags as data-loss warnings, so report the stored board count and
+    // whether a rail was present, even though neither could be interpreted.
+    const result = parseKioskLayoutLenient({
+      version: 999,
+      boards: [slot(BOARD_A), slot(BOARD_B)],
+      leaderboard: { boardUuid: null, period: 'week' },
+    });
+    expect(result.layout).toEqual(emptyKioskLayout());
+    expect(result.droppedBoardCount).toBe(2);
+    expect(result.droppedLeaderboard).toBe(true);
+  });
+
+  it('reports zero drops for an unknown version carrying no boards and a null rail', () => {
+    const result = parseKioskLayoutLenient({ version: 999, boards: [], leaderboard: null });
+    expect(result.layout).toEqual(emptyKioskLayout());
+    expect(result.droppedBoardCount).toBe(0);
+    expect(result.droppedLeaderboard).toBe(false);
+  });
+
+  it('returns the empty layout when boards and leaderboard keys are entirely absent', () => {
+    const result = parseKioskLayoutLenient({ version: KIOSK_LAYOUT_VERSION });
     expect(result.layout).toEqual(emptyKioskLayout());
     expect(result.droppedBoardCount).toBe(0);
     expect(result.droppedLeaderboard).toBe(false);

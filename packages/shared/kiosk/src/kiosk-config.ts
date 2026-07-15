@@ -104,8 +104,11 @@ export interface LenientKioskLayoutResult {
  *
  * Rules:
  * - A top-level `version` this code doesn't recognise (a future breaking bump) is
- *   uninterpretable, so return an empty layout rather than guess. Non-object input
- *   yields an empty layout too, never a throw.
+ *   uninterpretable, so return an empty layout rather than guess — but still
+ *   report what was discarded (best-effort: the stored board count, and whether a
+ *   leaderboard was present) so a caller that surfaces "your layout was dropped"
+ *   warnings doesn't read the wholesale discard as "nothing dropped". Non-object
+ *   input yields an empty layout with zero drop flags, never a throw.
  * - `safeParse` each board slot independently, drop the invalid ones, dedupe by
  *   `boardUuid` keeping the first occurrence, and cap at `MAX_KIOSK_BOARDS`.
  * - A malformed leaderboard is dropped to `null` (`droppedLeaderboard: true`).
@@ -124,7 +127,13 @@ export function parseKioskLayoutLenient(value: unknown): LenientKioskLayoutResul
   const record = value as { version?: unknown; boards?: unknown; leaderboard?: unknown };
 
   if (record.version !== KIOSK_LAYOUT_VERSION) {
-    return { layout: emptyKioskLayout(), droppedBoardCount: 0, droppedLeaderboard: false };
+    // Wholesale discard: the layout is uninterpretable under this code, but the
+    // drop flags must still tell the caller that stored config was lost.
+    return {
+      layout: emptyKioskLayout(),
+      droppedBoardCount: Array.isArray(record.boards) ? record.boards.length : 0,
+      droppedLeaderboard: record.leaderboard !== null && record.leaderboard !== undefined,
+    };
   }
 
   const boards: KioskBoardSlot[] = [];
