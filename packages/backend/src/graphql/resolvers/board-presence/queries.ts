@@ -10,7 +10,12 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
 import { applyRateLimit } from '../shared/helpers';
-import { requireActiveBoardById, requireAnonReadableBoard, resolveBoardHolder } from './shared';
+import {
+  assertAnonReadableBoard,
+  requireActiveBoardWithVisibilityById,
+  requireAnonReadableBoard,
+  resolveBoardHolder,
+} from './shared';
 import { computeBoardPresenceStats, getCachedBoardPresenceStats, setCachedBoardPresenceStats } from './stats';
 
 export const boardPresenceQueries = {
@@ -30,9 +35,11 @@ export const boardPresenceQueries = {
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
     await applyRateLimit(ctx, 60, 'boardRecentClimbs');
-    await requireActiveBoardById(boardId);
-    // Anonymous viewers only backfill public / system-shared boards.
-    await requireAnonReadableBoard(boardId, ctx.userId);
+    // One by-id lookup covers both the existence check and the isPublic/ownerId
+    // fields the anon gate below needs (anonymous viewers only backfill
+    // public / system-shared boards), instead of two round-trips for the same
+    // row on every anonymous request.
+    assertAnonReadableBoard(await requireActiveBoardWithVisibilityById(boardId), ctx.userId);
     return pubsub.getRecentBoardClimbs(String(boardId));
   },
 
@@ -64,9 +71,11 @@ export const boardPresenceQueries = {
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
     await applyRateLimit(ctx, 60, 'boardHistory');
-    await requireActiveBoardById(boardId);
-    // Anonymous viewers only read public / system-shared boards' history.
-    await requireAnonReadableBoard(boardId, ctx.userId);
+    // One by-id lookup covers both the existence check and the isPublic/ownerId
+    // fields the anon gate below needs (anonymous viewers only read public /
+    // system-shared boards' history), instead of two round-trips for the same
+    // row on every anonymous request.
+    assertAnonReadableBoard(await requireActiveBoardWithVisibilityById(boardId), ctx.userId);
 
     // Parse + validate the cursor before it reaches SQL, so a malformed value
     // returns a clean error instead of a leaked Postgres parse error. Trim
@@ -155,9 +164,12 @@ export const boardPresenceQueries = {
     // Multiple gym TVs can sit behind one NAT and reconnect together after a
     // network blip, so this anon-tolerant read gets the higher 60/min budget.
     await applyRateLimit(ctx, 60, 'boardPresenceStats');
-    const board = await requireActiveBoardById(boardId);
+    // One by-id lookup covers both the existence check and the isPublic/ownerId
+    // fields the anon gate below needs, instead of two round-trips for the
+    // same row on every anonymous request.
+    const board = await requireActiveBoardWithVisibilityById(boardId);
     // Anonymous viewers only read public / system-shared boards' stats.
-    await requireAnonReadableBoard(boardId, ctx.userId);
+    assertAnonReadableBoard(board, ctx.userId);
 
     const cached = await getCachedBoardPresenceStats(boardId);
     if (cached) return cached;
