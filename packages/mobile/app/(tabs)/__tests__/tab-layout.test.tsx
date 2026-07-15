@@ -450,6 +450,9 @@ describe('TabLayout', () => {
 
     const { container } = render(<TabLayout />);
 
+    // `data-ipad-*` markers keep the shared components' names: IpadPlayPane /
+    // IpadWallColumn are variant-agnostic and render on Android too (only the glass
+    // IpadSidebar is iOS-specific, swapped for the rail via TabletSidebar).
     expect(container.querySelector('[data-ipad-wall-column="true"]')).not.toBeNull();
     expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();

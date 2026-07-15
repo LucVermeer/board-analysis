@@ -46,7 +46,10 @@ type RailDestination = {
 
 const RAIL_ICON_SIZE = 24;
 
-function RailItem({
+// Memoized so a focus change (navigation) only re-renders the two items whose
+// `focused` flipped, not all six — the parent passes referentially-stable
+// `destination`/`onPress`. Matches the "row is React.memo'd" nav-chrome guidance.
+const RailItem = memo(function RailItem({
   destination,
   focused,
   onPress,
@@ -85,7 +88,7 @@ function RailItem({
       </Text>
     </PressableSurface>
   );
-}
+});
 
 function MaterialNavigationRailComponent({ showWallCell = true }: { showWallCell?: boolean }) {
   const { t } = useTranslation('common');
@@ -104,6 +107,10 @@ function MaterialNavigationRailComponent({ showWallCell = true }: { showWallCell
   const primary = useMemo<RailDestination[]>(
     () => [
       { segment: 'home', href: '/home', icon: 'home', iconInactive: 'home-outline', label: t('mobile.nav.home') },
+      // Climbs (search) deliberately uses the same glyph for both states — matching
+      // MaterialTabBar's `materialTabIcon('magnify', 'magnify')`; MaterialCommunityIcons
+      // has no filled `magnify` that reads as "search selected". The active pill carries
+      // the focus state instead.
       { segment: 'climbs', href: '/climbs', icon: 'magnify', iconInactive: 'magnify', label: t('mobile.nav.climbs') },
       {
         segment: 'record',
