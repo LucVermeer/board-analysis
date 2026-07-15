@@ -264,7 +264,12 @@ let db: TestSqliteDb;
 
 beforeEach(async () => {
   workDir = mkdtempSync(join(tmpdir(), 'snapshot-bootstrap-'));
-  db = createTestDatabase();
+  // FILE-backed, deliberately: the adapter then mirrors expo-sqlite's
+  // withExclusiveTransactionAsync running its task on a SEPARATE connection,
+  // where a main-connection ATTACH does not exist. The in-memory double's
+  // same-connection transactions hid exactly that and let the BOARDSESH-AA
+  // "no such table: bs_snapshot.board_climb_stats" ship.
+  db = createTestDatabase(join(workDir, 'client.db'));
   await runMigrations(db);
   await ensureMutationQueueTable(db);
   __resetDrainerStateForTests();
@@ -563,17 +568,24 @@ describe('bootstrapScopeFromSnapshot', () => {
     // Flip the real wipe epoch the moment the stats INSERT runs (after the climbs
     // INSERT already executed inside the transaction), simulating a full sign-out
     // wipe cycle in flight. The final in-txn epoch check must then roll everything
-    // back — no imported rows, no checkpoints.
-    const realRunAsync = db.runAsync.bind(db);
+    // back — no imported rows, no checkpoints. Spy on the adapter PROTOTYPE: the
+    // import runs on the transaction's own connection (a separate adapter
+    // instance, mirroring expo), so an instance spy on `db` would never fire.
+    const adapterPrototype = Object.getPrototypeOf(db) as { runAsync: typeof db.runAsync };
+    const realRunAsync = adapterPrototype.runAsync;
     let wiped = false;
-    vi.spyOn(db, 'runAsync').mockImplementation((async (source: string, ...rest: unknown[]) => {
+    vi.spyOn(adapterPrototype, 'runAsync').mockImplementation(async function (
+      this: unknown,
+      source: string,
+      ...rest: unknown[]
+    ) {
       if (!wiped && source.includes('INSERT OR REPLACE INTO main.board_climb_stats')) {
         wiped = true;
         setSigningOut(true);
         setSigningOut(false); // epoch stays bumped; isSigningOut back to false
       }
-      return realRunAsync(source, ...(rest as never[]));
-    }) as typeof db.runAsync);
+      return realRunAsync.call(this, source, ...(rest as never[]));
+    } as typeof db.runAsync);
 
     await expect(
       bootstrapScopeFromSnapshot({ db, scope: SCOPE_KILTER_5, scopeKey: 'kilter:1:5', filePath }),
@@ -598,17 +610,23 @@ describe('bootstrapScopeFromSnapshot', () => {
     // Flip the wipe epoch during the quick_check read — BEFORE the import
     // transaction opens. The epoch captured before the first await must catch a
     // wipe cycle that starts AND finishes inside the integrity checks; nothing
-    // may be imported into the freshly wiped DB.
-    const realGetAllAsync = db.getAllAsync.bind(db);
+    // may be imported into the freshly wiped DB. Prototype spy: the integrity
+    // checks now run on the transaction connection's own adapter instance.
+    const adapterPrototype = Object.getPrototypeOf(db) as { getAllAsync: typeof db.getAllAsync };
+    const realGetAllAsync = adapterPrototype.getAllAsync;
     let wiped = false;
-    vi.spyOn(db, 'getAllAsync').mockImplementation((async (source: string, ...rest: unknown[]) => {
+    vi.spyOn(adapterPrototype, 'getAllAsync').mockImplementation(async function (
+      this: unknown,
+      source: string,
+      ...rest: unknown[]
+    ) {
       if (!wiped && source.includes('quick_check')) {
         wiped = true;
         setSigningOut(true);
         setSigningOut(false); // epoch stays bumped; isSigningOut back to false
       }
-      return realGetAllAsync(source, ...(rest as never[]));
-    }) as typeof db.getAllAsync);
+      return realGetAllAsync.call(this, source, ...(rest as never[]));
+    } as typeof db.getAllAsync);
 
     await expect(
       bootstrapScopeFromSnapshot({ db, scope: SCOPE_KILTER_5, scopeKey: 'kilter:1:5', filePath }),
