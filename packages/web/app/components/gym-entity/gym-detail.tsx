@@ -19,6 +19,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import VerifiedUserOutlined from '@mui/icons-material/VerifiedUserOutlined';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';
@@ -43,6 +44,9 @@ import {
 import { useSession } from 'next-auth/react';
 import { themeTokens } from '@/app/theme/theme-config';
 import FollowButton from '@/app/components/ui/follow-button';
+import LocaleLink from '@/app/components/i18n/locale-link';
+import { useFeatureFlag } from '@/app/components/providers/feature-flags-provider';
+import { GYM_KIOSK_FLAG } from '@/app/flags';
 import EditGymForm from './edit-gym-form';
 import GymMemberManagement from './gym-member-management';
 import ClaimGymDialog from './claim-gym-dialog';
@@ -58,6 +62,8 @@ type GymDetailProps = {
 
 export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 'bottom' }: GymDetailProps) {
   const { t } = useTranslation('boards');
+  const { t: tKiosk } = useTranslation('kiosk');
+  const kioskFlag = useFeatureFlag(GYM_KIOSK_FLAG);
   const [gym, setGym] = useState<Gym | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -249,6 +255,18 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
                 sx={{ textTransform: 'none' }}
               >
                 {t('gymEntity.actions.edit')}
+              </MuiButton>
+            )}
+            {gym.canEdit && kioskFlag && (
+              <MuiButton
+                component={LocaleLink}
+                href={`/gym/${gym.slug ?? gym.uuid}/manage`}
+                variant="outlined"
+                size="small"
+                startIcon={<SettingsOutlined />}
+                sx={{ textTransform: 'none' }}
+              >
+                {tKiosk('gymPage.manageGym')}
               </MuiButton>
             )}
             {gym.canClaim && (

@@ -56,5 +56,79 @@
       "errorTitle": "Clasificación no disponible",
       "errorBody": "No se han podido cargar los últimos encadenes. Se reintentará automáticamente."
     }
+  },
+  "gymPage": {
+    "metaTitle": "Rocódromo {{gymName}}",
+    "metaDescription": "Mira los plafones y el muro en directo de {{gymName}} en Boardsesh.",
+    "breadcrumbHome": "Boardsesh",
+    "manageGym": "Gestionar rocódromo",
+    "seeOnTheWall": "Mira qué hay en el muro",
+    "boardsHeading": "Plafones",
+    "boardCount_one": "{{count}} plafón",
+    "boardCount_other": "{{count}} plafones",
+    "visitWebsite": "Visitar el sitio web",
+    "noBoardsYet": "Aún no hay plafones aquí."
+  },
+  "manage": {
+    "title": "Gestionar {{gymName}}",
+    "backToGym": "Volver a la página del rocódromo",
+    "accessDenied": "No tienes permiso para gestionar este rocódromo.",
+    "tabs": {
+      "kiosks": "Kioscos",
+      "branding": "Marca",
+      "boards": "Plafones",
+      "members": "Miembros"
+    },
+    "slugGuard": {
+      "title": "Dale una dirección web a este rocódromo",
+      "body": "Tu kiosco y la página pública del rocódromo necesitan un slug de URL corto antes de que alguien pueda abrirlos.",
+      "label": "Slug de URL",
+      "helper": "boardsesh.com/gym/{{slug}}",
+      "placeholder": "tu-rocodromo",
+      "save": "Guardar slug",
+      "errorEmpty": "Escribe un slug.",
+      "errorInvalid": "Usa solo minúsculas, números y guiones.",
+      "saved": "Slug guardado.",
+      "saveFailed": "No se pudo guardar el slug."
+    },
+    "kiosks": {
+      "emptyTitle": "La configuración del kiosco llega pronto",
+      "emptyBody": "Apunta una pantalla a tu muro y muestra qué está encendido. El editor de kioscos llega en la próxima actualización.",
+      "cta": "Configurar un kiosco"
+    },
+    "branding": {
+      "emptyTitle": "La personalización de marca llega pronto",
+      "emptyBody": "Añade tu logo y tus colores para que la pantalla del muro se vea como tu rocódromo. Llega en la próxima actualización.",
+      "cta": "Personalizar la marca"
+    },
+    "boards": {
+      "heading": "Plafones de este rocódromo",
+      "description": "Vincula los plafones que posees para que aparezcan en la página de tu rocódromo y en los kioscos.",
+      "addBoard": "Añadir un plafón",
+      "empty": "Aún no hay plafones vinculados. Añade uno para empezar.",
+      "loadError": "No se pudieron cargar los plafones de este rocódromo.",
+      "unlink": "Desvincular",
+      "unlinkTitle": "¿Desvincular este plafón?",
+      "unlinkBody": "«{{name}}» dejará de aparecer en la página y los kioscos de este rocódromo. Puedes volver a vincularlo cuando quieras.",
+      "unlinkConfirm": "Desvincular",
+      "cancel": "Cancelar",
+      "linked": "Plafón vinculado.",
+      "linkFailed": "No se pudo vincular el plafón.",
+      "unlinked": "Plafón desvinculado.",
+      "unlinkFailed": "No se pudo desvincular el plafón.",
+      "visibility": {
+        "public": "Público",
+        "unlisted": "No listado",
+        "private": "Privado"
+      },
+      "addDialog": {
+        "title": "Añade uno de tus plafones",
+        "body": "Elige un plafón que poseas para vincularlo a este rocódromo.",
+        "empty": "No te quedan plafones para vincular.",
+        "loading": "Cargando tus plafones…",
+        "link": "Vincular",
+        "close": "Cerrar"
+      }
+    }
   }
 }
