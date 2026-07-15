@@ -6,6 +6,7 @@ import {
   setCheckpoint,
   getCheckpointKey,
   markScopeDownloadComplete,
+  isScopeDownloadComplete,
   DELETIONS_CHECKPOINT_KEY,
 } from './checkpoints';
 import {
@@ -13,6 +14,7 @@ import {
   getBootstrapAttempts,
   recordBootstrapAttempt,
   markBootstrapDone,
+  isBootstrapDone,
   MAX_BOOTSTRAP_ATTEMPTS,
   SnapshotWipedError,
   SnapshotSchemaStaleError,
@@ -49,6 +51,30 @@ export type SyncProgress = {
   failed?: boolean;
 };
 
+/**
+ * Fired once a board scope's initial download completes this cycle (both
+ * board_climbs and board_climb_stats reached their tail — the same gate as
+ * `markScopeDownloadComplete`). Lets the app compare the two download paths in
+ * the field: `method` is `'snapshot'` when a bootstrap warm-up ever succeeded
+ * for this scope (the persisted `isBootstrapDone` marker — the import and the
+ * completing delta pull may land in different cycles when connectivity drops
+ * between them), `'paged'` otherwise (fresh paged crawl, a resumed mid-crawl
+ * scope, or bootstrap unavailable/exhausted).
+ * `durationMs` is measured from when this pullSync cycle FIRST touched the
+ * scope — a snapshot-eligible scope is stamped at its bootstrap eligibility
+ * check (so the duration includes its manifest/download/import time, not just
+ * the trailing delta pull), a paged-only scope at its turn in the board-data
+ * loop. Per-scope stamping keeps a multi-board cycle honest: scope B's
+ * duration never includes scope A's download time, so `'snapshot'` vs
+ * `'paged'` percentiles stay apples-to-apples.
+ */
+export type ScopeDownloadCompleteInfo = {
+  scopeKey: string;
+  method: 'snapshot' | 'paged';
+  durationMs: number;
+};
+export type ScopeDownloadCompleteReporter = (info: ScopeDownloadCompleteInfo) => void;
+
 export type SyncOptions = {
   /** Encoded board scope keys ("boardType:layoutId:sizeId") to download offline. */
   enabledBoards?: string[];
@@ -62,6 +88,8 @@ export type SyncOptions = {
   snapshotSource?: SnapshotSource;
   /** Telemetry for a counted bootstrap failure (manifest/download/import). */
   onSnapshotBootstrapError?: SnapshotBootstrapErrorReporter;
+  /** Telemetry for comparing the snapshot vs paged download paths. See ScopeDownloadCompleteInfo. */
+  onScopeDownloadComplete?: ScopeDownloadCompleteReporter;
 };
 
 /** A per-board download target: the parsed scope plus its encoded key. */
@@ -460,12 +488,18 @@ async function resolveManifestOnce(
  * A wipe detected mid-phase bails the whole phase with no attempt (mirrors
  * syncTable). One artifact is downloaded per (boardType, layoutId) and reused
  * across that layout's sizes; all downloads are deleted in a finally.
+ *
+ * Returns the skip-set (above). Snapshot attribution for
+ * ScopeDownloadCompleteInfo.method is NOT threaded through here — it reads the
+ * persisted `isBootstrapDone` marker instead, because the completing delta
+ * pull can land cycles after the import (see ScopeDownloadCompleteInfo).
  */
 async function runBootstrapPhase(
   db: OfflineDatabase,
   queryClient: QueryInvalidator,
   source: SnapshotSource,
   scopes: BoardScope[],
+  stampScopeStart: (scopeKey: string) => void,
   onProgress: ((progress: SyncProgress) => void) | undefined,
   onSchemaDrift: SchemaDriftReporter | undefined,
   onSnapshotBootstrapError: SnapshotBootstrapErrorReporter | undefined,
@@ -483,6 +517,10 @@ async function runBootstrapPhase(
   try {
     for (const scope of scopes) {
       if (isSigningOut() || getWipeEpoch() !== startEpoch) break;
+
+      // Duration telemetry starts here — before the eligibility check — so a
+      // snapshot scope's durationMs covers its manifest/download/import work.
+      stampScopeStart(scope.scopeKey);
 
       // Eligibility: FRESH on BOTH board tables and under the attempt cap.
       const climbsCheckpoint = await getCheckpoint(db, getCheckpointKey('board_climbs', scope.scopeKey));
@@ -620,6 +658,16 @@ export async function pullSync(
     if (scope) boardScopes.push({ ...scope, scopeKey });
   }
 
+  // Per-scope start timestamp for ScopeDownloadCompleteInfo.durationMs, stamped
+  // when the cycle FIRST touches that scope (bootstrap eligibility check, or
+  // its turn in the board-data loop) — NOT once at cycle start, which would
+  // fold scope A's entire download time into scope B's duration whenever a
+  // cycle processes several boards.
+  const scopeStartedAt = new Map<string, number>();
+  const stampScopeStart = (scopeKey: string): void => {
+    if (!scopeStartedAt.has(scopeKey)) scopeStartedAt.set(scopeKey, Date.now());
+  };
+
   // Phase 0: snapshot bootstrap (BEFORE deletions). Only when an adapter injected
   // snapshot I/O; otherwise this is a pure paged pull, byte-identical to before.
   let skipBootstrapPagedPull: Set<string> = new Set();
@@ -630,6 +678,7 @@ export async function pullSync(
       queryClient,
       options.snapshotSource,
       boardScopes,
+      stampScopeStart,
       onProgress,
       options.onSchemaDrift,
       options.onSnapshotBootstrapError,
@@ -670,6 +719,9 @@ export async function pullSync(
   // can match itself.
   for (const boardScope of boardScopes) {
     const scopeKey = boardScope.scopeKey;
+    // No-op when the bootstrap phase already stamped this scope; the paged-only
+    // path (no snapshotSource) starts its duration clock here.
+    stampScopeStart(scopeKey);
     // A scope whose bootstrap failed this cycle (with attempts still left) skips
     // its paged pull: a first-page checkpoint would permanently disqualify the
     // snapshot path, so the next cycle retries the snapshot instead.
@@ -708,7 +760,24 @@ export async function pullSync(
     // searches — a first-page checkpoint would otherwise serve a sliver of the
     // catalog as if it were everything.
     if (allTablesReachedTail) {
+      const wasScopeComplete = await isScopeDownloadComplete(db, scopeKey);
       await markScopeDownloadComplete(db, scopeKey);
+      if (wasScopeComplete) continue;
+      const startedAt = scopeStartedAt.get(scopeKey);
+      // Should be unreachable because stampScopeStart runs at the top of this
+      // loop for every scope. If that invariant breaks, skip telemetry rather
+      // than emit a misleading 0ms duration.
+      if (startedAt === undefined) continue;
+      // Attribution reads the persisted marker, not this run's bootstrap set:
+      // the import and the completing delta pull can land in different cycles
+      // (connectivity drop between them), and this event fires exactly once per
+      // scope — misreporting that one event as 'paged' would permanently
+      // undercount snapshot wins in the rollout comparison.
+      options?.onScopeDownloadComplete?.({
+        scopeKey,
+        method: (await isBootstrapDone(db, scopeKey)) ? 'snapshot' : 'paged',
+        durationMs: Date.now() - startedAt,
+      });
     }
   }
 

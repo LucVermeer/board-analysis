@@ -21,6 +21,15 @@ vi.mock('../../offline/offline-sync-adapter', () => ({
   drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
 }));
 
+// A stable sentinel so tests can assert the bridge passes THIS reference
+// through to startSyncScheduler (rather than exercising the real
+// expo-file-system-backed implementation). vi.hoisted because vi.mock
+// factories are hoisted above regular top-level const declarations.
+const mobileSnapshotSourceStub = vi.hoisted(() => ({ tag: 'snapshot-source' }));
+vi.mock('../../offline/snapshot-source', () => ({
+  mobileSnapshotSource: mobileSnapshotSourceStub,
+}));
+
 const getPendingCountMock = vi.fn(async (..._args: unknown[]) => 0);
 vi.mock('@boardsesh/offline-sync', () => ({
   getPendingCount: (...args: unknown[]) => getPendingCountMock(...args),
@@ -39,6 +48,11 @@ vi.mock('../../notifications', () => ({
 
 vi.mock('../../lib/graphql/client', () => ({
   getHttpClient: () => ({ request: vi.fn() }),
+}));
+
+const snapshotBaseUrlConfigured = vi.hoisted(() => ({ value: true }));
+vi.mock('../../lib/env', () => ({
+  isSnapshotBaseUrlConfigured: () => snapshotBaseUrlConfigured.value,
 }));
 
 const fakeDb = { tag: 'db' };
@@ -97,12 +111,22 @@ function makeQueryClient() {
 
 const FLAG_ON: FeatureFlags = { 'offline-board-downloads': true };
 const FLAG_OFF: FeatureFlags = { 'offline-board-downloads': false };
+const FLAG_ON_WITH_SNAPSHOT: FeatureFlags = { 'offline-board-downloads': true, 'offline-snapshot-bootstrap': true };
+function getStartSyncSchedulerSnapshotSource(): unknown {
+  const call = startSyncSchedulerMock.mock.calls[0] as unknown[] | undefined;
+  expect(call).toBeDefined();
+  // The trailing argument is the named options bag — no positional offsets to
+  // silently drift if the scheduler signature grows.
+  const options = call?.at(-1) as { snapshotSource?: unknown } | undefined;
+  return options?.snapshotSource;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   startSyncSchedulerMock.mockReturnValue(startSyncSchedulerStop);
   getPendingCountMock.mockResolvedValue(0);
   isAuthenticated = true;
+  snapshotBaseUrlConfigured.value = true;
 });
 
 afterEach(() => {
@@ -127,6 +151,26 @@ describe('OfflineSyncBridge — flag ON', () => {
     await waitFor(() => expect(startSyncSchedulerMock).toHaveBeenCalled());
     unmount();
     expect(startSyncSchedulerStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes no snapshotSource when offline-snapshot-bootstrap is off', async () => {
+    render(<Harness flags={FLAG_ON} queryClient={makeQueryClient()} />);
+    await waitFor(() => expect(startSyncSchedulerMock).toHaveBeenCalledTimes(1));
+    expect(getStartSyncSchedulerSnapshotSource()).toBeUndefined();
+  });
+
+  it('passes the mobile snapshot source when offline-snapshot-bootstrap is also on', async () => {
+    render(<Harness flags={FLAG_ON_WITH_SNAPSHOT} queryClient={makeQueryClient()} />);
+    await waitFor(() => expect(startSyncSchedulerMock).toHaveBeenCalledTimes(1));
+    expect(getStartSyncSchedulerSnapshotSource()).toBe(mobileSnapshotSourceStub);
+  });
+
+  it('passes no snapshotSource when the snapshot manifest URL is not configured', async () => {
+    snapshotBaseUrlConfigured.value = false;
+
+    render(<Harness flags={FLAG_ON_WITH_SNAPSHOT} queryClient={makeQueryClient()} />);
+    await waitFor(() => expect(startSyncSchedulerMock).toHaveBeenCalledTimes(1));
+    expect(getStartSyncSchedulerSnapshotSource()).toBeUndefined();
   });
 });
 
