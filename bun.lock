@@ -67,6 +67,7 @@
         "@boardsesh/graphql": "*",
         "@boardsesh/gym-claim": "*",
         "@boardsesh/kilter-sync": "*",
+        "@boardsesh/kiosk": "*",
         "@boardsesh/offline-sync": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",

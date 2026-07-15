@@ -327,9 +327,11 @@ async function enrichBoard(
 
 /**
  * Batch-enrich multiple boards with computed fields using 6 total queries
- * instead of 6 per board. Used by list endpoints to avoid N+1.
+ * instead of 6 per board. Used by list endpoints to avoid N+1. Exported so the
+ * kiosk resolver resolves slot boards through the exact same `boardId` gate as
+ * every other board read (public or viewer-can-edit → id, else null).
  */
-async function enrichBoards(
+export async function enrichBoards(
   boards: Array<{ board: typeof dbSchema.userBoards.$inferSelect; distanceMeters?: number | null }>,
   authenticatedUserId?: string,
 ) {

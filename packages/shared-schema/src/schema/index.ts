@@ -11,6 +11,7 @@ import { profileStatsTypeDefs } from './profile-stats';
 import { playlistsTypeDefs } from './playlists';
 import { boardEntitiesTypeDefs } from './board-entities';
 import { gymsTypeDefs } from './gyms';
+import { gymKiosksTypeDefs } from './gym-kiosks';
 import { notificationsTypeDefs } from './notifications';
 import { proposalsTypeDefs } from './proposals';
 import { socialTypeDefs } from './social';
@@ -41,6 +42,7 @@ export const typeDefs = [
   playlistsTypeDefs,
   boardEntitiesTypeDefs,
   gymsTypeDefs,
+  gymKiosksTypeDefs,
   notificationsTypeDefs,
   proposalsTypeDefs,
   socialTypeDefs,

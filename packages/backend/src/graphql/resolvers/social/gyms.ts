@@ -100,8 +100,10 @@ function mapRawGymRow(row: Record<string, unknown>): typeof dbSchema.gyms.$infer
 
 /**
  * Enrich a gym row with computed fields (counts, follow status, membership).
+ * Exported so the kiosk resolvers can attach the same branding-carrying `Gym`
+ * payload (logo + colours) to a public kiosk without duplicating the enrichment.
  */
-async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUserId?: string) {
+export async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUserId?: string) {
   const [
     ownerResult,
     boardCountResult,
@@ -339,8 +341,13 @@ async function requireGymOwnerOrAdmin(gymUuid: string, userId: string): Promise<
  * editor member, or a community admin/leader whose role is global or scoped to
  * one of the gym's board types. Mirrors the `canEdit` computation in enrichGym
  * so the edit UI and the mutation agree. Editing details only — never membership.
+ * Exported so the kiosk CRUD mutations reuse the exact same edit gate as
+ * updateGym (a gym's kiosks are part of "editing the gym's own details").
  */
-async function requireGymEditAccess(gymUuid: string, userId: string): Promise<typeof dbSchema.gyms.$inferSelect> {
+export async function requireGymEditAccess(
+  gymUuid: string,
+  userId: string,
+): Promise<typeof dbSchema.gyms.$inferSelect> {
   const { gym, isOwner, memberRole } = await loadGymWithMemberRole(gymUuid, userId);
   if (isOwner || memberRole === 'admin' || memberRole === 'editor') {
     return gym;

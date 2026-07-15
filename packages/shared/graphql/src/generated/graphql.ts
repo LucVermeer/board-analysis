@@ -1313,6 +1313,21 @@ export type CreateGymInput = {
   website?: InputMaybe<Scalars['String']['input']>;
 };
 
+/**
+ * Input for creating a kiosk. `slug` is optional — when omitted it's derived
+ * from `name` and made unique within the gym. A kiosk can be created before the
+ * gym has a slug (the manage UI prompts for the gym slug the public kiosk URL
+ * needs); creation itself doesn't require one.
+ */
+export type CreateGymKioskInput = {
+  /** The gym to create the kiosk under. */
+  gymUuid: Scalars['ID']['input'];
+  /** Kiosk display name. */
+  name: Scalars['String']['input'];
+  /** Optional URL slug (lowercase alphanumeric + hyphens, 3–60 chars). Derived from name when omitted. */
+  slug?: InputMaybe<Scalars['String']['input']>;
+};
+
 /** Input for creating a playlist. */
 export type CreatePlaylistInput = {
   /** Board type */
@@ -2149,6 +2164,66 @@ export type GymConnection = {
   totalCount: Scalars['Int']['output'];
 };
 
+/**
+ * A gym kiosk: a preset-based smart-TV wall dashboard, addressed publicly as
+ * `/kiosk/{gym-slug}/{kiosk-slug}`. The `layout` is the stored preset config —
+ * 1–4 board slots plus an optional leaderboard rail — validated on write against
+ * @boardsesh/kiosk's `KioskLayoutSchema` and read back leniently (a corrupt or
+ * future-version stored layout degrades to an empty layout rather than erroring).
+ * `boards` is the RESOLVED slot list (see GymKioskBoard); it can be shorter than
+ * `layout.boards` when slots point at dead boards or boards the viewer may not
+ * see. `gym` carries the gym's branding (logo + colours) for the kiosk chrome.
+ */
+export type GymKiosk = {
+  __typename?: 'GymKiosk';
+  /** Resolved slot boards in slot order (dead/hidden slots omitted). */
+  boards: Array<GymKioskBoard>;
+  /** When the kiosk was created (ISO 8601). */
+  createdAt: Scalars['String']['output'];
+  /** The owning gym, enriched with branding for the kiosk chrome. */
+  gym: Gym;
+  /** Preset layout config (@boardsesh/kiosk KioskLayoutSchema): 1–4 board slots + optional leaderboard rail. Read leniently. */
+  layout: Scalars['JSON']['output'];
+  /** Kiosk display name. */
+  name: Scalars['String']['output'];
+  /** URL slug (unique per gym among live kiosks). */
+  slug: Scalars['String']['output'];
+  /** When the kiosk was last updated (ISO 8601). */
+  updatedAt: Scalars['String']['output'];
+  /** Unique identifier. */
+  uuid: Scalars['ID']['output'];
+};
+
+/**
+ * One resolved board shown on a kiosk, in slot order. These are the boards that
+ * actually render on the TV: dead/unlinked slots are dropped, and for a viewer
+ * without gym-edit access non-public boards are filtered out entirely (the kiosk
+ * client renders a placeholder for the missing slot / degrades the preset).
+ * `boardId` is the numeric board-presence channel id (userBoards.id) and is
+ * always populated here — a board only appears in this list when it passes the
+ * same anon-readable gate as `UserBoard.boardId` (public, or the viewer can edit
+ * it), which is exactly when that id is safe to expose.
+ */
+export type GymKioskBoard = {
+  __typename?: 'GymKioskBoard';
+  /** Default wall angle. */
+  angle: Scalars['Int']['output'];
+  /** Numeric board-presence channel id (userBoards.id) — feeds boardNowPlaying(boardId). */
+  boardId: Scalars['Int']['output'];
+  /** Board type (kilter, tension, moonboard, ...). */
+  boardType: Scalars['String']['output'];
+  /** The board's immutable UUID (stable across board renames). */
+  boardUuid: Scalars['ID']['output'];
+  /** Layout ID. */
+  layoutId: Scalars['Int']['output'];
+  /** Board display name. */
+  name: Scalars['String']['output'];
+  /** Comma-separated set IDs. */
+  setIds: Scalars['String']['output'];
+  /** Product size ID. */
+  sizeId: Scalars['Int']['output'];
+};
+
 /** A member of a gym. */
 export type GymMember = {
   __typename?: 'GymMember';
@@ -2450,6 +2525,13 @@ export type Mutation = {
   /** Create a new gym. */
   createGym: Gym;
   /**
+   * Create a kiosk (smart-TV wall dashboard) under a gym. Requires gym edit
+   * access. The slug is derived from the name (and made unique per gym) when
+   * omitted. Starts with an empty layout — assign boards via updateGymKiosk. Fails
+   * when the gym already has the maximum number of kiosks.
+   */
+  createGymKiosk: GymKiosk;
+  /**
    * Mint a short-lived, single-use handoff code for starting the provider's
    * browser OAuth flow (GET /integrations/:provider/start?handoff=...). Keeps
    * the session token out of URLs, where it would persist in logs and browser
@@ -2483,6 +2565,8 @@ export type Mutation = {
   deleteDraftClimb: Scalars['Boolean']['output'];
   /** Soft-delete a gym. */
   deleteGym: Scalars['Boolean']['output'];
+  /** Soft-delete a kiosk. Requires gym edit access. The slug is freed for reuse. */
+  deleteGymKiosk: Scalars['Boolean']['output'];
   /** Delete a playlist (owner only). */
   deletePlaylist: Scalars['Boolean']['output'];
   /** Delete an accepted proposal and revert its effects (admin/leader only). */
@@ -2772,6 +2856,13 @@ export type Mutation = {
   updateComment: Comment;
   /** Update a gym's metadata. */
   updateGym: Gym;
+  /**
+   * Update a kiosk's name, slug, and/or layout. Requires gym edit access. A
+   * supplied layout is strictly validated (@boardsesh/kiosk KioskLayoutSchema) and
+   * persisted as the schema-parsed output — every referenced board must be alive
+   * and linked to this kiosk's gym.
+   */
+  updateGymKiosk: GymKiosk;
   /** Update playlist metadata. */
   updatePlaylist: Playlist;
   /** Update only lastAccessedAt for a playlist (does not update updatedAt). */
@@ -2856,6 +2947,11 @@ export type MutationCreateGymArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationCreateGymKioskArgs = {
+  input: CreateGymKioskInput;
+};
+
+/** Root mutation type for all write operations. */
 export type MutationCreateIntegrationOAuthHandoffArgs = {
   provider: IntegrationProvider;
 };
@@ -2909,6 +3005,11 @@ export type MutationDeleteDraftClimbArgs = {
 /** Root mutation type for all write operations. */
 export type MutationDeleteGymArgs = {
   gymUuid: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationDeleteGymKioskArgs = {
+  kioskUuid: Scalars['ID']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3308,6 +3409,11 @@ export type MutationUpdateCommentArgs = {
 /** Root mutation type for all write operations. */
 export type MutationUpdateGymArgs = {
   input: UpdateGymInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationUpdateGymKioskArgs = {
+  input: UpdateGymKioskInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -4020,6 +4126,22 @@ export type Query = {
   gymBoards: Array<UserBoard>;
   /** Get a gym by slug (for URL routing). */
   gymBySlug?: Maybe<Gym>;
+  /**
+   * A gym's public kiosk (smart-TV wall dashboard) by gym slug, with an optional
+   * kiosk slug. Public read, rate-limited, no login: a public gym's kiosks are
+   * visible to anyone; a private gym's are visible only to a viewer who can edit
+   * it (everyone else gets null, indistinguishable from a missing gym/kiosk). When
+   * `kioskSlug` is omitted the gym's oldest live kiosk is returned as the default.
+   * Returns null when the gym or kiosk doesn't exist or isn't visible. The
+   * `boards` list is resolved in slot order with dead/hidden slots dropped; the
+   * `layout` JSON is read leniently (a corrupt stored layout degrades to empty).
+   */
+  gymKiosk?: Maybe<GymKiosk>;
+  /**
+   * All of a gym's live kiosks (oldest first) for the manage UI. Requires gym edit
+   * access (owner, gym admin/editor, or a covering community admin/leader).
+   */
+  gymKiosks: Array<GymKiosk>;
   /** Get members of a gym. */
   gymMembers: GymMemberConnection;
   /**
@@ -4548,6 +4670,17 @@ export type QueryGymBoardsArgs = {
 /** Root query type for all read operations. */
 export type QueryGymBySlugArgs = {
   slug: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryGymKioskArgs = {
+  gymSlug: Scalars['String']['input'];
+  kioskSlug?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Root query type for all read operations. */
+export type QueryGymKiosksArgs = {
+  gymUuid: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -6466,6 +6599,23 @@ export type UpdateGymInput = {
   slug?: InputMaybe<Scalars['String']['input']>;
   /** New website URL */
   website?: InputMaybe<Scalars['String']['input']>;
+};
+
+/**
+ * Input for updating a kiosk. Every field is optional; omitted fields are left
+ * untouched. When `layout` is present it's validated with the STRICT
+ * KioskLayoutSchema and every referenced board (slots + a single-board
+ * leaderboard) must be an alive board linked to this kiosk's gym.
+ */
+export type UpdateGymKioskInput = {
+  /** The kiosk to update. */
+  kioskUuid: Scalars['ID']['input'];
+  /** New preset layout config (@boardsesh/kiosk KioskLayoutSchema). Persisted as the schema-parsed output. */
+  layout?: InputMaybe<Scalars['JSON']['input']>;
+  /** New display name. */
+  name?: InputMaybe<Scalars['String']['input']>;
+  /** New URL slug (lowercase alphanumeric + hyphens, 3–60 chars; unique per gym). */
+  slug?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Input for updating a playlist. */

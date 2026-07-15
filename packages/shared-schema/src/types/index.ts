@@ -9,6 +9,7 @@ export * from './ticks';
 export * from './profile-stats';
 export * from './board-entities';
 export * from './gyms';
+export * from './gym-kiosks';
 export * from './playlists';
 export * from './social';
 export * from './notifications';
