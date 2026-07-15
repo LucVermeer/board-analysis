@@ -54,4 +54,14 @@ describe('with-android-tablet-orientation', () => {
     const drifted = 'class MainActivity : ReactActivity() {\n}\n';
     expect(() => plugin.addTabletOrientation(drifted)).toThrow(/super\.onCreate/);
   });
+
+  it('anchors even when the super.onCreate argument has a nested closing paren', () => {
+    // Some template variants pass `savedInstanceState ?: Bundle()` — the greedy
+    // anchor must still match the whole statement line.
+    const nested = MAIN_ACTIVITY.replace('super.onCreate(null)', 'super.onCreate(savedInstanceState ?: Bundle())');
+    const result = plugin.addTabletOrientation(nested);
+    expect(result).toContain(plugin.MARKER);
+    expect(result).toContain('smallestScreenWidthDp >= 600');
+    expect(result.indexOf('Bundle())')).toBeLessThan(result.indexOf('smallestScreenWidthDp'));
+  });
 });

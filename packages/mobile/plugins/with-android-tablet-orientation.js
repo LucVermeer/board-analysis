@@ -26,8 +26,11 @@ function addTabletOrientation(contents) {
     return contents;
   }
   // Anchor on the `super.onCreate(...)` call inside onCreate and inject right
-  // after it, preserving the surrounding indentation.
-  const anchor = contents.match(/^([ \t]*)super\.onCreate\([^\n)]*\)[ \t]*$/m);
+  // after it, preserving the surrounding indentation. The greedy `.*\)` (rather
+  // than `[^)]*`) tolerates a nested closing paren in the argument — e.g.
+  // `super.onCreate(savedInstanceState ?: Bundle())` — while `[ \t]*$` keeps it
+  // pinned to the whole statement line.
+  const anchor = contents.match(/^([ \t]*)super\.onCreate\(.*\)[ \t]*$/m);
   if (!anchor) {
     throw new Error(
       'with-android-tablet-orientation: could not find `super.onCreate(...)` in MainActivity — ' +

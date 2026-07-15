@@ -64,6 +64,14 @@ export function resolveDeviceLayout({ width, isTablet }: { width: number; isTabl
 export const TABLET_MIN_SHORT_SIDE_DP = 600;
 
 /**
+ * A structural mirror of react-native's `Platform.OS` union, kept local so this
+ * module stays react-native-free (it unit-tests as plain functions). `Platform.OS`
+ * is assignable to it, and typing the param this way — rather than `string` —
+ * catches a mistyped OS branch at the call site instead of silently never matching.
+ */
+export type PlatformOS = 'ios' | 'android' | 'windows' | 'macos' | 'web';
+
+/**
  * Whether this device opts into the adaptive shell: an iPad, or an Android tablet
  * whose smallest screen width clears {@link TABLET_MIN_SHORT_SIDE_DP}. Pure (the
  * platform and the physical-screen short side are injected) so it unit-tests
@@ -82,7 +90,7 @@ export function resolveIsTablet({
   isPad,
   screenShortSide,
 }: {
-  platformOS: string;
+  platformOS: PlatformOS;
   isPad: boolean;
   screenShortSide: number;
 }): boolean {

@@ -188,7 +188,12 @@ function MaterialNavigationRailComponent({ showWallCell = true }: { showWallCell
           the shell shows the full wall column/strip so there's one wall surface per
           layout. Reads the Material tonal `systemColors` on Android. */}
       {showWallCell ? <SidebarWallCell /> : null}
-      <RailItem destination={account} focused={account.segment === activeSegment} onPress={handleNavigate} />
+      {/* Profile is a nav destination too, so its `tab` role must live inside a
+          tablist — its own here, keeping the ambient wall cell (a plain button)
+          outside so it doesn't split the primary tab run. */}
+      <View style={styles.accountGroup} accessibilityRole="tablist">
+        <RailItem destination={account} focused={account.segment === activeSegment} onPress={handleNavigate} />
+      </View>
     </View>
   );
 }
@@ -206,6 +211,10 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     gap: spacing[1],
+  },
+  accountGroup: {
+    width: '100%',
+    alignItems: 'center',
   },
   item: {
     alignItems: 'center',
