@@ -10,6 +10,7 @@ import { useStickyAccessoryPresence } from '../../src/hooks/use-sticky-accessory
 import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBottomAccessory';
 import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
+import { selectByVariant } from '../../src/theme/variants/select-by-variant';
 import { brandColors } from '../../src/theme/colors';
 import { useNativeAccessoryActive, useNativeTabBar } from '../../src/hooks/use-bottom-accessory';
 import { useOnAccessorySurface } from '../../src/hooks/use-on-accessory-surface';
@@ -62,8 +63,14 @@ export default function TabLayout() {
   const { t } = useTranslation('common');
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSession } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, variant, m3 } = useTheme();
   const nativeTabBar = useNativeTabBar();
+  // Shell column separators: an M3 faint divider (outlineVariant) on Material, the
+  // system hairline on Liquid Glass — so the panes read as M3 depth on Android.
+  const shellDividerColor = selectByVariant(variant, {
+    liquidGlass: systemColors.separator,
+    material: m3.outlineVariant,
+  });
   const nativeAccessoryActive = useNativeAccessoryActive();
 
   // Record-tab status cue: a badge when a board is connected over Bluetooth or a
@@ -253,7 +260,7 @@ export default function TabLayout() {
             content pane, so a persistent (usually empty) detail pane there just squeezes
             it — same redundancy guard as the wall column below. */}
         {isRegular && showDetailPane && !onWallTab ? (
-          <View key="pane" style={[styles.playPane, { width: playPaneWidth, borderLeftColor: systemColors.separator }]}>
+          <View key="pane" style={[styles.playPane, { width: playPaneWidth, borderLeftColor: shellDividerColor }]}>
             <IpadPlayPane />
           </View>
         ) : null}
@@ -265,7 +272,7 @@ export default function TabLayout() {
         {isRegular && showWallColumn && !onWallTab ? (
           <View
             key="wall"
-            style={[styles.wallColumn, { width: WALL_COLUMN_WIDTH, borderLeftColor: systemColors.separator }]}
+            style={[styles.wallColumn, { width: WALL_COLUMN_WIDTH, borderLeftColor: shellDividerColor }]}
           >
             <IpadWallColumn />
           </View>

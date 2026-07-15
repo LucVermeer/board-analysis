@@ -135,7 +135,9 @@ vi.mock('../../../src/providers/theme-provider', () => ({
     systemColors: {
       label: '#F5F2FB',
       secondaryLabel: '#A9A2B6',
+      separator: 'rgba(60,55,75,0.18)',
     },
+    m3: { outlineVariant: '#49454F' },
   }),
 }));
 
@@ -429,6 +431,27 @@ describe('TabLayout', () => {
     // The detail pane mounts alongside the list and the dedicated wall column — the
     // pixel widths of each are covered by size-class.test.ts (resolveDetailPaneWidth,
     // WALL_COLUMN_WIDTH), so assert the surfaces are present, not their arithmetic.
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+  });
+
+  it('shows the dedicated wall column on a landscape Android tablet with a bound board', () => {
+    // The chosen v1 scope: a wide Android tablet is panel-capable (no dp floor), so
+    // the wall graduates to its own column beside the browse list + detail pane —
+    // exactly the wall-mounted-gym-tablet scenario, in Material dress.
+    cfg.platformOS = 'android';
+    cfg.variant = 'material';
+    cfg.glassCapable = false;
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1280;
+    cfg.wallDeviceClass = 'panel-capable';
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = { uuid: 'board-1' };
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
   });
 

@@ -45,7 +45,10 @@ export function useDeviceLayout(): DeviceLayout & { isTablet: boolean; wallDevic
   // so an Android tablet in a small multi-window/DeX split is still a tablet but reads
   // `compact` from the live width — exactly like an iPad in a narrow Split View.
   const isTablet = resolveIsTablet({ platformOS: Platform.OS, isPad, screenShortSide });
-  const wallDeviceClass = resolveWallDeviceClass({ screenLongSide, isPad });
+  // Android tablets are panel-capable regardless of the dp long side (the width
+  // budget decides the surface); only iPad consults the points floor.
+  const isAndroidTablet = Platform.OS === 'android' && isTablet;
+  const wallDeviceClass = resolveWallDeviceClass({ screenLongSide, isPad, isAndroidTablet });
   return useMemo(
     () => ({ ...resolveDeviceLayout({ width, isTablet }), isTablet, wallDeviceClass }),
     [width, isTablet, wallDeviceClass],

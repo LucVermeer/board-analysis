@@ -98,19 +98,30 @@ export type WallDeviceClass = 'panel-capable' | 'sheet-only';
 
 /**
  * Resolve the wall device class from the physical screen long side (see
- * {@link WALL_PANEL_MIN_DEVICE_LONG_SIDE}). Non-iPad is always `sheet-only` —
- * phones never mount the panel — so this is only consulted on iPad. Pure (the
- * long side is injected), so it unit-tests without react-native like the width
- * resolvers; the React wrapper reads `Dimensions.get('screen')` in
- * `use-device-layout.ts`.
+ * {@link WALL_PANEL_MIN_DEVICE_LONG_SIDE}).
+ *
+ * - **Android tablets are always `panel-capable`.** The iPad points floor exists
+ *   only because iPad points can't separate an iPad mini from an 11" Pro at the
+ *   same size class; on Android the live width budget (`resolveWallSurface`)
+ *   already decides column/strip/none, and density-bucketed dp isn't comparable to
+ *   the iPad point floor anyway. So the floor is iOS-only.
+ * - **iPad** keeps the launch-fixed points floor.
+ * - **Phones** are always `sheet-only` — they never mount the panel.
+ *
+ * Pure (the long side + device flags are injected), so it unit-tests without
+ * react-native like the width resolvers; the React wrapper reads
+ * `Dimensions.get('screen')` in `use-device-layout.ts`.
  */
 export function resolveWallDeviceClass({
   screenLongSide,
   isPad,
+  isAndroidTablet,
 }: {
   screenLongSide: number;
   isPad: boolean;
+  isAndroidTablet: boolean;
 }): WallDeviceClass {
+  if (isAndroidTablet) return 'panel-capable';
   if (!isPad || screenLongSide < WALL_PANEL_MIN_DEVICE_LONG_SIDE) return 'sheet-only';
   return 'panel-capable';
 }
