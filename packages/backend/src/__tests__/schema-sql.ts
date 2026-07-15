@@ -841,9 +841,10 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "gym_claims_token_hash_idx" ON "gym_claims" ("token_hash") WHERE "token_hash" IS NOT NULL;
   CREATE UNIQUE INDEX IF NOT EXISTS "gym_claims_unique_pending" ON "gym_claims" ("gym_id", "claimant_user_id") WHERE "status" = 'pending';
 
-  -- Gym kiosks (smart-TV dashboards). layout holds the widget grid; the resolver
-  -- validates it with @boardsesh/kiosk's KioskLayoutSchema. Partial unique index
-  -- keeps one live kiosk per (gym, slug) while freeing the slug on soft-delete.
+  -- Gym kiosks (smart-TV dashboards). layout holds the preset config (1–4 board
+  -- slots + optional leaderboard rail); the resolver validates it with
+  -- @boardsesh/kiosk's KioskLayoutSchema. Partial unique index keeps one live
+  -- kiosk per (gym, slug) while freeing the slug on soft-delete.
   DROP TABLE IF EXISTS "gym_kiosks" CASCADE;
   CREATE TABLE IF NOT EXISTS "gym_kiosks" (
     "id" bigserial PRIMARY KEY NOT NULL,
@@ -851,7 +852,7 @@ export const schemaSQL = `
     "gym_id" bigint NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
     "slug" text NOT NULL,
     "name" text NOT NULL,
-    "layout" jsonb DEFAULT '{"version":1,"widgets":[]}'::jsonb NOT NULL,
+    "layout" jsonb DEFAULT '{"version":1,"boards":[],"leaderboard":null}'::jsonb NOT NULL,
     "created_at" timestamp DEFAULT now() NOT NULL,
     "updated_at" timestamp DEFAULT now() NOT NULL,
     "deleted_at" timestamp

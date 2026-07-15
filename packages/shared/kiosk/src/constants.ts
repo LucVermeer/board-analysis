@@ -1,80 +1,69 @@
 /**
- * Shared kiosk-dashboard limits and identifiers, so the backend write validator,
- * the web renderer, and the manage-UI editor all agree on the same numbers. A
- * client that caps below the backend limit silently truncates a valid layout;
- * one that caps above it lets the owner build a kiosk the mutation then rejects
- * with no inline explanation.
+ * Shared kiosk limits and identifiers, so the backend write validator, the web
+ * renderer, and the manage-UI editor all agree on the same numbers. A client that
+ * caps below the backend limit silently truncates a valid layout; one that caps
+ * above it lets the owner build a kiosk the mutation then rejects with no inline
+ * explanation.
+ *
+ * A kiosk is an OPINIONATED preset surface, not a free-form dashboard: 1–4 board
+ * slots (the preset is derived from how many are configured) plus an optional
+ * single leaderboard rail. The pre-merge draft of this package modelled a
+ * free-form 12×8 widget grid; it was replaced with this preset config in the same
+ * PR (#3627) that first lands the package, so no grid layout ever shipped.
  */
 
 /**
- * On-disk layout schema version. Bump only for a breaking layout-shape change;
+ * On-disk layout schema version. Kept at 1: the widget-grid draft was replaced by
+ * this preset schema before either reached `main`, so version 1 has only ever
+ * meant "preset config". Bump only for a future breaking layout-shape change;
  * older clients treat any version they don't recognise as an empty layout (see
  * `parseKioskLayoutLenient`), so a bump is a hard cutover, not a soft migration.
  */
 export const KIOSK_LAYOUT_VERSION = 1;
 
-/** Most widgets one kiosk can hold. The strict writer schema enforces this. */
-export const MAX_KIOSK_WIDGETS = 12;
+/** Most board slots one kiosk can hold. The strict writer schema enforces this. */
+export const MAX_KIOSK_BOARDS = 4;
 
 /** Most kiosks (TV configs) a single gym can create. Enforced backend-side. */
 export const MAX_KIOSKS_PER_GYM = 10;
 
 /**
- * The kiosk canvas is a fixed 12-column by 8-row grid. Widget `position`
- * ({x,y,w,h}) is expressed in these grid units, so a 1920x1080 TV and the scaled
- * manage-editor canvas lay widgets out identically.
+ * Preset layout names, indexed by board count (1 board → 'single', 4 → 'quad').
+ * The preset is DERIVED from `layout.boards.length` rather than stored, so there
+ * is no picker and no way for the stored count and the named preset to disagree.
  */
-export const KIOSK_GRID_COLUMNS = 12;
-export const KIOSK_GRID_ROWS = 8;
+export const KIOSK_PRESETS = ['single', 'dual', 'triple', 'quad'] as const;
 
-// Widget type discriminators. Kept as named constants so the discriminated-union
-// members, the registry, and the manage-UI palette all reference one source.
-export const WIDGET_TYPE_NOW_ON_THE_WALL = 'now-on-the-wall';
-export const WIDGET_TYPE_UP_NEXT = 'up-next';
-export const WIDGET_TYPE_SESSION_LEADERBOARD = 'session-leaderboard';
-export const WIDGET_TYPE_RECENT_SENDS = 'recent-sends';
-export const WIDGET_TYPE_IFRAME = 'iframe';
-
-/** Every kiosk widget type, in palette order. */
-export const KIOSK_WIDGET_TYPES = [
-  WIDGET_TYPE_NOW_ON_THE_WALL,
-  WIDGET_TYPE_UP_NEXT,
-  WIDGET_TYPE_SESSION_LEADERBOARD,
-  WIDGET_TYPE_RECENT_SENDS,
-  WIDGET_TYPE_IFRAME,
-] as const;
-
-export type KioskWidgetType = (typeof KIOSK_WIDGET_TYPES)[number];
-
-// --- Per-widget config bounds (shared so client caps match backend rejects) ---
-
-/** `up-next`: how many upcoming climbs to preview. */
-export const UP_NEXT_MIN_COUNT = 1;
-export const UP_NEXT_MAX_COUNT = 10;
-export const UP_NEXT_DEFAULT_COUNT = 5;
+export type KioskPreset = (typeof KIOSK_PRESETS)[number];
 
 /**
- * Cap on how many boards a multi-board widget (`session-leaderboard`,
- * `recent-sends`) may aggregate. Bounds the fan-out of the per-board queries
- * these widgets drive once wired up in later PRs, so a layout can't turn one
- * widget into thousands of board reads.
+ * The preset a kiosk renders for a given board count, or `null` when out of range
+ * (0 boards → the TV shows a "not set up yet" placeholder; >4 is impossible under
+ * the strict schema but degrades to the placeholder rather than throwing).
  */
-export const MAX_BOARDS_PER_WIDGET = 20;
-
-/** `session-leaderboard`: rolling window (minutes) the ranking looks back over. */
-export const SESSION_LEADERBOARD_MIN_WINDOW_MINUTES = 5;
-export const SESSION_LEADERBOARD_MAX_WINDOW_MINUTES = 1440; // 24h
-export const SESSION_LEADERBOARD_DEFAULT_WINDOW_MINUTES = 180;
-
-/** `recent-sends`: how many recent sends to list. */
-export const RECENT_SENDS_MIN_LIMIT = 1;
-export const RECENT_SENDS_MAX_LIMIT = 25;
-export const RECENT_SENDS_DEFAULT_LIMIT = 10;
+export function kioskPresetForBoardCount(count: number): KioskPreset | null {
+  if (!Number.isInteger(count) || count < 1 || count > MAX_KIOSK_BOARDS) {
+    return null;
+  }
+  return KIOSK_PRESETS[count - 1];
+}
 
 /**
- * `iframe`: gym-supplied external URL. Length capped to keep a pasted tracking
- * URL from ballooning the layout jsonb; the URL is further constrained
- * (https-only, no credentials, not a boardsesh.com host) in `widget-config.ts`.
+ * Leaderboard time windows a kiosk rail can rank over. 'session' is the live
+ * rolling-window ranking (see `KIOSK_SESSION_WINDOW_MINUTES`); 'day' is a rolling
+ * 24 hours (copy says "Last 24 hours", never "Today"); 'week'/'month' are the
+ * period leaderboards. Order is the editor's toggle order.
  */
-export const IFRAME_URL_MAX_LENGTH = 2000;
-export const IFRAME_TITLE_MAX_LENGTH = 100;
+export const KIOSK_LEADERBOARD_PERIODS = ['session', 'day', 'week', 'month'] as const;
+
+export type KioskLeaderboardPeriod = (typeof KIOSK_LEADERBOARD_PERIODS)[number];
+
+/** Default rail period for a freshly enabled leaderboard: the live session ranking. */
+export const KIOSK_DEFAULT_LEADERBOARD_PERIOD: KioskLeaderboardPeriod = 'session';
+
+/**
+ * Rolling window (minutes) the live 'session' leaderboard looks back over. Three
+ * hours covers a typical gym session without letting a morning climber linger on
+ * the board all evening.
+ */
+export const KIOSK_SESSION_WINDOW_MINUTES = 180;

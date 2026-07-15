@@ -10,8 +10,9 @@ import { gyms } from './gyms';
 /**
  * Gym kiosks — a configurable smart-TV dashboard for a gym. A gym can run several
  * (one per wall/screen), addressed publicly as `/kiosk/{gym-slug}/{kiosk-slug}`.
- * The `layout` jsonb holds the widget grid, validated with `KioskLayoutSchema`
- * from @boardsesh/kiosk on every write.
+ * The `layout` jsonb holds the preset config — 1–4 board slots plus an optional
+ * leaderboard rail — validated with `KioskLayoutSchema` from @boardsesh/kiosk on
+ * every write.
  */
 export const gymKiosks = pgTable(
   'gym_kiosks',
@@ -27,14 +28,15 @@ export const gymKiosks = pgTable(
     // text so a soft-deleted row can free an oddly-shaped legacy slug.
     slug: text('slug').notNull(),
     name: text('name').notNull(),
-    // Widget grid. Shape is owned by @boardsesh/kiosk (KioskLayoutSchema); reads
-    // go through parseKioskLayoutLenient so older clients drop unknown widgets.
+    // Preset config: 1–4 board slots + optional leaderboard rail. Shape is owned
+    // by @boardsesh/kiosk (KioskLayoutSchema); reads go through
+    // parseKioskLayoutLenient so older clients repair unknown layouts.
     // The default is hardcoded to version 1 rather than importing
     // KIOSK_LAYOUT_VERSION: the import above is type-only, and a value import
     // would pull @boardsesh/kiosk (TS `main`) into the compiled drizzle output,
     // breaking `drizzle-kit generate` (it loads dist as JS). A layout-version
     // bump is a documented hard cutover and must update this literal in lockstep.
-    layout: jsonb('layout').$type<KioskLayout>().default({ version: 1, widgets: [] }).notNull(),
+    layout: jsonb('layout').$type<KioskLayout>().default({ version: 1, boards: [], leaderboard: null }).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
