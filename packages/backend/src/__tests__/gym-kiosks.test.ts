@@ -179,20 +179,22 @@ describe('kiosk CRUD gate', () => {
     ).rejects.toThrow();
   });
 
-  it('gates update + delete the same way', async () => {
+  it('gates update + delete the same way, masking authz failures as NOT_FOUND', async () => {
     const seeded = await insertKiosk({ gymId: publicGym.id, slug: 'gated', name: 'Gated' });
 
     for (const viewer of [MEMBER, RANDOM]) {
+      // An authenticated non-editor gets the SAME error (message + extensions)
+      // as a missing kiosk — no existence oracle for probers.
       await expect(
         socialGymKioskMutations.updateGymKiosk(
           null,
           { input: { kioskUuid: seeded.uuid, name: 'Renamed' } },
           authCtx(viewer),
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ message: 'Kiosk not found', extensions: { code: 'NOT_FOUND' } });
       await expect(
         socialGymKioskMutations.deleteGymKiosk(null, { kioskUuid: seeded.uuid }, authCtx(viewer)),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ message: 'Kiosk not found', extensions: { code: 'NOT_FOUND' } });
     }
     await expect(
       socialGymKioskMutations.updateGymKiosk(null, { input: { kioskUuid: seeded.uuid, name: 'X' } }, anonCtx()),
@@ -226,6 +228,28 @@ describe('createGymKiosk slug + cap', () => {
       authCtx(OWNER),
     );
     expect(kiosk.slug).toBe('my-cool-kiosk');
+  });
+
+  it('derives a valid slug from a long name whose 50-char cut lands on a hyphen', async () => {
+    // 49 a's + ' bcd' → slugified 'aaa…a-bcd' → slice(0, 50) ends in '-' —
+    // without the post-slice re-trim the stored slug fails the slug pattern and
+    // the kiosk becomes unfetchable by slug.
+    const kiosk = await socialGymKioskMutations.createGymKiosk(
+      null,
+      { input: { gymUuid: publicGym.uuid, name: 'a'.repeat(49) + ' bcd' } },
+      authCtx(OWNER),
+    );
+    expect(kiosk.slug).toBe('a'.repeat(49));
+    expect(kiosk.slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+
+    // And the derived slug actually resolves through the public read.
+    const fetched = await socialGymKioskQueries.gymKiosk(
+      null,
+      { gymSlug: publicGym.slug, kioskSlug: kiosk.slug },
+      anonCtx(),
+    );
+    expect(fetched).not.toBeNull();
+    expect(fetched!.uuid).toBe(kiosk.uuid);
   });
 
   it('rejects a malformed explicit slug', async () => {
@@ -298,6 +322,43 @@ describe('createGymKiosk slug + cap', () => {
         authCtx(OWNER),
       ),
     ).rejects.toMatchObject({ extensions: { code: 'BAD_USER_INPUT' } });
+  });
+
+  it('frees the slug for reuse after a soft delete', async () => {
+    const first = await socialGymKioskMutations.createGymKiosk(
+      null,
+      { input: { gymUuid: publicGym.uuid, name: 'Reusable', slug: 'reusable' } },
+      authCtx(OWNER),
+    );
+    await socialGymKioskMutations.deleteGymKiosk(null, { kioskUuid: first.uuid }, authCtx(OWNER));
+
+    const second = await socialGymKioskMutations.createGymKiosk(
+      null,
+      { input: { gymUuid: publicGym.uuid, name: 'Reusable Again', slug: 'reusable' } },
+      authCtx(OWNER),
+    );
+    expect(second.slug).toBe('reusable');
+    expect(second.uuid).not.toBe(first.uuid);
+  });
+
+  it('frees a MAX_KIOSKS_PER_GYM slot after a soft delete', async () => {
+    const created: string[] = [];
+    for (let i = 0; i < MAX_KIOSKS_PER_GYM; i++) {
+      const kiosk = await socialGymKioskMutations.createGymKiosk(
+        null,
+        { input: { gymUuid: publicGym.uuid, name: `Kiosk ${i}`, slug: `kiosk-${i}` } },
+        authCtx(OWNER),
+      );
+      created.push(kiosk.uuid);
+    }
+    await socialGymKioskMutations.deleteGymKiosk(null, { kioskUuid: created[0] }, authCtx(OWNER));
+
+    const replacement = await socialGymKioskMutations.createGymKiosk(
+      null,
+      { input: { gymUuid: publicGym.uuid, name: 'Replacement', slug: 'replacement' } },
+      authCtx(OWNER),
+    );
+    expect(replacement.slug).toBe('replacement');
   });
 });
 
@@ -444,6 +505,42 @@ describe('updateGymKiosk layout validation', () => {
     const storedBoards = stored.boards as Array<Record<string, unknown>>;
     expect(Object.keys(storedBoards[0])).toEqual(['boardUuid']);
   });
+
+  it('strips unknown keys at the leaderboard level too', async () => {
+    const kiosk = await seedKiosk();
+    await socialGymKioskMutations.updateGymKiosk(
+      null,
+      {
+        input: {
+          kioskUuid: kiosk.uuid,
+          layout: {
+            version: 1,
+            boards: [{ boardUuid: boardPub1.uuid }],
+            leaderboard: { boardUuid: boardPub1.uuid, period: 'week', junk: 'strip-me' },
+          },
+        },
+      },
+      authCtx(OWNER),
+    );
+
+    const rows = await db.execute(sql`SELECT layout FROM gym_kiosks WHERE uuid = ${kiosk.uuid}`);
+    const stored = Array.from(rows as Iterable<{ layout: Record<string, unknown> }>)[0].layout;
+    const storedLeaderboard = stored.leaderboard as Record<string, unknown>;
+    expect(Object.keys(storedLeaderboard).sort()).toEqual(['boardUuid', 'period']);
+    expect(storedLeaderboard.period).toBe('week');
+  });
+
+  it('surfaces an update-path duplicate slug as a clean error (not a 500)', async () => {
+    await insertKiosk({ gymId: publicGym.id, slug: 'occupied', name: 'Occupied' });
+    const kiosk = await seedKiosk();
+    await expect(
+      socialGymKioskMutations.updateGymKiosk(
+        null,
+        { input: { kioskUuid: kiosk.uuid, slug: 'occupied' } },
+        authCtx(OWNER),
+      ),
+    ).rejects.toMatchObject({ extensions: { code: 'KIOSK_SLUG_ALREADY_EXISTS' } });
+  });
 });
 
 // ============================================================================
@@ -512,6 +609,55 @@ describe('gymKiosk public read', () => {
     expect(kiosk!.boards.map((b) => b.boardUuid)).toEqual([boardPub1.uuid]);
     // ...but the layout JSON still records the slot (renderer degrades the preset).
     expect(kiosk!.layout.boards.map((slot) => slot.boardUuid)).toEqual([boardPub1.uuid, boardPriv.uuid]);
+  });
+
+  it('shows a private slot board (with boardId) to a gym EDITOR member', async () => {
+    // Gym-level edit access drives slot visibility: an editor placing a private
+    // board on a kiosk must see it in `boards` (not a placeholder), even though
+    // the stricter per-board canEdit gate (used by UserBoard.boardId) says no.
+    await insertKiosk({
+      gymId: publicGym.id,
+      slug: 'editor-view',
+      name: 'Editor View',
+      layout: {
+        version: 1,
+        boards: [{ boardUuid: boardPub1.uuid }, { boardUuid: boardPriv.uuid }],
+        leaderboard: null,
+      },
+    });
+
+    const viaPublicRead = await socialGymKioskQueries.gymKiosk(
+      null,
+      { gymSlug: publicGym.slug, kioskSlug: 'editor-view' },
+      authCtx(EDITOR),
+    );
+    expect(viaPublicRead!.boards.map((b) => b.boardUuid)).toEqual([boardPub1.uuid, boardPriv.uuid]);
+    const privateEntry = viaPublicRead!.boards.find((b) => b.boardUuid === boardPriv.uuid);
+    expect(privateEntry!.boardId).toBe(boardPriv.id);
+
+    // Same through the manage list.
+    const manageList = await socialGymKioskQueries.gymKiosks(null, { gymUuid: publicGym.uuid }, authCtx(EDITOR));
+    const managed = manageList.find((k) => k.slug === 'editor-view');
+    expect(managed!.boards.map((b) => b.boardUuid)).toEqual([boardPub1.uuid, boardPriv.uuid]);
+  });
+
+  it('still filters the private slot board for a signed-in NON-editor', async () => {
+    await insertKiosk({
+      gymId: publicGym.id,
+      slug: 'rando-view',
+      name: 'Rando View',
+      layout: {
+        version: 1,
+        boards: [{ boardUuid: boardPub1.uuid }, { boardUuid: boardPriv.uuid }],
+        leaderboard: null,
+      },
+    });
+    const kiosk = await socialGymKioskQueries.gymKiosk(
+      null,
+      { gymSlug: publicGym.slug, kioskSlug: 'rando-view' },
+      authCtx(RANDOM),
+    );
+    expect(kiosk!.boards.map((b) => b.boardUuid)).toEqual([boardPub1.uuid]);
   });
 
   it('omits a dead board (quad degrades) but keeps its slot in the layout', async () => {

@@ -41,7 +41,11 @@ function deriveKioskSlugBase(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
+    .slice(0, 50)
+    // The slice can cut right after a hyphen (e.g. a 49-char word + space +
+    // more), leaving a trailing hyphen that KioskSlugSchema and the lookup
+    // pattern reject — the kiosk would be unfetchable by slug. Re-trim.
+    .replace(/^-+|-+$/g, '');
   return base.length >= 3 ? base : 'kiosk';
 }
 
@@ -74,30 +78,43 @@ async function deriveUniqueKioskSlug(gymId: number, name: string): Promise<strin
   return `${base}-${uuidv4().slice(0, 8)}`;
 }
 
+type ResolvedKioskBoard = {
+  boardId: number;
+  boardUuid: string;
+  name: string;
+  boardType: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
+};
+
 /**
  * Build the public GymKiosk payload: the leniently-parsed layout, the resolved
  * slot boards (in slot order, dead/hidden slots dropped), and the branding-
- * carrying gym. A slot board is included only when it's alive, linked to this
- * gym, AND its presence-channel id is exposable to the viewer — GymKioskBoard's
- * boardId is non-null, so a filtered board is omitted rather than shown with a
- * null id. That reuses the exact `UserBoard.boardId` gate (public, or the viewer
- * can edit the board) via enrichBoards, and doubles as the "hide non-public
- * boards from anon" rule (the private board stays in `layout`, off `boards`).
+ * carrying gym.
+ *
+ * Board visibility follows the viewer's GYM-level access, matching the SDL
+ * docstring ("for a viewer without gym-edit access non-public boards are
+ * filtered out"):
+ *  - `viewerCanEditGym` (owner, gym admin/editor, or covering community
+ *    admin/leader — the same set that passes the kiosk write gate): every
+ *    alive, gym-linked slot board is included, private ones too, so the manage
+ *    UI never shows a placeholder for a board the editor just placed. Their
+ *    `boardId` is exposed directly — gym edit access is at least as strong a
+ *    trust signal as the per-board gate.
+ *  - everyone else: a slot board is included only when its presence-channel id
+ *    is exposable via the shared `UserBoard.boardId` gate in enrichBoards
+ *    (public, or the viewer can edit that board). GymKioskBoard's boardId is
+ *    non-null, so a filtered board is omitted rather than shown with a null id
+ *    (the private board stays in `layout`, off `boards`, and the kiosk client
+ *    degrades the preset).
  */
-async function resolveKioskView(kiosk: KioskRow, gym: GymRow, viewerId?: string) {
+async function resolveKioskView(kiosk: KioskRow, gym: GymRow, viewerId: string | undefined, viewerCanEditGym: boolean) {
   const parsed = parseKioskLayoutLenient(kiosk.layout);
   const slotUuids = parsed.layout.boards.map((slot) => slot.boardUuid);
 
-  const boards: Array<{
-    boardId: number;
-    boardUuid: string;
-    name: string;
-    boardType: string;
-    layoutId: number;
-    sizeId: number;
-    setIds: string;
-    angle: number;
-  }> = [];
+  const boards: ResolvedKioskBoard[] = [];
 
   if (slotUuids.length > 0) {
     const rows = await db
@@ -110,25 +127,45 @@ async function resolveKioskView(kiosk: KioskRow, gym: GymRow, viewerId?: string)
           isNull(dbSchema.userBoards.deletedAt),
         ),
       );
-    const enriched = await enrichBoards(
-      rows.map((board) => ({ board })),
-      viewerId,
-    );
-    const byUuid = new Map(enriched.map((board) => [board.uuid, board]));
+
+    const visibleByUuid = new Map<string, ResolvedKioskBoard>();
+    if (viewerCanEditGym) {
+      // Gym editors see every alive, gym-linked slot board (private included).
+      for (const row of rows) {
+        visibleByUuid.set(row.uuid, {
+          boardId: row.id,
+          boardUuid: row.uuid,
+          name: row.name,
+          boardType: row.boardType,
+          layoutId: Number(row.layoutId),
+          sizeId: Number(row.sizeId),
+          setIds: row.setIds,
+          angle: Number(row.angle),
+        });
+      }
+    } else {
+      const enriched = await enrichBoards(
+        rows.map((board) => ({ board })),
+        viewerId,
+      );
+      for (const board of enriched) {
+        if (board.boardId == null) continue;
+        visibleByUuid.set(board.uuid, {
+          boardId: board.boardId,
+          boardUuid: board.uuid,
+          name: board.name,
+          boardType: board.boardType,
+          layoutId: board.layoutId,
+          sizeId: board.sizeId,
+          setIds: board.setIds,
+          angle: board.angle,
+        });
+      }
+    }
 
     for (const slot of parsed.layout.boards) {
-      const board = byUuid.get(slot.boardUuid);
-      if (!board || board.boardId == null) continue;
-      boards.push({
-        boardId: board.boardId,
-        boardUuid: board.uuid,
-        name: board.name,
-        boardType: board.boardType,
-        layoutId: board.layoutId,
-        sizeId: board.sizeId,
-        setIds: board.setIds,
-        angle: board.angle,
-      });
+      const board = visibleByUuid.get(slot.boardUuid);
+      if (board) boards.push(board);
     }
   }
 
@@ -226,12 +263,14 @@ export const socialGymKioskQueries = {
     if (!gym) return null;
 
     const viewerId = ctx.isAuthenticated ? ctx.userId : undefined;
+    // Gym-level edit access drives both the private-gym visibility rule and the
+    // slot-board visibility inside resolveKioskView.
+    const viewerCanEdit = viewerId ? await userCanEditGym(gym, viewerId) : false;
 
     // Private gym: visible only to a viewer who can edit it; everyone else gets
     // null (indistinguishable from a missing gym/kiosk).
-    if (!gym.isPublic) {
-      const canEdit = viewerId ? await userCanEditGym(gym, viewerId) : false;
-      if (!canEdit) return null;
+    if (!gym.isPublic && !viewerCanEdit) {
+      return null;
     }
 
     const conditions = [eq(dbSchema.gymKiosks.gymId, gym.id), isNull(dbSchema.gymKiosks.deletedAt)];
@@ -242,16 +281,17 @@ export const socialGymKioskQueries = {
       conditions.push(eq(dbSchema.gymKiosks.slug, kioskSlug));
     }
 
-    // Named slug → that kiosk; no slug → the oldest live kiosk as the default.
+    // Named slug → that kiosk; no slug → the oldest live kiosk as the default
+    // (id tiebreak keeps same-millisecond rows deterministic).
     const [kiosk] = await db
       .select()
       .from(dbSchema.gymKiosks)
       .where(and(...conditions))
-      .orderBy(asc(dbSchema.gymKiosks.createdAt))
+      .orderBy(asc(dbSchema.gymKiosks.createdAt), asc(dbSchema.gymKiosks.id))
       .limit(1);
     if (!kiosk) return null;
 
-    return resolveKioskView(kiosk, gym, viewerId);
+    return resolveKioskView(kiosk, gym, viewerId, viewerCanEdit);
   },
 
   gymKiosks: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
@@ -266,9 +306,10 @@ export const socialGymKioskQueries = {
       .select()
       .from(dbSchema.gymKiosks)
       .where(and(eq(dbSchema.gymKiosks.gymId, gym.id), isNull(dbSchema.gymKiosks.deletedAt)))
-      .orderBy(asc(dbSchema.gymKiosks.createdAt));
+      .orderBy(asc(dbSchema.gymKiosks.createdAt), asc(dbSchema.gymKiosks.id));
 
-    return Promise.all(kiosks.map((kiosk) => resolveKioskView(kiosk, gym, userId)));
+    // The viewer just passed requireGymEditAccess, so they're a gym editor.
+    return Promise.all(kiosks.map((kiosk) => resolveKioskView(kiosk, gym, userId, true)));
   },
 };
 
@@ -320,7 +361,8 @@ export const socialGymKioskMutations = {
       throw error;
     }
 
-    return resolveKioskView(created, gym, userId);
+    // The viewer just passed requireGymEditAccess, so they're a gym editor.
+    return resolveKioskView(created, gym, userId, true);
   },
 
   updateGymKiosk: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
@@ -332,7 +374,14 @@ export const socialGymKioskMutations = {
     const userId = ctx.userId!;
 
     const { kiosk, gym } = await loadKioskForWrite(validated.kioskUuid);
-    await requireGymEditAccess(gym.uuid, userId);
+    // Authorization failures are masked as the same NOT_FOUND the load path
+    // throws, so an authenticated prober can't tell a kiosk they may not edit
+    // apart from one that doesn't exist. userCanEditGym covers exactly the
+    // requireGymEditAccess set (owner, gym admin/editor, covering community
+    // admin/leader) without the distinguishable "Not authorized" error.
+    if (!(await userCanEditGym(gym, userId))) {
+      throw new GraphQLError('Kiosk not found', { extensions: { code: 'NOT_FOUND' } });
+    }
 
     const updateValues: Record<string, unknown> = { updatedAt: new Date() };
     if (validated.name !== undefined) updateValues.name = validated.name;
@@ -360,7 +409,8 @@ export const socialGymKioskMutations = {
       throw error;
     }
 
-    return resolveKioskView(updated, gym, userId);
+    // The viewer just passed the gym-edit gate above, so they're a gym editor.
+    return resolveKioskView(updated, gym, userId, true);
   },
 
   deleteGymKiosk: async (
@@ -374,7 +424,11 @@ export const socialGymKioskMutations = {
     const userId = ctx.userId!;
 
     const { kiosk, gym } = await loadKioskForWrite(kioskUuid);
-    await requireGymEditAccess(gym.uuid, userId);
+    // Same NOT_FOUND mask as updateGymKiosk: no existence oracle for
+    // authenticated probers.
+    if (!(await userCanEditGym(gym, userId))) {
+      throw new GraphQLError('Kiosk not found', { extensions: { code: 'NOT_FOUND' } });
+    }
 
     await db.update(dbSchema.gymKiosks).set({ deletedAt: new Date() }).where(eq(dbSchema.gymKiosks.id, kiosk.id));
 

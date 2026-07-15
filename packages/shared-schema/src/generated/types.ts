@@ -2203,9 +2203,12 @@ export type GymKiosk = {
  * without gym-edit access non-public boards are filtered out entirely (the kiosk
  * client renders a placeholder for the missing slot / degrades the preset).
  * `boardId` is the numeric board-presence channel id (userBoards.id) and is
- * always populated here — a board only appears in this list when it passes the
- * same anon-readable gate as `UserBoard.boardId` (public, or the viewer can edit
- * it), which is exactly when that id is safe to expose.
+ * always populated here. Visibility follows the viewer's GYM-level access: a gym
+ * editor (owner, gym admin/editor, or covering community admin/leader) sees every
+ * alive gym-linked slot board — private included, so the manage UI never shows a
+ * placeholder for a board they just placed; everyone else gets only boards
+ * passing the same anon-readable gate as `UserBoard.boardId` (public, or the
+ * viewer can edit that board), which is exactly when that id is safe to expose.
  */
 export type GymKioskBoard = {
   __typename?: 'GymKioskBoard';
