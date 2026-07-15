@@ -1161,7 +1161,12 @@ export const socialBoardQueries = {
       .limit(1);
 
     if (!board) {
-      throw new Error('Board not found');
+      // GraphQLError with NOT_FOUND (not a plain Error, which the HTTP layer
+      // masks to a generic INTERNAL_SERVER_ERROR) so a missing board and a
+      // private board (masked by requireAnonReadableBoard below) are
+      // indistinguishable on the wire — a plain Error here would let an
+      // anonymous caller use the error shape as an existence oracle.
+      throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
     }
 
     // Anonymous callers only read public / system-shared boards' leaderboards.

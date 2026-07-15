@@ -251,7 +251,7 @@ export const boardEntitiesTypeDefs = /* GraphQL */ `
   input BoardLeaderboardInput {
     "Board UUID"
     boardUuid: ID!
-    "Time period (day, week, month, year, all)"
+    "Time period (day, week, month, year, all). 'day' is a rolling last-24-hours window (NOW() - INTERVAL '1 day'), not the calendar day so far."
     period: String
     "Max entries to return"
     limit: Int

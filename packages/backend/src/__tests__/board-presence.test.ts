@@ -1549,29 +1549,34 @@ describe('board-presence connection holder', () => {
       expect(stats.distinctClimbersCount).toBe(0);
     });
 
-    it("masks a private board's history and stats as NOT_FOUND for anonymous viewers, same as a missing board", async () => {
+    it("masks a private board's history and stats as NOT_FOUND for anonymous viewers, identical to a missing board", async () => {
       const boardId = await makePrivateBoard();
+      const missingBoardId = 999_999_999;
 
       for (const query of [
-        () => boardPresenceQueries.boardHistory(undefined, { boardId }, anon()),
-        () => boardPresenceQueries.boardPresenceStats(undefined, { boardId }, anon()),
+        (id: number) => boardPresenceQueries.boardHistory(undefined, { boardId: id }, anon()),
+        (id: number) => boardPresenceQueries.boardPresenceStats(undefined, { boardId: id }, anon()),
       ]) {
-        const error = await query().then(
+        const privateError = await query(boardId).then(
           () => null,
           (caught: unknown) => caught,
         );
-        expect(error).toBeInstanceOf(GraphQLError);
-        expect((error as GraphQLError).message).toBe('Board not found');
-        expect((error as GraphQLError).extensions?.code).toBe('NOT_FOUND');
-      }
+        const missingError = await query(missingBoardId).then(
+          () => null,
+          (caught: unknown) => caught,
+        );
 
-      // Indistinguishable from a board that does not exist at all.
-      await expect(boardPresenceQueries.boardHistory(undefined, { boardId: 999_999_999 }, anon())).rejects.toThrow(
-        'Board not found',
-      );
-      await expect(
-        boardPresenceQueries.boardPresenceStats(undefined, { boardId: 999_999_999 }, anon()),
-      ).rejects.toThrow('Board not found');
+        // A private board (masked) and a genuinely missing board must be
+        // indistinguishable on the wire: identical message AND identical
+        // extensions.code — otherwise an anonymous caller can use the error
+        // shape as an existence oracle.
+        expect(privateError).toBeInstanceOf(GraphQLError);
+        expect(missingError).toBeInstanceOf(GraphQLError);
+        expect((privateError as GraphQLError).message).toBe('Board not found');
+        expect((missingError as GraphQLError).message).toBe('Board not found');
+        expect((privateError as GraphQLError).extensions?.code).toBe('NOT_FOUND');
+        expect((missingError as GraphQLError).extensions?.code).toBe('NOT_FOUND');
+      }
     });
 
     it("keeps authenticated access to the caller's own private board's history and stats", async () => {
@@ -1634,16 +1639,31 @@ describe('board-presence connection holder', () => {
       expect(allTime.totalCount).toBe(2);
     });
 
-    it("masks a private board's leaderboard as NOT_FOUND for anonymous callers but still serves its owner", async () => {
+    it("masks a private board's leaderboard as NOT_FOUND for anonymous callers, identical to a missing board, but still serves its owner", async () => {
       const { boardUuid } = await makeLeaderboardBoard(false);
+      const missingBoardUuid = uuidv4();
 
-      const error = await socialBoardQueries.boardLeaderboard(undefined, { input: { boardUuid } }, anon()).then(
+      const privateError = await socialBoardQueries.boardLeaderboard(undefined, { input: { boardUuid } }, anon()).then(
         () => null,
         (caught: unknown) => caught,
       );
-      expect(error).toBeInstanceOf(GraphQLError);
-      expect((error as GraphQLError).message).toBe('Board not found');
-      expect((error as GraphQLError).extensions?.code).toBe('NOT_FOUND');
+      const missingError = await socialBoardQueries
+        .boardLeaderboard(undefined, { input: { boardUuid: missingBoardUuid } }, anon())
+        .then(
+          () => null,
+          (caught: unknown) => caught,
+        );
+
+      // A private board (masked) and a genuinely missing board must be
+      // indistinguishable on the wire: identical message AND identical
+      // extensions.code — otherwise an anonymous caller can use the error
+      // shape as an existence oracle.
+      expect(privateError).toBeInstanceOf(GraphQLError);
+      expect(missingError).toBeInstanceOf(GraphQLError);
+      expect((privateError as GraphQLError).message).toBe('Board not found');
+      expect((missingError as GraphQLError).message).toBe('Board not found');
+      expect((privateError as GraphQLError).extensions?.code).toBe('NOT_FOUND');
+      expect((missingError as GraphQLError).extensions?.code).toBe('NOT_FOUND');
 
       const owned = await socialBoardQueries.boardLeaderboard(undefined, { input: { boardUuid } }, authCtx());
       expect(owned.entries).toEqual([]);

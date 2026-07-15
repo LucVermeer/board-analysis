@@ -292,7 +292,10 @@ export async function requireActiveBoardById(boardId: number): Promise<ActivePre
   assertValidBoardId(boardId);
   const board = await findActiveBoardById(boardId);
   if (!board) {
-    throw new GraphQLError('Board not found');
+    // NOT_FOUND matches requireAnonReadableBoard's mask below, so a missing
+    // board and a private board masked from an anonymous viewer produce the
+    // identical error shape (message + extensions.code) on the wire.
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
   return board;
 }
