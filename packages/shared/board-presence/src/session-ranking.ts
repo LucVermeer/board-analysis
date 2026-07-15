@@ -3,6 +3,7 @@
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 
 export type RankedSessionClimber = {
+  /** Null for anonymous senders, which group by display name — same-name guests merge into one row. */
   userId: string | null;
   /** Null when the sender had no display name; the UI supplies a localized fallback. */
   displayName: string | null;
@@ -67,9 +68,9 @@ export function rankSessionClimbers(
     if (sentAtMs > existing.lastSentAtMs) {
       existing.lastSentAtMs = sentAtMs;
       existing.lastSentAt = climb.sentAt;
-      // Prefer the most recent send's identity details (name/avatar may have changed mid-session).
-      existing.displayName = displayName ?? existing.displayName;
-      existing.avatarUrl = climb.sentByAvatarUrl ?? existing.avatarUrl;
+      // The newest send's identity wins outright — a null name/avatar means it no longer resolves.
+      existing.displayName = displayName;
+      existing.avatarUrl = climb.sentByAvatarUrl ?? null;
     }
   }
 

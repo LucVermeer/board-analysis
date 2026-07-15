@@ -193,6 +193,44 @@ describe('rankSessionClimbers', () => {
     });
   });
 
+  it('clears stale name and avatar when the newest send no longer carries them', () => {
+    const history: BoardPresenceClimb[] = [
+      makeClimb({
+        seq: 1,
+        climbUuid: 'climb-a',
+        sentByUserId: 'user-1',
+        sentByDisplayName: 'Old Name',
+        sentByAvatarUrl: 'https://example.com/old.png',
+        sentAt: new Date(NOW.getTime() - 60 * 60_000).toISOString(),
+      }),
+      makeClimb({
+        seq: 2,
+        climbUuid: 'climb-b',
+        sentByUserId: 'user-1',
+        sentAt: new Date(NOW.getTime() - 5 * 60_000).toISOString(),
+      }),
+    ];
+
+    for (const orderedHistory of [history, [...history].reverse()]) {
+      const ranked = rankSessionClimbers(orderedHistory, { now: NOW });
+
+      expect(ranked).toHaveLength(1);
+      expect(ranked[0]).toMatchObject({ userId: 'user-1', displayName: null, avatarUrl: null, sendCount: 2 });
+    }
+  });
+
+  it('skips entries whose sentAt does not parse as a date', () => {
+    const history: BoardPresenceClimb[] = [
+      makeClimb({ seq: 1, climbUuid: 'climb-a', sentByUserId: 'user-1', sentAt: 'not-a-date' }),
+      makeClimb({ seq: 2, climbUuid: 'climb-b', sentByUserId: 'user-2', sentByDisplayName: 'Valid Climber' }),
+    ];
+
+    const ranked = rankSessionClimbers(history, { now: NOW });
+
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0].userId).toBe('user-2');
+  });
+
   it('carries avatarUrl through and defaults to null when absent', () => {
     const history: BoardPresenceClimb[] = [
       makeClimb({

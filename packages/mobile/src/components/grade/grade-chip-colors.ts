@@ -1,4 +1,4 @@
-// Moved to @boardsesh/board-constants (shared with the web gym kiosk); re-exported so existing mobile imports keep working.
+// Re-exported from @boardsesh/board-constants so existing mobile imports keep working.
 export {
   readableDarkText,
   readableLightText,
