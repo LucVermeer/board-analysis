@@ -10,15 +10,15 @@ type ManageTabEmptyStateProps = {
   icon: React.ReactNode;
   title: string;
   body: string;
-  /** Disabled CTA hinting at the feature that lands in a later PR. */
   ctaLabel: string;
+  /** CTA action; omitted → the button renders disabled (placeholder tabs). */
+  onCtaClick?: () => void;
 };
 
 /**
- * Shared empty-state for the manage-gym placeholder tabs. Icon + one line of
- * copy + a disabled affordance, per the shell contract PR I fills in.
+ * Shared empty-state for the manage-gym tabs: icon + one line of copy + a CTA.
  */
-export default function ManageTabEmptyState({ icon, title, body, ctaLabel }: ManageTabEmptyStateProps) {
+export default function ManageTabEmptyState({ icon, title, body, ctaLabel, onCtaClick }: ManageTabEmptyStateProps) {
   return (
     <Box
       sx={{
@@ -40,7 +40,13 @@ export default function ManageTabEmptyState({ icon, title, body, ctaLabel }: Man
       <Typography variant="body2" color="text.secondary">
         {body}
       </Typography>
-      <Button variant="outlined" size="small" disabled sx={{ textTransform: 'none', mt: 1 }}>
+      <Button
+        variant={onCtaClick ? 'contained' : 'outlined'}
+        size="small"
+        disabled={!onCtaClick}
+        onClick={onCtaClick}
+        sx={{ textTransform: 'none', mt: 1 }}
+      >
         {ctaLabel}
       </Button>
     </Box>

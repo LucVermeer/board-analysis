@@ -93,14 +93,31 @@
       "saveFailed": "Couldn't save the slug."
     },
     "kiosks": {
-      "emptyTitle": "Kiosk setup lands here soon",
-      "emptyBody": "Point a screen at your wall and show what's lit. The kiosk editor arrives in the next update.",
-      "cta": "Set up a kiosk"
-    },
-    "branding": {
-      "emptyTitle": "Branding lands here soon",
-      "emptyBody": "Add your logo and colours so the wall display looks like your gym. Coming in the next update.",
-      "cta": "Customise branding"
+      "emptyTitle": "Point a screen at your wall",
+      "emptyBody": "A kiosk shows what's lit on your boards, live, in any TV browser. Create one, assign your boards, and open its URL on the screen.",
+      "cta": "Set up a kiosk",
+      "heading": "Kiosks",
+      "description": "TV screens showing your walls live. Each kiosk gets its own URL.",
+      "newKiosk": "New kiosk",
+      "capReached": "A gym can have up to {{max}} kiosks.",
+      "needSlugHint": "Set your gym's URL slug above — kiosk URLs need it before a TV can open them.",
+      "loadError": "Couldn't load this gym's kiosks.",
+      "defaultBadge": "Default",
+      "boardCount_one": "{{count}} board",
+      "boardCount_other": "{{count}} boards",
+      "railOn": "Leaderboard on",
+      "railOff": "No leaderboard",
+      "openTv": "Open TV view",
+      "openTvNeedsSlug": "Set your gym's URL slug first (see the banner above).",
+      "urlPending": "URL: /kiosk/…/{{slug}} — needs the gym slug",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteTitle": "Delete this kiosk?",
+      "deleteBody": "“{{name}}” goes dark: any TV showing it lands on a not-found screen. This can't be undone.",
+      "deleteConfirm": "Delete",
+      "cancel": "Cancel",
+      "deleted": "Kiosk deleted.",
+      "deleteFailed": "Couldn't delete the kiosk."
     },
     "boards": {
       "heading": "Boards at this gym",
@@ -132,6 +149,124 @@
         "link": "Link",
         "close": "Close"
       }
+    },
+    "presets": {
+      "single": "Single wall",
+      "dual": "Dual wall",
+      "triple": "Triple wall",
+      "quad": "Quad wall",
+      "none": "No boards yet"
+    },
+    "createDialog": {
+      "title": "New kiosk",
+      "body": "Name it after where the screen hangs — “Front desk TV”, “Kilter corner”.",
+      "nameLabel": "Kiosk name",
+      "namePlaceholder": "Main wall TV",
+      "urlHint": "URL assigned on create.",
+      "create": "Create kiosk",
+      "cancel": "Cancel",
+      "created": "Kiosk created — its URL ends in /{{slug}}.",
+      "createFailed": "Couldn't create the kiosk."
+    },
+    "editor": {
+      "back": "All kiosks",
+      "save": "Save layout",
+      "saved": "Kiosk saved.",
+      "saveFailed": "Couldn't save the kiosk.",
+      "needSlug": "Set the gym slug to get this kiosk's URL",
+      "boardsHeading": "Boards on this screen",
+      "slotLabel": "Slot {{index}}",
+      "slotUnknownBoard": "This board is no longer at this gym — remove it.",
+      "addBoard": "Add a board",
+      "addBoardHelper": "Slot order is screen order.",
+      "addBoardNoneLeft": "Every gym board is already on this kiosk.",
+      "addBoardFullHelper": "A kiosk shows up to {{max}} boards.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "removeSlot": "Remove board",
+      "presetNoneHelper": "Add a board and the TV layout appears here.",
+      "quadRailHint": "Four boards plus the leaderboard is a tight fit — each board gets about 740×420 pixels on a 1080p TV. Check the preview still reads from across the gym.",
+      "leaderboardHeading": "Leaderboard rail",
+      "railSwitch": "Show the leaderboard",
+      "railDisabledTooltip": "Assign at least one board first — the leaderboard ranks sends on this kiosk's boards.",
+      "scopeLabel": "Ranks sends on",
+      "scopeAll": "All kiosk boards",
+      "periodLabel": "Time window",
+      "period": {
+        "session": "Session",
+        "day": "Last 24 hours",
+        "week": "Week",
+        "month": "Month"
+      },
+      "previewHeading": "Live preview",
+      "previewHint": "This is the real kiosk render — live sends show up as they happen, and unsaved changes preview immediately.",
+      "previewMissingBoard": "This board isn't at this gym anymore",
+      "previewUnavailable": "{{name}} can't render here",
+      "slotDuplicateError": "This board is already on another slot.",
+      "scopeInvalidError": "Pick one of the kiosk's boards.",
+      "discardTitle": "Discard changes?",
+      "discardBody": "Your layout edits aren't saved yet.",
+      "keepEditing": "Keep editing",
+      "discard": "Discard"
     }
+  },
+  "branding": {
+    "logo": {
+      "heading": "Gym logo",
+      "description": "Shows on your kiosk header and embeds. Transparent PNGs look best on the dark TV screen.",
+      "upload": "Upload logo",
+      "replace": "Replace logo",
+      "remove": "Remove",
+      "removed": "Logo removed.",
+      "uploaded": "Logo saved.",
+      "uploadFailed": "Couldn't upload the logo.",
+      "saveFailed": "Couldn't save the logo.",
+      "tooLarge": "That file is over 10MB. Pick a smaller image.",
+      "uploadTooLarge": "That file is over 2MB and animated GIFs can't be shrunk here. Pick a smaller one.",
+      "unsupportedType": "Use a JPG, PNG, GIF, or WebP image.",
+      "currentAlt": "{{gymName}} logo",
+      "emptyPlaceholder": "No logo",
+      "formatsHint": "JPG, PNG, GIF, or WebP. Resized to 512px — transparency stays."
+    },
+    "colors": {
+      "heading": "Brand colours",
+      "description": "Your kiosk stays dark; these colours drive the accent on grade chips and highlights.",
+      "primary": "Primary colour",
+      "accent": "Accent colour",
+      "background": "Background colour",
+      "invalidHex": "Use a #RRGGBB hex value.",
+      "contrastWarning": "{{colors}}: hard to read on the dark kiosk screen (under 3:1 contrast). The kiosk auto-lightens it until it reads.",
+      "save": "Save colours",
+      "saved": "Colours saved.",
+      "saveFailed": "Couldn't save the colours.",
+      "unsavedHint": "Unsaved changes"
+    },
+    "preview": {
+      "heading": "Kiosk preview",
+      "sampleChip": "Accent sample",
+      "poweredByNote": "The “Powered by Boardsesh” badge shows on every kiosk and embed and can't be removed."
+    },
+    "reset": {
+      "button": "Reset branding to defaults",
+      "title": "Reset branding?",
+      "body": "Clears your logo and all three colours. Kiosks and embeds go back to the Boardsesh look.",
+      "confirm": "Reset",
+      "cancel": "Cancel",
+      "done": "Branding reset."
+    }
+  },
+  "embed": {
+    "boardButton": "Embed this board",
+    "railButton": "Embed leaderboard",
+    "boardDialogTitle": "Embed {{name}}",
+    "railDialogTitle": "Embed the {{name}} leaderboard",
+    "copy": "Copy",
+    "copied": "Copied to clipboard.",
+    "copyFailed": "Couldn't copy — select the code and copy it manually.",
+    "periodNote": "The period parameter accepts day, week, or month.",
+    "docsHint": "Paste into any HTML page — it stays live.",
+    "close": "Close",
+    "publicOnlyBoard": "Only public boards can be embedded.",
+    "publicOnlyGym": "Only public gyms can embed the leaderboard."
   }
 }

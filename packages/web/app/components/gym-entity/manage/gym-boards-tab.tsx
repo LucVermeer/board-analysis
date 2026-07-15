@@ -37,7 +37,7 @@ import { themeTokens } from '@/app/theme/theme-config';
 import { canManageGymBoards, canUnlinkBoard, linkableBoards } from './gym-board-permissions';
 import type { GymManageTabProps } from './tab-props';
 
-function VisibilityChip({ board }: { board: Pick<UserBoard, 'isPublic' | 'isUnlisted'> }) {
+export function VisibilityChip({ board }: { board: Pick<UserBoard, 'isPublic' | 'isUnlisted'> }) {
   const { t } = useTranslation('kiosk');
   if (board.isPublic) {
     return <Chip size="small" color="success" variant="outlined" label={t('manage.boards.visibility.public')} />;
