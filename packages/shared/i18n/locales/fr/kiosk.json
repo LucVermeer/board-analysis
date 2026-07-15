@@ -40,5 +40,21 @@
   },
   "attribution": {
     "poweredBy": "Propulsé par"
+  },
+  "embed": {
+    "metadata": {
+      "boardTitle": "{{boardName}} — vue de la board en direct",
+      "boardDescription": "Ce qui est allumé sur {{boardName}} en ce moment. Propulsé par Boardsesh.",
+      "boardFallbackTitle": "Vue de la board en direct",
+      "boardFallbackDescription": "Widget de board en direct. Propulsé par Boardsesh.",
+      "leaderboardTitle": "{{gymName}} — classement",
+      "leaderboardDescription": "Qui enchaîne à {{gymName}}. Propulsé par Boardsesh.",
+      "leaderboardFallbackTitle": "Classement de la salle",
+      "leaderboardFallbackDescription": "Widget de classement de salle. Propulsé par Boardsesh."
+    },
+    "leaderboard": {
+      "errorTitle": "Classement indisponible",
+      "errorBody": "Impossible de charger les dernières croix. Le widget réessaie tout seul."
+    }
   }
 }

@@ -1,0 +1,21 @@
+/* Embed widget frame. The iframe gives us a fixed viewport (recommended
+ * snippets: board 640px tall, leaderboard 520px), so the shell fills exactly
+ * 100dvh — content column + slim attribution bar — and never scrolls. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Single-cell grid: whatever widget lands here (board slot, leaderboard
+ * panel) stretches to fill the remaining height above the attribution bar. */
+.content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  padding: var(--spacing-3);
+}

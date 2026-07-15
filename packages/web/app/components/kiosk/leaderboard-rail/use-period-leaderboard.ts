@@ -25,6 +25,9 @@ import { mergeSettledPeriodLeaderboards, type KioskLeaderboardRowData } from './
 
 export type KioskPeriodLeaderboardPeriod = Exclude<KioskLeaderboardPeriod, 'session'>;
 
+/** Kiosk default: an unattended gym TV refreshes every minute. Embeds pass a
+ * gentler interval (they run on arbitrary gym websites, one per visitor tab,
+ * so their polling is deliberately rate-limit friendly). */
 const PERIOD_REFETCH_MS = 60_000;
 /** Per-board fetch depth: enough that a 10-row merged ranking can't miss a
  * climber who is mid-pack on every individual board. */
@@ -41,11 +44,12 @@ export function usePeriodLeaderboard(
   boardUuids: string[],
   period: KioskPeriodLeaderboardPeriod,
   enabled: boolean,
+  options: { refetchIntervalMs?: number } = {},
 ): PeriodLeaderboardResult {
   const { data, isError, dataUpdatedAt } = useQuery({
     queryKey: ['kioskPeriodLeaderboard', period, boardUuids],
     enabled: enabled && boardUuids.length > 0,
-    refetchInterval: PERIOD_REFETCH_MS,
+    refetchInterval: options.refetchIntervalMs ?? PERIOD_REFETCH_MS,
     refetchIntervalInBackground: true,
     queryFn: async (): Promise<KioskLeaderboardRowData[]> => {
       const settled = await Promise.allSettled(

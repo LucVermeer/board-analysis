@@ -19,6 +19,26 @@ export function middleware(request: NextRequest) {
     });
   }
 
+  // /embed/** — iframe widgets for gym websites: display-only, cookieless,
+  // anonymous. Bypass BEFORE locale detection so no sticky-locale cookie (or
+  // any other cookie) is ever set on an embed response, and no locale
+  // redirect/rewrite can move the request off the /embed/** path that the
+  // next.config.mjs `frame-ancestors *` header rule matches on.
+  if (pathname === '/embed' || pathname.startsWith('/embed/')) {
+    return NextResponse.next();
+  }
+
+  // Locale-prefixed embed URLs are 308'd to the un-prefixed path: headers()
+  // matches the ORIGINAL request path, so /es/embed/** would dodge the embed
+  // header rule and be served frame-DENYING X-Frame-Options: SAMEORIGIN.
+  // Embeds are en-US-only by design.
+  const localePrefixedEmbed = pathname.match(/^\/(es|fr)\/embed\//);
+  if (localePrefixedEmbed) {
+    const unprefixedEmbedUrl = request.nextUrl.clone();
+    unprefixedEmbedUrl.pathname = pathname.slice(localePrefixedEmbed[1].length + 1);
+    return NextResponse.redirect(unprefixedEmbedUrl, 308);
+  }
+
   // Check API routes
   if (pathname.startsWith('/api/v1/')) {
     const pathParts = pathname.split('/');

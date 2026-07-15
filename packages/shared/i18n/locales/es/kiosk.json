@@ -40,5 +40,21 @@
   },
   "attribution": {
     "poweredBy": "Con la tecnología de"
+  },
+  "embed": {
+    "metadata": {
+      "boardTitle": "{{boardName}} — vista del plafón en directo",
+      "boardDescription": "Mira qué está encendido en {{boardName}} ahora mismo. Con la tecnología de Boardsesh.",
+      "boardFallbackTitle": "Vista del plafón en directo",
+      "boardFallbackDescription": "Widget del plafón en directo. Con la tecnología de Boardsesh.",
+      "leaderboardTitle": "{{gymName}} — clasificación",
+      "leaderboardDescription": "Quién está encadenando en {{gymName}}. Con la tecnología de Boardsesh.",
+      "leaderboardFallbackTitle": "Clasificación del rocódromo",
+      "leaderboardFallbackDescription": "Widget de clasificación del rocódromo. Con la tecnología de Boardsesh."
+    },
+    "leaderboard": {
+      "errorTitle": "Clasificación no disponible",
+      "errorBody": "No se han podido cargar los últimos encadenes. Se reintentará automáticamente."
+    }
   }
 }

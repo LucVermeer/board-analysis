@@ -54,6 +54,7 @@ const BOARD_FIELDS = `
   distanceMeters
   serialNumber
   canEdit
+  boardId
 `;
 
 export const GET_BOARD = gql`

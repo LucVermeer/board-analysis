@@ -79,9 +79,30 @@ const nextConfig = {
         headers: [{ key: 'Content-Type', value: 'application/json' }],
       },
       {
-        source: '/:path*',
+        // Every route EXCEPT /embed/** keeps the frame-denying default.
+        // If this exclusion ever regresses, the fail-safe is SAMEORIGIN
+        // (embeds break visibly rather than the whole site becoming frameable).
+        source: '/((?!embed/).*)',
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+      {
+        // /embed/** — iframe widgets for gym websites (live board view, gym
+        // leaderboard). Display-only, cookieless, no authenticated action;
+        // review rule: no auth-dependent UI under app/embed/**. They must be
+        // frameable by ANY origin, hence `frame-ancestors *` and NO
+        // X-Frame-Options (frame-ancestors takes precedence over XFO in
+        // modern browsers; omitting XFO keeps legacy browsers from denying).
+        // The middleware 308s locale-prefixed /es|fr/embed/** to the
+        // un-prefixed path because this matcher sees the ORIGINAL request
+        // path — a prefixed variant would fall into the SAMEORIGIN rule above.
+        source: '/embed/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: 'frame-ancestors *' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
