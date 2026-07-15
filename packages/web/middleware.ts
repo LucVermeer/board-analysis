@@ -3,10 +3,26 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { SUPPORTED_BOARDS } from './app/lib/board-data';
 import { getListPageCacheTTL } from './app/lib/list-page-cache';
 import { CLIMB_SESSION_COOKIE } from './app/lib/climb-session-cookie';
-import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALE_HEADER, isSupportedLocale } from './app/lib/i18n/config';
+import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  LOCALE_HEADER,
+  SUPPORTED_LOCALES,
+  isSupportedLocale,
+} from './app/lib/i18n/config';
 import { detectLocale } from './app/lib/i18n/detect-locale';
 
 const SPECIAL_ROUTES = ['angles', 'grades']; // routes that don't need board validation
+
+// Locale-prefixed embed URLs (/es/embed/..., /fr/embed/...) are 308'd to the
+// un-prefixed path (see the carve-out below). Derived from SUPPORTED_LOCALES
+// so adding a locale can't silently leave its prefixed embeds on the
+// frame-denying header rule. Case-insensitive to match the case-insensitive
+// next.config header matchers.
+const LOCALE_PREFIXED_EMBED_PATTERN = new RegExp(
+  `^/(${SUPPORTED_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE).join('|')})/embed/`,
+  'i',
+);
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -45,9 +61,8 @@ export function middleware(request: NextRequest) {
   // Locale-prefixed embed URLs are 308'd to the un-prefixed path: headers()
   // matches the ORIGINAL request path, so /es/embed/** would dodge the embed
   // header rule and be served frame-DENYING X-Frame-Options: SAMEORIGIN.
-  // Embeds are en-US-only by design. Case-insensitive to match the
-  // case-insensitive header rules (see above).
-  const localePrefixedEmbed = pathname.match(/^\/(es|fr)\/embed\//i);
+  // Embeds are en-US-only by design.
+  const localePrefixedEmbed = pathname.match(LOCALE_PREFIXED_EMBED_PATTERN);
   if (localePrefixedEmbed) {
     const unprefixedEmbedUrl = request.nextUrl.clone();
     unprefixedEmbedUrl.pathname = pathname.slice(localePrefixedEmbed[1].length + 1);
