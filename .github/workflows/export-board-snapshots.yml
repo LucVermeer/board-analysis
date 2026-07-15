@@ -1,0 +1,55 @@
+name: Export Board Snapshots
+
+# Nightly: build a per-(board, layout) SQLite snapshot of board_climbs +
+# board_climb_stats and upload it to Tigris/S3 under board-snapshots/v1/.
+# A freshly downloaded board on mobile warms from these artifacts instead of
+# paging the whole catalog over GraphQL, then resumes an incremental pull from
+# the watermarks the manifest records. Idempotent — each run mints new
+# content-addressed artifacts and rewrites the manifest last.
+on:
+  schedule:
+    - cron: '15 7 * * *' # 07:15 UTC daily (off-peak; distinct from the 06:00/06:30 refresh crons)
+  workflow_dispatch:
+
+concurrency:
+  group: export-board-snapshots
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # DATABASE_URL is read-only-sufficient (snapshots only SELECT) but MUST
+    # point at the PRIMARY, never a read replica: the sync cursor
+    # (updated_at, sync_seq) is write-time ordered while a replica snapshot is
+    # commit-order consistent, so a lagging replica can yield watermarks that
+    # cover rows absent from the artifact — bootstrapped clients would skip
+    # those rows forever.
+    environment: Production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Export board snapshots
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          # Keep the export's stability window in lockstep with the backend if
+          # it's ever configured off-default (empty → the shared 30s default).
+          SYNC_STABILITY_WINDOW_SECONDS: ${{ vars.SYNC_STABILITY_WINDOW_SECONDS }}
+        run: node --import tsx src/scripts/export-board-snapshots.ts

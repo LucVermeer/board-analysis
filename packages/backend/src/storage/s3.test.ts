@@ -29,6 +29,7 @@ vi.mock('@aws-sdk/client-s3', () => {
     DeleteObjectCommand: class DeleteObjectCommand extends MockCommand {},
     GetObjectCommand: class GetObjectCommand extends MockCommand {},
     HeadObjectCommand: class HeadObjectCommand extends MockCommand {},
+    ListObjectsV2Command: class ListObjectsV2Command extends MockCommand {},
   };
 });
 
@@ -138,5 +139,59 @@ describe('s3 storage', () => {
 
     awsMocks.send.mockRejectedValueOnce(new Error('not found'));
     await expect(getFromS3('missing.json')).resolves.toBeNull();
+  });
+
+  it('getFromS3Strict distinguishes a missing object (null) from a read failure (throws)', async () => {
+    const { getFromS3Strict } = await import('./s3');
+
+    // NoSuchKey / 404 shapes → null (the object genuinely does not exist).
+    const noSuchKey = Object.assign(new Error('no such key'), { name: 'NoSuchKey' });
+    awsMocks.send.mockRejectedValueOnce(noSuchKey);
+    await expect(getFromS3Strict('missing.json')).resolves.toBeNull();
+
+    const http404 = Object.assign(new Error('not found'), { $metadata: { httpStatusCode: 404 } });
+    awsMocks.send.mockRejectedValueOnce(http404);
+    await expect(getFromS3Strict('missing.json')).resolves.toBeNull();
+
+    // Anything else (network/auth/throttle) must PROPAGATE — callers like the
+    // snapshot manifest merge treat "missing" and "unreadable" very differently.
+    awsMocks.send.mockRejectedValueOnce(new Error('connection reset'));
+    await expect(getFromS3Strict('broken.json')).rejects.toThrow('connection reset');
+
+    // The lenient getFromS3 still maps that same failure to null (caller contract).
+    const { getFromS3 } = await import('./s3');
+    awsMocks.send.mockRejectedValueOnce(new Error('connection reset'));
+    await expect(getFromS3('broken.json')).resolves.toBeNull();
+  });
+
+  it('listS3Objects follows continuation tokens across pages and skips keyless entries', async () => {
+    const { listS3Objects } = await import('./s3');
+
+    const firstModified = new Date('2026-06-01T00:00:00Z');
+    const secondModified = new Date('2026-06-02T00:00:00Z');
+    awsMocks.send
+      .mockResolvedValueOnce({
+        Contents: [
+          { Key: 'board-snapshots/v1/kilter/1/a.db', Size: 10, LastModified: firstModified },
+          { Size: 5 }, // keyless entry must be skipped, not crash
+        ],
+        IsTruncated: true,
+        NextContinuationToken: 'token-2',
+      })
+      .mockResolvedValueOnce({
+        Contents: [{ Key: 'board-snapshots/v1/kilter/1/b.db', Size: 20, LastModified: secondModified }],
+        IsTruncated: false,
+      });
+
+    const objects = await listS3Objects('board-snapshots/v1/');
+
+    expect(objects).toEqual([
+      { key: 'board-snapshots/v1/kilter/1/a.db', size: 10, lastModified: firstModified },
+      { key: 'board-snapshots/v1/kilter/1/b.db', size: 20, lastModified: secondModified },
+    ]);
+    expect(awsMocks.send).toHaveBeenCalledTimes(2);
+    const secondCall = awsMocks.send.mock.calls[1][0] as { input: Record<string, unknown> };
+    expect(secondCall.input.ContinuationToken).toBe('token-2');
+    expect(secondCall.input.Prefix).toBe('board-snapshots/v1/');
   });
 });
