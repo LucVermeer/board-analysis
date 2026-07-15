@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-15T11:09:16.305Z",
+  "generatedAt": "2026-07-15T21:16:58.165Z",
   "entries": [
+    {
+      "prNumber": 3625,
+      "category": "new",
+      "title": "See how big a board is before you download it — no more surprise 270 MB on cellular",
+      "mergedAt": "2026-07-15T21:15:57Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3625"
+    },
     {
       "prNumber": 3622,
       "category": "new",

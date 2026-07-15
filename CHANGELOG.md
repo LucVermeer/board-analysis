@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- See how big a board is before you download it — no more surprise 270 MB on cellular ([#3625](https://github.com/boardsesh/boardsesh/pull/3625))
 - Find a new wall and it drops straight into your boards, ready to pull down for offline. ([#3622](https://github.com/boardsesh/boardsesh/pull/3622))
   Turn on "Keep boards offline" in Settings to download every board you use so browsing and logging sends works with no signal.
   Manage your boards the easy way: tap Edit to unfollow or delete, or swipe — the swipe actually catches now.
