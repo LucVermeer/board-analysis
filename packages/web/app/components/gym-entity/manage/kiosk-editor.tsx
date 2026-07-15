@@ -21,8 +21,9 @@ import {
   UPDATE_GYM_KIOSK,
   type UpdateGymKioskMutationResponse,
   type UpdateGymKioskMutationVariables,
+  type GymKioskOperationResult,
 } from '@boardsesh/graphql/operations';
-import type { Gym, GymKiosk, UserBoard } from '@boardsesh/shared-schema';
+import type { Gym, UserBoard } from '@boardsesh/shared-schema';
 import { useEntityMutation } from '@/app/hooks/use-entity-mutation';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -49,16 +50,23 @@ import EmbedCodeDialog, { type EmbedCodeDialogState } from './embed-code-dialog'
 
 type KioskEditorProps = {
   gym: Gym;
-  kiosk: GymKiosk;
+  kiosk: GymKioskOperationResult;
   /** All the gym's boards (null while loading or when the fetch failed). */
   gymBoards: UserBoard[] | null;
   /** True when the gymBoards fetch settled into an error — renders an error state instead of an endless spinner. */
   gymBoardsLoadFailed: boolean;
   onBack: () => void;
   /** Called with the updated kiosk after a successful save. */
-  onSaved: (kiosk: GymKiosk) => void;
+  onSaved: (kiosk: GymKioskOperationResult) => void;
   /** Reports unsaved-layout state up to the manage shell's navigation guard. */
   onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * The canonical TV URL for this kiosk (from the list's kioskTvPath — the
+   * DEFAULT kiosk is the slug-less /kiosk/{gym-slug}), or null while the gym
+   * has no slug. Passed in so the editor header can never show a different
+   * URL than the list card.
+   */
+  tvPath: string | null;
 };
 
 export default function KioskEditor({
@@ -69,6 +77,7 @@ export default function KioskEditor({
   onBack,
   onSaved,
   onDirtyChange,
+  tvPath,
 }: KioskEditorProps) {
   const { t } = useTranslation('kiosk');
   const { showMessage } = useSnackbar();
@@ -174,8 +183,6 @@ export default function KioskEditor({
     }
   };
 
-  const kioskUrlPath = gym.slug ? `/kiosk/${gym.slug}/${kiosk.slug}` : null;
-
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
@@ -192,7 +199,7 @@ export default function KioskEditor({
             {kiosk.name}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {kioskUrlPath ?? t('manage.editor.needSlug')}
+            {tvPath ?? t('manage.editor.needSlug')}
           </Typography>
         </Box>
         <Button

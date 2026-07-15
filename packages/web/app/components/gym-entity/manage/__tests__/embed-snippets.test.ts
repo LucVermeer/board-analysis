@@ -32,4 +32,9 @@ describe('escapeHtmlAttribute', () => {
     expect(escapeHtmlAttribute('&quot;')).toBe('&amp;quot;');
     expect(escapeHtmlAttribute('a & b "c" <d>')).toBe('a &amp; b &quot;c&quot; &lt;d&gt;');
   });
+
+  it("escapes single quotes so single-quoted attribute contexts can't break out", () => {
+    expect(escapeHtmlAttribute("Marco's Wall")).toBe('Marco&#39;s Wall');
+    expect(escapeHtmlAttribute(`'"&<>'`)).toBe('&#39;&quot;&amp;&lt;&gt;&#39;');
+  });
 });

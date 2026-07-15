@@ -5,9 +5,14 @@
 
 import { SITE_URL } from '@/app/lib/seo/base-url';
 
-/** Escape a string for use inside a double-quoted HTML attribute. */
+/** Escape a string for use inside an HTML attribute (either quote style). */
 export function escapeHtmlAttribute(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Iframe snippet for the live board view at /embed/board/{boardUuid}. */

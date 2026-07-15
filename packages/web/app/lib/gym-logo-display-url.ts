@@ -13,7 +13,9 @@
 
 export function resolveGymLogoDisplayUrl(logoUrl: string | null, backendHttpBaseUrl: string | null): string | null {
   if (!logoUrl) return null;
-  if (!logoUrl.startsWith('/')) return logoUrl;
+  // Protocol-relative (//host/...) is already absolute — only single-slash
+  // backend paths get the origin prepended.
+  if (!logoUrl.startsWith('/') || logoUrl.startsWith('//')) return logoUrl;
   if (!backendHttpBaseUrl) return logoUrl;
   return `${backendHttpBaseUrl.replace(/\/+$/, '')}${logoUrl}`;
 }

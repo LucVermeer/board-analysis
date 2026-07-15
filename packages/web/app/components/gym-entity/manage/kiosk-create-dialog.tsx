@@ -18,8 +18,8 @@ import {
   CREATE_GYM_KIOSK,
   type CreateGymKioskMutationResponse,
   type CreateGymKioskMutationVariables,
+  type GymKioskOperationResult,
 } from '@boardsesh/graphql/operations';
-import type { GymKiosk } from '@boardsesh/shared-schema';
 import { useEntityMutation } from '@/app/hooks/use-entity-mutation';
 
 const KIOSK_NAME_MAX_LENGTH = 100;
@@ -29,7 +29,7 @@ type KioskCreateDialogProps = {
   gymUuid: string;
   onClose: () => void;
   /** Called with the created kiosk (carrying the server-derived slug). */
-  onCreated: (kiosk: GymKiosk) => void;
+  onCreated: (kiosk: GymKioskOperationResult) => void;
 };
 
 export default function KioskCreateDialog({ open, gymUuid, onClose, onCreated }: KioskCreateDialogProps) {

@@ -27,4 +27,10 @@ describe('resolveGymLogoDisplayUrl', () => {
   it('keeps the relative path when no backend base is known', () => {
     expect(resolveGymLogoDisplayUrl(storedPath, null)).toBe(storedPath);
   });
+
+  it('treats protocol-relative URLs as already absolute', () => {
+    expect(resolveGymLogoDisplayUrl('//cdn.example.com/logo.png', 'https://ws.boardsesh.com')).toBe(
+      '//cdn.example.com/logo.png',
+    );
+  });
 });

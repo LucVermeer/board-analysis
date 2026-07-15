@@ -4,9 +4,10 @@
 // rail on/off, open-TV link), creates new ones (server assigns the URL slug),
 // and hosts the kiosk editor for the one being edited.
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -30,8 +31,8 @@ import {
   type GetGymBoardsQueryVariables,
   type GetGymKiosksQueryResponse,
   type GetGymKiosksQueryVariables,
+  type GymKioskOperationResult,
 } from '@boardsesh/graphql/operations';
-import type { GymKiosk } from '@boardsesh/shared-schema';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useEntityMutation } from '@/app/hooks/use-entity-mutation';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
@@ -45,6 +46,22 @@ import KioskCreateDialog from './kiosk-create-dialog';
 import KioskEditor from './kiosk-editor';
 import type { GymManageTabProps } from './tab-props';
 
+/**
+ * The URL the TV should load for a kiosk: the DEFAULT kiosk (oldest — the one
+ * the resolver serves for a slug-less lookup) lives at /kiosk/{gym-slug}; any
+ * other kiosk at /kiosk/{gym-slug}/{kiosk-slug}. Null while the gym has no
+ * slug. Single source for the list cards AND the editor header, so an owner
+ * never sees two different URLs for the same kiosk.
+ */
+function kioskTvPath(
+  gymSlug: string | null,
+  kiosk: Pick<GymKioskOperationResult, 'slug'>,
+  isDefaultKiosk: boolean,
+): string | null {
+  if (!gymSlug) return null;
+  return isDefaultKiosk ? `/kiosk/${gymSlug}` : `/kiosk/${gymSlug}/${kiosk.slug}`;
+}
+
 export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
   const { token, isLoading: isTokenLoading } = useWsAuthToken();
@@ -52,9 +69,14 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingKioskUuid, setEditingKioskUuid] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<GymKiosk | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GymKioskOperationResult | null>(null);
+  const { data: session } = useSession();
+  // Viewer identity in the query keys: both queries are viewer-scoped
+  // (editors see private/unlisted boards), so an in-session login/logout must
+  // key a different cache entry instead of serving the previous viewer's rows.
+  const viewerUserId = session?.user?.id ?? 'anonymous';
 
-  const kiosksQueryKey = ['gymKiosks', gym.uuid];
+  const kiosksQueryKey = ['gymKiosks', gym.uuid, viewerUserId];
 
   const {
     data: kiosks,
@@ -75,7 +97,7 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   // The editor needs the gym's full board list (editors see private/unlisted
   // boards too). Fetched only once a kiosk is opened for editing.
   const { data: gymBoards, isError: gymBoardsLoadFailed } = useQuery({
-    queryKey: ['gymBoards', gym.uuid],
+    queryKey: ['gymBoards', gym.uuid, viewerUserId],
     queryFn: async () => {
       const client = createGraphQLHttpClient(token);
       const response = await client.request<GetGymBoardsQueryResponse, GetGymBoardsQueryVariables>(GET_GYM_BOARDS, {
@@ -91,16 +113,16 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
     { successMessage: t('manage.kiosks.deleted'), errorMessage: t('manage.kiosks.deleteFailed') },
   );
 
-  const handleCreated = (kiosk: GymKiosk) => {
-    queryClient.setQueryData<GymKiosk[]>(kiosksQueryKey, (previous) => (previous ? [...previous, kiosk] : [kiosk]));
+  const handleCreated = (kiosk: GymKioskOperationResult) => {
+    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) => (previous ? [...previous, kiosk] : [kiosk]));
     setCreateDialogOpen(false);
     showMessage(t('manage.createDialog.created', { slug: kiosk.slug }), 'success');
     // Straight into the editor — a fresh kiosk has no boards yet.
     setEditingKioskUuid(kiosk.uuid);
   };
 
-  const handleSaved = (kiosk: GymKiosk) => {
-    queryClient.setQueryData<GymKiosk[]>(kiosksQueryKey, (previous) =>
+  const handleSaved = (kiosk: GymKioskOperationResult) => {
+    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
       previous ? previous.map((existing) => (existing.uuid === kiosk.uuid ? kiosk : existing)) : [kiosk],
     );
   };
@@ -111,18 +133,28 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
     setDeleteTarget(null);
     const result = await deleteMutation.execute({ kioskUuid: target.uuid });
     if (result) {
-      queryClient.setQueryData<GymKiosk[]>(kiosksQueryKey, (previous) =>
+      queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
         previous ? previous.filter((existing) => existing.uuid !== target.uuid) : previous,
       );
     }
   };
 
+  // Oldest-first, matching the resolver's default-kiosk pick (orderBy
+  // createdAt asc). Client-side sort makes the index-0 = default invariant
+  // explicit instead of trusting response order; the stable sort keeps server
+  // order for equal timestamps.
+  const kioskList = useMemo(
+    () => [...(kiosks ?? [])].sort((first, second) => first.createdAt.localeCompare(second.createdAt)),
+    [kiosks],
+  );
+
   const editingKiosk =
-    editingKioskUuid === null ? null : (kiosks ?? []).find((candidate) => candidate.uuid === editingKioskUuid);
+    editingKioskUuid === null ? null : (kioskList.find((candidate) => candidate.uuid === editingKioskUuid) ?? null);
 
   if (editingKiosk) {
     return (
       <KioskEditor
+        tvPath={kioskTvPath(gym.slug ?? null, editingKiosk, kioskList[0]?.uuid === editingKiosk.uuid)}
         // Remount per kiosk: editor state must never leak from one kiosk into
         // another (the initial state comes from a useState initializer).
         key={editingKiosk.uuid}
@@ -157,7 +189,6 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
     );
   }
 
-  const kioskList = kiosks ?? [];
   const atCap = kioskList.length >= MAX_KIOSKS_PER_GYM;
 
   if (kioskList.length === 0) {
@@ -218,17 +249,10 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
         {kioskList.map((kiosk, index) => {
-          // gymKiosks returns oldest-first; the resolver serves the oldest live
-          // kiosk at the slug-less default URL /kiosk/{gym-slug}.
           const isDefaultKiosk = index === 0;
           const preset = kioskPresetForBoardCount(kiosk.boards.length);
           const hasRail = buildKioskViewModel(kiosk).leaderboard !== null;
-          const tvPath =
-            gym.slug === null || gym.slug === undefined
-              ? null
-              : isDefaultKiosk
-                ? `/kiosk/${gym.slug}`
-                : `/kiosk/${gym.slug}/${kiosk.slug}`;
+          const tvPath = kioskTvPath(gym.slug ?? null, kiosk, isDefaultKiosk);
 
           return (
             <Card key={kiosk.uuid} variant="outlined">

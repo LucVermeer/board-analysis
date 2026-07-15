@@ -159,7 +159,13 @@ export default function GymLogoUploader({ gym, logoDisplayUrl, onGymChange }: Gy
 
       // Persist the backend-relative path verbatim: no deploy domain frozen
       // into the row. Render sites resolve it via resolveGymLogoDisplayUrl.
-      const { logoUrl } = (await response.json()) as { logoUrl: string };
+      // Runtime-checked — an unexpected body must not store undefined.
+      const uploadPayload = (await response.json().catch(() => null)) as { logoUrl?: unknown } | null;
+      const logoUrl = typeof uploadPayload?.logoUrl === 'string' ? uploadPayload.logoUrl : null;
+      if (logoUrl === null) {
+        showMessage(t('branding.logo.uploadFailed'), 'error');
+        return;
+      }
       const savedGymData = await updateGymMutation.execute({ input: { gymUuid: gym.uuid, logoUrl } });
       if (savedGymData) {
         onGymChange(savedGymData.updateGym);
