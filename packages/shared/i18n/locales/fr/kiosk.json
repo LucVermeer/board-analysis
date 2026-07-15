@@ -67,7 +67,8 @@
     "boardCount_one": "{{count}} board",
     "boardCount_other": "{{count}} boards",
     "visitWebsite": "Visiter le site web",
-    "noBoardsYet": "Aucune board ici pour l'instant."
+    "noBoardsYet": "Aucune board ici pour l'instant.",
+    "exploreFeed": "Voir ce que les grimpeurs enchaînent"
   },
   "manage": {
     "title": "Gérer {{gymName}}",
@@ -108,6 +109,8 @@
       "empty": "Aucune board reliée pour l'instant. Ajoutes-en une pour commencer.",
       "loadError": "Impossible de charger les boards de cette salle.",
       "unlink": "Détacher",
+      "onlyOwnerCanUnlink": "Seul le propriétaire de la board peut la détacher",
+      "readOnlyHint": "Seul le propriétaire de la salle ou un admin peut relier des boards.",
       "unlinkTitle": "Détacher cette board ?",
       "unlinkBody": "« {{name}} » n'apparaîtra plus sur la page ni sur les bornes de cette salle. Tu peux la relier à tout moment.",
       "unlinkConfirm": "Détacher",

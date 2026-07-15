@@ -31,6 +31,9 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import GymPageManageButton from './gym-page-manage-button';
 
 // Brand display names — proper nouns, not translated copy.
+// TODO: this map is duplicated across board-detail, board cards, and the manage
+// Boards tab — extract a shared helper (e.g. @boardsesh/board-constants) instead
+// of adding another copy.
 const BOARD_TYPE_LABELS: Record<string, string> = {
   kilter: 'Kilter',
   tension: 'Tension',
@@ -218,6 +221,8 @@ export default async function GymPage(props: GymRouteProps) {
           )}
         </Box>
 
+        {/* Together with the breadcrumb above, this keeps the page at ≥2
+            crawlable internal links even for a gym with no boards or kiosk. */}
         {boards.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {t('gymPage.noBoardsYet')}
@@ -243,6 +248,12 @@ export default async function GymPage(props: GymRouteProps) {
             ))}
           </Box>
         )}
+
+        <Box sx={{ mt: 4 }}>
+          <MuiLink component={LocaleLink} href="/feed" underline="hover" sx={{ color: themeTokens.colors.primary }}>
+            {t('gymPage.exploreFeed')}
+          </MuiLink>
+        </Box>
       </Container>
     </I18nProvider>
   );

@@ -62,7 +62,10 @@ export async function generateMetadata(props: ManageGymRouteProps): Promise<Meta
   const { t, locale } = await getServerTranslation('kiosk');
   const token = await getServerAuthToken();
   const gym = token ? await resolveManageGym(gym_slug, token) : null;
-  const title = gym ? t('manage.title', { gymName: gym.name }) : t('metadata.fallbackTitle');
+  // Only editors get the gym's name in the title — gymBySlug returns private
+  // gyms to any authenticated viewer, and the name must not leak through
+  // metadata for a page whose body 404s them.
+  const title = gym && gym.canEdit ? t('manage.title', { gymName: gym.name }) : t('metadata.fallbackTitle');
   return createNoIndexMetadata({
     title,
     description: t('metadata.fallbackDescription'),
@@ -80,12 +83,16 @@ export default async function ManageGymPage(props: ManageGymRouteProps) {
   }
 
   const gym = await resolveManageGym(gym_slug, token);
-  if (!gym) {
+  // Match the public page's visibility contract: a private gym must be
+  // indistinguishable from a missing one for viewers who can't edit it — a 403
+  // here would confirm the gym exists.
+  if (!gym || (!gym.isPublic && !gym.canEdit)) {
     notFound();
   }
 
   const locale = await getLocale();
 
+  // Public gym, but this viewer can't manage it.
   if (!gym.canEdit) {
     const { t } = await getServerTranslation('kiosk');
     return (

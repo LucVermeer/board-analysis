@@ -10,6 +10,11 @@ describe('sanitizeSlugInput', () => {
     expect(sanitizeSlugInput('boulder-lab')).toBe('boulder-lab');
   });
 
+  it('collapses consecutive hyphens (backend SlugSchema rejects them)', () => {
+    expect(sanitizeSlugInput('my--gym')).toBe('my-gym');
+    expect(sanitizeSlugInput('a---b--c')).toBe('a-b-c');
+  });
+
   it('caps length at the backend maximum', () => {
     const long = 'a'.repeat(GYM_SLUG_MAX_LENGTH + 40);
     expect(sanitizeSlugInput(long)).toHaveLength(GYM_SLUG_MAX_LENGTH);
@@ -29,6 +34,10 @@ describe('gymSlugValidationError', () => {
 
   it('flags uppercase or spaces as invalid', () => {
     expect(gymSlugValidationError('My Gym')).toBe('invalid');
+  });
+
+  it('flags consecutive hyphens as invalid, matching backend SlugSchema', () => {
+    expect(gymSlugValidationError('my--gym')).toBe('invalid');
   });
 
   it('accepts a well-formed slug', () => {

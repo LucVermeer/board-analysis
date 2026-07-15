@@ -1,18 +1,22 @@
 // Pure slug helpers shared by the manage-gym slug guard. Mirrors the backend
-// gym-slug format (lowercase alphanumeric + hyphens, no leading/trailing hyphen,
-// ≤120 chars) so the client rejects obviously-bad input before the mutation.
-// Uniqueness is enforced server-side — updateGym surfaces a conflict message the
-// slug guard shows verbatim, so there's no client-side availability check here.
+// SlugSchema format: lowercase alphanumeric segments joined by single hyphens
+// (consecutive hyphens are rejected server-side too). Uniqueness is enforced
+// server-side — updateGym surfaces a conflict message the slug guard shows
+// verbatim, so there's no client-side availability check here.
 
+// The backend SlugSchema allows up to 200 chars, but the gymBySlug LOOKUP guard
+// rejects slugs over 120 — a longer slug would save fine and then never resolve.
+// Cap client input at the lookup guard so every saved slug stays reachable.
 export const GYM_SLUG_MAX_LENGTH = 120;
 
-const GYM_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const GYM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Normalize raw text-field input to slug-legal characters as the user types. */
 export function sanitizeSlugInput(raw: string): string {
   return raw
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
     .slice(0, GYM_SLUG_MAX_LENGTH);
 }
 

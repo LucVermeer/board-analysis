@@ -17,6 +17,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import AddOutlined from '@mui/icons-material/AddOutlined';
 import LinkOffOutlined from '@mui/icons-material/LinkOffOutlined';
+import { useSession } from 'next-auth/react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { useEntityMutation } from '@/app/hooks/use-entity-mutation';
@@ -32,9 +33,13 @@ import {
 } from '@boardsesh/graphql/operations';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { themeTokens } from '@/app/theme/theme-config';
+import { canManageGymBoards, canUnlinkBoard, linkableBoards } from './gym-board-permissions';
 import type { GymManageTabProps } from './tab-props';
 
 // Brand display names — proper nouns, not translated copy.
+// TODO: this map is duplicated across board-detail, board cards, and the public
+// gym page — extract a shared helper (e.g. @boardsesh/board-constants) instead
+// of adding a seventh copy.
 const BOARD_TYPE_LABELS: Record<string, string> = {
   kilter: 'Kilter',
   tension: 'Tension',
@@ -63,11 +68,16 @@ function VisibilityChip({ board }: { board: Pick<UserBoard, 'isPublic' | 'isUnli
 export default function GymBoardsTab({ gym }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
   const { token } = useWsAuthToken();
+  const { data: session } = useSession();
+  const viewerUserId = session?.user?.id ?? null;
   const [boards, setBoards] = useState<UserBoard[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState<UserBoard | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const linkedBoardUuids = useMemo(() => new Set((boards ?? []).map((board) => board.uuid)), [boards]);
+  // Backend contract: linking requires gym owner/admin; unlinking requires
+  // owning the board. Editors (canEdit) still see the list, read-only.
+  const canLinkBoards = canManageGymBoards(gym, viewerUserId);
 
   const linkMutation = useEntityMutation<LinkBoardToGymMutationResponse, LinkBoardToGymMutationVariables>(
     LINK_BOARD_TO_GYM,
@@ -126,16 +136,23 @@ export default function GymBoardsTab({ gym }: GymManageTabProps) {
             {t('manage.boards.description')}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<AddOutlined />}
-          onClick={() => setAddDialogOpen(true)}
-          sx={{ textTransform: 'none', flexShrink: 0 }}
-        >
-          {t('manage.boards.addBoard')}
-        </Button>
+        {canLinkBoards && (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddOutlined />}
+            onClick={() => setAddDialogOpen(true)}
+            sx={{ textTransform: 'none', flexShrink: 0 }}
+          >
+            {t('manage.boards.addBoard')}
+          </Button>
+        )}
       </Box>
+      {!canLinkBoards && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          {t('manage.boards.readOnlyHint')}
+        </Typography>
+      )}
 
       {boards === null ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -157,15 +174,21 @@ export default function GymBoardsTab({ gym }: GymManageTabProps) {
               divider
               disableGutters
               secondaryAction={
-                <Button
-                  size="small"
-                  color="error"
-                  startIcon={<LinkOffOutlined />}
-                  onClick={() => setUnlinkTarget(board)}
-                  sx={{ textTransform: 'none' }}
-                >
-                  {t('manage.boards.unlink')}
-                </Button>
+                canUnlinkBoard(board, viewerUserId) ? (
+                  <Button
+                    size="small"
+                    color="error"
+                    startIcon={<LinkOffOutlined />}
+                    onClick={() => setUnlinkTarget(board)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {t('manage.boards.unlink')}
+                  </Button>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    {t('manage.boards.onlyOwnerCanUnlink')}
+                  </Typography>
+                )
               }
             >
               <ListItemText
@@ -199,13 +222,16 @@ export default function GymBoardsTab({ gym }: GymManageTabProps) {
         </DialogActions>
       </Dialog>
 
-      <AddBoardDialog
-        open={addDialogOpen}
-        gymUuid={gym.uuid}
-        linkedBoardUuids={new Set((boards ?? []).map((board) => board.uuid))}
-        onClose={() => setAddDialogOpen(false)}
-        onLink={handleLink}
-      />
+      {canLinkBoards && (
+        <AddBoardDialog
+          open={addDialogOpen}
+          gymUuid={gym.uuid}
+          viewerUserId={viewerUserId}
+          linkedBoardUuids={linkedBoardUuids}
+          onClose={() => setAddDialogOpen(false)}
+          onLink={handleLink}
+        />
+      )}
     </Box>
   );
 }
@@ -213,12 +239,13 @@ export default function GymBoardsTab({ gym }: GymManageTabProps) {
 type AddBoardDialogProps = {
   open: boolean;
   gymUuid: string;
+  viewerUserId: string | null;
   linkedBoardUuids: Set<string>;
   onClose: () => void;
   onLink: (boardUuid: string) => Promise<void>;
 };
 
-function AddBoardDialog({ open, gymUuid, linkedBoardUuids, onClose, onLink }: AddBoardDialogProps) {
+function AddBoardDialog({ open, gymUuid, viewerUserId, linkedBoardUuids, onClose, onLink }: AddBoardDialogProps) {
   const { t } = useTranslation('kiosk');
   const { token } = useWsAuthToken();
   const [candidates, setCandidates] = useState<UserBoard[] | null>(null);
@@ -228,18 +255,16 @@ function AddBoardDialog({ open, gymUuid, linkedBoardUuids, onClose, onLink }: Ad
     if (!open || !token) return;
     let cancelled = false;
     setCandidates(null);
-    (async () => {
+    void (async () => {
       try {
         const client = createGraphQLHttpClient(token);
         const data = await client.request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, {
           input: { limit: 50, offset: 0 },
         });
         if (cancelled) return;
-        // Only boards the viewer owns that aren't already on this gym.
-        const linkable = data.myBoards.boards.filter(
-          (board) => board.isOwned && board.gymUuid !== gymUuid && !linkedBoardUuids.has(board.uuid),
-        );
-        setCandidates(linkable);
+        // ownerId, not isOwned — myBoards includes followed boards, and isOwned
+        // is the physical-ownership column, not the account that may link it.
+        setCandidates(linkableBoards(data.myBoards.boards, gymUuid, linkedBoardUuids, viewerUserId));
       } catch (error) {
         console.error('Failed to load your boards:', error);
         if (!cancelled) setCandidates([]);
@@ -248,7 +273,7 @@ function AddBoardDialog({ open, gymUuid, linkedBoardUuids, onClose, onLink }: Ad
     return () => {
       cancelled = true;
     };
-  }, [open, token, gymUuid, linkedBoardUuids]);
+  }, [open, token, gymUuid, linkedBoardUuids, viewerUserId]);
 
   const handleLinkClick = async (boardUuid: string) => {
     setLinkingUuid(boardUuid);

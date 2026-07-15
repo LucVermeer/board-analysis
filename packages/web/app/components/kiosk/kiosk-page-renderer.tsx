@@ -153,7 +153,12 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
         <KioskReliability gymSlug={gymSlug} kioskSlug={kioskSlug} initialUpdatedAt={kiosk.updatedAt} />
         <KioskPresenceHub boardIds={distinctBoardIds}>
           <div className={layoutStyles.root}>
-            <KioskHeader gymName={kiosk.gym.name} logoUrl={kiosk.gym.logoUrl ?? null} kioskName={kiosk.name} />
+            <KioskHeader
+              gymName={kiosk.gym.name}
+              logoUrl={kiosk.gym.logoUrl ?? null}
+              kioskName={kiosk.name}
+              gymSlug={kiosk.gym.slug ?? null}
+            />
             {preset === null ? (
               <div className={layoutStyles.setupPlaceholder}>
                 <h1 className={layoutStyles.setupTitle}>{t('setup.title')}</h1>

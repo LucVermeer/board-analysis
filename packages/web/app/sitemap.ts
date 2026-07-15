@@ -17,6 +17,10 @@ type StaticEntry = {
   lastModified: Date;
 };
 
+// Public gym pages (/gym/[slug]) are not listed yet: there is no
+// public-gyms enumeration query (only searchGyms/myGyms, both input-driven).
+// Tracked follow-up on the gym-kiosk epic — until then gym pages are reached
+// through crawlable links from kiosk pages and board pages.
 const STATIC_ENTRIES: StaticEntry[] = [
   { path: '/', changeFrequency: 'weekly', priority: 1.0, lastModified: new Date('2026-04-30') },
   { path: '/aurora-migration', changeFrequency: 'weekly', priority: 0.9, lastModified: new Date('2026-04-30') },

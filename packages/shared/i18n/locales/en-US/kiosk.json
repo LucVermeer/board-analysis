@@ -67,7 +67,8 @@
     "boardCount_one": "{{count}} board",
     "boardCount_other": "{{count}} boards",
     "visitWebsite": "Visit website",
-    "noBoardsYet": "No boards listed here yet."
+    "noBoardsYet": "No boards listed here yet.",
+    "exploreFeed": "See what climbers are sending"
   },
   "manage": {
     "title": "Manage {{gymName}}",
@@ -108,6 +109,8 @@
       "empty": "No boards linked yet. Add one to get started.",
       "loadError": "Couldn't load this gym's boards.",
       "unlink": "Unlink",
+      "onlyOwnerCanUnlink": "Only the board's owner can unlink it",
+      "readOnlyHint": "Only the gym owner or an admin can link boards.",
       "unlinkTitle": "Unlink this board?",
       "unlinkBody": "\"{{name}}\" stops showing on this gym's page and kiosks. You can re-link it anytime.",
       "unlinkConfirm": "Unlink",

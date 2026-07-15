@@ -15,7 +15,7 @@ import {
   type UpdateGymMutationResponse,
 } from '@boardsesh/graphql/operations';
 import type { Gym } from '@boardsesh/shared-schema';
-import { sanitizeSlugInput, gymSlugValidationError } from './slug-utils';
+import { sanitizeSlugInput, gymSlugValidationError, GYM_SLUG_MAX_LENGTH } from './slug-utils';
 
 type GymSlugGuardProps = {
   gym: Gym;
@@ -86,7 +86,7 @@ export default function GymSlugGuard({ gym, onSlugSet }: GymSlugGuardProps) {
           placeholder={t('manage.slugGuard.placeholder')}
           helperText={helperText}
           error={validationError !== null}
-          slotProps={{ htmlInput: { maxLength: 120 } }}
+          slotProps={{ htmlInput: { maxLength: GYM_SLUG_MAX_LENGTH } }}
           sx={{ minWidth: 240 }}
         />
         <Button type="submit" variant="contained" disabled={isSaving} sx={{ mt: 0.25, textTransform: 'none' }}>

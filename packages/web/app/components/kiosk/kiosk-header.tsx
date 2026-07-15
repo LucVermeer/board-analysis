@@ -13,10 +13,15 @@ export default function KioskHeader({
   gymName,
   logoUrl,
   kioskName,
+  gymSlug = null,
 }: {
   gymName: string;
   logoUrl: string | null;
   kioskName: string;
+  /** When set, the brand block links to the public gym page. The kiosk page is
+   * noindex,follow, so this server-rendered <a> is what lets crawlers reach
+   * /gym/{slug} (gym pages aren't in the sitemap yet). Visually inert on a TV. */
+  gymSlug?: string | null;
 }) {
   const { t } = useTranslation('kiosk');
   const connectionStatus = useKioskConnectionStatus();
@@ -32,7 +37,13 @@ export default function KioskHeader({
 
   return (
     <header className={styles.header}>
-      <div className={styles.brand}>{brandContent}</div>
+      {gymSlug ? (
+        <a className={`${styles.brand} ${styles.brandLink}`} href={`/gym/${gymSlug}`}>
+          {brandContent}
+        </a>
+      ) : (
+        <div className={styles.brand}>{brandContent}</div>
+      )}
       <div className={styles.meta}>
         {connectionStatus === 'reconnecting' ? (
           <span className={styles.reconnectChip} role="status">

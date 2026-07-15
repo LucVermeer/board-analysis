@@ -122,6 +122,7 @@ export const GET_GYM_MEMBERS = gql`
 const GYM_BOARD_FIELDS = `
   uuid
   slug
+  ownerId
   name
   boardType
   layoutId

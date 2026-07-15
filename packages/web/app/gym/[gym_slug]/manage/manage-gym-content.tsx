@@ -16,6 +16,7 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 import { themeTokens } from '@/app/theme/theme-config';
 import GymMemberManagement from '@/app/components/gym-entity/gym-member-management';
+import { canManageGymBoards } from '@/app/components/gym-entity/manage/gym-board-permissions';
 import GymBoardsTab from '@/app/components/gym-entity/manage/gym-boards-tab';
 import KiosksTab from '@/app/components/gym-entity/manage/kiosks-tab';
 import BrandingTab from '@/app/components/gym-entity/manage/branding-tab';
@@ -34,7 +35,7 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
   const { data: session } = useSession();
 
   const currentUserId = session?.user?.id ?? null;
-  const isOwnerOrAdmin = (!!currentUserId && gym.ownerId === currentUserId) || gym.myRole === 'admin';
+  const isOwnerOrAdmin = canManageGymBoards(gym, currentUserId);
 
   const tabParam = searchParams.get('tab');
   const activeTab: ManageTab = VALID_TABS.includes(tabParam as ManageTab) ? (tabParam as ManageTab) : DEFAULT_TAB;
