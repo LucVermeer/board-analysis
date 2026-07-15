@@ -9,10 +9,9 @@ import { getSetting } from '../settings';
 import { setupNotificationHandlers } from '../notifications';
 import { getHttpClient } from '../lib/graphql/client';
 import { setOfflineEngineEnabled } from '../lib/offline-engine';
-import { isSnapshotBaseUrlConfigured } from '../lib/env';
 import { useAuth } from '../providers/auth-provider';
-import { useOfflineDownloadsEnabled, useSnapshotBootstrapEnabled } from '../providers/feature-flags-provider';
-import { mobileSnapshotSource } from '../offline/snapshot-source';
+import { useOfflineDownloadsEnabled } from '../providers/feature-flags-provider';
+import { useSnapshotSource } from '../offline/use-snapshot-source';
 
 /**
  * Publishes the offline-engine flag decision to the module-level store that
@@ -52,8 +51,7 @@ export function OfflineSyncBridge() {
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const offlineEnabled = useOfflineDownloadsEnabled();
-  const snapshotBootstrapEnabled = useSnapshotBootstrapEnabled();
-  const snapshotSource = snapshotBootstrapEnabled && isSnapshotBaseUrlConfigured() ? mobileSnapshotSource : undefined;
+  const snapshotSource = useSnapshotSource();
 
   // getHttpClient() already carries auth + endpoint; binding .request keeps the
   // GraphQLFetch shape the scheduler and drainer expect.
@@ -87,13 +85,13 @@ export function OfflineSyncBridge() {
           graphqlFetch,
           () => getSetting('syncEnabledBoards'),
           () => drainMutationQueue(db, queryClient, graphqlFetch),
-          // Publish pull progress to the module-level store so the Settings screen
-          // can render "last synced" + live progress without prop-drilling.
-          setSyncProgress,
-          // Snapshot bootstrap is its own flag, nested under offline-board-downloads
-          // and a real build-time manifest URL — otherwise a freshly-enabled
-          // board still downloads through the paged crawl.
-          snapshotSource,
+          {
+            // Publish pull progress to the module-level store so the Settings
+            // screen can render "last synced" + live progress without
+            // prop-drilling. snapshotSource is gated by useSnapshotSource.
+            onProgress: setSyncProgress,
+            snapshotSource,
+          },
         );
         return stop;
       } catch (error) {

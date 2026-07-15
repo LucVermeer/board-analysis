@@ -163,8 +163,7 @@ describe('snapshot-bootstrap bindings', () => {
       graphqlFetch,
       () => [],
       async () => {},
-      undefined,
-      fakeSnapshotSource,
+      { snapshotSource: fakeSnapshotSource },
     );
     const options = startSyncSchedulerCore.mock.calls[0][6] as SchedulerOptions;
     expect(options.snapshotSource).toBe(fakeSnapshotSource);
@@ -201,8 +200,7 @@ describe('snapshot-bootstrap bindings', () => {
       graphqlFetch,
       () => [],
       async () => {},
-      undefined,
-      fakeSnapshotSource,
+      { snapshotSource: fakeSnapshotSource },
     );
     const options = triggerSyncCore.mock.calls[0][5] as SchedulerOptions;
     expect(options.snapshotSource).toBe(fakeSnapshotSource);
@@ -275,7 +273,7 @@ describe('triggerSync / pullSync bindings', () => {
       graphqlFetch,
       () => ['kilter:1:5'],
       async () => {},
-      onProgress,
+      { onProgress },
     );
 
     const options = triggerSyncCore.mock.calls[0][5] as SchedulerOptions;

@@ -100,23 +100,29 @@ export function drainMutationQueue(
   });
 }
 
+// A named bag rather than trailing positionals so callers (and their tests)
+// never depend on argument order for the optional seams.
+export type SyncRunOptions = {
+  onProgress?: SyncProgressSink;
+  // Injected only when the offline-snapshot-bootstrap flag is on (see
+  // useSnapshotSource) — undefined here reproduces the pure paged-crawl
+  // behaviour exactly, byte-identical to before this seam existed.
+  snapshotSource?: SnapshotSource;
+};
+
 export function startSyncScheduler(
   db: OfflineDatabase,
   queryClient: QueryClient,
   graphqlFetch: GraphQLFetch,
   getEnabledBoards: () => string[],
   drainQueue: DrainQueue,
-  onProgress?: SyncProgressSink,
-  // Injected only when the offline-snapshot-bootstrap flag is on (see
-  // OfflineSyncBridge) — undefined here reproduces the pure paged-crawl
-  // behaviour exactly, byte-identical to before this seam existed.
-  snapshotSource?: SnapshotSource,
+  options?: SyncRunOptions,
 ): () => void {
   return startSyncSchedulerCore(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, schedulerTriggers, {
-    onProgress,
+    onProgress: options?.onProgress,
     onCycleError: warnCycleError,
     onSchemaDrift: reportSchemaDrift,
-    snapshotSource,
+    snapshotSource: options?.snapshotSource,
     onSnapshotBootstrapError: reportSnapshotBootstrapError,
     onScopeDownloadComplete: reportScopeDownloadComplete,
   });
@@ -128,14 +134,13 @@ export function triggerSync(
   graphqlFetch: GraphQLFetch,
   getEnabledBoards: () => string[],
   drainQueue: DrainQueue,
-  onProgress?: SyncProgressSink,
-  snapshotSource?: SnapshotSource,
+  options?: SyncRunOptions,
 ): void {
   triggerSyncCore(db, queryClient, graphqlFetch, getEnabledBoards, drainQueue, {
-    onProgress,
+    onProgress: options?.onProgress,
     onCycleError: warnCycleError,
     onSchemaDrift: reportSchemaDrift,
-    snapshotSource,
+    snapshotSource: options?.snapshotSource,
     onSnapshotBootstrapError: reportSnapshotBootstrapError,
     onScopeDownloadComplete: reportScopeDownloadComplete,
   });

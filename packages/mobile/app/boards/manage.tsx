@@ -12,12 +12,12 @@ import { useAuth } from '../../src/providers/auth-provider';
 import { useToast } from '../../src/providers/toast-provider';
 import { useConfirm } from '../../src/providers/dialog-provider';
 import { useTheme } from '../../src/providers/theme-provider';
-import { useOfflineDownloadsEnabled, useSnapshotBootstrapEnabled } from '../../src/providers/feature-flags-provider';
+import { useOfflineDownloadsEnabled } from '../../src/providers/feature-flags-provider';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { useSyncStatus, setSyncProgress } from '../../src/sync';
 import { getDownloadedScopeKeys, type GraphQLFetch } from '@boardsesh/offline-sync';
 import { triggerSync, drainMutationQueue } from '../../src/offline/offline-sync-adapter';
-import { mobileSnapshotSource } from '../../src/offline/snapshot-source';
+import { useSnapshotSource } from '../../src/offline/use-snapshot-source';
 import {
   getSetting,
   useSetting,
@@ -26,7 +26,6 @@ import {
   offlineBoardScopeForBoard,
 } from '../../src/settings';
 import { getHttpClient } from '../../src/lib/graphql/client';
-import { isSnapshotBaseUrlConfigured } from '../../src/lib/env';
 import { Text } from '../../src/components/Text';
 import { Icon } from '../../src/components/Icon';
 import { Button } from '../../src/components/Button';
@@ -86,8 +85,7 @@ export default function ManageBoards() {
   // flush (see OfflineSyncBridge). This screen stays the only writer of
   // syncEnabledBoards.
   const offlineDownloadsEnabled = useOfflineDownloadsEnabled();
-  const snapshotBootstrapEnabled = useSnapshotBootstrapEnabled();
-  const snapshotSource = snapshotBootstrapEnabled && isSnapshotBaseUrlConfigured() ? mobileSnapshotSource : undefined;
+  const snapshotSource = useSnapshotSource();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const syncStatus = useSyncStatus();
@@ -140,15 +138,10 @@ export default function ManageBoards() {
       // the next foreground/reconnect trigger. triggerSync → runSync is single-flight
       // (one in-flight run + at most one queued follow-up), so enabling several boards
       // in quick succession collapses into one cycle that reads the latest setting.
-      triggerSync(
-        db,
-        queryClient,
-        graphqlFetch,
-        () => getSetting('syncEnabledBoards'),
-        drainQueue,
-        setSyncProgress,
+      triggerSync(db, queryClient, graphqlFetch, () => getSetting('syncEnabledBoards'), drainQueue, {
+        onProgress: setSyncProgress,
         snapshotSource,
-      );
+      });
     },
     [confirm, t, db, queryClient, graphqlFetch, drainQueue, snapshotSource],
   );

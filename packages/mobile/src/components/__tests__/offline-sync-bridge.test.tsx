@@ -112,12 +112,13 @@ function makeQueryClient() {
 const FLAG_ON: FeatureFlags = { 'offline-board-downloads': true };
 const FLAG_OFF: FeatureFlags = { 'offline-board-downloads': false };
 const FLAG_ON_WITH_SNAPSHOT: FeatureFlags = { 'offline-board-downloads': true, 'offline-snapshot-bootstrap': true };
-const SNAPSHOT_SOURCE_ARG_INDEX = 6;
-
 function getStartSyncSchedulerSnapshotSource(): unknown {
   const call = startSyncSchedulerMock.mock.calls[0] as unknown[] | undefined;
   expect(call).toBeDefined();
-  return call?.[SNAPSHOT_SOURCE_ARG_INDEX];
+  // The trailing argument is the named options bag — no positional offsets to
+  // silently drift if the scheduler signature grows.
+  const options = call?.at(-1) as { snapshotSource?: unknown } | undefined;
+  return options?.snapshotSource;
 }
 
 beforeEach(() => {

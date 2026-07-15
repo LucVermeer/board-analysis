@@ -60,11 +60,13 @@ export type SyncProgress = {
  * completing delta pull may land in different cycles when connectivity drops
  * between them), `'paged'` otherwise (fresh paged crawl, a resumed mid-crawl
  * scope, or bootstrap unavailable/exhausted).
- * `durationMs` is measured from when this pullSync cycle started working on the
- * scope (before the bootstrap eligibility check), so a `'snapshot'` scope's
- * duration includes its manifest/download/import time, not just the trailing
- * delta pull — an apples-to-apples comparison against a `'paged'` scope's full
- * crawl time.
+ * `durationMs` is measured from when this pullSync cycle FIRST touched the
+ * scope — a snapshot-eligible scope is stamped at its bootstrap eligibility
+ * check (so the duration includes its manifest/download/import time, not just
+ * the trailing delta pull), a paged-only scope at its turn in the board-data
+ * loop. Per-scope stamping keeps a multi-board cycle honest: scope B's
+ * duration never includes scope A's download time, so `'snapshot'` vs
+ * `'paged'` percentiles stay apples-to-apples.
  */
 export type ScopeDownloadCompleteInfo = {
   scopeKey: string;
@@ -497,6 +499,7 @@ async function runBootstrapPhase(
   queryClient: QueryInvalidator,
   source: SnapshotSource,
   scopes: BoardScope[],
+  stampScopeStart: (scopeKey: string) => void,
   onProgress: ((progress: SyncProgress) => void) | undefined,
   onSchemaDrift: SchemaDriftReporter | undefined,
   onSnapshotBootstrapError: SnapshotBootstrapErrorReporter | undefined,
@@ -514,6 +517,10 @@ async function runBootstrapPhase(
   try {
     for (const scope of scopes) {
       if (isSigningOut() || getWipeEpoch() !== startEpoch) break;
+
+      // Duration telemetry starts here — before the eligibility check — so a
+      // snapshot scope's durationMs covers its manifest/download/import work.
+      stampScopeStart(scope.scopeKey);
 
       // Eligibility: FRESH on BOTH board tables and under the attempt cap.
       const climbsCheckpoint = await getCheckpoint(db, getCheckpointKey('board_climbs', scope.scopeKey));
@@ -651,13 +658,15 @@ export async function pullSync(
     if (scope) boardScopes.push({ ...scope, scopeKey });
   }
 
-  // Start-of-cycle timestamp per scope, captured before the bootstrap eligibility
-  // check runs — so a 'snapshot' scope's ScopeDownloadCompleteInfo.durationMs
-  // includes its manifest/download/import time, not just the trailing delta pull.
+  // Per-scope start timestamp for ScopeDownloadCompleteInfo.durationMs, stamped
+  // when the cycle FIRST touches that scope (bootstrap eligibility check, or
+  // its turn in the board-data loop) — NOT once at cycle start, which would
+  // fold scope A's entire download time into scope B's duration whenever a
+  // cycle processes several boards.
   const scopeStartedAt = new Map<string, number>();
-  for (const boardScope of boardScopes) {
-    scopeStartedAt.set(boardScope.scopeKey, Date.now());
-  }
+  const stampScopeStart = (scopeKey: string): void => {
+    if (!scopeStartedAt.has(scopeKey)) scopeStartedAt.set(scopeKey, Date.now());
+  };
 
   // Phase 0: snapshot bootstrap (BEFORE deletions). Only when an adapter injected
   // snapshot I/O; otherwise this is a pure paged pull, byte-identical to before.
@@ -669,6 +678,7 @@ export async function pullSync(
       queryClient,
       options.snapshotSource,
       boardScopes,
+      stampScopeStart,
       onProgress,
       options.onSchemaDrift,
       options.onSnapshotBootstrapError,
@@ -709,6 +719,9 @@ export async function pullSync(
   // can match itself.
   for (const boardScope of boardScopes) {
     const scopeKey = boardScope.scopeKey;
+    // No-op when the bootstrap phase already stamped this scope; the paged-only
+    // path (no snapshotSource) starts its duration clock here.
+    stampScopeStart(scopeKey);
     // A scope whose bootstrap failed this cycle (with attempts still left) skips
     // its paged pull: a first-page checkpoint would permanently disqualify the
     // snapshot path, so the next cycle retries the snapshot instead.
@@ -751,9 +764,9 @@ export async function pullSync(
       await markScopeDownloadComplete(db, scopeKey);
       if (wasScopeComplete) continue;
       const startedAt = scopeStartedAt.get(scopeKey);
-      // Should be unreachable because scopeStartedAt is seeded from the same
-      // parsed boardScopes list this loop iterates. If that invariant breaks,
-      // skip telemetry rather than emit a misleading 0ms duration.
+      // Should be unreachable because stampScopeStart runs at the top of this
+      // loop for every scope. If that invariant breaks, skip telemetry rather
+      // than emit a misleading 0ms duration.
       if (startedAt === undefined) continue;
       // Attribution reads the persisted marker, not this run's bootstrap set:
       // the import and the completing delta pull can land in different cycles
