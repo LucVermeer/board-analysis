@@ -251,7 +251,7 @@ export const boardEntitiesTypeDefs = /* GraphQL */ `
   input BoardLeaderboardInput {
     "Board UUID"
     boardUuid: ID!
-    "Time period (week, month, year, all)"
+    "Time period (day, week, month, year, all)"
     period: String
     "Max entries to return"
     limit: Int

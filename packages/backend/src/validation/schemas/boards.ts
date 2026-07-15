@@ -78,7 +78,7 @@ export const UpdateBoardInputSchema = z.object({
  */
 export const BoardLeaderboardInputSchema = z.object({
   boardUuid: UUIDSchema,
-  period: z.enum(['week', 'month', 'year', 'all']).optional().default('all'),
+  period: z.enum(['day', 'week', 'month', 'year', 'all']).optional().default('all'),
   limit: z.number().int().min(1).max(100).optional().default(50),
   offset: z.number().int().min(0).optional().default(0),
 });

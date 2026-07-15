@@ -22,7 +22,7 @@ import {
 } from '../../../validation/schemas';
 import { generateUniqueGymSlug } from './gyms';
 import { getUserCommunityRoles, hasAdminOrLeader, rolesGrantAdminOrLeader } from './roles';
-import { SYSTEM_BOARD_OWNER_ID } from '../board-presence/shared';
+import { SYSTEM_BOARD_OWNER_ID, requireAnonReadableBoard } from '../board-presence/shared';
 import { logger } from '../../../utils/logger';
 import { redisClientManager } from '../../../redis/client';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
@@ -1137,9 +1137,17 @@ export const socialBoardQueries = {
   },
 
   /**
-   * Get leaderboard for a board
+   * Get leaderboard for a board.
+   *
+   * Auth-optional: same shared, leaderboard-style data as `boardHistory` /
+   * `boardPresenceStats`, so anonymous callers may read a public / system-shared
+   * board's leaderboard (`requireAnonReadableBoard`); a private board is masked
+   * as NOT_FOUND for them, same as a nonexistent board. This gate + the rate
+   * limit were previously missing entirely (any caller could query any board's
+   * leaderboard unbounded) — both are added here alongside the anon-read work.
    */
-  boardLeaderboard: async (_: unknown, { input }: { input: unknown }, _ctx: ConnectionContext) => {
+  boardLeaderboard: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx, 60, 'boardLeaderboard');
     const validatedInput = validateInput(BoardLeaderboardInputSchema, input, 'input');
     const { boardUuid, period } = validatedInput;
     const limit = validatedInput.limit ?? 20;
@@ -1156,10 +1164,16 @@ export const socialBoardQueries = {
       throw new Error('Board not found');
     }
 
+    // Anonymous callers only read public / system-shared boards' leaderboards.
+    await requireAnonReadableBoard(board.id, ctx.userId);
+
     // Build time filter
     let timeFilter;
     let periodLabel = 'All Time';
-    if (period === 'week') {
+    if (period === 'day') {
+      timeFilter = sql`${dbSchema.boardseshTicks.climbedAt} >= NOW() - INTERVAL '1 day'`;
+      periodLabel = 'Today';
+    } else if (period === 'week') {
       timeFilter = sql`${dbSchema.boardseshTicks.climbedAt} >= NOW() - INTERVAL '7 days'`;
       periodLabel = 'This Week';
     } else if (period === 'month') {

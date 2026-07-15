@@ -21,6 +21,7 @@ import { roomManager } from '../services/room-manager';
 import { boardPresenceMutations } from '../graphql/resolvers/board-presence/mutations';
 import { boardPresenceQueries } from '../graphql/resolvers/board-presence/queries';
 import { boardPresenceSubscriptions } from '../graphql/resolvers/board-presence/subscription';
+import { socialBoardQueries } from '../graphql/resolvers/social/boards';
 import { getBoardSeqFloor } from '../graphql/resolvers/board-presence/shared';
 import { setCachedBoardPresenceStats } from '../graphql/resolvers/board-presence/stats';
 import { tickMutations } from '../graphql/resolvers/ticks/mutations';
@@ -1530,6 +1531,123 @@ describe('board-presence connection holder', () => {
           anon(),
         ),
       ).rejects.toThrow('Board not found');
+    });
+
+    it("lets anonymous viewers read a public board's durable history and stats (kiosk path)", async () => {
+      // Serial-resolved boards default to isPublic = true.
+      const boardId = await makeHolderBoard();
+      await db.execute(
+        sql`INSERT INTO board_climb_events (board_id, board_type, climb_uuid, angle, seq, confirmed_at)
+            VALUES (${boardId}, 'kilter', ${TEST_CLIMB_UUID}, 40, 1, '2026-01-01 00:00:00')`,
+      );
+
+      const history = await boardPresenceQueries.boardHistory(undefined, { boardId }, anon());
+      expect(history.map((row) => row.climbUuid)).toEqual([TEST_CLIMB_UUID]);
+
+      const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, anon());
+      expect(stats.climbsSentCount).toBe(0);
+      expect(stats.distinctClimbersCount).toBe(0);
+    });
+
+    it("masks a private board's history and stats as NOT_FOUND for anonymous viewers, same as a missing board", async () => {
+      const boardId = await makePrivateBoard();
+
+      for (const query of [
+        () => boardPresenceQueries.boardHistory(undefined, { boardId }, anon()),
+        () => boardPresenceQueries.boardPresenceStats(undefined, { boardId }, anon()),
+      ]) {
+        const error = await query().then(
+          () => null,
+          (caught: unknown) => caught,
+        );
+        expect(error).toBeInstanceOf(GraphQLError);
+        expect((error as GraphQLError).message).toBe('Board not found');
+        expect((error as GraphQLError).extensions?.code).toBe('NOT_FOUND');
+      }
+
+      // Indistinguishable from a board that does not exist at all.
+      await expect(boardPresenceQueries.boardHistory(undefined, { boardId: 999_999_999 }, anon())).rejects.toThrow(
+        'Board not found',
+      );
+      await expect(
+        boardPresenceQueries.boardPresenceStats(undefined, { boardId: 999_999_999 }, anon()),
+      ).rejects.toThrow('Board not found');
+    });
+
+    it("keeps authenticated access to the caller's own private board's history and stats", async () => {
+      const boardId = await makePrivateBoard();
+
+      await expect(boardPresenceQueries.boardHistory(undefined, { boardId }, authCtx())).resolves.toEqual([]);
+      const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
+      expect(stats.climbsSentCount).toBe(0);
+    });
+  });
+
+  describe('boardLeaderboard anon gate + day period', () => {
+    const anon = () => authCtx({ isAuthenticated: false, userId: undefined });
+    let leaderboardSlugCounter = 0;
+
+    async function makeLeaderboardBoard(isPublic: boolean): Promise<{ boardId: number; boardUuid: string }> {
+      const boardUuid = uuidv4();
+      const slug = `lb-${Date.now().toString(36)}-${leaderboardSlugCounter++}`;
+      const [row] = await db
+        .insert(dbSchema.userBoards)
+        .values({
+          uuid: boardUuid,
+          slug,
+          ownerId: TEST_USER_ID,
+          boardType: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,2',
+          name: 'Leaderboard Wall',
+          serialNumber: null,
+          isPublic,
+        })
+        .returning({ id: dbSchema.userBoards.id });
+      return { boardId: Number(row.id), boardUuid };
+    }
+
+    it("scopes the 'day' period to the last 24h (labelled Today) and works anonymously on a public board", async () => {
+      const { boardId, boardUuid } = await makeLeaderboardBoard(true);
+      const recentClimbedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const staleClimbedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      await db.execute(sql`
+        INSERT INTO boardsesh_ticks
+          (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, difficulty, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
+        VALUES
+          (${`tick-day-recent-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', ${TEST_CLIMB_UUID}, 40, false, 'send', 1, 17, false, '', ${recentClimbedAt}, now(), now(), ${boardId}),
+          (${`tick-day-stale-${Date.now()}`}, ${SECOND_USER_ID}, 'kilter', ${OTHER_TEST_CLIMB_UUID}, 40, false, 'send', 1, 18, false, '', ${staleClimbedAt}, now(), now(), ${boardId})
+      `);
+
+      const dayBoard = await socialBoardQueries.boardLeaderboard(
+        undefined,
+        { input: { boardUuid, period: 'day' } },
+        anon(),
+      );
+      expect(dayBoard.periodLabel).toBe('Today');
+      expect(dayBoard.totalCount).toBe(1);
+      expect(dayBoard.entries.map((entry) => entry.userId)).toEqual([TEST_USER_ID]);
+
+      // The default all-time window still sees both senders.
+      const allTime = await socialBoardQueries.boardLeaderboard(undefined, { input: { boardUuid } }, anon());
+      expect(allTime.totalCount).toBe(2);
+    });
+
+    it("masks a private board's leaderboard as NOT_FOUND for anonymous callers but still serves its owner", async () => {
+      const { boardUuid } = await makeLeaderboardBoard(false);
+
+      const error = await socialBoardQueries.boardLeaderboard(undefined, { input: { boardUuid } }, anon()).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(GraphQLError);
+      expect((error as GraphQLError).message).toBe('Board not found');
+      expect((error as GraphQLError).extensions?.code).toBe('NOT_FOUND');
+
+      const owned = await socialBoardQueries.boardLeaderboard(undefined, { input: { boardUuid } }, authCtx());
+      expect(owned.entries).toEqual([]);
+      expect(owned.totalCount).toBe(0);
     });
   });
 

@@ -19,7 +19,10 @@ export const boardPresenceSubscriptions = {
    */
   boardNowPlaying: {
     subscribe: async function* (_: unknown, { boardId }: { boardId: number }, ctx: ConnectionContext) {
-      await applyRateLimit(ctx, 30, 'boardNowPlaying');
+      // Multiple gym TVs can sit behind one NAT and reconnect together after a
+      // network blip, so this anon-tolerant subscribe gets the higher 60/min
+      // budget.
+      await applyRateLimit(ctx, 60, 'boardNowPlaying');
       // Validates the id and, for anonymous viewers, restricts to public /
       // system-shared boards (not a private wall reached by enumerating ids);
       // logged-in callers are unbounded.
