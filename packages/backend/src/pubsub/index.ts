@@ -626,6 +626,15 @@ class PubSub {
       session: this.sessionChannel.count(sessionId),
     };
   }
+
+  /**
+   * Count of local board-queue-preview subscribers for a board. Debug/test
+   * aid — the subscription-leak regression test asserts this returns to 0
+   * after a disconnect that lands during the seed computation.
+   */
+  getBoardQueuePreviewSubscriberCount(boardId: string): number {
+    return this.boardQueueChannel.count(boardId);
+  }
 }
 
 export const pubsub = new PubSub();

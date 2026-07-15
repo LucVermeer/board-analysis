@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vite-plus/test';
 import Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type {
   BoardPresenceClimb,
   BoardQueuePreview,
@@ -19,6 +19,7 @@ import {
   buildBoardQueuePreview,
   getBoardQueuePreviewSnapshot,
   publishBoardQueuePreviewForSession,
+  publishBoardQueuePreviewTombstoneForSession,
   registerBoardQueuePreviewHook,
   toBoardQueuePreviewItem,
 } from '../services/board-queue-preview';
@@ -26,6 +27,8 @@ import {
   boardQueuePreviewQueries,
   boardQueuePreviewSubscriptions,
 } from '../graphql/resolvers/board-presence/queue-preview';
+import { SYSTEM_BOARD_OWNER_ID } from '../graphql/resolvers/board-presence/shared';
+import { roomManager } from '../services/room-manager';
 
 const TEST_USER_ID = 'board-queue-preview-test-user';
 const TEST_BOARD_PATH = 'queue-preview-test/1/10/1,2/40';
@@ -82,14 +85,20 @@ function makeQueueEvent(item: ClimbQueueItem): QueueEvent {
 }
 
 let boardSlugCounter = 0;
-async function makeBoard({ isPublic }: { isPublic: boolean }): Promise<number> {
+async function makeBoard({
+  isPublic,
+  ownerId = TEST_USER_ID,
+}: {
+  isPublic: boolean;
+  ownerId?: string;
+}): Promise<number> {
   const slug = `qp-board-${Date.now().toString(36)}-${boardSlugCounter++}`;
   const [row] = await db
     .insert(dbSchema.userBoards)
     .values({
       uuid: `uuid-${slug}`,
       slug,
-      ownerId: TEST_USER_ID,
+      ownerId,
       boardType: 'kilter',
       layoutId: 1,
       sizeId: 10,
@@ -159,11 +168,32 @@ async function seedUser(): Promise<void> {
   `);
 }
 
+/** The system board owner (`shared.ts#ensureSystemBoardOwner` equivalent for tests). */
+async function seedSystemBoardOwner(): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO users (id, email, name, created_at, updated_at)
+    VALUES (${SYSTEM_BOARD_OWNER_ID}, 'system@boardsesh.com', 'Boardsesh', now(), now())
+    ON CONFLICT DO NOTHING
+  `);
+}
+
 async function cleanup(): Promise<void> {
   // board_session_queues cascades from board_sessions.
   await db.execute(sql`DELETE FROM board_sessions WHERE board_path = ${TEST_BOARD_PATH}`);
-  await db.execute(sql`DELETE FROM user_boards WHERE owner_id = ${TEST_USER_ID}`);
+  // Slug-scoped so it also covers system-owned boards created by makeBoard
+  // (the shared system user row itself is left in place).
+  await db.execute(sql`DELETE FROM user_boards WHERE owner_id = ${TEST_USER_ID} OR slug LIKE 'qp-board-%'`);
   await db.execute(sql`DELETE FROM users WHERE id = ${TEST_USER_ID}`);
+}
+
+/** A public board with a public, active, queue-seeded session bound to it. */
+async function makePreviewableSession(): Promise<{ boardId: number; sessionId: string }> {
+  const boardId = await makeBoard({ isPublic: true });
+  const sessionId = await makeSession({ boardId, isPublic: true });
+  const queue = [makeQueueItem(1), makeQueueItem(2)];
+  await seedQueueState(sessionId, queue, queue[0]);
+  await bindSessionToBoard(sessionId, boardId);
+  return { boardId, sessionId };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -334,6 +364,53 @@ describe('board-queue-preview privacy gates', () => {
     unsubscribe();
   });
 
+  it('a live-bound session that fails the gates never falls through to the DB fallback', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+    // An older public active session with a seeded queue exists in the DB…
+    const olderPublicSessionId = await makeSession({
+      boardId,
+      isPublic: true,
+      lastActivity: new Date(Date.now() - 60_000),
+    });
+    await seedQueueState(olderPublicSessionId, [makeQueueItem(1)], null);
+    // …but the LIVE binding points at a private session that currently holds
+    // the wall.
+    const privateSessionId = await makeSession({ boardId, isPublic: false });
+    await seedQueueState(privateSessionId, [makeQueueItem(2)], null);
+    await bindSessionToBoard(privateSessionId, boardId);
+
+    // A regression that fell through to the DB fallback would surface the
+    // older public session's queue while the private session is on the wall —
+    // the wrong session's queue, on a public display.
+    expect(await boardQueuePreviewQueries.boardQueuePreview(undefined, { boardId }, anonCtx())).toBeNull();
+    expect(await getBoardQueuePreviewSnapshot(boardId)).toBeNull();
+  });
+
+  it('a live-bound session that has already ended yields null', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+    const endedSessionId = await makeSession({ boardId, isPublic: true, status: 'ended' });
+    await seedQueueState(endedSessionId, [makeQueueItem(1)], null);
+    await bindSessionToBoard(endedSessionId, boardId);
+
+    expect(await boardQueuePreviewQueries.boardQueuePreview(undefined, { boardId }, anonCtx())).toBeNull();
+  });
+
+  it('system-owned non-public shared boards pass the anon gate (system allowance branch)', async () => {
+    await seedSystemBoardOwner();
+    const boardId = await makeBoard({ isPublic: false, ownerId: SYSTEM_BOARD_OWNER_ID });
+    const sessionId = await makeSession({ boardId, isPublic: true });
+    const queue = [makeQueueItem(1), makeQueueItem(2)];
+    await seedQueueState(sessionId, queue, queue[0]);
+    await bindSessionToBoard(sessionId, boardId);
+
+    // isPublic=false, but the system owner marks it a shared per-config feed —
+    // anon-readable, so the preview flows (and the anon gate does not throw).
+    const preview = await boardQueuePreviewQueries.boardQueuePreview(undefined, { boardId }, anonCtx());
+    expect(preview).not.toBeNull();
+    expect(preview!.current?.climbUuid).toBe('climb-1');
+    expect(JSON.stringify(preview)).not.toContain(SECRET_USER_ID);
+  });
+
   it('private board → NOT_FOUND for anonymous viewers (query and subscription), null for logged-in', async () => {
     const boardId = await makeBoard({ isPublic: false });
     const sessionId = await makeSession({ boardId, isPublic: true });
@@ -405,15 +482,6 @@ describe('board-queue-preview live producer', () => {
   afterEach(async () => {
     await cleanup();
   });
-
-  async function makePreviewableSession(): Promise<{ boardId: number; sessionId: string }> {
-    const boardId = await makeBoard({ isPublic: true });
-    const sessionId = await makeSession({ boardId, isPublic: true });
-    const queue = [makeQueueItem(1), makeQueueItem(2)];
-    await seedQueueState(sessionId, queue, queue[0]);
-    await bindSessionToBoard(sessionId, boardId);
-    return { boardId, sessionId };
-  }
 
   it('a burst of queue mutations triggers exactly one publish after the debounce', async () => {
     const { boardId, sessionId } = await makePreviewableSession();
@@ -539,6 +607,147 @@ describe('board-queue-preview live producer', () => {
     } finally {
       await iterator.return?.(undefined);
       unregister();
+    }
+  });
+
+  it('a disconnect while the seed is still being computed does not leak the channel subscription', async () => {
+    const { boardId } = await makePreviewableSession();
+    const boardKey = String(boardId);
+    expect(pubsub.getBoardQueuePreviewSubscriberCount(boardKey)).toBe(0);
+
+    const iterator = boardQueuePreviewSubscriptions.boardQueuePreview.subscribe(undefined, { boardId }, anonCtx());
+    // Start the generator: it eagerly subscribes to the channel, then awaits
+    // the seed snapshot (DB work).
+    const nextPromise = iterator.next();
+    // Queue `.return()` immediately — async-generator requests are processed
+    // in order, so this deterministically lands while the first step (which
+    // includes the seed computation) is still running: exactly what
+    // graphql-ws does when the client disconnects during setup. The queued
+    // return completes at the seed yield, BEFORE the streaming loop starts —
+    // without the resolver's finally-cleanup, the eager iterator would never
+    // be closed and the channel subscription would leak permanently.
+    const returnPromise = iterator.return?.(undefined);
+
+    const [seedResult, returnResult] = await Promise.all([nextPromise, returnPromise]);
+    // The in-flight seed still resolves the pending next()…
+    expect(seedResult.done).toBe(false);
+    expect(returnResult?.done).toBe(true);
+    // …but the generator must have unsubscribed on its way out.
+    expect(pubsub.getBoardQueuePreviewSubscriberCount(boardKey)).toBe(0);
+  });
+});
+
+// ============================================================
+// Tombstone: a session that stops being previewable clears public kiosks
+// with an EMPTY snapshot (the producer only re-gates on queue events, so
+// without this the last snapshot would linger indefinitely).
+// ============================================================
+describe('board-queue-preview tombstone', () => {
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+  });
+
+  const EMPTY_PREVIEW_SHAPE = { current: null, upNext: [], queueLength: 0 };
+
+  it('ending the bound session publishes an empty snapshot to the board channel', async () => {
+    const { boardId, sessionId } = await makePreviewableSession();
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      // The same path the explicit endSession mutation takes.
+      await roomManager.endSession(sessionId);
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ boardId, ...EMPTY_PREVIEW_SHAPE });
+      expect(Date.parse(received[0].updatedAt)).not.toBeNaN();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('a session flipping to private publishes an empty snapshot (contract for future is_public mutations)', async () => {
+    const { boardId, sessionId } = await makePreviewableSession();
+    // No mutation flips board_sessions.is_public today; simulate the flip and
+    // exercise the tombstone call such a mutation must make.
+    await db.update(dbSchema.boardSessions).set({ isPublic: false }).where(eq(dbSchema.boardSessions.id, sessionId));
+
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      await publishBoardQueuePreviewTombstoneForSession(sessionId);
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ boardId, ...EMPTY_PREVIEW_SHAPE });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('does not tombstone when a different session has since taken over the binding', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+    const supersededSessionId = await makeSession({ boardId, isPublic: true });
+    const currentSessionId = await makeSession({ boardId, isPublic: true });
+    await seedQueueState(currentSessionId, [makeQueueItem(1)], null);
+
+    await bindSessionToBoard(supersededSessionId, boardId);
+    // The wall moves on: the second session re-binds the board.
+    await bindSessionToBoard(currentSessionId, boardId);
+
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      // Ending the superseded session must NOT clobber the preview owned by
+      // the session actually on the wall.
+      await roomManager.endSession(supersededSessionId);
+      expect(received).toHaveLength(0);
+
+      // The current session's queue still previews normally afterwards.
+      await publishBoardQueuePreviewForSession(currentSessionId);
+      expect(received).toHaveLength(1);
+      expect(received[0].upNext.map((item) => item.queueItemUuid)).toEqual(['queue-item-1']);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('does not tombstone a session that is still publicly previewable (misplaced-call guard)', async () => {
+    const { boardId, sessionId } = await makePreviewableSession();
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      await publishBoardQueuePreviewTombstoneForSession(sessionId);
+      expect(received).toHaveLength(0);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('does not tombstone on a board that is not anon-readable', async () => {
+    const boardId = await makeBoard({ isPublic: false });
+    const sessionId = await makeSession({ boardId, isPublic: true });
+    await seedQueueState(sessionId, [makeQueueItem(1)], null);
+    await bindSessionToBoard(sessionId, boardId);
+
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      // The producer never published for this private board, so there is
+      // nothing to clear — and even an empty publish would leak "a session
+      // just ended here" timing on the private board's channel.
+      await roomManager.endSession(sessionId);
+      expect(received).toHaveLength(0);
+    } finally {
+      unsubscribe();
     }
   });
 });

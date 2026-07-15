@@ -355,6 +355,7 @@ Party queues live in membership-gated sessions keyed by session UUID; a public g
 - **Board→session binding**: `commitBoardClimb` (the `reportBoardClimb` pipeline) writes the reverse key `board:{boardId}:session` alongside the existing `session:{id}:board`, same 12h proof-of-presence TTL, read via `pubsub.getBoardSession(boardId)`. When no live binding exists the resolvers fall back to the newest active public `board_sessions` row for the board (`board_id`, `last_activity DESC`). A live binding that fails the gates returns null — it never falls through to a different session. Redis-less single-instance deployments use an in-memory binding fallback in `BoardPresenceStore`.
 - **Live channel**: new pub/sub domain on prefix `boardsesh:board-queue:` (no overlap with `boardsesh:board:`). Each event is a full snapshot (latest wins — no deltas, no replay); the subscription eagerly subscribes, then yields the query-path snapshot as a seed.
 - **Producer**: `registerBoardQueuePreviewHook()` (wired in `server.ts`) listens on the queue-event hook registry — `pubsub.setQueueEventHook` was converted to a multi-hook `addQueueEventHook(hook): unregister`, so the APNs Live Activity hook and this producer coexist. On each queue event (skipping `PlaybackStateChanged`) it debounces ~250 ms per session (trailing), re-verifies the reverse binding still points at the emitting session (a superseded session must not clobber the wall's preview), applies both gates, and publishes the redacted snapshot. Publisher-side hook semantics are correct here because the board-queue channel itself Redis-fans-out to every instance's subscribers.
+- **Tombstone on session end**: the producer only re-gates on queue events, so a session that stops being previewable without a queue mutation would leave its last snapshot on kiosks indefinitely. Every session-end path (`RoomManager.endSession` behind the explicit `endSession` mutation, and the inactivity sweep) therefore calls `publishBoardQueuePreviewTombstoneForSession(sessionId)`, which publishes an **empty** preview (`current: null, upNext: [], queueLength: 0`) — but only while the board's reverse binding still points at that session (a superseded session must not clobber the new session's preview), only for anon-readable boards, and only when the session genuinely is no longer publicly previewable. There is currently no mutation that flips `board_sessions.is_public` after creation; if one is added it must call the same tombstone when flipping to private.
 
 ---
 
@@ -1947,7 +1948,7 @@ All except `/api/watch/pair` take `Authorization: Bearer <mobile JWT>`. `navigat
 ### Backend
 
 - `packages/backend/src/websocket/setup.ts` - WebSocket server configuration
-- `packages/backend/src/pubsub/index.ts` - Event pub/sub system + `setQueueEventHook`
+- `packages/backend/src/pubsub/index.ts` - Event pub/sub system + `addQueueEventHook`
 - `packages/backend/src/pubsub/redis-adapter.ts` - Redis pub/sub adapter
 - `packages/backend/src/services/room-manager.ts` - Session & queue management
 - `packages/backend/src/services/redis-session-store.ts` - Redis session persistence

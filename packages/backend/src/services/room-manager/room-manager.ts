@@ -35,6 +35,11 @@ import {
 } from './client-lifecycle';
 import { pubsub } from '../../pubsub/index';
 import { endLiveActivity } from '../apns/index';
+// Module cycle (benign): board-queue-preview imports `roomManager` from this
+// package's index for queue-state reads, and we import its tombstone here.
+// Both sides only reference the other inside function bodies at runtime —
+// no top-level access — so ESM/CJS cycle resolution is safe.
+import { publishBoardQueuePreviewTombstoneForSession } from '../board-queue-preview';
 import type { SessionEvent } from '@boardsesh/shared-schema';
 import {
   getSessionById as getSessionByIdFn,
@@ -190,6 +195,11 @@ class RoomManager {
       pubsub.publishSessionEvent(sessionId, event);
       endLiveActivity(sessionId).catch((err) => {
         logger.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
+      });
+      // Clear public kiosks showing this session's queue preview — same
+      // side-effect mirroring as `endSession`, reached via the sweep instead.
+      await publishBoardQueuePreviewTombstoneForSession(sessionId).catch((error: unknown) => {
+        logger.error(`[RoomManager] board-queue-preview tombstone failed for auto-ended session ${sessionId}:`, error);
       });
     }
   }
@@ -632,7 +642,16 @@ class RoomManager {
 
   async endSession(sessionId: string): Promise<void> {
     this.clearLocalSessionShadows(sessionId);
-    return endSessionFn(this.deps(), sessionId);
+    await endSessionFn(this.deps(), sessionId);
+    // The session row is now `ended`, so the board-queue preview's producer
+    // gates would fail — but a session ending is not a queue event, so
+    // nothing would ever re-publish. Clear public kiosks explicitly (no-op
+    // when another session has since taken over the board's binding).
+    // Awaited so the explicit-end mutation observably completes the clear,
+    // but never fatal: a tombstone failure must not fail the end itself.
+    await publishBoardQueuePreviewTombstoneForSession(sessionId).catch((error: unknown) => {
+      logger.error(`[RoomManager] board-queue-preview tombstone failed for ended session ${sessionId}:`, error);
+    });
   }
 
   async flushPendingWrites(): Promise<void> {

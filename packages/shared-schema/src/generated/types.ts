@@ -6081,7 +6081,10 @@ export type Subscription = {
    * `isPublic: true` bound session — see the `boardQueuePreview` query,
    * including the deliberate widening of `is_public`'s meaning). The stream
    * is seeded with the current snapshot when one exists, since pub/sub has no
-   * replay. Items are redacted to climb-catalog fields only.
+   * replay. Items are redacted to climb-catalog fields only. When the bound
+   * session stops being previewable (ends, or goes private) an EMPTY snapshot
+   * (`current: null, upNext: [], queueLength: 0`) is published so displays
+   * clear instead of showing the last queue forever.
    */
   boardQueuePreview: BoardQueuePreview;
   /** Subscribe to real-time comment updates on an entity. */
