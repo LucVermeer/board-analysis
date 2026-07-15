@@ -45,7 +45,7 @@ import KioskCreateDialog from './kiosk-create-dialog';
 import KioskEditor from './kiosk-editor';
 import type { GymManageTabProps } from './tab-props';
 
-export default function KiosksTab({ gym }: GymManageTabProps) {
+export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
   const { token, isLoading: isTokenLoading } = useWsAuthToken();
   const { showMessage } = useSnackbar();
@@ -132,6 +132,7 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
         gymBoardsLoadFailed={gymBoardsLoadFailed}
         onBack={() => setEditingKioskUuid(null)}
         onSaved={handleSaved}
+        onDirtyChange={onDirtyChange}
       />
     );
   }

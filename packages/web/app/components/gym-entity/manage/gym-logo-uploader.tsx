@@ -149,8 +149,11 @@ export default function GymLogoUploader({ gym, logoDisplayUrl, onGymChange }: Gy
         body: formData,
       });
       if (!response.ok) {
+        // Localized message first; the backend detail (English) rides along as
+        // secondary context, mirroring useEntityMutation's server-message style.
         const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
-        showMessage(errorPayload?.error ?? t('branding.logo.uploadFailed'), 'error');
+        const localizedMessage = t('branding.logo.uploadFailed');
+        showMessage(errorPayload?.error ? `${localizedMessage} (${errorPayload.error})` : localizedMessage, 'error');
         return;
       }
 

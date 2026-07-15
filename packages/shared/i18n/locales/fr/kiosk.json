@@ -80,6 +80,12 @@
       "boards": "Boards",
       "members": "Membres"
     },
+    "navGuard": {
+      "title": "Abandonner les modifications non enregistrées ?",
+      "body": "Tu as des modifications non enregistrées sur cet onglet. En partant, elles seront perdues.",
+      "discard": "Abandonner et quitter",
+      "stay": "Rester ici"
+    },
     "slugGuard": {
       "title": "Donne une adresse web à cette salle",
       "body": "Ta borne et la page publique de la salle ont besoin d'un slug d'URL court avant que quiconque puisse les ouvrir.",
@@ -235,7 +241,6 @@
       "description": "La borne reste sombre ; ces couleurs pilotent l'accent des pastilles de cotation et des mises en avant.",
       "primary": "Couleur principale",
       "accent": "Couleur d'accent",
-      "background": "Couleur de fond",
       "invalidHex": "Utilise une valeur hexadécimale #RRGGBB.",
       "contrastWarning": "{{colors}} : difficile à lire sur l'écran sombre de la borne (contraste sous 3:1). La borne l'éclaircit automatiquement jusqu'à ce que ça se lise.",
       "save": "Enregistrer les couleurs",

@@ -80,6 +80,12 @@
       "boards": "Boards",
       "members": "Members"
     },
+    "navGuard": {
+      "title": "Discard unsaved changes?",
+      "body": "You have edits on this tab that aren't saved yet. Leaving discards them.",
+      "discard": "Discard and leave",
+      "stay": "Stay here"
+    },
     "slugGuard": {
       "title": "Give this gym a web address",
       "body": "Your kiosk and public gym page need a short URL slug before anyone can open them.",
@@ -235,7 +241,6 @@
       "description": "Your kiosk stays dark; these colours drive the accent on grade chips and highlights.",
       "primary": "Primary colour",
       "accent": "Accent colour",
-      "background": "Background colour",
       "invalidHex": "Use a #RRGGBB hex value.",
       "contrastWarning": "{{colors}}: hard to read on the dark kiosk screen (under 3:1 contrast). The kiosk auto-lightens it until it reads.",
       "save": "Save colours",

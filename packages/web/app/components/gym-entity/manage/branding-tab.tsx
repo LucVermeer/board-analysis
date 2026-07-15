@@ -40,12 +40,11 @@ function gymValueFromField(fieldValue: string): string | null {
   return fieldValue === '' ? null : fieldValue;
 }
 
-export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
+export default function BrandingTab({ gym, onGymChange, onDirtyChange }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
   const { showMessage } = useSnackbar();
   const [primaryColor, setPrimaryColor] = useState(fieldValueFromGym(gym.brandPrimaryColor));
   const [accentColor, setAccentColor] = useState(fieldValueFromGym(gym.brandAccentColor));
-  const [backgroundColor, setBackgroundColor] = useState(fieldValueFromGym(gym.brandBackgroundColor));
   const [isSavingColors, setIsSavingColors] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -56,23 +55,27 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
 
   const logoDisplayUrl = resolveGymLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
 
+  // brandBackgroundColor exists in the DB/SDL/zod but is deliberately NOT
+  // exposed here: nothing renders it yet (the kiosk surface is always dark and
+  // brand-contrast.ts ignores it; the embeds don't read it either). Add a
+  // field only once a surface actually consumes the colour.
   const colorFields = [
     { key: 'primary', value: primaryColor, setValue: setPrimaryColor, label: t('branding.colors.primary') },
     { key: 'accent', value: accentColor, setValue: setAccentColor, label: t('branding.colors.accent') },
-    {
-      key: 'background',
-      value: backgroundColor,
-      setValue: setBackgroundColor,
-      label: t('branding.colors.background'),
-    },
   ] as const;
 
   const hasInvalidColor = colorFields.some((field) => field.value !== '' && !isValidHexColor(field.value));
 
   const colorsDirty =
     gymValueFromField(primaryColor) !== (gym.brandPrimaryColor ?? null) ||
-    gymValueFromField(accentColor) !== (gym.brandAccentColor ?? null) ||
-    gymValueFromField(backgroundColor) !== (gym.brandBackgroundColor ?? null);
+    gymValueFromField(accentColor) !== (gym.brandAccentColor ?? null);
+
+  // Tell the shell about unsaved edits so tab switches and "Back to gym" get
+  // the discard confirmation; report clean on unmount.
+  useEffect(() => {
+    onDirtyChange?.(colorsDirty);
+    return () => onDirtyChange?.(false);
+  }, [colorsDirty, onDirtyChange]);
 
   // Native confirm on page close/refresh with unsaved colours — mirrors the
   // kiosk editor's dirty guard. In-app tab switches unmount this component
@@ -90,12 +93,11 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
   }, [colorsDirty]);
 
   // Non-blocking contrast check against the dark kiosk surface, mirroring the
-  // clamp in lib/kiosk/brand-contrast.ts. Only primary/accent feed the kiosk
-  // accent (background is ignored there), so only those two are checked.
-  // Cheap enough to recompute per render — no memo.
+  // clamp in lib/kiosk/brand-contrast.ts. Both exposed colours feed the kiosk
+  // accent. Cheap enough to recompute per render — no memo.
   const lowContrastLabels = colorFields
     .filter((field) => {
-      if (field.key === 'background' || !isValidHexColor(field.value)) return false;
+      if (!isValidHexColor(field.value)) return false;
       const ratio = contrastRatio(field.value, KIOSK_DARK_SURFACE);
       return ratio !== null && ratio < KIOSK_MIN_ACCENT_CONTRAST;
     })
@@ -109,7 +111,6 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
           gymUuid: gym.uuid,
           brandPrimaryColor: gymValueFromField(primaryColor),
           brandAccentColor: gymValueFromField(accentColor),
-          brandBackgroundColor: gymValueFromField(backgroundColor),
         },
       });
       if (savedGymData) {
@@ -138,7 +139,6 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
         onGymChange(resetGymData.updateGym);
         setPrimaryColor('');
         setAccentColor('');
-        setBackgroundColor('');
         showMessage(t('branding.reset.done'), 'success');
       }
     } finally {
@@ -169,7 +169,7 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
             gap: 2,
             mb: 2,
           }}

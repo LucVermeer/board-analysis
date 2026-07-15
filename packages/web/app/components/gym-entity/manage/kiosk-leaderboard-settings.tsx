@@ -1,10 +1,11 @@
 'use client';
 
-// Leaderboard rail settings for the kiosk editor: on/off switch (disabled
-// until at least one board is assigned — the schema tolerates a rail with
-// zero boards, the editor doesn't build one), scope (all kiosk boards or one
-// assigned board), and the ranking window. 'day' copy is ALWAYS "Last 24
-// hours" — it's a rolling window, never calendar-today.
+// Leaderboard rail settings for the kiosk editor: on/off switch (turning it
+// ON requires at least one assigned board — the schema tolerates a rail with
+// zero boards, the editor doesn't build one; turning it OFF always works),
+// scope (all kiosk boards or one assigned board), and the ranking window.
+// 'day' copy is ALWAYS "Last 24 hours" — it's a rolling window, never
+// calendar-today.
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -75,10 +76,15 @@ export default function KioskLeaderboardSettings({
     month: t('manage.editor.period.month'),
   };
 
+  // Zero boards only blocks turning the rail ON. A persisted rail-on kiosk
+  // whose boards have all been unlinked must still be switchable OFF — a
+  // checked-and-disabled switch would be a dead end.
+  const switchDisabled = !hasBoards && !railEnabled;
+
   const switchControl = (
     <FormControlLabel
       control={
-        <Switch checked={railEnabled} disabled={!hasBoards} onChange={(event) => onToggle(event.target.checked)} />
+        <Switch checked={railEnabled} disabled={switchDisabled} onChange={(event) => onToggle(event.target.checked)} />
       }
       label={t('manage.editor.railSwitch')}
     />
@@ -87,12 +93,12 @@ export default function KioskLeaderboardSettings({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
-        {hasBoards ? (
-          switchControl
-        ) : (
+        {switchDisabled ? (
           <Tooltip title={t('manage.editor.railDisabledTooltip')}>
             <span>{switchControl}</span>
           </Tooltip>
+        ) : (
+          switchControl
         )}
         <Tooltip title={isGymPublic ? t('embed.railButton') : t('embed.publicOnlyGym')}>
           <span>

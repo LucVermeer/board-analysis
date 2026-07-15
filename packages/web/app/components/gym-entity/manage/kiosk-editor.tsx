@@ -24,6 +24,7 @@ import {
 } from '@boardsesh/graphql/operations';
 import type { Gym, GymKiosk, UserBoard } from '@boardsesh/shared-schema';
 import { useEntityMutation } from '@/app/hooks/use-entity-mutation';
+import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
 import {
   addBoardSlot,
@@ -56,10 +57,21 @@ type KioskEditorProps = {
   onBack: () => void;
   /** Called with the updated kiosk after a successful save. */
   onSaved: (kiosk: GymKiosk) => void;
+  /** Reports unsaved-layout state up to the manage shell's navigation guard. */
+  onDirtyChange?: (isDirty: boolean) => void;
 };
 
-export default function KioskEditor({ gym, kiosk, gymBoards, gymBoardsLoadFailed, onBack, onSaved }: KioskEditorProps) {
+export default function KioskEditor({
+  gym,
+  kiosk,
+  gymBoards,
+  gymBoardsLoadFailed,
+  onBack,
+  onSaved,
+  onDirtyChange,
+}: KioskEditorProps) {
   const { t } = useTranslation('kiosk');
+  const { showMessage } = useSnackbar();
   const [editorState, setEditorState] = useState<KioskEditorState>(() => editorStateFromLayout(kiosk.layout));
   const [baselineState, setBaselineState] = useState<KioskEditorState>(editorState);
   const [slotErrors, setSlotErrors] = useState<ReadonlyMap<number, string>>(new Map());
@@ -69,6 +81,13 @@ export default function KioskEditor({ gym, kiosk, gymBoards, gymBoardsLoadFailed
   const [embedDialog, setEmbedDialog] = useState<EmbedCodeDialogState | null>(null);
 
   const isDirty = !editorStatesEqual(editorState, baselineState);
+
+  // Tell the shell about unsaved edits (tab switch / "Back to gym" guard);
+  // report clean on unmount so a confirmed navigation clears the flag.
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => onDirtyChange?.(false);
+  }, [isDirty, onDirtyChange]);
 
   // Native confirm on page close/refresh while unsaved. In-app tab switches in
   // the manage shell unmount this editor without a hook to intercept; the
@@ -125,6 +144,11 @@ export default function KioskEditor({ gym, kiosk, gymBoards, gymBoardsLoadFailed
       }
       setSlotErrors(nextSlotErrors);
       setScopeError(nextScopeError);
+      if (nextSlotErrors.size === 0 && nextScopeError === null) {
+        // An issue that maps to no inline field (future schema rule, top-level
+        // shape) must still surface — Save silently doing nothing is worse.
+        showMessage(t('manage.editor.saveFailed'), 'error');
+      }
       return;
     }
 

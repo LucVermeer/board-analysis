@@ -80,6 +80,12 @@
       "boards": "Plafones",
       "members": "Miembros"
     },
+    "navGuard": {
+      "title": "¿Descartar los cambios sin guardar?",
+      "body": "Tienes cambios sin guardar en esta pestaña. Si sales, se descartan.",
+      "discard": "Descartar y salir",
+      "stay": "Quedarme aquí"
+    },
     "slugGuard": {
       "title": "Dale una dirección web a este rocódromo",
       "body": "Tu kiosco y la página pública del rocódromo necesitan un slug de URL corto antes de que alguien pueda abrirlos.",
@@ -235,7 +241,6 @@
       "description": "El kiosco siempre es oscuro; estos colores marcan el acento de las fichas de grado y los destacados.",
       "primary": "Color primario",
       "accent": "Color de acento",
-      "background": "Color de fondo",
       "invalidHex": "Usa un valor hexadecimal #RRGGBB.",
       "contrastWarning": "{{colors}}: se lee mal en la pantalla oscura del kiosco (contraste menor de 3:1). El kiosco lo aclara automáticamente hasta que se lea.",
       "save": "Guardar colores",
