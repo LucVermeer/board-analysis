@@ -355,6 +355,48 @@ describe('TabLayout', () => {
     expect(cfg.materialScreens.find((screen) => screen.name === 'wall')?.options).toMatchObject({ href: null });
   });
 
+  it('mounts the same shell on an Android tablet (Material variant, regular width, no NativeTabs)', () => {
+    // An Android tablet resolves the Material variant and, at regular width, takes the
+    // adaptive-shell branch exactly like an iPad: the rail (TabletSidebar → the M3
+    // navigation rail) carries navigation over a hidden JS Tabs bar, with the detail
+    // pane beside it. The native glass tab bar never exists on Android.
+    cfg.platformOS = 'android';
+    cfg.variant = 'material';
+    cfg.glassCapable = false;
+    cfg.widthClass = 'regular';
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
+    expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
+      'home',
+      'climbs',
+      'record',
+      'wall',
+      'discover',
+      'profile',
+    ]);
+  });
+
+  it('keeps a compact Android tablet (small multi-window split) on the Material bar, no rail', () => {
+    // A tablet in a small freeform / split-screen window is still a tablet (sw600dp,
+    // launch-fixed) but reads `compact` from the live width — so it stays on the single
+    // JS Tabs navigator + Material bar with no rail, mirroring an iPad in a narrow split.
+    cfg.platformOS = 'android';
+    cfg.variant = 'material';
+    cfg.glassCapable = false;
+    cfg.widthClass = 'compact';
+    cfg.isTablet = true;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tabs-material="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).toBeNull();
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
+  });
+
   it('suppresses the detail pane on the tightest regular portraits, keeping the list full width', () => {
     // iPad mini portrait (744): sidebar (96) + the pane's 320pt floor would leave the
     // browse list ~328pt — below the 400pt readable floor — so resolveDetailPaneSurface

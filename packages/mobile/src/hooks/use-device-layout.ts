@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Dimensions, Platform, useWindowDimensions } from 'react-native';
 import {
   resolveDeviceLayout,
+  resolveIsTablet,
   resolveWallDeviceClass,
   type DeviceLayout,
   type WallDeviceClass,
@@ -18,27 +19,32 @@ import {
  * `isTablet` is surfaced alongside the size class so the shell can keep a tablet
  * on a single JS `Tabs` navigator across the regular↔compact boundary (a tablet
  * in a narrow split is `compact` but must NOT swap to NativeTabs, or the boundary
- * cross would remount the navigator). It is launch-fixed, unlike `widthClass`,
- * which is live. (Android tablet detection is wired in a later step; today
- * `isTablet` equals the iPad flag.)
+ * cross would remount the navigator). It is launch-fixed — an iPad (`Platform.isPad`)
+ * or an Android tablet (`sw600dp`, see `resolveIsTablet`) — unlike `widthClass`,
+ * which is live.
  *
  * `wallDeviceClass` is the other launch-fixed axis: whether the device is
  * physically large enough for the persistent wall panel, from the screen long
- * side (see `resolveWallDeviceClass`). It's read from `Dimensions.get('screen')`
+ * side (see `resolveWallDeviceClass`). Both the long side (wall panel) and the
+ * short side (Android tablet eligibility) are read from `Dimensions.get('screen')`
  * — the PHYSICAL screen, not the app window (which shrinks under Split View /
- * Stage Manager) — and rotation-invariant via `max`, so it's memoized once.
+ * multi-window / DeX) — and rotation-invariant via `max`/`min`, so memoized once.
  */
 export function useDeviceLayout(): DeviceLayout & { isTablet: boolean; wallDeviceClass: WallDeviceClass } {
   const { width } = useWindowDimensions();
   // `Platform.isPad` is iOS-only (undefined on Android), so guard on the OS too.
   const isPad = Platform.OS === 'ios' && Platform.isPad === true;
-  const screenLongSide = useMemo(() => {
+  const { screenLongSide, screenShortSide } = useMemo(() => {
     const screen = Dimensions.get('screen');
-    return Math.max(screen.width, screen.height);
+    return {
+      screenLongSide: Math.max(screen.width, screen.height),
+      screenShortSide: Math.min(screen.width, screen.height),
+    };
   }, []);
-  // Adaptive-shell eligibility. Android tablets join here in a later step; for now
-  // this is exactly the iPad flag, so behavior is unchanged off iPad.
-  const isTablet = isPad;
+  // Adaptive-shell eligibility: an iPad, or an Android tablet at sw600dp. Launch-fixed,
+  // so an Android tablet in a small multi-window/DeX split is still a tablet but reads
+  // `compact` from the live width — exactly like an iPad in a narrow Split View.
+  const isTablet = resolveIsTablet({ platformOS: Platform.OS, isPad, screenShortSide });
   const wallDeviceClass = resolveWallDeviceClass({ screenLongSide, isPad });
   return useMemo(
     () => ({ ...resolveDeviceLayout({ width, isTablet }), isTablet, wallDeviceClass }),

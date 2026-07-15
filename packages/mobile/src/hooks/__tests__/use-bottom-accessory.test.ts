@@ -206,6 +206,21 @@ describe('use-bottom-accessory', () => {
 
       expect(result.current).toBe(false);
     });
+
+    it('is false on an Android tablet (Material variant) — the shell rail carries nav', () => {
+      // Android resolves the Material variant and is never glass-capable, so it was
+      // already false; the tablet shell also renders JS Tabs at every width. Either way
+      // the native glass tab bar / bottom accessory never mounts on an Android tablet.
+      cfg.platformOS = 'android';
+      cfg.variant = 'material';
+      cfg.glassEffectApiAvailable = false;
+      cfg.isTablet = true;
+      cfg.widthClass = 'regular';
+
+      const { result } = renderHook(() => useNativeTabBar());
+
+      expect(result.current).toBe(false);
+    });
   });
 
   it('keeps the accessory and the native tab bar consistent when the glass APIs diverge', () => {
