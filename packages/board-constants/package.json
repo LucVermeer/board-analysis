@@ -49,6 +49,11 @@
       "types": "./src/moonboard.ts",
       "import": "./src/moonboard.ts",
       "default": "./src/moonboard.ts"
+    },
+    "./readable-text-color": {
+      "types": "./src/readable-text-color.ts",
+      "import": "./src/readable-text-color.ts",
+      "default": "./src/readable-text-color.ts"
     }
   },
   "scripts": {

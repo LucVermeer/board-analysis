@@ -7,3 +7,7 @@ export { boardPresenceReducer, initialBoardPresenceState, HISTORY_CAP } from './
 export { mapBoardPresenceEnvelopeToAction } from './map-envelope';
 
 export type { BoardPresenceState, BoardPresenceAction } from './types';
+
+export { rankSessionClimbers } from './session-ranking';
+
+export type { RankedSessionClimber, SessionRankingOptions } from './session-ranking';

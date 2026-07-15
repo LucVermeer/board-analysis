@@ -6,3 +6,4 @@ export * from './grade-colors';
 export * from './grade-conversion';
 export * from './size-comparison';
 export * from './moonboard';
+export * from './readable-text-color';
