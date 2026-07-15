@@ -97,9 +97,12 @@ vi.mock('../../../src/hooks/use-device-layout', () => ({
   }),
 }));
 
-vi.mock('../../../src/components/navigation/IpadSidebar', () => ({
-  IpadSidebar: ({ showWallCell = true }: { showWallCell?: boolean }) =>
-    createElement('aside', { 'data-ipad-sidebar': 'true', 'data-show-wall-cell': String(showWallCell) }),
+// The shell renders TabletSidebar (the variant router → IpadSidebar glass rail or
+// MaterialNavigationRail); mock it so the layout tests don't reach into either rail's
+// native surface. The per-variant routing is covered by the variant-component tests.
+vi.mock('../../../src/components/navigation/TabletSidebar', () => ({
+  TabletSidebar: ({ showWallCell = true }: { showWallCell?: boolean }) =>
+    createElement('aside', { 'data-tablet-sidebar': 'true', 'data-show-wall-cell': String(showWallCell) }),
 }));
 
 vi.mock('../../../src/components/play-drawer/IpadPlayPane', () => ({
@@ -312,7 +315,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-tabs-material="true"]')).not.toBeNull();
     expect(container.querySelector('[data-tabs="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')).toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).toBeNull();
     expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
       'home',
       'climbs',
@@ -331,13 +334,13 @@ describe('TabLayout', () => {
 
     const { container } = render(<TabLayout />);
 
-    expect(container.querySelector('[data-ipad-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     // The right column hosts the PlayDrawer pane (replaces the floating accessory bar).
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
     // At narrow-regular width (1024) the wall has no room for a column, so it stays
     // the sidebar cell — no dedicated column, rail cell shown.
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
     expect(container.querySelector('[data-tabs="true"]')).toBeNull();
     expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
       'home',
@@ -361,7 +364,7 @@ describe('TabLayout', () => {
 
     const { container } = render(<TabLayout />);
 
-    expect(container.querySelector('[data-ipad-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
     // No room for a wall column at this width either — the wall stays the sidebar cell.
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
@@ -380,7 +383,7 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).not.toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
     // The detail pane mounts alongside the list and the dedicated wall column — the
     // pixel widths of each are covered by size-class.test.ts (resolveDetailPaneWidth,
     // WALL_COLUMN_WIDTH), so assert the surfaces are present, not their arithmetic.
@@ -402,7 +405,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
     // No rich wall surface on this device → the ambient sidebar cell stays the launcher.
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('hides the wall column while the "On the Wall" tab is the focused destination', () => {
@@ -424,7 +427,7 @@ describe('TabLayout', () => {
     expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
     // The surface still EXISTS for this layout, so the sidebar cell stays hidden — it
     // doesn't pop back in merely because the wall tab is open.
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
     // Kiosk stays lit while the wall tab is focused.
     expect(keepAwake.activate).toHaveBeenCalledWith('wall');
   });
@@ -452,7 +455,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
   });
 
   it('keeps the sidebar wall cell when tight regular width suppresses the play pane', () => {
@@ -468,7 +471,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('keeps the sidebar wall cell in portrait while the active board config is unresolved', () => {
@@ -484,7 +487,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('keeps the wall as the sidebar cell (no column) when no board is bound', () => {
@@ -499,7 +502,7 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('does not reserve a wall column when a board is BLE-bound but no active board is resolved', () => {
@@ -515,7 +518,7 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('does not render the Record badge when no status is active', () => {

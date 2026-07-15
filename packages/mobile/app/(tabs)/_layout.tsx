@@ -14,7 +14,7 @@ import { brandColors } from '../../src/theme/colors';
 import { useNativeAccessoryActive, useNativeTabBar } from '../../src/hooks/use-bottom-accessory';
 import { useOnAccessorySurface } from '../../src/hooks/use-on-accessory-surface';
 import { useDeviceLayout } from '../../src/hooks/use-device-layout';
-import { IpadSidebar } from '../../src/components/navigation/IpadSidebar';
+import { TabletSidebar } from '../../src/components/navigation/TabletSidebar';
 import { IpadPlayPane } from '../../src/components/play-drawer/IpadPlayPane';
 import { IpadWallColumn } from '../../src/components/board-presence/IpadWallColumn';
 import { useBoardPresenceControls } from '../../src/providers/board-presence-provider';
@@ -240,7 +240,7 @@ export default function TabLayout() {
     );
     return (
       <View style={isRegular ? styles.shell : styles.shellCompact}>
-        {isRegular ? <IpadSidebar key="sidebar" showWallCell={!showRichWallSurface} /> : null}
+        {isRegular ? <TabletSidebar key="sidebar" showWallCell={!showRichWallSurface} /> : null}
         <View key="content" style={styles.shellContent}>
           {tabsNavigator}
         </View>
