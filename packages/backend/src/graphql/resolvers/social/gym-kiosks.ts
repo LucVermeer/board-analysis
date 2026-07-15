@@ -89,10 +89,13 @@ type ResolvedKioskBoard = {
   angle: number;
 };
 
+type EnrichedGym = Awaited<ReturnType<typeof enrichGym>>;
+
 /**
  * Build the public GymKiosk payload: the leniently-parsed layout, the resolved
  * slot boards (in slot order, dead/hidden slots dropped), and the branding-
- * carrying gym.
+ * carrying gym (`enrichedGym` — enriched ONCE by the caller, since the manage
+ * list shares one gym across all its kiosks).
  *
  * Board visibility follows the viewer's GYM-level access, matching the SDL
  * docstring ("for a viewer without gym-edit access non-public boards are
@@ -110,7 +113,12 @@ type ResolvedKioskBoard = {
  *    (the private board stays in `layout`, off `boards`, and the kiosk client
  *    degrades the preset).
  */
-async function resolveKioskView(kiosk: KioskRow, gym: GymRow, viewerId: string | undefined, viewerCanEditGym: boolean) {
+async function resolveKioskView(
+  kiosk: KioskRow,
+  enrichedGym: EnrichedGym,
+  viewerId: string | undefined,
+  viewerCanEditGym: boolean,
+) {
   const parsed = parseKioskLayoutLenient(kiosk.layout);
   const slotUuids = parsed.layout.boards.map((slot) => slot.boardUuid);
 
@@ -176,7 +184,9 @@ async function resolveKioskView(kiosk: KioskRow, gym: GymRow, viewerId: string |
     // Return the leniently-parsed layout, never the raw stored jsonb: a corrupt
     // or future-version row surfaces as an empty layout, never an error.
     layout: parsed.layout,
-    gym: await enrichGym(gym, viewerId),
+    // Enriched once by the caller (the manage list shares one gym across all
+    // its kiosks — enriching per kiosk would fan the same queries out N times).
+    gym: enrichedGym,
     boards,
     createdAt: kiosk.createdAt.toISOString(),
     updatedAt: kiosk.updatedAt.toISOString(),
@@ -291,7 +301,7 @@ export const socialGymKioskQueries = {
       .limit(1);
     if (!kiosk) return null;
 
-    return resolveKioskView(kiosk, gym, viewerId, viewerCanEdit);
+    return resolveKioskView(kiosk, await enrichGym(gym, viewerId), viewerId, viewerCanEdit);
   },
 
   gymKiosks: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
@@ -309,7 +319,9 @@ export const socialGymKioskQueries = {
       .orderBy(asc(dbSchema.gymKiosks.createdAt), asc(dbSchema.gymKiosks.id));
 
     // The viewer just passed requireGymEditAccess, so they're a gym editor.
-    return Promise.all(kiosks.map((kiosk) => resolveKioskView(kiosk, gym, userId, true)));
+    // Every kiosk shares this one gym — enrich it once, not once per kiosk.
+    const enrichedGym = await enrichGym(gym, userId);
+    return Promise.all(kiosks.map((kiosk) => resolveKioskView(kiosk, enrichedGym, userId, true)));
   },
 };
 
@@ -326,32 +338,44 @@ export const socialGymKioskMutations = {
 
     const gym = await requireGymEditAccess(validated.gymUuid, userId);
 
-    // Enforce the per-gym kiosk cap (live kiosks only; soft-deleted rows free a slot).
-    const [countRow] = await db
-      .select({ value: count() })
-      .from(dbSchema.gymKiosks)
-      .where(and(eq(dbSchema.gymKiosks.gymId, gym.id), isNull(dbSchema.gymKiosks.deletedAt)));
-    if (Number(countRow?.value ?? 0) >= MAX_KIOSKS_PER_GYM) {
-      throw new GraphQLError(`A gym can have at most ${MAX_KIOSKS_PER_GYM} kiosks`, {
-        extensions: { code: 'BAD_USER_INPUT' },
-      });
-    }
-
+    // Slug derivation stays outside the transaction: it's advisory (the partial
+    // unique index is the real guard; a race lands in the catch below).
     const slug = validated.slug ?? (await deriveUniqueKioskSlug(gym.id, validated.name));
 
     let created: KioskRow;
     try {
-      [created] = await db
-        .insert(dbSchema.gymKiosks)
-        .values({
-          uuid: uuidv4(),
-          gymId: gym.id,
-          slug,
-          name: validated.name,
-          // A fresh kiosk starts empty; boards are assigned via updateGymKiosk.
-          layout: emptyKioskLayout(),
-        })
-        .returning();
+      created = await db.transaction(async (tx) => {
+        // Serialize concurrent creates for the same gym: lock the gym row so
+        // the count-then-insert below can't race — without this, two calls one
+        // below MAX_KIOSKS_PER_GYM could both pass the check and leave the gym
+        // over the cap (the only DB invariant is the slug index).
+        await tx.select({ id: dbSchema.gyms.id }).from(dbSchema.gyms).where(eq(dbSchema.gyms.id, gym.id)).for('update');
+
+        // Enforce the per-gym kiosk cap (live kiosks only; a soft-deleted row
+        // frees its slot).
+        const [countRow] = await tx
+          .select({ value: count() })
+          .from(dbSchema.gymKiosks)
+          .where(and(eq(dbSchema.gymKiosks.gymId, gym.id), isNull(dbSchema.gymKiosks.deletedAt)));
+        if (Number(countRow?.value ?? 0) >= MAX_KIOSKS_PER_GYM) {
+          throw new GraphQLError(`A gym can have at most ${MAX_KIOSKS_PER_GYM} kiosks`, {
+            extensions: { code: 'BAD_USER_INPUT' },
+          });
+        }
+
+        const [row] = await tx
+          .insert(dbSchema.gymKiosks)
+          .values({
+            uuid: uuidv4(),
+            gymId: gym.id,
+            slug,
+            name: validated.name,
+            // A fresh kiosk starts empty; boards are assigned via updateGymKiosk.
+            layout: emptyKioskLayout(),
+          })
+          .returning();
+        return row;
+      });
     } catch (error) {
       if (isUniqueViolation(error, 'gym_kiosks_unique_gym_slug')) {
         throw new GraphQLError('A kiosk with that slug already exists in this gym', {
@@ -362,7 +386,7 @@ export const socialGymKioskMutations = {
     }
 
     // The viewer just passed requireGymEditAccess, so they're a gym editor.
-    return resolveKioskView(created, gym, userId, true);
+    return resolveKioskView(created, await enrichGym(gym, userId), userId, true);
   },
 
   updateGymKiosk: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
@@ -383,7 +407,9 @@ export const socialGymKioskMutations = {
       throw new GraphQLError('Kiosk not found', { extensions: { code: 'NOT_FOUND' } });
     }
 
-    const updateValues: Record<string, unknown> = { updatedAt: new Date() };
+    // Typed against the table's insert shape so a key typo is a compile error
+    // instead of a silently ignored column.
+    const updateValues: Partial<typeof dbSchema.gymKiosks.$inferInsert> = { updatedAt: new Date() };
     if (validated.name !== undefined) updateValues.name = validated.name;
     if (validated.slug !== undefined) updateValues.slug = validated.slug;
 
@@ -410,7 +436,7 @@ export const socialGymKioskMutations = {
     }
 
     // The viewer just passed the gym-edit gate above, so they're a gym editor.
-    return resolveKioskView(updated, gym, userId, true);
+    return resolveKioskView(updated, await enrichGym(gym, userId), userId, true);
   },
 
   deleteGymKiosk: async (

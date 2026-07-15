@@ -1,5 +1,5 @@
 import { gql } from 'graphql-request';
-import type { GymKiosk, CreateGymKioskInput, UpdateGymKioskInput } from '@boardsesh/shared-schema';
+import type { Gym, GymKiosk, CreateGymKioskInput, UpdateGymKioskInput } from '@boardsesh/shared-schema';
 
 // ============================================
 // Gym Kiosk Operations
@@ -89,13 +89,35 @@ export const DELETE_GYM_KIOSK = gql`
 // Query/Mutation Variable Types
 // ============================================
 
+/**
+ * Exactly the gym fields these operations select (GYM_KIOSK_GYM_FIELDS). The
+ * response types narrow `gym` to this instead of the full `Gym` so a consumer
+ * reading an unselected field (ownerId, counts, ...) is a compile error rather
+ * than an `undefined` at runtime.
+ */
+export type GymKioskOperationGym = Pick<
+  Gym,
+  | 'uuid'
+  | 'slug'
+  | 'name'
+  | 'isPublic'
+  | 'logoUrl'
+  | 'brandPrimaryColor'
+  | 'brandAccentColor'
+  | 'brandBackgroundColor'
+  | 'canEdit'
+>;
+
+/** A GymKiosk as returned by these operations: full kiosk, narrowed gym. */
+export type GymKioskOperationResult = Omit<GymKiosk, 'gym'> & { gym: GymKioskOperationGym };
+
 export type GetGymKioskQueryVariables = {
   gymSlug: string;
   kioskSlug?: string | null;
 };
 
 export type GetGymKioskQueryResponse = {
-  gymKiosk: GymKiosk | null;
+  gymKiosk: GymKioskOperationResult | null;
 };
 
 export type GetGymKiosksQueryVariables = {
@@ -103,7 +125,7 @@ export type GetGymKiosksQueryVariables = {
 };
 
 export type GetGymKiosksQueryResponse = {
-  gymKiosks: GymKiosk[];
+  gymKiosks: GymKioskOperationResult[];
 };
 
 export type CreateGymKioskMutationVariables = {
@@ -111,7 +133,7 @@ export type CreateGymKioskMutationVariables = {
 };
 
 export type CreateGymKioskMutationResponse = {
-  createGymKiosk: GymKiosk;
+  createGymKiosk: GymKioskOperationResult;
 };
 
 export type UpdateGymKioskMutationVariables = {
@@ -119,7 +141,7 @@ export type UpdateGymKioskMutationVariables = {
 };
 
 export type UpdateGymKioskMutationResponse = {
-  updateGymKiosk: GymKiosk;
+  updateGymKiosk: GymKioskOperationResult;
 };
 
 export type DeleteGymKioskMutationVariables = {

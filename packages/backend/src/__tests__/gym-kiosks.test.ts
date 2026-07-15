@@ -324,6 +324,42 @@ describe('createGymKiosk slug + cap', () => {
     ).rejects.toMatchObject({ extensions: { code: 'BAD_USER_INPUT' } });
   });
 
+  it('serializes concurrent creates at the cap boundary (exactly one wins)', async () => {
+    // Seed to one below the cap, then race two creates with distinct slugs.
+    // The transactional gym-row lock serializes them: the first insert takes
+    // the last slot, the second re-counts and hits BAD_USER_INPUT — never 11.
+    for (let i = 0; i < MAX_KIOSKS_PER_GYM - 1; i++) {
+      await insertKiosk({ gymId: publicGym.id, slug: `seed-${i}`, name: `Seed ${i}` });
+    }
+
+    const outcomes = await Promise.allSettled([
+      socialGymKioskMutations.createGymKiosk(
+        null,
+        { input: { gymUuid: publicGym.uuid, name: 'Racer A', slug: 'racer-a' } },
+        authCtx(OWNER),
+      ),
+      socialGymKioskMutations.createGymKiosk(
+        null,
+        { input: { gymUuid: publicGym.uuid, name: 'Racer B', slug: 'racer-b' } },
+        authCtx(ADMIN),
+      ),
+    ]);
+
+    const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+    const rejected = outcomes.filter((outcome) => outcome.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+      extensions: { code: 'BAD_USER_INPUT' },
+    });
+
+    // And the DB really holds exactly MAX_KIOSKS_PER_GYM live kiosks.
+    const rows = await db.execute(
+      sql`SELECT count(*)::int AS live FROM gym_kiosks WHERE gym_id = ${publicGym.id} AND deleted_at IS NULL`,
+    );
+    expect(Number(Array.from(rows as Iterable<{ live: number }>)[0].live)).toBe(MAX_KIOSKS_PER_GYM);
+  });
+
   it('frees the slug for reuse after a soft delete', async () => {
     const first = await socialGymKioskMutations.createGymKiosk(
       null,
