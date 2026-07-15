@@ -129,13 +129,25 @@ describe('rankSessionClimbers', () => {
     expect(ranked[0]).toMatchObject({ userId: null, displayName: 'Guest Climber', sendCount: 2 });
   });
 
-  it('falls back to Anonymous for a logged-in sender with no display name', () => {
+  it('returns a null displayName for a logged-in sender with no display name', () => {
     const history: BoardPresenceClimb[] = [makeClimb({ seq: 1, climbUuid: 'climb-a', sentByUserId: 'user-1' })];
 
     const ranked = rankSessionClimbers(history, { now: NOW });
 
     expect(ranked).toHaveLength(1);
-    expect(ranked[0]).toMatchObject({ userId: 'user-1', displayName: 'Anonymous', sendCount: 1 });
+    expect(ranked[0]).toMatchObject({ userId: 'user-1', displayName: null, sendCount: 1 });
+  });
+
+  it('normalizes an empty-string sentByUserId to a null userId and groups by display name', () => {
+    const history: BoardPresenceClimb[] = [
+      makeClimb({ seq: 1, climbUuid: 'climb-a', sentByUserId: '', sentByDisplayName: 'Guest Climber' }),
+      makeClimb({ seq: 2, climbUuid: 'climb-b', sentByDisplayName: 'Guest Climber' }),
+    ];
+
+    const ranked = rankSessionClimbers(history, { now: NOW });
+
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]).toMatchObject({ userId: null, displayName: 'Guest Climber', sendCount: 2 });
   });
 
   it('skips entries with neither sentByUserId nor sentByDisplayName', () => {

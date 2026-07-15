@@ -4,7 +4,8 @@ import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 
 export type RankedSessionClimber = {
   userId: string | null;
-  displayName: string;
+  /** Null when the sender had no display name; the UI supplies a localized fallback. */
+  displayName: string | null;
   avatarUrl: string | null;
   sendCount: number;
   lastSentAt: string;
@@ -21,7 +22,7 @@ const DEFAULT_WINDOW_MINUTES = 180;
 
 type ClimberAccumulator = {
   userId: string | null;
-  displayName: string;
+  displayName: string | null;
   avatarUrl: string | null;
   distinctClimbUuids: Set<string>;
   lastSentAt: string;
@@ -43,8 +44,8 @@ export function rankSessionClimbers(
     const sentAtMs = new Date(climb.sentAt).getTime();
     if (!Number.isFinite(sentAtMs) || sentAtMs < windowStartMs) continue;
 
-    const userId = climb.sentByUserId ?? null;
-    const displayName = climb.sentByDisplayName ?? null;
+    const userId = climb.sentByUserId || null;
+    const displayName = climb.sentByDisplayName || null;
     if (!userId && !displayName) continue;
 
     const key = userId ? `user:${userId}` : `name:${displayName}`;
@@ -53,7 +54,7 @@ export function rankSessionClimbers(
     if (!existing) {
       climbersByKey.set(key, {
         userId,
-        displayName: displayName ?? 'Anonymous',
+        displayName,
         avatarUrl: climb.sentByAvatarUrl ?? null,
         distinctClimbUuids: new Set([climb.climbUuid]),
         lastSentAt: climb.sentAt,
