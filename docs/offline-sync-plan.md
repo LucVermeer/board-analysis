@@ -462,14 +462,16 @@ async function syncTable(
 
     if (documents.length === 0) break;
 
-    // Use smaller transaction batches to minimize write lock duration
-    for (const batch of chunk(documents, 50)) {
-      await db.withExclusiveTransactionAsync(async (tx) => {
-        for (const doc of batch) {
-          await tx.runAsync(`INSERT OR REPLACE INTO ${tableName} (...) VALUES (...)`, mapDocToColumns(tableName, doc));
-        }
-      });
-    }
+    // One exclusive transaction per page; rows go in as multi-row
+    // INSERT OR REPLACE ... VALUES (...),(...) statements chunked to
+    // floor(999 / columnCount) rows so a statement never exceeds SQLite's
+    // bind-variable limit (see upsertDocuments in pull-client.ts).
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      for (const rows of chunk(documents, multiRowChunkSize(columns.length))) {
+        const values = rows.flatMap((row) => columns.map((column) => toSqliteValue(row[column])));
+        await tx.runAsync(buildMultiRowInsertSql(tableName, columns, rows.length), values);
+      }
+    });
 
     await setCheckpoint(db, checkpointKey, newCursor);
     cursor = newCursor;
