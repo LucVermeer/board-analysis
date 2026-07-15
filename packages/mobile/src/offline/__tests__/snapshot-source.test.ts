@@ -15,6 +15,10 @@ const state = vi.hoisted(() => ({
   downloadCalls: [] as Array<{ url: string; idempotent?: boolean }>,
   downloadError: null as Error | null,
   downloadBytes: new Uint8Array([9, 9, 9, 9]), // non-gzip payload by default
+  // When set, readableStream() yields these chunks one read() at a time
+  // instead of the whole file in one chunk — for the empty-first-chunk and
+  // split-header edge cases the ReadableStream spec allows.
+  streamChunks: null as Uint8Array[] | null,
   deletedUris: [] as string[],
 }));
 
@@ -57,14 +61,13 @@ vi.mock('expo-file-system', () => {
     }
 
     readableStream() {
-      const bytes = this.bytes;
-      let consumed = false;
+      const chunks = state.streamChunks ?? [this.bytes];
+      let index = 0;
       return {
         getReader: () => ({
           read: async () => {
-            if (consumed) return { done: true, value: undefined };
-            consumed = true;
-            return { done: false, value: bytes };
+            if (index >= chunks.length) return { done: true, value: undefined };
+            return { done: false, value: chunks[index++] };
           },
           cancel: async () => {},
         }),
@@ -137,6 +140,7 @@ beforeEach(() => {
   state.downloadCalls = [];
   state.downloadError = null;
   state.downloadBytes = PLAIN_SQLITE_BYTES;
+  state.streamChunks = null;
   state.deletedUris = [];
 });
 
@@ -259,6 +263,26 @@ describe('downloadArtifact', () => {
         extra: expect.objectContaining({ boardType: 'kilter', layoutId: 8 }),
       }),
     );
+  });
+
+  it('still detects gzip when the stream yields an empty chunk, then a split header', async () => {
+    // A ReadableStream may legally deliver empty or tiny chunks before real
+    // data. An empty first read followed by the magic bytes split across two
+    // chunks must still be recognised as an undecoded gzip body.
+    state.streamChunks = [new Uint8Array([]), new Uint8Array([0x1f]), new Uint8Array([0x8b, 0x08])];
+
+    await expect(mobileSnapshotSource.downloadArtifact(ENTRY)).rejects.toThrow(SnapshotPermanentMissError);
+    expect(state.deletedUris).toHaveLength(1);
+  });
+
+  it('treats a sub-2-byte stream as not gzip (EOF before the header completes)', async () => {
+    state.streamChunks = [new Uint8Array([]), new Uint8Array([0x1f])];
+
+    const result = await mobileSnapshotSource.downloadArtifact(ENTRY);
+
+    expect(result).not.toBeNull();
+    expect(state.deletedUris).toHaveLength(0);
+    expect(reportHandledError).not.toHaveBeenCalled();
   });
 
   it('skips the gzip-magic check entirely for an identity-encoded entry', async () => {

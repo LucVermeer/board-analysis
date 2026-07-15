@@ -65,15 +65,23 @@ function toFileUri(sqlitePath: string): string {
  * True when `file`'s first two bytes are the gzip magic number — i.e. the
  * native HTTP stack did NOT transparently decompress a `Content-Encoding:
  * gzip` response body, and the file on disk is still the raw gzip stream.
- * Reads only the stream's first chunk (never the whole file), so this stays
- * cheap even for a large artifact.
+ * A ReadableStream may legally yield empty (or 1-byte) chunks before real
+ * data, so this keeps reading until it has the two header bytes or EOF — but
+ * never more than that, so it stays cheap even for a large artifact.
  */
 async function looksGzipCompressed(file: File): Promise<boolean> {
   const reader = file.readableStream().getReader();
   try {
-    const { value } = await reader.read();
-    if (!value || value.byteLength < 2) return false;
-    return value[0] === GZIP_MAGIC_BYTE_0 && value[1] === GZIP_MAGIC_BYTE_1;
+    const header: number[] = [];
+    while (header.length < 2) {
+      const { value, done } = await reader.read();
+      if (done) return false; // < 2 bytes total — not a gzip stream
+      for (const byte of value ?? []) {
+        header.push(byte);
+        if (header.length === 2) break;
+      }
+    }
+    return header[0] === GZIP_MAGIC_BYTE_0 && header[1] === GZIP_MAGIC_BYTE_1;
   } finally {
     await reader.cancel().catch(() => {});
   }
@@ -82,6 +90,8 @@ async function looksGzipCompressed(file: File): Promise<boolean> {
 /** Best-effort delete — a leftover partial/bad file just wastes cache space until the OS reclaims it. */
 function safeDeleteFile(file: File): void {
   try {
+    // `exists` is a synchronous property on SDK 57's File API (older expo-file-system
+    // versions exposed an async `exists()` — revisit if the SDK pin moves).
     if (file.exists) file.delete();
   } catch {
     // Ignore — see above.
