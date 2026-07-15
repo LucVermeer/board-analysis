@@ -34,7 +34,9 @@
     "live": "En directo",
     "updatedAt": "Actualizado a las {{time}}",
     "emptyTitle": "Aún no hay nadie en el plafón",
-    "emptyBody": "Enciende un bloque y encadénalo: la clasificación empieza contigo."
+    "emptyBody": "Enciende un bloque y encadénalo: la clasificación empieza contigo.",
+    "unavailableTitle": "La clasificación no está disponible ahora mismo",
+    "unavailableBody": "Seguimos intentándolo: volverá sola."
   },
   "attribution": {
     "poweredBy": "Con la tecnología de"

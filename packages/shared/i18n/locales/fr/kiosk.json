@@ -34,7 +34,9 @@
     "live": "En direct",
     "updatedAt": "Mis à jour à {{time}}",
     "emptyTitle": "Personne sur la board pour l'instant",
-    "emptyBody": "Allume un bloc et enchaîne-le : le classement commence avec toi."
+    "emptyBody": "Allume un bloc et enchaîne-le : le classement commence avec toi.",
+    "unavailableTitle": "Classement hors de portée pour le moment",
+    "unavailableBody": "On continue d'essayer : il revient tout seul."
   },
   "attribution": {
     "poweredBy": "Propulsé par"

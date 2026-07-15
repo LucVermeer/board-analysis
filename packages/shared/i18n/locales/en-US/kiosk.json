@@ -34,7 +34,9 @@
     "live": "Live",
     "updatedAt": "Updated {{time}}",
     "emptyTitle": "No one's on the board yet",
-    "emptyBody": "Light a climb and send it — the leaderboard starts with you."
+    "emptyBody": "Light a climb and send it — the leaderboard starts with you.",
+    "unavailableTitle": "Leaderboard's out of reach right now",
+    "unavailableBody": "We'll keep trying — the rankings come back on their own."
   },
   "attribution": {
     "poweredBy": "Powered by"

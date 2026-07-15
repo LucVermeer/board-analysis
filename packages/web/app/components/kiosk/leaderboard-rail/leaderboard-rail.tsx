@@ -46,6 +46,10 @@ export default function LeaderboardRail({
   );
 
   const rows = isSession ? sessionRows : periodResult.rows;
+  // Period fetches failed with nothing cached (backend blip, or a 'day' rail
+  // against a backend that predates #3629): honest "unavailable" copy instead
+  // of a fake "no sends yet". Stale rows from an earlier success keep showing.
+  const showUnavailableState = !isSession && periodResult.isError && rows.length === 0;
   const showEmptyState = scopedBoards.length === 0 || rows.length < MIN_RANKED_CLIMBERS;
 
   const periodTitle =
@@ -75,7 +79,12 @@ export default function LeaderboardRail({
         <span className={styles.scope}>{scopeLabel}</span>
       </header>
 
-      {showEmptyState ? (
+      {showUnavailableState ? (
+        <div className={styles.empty}>
+          <p className={styles.emptyTitle}>{t('leaderboard.unavailableTitle')}</p>
+          <p className={styles.emptyBody}>{t('leaderboard.unavailableBody')}</p>
+        </div>
+      ) : showEmptyState ? (
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>{t('leaderboard.emptyTitle')}</p>
           <p className={styles.emptyBody}>{t('leaderboard.emptyBody')}</p>

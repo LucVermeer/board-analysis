@@ -86,3 +86,26 @@ export function mergePeriodLeaderboards(
     })
     .slice(0, options.maxRows ?? KIOSK_LEADERBOARD_MAX_ROWS);
 }
+
+/**
+ * Reduce the settled per-board `boardLeaderboard` fetches to merged rows.
+ * Partial failure is tolerated — the ranking narrows to the boards that
+ * answered (a temporarily unreachable board should not blank the whole rail).
+ * When EVERY board failed this throws, so the caller (React Query) surfaces
+ * an error state distinguishable from a genuine "nobody climbed" empty
+ * ranking. An empty input (zero scoped boards) merges to no rows.
+ */
+export function mergeSettledPeriodLeaderboards(
+  settled: ReadonlyArray<PromiseSettledResult<{ boardLeaderboard: BoardLeaderboard }>>,
+): KioskLeaderboardRowData[] {
+  const leaderboards: BoardLeaderboard[] = [];
+  for (const result of settled) {
+    if (result.status === 'fulfilled') {
+      leaderboards.push(result.value.boardLeaderboard);
+    }
+  }
+  if (leaderboards.length === 0 && settled.length > 0) {
+    throw new Error('kiosk period leaderboard: all board fetches failed');
+  }
+  return mergePeriodLeaderboards(leaderboards);
+}

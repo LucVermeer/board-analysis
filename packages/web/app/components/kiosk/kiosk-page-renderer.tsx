@@ -10,7 +10,6 @@
 import React, { cache } from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { kioskPresetForBoardCount } from '@boardsesh/kiosk';
 import { BOARD_RECENT_CLIMBS, GET_GYM_KIOSK } from '@boardsesh/graphql/operations';
 import type { BoardPresenceClimb, GymKiosk, GymKioskBoard } from '@boardsesh/shared-schema';
 import { getGraphQLHttpUrl } from '@/app/lib/graphql/client';
@@ -163,11 +162,10 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
 
   const locale = await getLocale();
   const { t } = await getServerTranslation('kiosk');
-  const viewModel = buildKioskViewModel(kiosk);
 
   const slots: RenderableSlot[] = (
     await Promise.all(
-      viewModel.boards.map(async (board): Promise<RenderableSlot | null> => {
+      kiosk.boards.map(async (board): Promise<RenderableSlot | null> => {
         const boardDetails = resolveBoardDetails(board);
         if (boardDetails === null) return null;
 
@@ -188,10 +186,15 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
     )
   ).filter((slot): slot is RenderableSlot => slot !== null);
 
-  // Preset from the boards that actually render: the backend already omitted
-  // dead/hidden slots; a board-details failure degrades the same way here.
-  const preset = kioskPresetForBoardCount(slots.length);
-  const distinctBoardIds = Array.from(new Set(slots.map((slot) => slot.board.boardId)));
+  // View model over the boards that ACTUALLY render: the backend already
+  // omitted dead/hidden slots, and a board-details failure above degrades the
+  // same way — so the preset, the rail's scope universe, and the presence hub
+  // all describe the same visible kiosk. A rail scoped to an unrenderable
+  // board widens to all rendered boards inside buildKioskViewModel.
+  const renderedBoards = slots.map((slot) => slot.board);
+  const viewModel = buildKioskViewModel({ layout: kiosk.layout, boards: renderedBoards });
+  const preset = viewModel.preset;
+  const distinctBoardIds = Array.from(new Set(renderedBoards.map((board) => board.boardId)));
 
   const rail =
     viewModel.leaderboard === null ? null : (

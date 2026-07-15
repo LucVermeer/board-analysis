@@ -5,9 +5,13 @@
 // React Query refetches every 60s so an unattended TV stays fresh.
 //
 // Deploy-order note: the 'day' period (rolling 24h) and anonymous access land
-// with PR #3629. Until that's live in production, a 'day'-scoped rail resolves
-// to the query's error state and the rail shows its empty-state copy — the
-// kiosk itself keeps running.
+// with PR #3629, which merges ahead of this. Should this ever run against an
+// older backend, every 'day' fetch rejects, the query errors, and the rail
+// shows its "unavailable" copy (distinct from the no-sends empty state) —
+// then self-heals via the refetch interval once the backend catches up. The
+// period is deliberately NOT remapped client-side: labelling week data "Last
+// 24 hours" (or silently swapping the configured window) would misrepresent
+// the ranking.
 
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -16,9 +20,8 @@ import {
   type GetBoardLeaderboardQueryVariables,
 } from '@boardsesh/graphql/operations';
 import type { KioskLeaderboardPeriod } from '@boardsesh/kiosk';
-import type { BoardLeaderboard } from '@boardsesh/shared-schema';
 import { executeGraphQL } from '@/app/lib/graphql/client';
-import { mergePeriodLeaderboards, type KioskLeaderboardRowData } from './leaderboard-model';
+import { mergeSettledPeriodLeaderboards, type KioskLeaderboardRowData } from './leaderboard-model';
 
 export type KioskPeriodLeaderboardPeriod = Exclude<KioskLeaderboardPeriod, 'session'>;
 
@@ -52,18 +55,10 @@ export function usePeriodLeaderboard(
           }),
         ),
       );
-      const leaderboards: BoardLeaderboard[] = [];
-      for (const result of settled) {
-        if (result.status === 'fulfilled') {
-          leaderboards.push(result.value.boardLeaderboard);
-        }
-      }
-      if (leaderboards.length === 0) {
-        // Every board failed — surface an error state instead of an
-        // indistinguishable "nobody climbed" empty ranking.
-        throw new Error('kiosk period leaderboard: all board fetches failed');
-      }
-      return mergePeriodLeaderboards(leaderboards);
+      // Tolerates partial failure; throws when every board failed so the rail
+      // shows its "unavailable" state instead of a fake empty ranking (see
+      // mergeSettledPeriodLeaderboards — pure, unit-tested).
+      return mergeSettledPeriodLeaderboards(settled);
     },
   });
 

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BoardLeaderboard, BoardLeaderboardEntry, BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { buildSessionLeaderboardRows, mergePeriodLeaderboards } from '../leaderboard-rail/leaderboard-model';
+import {
+  buildSessionLeaderboardRows,
+  mergePeriodLeaderboards,
+  mergeSettledPeriodLeaderboards,
+} from '../leaderboard-rail/leaderboard-model';
 
 const NOW = new Date('2026-07-15T19:00:00.000Z');
 
@@ -134,5 +138,40 @@ describe('mergePeriodLeaderboards', () => {
     const rows = mergePeriodLeaderboards([makeLeaderboard('board-a', manyEntries)]);
     expect(rows).toHaveLength(10);
     expect(rows.map((row) => row.key)).toEqual(rows.map((row) => row.key).sort());
+  });
+});
+
+function fulfilled(leaderboard: BoardLeaderboard): PromiseFulfilledResult<{ boardLeaderboard: BoardLeaderboard }> {
+  return { status: 'fulfilled', value: { boardLeaderboard: leaderboard } };
+}
+
+function rejected(): PromiseRejectedResult {
+  return { status: 'rejected', reason: new Error('board fetch failed') };
+}
+
+describe('mergeSettledPeriodLeaderboards', () => {
+  it('throws when EVERY board fetch failed (rail shows unavailable, not fake-empty)', () => {
+    expect(() => mergeSettledPeriodLeaderboards([rejected(), rejected()])).toThrow(/all board fetches failed/);
+  });
+
+  it('narrows to the boards that answered on partial failure', () => {
+    const rows = mergeSettledPeriodLeaderboards([
+      fulfilled(makeLeaderboard('board-a', [makeEntry({ userId: 'user-1', totalSends: 4 })])),
+      rejected(),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ key: 'user:user-1', sendCount: 4 });
+  });
+
+  it('treats zero scoped boards as an empty ranking, not an error', () => {
+    expect(mergeSettledPeriodLeaderboards([])).toEqual([]);
+  });
+
+  it('still merges across boards when all succeed', () => {
+    const rows = mergeSettledPeriodLeaderboards([
+      fulfilled(makeLeaderboard('board-a', [makeEntry({ userId: 'user-1', totalSends: 2 })])),
+      fulfilled(makeLeaderboard('board-b', [makeEntry({ userId: 'user-1', totalSends: 3 })])),
+    ]);
+    expect(rows[0]).toMatchObject({ key: 'user:user-1', sendCount: 5, hardestGradeName: null });
   });
 });

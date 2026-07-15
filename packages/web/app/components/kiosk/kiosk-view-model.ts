@@ -17,15 +17,17 @@ export type KioskLeaderboardConfig = {
 
 export type KioskViewModel = {
   /**
-   * The boards the kiosk renders, in slot order. This is the backend-RESOLVED
-   * list (viewer-hidden and dead boards already omitted) — never re-derived
-   * from `layout.boards`.
+   * The boards the kiosk renders, in slot order — the same list the caller
+   * passed in (the backend-RESOLVED boards, further filtered by the renderer
+   * to those whose board details resolve). Never re-derived from
+   * `layout.boards`.
    */
   boards: GymKioskBoard[];
   /**
-   * Preset derived from the RESOLVED board count. A slot whose board was
-   * omitted server-side simply collapses (quad degrades to triple); zero
-   * renderable boards yields `null` → the "isn't set up yet" placeholder.
+   * Preset derived from the RENDERABLE board count. A slot whose board was
+   * omitted (hidden server-side or unrenderable client-side) simply collapses
+   * (quad degrades to triple); zero renderable boards yields `null` → the
+   * "isn't set up yet" placeholder.
    */
   preset: KioskPreset | null;
   /** Leaderboard rail config, or null when the rail is off. */
@@ -36,14 +38,18 @@ export type KioskViewModel = {
  * Build the render model for a kiosk. `layout` is the raw JSON scalar off the
  * wire — parsed leniently here, NEVER trusted as-is (the backend also returns
  * the lenient parse, but a defence-in-depth reparse costs nothing and keeps
- * this function total over arbitrary input).
+ * this function total over arbitrary input). `boards` must be the boards the
+ * page will ACTUALLY render (the renderer passes its detail-filtered slot
+ * list), so the preset, the rail scope, and the presence subscriptions all
+ * describe the same visible kiosk.
  *
- * A leaderboard scoped to a board that is NOT in the resolved list (e.g. a
- * non-public board hidden from this viewer) is widened to all-boards rather
- * than dropped — mirroring `parseKioskLayoutLenient`'s treatment of a scope
- * pointing at a removed slot. Ranking an invisible wall would leak nothing
- * useful and an empty rail would look broken, so the rail falls back to the
- * boards the viewer can actually see.
+ * A leaderboard scoped to a board that is NOT in `boards` (a non-public board
+ * hidden from this viewer, or one whose board details failed to resolve) is
+ * widened to all-boards rather than dropped — mirroring
+ * `parseKioskLayoutLenient`'s treatment of a scope pointing at a removed
+ * slot. Ranking an invisible wall would show sends nobody can see on screen
+ * and an empty rail would look broken, so the rail falls back to the boards
+ * the viewer actually sees.
  */
 export function buildKioskViewModel(kiosk: Pick<GymKiosk, 'layout' | 'boards'>): KioskViewModel {
   const { layout } = parseKioskLayoutLenient(kiosk.layout);

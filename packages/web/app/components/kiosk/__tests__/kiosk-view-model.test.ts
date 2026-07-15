@@ -70,6 +70,23 @@ describe('buildKioskViewModel', () => {
     expect(viewModel.leaderboard).toEqual({ boardUuid: null, period: 'session' });
   });
 
+  it('keeps the rail scope aligned with the boards that actually render', () => {
+    // The renderer passes its detail-FILTERED slot list as `boards`: UUID_B
+    // resolved server-side but its board details failed client-side, so it is
+    // off the grid and off the presence hub. The rail must not scope to it
+    // (its session history would always be empty and silently bias the
+    // ranking) — the scope widens to the rendered boards instead, and the
+    // preset degrades in the same breath.
+    const renderedBoards = [makeBoard(UUID_A, 1), makeBoard(UUID_C, 3)];
+    const viewModel = buildKioskViewModel({
+      layout: layoutFor([UUID_A, UUID_B, UUID_C], { boardUuid: UUID_B, period: 'week' }),
+      boards: renderedBoards,
+    });
+    expect(viewModel.leaderboard).toEqual({ boardUuid: null, period: 'week' });
+    expect(viewModel.preset).toBe('dual');
+    expect(viewModel.boards).toBe(renderedBoards);
+  });
+
   it('keeps the rail off when the layout has no leaderboard', () => {
     const viewModel = buildKioskViewModel({ layout: layoutFor([UUID_A]), boards: [makeBoard(UUID_A, 1)] });
     expect(viewModel.leaderboard).toBeNull();
