@@ -5,18 +5,13 @@
 // (dirty-guarded); the logo persists on upload/remove. Reset-to-defaults nulls
 // all four fields after a confirm.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogActions from '@mui/material/DialogActions';
 import RestartAltOutlined from '@mui/icons-material/RestartAltOutlined';
 import { contrastRatio } from '@boardsesh/board-constants';
 import {
@@ -29,10 +24,11 @@ import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { getBackendHttpUrl } from '@/app/lib/backend-url';
 import { KIOSK_DARK_SURFACE, KIOSK_DEFAULT_ACCENT, KIOSK_MIN_ACCENT_CONTRAST } from '@/app/lib/kiosk/brand-contrast';
 import { themeTokens } from '@/app/theme/theme-config';
+import { resolveGymLogoDisplayUrl } from '@/app/lib/gym-logo-display-url';
 import ColorField, { isValidHexColor } from './color-field';
 import GymLogoUploader from './gym-logo-uploader';
 import BrandingPreview from './branding-preview';
-import { resolveLogoDisplayUrl } from './logo-image-utils';
+import ConfirmDialog from './confirm-dialog';
 import type { GymManageTabProps } from './tab-props';
 
 /** '' ↔ null mapping between the text fields and the nullable gym columns. */
@@ -58,7 +54,7 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
     errorMessage: t('branding.colors.saveFailed'),
   });
 
-  const logoDisplayUrl = resolveLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
+  const logoDisplayUrl = resolveGymLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
 
   const colorFields = [
     { key: 'primary', value: primaryColor, setValue: setPrimaryColor, label: t('branding.colors.primary') },
@@ -78,6 +74,21 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
     gymValueFromField(accentColor) !== (gym.brandAccentColor ?? null) ||
     gymValueFromField(backgroundColor) !== (gym.brandBackgroundColor ?? null);
 
+  // Native confirm on page close/refresh with unsaved colours — mirrors the
+  // kiosk editor's dirty guard. In-app tab switches unmount this component
+  // without a hook to intercept; the inline "Unsaved changes" hint plus this
+  // covers the destructive paths.
+  useEffect(() => {
+    if (!colorsDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Chromium < 119 ignores preventDefault() and needs returnValue set.
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [colorsDirty]);
+
   // Non-blocking contrast check against the dark kiosk surface, mirroring the
   // clamp in lib/kiosk/brand-contrast.ts. Only primary/accent feed the kiosk
   // accent (background is ignored there), so only those two are checked.
@@ -93,7 +104,7 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
   const handleSaveColors = async () => {
     setIsSavingColors(true);
     try {
-      const data = await updateGymMutation.execute({
+      const savedGymData = await updateGymMutation.execute({
         input: {
           gymUuid: gym.uuid,
           brandPrimaryColor: gymValueFromField(primaryColor),
@@ -101,8 +112,8 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
           brandBackgroundColor: gymValueFromField(backgroundColor),
         },
       });
-      if (data) {
-        onGymChange(data.updateGym);
+      if (savedGymData) {
+        onGymChange(savedGymData.updateGym);
         showMessage(t('branding.colors.saved'), 'success');
       }
     } finally {
@@ -114,7 +125,7 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
     setResetDialogOpen(false);
     setIsResetting(true);
     try {
-      const data = await updateGymMutation.execute({
+      const resetGymData = await updateGymMutation.execute({
         input: {
           gymUuid: gym.uuid,
           logoUrl: null,
@@ -123,8 +134,8 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
           brandBackgroundColor: null,
         },
       });
-      if (data) {
-        onGymChange(data.updateGym);
+      if (resetGymData) {
+        onGymChange(resetGymData.updateGym);
         setPrimaryColor('');
         setAccentColor('');
         setBackgroundColor('');
@@ -221,20 +232,15 @@ export default function BrandingTab({ gym, onGymChange }: GymManageTabProps) {
         </Button>
       </Box>
 
-      <Dialog open={resetDialogOpen} onClose={() => setResetDialogOpen(false)}>
-        <DialogTitle>{t('branding.reset.title')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('branding.reset.body')}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResetDialogOpen(false)} sx={{ textTransform: 'none' }}>
-            {t('branding.reset.cancel')}
-          </Button>
-          <Button onClick={handleReset} color="error" autoFocus sx={{ textTransform: 'none' }}>
-            {t('branding.reset.confirm')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={resetDialogOpen}
+        title={t('branding.reset.title')}
+        body={t('branding.reset.body')}
+        confirmLabel={t('branding.reset.confirm')}
+        cancelLabel={t('branding.reset.cancel')}
+        onConfirm={handleReset}
+        onClose={() => setResetDialogOpen(false)}
+      />
     </Box>
   );
 }

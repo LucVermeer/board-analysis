@@ -38,9 +38,17 @@ function BoardOption({ board }: { board: UserBoard }) {
   );
 }
 
+/** One editor slot: the stored uuid plus its resolved gym board (null = the
+ * board is no longer at this gym). Resolved ONCE in kiosk-editor so every
+ * panel judges "unknown board" identically. */
+export type KioskEditorSlot = {
+  boardUuid: string;
+  board: UserBoard | null;
+};
+
 type KioskBoardSlotsProps = {
-  /** Assigned board uuids in slot order. */
-  slotBoardUuids: string[];
+  /** Assigned slots in slot order, boards pre-resolved by the editor. */
+  slotBoards: KioskEditorSlot[];
   /** All the gym's boards (editors see private/unlisted ones too). */
   gymBoards: UserBoard[];
   /** Inline error per slot index (from schema refine mapping), if any. */
@@ -54,7 +62,7 @@ type KioskBoardSlotsProps = {
 };
 
 export default function KioskBoardSlots({
-  slotBoardUuids,
+  slotBoards,
   gymBoards,
   slotErrors,
   onSetSlot,
@@ -65,15 +73,13 @@ export default function KioskBoardSlots({
 }: KioskBoardSlotsProps) {
   const { t } = useTranslation('kiosk');
 
-  const boardsByUuid = new Map(gymBoards.map((board) => [board.uuid, board]));
-  const assignedUuids = new Set(slotBoardUuids);
+  const assignedUuids = new Set(slotBoards.map((slot) => slot.boardUuid));
   const availableBoards = gymBoards.filter((board) => !assignedUuids.has(board.uuid));
-  const isFull = slotBoardUuids.length >= MAX_KIOSK_BOARDS;
+  const isFull = slotBoards.length >= MAX_KIOSK_BOARDS;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {slotBoardUuids.map((boardUuid, index) => {
-        const board = boardsByUuid.get(boardUuid) ?? null;
+      {slotBoards.map(({ boardUuid, board }, index) => {
         const slotError = slotErrors.get(index) ?? null;
         // The row's Autocomplete offers the unassigned boards plus its own
         // current value (so the selected label renders).
@@ -125,7 +131,7 @@ export default function KioskBoardSlots({
                 <IconButton
                   size="small"
                   aria-label={t('manage.editor.moveDown')}
-                  disabled={index === slotBoardUuids.length - 1}
+                  disabled={index === slotBoards.length - 1}
                   onClick={() => onMoveSlot(index, 1)}
                 >
                   <ArrowDownwardOutlined fontSize="small" />
@@ -169,7 +175,7 @@ export default function KioskBoardSlots({
       ) : (
         <Autocomplete
           // Remount after each add so the typed text clears with the selection.
-          key={slotBoardUuids.length}
+          key={slotBoards.length}
           options={availableBoards}
           value={null}
           onChange={(_event, nextBoard) => {

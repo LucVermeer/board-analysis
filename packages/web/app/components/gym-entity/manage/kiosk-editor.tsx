@@ -13,11 +13,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
 import Divider from '@mui/material/Divider';
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
 import { KioskLayoutSchema } from '@boardsesh/kiosk';
@@ -43,7 +39,8 @@ import {
   type KioskEditorState,
 } from './kiosk-editor-state';
 import { buildBoardEmbedSnippet, buildLeaderboardEmbedSnippet } from './embed-snippets';
-import KioskBoardSlots from './kiosk-board-slots';
+import ConfirmDialog from './confirm-dialog';
+import KioskBoardSlots, { type KioskEditorSlot } from './kiosk-board-slots';
 import KioskLayoutBadge from './kiosk-layout-badge';
 import KioskLeaderboardSettings from './kiosk-leaderboard-settings';
 import KioskPreview from './kiosk-preview';
@@ -52,14 +49,16 @@ import EmbedCodeDialog, { type EmbedCodeDialogState } from './embed-code-dialog'
 type KioskEditorProps = {
   gym: Gym;
   kiosk: GymKiosk;
-  /** All the gym's boards (null while loading). */
+  /** All the gym's boards (null while loading or when the fetch failed). */
   gymBoards: UserBoard[] | null;
+  /** True when the gymBoards fetch settled into an error — renders an error state instead of an endless spinner. */
+  gymBoardsLoadFailed: boolean;
   onBack: () => void;
   /** Called with the updated kiosk after a successful save. */
   onSaved: (kiosk: GymKiosk) => void;
 };
 
-export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: KioskEditorProps) {
+export default function KioskEditor({ gym, kiosk, gymBoards, gymBoardsLoadFailed, onBack, onSaved }: KioskEditorProps) {
   const { t } = useTranslation('kiosk');
   const [editorState, setEditorState] = useState<KioskEditorState>(() => editorStateFromLayout(kiosk.layout));
   const [baselineState, setBaselineState] = useState<KioskEditorState>(editorState);
@@ -78,6 +77,8 @@ export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: 
     if (!isDirty) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
+      // Chromium < 119 ignores preventDefault() and needs returnValue set.
+      event.returnValue = '';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -95,16 +96,18 @@ export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: 
     setScopeError(null);
   };
 
-  const assignedBoards =
-    gymBoards === null
-      ? []
-      : editorState.boardUuids
-          .map((boardUuid) => gymBoards.find((board) => board.uuid === boardUuid))
-          .filter((board): board is UserBoard => board !== undefined);
+  // Single slot→board resolution feeding the rows, the save gate, and the
+  // leaderboard settings, so "board no longer at this gym" can't be judged
+  // differently by different panels. board === null means unknown board.
+  const slotBoards: KioskEditorSlot[] = editorState.boardUuids.map((boardUuid) => ({
+    boardUuid,
+    board: gymBoards?.find((gymBoard) => gymBoard.uuid === boardUuid) ?? null,
+  }));
+  const assignedBoards = slotBoards.map((slot) => slot.board).filter((board): board is UserBoard => board !== null);
 
   // Slots whose board isn't (or no longer is) one of the gym's boards can't
   // save — the backend rejects layouts naming boards not linked to the gym.
-  const hasUnknownSlots = gymBoards !== null && assignedBoards.length !== editorState.boardUuids.length;
+  const hasUnknownSlots = gymBoards !== null && slotBoards.some((slot) => slot.board === null);
 
   const handleSave = async () => {
     const parsed = KioskLayoutSchema.safeParse(serializeKioskLayout(editorState));
@@ -127,12 +130,12 @@ export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: 
 
     setIsSaving(true);
     try {
-      const data = await updateKioskMutation.execute({
+      const savedKioskData = await updateKioskMutation.execute({
         input: { kioskUuid: kiosk.uuid, layout: parsed.data },
       });
-      if (data) {
+      if (savedKioskData) {
         setBaselineState(editorState);
-        onSaved(data.updateGymKiosk);
+        onSaved(savedKioskData.updateGymKiosk);
       }
     } finally {
       setIsSaving(false);
@@ -191,13 +194,15 @@ export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: 
             <Typography variant="subtitle1" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold, mb: 1 }}>
               {t('manage.editor.boardsHeading')}
             </Typography>
-            {gymBoards === null ? (
+            {gymBoardsLoadFailed ? (
+              <Alert severity="error">{t('manage.editor.boardsLoadError')}</Alert>
+            ) : gymBoards === null ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
                 <CircularProgress size={24} />
               </Box>
             ) : (
               <KioskBoardSlots
-                slotBoardUuids={editorState.boardUuids}
+                slotBoards={slotBoards}
                 gymBoards={gymBoards}
                 slotErrors={slotErrors}
                 onSetSlot={(index, boardUuid) => applyStateChange(setSlotBoard(editorState, index, boardUuid))}
@@ -246,7 +251,9 @@ export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: 
           <Typography variant="subtitle1" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold, mb: 1 }}>
             {t('manage.editor.previewHeading')}
           </Typography>
-          {gymBoards === null ? (
+          {gymBoardsLoadFailed ? (
+            <Alert severity="error">{t('manage.editor.boardsLoadError')}</Alert>
+          ) : gymBoards === null ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
               <CircularProgress size={24} />
             </Box>
@@ -259,27 +266,18 @@ export default function KioskEditor({ gym, kiosk, gymBoards, onBack, onSaved }: 
         </Box>
       </Box>
 
-      <Dialog open={discardDialogOpen} onClose={() => setDiscardDialogOpen(false)}>
-        <DialogTitle>{t('manage.editor.discardTitle')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('manage.editor.discardBody')}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDiscardDialogOpen(false)} sx={{ textTransform: 'none' }} autoFocus>
-            {t('manage.editor.keepEditing')}
-          </Button>
-          <Button
-            color="error"
-            onClick={() => {
-              setDiscardDialogOpen(false);
-              onBack();
-            }}
-            sx={{ textTransform: 'none' }}
-          >
-            {t('manage.editor.discard')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={discardDialogOpen}
+        title={t('manage.editor.discardTitle')}
+        body={t('manage.editor.discardBody')}
+        confirmLabel={t('manage.editor.discard')}
+        cancelLabel={t('manage.editor.keepEditing')}
+        onConfirm={() => {
+          setDiscardDialogOpen(false);
+          onBack();
+        }}
+        onClose={() => setDiscardDialogOpen(false)}
+      />
 
       <EmbedCodeDialog state={embedDialog} onClose={() => setEmbedDialog(null)} />
     </Box>

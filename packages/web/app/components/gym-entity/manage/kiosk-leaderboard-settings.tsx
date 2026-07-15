@@ -58,6 +58,16 @@ export default function KioskLeaderboardSettings({
   const hasBoards = assignedBoards.length > 0;
   const railEnabled = leaderboard !== null;
 
+  // A scope pointing at a board that's no longer at the gym isn't in the
+  // MenuItems — clamp the DISPLAYED value to "all boards" instead of handing
+  // MUI an out-of-range value (blank Select + console warning). The stored
+  // scope is untouched; removing the dead slot widens it for real.
+  const scopedBoardUuid = leaderboard?.boardUuid ?? null;
+  const scopeSelectValue =
+    scopedBoardUuid !== null && assignedBoards.some((board) => board.uuid === scopedBoardUuid)
+      ? scopedBoardUuid
+      : ALL_BOARDS_VALUE;
+
   const periodLabels: Record<KioskLeaderboardPeriod, string> = {
     session: t('manage.editor.period.session'),
     day: t('manage.editor.period.day'),
@@ -107,7 +117,7 @@ export default function KioskLeaderboardSettings({
             <Select
               labelId="kiosk-leaderboard-scope-label"
               label={t('manage.editor.scopeLabel')}
-              value={leaderboard.boardUuid ?? ALL_BOARDS_VALUE}
+              value={scopeSelectValue}
               onChange={(event) => {
                 const selectedValue = event.target.value;
                 onScopeChange(selectedValue === ALL_BOARDS_VALUE ? null : selectedValue);

@@ -15,11 +15,6 @@ import CardActions from '@mui/material/CardActions';
 import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogActions from '@mui/material/DialogActions';
 import Tooltip from '@mui/material/Tooltip';
 import AddOutlined from '@mui/icons-material/AddOutlined';
 import TvOutlined from '@mui/icons-material/TvOutlined';
@@ -45,13 +40,14 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import { themeTokens } from '@/app/theme/theme-config';
 import { buildKioskViewModel } from '../../kiosk/kiosk-view-model';
 import ManageTabEmptyState from './manage-tab-empty-state';
+import ConfirmDialog from './confirm-dialog';
 import KioskCreateDialog from './kiosk-create-dialog';
 import KioskEditor from './kiosk-editor';
 import type { GymManageTabProps } from './tab-props';
 
 export default function KiosksTab({ gym }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
-  const { token } = useWsAuthToken();
+  const { token, isLoading: isTokenLoading } = useWsAuthToken();
   const { showMessage } = useSnackbar();
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -62,8 +58,8 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
 
   const {
     data: kiosks,
-    isLoading: isLoadingKiosks,
-    isError: kiosksLoadFailed,
+    isPending: isKiosksQueryPending,
+    isError: kiosksQueryFailed,
   } = useQuery({
     queryKey: kiosksQueryKey,
     queryFn: async () => {
@@ -78,7 +74,7 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
 
   // The editor needs the gym's full board list (editors see private/unlisted
   // boards too). Fetched only once a kiosk is opened for editing.
-  const { data: gymBoards } = useQuery({
+  const { data: gymBoards, isError: gymBoardsLoadFailed } = useQuery({
     queryKey: ['gymBoards', gym.uuid],
     queryFn: async () => {
       const client = createGraphQLHttpClient(token);
@@ -127,16 +123,24 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
   if (editingKiosk) {
     return (
       <KioskEditor
+        // Remount per kiosk: editor state must never leak from one kiosk into
+        // another (the initial state comes from a useState initializer).
+        key={editingKiosk.uuid}
         gym={gym}
         kiosk={editingKiosk}
         gymBoards={gymBoards ?? null}
+        gymBoardsLoadFailed={gymBoardsLoadFailed}
         onBack={() => setEditingKioskUuid(null)}
         onSaved={handleSaved}
       />
     );
   }
 
-  if (isLoadingKiosks) {
+  // While the ws-auth token is loading the query is disabled (isPending stays
+  // true), so this spinner covers both windows — never the false "no kiosks
+  // yet" empty state during auth. A token that settles absent means the list
+  // can't load at all: show the error, not an invitation to create kiosk #1.
+  if (isTokenLoading || (token !== null && isKiosksQueryPending)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
         <CircularProgress />
@@ -144,7 +148,7 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
     );
   }
 
-  if (kiosksLoadFailed) {
+  if (kiosksQueryFailed || token === null) {
     return (
       <Typography variant="body2" color="error" sx={{ py: 2 }}>
         {t('manage.kiosks.loadError')}
@@ -231,7 +235,10 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
                   <Typography
                     component="span"
-                    sx={{ fontWeight: themeTokens.typography.fontWeight.semibold, fontSize: '1.05rem' }}
+                    sx={{
+                      fontWeight: themeTokens.typography.fontWeight.semibold,
+                      fontSize: themeTokens.typography.fontSize.base,
+                    }}
                   >
                     {kiosk.name}
                   </Typography>
@@ -299,20 +306,21 @@ export default function KiosksTab({ gym }: GymManageTabProps) {
         })}
       </Box>
 
-      <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)}>
-        <DialogTitle>{t('manage.kiosks.deleteTitle')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('manage.kiosks.deleteBody', { name: deleteTarget?.name ?? '' })}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)} sx={{ textTransform: 'none' }}>
-            {t('manage.kiosks.cancel')}
-          </Button>
-          <Button onClick={handleDeleteConfirm} color="error" autoFocus sx={{ textTransform: 'none' }}>
-            {t('manage.kiosks.deleteConfirm')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t('manage.kiosks.deleteTitle')}
+        // Deleting the DEFAULT kiosk doesn't 404 the slug-less URL — the
+        // resolver rolls it over to the next-oldest kiosk, so the copy says so.
+        body={
+          deleteTarget !== null && kioskList.length > 1 && kioskList[0]?.uuid === deleteTarget.uuid
+            ? t('manage.kiosks.deleteBodyDefault', { name: deleteTarget.name })
+            : t('manage.kiosks.deleteBody', { name: deleteTarget?.name ?? '' })
+        }
+        confirmLabel={t('manage.kiosks.deleteConfirm')}
+        cancelLabel={t('manage.kiosks.cancel')}
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteTarget(null)}
+      />
 
       <KioskCreateDialog
         open={createDialogOpen}

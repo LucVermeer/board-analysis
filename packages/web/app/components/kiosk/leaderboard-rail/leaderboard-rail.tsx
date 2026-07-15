@@ -21,10 +21,13 @@ const MIN_RANKED_CLIMBERS = 2;
 export default function LeaderboardRail({
   leaderboard,
   boards,
+  refetchInBackground = true,
 }: {
   leaderboard: KioskLeaderboardConfig;
   /** The kiosk's RESOLVED boards (slot order) — the scope universe. */
   boards: GymKioskBoard[];
+  /** Poll period leaderboards while the tab is hidden (TV: yes; editor preview: no). */
+  refetchInBackground?: boolean;
 }) {
   const { t, i18n } = useTranslation('kiosk');
   const isSession = leaderboard.period === 'session';
@@ -43,6 +46,7 @@ export default function LeaderboardRail({
     scopedBoardUuids,
     (isSession ? 'week' : leaderboard.period) as KioskPeriodLeaderboardPeriod,
     !isSession,
+    { refetchIntervalInBackground: refetchInBackground },
   );
 
   const rows = isSession ? sessionRows : periodResult.rows;

@@ -26,8 +26,8 @@ import BoardSlot from '../../kiosk/board-slot/board-slot';
 import LeaderboardRail from '../../kiosk/leaderboard-rail/leaderboard-rail';
 import { buildKioskViewModel } from '../../kiosk/kiosk-view-model';
 import layoutStyles from '../../kiosk/kiosk-layout.module.css';
+import { resolveGymLogoDisplayUrl } from '@/app/lib/gym-logo-display-url';
 import { serializeKioskLayout, type KioskEditorState } from './kiosk-editor-state';
-import { resolveLogoDisplayUrl } from './logo-image-utils';
 import styles from './kiosk-preview.module.css';
 
 /** The kiosk's logical TV width (the 1920×1080 canvas lives in the CSS module). */
@@ -114,16 +114,24 @@ export default function KioskPreview({ gym, kioskName, state, gymBoards }: Kiosk
     return () => observer.disconnect();
   }, []);
 
-  const { slots, viewModel } = useMemo(() => {
-    const previewSlots = state.boardUuids.map((boardUuid) => resolvePreviewSlot(boardUuid, gymBoards));
-    const renderableBoards = previewSlots
+  // Split memos: slot resolution rebuilds BoardDetails (hundreds of hold
+  // objects per board) and new bareBoardImageUrl identities, which would
+  // defeat React.memo(BoardRenderer) — so it's keyed on the boardUuids array,
+  // whose identity survives leaderboard-only edits (the pure state transitions
+  // spread the state but keep the untouched boardUuids array).
+  const slots = useMemo(
+    () => state.boardUuids.map((boardUuid) => resolvePreviewSlot(boardUuid, gymBoards)),
+    [state.boardUuids, gymBoards],
+  );
+
+  // The same derivation the TV runs: lenient layout parse + leaderboard-scope
+  // widening against the boards that actually render.
+  const viewModel = useMemo(() => {
+    const renderableBoards = slots
       .filter((slot): slot is Extract<PreviewSlot, { kind: 'board' }> => slot.kind === 'board')
       .map((slot) => slot.board);
-    // The same derivation the TV runs: lenient layout parse + leaderboard-scope
-    // widening against the boards that actually render.
-    const model = buildKioskViewModel({ layout: serializeKioskLayout(state), boards: renderableBoards });
-    return { slots: previewSlots, viewModel: model };
-  }, [state, gymBoards]);
+    return buildKioskViewModel({ layout: serializeKioskLayout(state), boards: renderableBoards });
+  }, [slots, state]);
 
   // Preset over ALL slots (missing ones included) so the grid shape always
   // matches what the owner configured, with guard tiles filling the gaps —
@@ -133,10 +141,10 @@ export default function KioskPreview({ gym, kioskName, state, gymBoards }: Kiosk
 
   const rail =
     viewModel.leaderboard === null ? null : (
-      <LeaderboardRail leaderboard={viewModel.leaderboard} boards={viewModel.boards} />
+      <LeaderboardRail leaderboard={viewModel.leaderboard} boards={viewModel.boards} refetchInBackground={false} />
     );
 
-  const logoDisplayUrl = resolveLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
+  const logoDisplayUrl = resolveGymLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
 
   return (
     <div ref={frameRef} className={styles.frame}>

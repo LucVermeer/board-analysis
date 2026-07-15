@@ -48,10 +48,10 @@ export default function KioskCreateDialog({ open, gymUuid, onClose, onCreated }:
     if (!trimmedName) return;
     setIsCreating(true);
     try {
-      const data = await createMutation.execute({ input: { gymUuid, name: trimmedName } });
-      if (data) {
+      const creationData = await createMutation.execute({ input: { gymUuid, name: trimmedName } });
+      if (creationData) {
         setName('');
-        onCreated(data.createGymKiosk);
+        onCreated(creationData.createGymKiosk);
       }
     } finally {
       setIsCreating(false);

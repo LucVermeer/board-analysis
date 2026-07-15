@@ -71,30 +71,3 @@ export function scaleToFit(width: number, height: number, maxDimension: number):
   }
   return { width: Math.max(1, Math.round((width * maxDimension) / height)), height: maxDimension };
 }
-
-/**
- * The logoUrl value to PERSIST via updateGym. The upload handler returns a
- * backend-relative `/static/gym-logos/...` path; in split-domain deploys
- * (production: www.boardsesh.com + ws.boardsesh.com) that path must be
- * absolutised against the backend origin or every kiosk/embed/gym-page <img>
- * 404s against the frontend host. The backend's GymLogoUrlSchema only accepts
- * absolute URLs over https, so a plain-http dev backend keeps the relative
- * path (dev renders resolve it per-request via resolveLogoDisplayUrl).
- */
-export function resolveLogoPersistUrl(uploadedLogoUrl: string, backendHttpBaseUrl: string | null): string {
-  if (!uploadedLogoUrl.startsWith('/')) return uploadedLogoUrl;
-  if (!backendHttpBaseUrl || !backendHttpBaseUrl.startsWith('https://')) return uploadedLogoUrl;
-  return `${backendHttpBaseUrl.replace(/\/+$/, '')}${uploadedLogoUrl}`;
-}
-
-/**
- * The URL to RENDER a stored logoUrl from (manage UI + editor preview). A
- * backend-relative path (dev, or legacy rows) is resolved against the backend
- * origin regardless of scheme; absolute URLs pass through.
- */
-export function resolveLogoDisplayUrl(logoUrl: string | null, backendHttpBaseUrl: string | null): string | null {
-  if (!logoUrl) return null;
-  if (!logoUrl.startsWith('/')) return logoUrl;
-  if (!backendHttpBaseUrl) return logoUrl;
-  return `${backendHttpBaseUrl.replace(/\/+$/, '')}${logoUrl}`;
-}

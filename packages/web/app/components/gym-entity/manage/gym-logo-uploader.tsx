@@ -31,7 +31,6 @@ import {
   GYM_LOGO_MAX_INPUT_BYTES,
   GYM_LOGO_MAX_UPLOAD_BYTES,
   resolveLogoEncodingPlan,
-  resolveLogoPersistUrl,
   scaleToFit,
   type GymLogoEncodingPlan,
 } from './logo-image-utils';
@@ -155,11 +154,12 @@ export default function GymLogoUploader({ gym, logoDisplayUrl, onGymChange }: Gy
         return;
       }
 
+      // Persist the backend-relative path verbatim: no deploy domain frozen
+      // into the row. Render sites resolve it via resolveGymLogoDisplayUrl.
       const { logoUrl } = (await response.json()) as { logoUrl: string };
-      const persistUrl = resolveLogoPersistUrl(logoUrl, backendBaseUrl);
-      const data = await updateGymMutation.execute({ input: { gymUuid: gym.uuid, logoUrl: persistUrl } });
-      if (data) {
-        onGymChange(data.updateGym);
+      const savedGymData = await updateGymMutation.execute({ input: { gymUuid: gym.uuid, logoUrl } });
+      if (savedGymData) {
+        onGymChange(savedGymData.updateGym);
         showMessage(t('branding.logo.uploaded'), 'success');
       }
     } catch (error) {
@@ -173,9 +173,9 @@ export default function GymLogoUploader({ gym, logoDisplayUrl, onGymChange }: Gy
   const handleRemove = async () => {
     setIsRemoving(true);
     try {
-      const data = await updateGymMutation.execute({ input: { gymUuid: gym.uuid, logoUrl: null } });
-      if (data) {
-        onGymChange(data.updateGym);
+      const clearedGymData = await updateGymMutation.execute({ input: { gymUuid: gym.uuid, logoUrl: null } });
+      if (clearedGymData) {
+        onGymChange(clearedGymData.updateGym);
         showMessage(t('branding.logo.removed'), 'success');
       }
     } finally {

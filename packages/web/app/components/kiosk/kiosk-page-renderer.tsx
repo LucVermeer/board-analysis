@@ -13,6 +13,8 @@ import type { Metadata } from 'next';
 import { GET_GYM_KIOSK } from '@boardsesh/graphql/operations';
 import type { GymKiosk, GymKioskBoard } from '@boardsesh/shared-schema';
 import { getGraphQLHttpUrl } from '@/app/lib/graphql/client';
+import { getPublicBackendHttpUrl } from '@/app/lib/backend-url';
+import { resolveGymLogoDisplayUrl } from '@/app/lib/gym-logo-display-url';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
@@ -155,7 +157,10 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
           <div className={layoutStyles.root}>
             <KioskHeader
               gymName={kiosk.gym.name}
-              logoUrl={kiosk.gym.logoUrl ?? null}
+              // Stored logo paths are backend-relative; resolve against the
+              // BROWSER-reachable backend origin (split-domain deploys would
+              // otherwise 404 the logo against the web host).
+              logoUrl={resolveGymLogoDisplayUrl(kiosk.gym.logoUrl ?? null, getPublicBackendHttpUrl())}
               kioskName={kiosk.name}
               gymSlug={kiosk.gym.slug ?? null}
             />

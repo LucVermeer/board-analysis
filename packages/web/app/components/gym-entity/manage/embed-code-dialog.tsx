@@ -14,6 +14,8 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { copyToClipboard } from '@/app/lib/share-utils';
+import { themeTokens } from '@/app/theme/theme-config';
 
 export type EmbedCodeDialogState = {
   title: string;
@@ -34,7 +36,9 @@ export default function EmbedCodeDialog({ state, onClose }: EmbedCodeDialogProps
   const handleCopy = async () => {
     if (!state) return;
     try {
-      await navigator.clipboard.writeText(state.snippet);
+      // Shared helper: navigator.clipboard with an execCommand fallback for
+      // non-secure contexts (LAN/dev gym setups are plain http).
+      await copyToClipboard(state.snippet);
       showMessage(t('embed.copied'), 'success');
     } catch {
       showMessage(t('embed.copyFailed'), 'error');
@@ -55,7 +59,7 @@ export default function EmbedCodeDialog({ state, onClose }: EmbedCodeDialogProps
             htmlInput: {
               readOnly: true,
               spellCheck: false,
-              sx: { fontFamily: 'monospace', fontSize: '0.8125rem' },
+              sx: { fontFamily: 'monospace', fontSize: themeTokens.typography.fontSize.sm },
             },
           }}
           onFocus={(event) => event.target.select()}

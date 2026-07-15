@@ -120,14 +120,8 @@ export function getGraphQLHttpUrl(): string {
   return wsUrl.replace(/^ws(s?):\/\//, 'http$1://');
 }
 
-/**
- * Get the backend base HTTP URL (without /graphql path).
- * Useful for REST-style endpoints like avatar upload.
- */
-export function getBackendHttpUrl(): string | null {
-  const wsUrl = getBackendWsUrl();
+function wsUrlToHttpBase(wsUrl: string | null): string | null {
   if (!wsUrl) return null;
-
   try {
     const url = new URL(wsUrl);
     url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
@@ -136,4 +130,26 @@ export function getBackendHttpUrl(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Get the backend base HTTP URL (without /graphql path).
+ * Useful for REST-style endpoints like avatar upload.
+ */
+export function getBackendHttpUrl(): string | null {
+  return wsUrlToHttpBase(getBackendWsUrl());
+}
+
+/**
+ * Browser-reachable backend HTTP origin. Differs from getBackendHttpUrl on
+ * the SERVER, where getBackendWsUrl prefers BACKEND_INTERNAL_URL (Docker
+ * networking) — an origin a browser can't reach. Use this when building URLs
+ * that end up in server-rendered HTML for the browser to fetch (e.g. gym-logo
+ * <img src> on the kiosk and gym pages).
+ */
+export function getPublicBackendHttpUrl(): string | null {
+  if (typeof window === 'undefined') {
+    return wsUrlToHttpBase(process.env.NEXT_PUBLIC_WS_URL || null);
+  }
+  return getBackendHttpUrl();
 }
