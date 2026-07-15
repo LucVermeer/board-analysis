@@ -1,4 +1,4 @@
-// Pure session-leaderboard ranking over a board's presence history, for the gym kiosk dashboard.
+// Pure session-leaderboard ranking over a board's presence history.
 
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 
