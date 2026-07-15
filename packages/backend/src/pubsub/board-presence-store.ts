@@ -138,6 +138,16 @@ export class BoardPresenceStore {
   private boardSeqReseedPending = new Set<string>();
   // Local-only proof-of-presence: `${boardId}:${userId}` → expiry epoch ms.
   private localBoardMembership = new Map<string, number>();
+  // Local-only session↔board binding fallback (single-instance, no Redis) —
+  // mirrors the localBoardSeq / localBoardMembership pattern. In Redis mode
+  // the authoritative pair is `session:{id}:board` / `board:{id}:session`
+  // written by `commitBoardClimb`; these maps only serve Redis-less
+  // deployments so the board-queue-preview producer still resolves bindings.
+  // Expiry matches BOARD_MEMBERSHIP_TTL; entries are lazily evicted on read
+  // and overwritten on each commit (bounded by the number of boards/sessions
+  // active in one process lifetime, like the other local maps).
+  private localSessionBoard = new Map<string, { value: string; expiresAtMs: number }>();
+  private localBoardSession = new Map<string, { value: string; expiresAtMs: number }>();
   private localBoardMembershipCleanupTimer: ReturnType<typeof setTimeout> | null = null;
   private localBoardMembershipCleanupExpiry: number | null = null;
   // Durable seq floor lookup for the `nextBoardSeq` dormancy reseed (A3).
@@ -495,6 +505,11 @@ export class BoardPresenceStore {
    */
   async commitBoardClimb(input: CommitBoardClimbInput): Promise<CommitBoardClimbResult> {
     if (!this.deps.isRedisAvailable()) {
+      // Redis-less single-instance fallback: still remember the session↔board
+      // binding in-memory so getSessionBoard/getBoardSession keep answering
+      // (the board-queue-preview producer depends on them). The writer slot
+      // and history remain Redis-only, unchanged.
+      this.rememberLocalSessionBoardBinding(input.sessionId, input.boardId);
       return { previousWriter: null, writerSlotOk: false };
     }
 
@@ -521,6 +536,12 @@ export class BoardPresenceStore {
       if (input.sessionId) {
         pipeline.set(`session:${input.sessionId}:board`, input.boardId, 'EX', BOARD_MEMBERSHIP_TTL);
         commandLabels.push('session-board-set');
+        // Reverse binding for the board-keyed queue preview (gym kiosks):
+        // `getBoardSession(boardId)` answers "which session's queue is on this
+        // wall". Same TTL/re-stamp lifecycle as the forward key — a fresh send
+        // re-stamps both, an idle binding expires with proof-of-presence.
+        pipeline.set(`board:${input.boardId}:session`, input.sessionId, 'EX', BOARD_MEMBERSHIP_TTL);
+        commandLabels.push('board-session-set');
       }
 
       const results = await pipeline.exec();
@@ -586,14 +607,17 @@ export class BoardPresenceStore {
    * side-effect of `reportBoardClimb` — the only moment a session is provably
    * tied to a board. The APNs Live Activity path reads it to resolve the
    * board's current holder for a given session (`QueueState` and the
-   * push-token rows carry sessionId but not boardId). Redis-only and TTL'd to
-   * the same window as proof-of-presence so an idle session's mapping doesn't
-   * leak; a fresh send re-stamps it. Without Redis the holder lookup degrades
-   * to "unknown" and the APNs path omits boardConnection (device falls back
-   * to its own App-Group state).
+   * push-token rows carry sessionId but not boardId), and the
+   * board-queue-preview producer reads it to route a session's queue events
+   * to the right board channel. TTL'd to the same window as proof-of-presence
+   * so an idle session's mapping doesn't leak; a fresh send re-stamps it.
+   * Without Redis this falls back to the single-instance in-memory binding
+   * written by `commitBoardClimb`'s local path.
    */
   async getSessionBoard(sessionId: string): Promise<string | null> {
-    if (!this.deps.isRedisAvailable()) return null;
+    if (!this.deps.isRedisAvailable()) {
+      return this.readLocalBinding(this.localSessionBoard, sessionId);
+    }
     try {
       const { publisher } = redisClientManager.getClients();
       return await publisher.get(`session:${sessionId}:board`);
@@ -602,6 +626,49 @@ export class BoardPresenceStore {
       this.deps.logger.error('[PubSub] Failed to get session board:', error);
       return null;
     }
+  }
+
+  /**
+   * The party session bound to this board, or null when unknown — the reverse
+   * of `getSessionBoard`, written by the same `commitBoardClimb` pipeline
+   * (`board:{id}:session`, same TTL). This is the board-keyed entry point for
+   * the anonymous queue preview: a kiosk knows the boardId, never the session
+   * UUID. Callers MUST still apply the privacy gates (anon-readable board +
+   * `board_sessions.is_public`) before exposing anything derived from the
+   * returned session. Without Redis this falls back to the single-instance
+   * in-memory binding.
+   */
+  async getBoardSession(boardId: string): Promise<string | null> {
+    if (!this.deps.isRedisAvailable()) {
+      return this.readLocalBinding(this.localBoardSession, boardId);
+    }
+    try {
+      const { publisher } = redisClientManager.getClients();
+      return await publisher.get(`board:${boardId}:session`);
+    } catch (error) {
+      if (this.deps.isRedisRequired()) throw error;
+      this.deps.logger.error('[PubSub] Failed to get board session:', error);
+      return null;
+    }
+  }
+
+  /** Local-only (Redis-less) session↔board binding write. See the map docs. */
+  private rememberLocalSessionBoardBinding(sessionId: string | null, boardId: string): void {
+    if (!sessionId) return;
+    const expiresAtMs = Date.now() + BOARD_MEMBERSHIP_TTL * 1000;
+    this.localSessionBoard.set(sessionId, { value: boardId, expiresAtMs });
+    this.localBoardSession.set(boardId, { value: sessionId, expiresAtMs });
+  }
+
+  /** Read + lazily evict an entry from a local binding map. */
+  private readLocalBinding(map: Map<string, { value: string; expiresAtMs: number }>, key: string): string | null {
+    const entry = map.get(key);
+    if (!entry) return null;
+    if (entry.expiresAtMs <= Date.now()) {
+      map.delete(key);
+      return null;
+    }
+    return entry.value;
   }
 
   private setLocalBoardMembership(localKey: string, expiry: number): void {

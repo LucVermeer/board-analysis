@@ -6,6 +6,7 @@ import type {
   NewClimbCreatedEvent,
   BoardPresenceEvent,
   BoardPresenceClimb,
+  BoardQueuePreview,
 } from '@boardsesh/shared-schema';
 import { redisClientManager } from '../redis/client';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from './redis-adapter';
@@ -29,9 +30,10 @@ type NotificationSubscriber = ChannelSubscriber<NotificationEvent>;
 type CommentSubscriber = ChannelSubscriber<CommentEvent>;
 type NewClimbSubscriber = ChannelSubscriber<NewClimbCreatedEvent>;
 type BoardPresenceSubscriber = ChannelSubscriber<BoardPresenceEvent>;
+type BoardQueuePreviewSubscriber = ChannelSubscriber<BoardQueuePreview>;
 
 /** External hook called after every queue event publish. Fire-and-forget. */
-type QueueEventHook = (sessionId: string, event: QueueEvent) => void;
+export type QueueEventHook = (sessionId: string, event: QueueEvent) => void;
 
 // Event buffer configuration (Phase 2: Delta sync)
 const EVENT_BUFFER_SIZE = 100; // Store last 100 events per session
@@ -49,8 +51,8 @@ const EVENT_BUFFER_TTL = 300; // 5 minutes
  * - Events are only dispatched to local subscribers
  * - Used when REDIS_URL is not configured
  *
- * The six domains below (queue, session, notification, comment, new-climb,
- * board-presence) all share the exact same subscribe/publish/fan-in mechanics
+ * The seven domains below (queue, session, notification, comment, new-climb,
+ * board-presence, board-queue) all share the exact same subscribe/publish/fan-in mechanics
  * — that generic behavior lives in `PubSubChannel` (./channel.ts). Each
  * `redisSubscribe`/`redisUnsubscribe`/`redisPublish` closure below resolves to
  * a no-op when `redisAdapter` is null (local-only mode or not-yet-initialized),
@@ -112,6 +114,17 @@ class PubSub {
     isRedisRequired: () => this.redisRequired,
     logger,
   });
+  // Redacted "Up next" previews for public gym displays. Keyed on the shared
+  // board_id like board presence; each event is a full snapshot (latest wins).
+  private readonly boardQueueChannel = new PubSubChannel<BoardQueuePreview>({
+    label: 'board queue',
+    redisSubscribe: (boardId) => this.redisAdapter?.subscribeBoardQueueChannel(boardId) ?? Promise.resolve(),
+    redisUnsubscribe: (boardId) => this.redisAdapter?.unsubscribeBoardQueueChannel(boardId) ?? Promise.resolve(),
+    redisPublish: (boardId, preview) =>
+      this.redisAdapter?.publishBoardQueuePreview(boardId, preview) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
   // Board-presence Redis KV helpers (seq counter, durable history, proof-of-
   // presence, writer holder, session→board) live outside the generic channel
   // — see board-presence-store.ts for why.
@@ -123,7 +136,7 @@ class PubSub {
   private redisAdapter: RedisPubSubAdapter | null = null;
   private initialized = false;
   private redisRequired = false;
-  private queueEventHook: QueueEventHook | null = null;
+  private queueEventHooks: QueueEventHook[] = [];
 
   /**
    * Initialize the PubSub system.
@@ -183,15 +196,19 @@ class PubSub {
 
   /**
    * Register an external hook that fires after every queue event publish.
-   * The hook is called fire-and-forget (not awaited, errors are caught internally).
-   * Used to wire APNs Live Activity updates without coupling PubSub to the APNs service.
+   * Multiple hooks may be registered (APNs Live Activity updates, the
+   * board-queue-preview producer, ...); they fire in registration order.
+   * Each hook is called fire-and-forget (not awaited, errors are caught
+   * internally and isolated per hook). Returns an unregister function —
+   * mirrors the `subscribe*` unsubscribe contract.
    *
    * **Publisher-side semantics (important for multi-instance deployments):**
-   * The hook fires only on the instance that calls `publishQueueEvent`. It is
+   * Hooks fire only on the instance that calls `publishQueueEvent`. They are
    * NOT invoked by the Redis fan-in path (`queueChannel.dispatchLocal`) when a
    * Redis fan-out message arrives from another instance — that path bypasses
-   * the hook intentionally so a single event published in a 3-instance cluster
-   * does not trigger 3 redundant APNs sends.
+   * the hooks intentionally so a single event published in a 3-instance
+   * cluster does not trigger 3 redundant APNs sends (or 3 redundant
+   * board-queue-preview publishes — the preview channel itself Redis-fans-out).
    *
    * Implication: every backend instance that receives queue mutations must
    * have APNs env vars configured, otherwise queue events that originate on
@@ -199,8 +216,14 @@ class PubSub {
    * `sendLiveActivityUpdate` becomes a no-op when `configured === false`).
    * The startup log in `server.ts` warns when env vars are missing.
    */
-  setQueueEventHook(hook: QueueEventHook): void {
-    this.queueEventHook = hook;
+  addQueueEventHook(hook: QueueEventHook): () => void {
+    this.queueEventHooks.push(hook);
+    return () => {
+      const index = this.queueEventHooks.indexOf(hook);
+      if (index !== -1) {
+        this.queueEventHooks.splice(index, 1);
+      }
+    };
   }
 
   private setupRedisMessageHandlers(): void {
@@ -228,6 +251,10 @@ class PubSub {
 
     this.redisAdapter.onBoardPresenceMessage((boardId, event) => {
       this.boardPresenceChannel.dispatchLocal(boardId, event);
+    });
+
+    this.redisAdapter.onBoardQueueMessage((boardId, preview) => {
+      this.boardQueueChannel.dispatchLocal(boardId, preview);
     });
   }
 
@@ -330,9 +357,10 @@ class PubSub {
   /**
    * Publish a queue event to all subscribers of a session.
    * Dispatches locally first, then stores the event in the delta-sync buffer,
-   * then publishes to Redis for other instances, then fires the APNs hook —
-   * the buffer and hook are queue-only quirks layered on top of the generic
-   * channel, not part of `PubSubChannel` itself.
+   * then publishes to Redis for other instances, then fires the registered
+   * queue-event hooks (APNs, board-queue preview) — the buffer and hooks are
+   * queue-only quirks layered on top of the generic channel, not part of
+   * `PubSubChannel` itself.
    *
    * `PlaybackStateChanged` events are excluded from buffering: they reuse the
    * room's current sequence number (rather than incrementing it) and can fire
@@ -375,10 +403,12 @@ class PubSub {
       });
     }
 
-    // Fire external hook (e.g. APNs Live Activity updates)
-    if (this.queueEventHook) {
+    // Fire external hooks (APNs Live Activity updates, board-queue-preview
+    // producer, ...). Errors are isolated per hook so one failing hook can't
+    // starve the others.
+    for (const hook of this.queueEventHooks) {
       try {
-        this.queueEventHook(sessionId, event);
+        hook(sessionId, event);
       } catch (error) {
         logger.error('[PubSub] Queue event hook error:', error);
       }
@@ -471,6 +501,27 @@ class PubSub {
     this.boardPresenceChannel.publish(boardId, event);
   }
 
+  /**
+   * Subscribe to redacted board-queue previews for a shared board (gym-kiosk
+   * "Up next"). Same keying and mechanics as board presence.
+   * @param boardId stringified userBoards.id
+   * @returns Promise that resolves to an unsubscribe function
+   */
+  async subscribeBoardQueuePreview(boardId: string, callback: BoardQueuePreviewSubscriber): Promise<() => void> {
+    this.ensureRedisIfRequired();
+    return this.boardQueueChannel.subscribe(boardId, callback);
+  }
+
+  /**
+   * Publish a redacted board-queue preview snapshot to subscribers.
+   * Dispatches locally first, then publishes to Redis for other instances.
+   * Callers must have applied the privacy gates BEFORE publishing (anon-
+   * readable board + isPublic session) — the channel itself is gate-free.
+   */
+  publishBoardQueuePreview(boardId: string, preview: BoardQueuePreview): void {
+    this.boardQueueChannel.publish(boardId, preview);
+  }
+
   // The methods below delegate to `boardPresenceStore` (board-presence-store.ts)
   // — Redis KV bookkeeping for the board-presence domain (seq counter, durable
   // history, proof-of-presence, writer holder, session→board) that sits
@@ -534,6 +585,11 @@ class PubSub {
   /** The shared board_id this session is on, or null when unknown (written by commitBoardClimb). */
   async getSessionBoard(sessionId: string): Promise<string | null> {
     return this.boardPresenceStore.getSessionBoard(sessionId);
+  }
+
+  /** The party session bound to this board, or null when unknown (reverse of getSessionBoard, same writer). */
+  async getBoardSession(boardId: string): Promise<string | null> {
+    return this.boardPresenceStore.getBoardSession(boardId);
   }
 
   /** @internal Test hook for local-only proof-of-presence cleanup coverage. */

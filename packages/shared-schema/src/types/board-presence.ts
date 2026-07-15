@@ -101,6 +101,37 @@ export type ResolveBoardResult = {
   candidates?: BoardCandidate[] | null;
 };
 
+/**
+ * One redacted entry of a board's public queue preview. Exposes ONLY
+ * climb-catalog display fields — never addedBy/addedByUser/tickedBy or any
+ * other user-identifying data (the kiosk audience is anonymous).
+ */
+export type BoardQueuePreviewItem = {
+  queueItemUuid: string;
+  climbUuid: string;
+  name?: string | null;
+  grade?: string | null;
+  gradeColor?: string | null;
+  frames?: string | null;
+  angle?: number | null;
+  setter?: string | null;
+};
+
+/**
+ * Redacted snapshot of the party-session queue bound to a shared board, for
+ * public "Up next" displays. Only exists while the board is anon-readable AND
+ * the bound session is `isPublic` (see the SDL for the widened `is_public`
+ * semantics). `upNext` is capped at 10; `queueLength` is the uncapped total.
+ */
+export type BoardQueuePreview = {
+  boardId: number;
+  current?: BoardQueuePreviewItem | null;
+  upNext: BoardQueuePreviewItem[];
+  queueLength: number;
+  /** ISO 8601, server-stamped when the snapshot was built. */
+  updatedAt: string;
+};
+
 export type BoardPresenceStats = {
   climbsSentCount: number;
   distinctClimbersCount: number;

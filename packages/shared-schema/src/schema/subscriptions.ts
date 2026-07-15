@@ -35,6 +35,19 @@ export const subscriptionsTypeDefs = /* GraphQL */ `
     """
     boardNowPlaying(boardId: Int!): BoardPresenceEvent!
 
+    """
+    Live redacted "Up next" previews of the party-session queue bound to a
+    shared board, for anonymous public displays (gym kiosks). Each event is a
+    full snapshot (latest wins — no deltas). Auth-optional with the same
+    anonymous existence-hiding as \`boardNowPlaying\`; events are only ever
+    published while the double privacy gate holds (anon-readable board AND
+    \`isPublic: true\` bound session — see the \`boardQueuePreview\` query,
+    including the deliberate widening of \`is_public\`'s meaning). The stream
+    is seeded with the current snapshot when one exists, since pub/sub has no
+    replay. Items are redacted to climb-catalog fields only.
+    """
+    boardQueuePreview(boardId: Int!): BoardQueuePreview!
+
     # ESP32 subscribes to receive LED commands - uses API key auth via connectionParams
     controllerEvents(sessionId: ID!): ControllerEvent!
   }

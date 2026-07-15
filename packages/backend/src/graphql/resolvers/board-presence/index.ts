@@ -1,6 +1,7 @@
 import { boardPresenceMutations } from './mutations';
 import { boardPresenceQueries } from './queries';
 import { boardPresenceSubscriptions } from './subscription';
+import { boardQueuePreviewQueries, boardQueuePreviewSubscriptions } from './queue-preview';
 
 /**
  * Union resolver for `BoardPresenceEvent` (BoardClimbSet | BoardClimbCleared |
@@ -14,8 +15,8 @@ const boardPresenceEventResolver = {
 };
 
 export const boardPresenceResolvers = {
-  Query: boardPresenceQueries,
+  Query: { ...boardPresenceQueries, ...boardQueuePreviewQueries },
   Mutation: boardPresenceMutations,
-  Subscription: boardPresenceSubscriptions,
+  Subscription: { ...boardPresenceSubscriptions, ...boardQueuePreviewSubscriptions },
   BoardPresenceEvent: boardPresenceEventResolver,
 };

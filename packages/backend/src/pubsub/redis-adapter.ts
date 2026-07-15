@@ -5,6 +5,7 @@ import type {
   CommentEvent,
   NewClimbCreatedEvent,
   BoardPresenceEvent,
+  BoardQueuePreview,
 } from '@boardsesh/shared-schema';
 import type Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,10 +18,21 @@ const NOTIFICATION_CHANNEL_PREFIX = 'boardsesh:notifications:';
 const COMMENT_CHANNEL_PREFIX = 'boardsesh:comments:';
 const NEW_CLIMB_CHANNEL_PREFIX = 'boardsesh:new-climbs:';
 const BOARD_PRESENCE_CHANNEL_PREFIX = 'boardsesh:board:';
+// No overlap with BOARD_PRESENCE_CHANNEL_PREFIX: the presence prefix ends in
+// `board:` (colon), this one continues `board-queue:` — a hyphen, so neither
+// is a prefix of the other.
+const BOARD_QUEUE_CHANNEL_PREFIX = 'boardsesh:board-queue:';
 
 type RedisMessage = {
   instanceId: string;
-  event: QueueEvent | SessionEvent | NotificationEvent | CommentEvent | NewClimbCreatedEvent | BoardPresenceEvent;
+  event:
+    | QueueEvent
+    | SessionEvent
+    | NotificationEvent
+    | CommentEvent
+    | NewClimbCreatedEvent
+    | BoardPresenceEvent
+    | BoardQueuePreview;
   timestamp: number;
 };
 
@@ -31,24 +43,28 @@ export type RedisPubSubAdapter = {
   publishCommentEvent(entityKey: string, event: CommentEvent): Promise<void>;
   publishNewClimbEvent(channelKey: string, event: NewClimbCreatedEvent): Promise<void>;
   publishBoardPresenceEvent(boardId: string, event: BoardPresenceEvent): Promise<void>;
+  publishBoardQueuePreview(boardId: string, preview: BoardQueuePreview): Promise<void>;
   subscribeQueueChannel(sessionId: string): Promise<void>;
   subscribeSessionChannel(sessionId: string): Promise<void>;
   subscribeNotificationChannel(userId: string): Promise<void>;
   subscribeCommentChannel(entityKey: string): Promise<void>;
   subscribeNewClimbChannel(channelKey: string): Promise<void>;
   subscribeBoardPresenceChannel(boardId: string): Promise<void>;
+  subscribeBoardQueueChannel(boardId: string): Promise<void>;
   unsubscribeQueueChannel(sessionId: string): Promise<void>;
   unsubscribeSessionChannel(sessionId: string): Promise<void>;
   unsubscribeNotificationChannel(userId: string): Promise<void>;
   unsubscribeCommentChannel(entityKey: string): Promise<void>;
   unsubscribeNewClimbChannel(channelKey: string): Promise<void>;
   unsubscribeBoardPresenceChannel(boardId: string): Promise<void>;
+  unsubscribeBoardQueueChannel(boardId: string): Promise<void>;
   onQueueMessage(callback: (sessionId: string, event: QueueEvent) => void): void;
   onSessionMessage(callback: (sessionId: string, event: SessionEvent) => void): void;
   onNotificationMessage(callback: (userId: string, event: NotificationEvent) => void): void;
   onCommentMessage(callback: (entityKey: string, event: CommentEvent) => void): void;
   onNewClimbMessage(callback: (channelKey: string, event: NewClimbCreatedEvent) => void): void;
   onBoardPresenceMessage(callback: (boardId: string, event: BoardPresenceEvent) => void): void;
+  onBoardQueueMessage(callback: (boardId: string, preview: BoardQueuePreview) => void): void;
   getInstanceId(): string;
 };
 
@@ -60,6 +76,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
   const subscribedCommentChannels = new Set<string>();
   const subscribedNewClimbChannels = new Set<string>();
   const subscribedBoardPresenceChannels = new Set<string>();
+  const subscribedBoardQueueChannels = new Set<string>();
 
   let queueMessageCallback: ((sessionId: string, event: QueueEvent) => void) | null = null;
   let sessionMessageCallback: ((sessionId: string, event: SessionEvent) => void) | null = null;
@@ -67,6 +84,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
   let commentMessageCallback: ((entityKey: string, event: CommentEvent) => void) | null = null;
   let newClimbMessageCallback: ((channelKey: string, event: NewClimbCreatedEvent) => void) | null = null;
   let boardPresenceMessageCallback: ((boardId: string, event: BoardPresenceEvent) => void) | null = null;
+  let boardQueueMessageCallback: ((boardId: string, preview: BoardQueuePreview) => void) | null = null;
 
   // Set up message handler
   subscriber.on('message', (channel: string, message: string) => {
@@ -101,6 +119,14 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
         const entityKey = channel.slice(COMMENT_CHANNEL_PREFIX.length);
         if (commentMessageCallback) {
           commentMessageCallback(entityKey, parsed.event as CommentEvent);
+        }
+      } else if (channel.startsWith(BOARD_QUEUE_CHANNEL_PREFIX)) {
+        // Checked before BOARD_PRESENCE for the same intent-clarity reason as
+        // below (the prefixes don't actually overlap — `board-queue:` vs
+        // `board:`).
+        const boardId = channel.slice(BOARD_QUEUE_CHANNEL_PREFIX.length);
+        if (boardQueueMessageCallback) {
+          boardQueueMessageCallback(boardId, parsed.event as BoardQueuePreview);
         }
       } else if (channel.startsWith(BOARD_PRESENCE_CHANNEL_PREFIX)) {
         // Checked before NEW_CLIMB so the more specific `boardsesh:board:`
@@ -198,6 +224,16 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       await publisher.publish(channel, JSON.stringify(message));
     },
 
+    async publishBoardQueuePreview(boardId: string, preview: BoardQueuePreview): Promise<void> {
+      const channel = `${BOARD_QUEUE_CHANNEL_PREFIX}${boardId}`;
+      const message: RedisMessage = {
+        instanceId,
+        event: preview,
+        timestamp: Date.now(),
+      };
+      await publisher.publish(channel, JSON.stringify(message));
+    },
+
     async subscribeQueueChannel(sessionId: string): Promise<void> {
       const channel = `${QUEUE_CHANNEL_PREFIX}${sessionId}`;
       if (subscribedQueueChannels.has(channel)) {
@@ -276,6 +312,16 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       logger.info(`[Redis] Subscribed to board presence channel: ${boardId}`);
     },
 
+    async subscribeBoardQueueChannel(boardId: string): Promise<void> {
+      const channel = `${BOARD_QUEUE_CHANNEL_PREFIX}${boardId}`;
+      if (subscribedBoardQueueChannels.has(channel)) {
+        return;
+      }
+      await subscriber.subscribe(channel);
+      subscribedBoardQueueChannels.add(channel);
+      logger.info(`[Redis] Subscribed to board queue channel: ${boardId}`);
+    },
+
     async unsubscribeNotificationChannel(userId: string): Promise<void> {
       const channel = `${NOTIFICATION_CHANNEL_PREFIX}${userId}`;
       if (!subscribedNotificationChannels.has(channel)) {
@@ -314,6 +360,16 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       logger.info(`[Redis] Unsubscribed from board presence channel: ${boardId}`);
     },
 
+    async unsubscribeBoardQueueChannel(boardId: string): Promise<void> {
+      const channel = `${BOARD_QUEUE_CHANNEL_PREFIX}${boardId}`;
+      if (!subscribedBoardQueueChannels.has(channel)) {
+        return;
+      }
+      await subscriber.unsubscribe(channel);
+      subscribedBoardQueueChannels.delete(channel);
+      logger.info(`[Redis] Unsubscribed from board queue channel: ${boardId}`);
+    },
+
     onQueueMessage(callback: (sessionId: string, event: QueueEvent) => void): void {
       queueMessageCallback = callback;
     },
@@ -336,6 +392,10 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
 
     onBoardPresenceMessage(callback: (boardId: string, event: BoardPresenceEvent) => void): void {
       boardPresenceMessageCallback = callback;
+    },
+
+    onBoardQueueMessage(callback: (boardId: string, preview: BoardQueuePreview) => void): void {
+      boardQueueMessageCallback = callback;
     },
 
     getInstanceId(): string {

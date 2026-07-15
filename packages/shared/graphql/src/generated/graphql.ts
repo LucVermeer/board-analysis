@@ -577,6 +577,64 @@ export type BoardPresenceStats = {
 };
 
 /**
+ * Redacted snapshot of the party-session queue currently bound to a shared
+ * board, for public "Up next" displays (gym kiosks). Party queues are
+ * membership-gated and keyed by session UUID; this preview is the anonymous,
+ * board-keyed bridge — it only exists while BOTH privacy gates hold:
+ *
+ * 1. The board is anonymously readable (public, or a system-owned shared
+ *    per-config board) — same gate as `boardNowPlaying`.
+ * 2. The bound session has `board_sessions.is_public = true`.
+ *
+ * NOTE on gate 2: this deliberately widens `isPublic`'s meaning from
+ * "appears in session discovery" to "queue is observable on public displays".
+ * A private (invite-only) session's queue is never previewed.
+ *
+ * Every item is redacted to climb-catalog fields only (see
+ * `BoardQueuePreviewItem`) — no addedBy/tickedBy/user identities ever leave
+ * the session boundary. `upNext` is capped at 10 items.
+ */
+export type BoardQueuePreview = {
+  __typename?: 'BoardQueuePreview';
+  /** Shared board id (userBoards.id) this preview is keyed on */
+  boardId: Scalars['Int']['output'];
+  /** The climb currently active in the bound session's queue, if any */
+  current?: Maybe<BoardQueuePreviewItem>;
+  /** Total number of items in the session queue (uncapped, independent of the upNext cap) */
+  queueLength: Scalars['Int']['output'];
+  /** Queue items after the current one, in order, capped at 10 */
+  upNext: Array<BoardQueuePreviewItem>;
+  /** ISO 8601 timestamp of when this snapshot was built (server-stamped) */
+  updatedAt: Scalars['String']['output'];
+};
+
+/**
+ * One redacted entry of a board's public queue preview. Deliberately exposes
+ * ONLY climb-catalog display fields — never who added the item, who ticked it,
+ * or any other user-identifying data. The kiosk audience is anonymous, so the
+ * payload must stay safe to show on a public gym display.
+ */
+export type BoardQueuePreviewItem = {
+  __typename?: 'BoardQueuePreviewItem';
+  /** Board angle in degrees. Null means unspecified (0 is a valid angle). */
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** UUID of the queued climb */
+  climbUuid: Scalars['String']['output'];
+  /** Aurora frames string for rendering a thumbnail */
+  frames?: Maybe<Scalars['String']['output']>;
+  /** Grade name (e.g. V6 / 7A+) as carried by the queue item */
+  grade?: Maybe<Scalars['String']['output']>;
+  /** Grade colour as a hex string (null until a shared server-side palette exists) */
+  gradeColor?: Maybe<Scalars['String']['output']>;
+  /** Climb name */
+  name?: Maybe<Scalars['String']['output']>;
+  /** Queue item UUID (stable identity for list diffing; carries no user info) */
+  queueItemUuid: Scalars['ID']['output'];
+  /** Catalog route setter display name (who set the climb) */
+  setter?: Maybe<Scalars['String']['output']>;
+};
+
+/**
  * Auto-recorded board configuration that the current user was on the last time
  * they connected to a controller with the given serial. Acts as a fallback for
  * serial→board lookups when no deliberately-saved `UserBoard` matches.
@@ -3783,6 +3841,25 @@ export type Query = {
    */
   boardPresenceStats: BoardPresenceStats;
   /**
+   * Redacted "Up next" snapshot of the party-session queue bound to a shared
+   * board, for anonymous public displays (gym kiosks). Auth-optional; for
+   * anonymous viewers a private board reads as NOT_FOUND (same existence
+   * hiding as `boardNowPlaying`).
+   *
+   * Double privacy gate — returns null unless BOTH hold:
+   * 1. the board is anonymously readable (public / system-shared), and
+   * 2. the bound session is `isPublic: true` and still active.
+   *
+   * Gate 2 deliberately widens `board_sessions.is_public` from "appears in
+   * discovery" to "queue observable on public displays" (documented product
+   * decision). Also null when no session is bound to the board. The bound
+   * session resolves from the live board→session binding stamped by
+   * `reportBoardClimb` (12h TTL), falling back to the newest active
+   * `board_sessions` row for the board. Items are redacted to climb-catalog
+   * fields only — never who added or ticked them.
+   */
+  boardQueuePreview?: Maybe<BoardQueuePreview>;
+  /**
    * Backfill the recent "now on the wall" history for a board (last ~50, 1
    * week window (BOARD_HISTORY_TTL)) from the Redis FIFO. Used by late joiners
    * before the live `boardNowPlaying` subscription takes over.
@@ -4250,6 +4327,11 @@ export type QueryBoardLeaderboardArgs = {
 
 /** Root query type for all read operations. */
 export type QueryBoardPresenceStatsArgs = {
+  boardId: Scalars['Int']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardQueuePreviewArgs = {
   boardId: Scalars['Int']['input'];
 };
 
@@ -5987,6 +6069,18 @@ export type Subscription = {
    * has connected to the board can watch. Sessions are not involved.
    */
   boardNowPlaying: BoardPresenceEvent;
+  /**
+   * Live redacted "Up next" previews of the party-session queue bound to a
+   * shared board, for anonymous public displays (gym kiosks). Each event is a
+   * full snapshot (latest wins — no deltas). Auth-optional with the same
+   * anonymous existence-hiding as `boardNowPlaying`; events are only ever
+   * published while the double privacy gate holds (anon-readable board AND
+   * `isPublic: true` bound session — see the `boardQueuePreview` query,
+   * including the deliberate widening of `is_public`'s meaning). The stream
+   * is seeded with the current snapshot when one exists, since pub/sub has no
+   * replay. Items are redacted to climb-catalog fields only.
+   */
+  boardQueuePreview: BoardQueuePreview;
   /** Subscribe to real-time comment updates on an entity. */
   commentUpdates: CommentEvent;
   controllerEvents: ControllerEvent;
@@ -6005,6 +6099,11 @@ export type Subscription = {
 
 /** Root subscription type for real-time updates. */
 export type SubscriptionBoardNowPlayingArgs = {
+  boardId: Scalars['Int']['input'];
+};
+
+/** Root subscription type for real-time updates. */
+export type SubscriptionBoardQueuePreviewArgs = {
   boardId: Scalars['Int']['input'];
 };
 
