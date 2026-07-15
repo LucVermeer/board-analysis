@@ -5,10 +5,12 @@ import { rankSessionClimbers } from '../session-ranking';
 const NOW = new Date('2026-07-15T18:00:00.000Z');
 
 function makeClimb(overrides: Partial<BoardPresenceClimb> & { seq: number }): BoardPresenceClimb {
+  const { seq, climbUuid, sentAt, ...rest } = overrides;
   return {
-    climbUuid: overrides.climbUuid ?? `climb-${overrides.seq}`,
-    sentAt: overrides.sentAt ?? NOW.toISOString(),
-    ...overrides,
+    climbUuid: climbUuid ?? `climb-${seq}`,
+    sentAt: sentAt ?? NOW.toISOString(),
+    seq,
+    ...rest,
   };
 }
 

@@ -1,11 +1,4 @@
-/**
- * Pure session-leaderboard ranking over a board's presence history.
- *
- * Turns the newest-first `BoardPresenceClimb` history the reducer already
- * tracks into a ranked "who's crushing it right now" leaderboard for the gym
- * kiosk dashboard. No React, no DOM, no react-native — same rules as the rest
- * of this package.
- */
+// Pure session-leaderboard ranking over a board's presence history, for the gym kiosk dashboard.
 
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 
@@ -35,19 +28,7 @@ type ClimberAccumulator = {
   lastSentAtMs: number;
 };
 
-/**
- * Ranks a board-presence history into a session leaderboard.
- *
- * - Entries older than `windowMinutes` (relative to `now`) are dropped.
- * - Entries with neither `sentByUserId` nor `sentByDisplayName` are skipped —
- *   there's nothing to group them under.
- * - Climbers are keyed on `sentByUserId` when present, falling back to
- *   `sentByDisplayName` for anonymous sends.
- * - `sendCount` is the number of *distinct* `climbUuid`s the climber sent in
- *   the window — relighting the same climb twice counts once.
- * - Ranked by `sendCount` descending, tie-broken by the climber's most recent
- *   `sentAt` descending.
- */
+// Ranks distinct-climb counts per climber within the session window, tie-broken by most recent send.
 export function rankSessionClimbers(
   history: BoardPresenceClimb[],
   options: SessionRankingOptions = {},
@@ -85,23 +66,24 @@ export function rankSessionClimbers(
     if (sentAtMs > existing.lastSentAtMs) {
       existing.lastSentAtMs = sentAtMs;
       existing.lastSentAt = climb.sentAt;
-      // Prefer the most recent send's identity details, in case a
-      // display-name-keyed climber's avatar/name changed mid-session.
+      // Prefer the most recent send's identity details (name/avatar may have changed mid-session).
       existing.displayName = displayName ?? existing.displayName;
       existing.avatarUrl = climb.sentByAvatarUrl ?? existing.avatarUrl;
     }
   }
 
   return Array.from(climbersByKey.values())
+    .sort((first, second) => {
+      const firstSendCount = first.distinctClimbUuids.size;
+      const secondSendCount = second.distinctClimbUuids.size;
+      if (secondSendCount !== firstSendCount) return secondSendCount - firstSendCount;
+      return second.lastSentAtMs - first.lastSentAtMs;
+    })
     .map((climber) => ({
       userId: climber.userId,
       displayName: climber.displayName,
       avatarUrl: climber.avatarUrl,
       sendCount: climber.distinctClimbUuids.size,
       lastSentAt: climber.lastSentAt,
-    }))
-    .sort((first, second) => {
-      if (second.sendCount !== first.sendCount) return second.sendCount - first.sendCount;
-      return new Date(second.lastSentAt).getTime() - new Date(first.lastSentAt).getTime();
-    });
+    }));
 }
