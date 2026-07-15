@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveDeviceLayout,
+  resolveIsTablet,
   resolveWallSurface,
   resolveWallDeviceClass,
   resolveEffectiveWallSurface,
@@ -9,50 +10,80 @@ import {
   REGULAR_WIDTH_BREAKPOINT,
   EXPANDED_WIDTH_BREAKPOINT,
   WALL_PANEL_MIN_DEVICE_LONG_SIDE,
+  TABLET_MIN_SHORT_SIDE_DP,
 } from '../size-class';
 
 const SIDEBAR_WIDTH = 96;
 
 describe('resolveDeviceLayout', () => {
-  it('keeps every iPhone compact regardless of width', () => {
-    // An iPhone is never an iPad, so even a wide landscape phone stays compact
+  it('keeps every phone compact regardless of width', () => {
+    // A phone is never a tablet, so even a wide landscape phone stays compact
     // (renders the phone UI verbatim).
-    expect(resolveDeviceLayout({ width: 932, isPad: false })).toEqual({ widthClass: 'compact', expanded: false });
-    expect(resolveDeviceLayout({ width: 430, isPad: false })).toEqual({ widthClass: 'compact', expanded: false });
+    expect(resolveDeviceLayout({ width: 932, isTablet: false })).toEqual({ widthClass: 'compact', expanded: false });
+    expect(resolveDeviceLayout({ width: 430, isTablet: false })).toEqual({ widthClass: 'compact', expanded: false });
   });
 
-  it('keeps an iPad compact in a narrow split (Slide Over / ⅓ / ½)', () => {
+  it('keeps a tablet compact in a narrow split (Slide Over / ⅓ / ½ / small multi-window)', () => {
     // 12.9" iPad split widths: Slide Over ~320, ½ ~507, ⅔ ~664 — all below 700.
     for (const width of [320, 375, 507, 664, REGULAR_WIDTH_BREAKPOINT - 1]) {
-      expect(resolveDeviceLayout({ width, isPad: true })).toEqual({ widthClass: 'compact', expanded: false });
+      expect(resolveDeviceLayout({ width, isTablet: true })).toEqual({ widthClass: 'compact', expanded: false });
     }
   });
 
-  it('is regular but not expanded for a narrow-regular iPad window', () => {
+  it('is regular but not expanded for a narrow-regular tablet window', () => {
     // 11" iPad portrait (834) and a ⅔ split that clears 700 but not 1024.
-    expect(resolveDeviceLayout({ width: 834, isPad: true })).toEqual({ widthClass: 'regular', expanded: false });
-    expect(resolveDeviceLayout({ width: REGULAR_WIDTH_BREAKPOINT, isPad: true })).toEqual({
+    expect(resolveDeviceLayout({ width: 834, isTablet: true })).toEqual({ widthClass: 'regular', expanded: false });
+    expect(resolveDeviceLayout({ width: REGULAR_WIDTH_BREAKPOINT, isTablet: true })).toEqual({
       widthClass: 'regular',
       expanded: false,
     });
-    expect(resolveDeviceLayout({ width: EXPANDED_WIDTH_BREAKPOINT - 1, isPad: true })).toEqual({
+    expect(resolveDeviceLayout({ width: EXPANDED_WIDTH_BREAKPOINT - 1, isTablet: true })).toEqual({
       widthClass: 'regular',
       expanded: false,
     });
   });
 
-  it('is regular but not expanded across the tightest real iPad portraits', () => {
+  it('is regular but not expanded across the tightest real tablet portraits', () => {
     // iPad mini portrait (744), 9.7"/10.2" portrait (768/810) — the narrow-regular
     // band where a persistent detail pane squeezes the browse list. All clear 700
     // (sidebar shows) but not 1024 (no master+detail). See resolveDetailPaneSurface.
     for (const width of [744, 768, 810]) {
-      expect(resolveDeviceLayout({ width, isPad: true })).toEqual({ widthClass: 'regular', expanded: false });
+      expect(resolveDeviceLayout({ width, isTablet: true })).toEqual({ widthClass: 'regular', expanded: false });
     }
   });
 
-  it('is expanded for a full-screen iPad (portrait 1024+ and any landscape)', () => {
+  it('is expanded for a full-screen tablet (portrait 1024+ and any landscape)', () => {
     for (const width of [EXPANDED_WIDTH_BREAKPOINT, 1194, 1366]) {
-      expect(resolveDeviceLayout({ width, isPad: true })).toEqual({ widthClass: 'regular', expanded: true });
+      expect(resolveDeviceLayout({ width, isTablet: true })).toEqual({ widthClass: 'regular', expanded: true });
+    }
+  });
+});
+
+describe('resolveIsTablet', () => {
+  it('is always true on iPad, whatever the screen size', () => {
+    for (const screenShortSide of [768, 820, 1024]) {
+      expect(resolveIsTablet({ platformOS: 'ios', isPad: true, screenShortSide })).toBe(true);
+    }
+  });
+
+  it('is false on an iPhone regardless of a wide landscape short side', () => {
+    // An iPhone is never a tablet; the sw600 rule only applies to Android.
+    expect(resolveIsTablet({ platformOS: 'ios', isPad: false, screenShortSide: 430 })).toBe(false);
+    expect(resolveIsTablet({ platformOS: 'ios', isPad: false, screenShortSide: 932 })).toBe(false);
+  });
+
+  it('is false on an Android phone (short side below sw600dp)', () => {
+    // Typical Android phone smallest widths: 360–420dp; a folded foldable outer
+    // display ~360dp — all below the tablet threshold.
+    for (const screenShortSide of [360, 411, TABLET_MIN_SHORT_SIDE_DP - 1]) {
+      expect(resolveIsTablet({ platformOS: 'android', isPad: false, screenShortSide })).toBe(false);
+    }
+  });
+
+  it('is true on an Android tablet at or above sw600dp', () => {
+    // 7" (~600dp), 10" (~800dp), unfolded foldable inner display — all tablets.
+    for (const screenShortSide of [TABLET_MIN_SHORT_SIDE_DP, 720, 800]) {
+      expect(resolveIsTablet({ platformOS: 'android', isPad: false, screenShortSide })).toBe(true);
     }
   });
 });

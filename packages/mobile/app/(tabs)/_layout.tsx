@@ -228,7 +228,7 @@ export default function TabLayout() {
   // never uses NativeTabs (that would swap navigator *types* on the boundary cross
   // and remount); NativeTabs stays the iPhone-only glass path below. The `content`
   // View carries a stable key so the navigator survives the chrome swap.
-  if (deviceLayout.isPad) {
+  if (deviceLayout.isTablet) {
     const isRegular = deviceLayout.widthClass === 'regular';
     const tabsNavigator = (
       <Tabs

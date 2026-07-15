@@ -43,16 +43,50 @@ export type DeviceLayout = {
 };
 
 /**
- * Resolve the size class from the app window width and whether the device is an
- * iPad. Only iPad opts into the adaptive shell — every iPhone stays `compact`
- * regardless of width — and an iPad in a narrow split is `compact` too, so the
- * sidebar appears only when there is genuinely room for two columns.
+ * Resolve the size class from the app window width and whether the device is a
+ * tablet (an iPad, or an Android tablet — see {@link resolveIsTablet}). Only a
+ * tablet opts into the adaptive shell — every phone stays `compact` regardless of
+ * width — and a tablet in a narrow split is `compact` too, so the sidebar appears
+ * only when there is genuinely room for two columns.
  */
-export function resolveDeviceLayout({ width, isPad }: { width: number; isPad: boolean }): DeviceLayout {
-  if (!isPad || width < REGULAR_WIDTH_BREAKPOINT) {
+export function resolveDeviceLayout({ width, isTablet }: { width: number; isTablet: boolean }): DeviceLayout {
+  if (!isTablet || width < REGULAR_WIDTH_BREAKPOINT) {
     return { widthClass: 'compact', expanded: false };
   }
   return { widthClass: 'regular', expanded: width >= EXPANDED_WIDTH_BREAKPOINT };
+}
+
+/**
+ * Android's tablet threshold: a device whose smallest screen width is at least
+ * this many dp is a tablet. This is the `sw600dp` resource qualifier Android and
+ * Material 3 use to switch to tablet layouts, so we match the platform's own line.
+ */
+export const TABLET_MIN_SHORT_SIDE_DP = 600;
+
+/**
+ * Whether this device opts into the adaptive shell: an iPad, or an Android tablet
+ * whose smallest screen width clears {@link TABLET_MIN_SHORT_SIDE_DP}. Pure (the
+ * platform and the physical-screen short side are injected) so it unit-tests
+ * without react-native, mirroring the width resolvers; the React wrapper reads
+ * `Platform.OS` / `Dimensions.get('screen')` in `use-device-layout.ts`.
+ *
+ * Launch-fixed like `Platform.isPad` — the short side comes from the PHYSICAL
+ * screen, not the app window (which shrinks under Split View / multi-window / DeX),
+ * so an Android tablet in a small freeform window is still a tablet (`isTablet`
+ * true) but resolves `compact` from the live width, exactly like an iPad in a
+ * narrow Split View. The mount decision must not flip the navigator type
+ * mid-session; the live axis is `widthClass`.
+ */
+export function resolveIsTablet({
+  platformOS,
+  isPad,
+  screenShortSide,
+}: {
+  platformOS: string;
+  isPad: boolean;
+  screenShortSide: number;
+}): boolean {
+  return isPad || (platformOS === 'android' && screenShortSide >= TABLET_MIN_SHORT_SIDE_DP);
 }
 
 /**

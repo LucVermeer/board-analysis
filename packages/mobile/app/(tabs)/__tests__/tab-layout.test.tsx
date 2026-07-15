@@ -18,11 +18,11 @@ const cfg = vi.hoisted(() => ({
   // (Material, plus Liquid Glass on iOS < 26 / Android) takes the JS tab bar.
   glassCapable: true,
   platformOS: 'ios' as 'ios' | 'android',
-  // 'regular' takes the iPad sidebar shell; 'compact' keeps the phone tab bars.
+  // 'regular' takes the tablet sidebar shell; 'compact' keeps the phone tab bars.
   widthClass: 'compact' as 'compact' | 'regular',
-  // iPad in a narrow split: compact width but still an iPad, which the shell keeps on
-  // JS Tabs (never NativeTabs). Independent of widthClass; 'regular' always implies iPad.
-  isPad: false,
+  // Tablet in a narrow split: compact width but still a tablet, which the shell keeps on
+  // JS Tabs (never NativeTabs). Independent of widthClass; 'regular' always implies tablet.
+  isTablet: false,
   // Window width drives the wall surface in the regular shell: a dedicated column
   // (landscape) vs a strip atop the pane (portrait) — see resolveWallSurface.
   windowWidth: 1024,
@@ -87,12 +87,12 @@ vi.mock('../../../src/hooks/use-on-accessory-surface', () => ({
 }));
 
 vi.mock('../../../src/hooks/use-device-layout', () => ({
-  // `regular` is only ever reached on an iPad (an iPhone is always compact), so it
-  // always implies isPad; cfg.isPad additionally models an iPad in a narrow split.
+  // `regular` is only ever reached on a tablet (a phone is always compact), so it
+  // always implies isTablet; cfg.isTablet additionally models a tablet in a narrow split.
   useDeviceLayout: () => ({
     widthClass: cfg.widthClass,
     expanded: false,
-    isPad: cfg.widthClass === 'regular' || cfg.isPad,
+    isTablet: cfg.widthClass === 'regular' || cfg.isTablet,
     wallDeviceClass: cfg.wallDeviceClass,
   }),
 }));
@@ -238,7 +238,7 @@ describe('TabLayout', () => {
     cfg.glassCapable = true;
     cfg.platformOS = 'ios';
     cfg.widthClass = 'compact';
-    cfg.isPad = false;
+    cfg.isTablet = false;
     cfg.windowWidth = 1024;
     cfg.boardPresenceEnabled = false;
     cfg.boardPresenceBoardId = null;
@@ -303,7 +303,7 @@ describe('TabLayout', () => {
     // shell routes it through JS Tabs + the Material bar so a resize across the 700pt
     // boundary doesn't swap navigator types — NativeTabs never renders on iPad, and
     // there's no rail at compact width.
-    cfg.isPad = true;
+    cfg.isTablet = true;
     cfg.widthClass = 'compact';
     cfg.variant = 'liquidGlass';
     cfg.glassCapable = true;
