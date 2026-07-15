@@ -57,6 +57,22 @@ const MANIFEST_KEY = `${SNAPSHOT_KEY_PREFIX}/manifest.json`;
 const MANIFEST_CACHE_CONTROL = 'public, max-age=300';
 const ARTIFACT_CONTENT_TYPE = 'application/x-sqlite3';
 
+// Public base for the manifest's artifact URLs. Tigris serves PUBLIC objects
+// only on the bucket's virtual-host domain (https://<bucket>.t3.tigrisfiles.io);
+// the S3 endpoint's path-style URL that getPublicUrl builds returns 403 for
+// unauthenticated GETs even on a public bucket. When set (no trailing slash
+// needed), entry URLs become `${base}/${key}`; unset falls back to getPublicUrl
+// for S3-compatible stores whose endpoint serves public reads directly. Read
+// lazily (not at module load) so tests can set it per-run.
+function snapshotPublicBaseUrl(): string {
+  return (process.env.SNAPSHOT_PUBLIC_BASE_URL ?? '').trim().replace(/\/+$/, '');
+}
+
+function publicUrlForKey(key: string): string {
+  const publicBase = snapshotPublicBaseUrl();
+  return publicBase ? `${publicBase}/${key}` : getPublicUrl(key);
+}
+
 // How long a superseded (manifest-unreferenced) artifact survives before the
 // unfiltered nightly run prunes it. The manifest is CDN-cached for max-age=300,
 // but a client may hold a fetched manifest much longer before starting the
@@ -653,9 +669,10 @@ export async function runExport(argv: string[]): Promise<void> {
           });
           newEntries.push(
             buildManifestEntry(result, {
-              // getPublicUrl instantiates the S3 client, so only call it when S3 is
-              // configured — a dry-run must work with no AWS credentials at all.
-              url: isS3Configured() ? getPublicUrl(key) : `dry-run:${key}`,
+              // publicUrlForKey may fall back to getPublicUrl, which instantiates
+              // the S3 client — so only call it when S3 is configured. A dry-run
+              // must work with no AWS credentials at all.
+              url: isS3Configured() || snapshotPublicBaseUrl() ? publicUrlForKey(key) : `dry-run:${key}`,
               key,
               bytes: uploadBody.length,
               contentEncoding,
@@ -680,7 +697,7 @@ export async function runExport(argv: string[]): Promise<void> {
           });
           newEntries.push(
             buildManifestEntry(result, {
-              url: uploaded.url,
+              url: publicUrlForKey(uploaded.key),
               key: uploaded.key,
               bytes: uploadBody.length,
               contentEncoding,
