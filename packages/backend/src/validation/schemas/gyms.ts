@@ -33,17 +33,28 @@ export const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colour must
 
 /**
  * Gym logo URL: either a backend-relative static path we serve ourselves
- * (`/static/gym-logos/<uuid>.<ext>[?v=...]`, written by POST /api/gym-logos) or a
- * plain https URL, capped at 500 chars. Rejecting other schemes (javascript:,
- * data:, http:) matters because the logo renders as an `<img src>` on the
- * kiosk/embed surfaces. Mirrors the avatar-URL contract.
+ * (exactly `/static/gym-logos/<uuid>.<ext>[?v=...]`, as written by
+ * POST /api/gym-logos — full-pattern matched so no traversal or other-path
+ * strings slip through) or a well-formed https URL, capped at 500 chars.
+ * Rejecting other schemes (javascript:, data:, http:) matters because the logo
+ * renders as an `<img src>` on the kiosk/embed surfaces.
  */
+const STATIC_GYM_LOGO_PATH_REGEX = /^\/static\/gym-logos\/[0-9a-f-]{36}\.(jpg|jpeg|png|gif|webp)(\?v=[\w-]+)?$/i;
+
+function isValidHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const GymLogoUrlSchema = z
   .string()
   .max(500)
   .refine(
-    (value) => value.startsWith('/static/gym-logos/') || /^https:\/\//i.test(value),
-    'Logo URL must be an https URL or a Boardsesh static path',
+    (value) => STATIC_GYM_LOGO_PATH_REGEX.test(value) || isValidHttpsUrl(value),
+    'Logo URL must be an https URL or a Boardsesh static gym-logo path',
   );
 
 /**

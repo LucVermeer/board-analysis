@@ -792,12 +792,13 @@ export const socialBoardQueries = {
   /**
    * A gym's linked, non-deleted boards, viewer-scoped. Editors of the gym (owner,
    * gym admin/editor, or a covering community admin/leader) see every linked
-   * board; everyone else — including anonymous callers — sees only public boards.
-   * A missing gym, or a private gym seen by a non-editor, is masked as NOT_FOUND
-   * (existence is not disclosed). Auth-optional and rate-limited like the other
-   * anon board reads; the leaderboard embed reuses it without any auth. Boards
-   * are ordered by name. Populates each board's `boardId` (presence channel) via
-   * the shared enrichBoards visibility rule.
+   * board; everyone else — including anonymous callers — sees only publicly
+   * listed boards (isPublic AND NOT isUnlisted, matching searchBoards' discovery
+   * convention: unlisted = link-only, never enumerated). A missing gym, or a
+   * private gym seen by a non-editor, is masked as NOT_FOUND. Auth-optional and
+   * rate-limited like the other anon board reads; the leaderboard embed reuses
+   * it without any auth. Boards are ordered by name. Populates each board's
+   * `boardId` (presence channel) via the shared enrichBoards visibility rule.
    */
   gymBoards: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, 20, 'gymBoards');
@@ -814,18 +815,23 @@ export const socialBoardQueries = {
     const canEdit = gym && viewerId ? await userCanEditGym(gym, viewerId) : false;
 
     // Mask a missing gym, and a private gym from anyone who can't edit it, behind
-    // the shared NOT_FOUND convention — the query never discloses that a private
-    // gym exists to a non-editor (the embed depends on this being safe to call
-    // anonymously against any uuid).
+    // the shared NOT_FOUND convention. Note this query masks private gyms
+    // STRICTER than the legacy gym(gymUuid)/gymBySlug queries, which still return
+    // private gyms fully enriched to anon — aligning those is a tracked
+    // follow-up. The embed depends on this one being safe to call anonymously
+    // against any uuid.
     if (!gym || (!gym.isPublic && !canEdit)) {
       throw new GraphQLError('Gym not found', { extensions: { code: 'NOT_FOUND' } });
     }
 
     const conditions = [eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt)];
-    // Non-editors (including anonymous) only see the gym's public boards; the
-    // leaderboard embed relies on this to enumerate boards without auth.
+    // Non-editors (including anonymous) only see the gym's publicly LISTED
+    // boards — isPublic AND NOT isUnlisted, mirroring searchBoards (unlisted =
+    // reachable by direct link only, never enumerated). The leaderboard embed
+    // relies on this to enumerate boards without auth.
     if (!canEdit) {
       conditions.push(eq(dbSchema.userBoards.isPublic, true));
+      conditions.push(eq(dbSchema.userBoards.isUnlisted, false));
     }
 
     const boards = await db

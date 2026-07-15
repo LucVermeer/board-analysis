@@ -30,8 +30,9 @@ const { socialGymQueries, socialGymMutations } = await import('../graphql/resolv
 const OWNER = 'gl-owner';
 const ADMIN_MEMBER = 'gl-admin';
 const EDITOR_MEMBER = 'gl-editor';
+const COMMUNITY_ADMIN = 'gl-community-admin';
 const RANDOM = 'gl-random';
-const ALL_USERS = [OWNER, ADMIN_MEMBER, EDITOR_MEMBER, RANDOM];
+const ALL_USERS = [OWNER, ADMIN_MEMBER, EDITOR_MEMBER, COMMUNITY_ADMIN, RANDOM];
 
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0xff, 0xd9]);
 
@@ -104,7 +105,7 @@ async function uploadLogo(
 
 beforeEach(async () => {
   await db.execute(sql`
-    TRUNCATE TABLE "gym_members", "user_boards", "gyms" RESTART IDENTITY CASCADE
+    TRUNCATE TABLE "community_roles", "gym_members", "user_boards", "gyms" RESTART IDENTITY CASCADE
   `);
   vi.clearAllMocks();
 
@@ -120,6 +121,12 @@ beforeEach(async () => {
   await db.execute(sql`
     INSERT INTO gym_members (gym_id, user_id, role, created_at)
     VALUES (${gymId}, ${ADMIN_MEMBER}, 'admin', now()), (${gymId}, ${EDITOR_MEMBER}, 'editor', now())
+  `);
+  // Global community admin (board_type NULL) — covers every gym per
+  // userCanEditGym's hasGymCommunityAccess branch.
+  await db.execute(sql`
+    INSERT INTO community_roles (user_id, role, board_type, created_at)
+    VALUES (${COMMUNITY_ADMIN}, 'admin', NULL, now())
   `);
 });
 
@@ -196,6 +203,17 @@ describe('POST /api/gym-logos', () => {
     }
   });
 
+  it('allows a global community admin (userCanEditGym community branch)', async () => {
+    validateTokenMock.mockResolvedValue({ userId: COMMUNITY_ADMIN });
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, { token: 'community-admin', gymUuid });
+      expect(response.status).toBe(200);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
   it('forbids a user with no edit access (403)', async () => {
     validateTokenMock.mockResolvedValue({ userId: RANDOM });
     const { baseUrl, server } = await startLogoServer();
@@ -251,6 +269,50 @@ describe('POST /api/gym-logos', () => {
     const { baseUrl, server } = await startLogoServer();
     try {
       const response = await uploadLogo(baseUrl, { token: 'owner' });
+      expect(response.status).toBe(400);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('rejects a malformed gymUuid (400)', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, { token: 'owner', gymUuid: '../../etc/passwd' });
+      expect(response.status).toBe(400);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('responds 500 (not a hang / unhandled rejection) when the gym lookup fails', async () => {
+    validateTokenMock.mockResolvedValue({ userId: OWNER });
+    // First db.select() inside the finish handler is the gym load — make it blow
+    // up like a transient DB outage. Without the try/catch around the authz
+    // block this would reject a detached async listener (process-level unhandled
+    // rejection) and leave the request hanging forever.
+    const selectSpy = vi.spyOn(db, 'select').mockImplementationOnce(() => {
+      throw new Error('connection terminated unexpectedly');
+    });
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      const response = await uploadLogo(baseUrl, { token: 'owner', gymUuid });
+      expect(response.status).toBe(500);
+      const body = (await response.json()) as { error?: string };
+      expect(body.error).toBe('Failed to authorize gym logo upload');
+    } finally {
+      selectSpy.mockRestore();
+      await closeServer(server);
+    }
+  });
+
+  it('rejects a path-traversal filename on the static route (400)', async () => {
+    const { baseUrl, server } = await startLogoServer();
+    try {
+      // A fileName containing a separator (sub/logo.jpg → basename mismatch)
+      // must be rejected before any fs/S3 access.
+      const response = await fetch(`${baseUrl}/static/gym-logos/sub/logo.jpg`);
       expect(response.status).toBe(400);
     } finally {
       await closeServer(server);

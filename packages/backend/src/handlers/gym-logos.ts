@@ -230,24 +230,36 @@ export async function handleGymLogoUpload(req: IncomingMessage, res: ServerRespo
       }
 
       // Load the gym (not deleted) and authorize: the caller must be able to edit
-      // it. A missing gym is a 404; an unauthorized caller is a 403.
-      const [gym] = await db
-        .select()
-        .from(dbSchema.gyms)
-        .where(and(eq(dbSchema.gyms.uuid, gymUuid), isNull(dbSchema.gyms.deletedAt)))
-        .limit(1);
+      // it. A missing gym is a 404; an unauthorized caller is a 403. The whole
+      // block is try/caught: an unhandled rejection inside this detached async
+      // listener would otherwise escape to the process level (killing the server
+      // under Node's default policy) AND leave the wrapping Promise unsettled, so
+      // the request would hang forever.
+      try {
+        const [gym] = await db
+          .select()
+          .from(dbSchema.gyms)
+          .where(and(eq(dbSchema.gyms.uuid, gymUuid), isNull(dbSchema.gyms.deletedAt)))
+          .limit(1);
 
-      if (!gym) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Gym not found' }));
-        resolve();
-        return;
-      }
+        if (!gym) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Gym not found' }));
+          resolve();
+          return;
+        }
 
-      const canEdit = await userCanEditGym(gym, authenticatedUserId);
-      if (!canEdit) {
-        res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'You do not have permission to edit this gym' }));
+        const canEdit = await userCanEditGym(gym, authenticatedUserId);
+        if (!canEdit) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'You do not have permission to edit this gym' }));
+          resolve();
+          return;
+        }
+      } catch (authzErr) {
+        logger.error('Failed to authorize gym logo upload:', authzErr);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to authorize gym logo upload' }));
         resolve();
         return;
       }

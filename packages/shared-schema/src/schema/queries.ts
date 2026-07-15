@@ -579,10 +579,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     A gym's linked, non-deleted boards (user_boards.gym_id = gym.id), ordered by
     name. Auth-optional and viewer-scoped: viewers who can edit the gym (owner,
     gym admin/editor, or a covering community admin/leader) see every linked
-    board; everyone else — including anonymous callers — sees only public boards
-    (isPublic). Powers the manage-gym board pickers and the anonymous leaderboard
-    embed. A missing gym, or a private gym seen by a non-editor, throws NOT_FOUND
-    (existence is masked). Rate-limited.
+    board; everyone else — including anonymous callers — sees only publicly
+    listed boards (isPublic AND NOT isUnlisted, matching searchBoards' discovery
+    convention: unlisted = link-only, never enumerated). Powers the manage-gym
+    board pickers and the anonymous leaderboard embed. A missing gym, or a
+    private gym seen by a non-editor, throws NOT_FOUND (existence is masked).
+    Rate-limited.
     """
     gymBoards(gymUuid: ID!): [UserBoard!]!
 

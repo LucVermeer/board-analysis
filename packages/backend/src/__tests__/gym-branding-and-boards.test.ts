@@ -66,14 +66,15 @@ const insertBoard = async (opts: {
   ownerId: string;
   name: string;
   isPublic: boolean;
+  isUnlisted?: boolean;
 }): Promise<{ id: number; uuid: string }> => {
-  const { gymId, ownerId, name, isPublic } = opts;
+  const { gymId, ownerId, name, isPublic, isUnlisted = false } = opts;
   const uuid = uuidv4();
   const sizeId = 10 + boardConfigCounter++;
   const result = await db.execute(sql`
     INSERT INTO user_boards
-      (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, gym_id, is_public, created_at, updated_at)
-    VALUES (${uuid}, ${uuid}, ${ownerId}, 'kilter', 1, ${sizeId}, '1,2', ${name}, ${gymId}, ${isPublic}, now(), now())
+      (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, gym_id, is_public, is_unlisted, created_at, updated_at)
+    VALUES (${uuid}, ${uuid}, ${ownerId}, 'kilter', 1, ${sizeId}, '1,2', ${name}, ${gymId}, ${isPublic}, ${isUnlisted}, now(), now())
     RETURNING id
   `);
   return { id: Number(Array.from(result as Iterable<{ id: number }>)[0].id), uuid };
@@ -85,12 +86,14 @@ const insertGymMember = (gymId: number, userId: string, role: string) =>
     VALUES (${gymId}, ${userId}, ${role}, now())
   `);
 
-// Public gym owned by OWNER, EDITOR is an editor member. Two boards: one public,
-// one private. Plus a private gym (owned by OWNER) with a single public board.
+// Public gym owned by OWNER, EDITOR is an editor member. Three boards: one
+// public, one private, one public-but-unlisted. Plus a private gym (owned by
+// OWNER) with a single public board.
 let publicGymUuid: string;
 let privateGymUuid: string;
 let pubBoard: { id: number; uuid: string };
 let privBoard: { id: number; uuid: string };
+let unlistedBoard: { id: number; uuid: string };
 
 beforeEach(async () => {
   await db.execute(sql`
@@ -107,6 +110,13 @@ beforeEach(async () => {
   await insertGymMember(publicGym.id, EDITOR, 'editor');
   pubBoard = await insertBoard({ gymId: publicGym.id, ownerId: OWNER, name: 'A Public Wall', isPublic: true });
   privBoard = await insertBoard({ gymId: publicGym.id, ownerId: OWNER, name: 'B Private Wall', isPublic: false });
+  unlistedBoard = await insertBoard({
+    gymId: publicGym.id,
+    ownerId: OWNER,
+    name: 'C Unlisted Wall',
+    isPublic: true,
+    isUnlisted: true,
+  });
 
   const privateGym = await insertGym({ ownerId: OWNER, name: 'Private Gym', isPublic: false });
   privateGymUuid = privateGym.uuid;
@@ -209,27 +219,32 @@ describe('updateGym branding', () => {
 // ============================================================================
 
 describe('gymBoards visibility', () => {
-  it('shows every linked board to a gym editor (incl. private)', async () => {
+  it('shows every linked board to a gym editor (incl. private and unlisted)', async () => {
     for (const viewer of [OWNER, EDITOR]) {
       const boards = await socialBoardQueries.gymBoards(null, { gymUuid: publicGymUuid }, authCtx(viewer));
       const uuids = boards.map((b) => b.uuid).sort();
-      expect(uuids).toEqual([pubBoard.uuid, privBoard.uuid].sort());
+      expect(uuids).toEqual([pubBoard.uuid, privBoard.uuid, unlistedBoard.uuid].sort());
     }
   });
 
-  it('shows only public boards to an anonymous viewer', async () => {
+  it('shows only publicly listed boards to an anonymous viewer', async () => {
     const boards = await socialBoardQueries.gymBoards(null, { gymUuid: publicGymUuid }, anonCtx());
     expect(boards.map((b) => b.uuid)).toEqual([pubBoard.uuid]);
   });
 
-  it('shows only public boards to a signed-in non-editor', async () => {
+  it('excludes a public-but-unlisted board for anonymous viewers (link-only, never enumerated)', async () => {
+    const boards = await socialBoardQueries.gymBoards(null, { gymUuid: publicGymUuid }, anonCtx());
+    expect(boards.map((b) => b.uuid)).not.toContain(unlistedBoard.uuid);
+  });
+
+  it('shows only publicly listed boards to a signed-in non-editor', async () => {
     const boards = await socialBoardQueries.gymBoards(null, { gymUuid: publicGymUuid }, authCtx(RANDOM));
     expect(boards.map((b) => b.uuid)).toEqual([pubBoard.uuid]);
   });
 
   it('orders boards by name', async () => {
     const boards = await socialBoardQueries.gymBoards(null, { gymUuid: publicGymUuid }, authCtx(OWNER));
-    expect(boards.map((b) => b.name)).toEqual(['A Public Wall', 'B Private Wall']);
+    expect(boards.map((b) => b.name)).toEqual(['A Public Wall', 'B Private Wall', 'C Unlisted Wall']);
   });
 
   it('masks a private gym as NOT_FOUND for anonymous viewers', async () => {
