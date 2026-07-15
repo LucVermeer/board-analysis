@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { SECURE_STORE_WRITE_OPTIONS } from './secure-store-options';
 import {
   SORT_OPTIONS,
   STATUS_FILTER_VALUES,
@@ -151,14 +152,14 @@ export async function saveLastSearch(
       const map = await readMap();
       if (key in map) {
         delete map[key];
-        await SecureStore.setItemAsync(LAST_SEARCH_KEY, JSON.stringify(map));
+        await SecureStore.setItemAsync(LAST_SEARCH_KEY, JSON.stringify(map), SECURE_STORE_WRITE_OPTIONS);
       }
       return;
     }
     const map = await readMap();
     map[key] = { filters, boardFilters, searchText, updatedAt: Date.now() };
     const capped = capMap(map);
-    await SecureStore.setItemAsync(LAST_SEARCH_KEY, JSON.stringify(capped));
+    await SecureStore.setItemAsync(LAST_SEARCH_KEY, JSON.stringify(capped), SECURE_STORE_WRITE_OPTIONS);
   } catch {
     // Storage failure is non-critical.
   }
@@ -170,7 +171,7 @@ export async function clearLastSearch(board: BoardSearchConfig): Promise<void> {
     const key = boardConfigKey(board);
     if (!(key in map)) return;
     delete map[key];
-    await SecureStore.setItemAsync(LAST_SEARCH_KEY, JSON.stringify(map));
+    await SecureStore.setItemAsync(LAST_SEARCH_KEY, JSON.stringify(map), SECURE_STORE_WRITE_OPTIONS);
   } catch {
     // Storage failure is non-critical.
   }

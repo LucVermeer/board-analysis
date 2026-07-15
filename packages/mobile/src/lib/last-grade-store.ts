@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { SECURE_STORE_WRITE_OPTIONS } from './secure-store-options';
 
 // Remembers the last grade the climber actually filtered by, so the grade rail
 // can open centred on it even after the filter is cleared. Deliberately a
@@ -22,7 +23,7 @@ export async function getLastUsedGradeId(): Promise<number | undefined> {
 
 export async function setLastUsedGradeId(difficultyId: number): Promise<void> {
   try {
-    await SecureStore.setItemAsync(LAST_GRADE_KEY, String(difficultyId));
+    await SecureStore.setItemAsync(LAST_GRADE_KEY, String(difficultyId), SECURE_STORE_WRITE_OPTIONS);
   } catch {
     // Storage failure is non-critical.
   }
