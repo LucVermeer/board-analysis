@@ -53,6 +53,14 @@ export const UP_NEXT_MIN_COUNT = 1;
 export const UP_NEXT_MAX_COUNT = 10;
 export const UP_NEXT_DEFAULT_COUNT = 5;
 
+/**
+ * Cap on how many boards a multi-board widget (`session-leaderboard`,
+ * `recent-sends`) may aggregate. Bounds the fan-out of the per-board queries
+ * these widgets drive once wired up in later PRs, so a layout can't turn one
+ * widget into thousands of board reads.
+ */
+export const MAX_BOARDS_PER_WIDGET = 20;
+
 /** `session-leaderboard`: rolling window (minutes) the ranking looks back over. */
 export const SESSION_LEADERBOARD_MIN_WINDOW_MINUTES = 5;
 export const SESSION_LEADERBOARD_MAX_WINDOW_MINUTES = 1440; // 24h

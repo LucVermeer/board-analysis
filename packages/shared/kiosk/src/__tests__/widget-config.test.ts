@@ -10,6 +10,7 @@ import {
 } from '../widget-config';
 import {
   KIOSK_LAYOUT_VERSION,
+  MAX_BOARDS_PER_WIDGET,
   MAX_KIOSK_WIDGETS,
   UP_NEXT_DEFAULT_COUNT,
   RECENT_SENDS_DEFAULT_LIMIT,
@@ -151,6 +152,18 @@ describe('KioskWidgetSchema — valid layouts per type', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('rejects a multi-board widget with more than MAX_BOARDS_PER_WIDGET boards', () => {
+    const tooManyBoards = Array.from({ length: MAX_BOARDS_PER_WIDGET + 1 }, () => BOARD_A);
+    expect(
+      KioskWidgetSchema.safeParse({
+        id: WIDGET_ID,
+        position: POSITION,
+        type: 'session-leaderboard',
+        boardUuids: tooManyBoards,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('IframeUrlSchema refinements', () => {
@@ -264,5 +277,13 @@ describe('parseKioskLayoutLenient (forward-compat reader)', () => {
     };
     const { layout } = parseKioskLayoutLenient(input);
     expect(layout.widgets[0]).toMatchObject({ type: 'up-next', count: UP_NEXT_DEFAULT_COUNT });
+  });
+
+  it('truncates to MAX_KIOSK_WIDGETS when a writer bypassed the strict cap', () => {
+    const overBy = 3;
+    const widgets = Array.from({ length: MAX_KIOSK_WIDGETS + overBy }, () => nowOnTheWall());
+    const { layout, droppedWidgetCount } = parseKioskLayoutLenient({ version: KIOSK_LAYOUT_VERSION, widgets });
+    expect(layout.widgets).toHaveLength(MAX_KIOSK_WIDGETS);
+    expect(droppedWidgetCount).toBe(overBy);
   });
 });

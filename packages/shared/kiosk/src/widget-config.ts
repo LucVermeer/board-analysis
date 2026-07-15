@@ -5,6 +5,7 @@ import {
   KIOSK_GRID_COLUMNS,
   KIOSK_GRID_ROWS,
   KIOSK_LAYOUT_VERSION,
+  MAX_BOARDS_PER_WIDGET,
   MAX_KIOSK_WIDGETS,
   RECENT_SENDS_DEFAULT_LIMIT,
   RECENT_SENDS_MAX_LIMIT,
@@ -113,7 +114,7 @@ export const UpNextWidgetSchema = z.object({
 export const SessionLeaderboardWidgetSchema = z.object({
   ...widgetBaseShape,
   type: z.literal(WIDGET_TYPE_SESSION_LEADERBOARD),
-  boardUuids: z.array(z.uuid()).min(1, 'Pick at least one board'),
+  boardUuids: z.array(z.uuid()).min(1, 'Pick at least one board').max(MAX_BOARDS_PER_WIDGET),
   windowMinutes: z
     .number()
     .int()
@@ -125,7 +126,7 @@ export const SessionLeaderboardWidgetSchema = z.object({
 export const RecentSendsWidgetSchema = z.object({
   ...widgetBaseShape,
   type: z.literal(WIDGET_TYPE_RECENT_SENDS),
-  boardUuids: z.array(z.uuid()).min(1, 'Pick at least one board'),
+  boardUuids: z.array(z.uuid()).min(1, 'Pick at least one board').max(MAX_BOARDS_PER_WIDGET),
   limit: z.number().int().min(RECENT_SENDS_MIN_LIMIT).max(RECENT_SENDS_MAX_LIMIT).default(RECENT_SENDS_DEFAULT_LIMIT),
 });
 
