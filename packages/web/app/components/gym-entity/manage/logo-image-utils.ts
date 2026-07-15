@@ -1,6 +1,8 @@
 // Pure decision logic for the gym logo uploader. The DOM/canvas work lives in
 // gym-logo-uploader.tsx; everything a unit test can pin down without a browser
-// (encoding choice, dimension math, URL resolution) lives here.
+// (encoding choice, dimension math) lives here. Display-URL resolution for
+// stored logos lives in app/lib/gym-logo-display-url.ts, shared with the
+// kiosk TV page and the public gym page.
 
 /** Client-side ceiling on the PICKED file — we downscale before uploading. */
 export const GYM_LOGO_MAX_INPUT_BYTES = 10 * 1024 * 1024;
