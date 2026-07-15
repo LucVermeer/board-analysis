@@ -1,4 +1,5 @@
 export * from './gyms';
+export * from './gym-kiosks';
 export * from './boards';
 export * from './board-serials';
 export * from './sessions';

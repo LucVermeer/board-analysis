@@ -515,6 +515,10 @@ export const schemaSQL = `
     "is_public" boolean DEFAULT true NOT NULL,
     "description" text,
     "image_url" text,
+    "logo_url" text,
+    "brand_primary_color" text,
+    "brand_accent_color" text,
+    "brand_background_color" text,
     "created_at" timestamp DEFAULT now() NOT NULL,
     "updated_at" timestamp DEFAULT now() NOT NULL,
     "deleted_at" timestamp
@@ -836,6 +840,24 @@ export const schemaSQL = `
   CREATE INDEX IF NOT EXISTS "gym_claims_status_idx" ON "gym_claims" ("status");
   CREATE UNIQUE INDEX IF NOT EXISTS "gym_claims_token_hash_idx" ON "gym_claims" ("token_hash") WHERE "token_hash" IS NOT NULL;
   CREATE UNIQUE INDEX IF NOT EXISTS "gym_claims_unique_pending" ON "gym_claims" ("gym_id", "claimant_user_id") WHERE "status" = 'pending';
+
+  -- Gym kiosks (smart-TV dashboards). layout holds the widget grid; the resolver
+  -- validates it with @boardsesh/kiosk's KioskLayoutSchema. Partial unique index
+  -- keeps one live kiosk per (gym, slug) while freeing the slug on soft-delete.
+  DROP TABLE IF EXISTS "gym_kiosks" CASCADE;
+  CREATE TABLE IF NOT EXISTS "gym_kiosks" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "uuid" text NOT NULL UNIQUE,
+    "gym_id" bigint NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
+    "slug" text NOT NULL,
+    "name" text NOT NULL,
+    "layout" jsonb DEFAULT '{"version":1,"widgets":[]}'::jsonb NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    "deleted_at" timestamp
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "gym_kiosks_unique_gym_slug" ON "gym_kiosks" ("gym_id", "slug") WHERE "deleted_at" IS NULL;
+  CREATE INDEX IF NOT EXISTS "gym_kiosks_gym_idx" ON "gym_kiosks" ("gym_id") WHERE "deleted_at" IS NULL;
 
   -- Board followers (enrichBoard counts these per board).
   DROP TABLE IF EXISTS "board_follows" CASCADE;

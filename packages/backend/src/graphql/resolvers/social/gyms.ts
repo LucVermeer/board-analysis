@@ -84,6 +84,10 @@ function mapRawGymRow(row: Record<string, unknown>): typeof dbSchema.gyms.$infer
     isPublic: row.is_public as boolean,
     description: (row.description as string | null) ?? null,
     imageUrl: (row.image_url as string | null) ?? null,
+    logoUrl: (row.logo_url as string | null) ?? null,
+    brandPrimaryColor: (row.brand_primary_color as string | null) ?? null,
+    brandAccentColor: (row.brand_accent_color as string | null) ?? null,
+    brandBackgroundColor: (row.brand_background_color as string | null) ?? null,
     // Raw `db.execute` returns timestamps as strings (the Drizzle query builder
     // hydrates them to Date). Coerce here so downstream `.toISOString()` works
     // regardless of which path produced the row. `new Date(Date)` is a no-op, so

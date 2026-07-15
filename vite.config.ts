@@ -123,6 +123,7 @@ export default defineConfig({
       './packages/shared/playlist-generator/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
       './packages/shared/gym-claim/vite.config.ts',
+      './packages/shared/kiosk/vite.config.ts',
       './packages/shared/i18n/vite.config.ts',
       './packages/shared/graphql/vite.config.ts',
       './packages/shared/graphql-client/vite.config.ts',
@@ -477,6 +478,9 @@ export default defineConfig({
         command: 'bun run --filter=@boardsesh/climb-filters typecheck',
         dependsOn: ['codegen'],
       },
+      'typecheck:kiosk': {
+        command: 'bun run --filter=@boardsesh/kiosk typecheck',
+      },
       'typecheck:i18n': {
         command: 'bun run --filter=@boardsesh/i18n typecheck',
       },
@@ -539,6 +543,7 @@ export default defineConfig({
           'typecheck:profile-stats',
           'typecheck:playlist-generator',
           'typecheck:climb-filters',
+          'typecheck:kiosk',
           'typecheck:i18n',
           'typecheck:graphql',
           'typecheck:graphql-client',
