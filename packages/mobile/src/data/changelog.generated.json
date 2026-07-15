@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-14T19:44:19.128Z",
+  "generatedAt": "2026-07-15T03:38:26.811Z",
   "entries": [
+    {
+      "prNumber": 3618,
+      "category": "fixed",
+      "title": "Downloading a board for offline use now completes in seconds instead of minutes — the app grabs a pre-built copy of the catalog instead of crawling it climb by climb. (This fixes the fast path so it actually kicks in.)",
+      "mergedAt": "2026-07-15T03:37:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3618"
+    },
     {
       "prNumber": 3601,
       "category": "new",

@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-15
+
+### Fixed
+
+- Downloading a board for offline use now completes in seconds instead of minutes — the app grabs a pre-built copy of the catalog instead of crawling it climb by climb. (This fixes the fast path so it actually kicks in.) ([#3618](https://github.com/boardsesh/boardsesh/pull/3618))
+
 ## 2026-07-14
 
 ### New
