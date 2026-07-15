@@ -21,7 +21,7 @@
 }
 
 .bodyWithRail {
-  grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 440px);
+  grid-template-columns: minmax(0, 1fr) var(--kiosk-rail-width);
 }
 
 .boardArea {
@@ -58,7 +58,7 @@
 @media (orientation: portrait) {
   .bodyWithRail {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) clamp(200px, 28vh, 360px);
+    grid-template-rows: minmax(0, 1fr) var(--kiosk-rail-height);
   }
 
   .dual {

@@ -17,7 +17,7 @@
 //
 // Plus a screen wake lock so the TV never sleeps mid-session.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   useBoardPresenceActions,
@@ -27,6 +27,7 @@ import {
 import { GET_GYM_KIOSK, type GetGymKioskQueryResponse } from '@boardsesh/graphql/operations';
 import { executeGraphQL } from '@/app/lib/graphql/client';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
+import { evaluateKioskConfigPoll } from './kiosk-config-poll';
 import type { KioskBoardSnapshot } from './presence/use-kiosk-board-presence';
 
 /** How often each board re-reads the durable history to repair silent drops. */
@@ -97,7 +98,7 @@ export default function KioskReliability({
 }) {
   useWakeLock(true);
 
-  const { data: kioskConfigData } = useQuery({
+  const { data: kioskConfigData, dataUpdatedAt } = useQuery({
     queryKey: ['kioskConfigPoll', gymSlug, kioskSlug],
     queryFn: () =>
       executeGraphQL<GetGymKioskQueryResponse>(GET_GYM_KIOSK, { gymSlug, kioskSlug: kioskSlug ?? undefined }),
@@ -108,23 +109,43 @@ export default function KioskReliability({
     staleTime: CONFIG_POLL_INTERVAL_MS,
   });
 
-  const mountedAtMsRef = useRef<number | null>(null);
-  useEffect(() => {
-    mountedAtMsRef.current ??= Date.now();
-  }, []);
+  // Client mount time. useState initializer (not a ref-in-effect) so it's set
+  // during the very first render — the decision effect below may run earlier
+  // than any layout effect ordering games would guarantee for a ref.
+  const [mountedAtMs] = useState(() => Date.now());
 
+  // Evaluate on every completed poll. Keyed on `dataUpdatedAt`, NOT just
+  // `data`: React Query's structural sharing keeps `data` referentially
+  // identical across refetches with equal payloads, so a mismatch that was
+  // gated by the age floor would otherwise never re-fire this effect and the
+  // TV would sit stale until the daily reload. A gated mismatch additionally
+  // schedules a one-shot recheck for the moment the floor expires (see
+  // evaluateKioskConfigPoll — the pure decision logic).
+  //
+  // Kiosk deleted/hidden → reload into the 404 (honest signal for the gym).
+  // updatedAt moved → the owner re-configured it; reload to re-render
+  // server-side with the new layout/branding.
   useEffect(() => {
     if (kioskConfigData === undefined) return;
-    const mountedAtMs = mountedAtMsRef.current;
-    if (mountedAtMs === null || Date.now() - mountedAtMs < MIN_PAGE_AGE_BEFORE_RELOAD_MS) return;
-    const polledKiosk = kioskConfigData.gymKiosk;
-    // Kiosk deleted/hidden → reload into the 404 (honest signal for the gym).
-    // updatedAt moved → the owner re-configured it; reload to re-render
-    // server-side with the new layout/branding.
-    if (polledKiosk === null || polledKiosk.updatedAt !== initialUpdatedAt) {
-      window.location.reload();
-    }
-  }, [kioskConfigData, initialUpdatedAt]);
+    const polledUpdatedAt = kioskConfigData.gymKiosk === null ? null : kioskConfigData.gymKiosk.updatedAt;
+
+    let recheckTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    const decide = () => {
+      const decision = evaluateKioskConfigPoll({
+        pageAgeMs: Date.now() - mountedAtMs,
+        initialUpdatedAt,
+        polledUpdatedAt,
+        minPageAgeMs: MIN_PAGE_AGE_BEFORE_RELOAD_MS,
+      });
+      if (decision.action === 'reload') {
+        window.location.reload();
+      } else if (decision.action === 'recheck') {
+        recheckTimeoutId = setTimeout(decide, decision.delayMs);
+      }
+    };
+    decide();
+    return () => clearTimeout(recheckTimeoutId);
+  }, [kioskConfigData, dataUpdatedAt, initialUpdatedAt, mountedAtMs]);
 
   useEffect(() => {
     const now = new Date();

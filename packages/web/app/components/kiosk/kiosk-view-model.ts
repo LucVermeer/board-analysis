@@ -56,6 +56,11 @@ export function buildKioskViewModel(kiosk: Pick<GymKiosk, 'layout' | 'boards'>):
     scopedBoardUuid !== null &&
     !boards.some((board) => board.boardUuid === scopedBoardUuid)
   ) {
+    // Review-accepted inconsistency: for a CORRUPT stored config the scope can
+    // widen twice — once in the lenient parser (relative to layout.boards) and
+    // once here (relative to the resolved list) — so what a corrupt config's
+    // rail shows isn't perfectly round-trippable with the editor. Accepted:
+    // corrupt configs are a repair path, not a product state.
     leaderboard = { ...leaderboard, boardUuid: null };
   }
 

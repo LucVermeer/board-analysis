@@ -24,6 +24,7 @@ import ErrorBoundary from '../error-boundary';
 import bottomBarStyles from '../bottom-tab-bar/bottom-bar-wrapper.module.css';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
 import { isBoardRoutePath } from '@/app/lib/board-route-paths';
+import { isChromeLessPath } from '@/app/lib/chrome-less-routes';
 import GlobalHeader from '../global-header/global-header';
 import SessionSummaryDialog from '../session-summary/session-summary-dialog';
 import { SearchDrawerBridgeProvider } from '../search-drawer/search-drawer-bridge-context';
@@ -243,6 +244,12 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
       document.documentElement.style.removeProperty('--bottom-bar-height-measured');
     };
   }, []);
+
+  // Chrome-less surfaces (kiosk TVs, embeds) get no bottom bar, no banners —
+  // after the hooks above so the hook order stays stable across routes.
+  if (isChromeLessPath(pathname)) {
+    return null;
+  }
 
   return (
     <div

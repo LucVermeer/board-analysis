@@ -12,6 +12,10 @@
     "title": "This kiosk isn't set up yet",
     "body": "Add a board to this kiosk from your gym's manage page and the wall shows up here."
   },
+  "retry": {
+    "title": "Can't reach Boardsesh right now",
+    "body": "Hang tight — this screen reconnects on its own. The wall comes back the moment we do."
+  },
   "board": {
     "wallsOpen": "Wall's open",
     "lastLit": "Last lit: {{name}}",

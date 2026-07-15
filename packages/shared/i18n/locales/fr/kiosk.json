@@ -12,6 +12,10 @@
     "title": "Cette borne n'est pas encore configurée",
     "body": "Ajoute une board à cette borne depuis la page de gestion de ta salle et le mur s'affichera ici."
   },
+  "retry": {
+    "title": "Impossible de joindre Boardsesh pour le moment",
+    "body": "Pas de panique : cet écran se reconnecte tout seul. Le mur revient dès que c'est bon."
+  },
   "board": {
     "wallsOpen": "Le mur est libre",
     "lastLit": "Dernier bloc allumé : {{name}}",

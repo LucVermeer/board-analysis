@@ -10,10 +10,15 @@ import styles from './kiosk-attribution.module.css';
 
 const BRAND_NAME = 'Boardsesh';
 
-export default function KioskAttribution() {
+export default function KioskAttribution({ hasRail = false }: { hasRail?: boolean }) {
   const { t } = useTranslation('kiosk');
   return (
-    <a className={styles.attribution} href="https://boardsesh.com" target="_blank" rel="noopener noreferrer">
+    <a
+      className={hasRail ? `${styles.attribution} ${styles.withRail}` : styles.attribution}
+      href="https://boardsesh.com"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
       {t('attribution.poweredBy')} <span className={styles.brand}>{BRAND_NAME}</span>
     </a>
   );

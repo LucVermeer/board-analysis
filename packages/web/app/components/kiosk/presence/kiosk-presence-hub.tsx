@@ -33,7 +33,7 @@ import {
 const EMPTY_SNAPSHOTS: ReadonlyMap<number, KioskBoardSnapshot> = new Map();
 
 export default function KioskPresenceHub({ boardIds, children }: { boardIds: number[]; children: ReactNode }) {
-  const { token } = useWsAuthToken();
+  const { token, isLoading: isTokenLoading } = useWsAuthToken();
   const hasBoards = boardIds.length > 0;
 
   const [activeWsClient, setActiveWsClient] = useState<Client | null>(null);
@@ -43,6 +43,11 @@ export default function KioskPresenceHub({ boardIds, children }: { boardIds: num
 
   useEffect(() => {
     if (!hasBoards) return;
+    // Wait for the ws-auth query to settle before building the client. For an
+    // anonymous TV the token resolves to null with no state change afterwards,
+    // so gating here avoids a build→dispose churn of an extra ws connection on
+    // every boot (token would otherwise flip loading→settled once).
+    if (isTokenLoading) return;
     const wsUrl = getBackendWsUrl();
     if (!wsUrl) return;
 
@@ -64,7 +69,7 @@ export default function KioskPresenceHub({ boardIds, children }: { boardIds: num
       }
       setActiveWsClient((currentClient) => (currentClient === client ? null : currentClient));
     };
-  }, [token, hasBoards]);
+  }, [token, hasBoards, isTokenLoading]);
 
   const presenceClient = useMemo<WebBoardPresenceClient | null>(() => {
     if (activeWsClient === null) return null;

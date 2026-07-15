@@ -19,6 +19,12 @@
   --kiosk-font-base: clamp(13px, 1.2vw, 22px);
   --kiosk-font-small: clamp(11px, 0.9vw, 17px);
 
+  /* Rail dimensions — single source shared by the layout grid
+   * (kiosk-layout.module.css) and the attribution offset
+   * (kiosk-attribution.module.css) so they can never drift apart. */
+  --kiosk-rail-width: clamp(300px, 24vw, 440px);
+  --kiosk-rail-height: clamp(200px, 28vh, 360px);
+
   color-scheme: dark;
   background: var(--kiosk-surface);
   color: var(--kiosk-text);

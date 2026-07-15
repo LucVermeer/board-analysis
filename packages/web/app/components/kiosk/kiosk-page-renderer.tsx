@@ -28,6 +28,7 @@ import KioskHeader from './kiosk-header';
 import KioskLayout from './kiosk-layout';
 import KioskAttribution from './kiosk-attribution';
 import KioskReliability from './kiosk-reliability';
+import KioskRetryScreen from './kiosk-retry-screen';
 import KioskAnalytics from './kiosk-analytics';
 import BoardSlot from './board-slot/board-slot';
 import LeaderboardRail from './leaderboard-rail/leaderboard-rail';
@@ -36,11 +37,19 @@ import layoutStyles from './kiosk-layout.module.css';
 const KIOSK_REVALIDATE_SECONDS = 60;
 
 /**
- * Anonymous, request-deduped (React cache) kiosk fetch shared by the page body
- * and generateMetadata. Mirrors `resolveBoardBySlug`. Returns null on any
- * failure — the page 404s rather than erroring a TV.
+ * A transient failure ('error': backend down, HTTP error, GraphQL resolver
+ * error) is distinguished from a genuine "no such kiosk" ('ok' with a null
+ * kiosk). A TV is unattended, so only the latter may 404 — a blip during e.g.
+ * the 04:00 reload must land on the self-healing retry screen, never brick
+ * the TV on a chrome-less 404 page with no reliability layer.
  */
-export const fetchGymKiosk = cache(async (gymSlug: string, kioskSlug: string | null): Promise<GymKiosk | null> => {
+export type GymKioskFetchResult = { status: 'ok'; kiosk: GymKiosk | null } | { status: 'error' };
+
+/**
+ * Anonymous, request-deduped (React cache) kiosk fetch shared by the page body
+ * and generateMetadata. Mirrors `resolveBoardBySlug`'s transport.
+ */
+export const fetchGymKiosk = cache(async (gymSlug: string, kioskSlug: string | null): Promise<GymKioskFetchResult> => {
   try {
     const response = await fetch(getGraphQLHttpUrl(), {
       method: 'POST',
@@ -48,11 +57,19 @@ export const fetchGymKiosk = cache(async (gymSlug: string, kioskSlug: string | n
       body: JSON.stringify({ query: GET_GYM_KIOSK, variables: { gymSlug, kioskSlug } }),
       next: { revalidate: KIOSK_REVALIDATE_SECONDS },
     });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as { data?: { gymKiosk?: GymKiosk | null } };
-    return payload.data?.gymKiosk ?? null;
+    if (!response.ok) return { status: 'error' };
+    const payload = (await response.json()) as {
+      data?: { gymKiosk?: GymKiosk | null } | null;
+      errors?: unknown[];
+    };
+    // GraphQL-level errors (resolver crash) are transient too — a genuine
+    // not-found/not-visible resolves successfully to `gymKiosk: null`.
+    if (payload.data?.gymKiosk === undefined || (payload.errors?.length ?? 0) > 0) {
+      return { status: 'error' };
+    }
+    return { status: 'ok', kiosk: payload.data.gymKiosk };
   } catch {
-    return null;
+    return { status: 'error' };
   }
 });
 
@@ -75,8 +92,12 @@ async function fetchInitialClimbs(boardId: number): Promise<BoardPresenceClimb[]
 }
 
 export async function buildKioskMetadata(gymSlug: string, kioskSlug: string | null): Promise<Metadata> {
-  const [{ t, locale }, kiosk] = await Promise.all([getServerTranslation('kiosk'), fetchGymKiosk(gymSlug, kioskSlug)]);
+  const [{ t, locale }, fetchResult] = await Promise.all([
+    getServerTranslation('kiosk'),
+    fetchGymKiosk(gymSlug, kioskSlug),
+  ]);
   const path = kioskSlug === null ? `/kiosk/${gymSlug}` : `/kiosk/${gymSlug}/${kioskSlug}`;
+  const kiosk = fetchResult.status === 'ok' ? fetchResult.kiosk : null;
   if (kiosk === null) {
     return createNoIndexMetadata({
       title: t('metadata.fallbackTitle'),
@@ -118,7 +139,24 @@ function resolveBoardDetails(board: GymKioskBoard): BoardDetails | null {
 }
 
 export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlug: string; kioskSlug: string | null }) {
-  const kiosk = await fetchGymKiosk(gymSlug, kioskSlug);
+  const fetchResult = await fetchGymKiosk(gymSlug, kioskSlug);
+
+  // Transient failure (backend blip, network outage): render the self-healing
+  // retry screen instead of 404ing — a bricked 404 on an unattended TV needs a
+  // human with a remote. Default-branded theme scope: the gym's branding is in
+  // the payload we just failed to fetch.
+  if (fetchResult.status === 'error') {
+    const retryLocale = await getLocale();
+    return (
+      <I18nProvider locale={retryLocale} namespaces={['common', 'kiosk']}>
+        <KioskThemeScope gym={{}}>
+          <KioskRetryScreen />
+        </KioskThemeScope>
+      </I18nProvider>
+    );
+  }
+
+  const kiosk = fetchResult.kiosk;
   if (kiosk === null) {
     notFound();
   }
@@ -191,7 +229,7 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
             )}
           </div>
         </KioskPresenceHub>
-        <KioskAttribution />
+        <KioskAttribution hasRail={rail !== null && preset !== null} />
       </KioskThemeScope>
     </I18nProvider>
   );

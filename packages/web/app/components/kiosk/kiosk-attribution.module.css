@@ -16,3 +16,18 @@
   color: var(--kiosk-text);
   font-weight: 600;
 }
+
+/* Rail kiosks: shift the mark clear of the rail so it never covers the rail
+ * footer. Landscape: left of the rail column (rail width + body padding +
+ * the usual inset). Portrait: above the rail's bottom band. Dimensions come
+ * from the shared vars in kiosk-theme-scope.module.css. */
+.withRail {
+  right: calc(var(--kiosk-rail-width) + var(--spacing-4) + var(--spacing-3));
+}
+
+@media (orientation: portrait) {
+  .withRail {
+    right: var(--spacing-3);
+    bottom: calc(var(--kiosk-rail-height) + var(--spacing-4) + var(--spacing-3));
+  }
+}
