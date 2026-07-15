@@ -4,6 +4,7 @@ import { stat } from 'fs/promises';
 import path, { extname } from 'path';
 import { applyCorsHeaders } from './cors';
 import { getAvatarsDir } from './avatars';
+import { getGymLogosDir } from './gym-logos';
 import { isS3Configured, getFromS3, uploadToS3 } from '../storage/s3';
 import { type AllowedImageSize, resizeImageBuffer, resizedVariantKey, streamToBuffer } from '../lib/image-resize';
 
@@ -165,6 +166,110 @@ export async function handleStaticAvatar(
     }
 
     // Check If-Modified-Since for caching
+    const ifModifiedSince = req.headers['if-modified-since'];
+    if (ifModifiedSince) {
+      const ifModifiedSinceDate = new Date(ifModifiedSince);
+      if (fileStat.mtime <= ifModifiedSinceDate) {
+        res.writeHead(304);
+        res.end();
+        return;
+      }
+    }
+
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': fileStat.size,
+      'Cache-Control': 'public, max-age=86400', // 1 day
+      ETag: etag,
+      'Last-Modified': fileStat.mtime.toUTCString(),
+    });
+
+    createReadStream(filePath).pipe(res);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found' }));
+  }
+}
+
+/**
+ * Static gym-logo file serving handler
+ * GET /static/gym-logos/:filename
+ *
+ * Mirrors handleStaticAvatar: proxies the image from S3 when configured
+ * (avoids ACL/public-access requirements), otherwise serves from local-dev
+ * storage. Logos overwrite in place on re-upload (key = gymUuid.ext), so the
+ * `?size=` resize path resizes on the fly without persisting a variant that
+ * could shadow a new logo.
+ */
+export async function handleStaticGymLogo(
+  req: IncomingMessage,
+  res: ServerResponse,
+  fileName: string,
+  size: AllowedImageSize | null = null,
+): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  // Security: validate filename to prevent path traversal
+  if (!fileName || fileName !== path.basename(fileName)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid path' }));
+    return;
+  }
+
+  if (isS3Configured()) {
+    const s3Key = `gym-logos/${fileName}`;
+
+    if (size !== null) {
+      const served = await serveResizedImageFromS3(res, s3Key, size, {
+        cacheVariant: false,
+        cacheControl: 'public, max-age=86400',
+      });
+      if (!served) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+      }
+      return;
+    }
+
+    const s3Object = await getFromS3(s3Key);
+
+    if (!s3Object) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
+    const ext = extname(fileName).toLowerCase();
+    const contentType = s3Object.contentType || MIME_TYPES[ext] || 'application/octet-stream';
+
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      ...(s3Object.contentLength && { 'Content-Length': s3Object.contentLength }),
+      'Cache-Control': 'public, max-age=86400', // 1 day
+    });
+
+    s3Object.stream.pipe(res);
+    return;
+  }
+
+  // Serve from local storage (the `?size=` resize path is S3-only; local-dev
+  // serves the full-size original).
+  const gymLogosDir = getGymLogosDir();
+  const filePath = path.join(gymLogosDir, fileName);
+
+  try {
+    const fileStat = await stat(filePath);
+    const ext = extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+    const etag = `"${fileStat.mtime.getTime()}"`;
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch === etag) {
+      res.writeHead(304);
+      res.end();
+      return;
+    }
+
     const ifModifiedSince = req.headers['if-modified-since'];
     if (ifModifiedSince) {
       const ifModifiedSinceDate = new Date(ifModifiedSince);

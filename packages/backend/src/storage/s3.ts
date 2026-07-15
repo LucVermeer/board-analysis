@@ -288,3 +288,22 @@ export async function deleteUserAvatarsFromS3(userId: string): Promise<void> {
     }),
   );
 }
+
+/**
+ * Delete all logo files for a gym (all extensions). Called before writing a new
+ * logo so a re-upload at a different extension can't leave a stale file behind
+ * (the key is `gym-logos/<uuid>.<ext>`).
+ */
+export async function deleteGymLogosFromS3(gymUuid: string): Promise<void> {
+  const extensions = ['jpg', 'png', 'gif', 'webp'];
+
+  await Promise.all(
+    extensions.map(async (ext) => {
+      try {
+        await deleteFromS3(`gym-logos/${gymUuid}.${ext}`);
+      } catch {
+        // File doesn't exist, ignore
+      }
+    }),
+  );
+}

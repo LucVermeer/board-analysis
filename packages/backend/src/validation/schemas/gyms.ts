@@ -26,6 +26,27 @@ export const GymWebsiteSchema = z
   .refine((value) => /^https?:\/\//i.test(value), 'Website must start with http:// or https://');
 
 /**
+ * Brand colour: exactly #RRGGBB (six hex digits). The kiosk and embed surfaces
+ * read these straight into CSS custom properties, so anything looser is rejected.
+ */
+export const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colour must be #RRGGBB');
+
+/**
+ * Gym logo URL: either a backend-relative static path we serve ourselves
+ * (`/static/gym-logos/<uuid>.<ext>[?v=...]`, written by POST /api/gym-logos) or a
+ * plain https URL, capped at 500 chars. Rejecting other schemes (javascript:,
+ * data:, http:) matters because the logo renders as an `<img src>` on the
+ * kiosk/embed surfaces. Mirrors the avatar-URL contract.
+ */
+export const GymLogoUrlSchema = z
+  .string()
+  .max(500)
+  .refine(
+    (value) => value.startsWith('/static/gym-logos/') || /^https:\/\//i.test(value),
+    'Logo URL must be an https URL or a Boardsesh static path',
+  );
+
+/**
  * Create gym input validation schema
  */
 export const CreateGymInputSchema = z.object({
@@ -58,6 +79,10 @@ export const UpdateGymInputSchema = z.object({
   longitude: LongitudeSchema.optional().nullable(),
   isPublic: z.boolean().optional(),
   imageUrl: z.string().url().max(500).optional().nullable(),
+  logoUrl: GymLogoUrlSchema.optional().nullable(),
+  brandPrimaryColor: HexColorSchema.optional().nullable(),
+  brandAccentColor: HexColorSchema.optional().nullable(),
+  brandBackgroundColor: HexColorSchema.optional().nullable(),
 });
 
 /**

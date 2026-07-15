@@ -68,6 +68,14 @@ export const gymsTypeDefs = /* GraphQL */ `
     isPublic: Boolean!
     "Image URL"
     imageUrl: String
+    "Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, which is the gym photo."
+    logoUrl: String
+    "Kiosk/embed brand primary colour as #RRGGBB (null when unset)."
+    brandPrimaryColor: String
+    "Kiosk/embed brand accent colour as #RRGGBB (null when unset)."
+    brandAccentColor: String
+    "Kiosk/embed brand background colour as #RRGGBB (null when unset)."
+    brandBackgroundColor: String
     "When created"
     createdAt: String!
     "Number of linked boards"
@@ -190,6 +198,14 @@ export const gymsTypeDefs = /* GraphQL */ `
     isPublic: Boolean
     "New image URL"
     imageUrl: String
+    "Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, the gym photo. Pass null to clear it."
+    logoUrl: String
+    "Kiosk/embed brand primary colour as #RRGGBB. Pass null to clear it."
+    brandPrimaryColor: String
+    "Kiosk/embed brand accent colour as #RRGGBB. Pass null to clear it."
+    brandAccentColor: String
+    "Kiosk/embed brand background colour as #RRGGBB. Pass null to clear it."
+    brandBackgroundColor: String
   }
 
   """

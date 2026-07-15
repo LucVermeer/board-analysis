@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, count, isNull, sql, ilike, or, desc, inArray, like } from 'drizzle-orm';
+import { eq, and, count, isNull, sql, ilike, or, asc, desc, inArray, like } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { normaliseSetIds } from '@boardsesh/board-config';
@@ -20,7 +20,7 @@ import {
   RecordBoardSerialInputSchema,
   UUIDSchema,
 } from '../../../validation/schemas';
-import { generateUniqueGymSlug } from './gyms';
+import { generateUniqueGymSlug, userCanEditGym } from './gyms';
 import { getUserCommunityRoles, hasAdminOrLeader, rolesGrantAdminOrLeader } from './roles';
 import { SYSTEM_BOARD_OWNER_ID, requireAnonReadableBoard } from '../board-presence/shared';
 import { logger } from '../../../utils/logger';
@@ -304,6 +304,10 @@ async function enrichBoard(
     commentCount: Number(commentStats?.count || 0),
     isFollowedByMe,
     gymId: board.gymId ?? null,
+    // Numeric board-presence channel id. Exposed only when the board is public
+    // or the viewer can edit it, so private boards never leak a live channel to
+    // anon kiosk/embed surfaces.
+    boardId: board.isPublic || canEdit ? board.id : null,
     gymUuid: gymInfo?.uuid ?? null,
     gymName: gymInfo?.name ?? null,
     distanceMeters: distanceMeters ?? null,
@@ -495,6 +499,10 @@ async function enrichBoards(
       commentCount: commentMap.get(board.uuid) || 0,
       isFollowedByMe: followedSet.has(board.uuid),
       gymId: board.gymId ?? null,
+      // Numeric board-presence channel id. Exposed only when the board is public
+      // or the viewer can edit it, so private boards never leak a live channel to
+      // anon kiosk/embed surfaces.
+      boardId: board.isPublic || canEdit ? board.id : null,
       gymUuid: gym?.uuid ?? null,
       gymName: gym?.name ?? null,
       distanceMeters: distanceMeters ?? null,
@@ -782,6 +790,57 @@ export const socialBoardQueries = {
   },
 
   /**
+   * A gym's linked, non-deleted boards, viewer-scoped. Editors of the gym (owner,
+   * gym admin/editor, or a covering community admin/leader) see every linked
+   * board; everyone else — including anonymous callers — sees only public boards.
+   * A missing gym, or a private gym seen by a non-editor, is masked as NOT_FOUND
+   * (existence is not disclosed). Auth-optional and rate-limited like the other
+   * anon board reads; the leaderboard embed reuses it without any auth. Boards
+   * are ordered by name. Populates each board's `boardId` (presence channel) via
+   * the shared enrichBoards visibility rule.
+   */
+  gymBoards: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx, 20, 'gymBoards');
+    validateInput(UUIDSchema, gymUuid, 'gymUuid');
+
+    const viewerId = ctx.isAuthenticated ? ctx.userId : undefined;
+
+    const [gym] = await db
+      .select()
+      .from(dbSchema.gyms)
+      .where(and(eq(dbSchema.gyms.uuid, gymUuid), isNull(dbSchema.gyms.deletedAt)))
+      .limit(1);
+
+    const canEdit = gym && viewerId ? await userCanEditGym(gym, viewerId) : false;
+
+    // Mask a missing gym, and a private gym from anyone who can't edit it, behind
+    // the shared NOT_FOUND convention — the query never discloses that a private
+    // gym exists to a non-editor (the embed depends on this being safe to call
+    // anonymously against any uuid).
+    if (!gym || (!gym.isPublic && !canEdit)) {
+      throw new GraphQLError('Gym not found', { extensions: { code: 'NOT_FOUND' } });
+    }
+
+    const conditions = [eq(dbSchema.userBoards.gymId, gym.id), isNull(dbSchema.userBoards.deletedAt)];
+    // Non-editors (including anonymous) only see the gym's public boards; the
+    // leaderboard embed relies on this to enumerate boards without auth.
+    if (!canEdit) {
+      conditions.push(eq(dbSchema.userBoards.isPublic, true));
+    }
+
+    const boards = await db
+      .select()
+      .from(dbSchema.userBoards)
+      .where(and(...conditions))
+      .orderBy(asc(dbSchema.userBoards.name));
+
+    return enrichBoards(
+      boards.map((board) => ({ board })),
+      viewerId,
+    );
+  },
+
+  /**
    * Look up boards by controller serial numbers.
    * Searches all boards (including unlisted/non-public) so BLE device
    * discovery can resolve any board regardless of visibility.
@@ -842,6 +901,8 @@ export const socialBoardQueries = {
           commentCount: 0,
           isFollowedByMe: false,
           gymId: null,
+          // Anonymous caller: only public boards expose their presence channel id.
+          boardId: board.isPublic ? board.id : null,
           gymUuid: null,
           gymName: null,
           distanceMeters: null,

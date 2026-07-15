@@ -231,6 +231,10 @@ async function enrichGym(gym: typeof dbSchema.gyms.$inferSelect, authenticatedUs
     longitude: gym.longitude,
     isPublic: gym.isPublic,
     imageUrl: gym.imageUrl,
+    logoUrl: gym.logoUrl,
+    brandPrimaryColor: gym.brandPrimaryColor,
+    brandAccentColor: gym.brandAccentColor,
+    brandBackgroundColor: gym.brandBackgroundColor,
     createdAt: gym.createdAt.toISOString(),
     boardCount,
     boardTypes,
@@ -714,6 +718,14 @@ export const socialGymMutations = {
     if (validatedInput.longitude !== undefined) updateValues.longitude = validatedInput.longitude;
     if (validatedInput.isPublic !== undefined) updateValues.isPublic = validatedInput.isPublic;
     if (validatedInput.imageUrl !== undefined) updateValues.imageUrl = validatedInput.imageUrl;
+    // Branding: an explicit null clears the column (reset-to-default in the manage
+    // UI); `undefined` (field omitted) leaves it untouched.
+    if (validatedInput.logoUrl !== undefined) updateValues.logoUrl = validatedInput.logoUrl;
+    if (validatedInput.brandPrimaryColor !== undefined)
+      updateValues.brandPrimaryColor = validatedInput.brandPrimaryColor;
+    if (validatedInput.brandAccentColor !== undefined) updateValues.brandAccentColor = validatedInput.brandAccentColor;
+    if (validatedInput.brandBackgroundColor !== undefined)
+      updateValues.brandBackgroundColor = validatedInput.brandBackgroundColor;
 
     // Handle slug update
     if (validatedInput.slug !== undefined) {

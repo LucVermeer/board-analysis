@@ -2027,6 +2027,12 @@ export type Gym = {
   boardCount: Scalars['Int']['output'];
   /** Distinct board types at this gym (kilter, tension, ...) — for filtering and badges */
   boardTypes: Array<Scalars['String']['output']>;
+  /** Kiosk/embed brand accent colour as #RRGGBB (null when unset). */
+  brandAccentColor?: Maybe<Scalars['String']['output']>;
+  /** Kiosk/embed brand background colour as #RRGGBB (null when unset). */
+  brandBackgroundColor?: Maybe<Scalars['String']['output']>;
+  /** Kiosk/embed brand primary colour as #RRGGBB (null when unset). */
+  brandPrimaryColor?: Maybe<Scalars['String']['output']>;
   /** Whether the current viewer may start an ownership claim for this gym (signed-in and not already the owner/gym admin) */
   canClaim: Scalars['Boolean']['output'];
   /** Whether the current viewer may edit this gym (owner, gym admin, gym editor, or community admin/leader for one of its board types) */
@@ -2055,6 +2061,8 @@ export type Gym = {
   isPublic: Scalars['Boolean']['output'];
   /** GPS latitude */
   latitude?: Maybe<Scalars['Float']['output']>;
+  /** Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, which is the gym photo. */
+  logoUrl?: Maybe<Scalars['String']['output']>;
   /** GPS longitude */
   longitude?: Maybe<Scalars['Float']['output']>;
   /** Number of members */
@@ -4001,6 +4009,16 @@ export type Query = {
   groupedNotifications: GroupedNotificationConnection;
   /** Get a gym by UUID. */
   gym?: Maybe<Gym>;
+  /**
+   * A gym's linked, non-deleted boards (user_boards.gym_id = gym.id), ordered by
+   * name. Auth-optional and viewer-scoped: viewers who can edit the gym (owner,
+   * gym admin/editor, or a covering community admin/leader) see every linked
+   * board; everyone else — including anonymous callers — sees only public boards
+   * (isPublic). Powers the manage-gym board pickers and the anonymous leaderboard
+   * embed. A missing gym, or a private gym seen by a non-editor, throws NOT_FOUND
+   * (existence is masked). Rate-limited.
+   */
+  gymBoards: Array<UserBoard>;
   /** Get a gym by slug (for URL routing). */
   gymBySlug?: Maybe<Gym>;
   /** Get members of a gym. */
@@ -4520,6 +4538,11 @@ export type QueryGroupedNotificationsArgs = {
 
 /** Root query type for all read operations. */
 export type QueryGymArgs = {
+  gymUuid: Scalars['ID']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryGymBoardsArgs = {
   gymUuid: Scalars['ID']['input'];
 };
 
@@ -6414,6 +6437,12 @@ export type UpdateCommentInput = {
 export type UpdateGymInput = {
   /** New address */
   address?: InputMaybe<Scalars['String']['input']>;
+  /** Kiosk/embed brand accent colour as #RRGGBB. Pass null to clear it. */
+  brandAccentColor?: InputMaybe<Scalars['String']['input']>;
+  /** Kiosk/embed brand background colour as #RRGGBB. Pass null to clear it. */
+  brandBackgroundColor?: InputMaybe<Scalars['String']['input']>;
+  /** Kiosk/embed brand primary colour as #RRGGBB. Pass null to clear it. */
+  brandPrimaryColor?: InputMaybe<Scalars['String']['input']>;
   /** New contact email */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** New contact phone */
@@ -6428,6 +6457,8 @@ export type UpdateGymInput = {
   isPublic?: InputMaybe<Scalars['Boolean']['input']>;
   /** New GPS latitude */
   latitude?: InputMaybe<Scalars['Float']['input']>;
+  /** Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, the gym photo. Pass null to clear it. */
+  logoUrl?: InputMaybe<Scalars['String']['input']>;
   /** New GPS longitude */
   longitude?: InputMaybe<Scalars['Float']['input']>;
   /** New name */
@@ -6488,6 +6519,8 @@ export type UserBoard = {
   __typename?: 'UserBoard';
   /** Default angle for this board */
   angle: Scalars['Int']['output'];
+  /** Numeric board-presence channel id (userBoards.id); null unless the board is public or the viewer can edit it. Feeds boardNowPlaying(boardId) for kiosk/embed surfaces. */
+  boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type (kilter, tension, moonboard) */
   boardType: Scalars['String']['output'];
   /** Whether the current viewer may edit this board (owner, community admin/leader for its board type, or owner/admin of its linked gym) */
@@ -8426,6 +8459,9 @@ export type GymResolvers<
   address?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
+  brandAccentColor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  brandBackgroundColor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  brandPrimaryColor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   canClaim?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   canEdit?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   canGrantAccess?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -8440,6 +8476,7 @@ export type GymResolvers<
   isMember?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   isPublic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   latitude?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  logoUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   longitude?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   memberCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   myRole?: Resolver<Maybe<ResolversTypes['GymMemberRole']>, ParentType, ContextType>;
@@ -9817,6 +9854,12 @@ export type QueryResolvers<
     Partial<QueryGroupedNotificationsArgs>
   >;
   gym?: Resolver<Maybe<ResolversTypes['Gym']>, ParentType, ContextType, RequireFields<QueryGymArgs, 'gymUuid'>>;
+  gymBoards?: Resolver<
+    Array<ResolversTypes['UserBoard']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGymBoardsArgs, 'gymUuid'>
+  >;
   gymBySlug?: Resolver<
     Maybe<ResolversTypes['Gym']>,
     ParentType,
@@ -11007,6 +11050,7 @@ export type UserBoardResolvers<
   ParentType extends ResolversParentTypes['UserBoard'] = ResolversParentTypes['UserBoard'],
 > = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   canEdit?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;

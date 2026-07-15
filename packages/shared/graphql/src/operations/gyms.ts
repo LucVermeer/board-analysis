@@ -19,6 +19,7 @@ import type {
   ReviewGymClaimInput,
   PendingGymClaimsInput,
   GymClaimConnection,
+  UserBoard,
 } from '@boardsesh/shared-schema';
 
 // ============================================
@@ -41,6 +42,10 @@ const GYM_FIELDS = `
   longitude
   isPublic
   imageUrl
+  logoUrl
+  brandPrimaryColor
+  brandAccentColor
+  brandBackgroundColor
   createdAt
   boardCount
   boardTypes
@@ -107,6 +112,36 @@ export const GET_GYM_MEMBERS = gql`
       }
       totalCount
       hasMore
+    }
+  }
+`;
+
+// Board fields the manage-gym board pickers and the leaderboard embed read from
+// gymBoards. `boardId` is the numeric board-presence channel id (null unless the
+// board is public or the viewer can edit it) — it feeds boardNowPlaying(boardId).
+const GYM_BOARD_FIELDS = `
+  uuid
+  slug
+  name
+  boardType
+  layoutId
+  sizeId
+  setIds
+  angle
+  isAngleAdjustable
+  isPublic
+  isUnlisted
+  locationName
+  gymId
+  gymUuid
+  boardId
+  canEdit
+`;
+
+export const GET_GYM_BOARDS = gql`
+  query GetGymBoards($gymUuid: ID!) {
+    gymBoards(gymUuid: $gymUuid) {
+      ${GYM_BOARD_FIELDS}
     }
   }
 `;
@@ -266,6 +301,14 @@ export type GetGymMembersQueryVariables = {
 
 export type GetGymMembersQueryResponse = {
   gymMembers: GymMemberConnection;
+};
+
+export type GetGymBoardsQueryVariables = {
+  gymUuid: string;
+};
+
+export type GetGymBoardsQueryResponse = {
+  gymBoards: UserBoard[];
 };
 
 export type CreateGymMutationVariables = {
