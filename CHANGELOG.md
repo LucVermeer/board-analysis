@@ -6,6 +6,12 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-15
 
+### New
+
+- Find a new wall and it drops straight into your boards, ready to pull down for offline. ([#3622](https://github.com/boardsesh/boardsesh/pull/3622))
+  Turn on "Keep boards offline" in Settings to download every board you use so browsing and logging sends works with no signal.
+  Manage your boards the easy way: tap Edit to unfollow or delete, or swipe — the swipe actually catches now.
+
 ### Fixed
 
 - Downloading a board for offline use now completes in seconds instead of minutes — the app grabs a pre-built copy of the catalog instead of crawling it climb by climb. (This fixes the fast path so it actually kicks in.) ([#3618](https://github.com/boardsesh/boardsesh/pull/3618))

@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-15T03:38:26.811Z",
+  "generatedAt": "2026-07-15T11:09:16.305Z",
   "entries": [
+    {
+      "prNumber": 3622,
+      "category": "new",
+      "title": "Find a new wall and it drops straight into your boards, ready to pull down for offline.",
+      "mergedAt": "2026-07-15T11:08:17Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3622",
+      "body": "Turn on \"Keep boards offline\" in Settings to download every board you use so browsing and logging sends works with no signal.\nManage your boards the easy way: tap Edit to unfollow or delete, or swipe — the swipe actually catches now."
+    },
     {
       "prNumber": 3618,
       "category": "fixed",
