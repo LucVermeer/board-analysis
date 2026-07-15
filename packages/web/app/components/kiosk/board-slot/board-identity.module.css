@@ -1,0 +1,52 @@
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding: var(--spacing-3) var(--spacing-4) var(--spacing-4);
+  border-top: 1px solid var(--kiosk-border);
+  min-width: 0;
+}
+
+.overline {
+  font-size: var(--kiosk-font-small);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kiosk-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  min-width: 0;
+}
+
+.gradeChip {
+  font-size: var(--kiosk-font-large);
+  font-weight: 700;
+  border-radius: var(--border-radius-md);
+  padding: 0 var(--spacing-3);
+  background: var(--kiosk-accent);
+  color: var(--kiosk-on-accent);
+  flex-shrink: 0;
+}
+
+.name {
+  font-size: var(--kiosk-font-hero);
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.secondary {
+  font-size: var(--kiosk-font-base);
+  color: var(--kiosk-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

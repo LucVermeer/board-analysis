@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "title": "{{gymName}} · Borne {{kioskName}}",
+    "description": "Vue en direct du mur de {{gymName}} : ce qui est allumé et qui enchaîne en ce moment.",
+    "fallbackTitle": "Borne de salle",
+    "fallbackDescription": "Vue en direct de la board pour les salles d'escalade."
+  },
+  "header": {
+    "reconnecting": "Reconnexion…"
+  },
+  "setup": {
+    "title": "Cette borne n'est pas encore configurée",
+    "body": "Ajoute une board à cette borne depuis la page de gestion de ta salle et le mur s'affichera ici."
+  },
+  "board": {
+    "wallsOpen": "Le mur est libre",
+    "lastLit": "Dernier bloc allumé : {{name}}",
+    "litBy": "allumé par {{name}}",
+    "unnamedClimb": "Bloc sans nom"
+  },
+  "leaderboard": {
+    "periodSession": "Classement de la séance",
+    "periodLast24h": "Dernières 24 heures",
+    "periodWeek": "Cette semaine",
+    "periodMonth": "Ce mois-ci",
+    "allBoards": "Toutes les boards",
+    "anonymous": "Grimpeur anonyme",
+    "sends_one": "croix",
+    "sends_other": "croix",
+    "live": "En direct",
+    "updatedAt": "Mis à jour à {{time}}",
+    "emptyTitle": "Personne sur la board pour l'instant",
+    "emptyBody": "Allume un bloc et enchaîne-le : le classement commence avec toi."
+  },
+  "attribution": {
+    "poweredBy": "Propulsé par"
+  }
+}

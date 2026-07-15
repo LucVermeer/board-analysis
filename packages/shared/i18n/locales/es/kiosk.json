@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "title": "{{gymName}} · Kiosco {{kioskName}}",
+    "description": "Vista en directo del muro de {{gymName}}: mira qué está encendido y quién está encadenando ahora mismo.",
+    "fallbackTitle": "Kiosco del rocódromo",
+    "fallbackDescription": "Vista en directo del plafón para rocódromos."
+  },
+  "header": {
+    "reconnecting": "Reconectando…"
+  },
+  "setup": {
+    "title": "Este kiosco aún no está configurado",
+    "body": "Añade un plafón a este kiosco desde la página de gestión de tu rocódromo y el muro aparecerá aquí."
+  },
+  "board": {
+    "wallsOpen": "El muro está libre",
+    "lastLit": "Último encendido: {{name}}",
+    "litBy": "encendido por {{name}}",
+    "unnamedClimb": "Bloque sin nombre"
+  },
+  "leaderboard": {
+    "periodSession": "Clasificación de la sesión",
+    "periodLast24h": "Últimas 24 horas",
+    "periodWeek": "Esta semana",
+    "periodMonth": "Este mes",
+    "allBoards": "Todos los plafones",
+    "anonymous": "Escalador anónimo",
+    "sends_one": "encadene",
+    "sends_other": "encadenes",
+    "live": "En directo",
+    "updatedAt": "Actualizado a las {{time}}",
+    "emptyTitle": "Aún no hay nadie en el plafón",
+    "emptyBody": "Enciende un bloque y encadénalo: la clasificación empieza contigo."
+  },
+  "attribution": {
+    "poweredBy": "Con la tecnología de"
+  }
+}

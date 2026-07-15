@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "title": "{{gymName}} · {{kioskName}} kiosk",
+    "description": "Live wall view for {{gymName}} — see what's lit and who's crushing right now.",
+    "fallbackTitle": "Gym kiosk",
+    "fallbackDescription": "Live board view for climbing gyms."
+  },
+  "header": {
+    "reconnecting": "Reconnecting…"
+  },
+  "setup": {
+    "title": "This kiosk isn't set up yet",
+    "body": "Add a board to this kiosk from your gym's manage page and the wall shows up here."
+  },
+  "board": {
+    "wallsOpen": "Wall's open",
+    "lastLit": "Last lit: {{name}}",
+    "litBy": "lit by {{name}}",
+    "unnamedClimb": "Unnamed climb"
+  },
+  "leaderboard": {
+    "periodSession": "Session leaderboard",
+    "periodLast24h": "Last 24 hours",
+    "periodWeek": "This week",
+    "periodMonth": "This month",
+    "allBoards": "All boards",
+    "anonymous": "Anonymous climber",
+    "sends_one": "send",
+    "sends_other": "sends",
+    "live": "Live",
+    "updatedAt": "Updated {{time}}",
+    "emptyTitle": "No one's on the board yet",
+    "emptyBody": "Light a climb and send it — the leaderboard starts with you."
+  },
+  "attribution": {
+    "poweredBy": "Powered by"
+  }
+}

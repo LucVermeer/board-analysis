@@ -1,0 +1,59 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  height: 64px;
+  padding: 0 var(--spacing-5);
+  border-bottom: 1px solid var(--kiosk-border);
+  background: var(--kiosk-surface-raised);
+  min-width: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  min-width: 0;
+}
+
+.logo {
+  height: 40px;
+  width: 40px;
+  object-fit: contain;
+  border-radius: var(--border-radius-sm);
+  flex-shrink: 0;
+}
+
+.gymName {
+  font-size: var(--kiosk-font-large);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.kioskName {
+  font-size: var(--kiosk-font-base);
+  color: var(--kiosk-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reconnectChip {
+  font-size: var(--kiosk-font-small);
+  color: var(--kiosk-surface);
+  background: var(--color-warning);
+  border-radius: var(--border-radius-full);
+  padding: var(--spacing-1) var(--spacing-3);
+  white-space: nowrap;
+}

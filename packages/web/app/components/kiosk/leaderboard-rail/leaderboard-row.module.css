@@ -1,0 +1,76 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--border-radius-md);
+  min-width: 0;
+}
+
+.topRow {
+  background: var(--kiosk-surface);
+  box-shadow: inset 3px 0 0 var(--kiosk-accent);
+}
+
+.topRow .rank {
+  color: var(--kiosk-accent);
+}
+
+.rank {
+  font-size: var(--kiosk-font-large);
+  font-weight: 700;
+  color: var(--kiosk-text-muted);
+  min-width: 1.4em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.avatar,
+.avatarFallback {
+  width: clamp(28px, 2.4vw, 44px);
+  height: clamp(28px, 2.4vw, 44px);
+  border-radius: var(--border-radius-full);
+  flex-shrink: 0;
+}
+
+.avatar {
+  object-fit: cover;
+}
+
+.avatarFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kiosk-border);
+  color: var(--kiosk-text);
+  font-size: var(--kiosk-font-base);
+  font-weight: 600;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--kiosk-font-base);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sends {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-1);
+  flex-shrink: 0;
+}
+
+.sendCount {
+  font-size: var(--kiosk-font-large);
+  font-weight: 700;
+}
+
+.sendLabel {
+  font-size: var(--kiosk-font-small);
+  color: var(--kiosk-text-muted);
+  white-space: nowrap;
+}

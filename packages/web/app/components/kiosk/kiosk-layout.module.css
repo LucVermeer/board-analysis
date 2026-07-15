@@ -1,0 +1,100 @@
+/* Kiosk frame + preset grids. 100dvh, zero scroll: every grid track uses
+ * minmax(0, …) so oversized content clips inside its cell instead of growing
+ * the page. No container queries — old smart-TV browsers don't support them;
+ * orientation media queries + clamp() carry the responsive behaviour. */
+
+/* Root frame: slim header row + body. Applied by kiosk-page-renderer. */
+.root {
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-4);
+  padding: var(--spacing-4);
+  min-height: 0;
+  min-width: 0;
+}
+
+.bodyWithRail {
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 440px);
+}
+
+.boardArea {
+  display: grid;
+  gap: var(--spacing-4);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* grid-template shorthand: <rows> / <columns> */
+.single {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.dual {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.triple {
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.quad {
+  grid-template: minmax(0, 1fr) minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.rail {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Portrait TVs: presets stack into rows; the rail becomes a bottom band. */
+@media (orientation: portrait) {
+  .bodyWithRail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) clamp(200px, 28vh, 360px);
+  }
+
+  .dual {
+    grid-template: minmax(0, 1fr) minmax(0, 1fr) / minmax(0, 1fr);
+  }
+
+  .triple {
+    grid-template: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) / minmax(0, 1fr);
+  }
+
+  .quad {
+    grid-template: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) / minmax(0, 1fr);
+  }
+}
+
+/* "Isn't set up yet" placeholder (zero configured boards). */
+.setupPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-3);
+  text-align: center;
+  padding: var(--spacing-8);
+  min-height: 0;
+}
+
+.setupTitle {
+  font-size: var(--kiosk-font-hero);
+  font-weight: 700;
+  margin: 0;
+}
+
+.setupBody {
+  font-size: var(--kiosk-font-base);
+  color: var(--kiosk-text-muted);
+  max-width: 36em;
+  margin: 0;
+}

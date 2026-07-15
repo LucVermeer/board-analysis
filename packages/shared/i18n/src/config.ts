@@ -41,6 +41,7 @@ export const ALL_NAMESPACES = [
   'admin',
   'aurora',
   'boards',
+  'kiosk',
 ] as const;
 export type Namespace = (typeof ALL_NAMESPACES)[number];
 

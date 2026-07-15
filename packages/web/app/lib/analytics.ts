@@ -137,6 +137,27 @@ export function reset(): boolean {
   return core.reset();
 }
 
+type PosthogSuperPropertyClient = {
+  register?: (properties: PosthogProperties) => unknown;
+};
+
+/**
+ * Register PostHog super properties — attached to every subsequent event from
+ * this page load. Used by the kiosk routes to stamp `kiosk: true` so 24/7 TV
+ * traffic is distinguishable from real climbers in product analytics.
+ * posthog-js-lite exposes `register` at runtime but not in its public typings,
+ * hence the narrow structural cast (same pattern as the feature-flag client
+ * above). Returns whether the property was registered.
+ */
+export function registerSuperProperties(properties: PosthogProperties): boolean {
+  const posthog = getPosthog();
+  if (!posthog) return false;
+  const superPropertyClient = posthog as unknown as PosthogSuperPropertyClient;
+  if (typeof superPropertyClient.register !== 'function') return false;
+  void superPropertyClient.register(properties);
+  return true;
+}
+
 export function pageview(url: string): void {
   if (isAdminAnalyticsUrl(url)) return;
 
