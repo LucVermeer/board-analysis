@@ -35,11 +35,11 @@ import {
 } from './client-lifecycle';
 import { pubsub } from '../../pubsub/index';
 import { endLiveActivity } from '../apns/index';
-// Module cycle (benign): board-queue-preview imports `roomManager` from this
-// package's index for queue-state reads, and we import its tombstone here.
-// Both sides only reference the other inside function bodies at runtime —
-// no top-level access — so ESM/CJS cycle resolution is safe.
-import { publishBoardQueuePreviewTombstoneForSession } from '../board-queue-preview';
+// Imported from the dedicated tombstone module, NOT from
+// `../board-queue-preview` — that module imports `roomManager` back for
+// queue-state reads, so importing it here would create a module cycle. The
+// tombstone module is roomManager-free by contract (see its header).
+import { publishBoardQueuePreviewTombstoneForSession } from '../board-queue-preview-tombstone';
 import type { SessionEvent } from '@boardsesh/shared-schema';
 import {
   getSessionById as getSessionByIdFn,

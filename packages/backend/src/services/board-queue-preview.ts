@@ -5,7 +5,18 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub, type QueueEventHook } from '../pubsub';
 import { roomManager } from './room-manager';
 import { isBoardAnonReadable } from '../graphql/resolvers/board-presence/shared';
+import { isPublicActiveSession, readBoardSessionPreviewGate } from './board-queue-preview-tombstone';
 import { logger } from '../utils/logger';
+
+// The tombstone + gate-2 session-visibility helpers live in their own module
+// so `RoomManager` can import the tombstone without a module cycle (this
+// module imports `roomManager` for queue-state reads). Re-exported here so
+// every other consumer keeps a single import point.
+export {
+  buildEmptyBoardQueuePreview,
+  isPublicActiveSession,
+  publishBoardQueuePreviewTombstoneForSession,
+} from './board-queue-preview-tombstone';
 
 /**
  * Board queue preview — the redacted, board-keyed "Up next" bridge between
@@ -78,31 +89,6 @@ export function buildBoardQueuePreview(boardId: number, queueState: QueueState):
 }
 
 /**
- * An empty preview snapshot — the tombstone published when a board's bound
- * session stops being publicly previewable (ended, or a future `is_public`
- * flip), so kiosks clear instead of showing the last queue forever.
- */
-export function buildEmptyBoardQueuePreview(boardId: number): BoardQueuePreview {
-  return {
-    boardId,
-    current: null,
-    upNext: [],
-    queueLength: 0,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-/** Whether this session may be previewed on public displays (gate 2). */
-async function isPublicActiveSession(sessionId: string): Promise<boolean> {
-  const [session] = await db
-    .select({ isPublic: dbSchema.boardSessions.isPublic, status: dbSchema.boardSessions.status })
-    .from(dbSchema.boardSessions)
-    .where(eq(dbSchema.boardSessions.id, sessionId))
-    .limit(1);
-  return Boolean(session && session.isPublic && session.status === 'active');
-}
-
-/**
  * Resolve the session whose queue may be publicly previewed for a board, or
  * null when there is none. Applies BOTH privacy gates (see module docs).
  *
@@ -110,16 +96,34 @@ async function isPublicActiveSession(sessionId: string): Promise<boolean> {
  * stamped by reportBoardClimb, 12h TTL) wins; when it's absent (expired,
  * Redis-less multi-instance, pre-deploy sessions) fall back to the newest
  * active `board_sessions` row for the board. When the live binding points at
- * a session that fails the gates we return null rather than falling through
- * to the DB — surfacing some *other* session's queue while a private one
- * holds the wall would be both wrong and a privacy leak.
+ * an ACTIVE session, that session decides the preview outright: public → its
+ * queue, private → null. It never falls through past an active private
+ * session — surfacing some *other* session's queue while a private one holds
+ * the wall would be both wrong and a privacy leak. An ENDED (or deleted)
+ * bound session is different: bindings are TTL'd and never cleared on
+ * session end, so the key can keep pointing at a dead session for hours. A
+ * dead session holds no privacy claim on the wall — treat the binding as
+ * stale and fall through, so a wall hand-off to a new session (no climb sent
+ * on it yet) doesn't blank kiosks until the new session's first send.
+ *
+ * `options.anonReadableVerified` skips the gate-1 board query when the
+ * caller has ALREADY verified `isBoardAnonReadable(boardId) === true` for
+ * this request (the anonymous resolver path, whose `requireAnonReadableBoard`
+ * ran the identical query) — never pass it on any other basis.
  */
-export async function resolvePublicPreviewSessionForBoard(boardId: number): Promise<string | null> {
-  if (!(await isBoardAnonReadable(boardId))) return null;
+export async function resolvePublicPreviewSessionForBoard(
+  boardId: number,
+  options: { anonReadableVerified?: boolean } = {},
+): Promise<string | null> {
+  if (!options.anonReadableVerified && !(await isBoardAnonReadable(boardId))) return null;
 
   const boundSessionId = await pubsub.getBoardSession(String(boardId));
   if (boundSessionId) {
-    return (await isPublicActiveSession(boundSessionId)) ? boundSessionId : null;
+    const boundSession = await readBoardSessionPreviewGate(boundSessionId);
+    if (boundSession && boundSession.status === 'active') {
+      return boundSession.isPublic ? boundSessionId : null;
+    }
+    // Ended/deleted bound session → stale binding; fall through (see above).
   }
 
   // Durable fallback: newest active public session linked to this board.
@@ -141,10 +145,14 @@ export async function resolvePublicPreviewSessionForBoard(boardId: number): Prom
 /**
  * The current redacted preview snapshot for a board, or null when no publicly
  * previewable session is bound. Shared by the `boardQueuePreview` query and
- * the subscription's seed yield.
+ * the subscription's seed yield. `options` is forwarded to
+ * `resolvePublicPreviewSessionForBoard` (see its gate-1 skip contract).
  */
-export async function getBoardQueuePreviewSnapshot(boardId: number): Promise<BoardQueuePreview | null> {
-  const sessionId = await resolvePublicPreviewSessionForBoard(boardId);
+export async function getBoardQueuePreviewSnapshot(
+  boardId: number,
+  options: { anonReadableVerified?: boolean } = {},
+): Promise<BoardQueuePreview | null> {
+  const sessionId = await resolvePublicPreviewSessionForBoard(boardId, options);
   if (!sessionId) return null;
   const queueState = await roomManager.getQueueState(sessionId);
   return buildBoardQueuePreview(boardId, queueState);
@@ -173,47 +181,6 @@ export async function publishBoardQueuePreviewForSession(sessionId: string): Pro
 
   const queueState = await roomManager.getQueueState(sessionId);
   pubsub.publishBoardQueuePreview(boardId, buildBoardQueuePreview(Number(boardId), queueState));
-}
-
-/**
- * Publish an EMPTY preview (tombstone) for the board this session is bound
- * to, clearing kiosks when the session stops being publicly previewable. The
- * live producer re-gates every queue-event publish, but a session ending (or
- * a visibility flip) is not a queue event — without this, the last published
- * snapshot would sit on public displays indefinitely.
- *
- * Called from every session-end path (`RoomManager.endSession` and the
- * inactivity sweep). There is currently no mutation that flips
- * `board_sessions.is_public` after creation — if one is ever added, it MUST
- * call this too when flipping to private.
- *
- * Guards, in order:
- * - Only while the board's REVERSE binding still points at THIS session. When
- *   a different session has since taken the wall, its queue owns the preview
- *   — an old session's end must not clobber it.
- * - Only for anon-readable boards (gate 1) — the producer never published for
- *   other boards, so there is nothing to clear, and an empty publish would
- *   still leak "a session just ended here" timing on a private board's
- *   channel.
- * - Only when the session genuinely is no longer previewable
- *   (`isPublicActiveSession` false) — a misplaced call for a still-live
- *   public session must not blank kiosks until the next queue event.
- *
- * Publisher-instance-only like every other preview publish: the end paths run
- * on one instance and the board-queue channel Redis-fans-out the tombstone to
- * every instance's subscribers.
- */
-export async function publishBoardQueuePreviewTombstoneForSession(sessionId: string): Promise<void> {
-  const boardId = await pubsub.getSessionBoard(sessionId);
-  if (!boardId) return;
-
-  const boundSessionId = await pubsub.getBoardSession(boardId);
-  if (boundSessionId !== sessionId) return;
-
-  if (!(await isBoardAnonReadable(Number(boardId)))) return;
-  if (await isPublicActiveSession(sessionId)) return;
-
-  pubsub.publishBoardQueuePreview(boardId, buildEmptyBoardQueuePreview(Number(boardId)));
 }
 
 /**

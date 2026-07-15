@@ -2480,7 +2480,7 @@ describe('board-presence commit degradation', () => {
       effectiveAngle: 40,
       sessionId: null,
     });
-    expect(result).toEqual({ previousWriter: null, writerSlotOk: false });
+    expect(result).toEqual({ previousWriter: null, writerSlotOk: false, sessionBindingChanged: false });
   });
 
   it('reportBoardClimb publishes the climb but no hand-off when the writer slot did not verifiably execute', async () => {
@@ -2495,7 +2495,11 @@ describe('board-presence commit degradation', () => {
     // fabrication and writerSlotOk says so. The resolver must still accept
     // the report and publish BoardClimbSet, but must NOT infer a free->held
     // hand-off from the fabricated null.
-    vi.spyOn(pubsub, 'commitBoardClimb').mockResolvedValue({ previousWriter: null, writerSlotOk: false });
+    vi.spyOn(pubsub, 'commitBoardClimb').mockResolvedValue({
+      previousWriter: null,
+      writerSlotOk: false,
+      sessionBindingChanged: false,
+    });
     const publishSpy = vi.spyOn(pubsub, 'publishBoardPresenceEvent');
 
     const accepted = await boardPresenceMutations.reportBoardClimb(

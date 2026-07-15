@@ -6,6 +6,7 @@ import type {
   BoardPresenceClimb,
   BoardQueuePreview,
   ClimbQueueItem,
+  ClimbQueueItemInput,
   ConnectionContext,
   QueueEvent,
   QueueState,
@@ -27,6 +28,7 @@ import {
   boardQueuePreviewQueries,
   boardQueuePreviewSubscriptions,
 } from '../graphql/resolvers/board-presence/queue-preview';
+import { boardPresenceMutations } from '../graphql/resolvers/board-presence/mutations';
 import { SYSTEM_BOARD_OWNER_ID } from '../graphql/resolvers/board-presence/shared';
 import { roomManager } from '../services/room-manager';
 
@@ -198,6 +200,15 @@ async function makePreviewableSession(): Promise<{ boardId: number; sessionId: s
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Poll until `condition` holds (for fire-and-forget publishes). */
+async function waitFor(condition: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('waitFor timed out');
+    await sleep(10);
+  }
+}
+
 // ============================================================
 // Redaction (pure — no DB, no Redis)
 // ============================================================
@@ -319,6 +330,58 @@ describe('board-queue-preview binding', () => {
 
     expect(await boardQueuePreviewQueries.boardQueuePreview(undefined, { boardId }, anonCtx())).toBeNull();
   });
+
+  it('commitBoardClimb reports whether this send created or changed the reverse binding (local fallback)', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+    const firstSessionId = await makeSession({ boardId, isPublic: true });
+    const secondSessionId = await makeSession({ boardId, isPublic: true });
+
+    const commit = (sessionId: string | null) =>
+      pubsub.commitBoardClimb({
+        boardId: String(boardId),
+        emitterId: TEST_USER_ID,
+        climb: makePresenceClimb(),
+        climbUuid: 'presence-climb',
+        effectiveAngle: 40,
+        sessionId,
+      });
+
+    // First bind creates the binding…
+    expect((await commit(firstSessionId)).sessionBindingChanged).toBe(true);
+    // …a re-stamp of the same session is not a change…
+    expect((await commit(firstSessionId)).sessionBindingChanged).toBe(false);
+    // …a hand-off to another session is…
+    expect((await commit(secondSessionId)).sessionBindingChanged).toBe(true);
+    // …and a session-less (solo) report never is.
+    expect((await commit(null)).sessionBindingChanged).toBe(false);
+  });
+
+  it('a stale binding to an ENDED session falls back to the newest active public session (wall hand-off)', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+    // Session A binds the board, then ends. Bindings are TTL'd, never cleared
+    // on session end, so the reverse key still points at A.
+    const endedSessionId = await makeSession({ boardId, isPublic: true });
+    await seedQueueState(endedSessionId, [makeQueueItem(9)], null);
+    await bindSessionToBoard(endedSessionId, boardId);
+    await db
+      .update(dbSchema.boardSessions)
+      .set({ status: 'ended' })
+      .where(eq(dbSchema.boardSessions.id, endedSessionId));
+    // Session B starts on the same board but has not sent a climb yet (no
+    // commitBoardClimb to re-stamp the binding).
+    const nextSessionId = await makeSession({ boardId, isPublic: true });
+    const queue = [makeQueueItem(1), makeQueueItem(2)];
+    await seedQueueState(nextSessionId, queue, queue[0]);
+
+    // A dead session holds no privacy claim on the wall — the stale binding
+    // must not blank the kiosk until B's first send.
+    const preview = await boardQueuePreviewQueries.boardQueuePreview(undefined, { boardId }, anonCtx());
+    expect(preview).not.toBeNull();
+    expect(preview!.current?.queueItemUuid).toBe('queue-item-1');
+    expect(preview!.upNext.map((item) => item.queueItemUuid)).toEqual(['queue-item-2']);
+    // The ended session's own queue never surfaces.
+    expect(JSON.stringify(preview)).not.toContain('queue-item-9');
+  });
 });
 
 // ============================================================
@@ -386,12 +449,16 @@ describe('board-queue-preview privacy gates', () => {
     expect(await getBoardQueuePreviewSnapshot(boardId)).toBeNull();
   });
 
-  it('a live-bound session that has already ended yields null', async () => {
+  it('a live-bound session that has already ended yields null when no other active public session exists', async () => {
     const boardId = await makeBoard({ isPublic: true });
     const endedSessionId = await makeSession({ boardId, isPublic: true, status: 'ended' });
     await seedQueueState(endedSessionId, [makeQueueItem(1)], null);
     await bindSessionToBoard(endedSessionId, boardId);
 
+    // The stale binding falls through to the DB fallback (see the wall
+    // hand-off test in the binding suite), which excludes ended sessions —
+    // so with nothing else on the board the ended session's queue never
+    // surfaces and the preview is null.
     expect(await boardQueuePreviewQueries.boardQueuePreview(undefined, { boardId }, anonCtx())).toBeNull();
   });
 
@@ -750,6 +817,125 @@ describe('board-queue-preview tombstone', () => {
       unsubscribe();
     }
   });
+
+  it('the inactivity sweep tombstones an auto-ended bound session (sweep wiring, not just the helper)', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+    // Stale enough for the sweep's 60-minute inactivity threshold.
+    const sessionId = await makeSession({
+      boardId,
+      isPublic: true,
+      lastActivity: new Date(Date.now() - 90 * 60 * 1000),
+    });
+    await seedQueueState(sessionId, [makeQueueItem(1)], null);
+    await bindSessionToBoard(sessionId, boardId);
+
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      await roomManager.runInactivitySweep();
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ boardId, ...EMPTY_PREVIEW_SHAPE });
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
+// ============================================================
+// First-bind kiosk seed: the reportBoardClimb that CREATES the binding also
+// publishes the initial preview. The live producer only fires on queue
+// events, so without this an always-on kiosk subscribed before anyone took
+// the wall would stay blank until the next queue mutation.
+// ============================================================
+describe('board-queue-preview first-bind seed', () => {
+  const BIND_CLIMB_UUID = 'queue-preview-bind-climb-uuid';
+  const OTHER_BIND_CLIMB_UUID = 'queue-preview-bind-climb-uuid-2';
+
+  function makeReportInput(climbUuid: string): ClimbQueueItemInput {
+    return {
+      uuid: `report-item-${climbUuid}`,
+      climb: {
+        uuid: climbUuid,
+        setter_username: 'setter-bind',
+        name: 'Bind Catalog Climb',
+        frames: 'p1100r12',
+        angle: 40,
+        ascensionist_count: 1,
+        difficulty: 'V5',
+        quality_average: '4.0',
+        stars: 4,
+        difficulty_error: '0',
+      },
+    };
+  }
+
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    // Catalog rows for the reported climbs (reportBoardClimb rejects unknown
+    // climbs); makeBoard creates kilter layout 1 boards.
+    await db.execute(sql`
+      INSERT INTO board_climbs (uuid, board_type, layout_id, name, frames, angle, is_listed, is_draft)
+      VALUES (${BIND_CLIMB_UUID}, 'kilter', 1, 'Bind Catalog Climb', 'p1100r12', 40, true, false),
+             (${OTHER_BIND_CLIMB_UUID}, 'kilter', 1, 'Other Bind Catalog Climb', 'p1101r12', 40, true, false)
+      ON CONFLICT (uuid) DO NOTHING
+    `);
+  });
+
+  afterEach(async () => {
+    await db.execute(sql`DELETE FROM board_climbs WHERE uuid IN (${BIND_CLIMB_UUID}, ${OTHER_BIND_CLIMB_UUID})`);
+    await cleanup();
+  });
+
+  it('the first reportBoardClimb seeds subscribers with the current queue snapshot — no queue mutation needed', async () => {
+    const boardId = await makeBoard({ isPublic: true });
+
+    // A real party session with a queue, joined the way the WS path does —
+    // ensureSessionRecordExists persists the board_sessions row (is_public
+    // defaults true, status active) before joinSession returns.
+    const sessionId = uuidv4();
+    const connectionId = `conn-bind-${Date.now()}`;
+    await roomManager.registerClient(connectionId, undefined, TEST_USER_ID);
+    const queue = [makeQueueItem(1), makeQueueItem(2)];
+    await roomManager.joinSession(connectionId, sessionId, TEST_BOARD_PATH, undefined, undefined, queue, queue[0]);
+    await pubsub.stampBoardMembership(String(boardId), TEST_USER_ID);
+
+    const received: BoardQueuePreview[] = [];
+    const unsubscribe = await pubsub.subscribeBoardQueuePreview(String(boardId), (preview) => received.push(preview));
+
+    try {
+      // No queue event has ever fired for this session — the wall report is
+      // the FIRST thing binding it to the board.
+      const ok = await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeReportInput(BIND_CLIMB_UUID), angle: 40 },
+        authCtx({ connectionId }),
+      );
+      expect(ok).toBe(true);
+
+      // The seed publish is fire-and-forget from the resolver.
+      await waitFor(() => received.length === 1);
+      expect(received[0].boardId).toBe(boardId);
+      expect(received[0].current?.queueItemUuid).toBe('queue-item-1');
+      expect(received[0].upNext.map((item) => item.queueItemUuid)).toEqual(['queue-item-2']);
+      expect(received[0].queueLength).toBe(2);
+      expect(JSON.stringify(received)).not.toContain(SECRET_USER_ID);
+
+      // A later report from the SAME session re-stamps the binding unchanged
+      // — no duplicate seed (queue events own subsequent publishes).
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeReportInput(OTHER_BIND_CLIMB_UUID), angle: 40 },
+        authCtx({ connectionId }),
+      );
+      await sleep(100);
+      expect(received).toHaveLength(1);
+    } finally {
+      unsubscribe();
+    }
+  });
 });
 
 // ============================================================
@@ -787,14 +973,22 @@ describe('board-queue-preview Redis binding', () => {
     const boardId = `redis-binding-board-${Date.now()}`;
     const sessionId = `redis-binding-session-${Date.now()}`;
 
-    await pubsub.commitBoardClimb({
-      boardId,
-      emitterId: TEST_USER_ID,
-      climb: makePresenceClimb(),
-      climbUuid: 'presence-climb',
-      effectiveAngle: 40,
-      sessionId,
-    });
+    const commit = (commitSessionId: string) =>
+      pubsub.commitBoardClimb({
+        boardId,
+        emitterId: TEST_USER_ID,
+        climb: makePresenceClimb(),
+        climbUuid: 'presence-climb',
+        effectiveAngle: 40,
+        sessionId: commitSessionId,
+      });
+
+    // SET..GET on the reverse key: the first commit observes "unbound" and
+    // reports the binding as changed; a re-stamp of the same session doesn't.
+    const firstCommit = await commit(sessionId);
+    expect(firstCommit.sessionBindingChanged).toBe(true);
+    const restamp = await commit(sessionId);
+    expect(restamp.sessionBindingChanged).toBe(false);
 
     try {
       expect(await pubsub.getSessionBoard(sessionId)).toBe(boardId);

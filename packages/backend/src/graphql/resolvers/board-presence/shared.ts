@@ -323,16 +323,24 @@ export async function isBoardAnonReadable(boardId: number): Promise<boolean> {
  * sequential board ids — are restricted to the `isBoardAnonReadable` set.
  * Throws the same `Board not found` as a missing board so a private board's
  * existence isn't revealed to anon. No-op for logged-in.
+ *
+ * Returns whether anon-readability was actually VERIFIED — true only on the
+ * anonymous path (where not throwing means `isBoardAnonReadable` held), false
+ * for logged-in viewers (nothing was checked). Callers that re-apply the same
+ * viewer-independent gate downstream (boardQueuePreview) use it to skip a
+ * duplicate `isBoardAnonReadable` query — never treat `false` as "not
+ * readable", only as "not verified here".
  */
 export async function requireAnonReadableBoard(
   boardId: number,
   viewerUserId: string | null | undefined,
-): Promise<void> {
+): Promise<boolean> {
   assertValidBoardId(boardId);
-  if (viewerUserId) return;
+  if (viewerUserId) return false;
   if (!(await isBoardAnonReadable(boardId))) {
     throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
+  return true;
 }
 
 export async function findOwnActiveBoardByConfig(

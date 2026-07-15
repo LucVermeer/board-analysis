@@ -587,8 +587,15 @@ export type BoardPresenceStats = {
  * 2. The bound session has `board_sessions.is_public = true`.
  *
  * NOTE on gate 2: this deliberately widens `isPublic`'s meaning from
- * "appears in session discovery" to "queue is observable on public displays".
- * A private (invite-only) session's queue is never previewed.
+ * "appears in session discovery" to "queue is observable on public displays"
+ * (user-approved product decision). `is_public` is the ONLY session
+ * visibility knob: `discoverable` controls nearby-search listing, not
+ * privacy — every session is joinable by anyone with its link, and no
+ * invite/approval mechanism exists. Today nothing sets `is_public = false`
+ * (`CreateSessionInput` has no such field), so every session on an
+ * anon-readable board is previewable after its first wall report; the gate is
+ * enforced now so the contract already holds when a session-privacy control
+ * ships.
  *
  * Every item is redacted to climb-catalog fields only (see
  * `BoardQueuePreviewItem`) — no addedBy/tickedBy/user identities ever leave
@@ -3854,9 +3861,12 @@ export type Query = {
    * discovery" to "queue observable on public displays" (documented product
    * decision). Also null when no session is bound to the board. The bound
    * session resolves from the live board→session binding stamped by
-   * `reportBoardClimb` (12h TTL), falling back to the newest active
-   * `board_sessions` row for the board. Items are redacted to climb-catalog
-   * fields only — never who added or ticked them.
+   * `reportBoardClimb` (12h TTL), falling back to the newest active public
+   * `board_sessions` row for the board when the binding is absent or points
+   * at an ended session (a stale binding — bindings are never cleared on
+   * session end). A binding pointing at an ACTIVE private session returns
+   * null outright, never another session's queue. Items are redacted to
+   * climb-catalog fields only — never who added or ticked them.
    */
   boardQueuePreview?: Maybe<BoardQueuePreview>;
   /**
@@ -6078,7 +6088,10 @@ export type Subscription = {
    * `isPublic: true` bound session — see the `boardQueuePreview` query,
    * including the deliberate widening of `is_public`'s meaning). The stream
    * is seeded with the current snapshot when one exists, since pub/sub has no
-   * replay. Items are redacted to climb-catalog fields only. When the bound
+   * replay; a snapshot is also published the moment a session first binds to
+   * the board (its first wall report), so an always-on display doesn't stay
+   * blank until the next queue mutation. Items are redacted to climb-catalog
+   * fields only. When the bound
    * session stops being previewable (ends, or goes private) an EMPTY snapshot
    * (`current: null, upNext: [], queueLength: 0`) is published so displays
    * clear instead of showing the last queue forever.

@@ -44,6 +44,18 @@ export type CommitBoardClimbResult = {
    * every send while Redis is unhealthy.
    */
   writerSlotOk: boolean;
+  /**
+   * True when this commit VERIFIABLY created or changed the board's reverse
+   * session binding (`board:{id}:session`) — i.e. the wall was previously
+   * unbound, or bound to a different session. False for a re-stamp of the
+   * same session, a session-less report, or when the binding slot didn't
+   * verifiably execute. `reportBoardClimb` uses it to seed the board-queue
+   * preview exactly when a session first takes (or takes over) the wall —
+   * the preview's live producer only fires on queue events, so without this
+   * seed a kiosk subscribed before the first send would stay blank until the
+   * next queue mutation.
+   */
+  sessionBindingChanged: boolean;
 };
 
 // Board-presence durable history (Redis FIFO) configuration. The live
@@ -509,8 +521,8 @@ export class BoardPresenceStore {
       // binding in-memory so getSessionBoard/getBoardSession keep answering
       // (the board-queue-preview producer depends on them). The writer slot
       // and history remain Redis-only, unchanged.
-      this.rememberLocalSessionBoardBinding(input.sessionId, input.boardId);
-      return { previousWriter: null, writerSlotOk: false };
+      const sessionBindingChanged = this.rememberLocalSessionBoardBinding(input.sessionId, input.boardId);
+      return { previousWriter: null, writerSlotOk: false, sessionBindingChanged };
     }
 
     try {
@@ -533,6 +545,7 @@ export class BoardPresenceStore {
       commandLabels.push('writer-set');
       pipeline.set(lastReportKey, lastReportValue, 'PX', REPORT_DEDUP_WINDOW_MS);
       commandLabels.push('last-report-set');
+      let boardSessionCommandIndex = -1;
       if (input.sessionId) {
         pipeline.set(`session:${input.sessionId}:board`, input.boardId, 'EX', BOARD_MEMBERSHIP_TTL);
         commandLabels.push('session-board-set');
@@ -540,7 +553,10 @@ export class BoardPresenceStore {
         // `getBoardSession(boardId)` answers "which session's queue is on this
         // wall". Same TTL/re-stamp lifecycle as the forward key — a fresh send
         // re-stamps both, an idle binding expires with proof-of-presence.
-        pipeline.set(`board:${input.boardId}:session`, input.sessionId, 'EX', BOARD_MEMBERSHIP_TTL);
+        // SET..GET (like the writer slot) so the caller learns whether this
+        // send just bound a NEW session to the wall (sessionBindingChanged).
+        boardSessionCommandIndex = commandLabels.length;
+        pipeline.set(`board:${input.boardId}:session`, input.sessionId, 'EX', BOARD_MEMBERSHIP_TTL, 'GET');
         commandLabels.push('board-session-set');
       }
 
@@ -555,12 +571,22 @@ export class BoardPresenceStore {
         }
       });
 
+      // Same verifiability rule as the writer slot: a failed binding slot means
+      // the previous value is a fabrication, so report "unchanged" (the next
+      // queue event re-gates and publishes anyway; a spurious "changed" is the
+      // only side to avoid guessing on).
+      let sessionBindingChanged = false;
+      if (boardSessionCommandIndex !== -1) {
+        const [bindingError, previousBoundSession] = results[boardSessionCommandIndex];
+        sessionBindingChanged = !bindingError && ((previousBoundSession as string | null) ?? null) !== input.sessionId;
+      }
+
       const [writerError, writerValue] = results[writerCommandIndex];
-      if (writerError) return { previousWriter: null, writerSlotOk: false };
-      return { previousWriter: (writerValue as string | null) ?? null, writerSlotOk: true };
+      if (writerError) return { previousWriter: null, writerSlotOk: false, sessionBindingChanged };
+      return { previousWriter: (writerValue as string | null) ?? null, writerSlotOk: true, sessionBindingChanged };
     } catch (error) {
       this.deps.logger.error('[PubSub] commitBoardClimb pipeline failed:', error);
-      return { previousWriter: null, writerSlotOk: false };
+      return { previousWriter: null, writerSlotOk: false, sessionBindingChanged: false };
     }
   }
 
@@ -652,12 +678,18 @@ export class BoardPresenceStore {
     }
   }
 
-  /** Local-only (Redis-less) session↔board binding write. See the map docs. */
-  private rememberLocalSessionBoardBinding(sessionId: string | null, boardId: string): void {
-    if (!sessionId) return;
+  /**
+   * Local-only (Redis-less) session↔board binding write. See the map docs.
+   * Returns whether the board's reverse binding was created or changed by
+   * this write (mirrors the Redis SET..GET path's `sessionBindingChanged`).
+   */
+  private rememberLocalSessionBoardBinding(sessionId: string | null, boardId: string): boolean {
+    if (!sessionId) return false;
+    const previousBoundSession = this.readLocalBinding(this.localBoardSession, boardId);
     const expiresAtMs = Date.now() + BOARD_MEMBERSHIP_TTL * 1000;
     this.localSessionBoard.set(sessionId, { value: boardId, expiresAtMs });
     this.localBoardSession.set(boardId, { value: sessionId, expiresAtMs });
+    return previousBoundSession !== sessionId;
   }
 
   /** Read + lazily evict an entry from a local binding map. */

@@ -226,8 +226,15 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
   2. The bound session has \`board_sessions.is_public = true\`.
 
   NOTE on gate 2: this deliberately widens \`isPublic\`'s meaning from
-  "appears in session discovery" to "queue is observable on public displays".
-  A private (invite-only) session's queue is never previewed.
+  "appears in session discovery" to "queue is observable on public displays"
+  (user-approved product decision). \`is_public\` is the ONLY session
+  visibility knob: \`discoverable\` controls nearby-search listing, not
+  privacy — every session is joinable by anyone with its link, and no
+  invite/approval mechanism exists. Today nothing sets \`is_public = false\`
+  (\`CreateSessionInput\` has no such field), so every session on an
+  anon-readable board is previewable after its first wall report; the gate is
+  enforced now so the contract already holds when a session-privacy control
+  ships.
 
   Every item is redacted to climb-catalog fields only (see
   \`BoardQueuePreviewItem\`) — no addedBy/tickedBy/user identities ever leave

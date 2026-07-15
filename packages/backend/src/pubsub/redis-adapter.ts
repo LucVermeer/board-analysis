@@ -121,9 +121,11 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
           commentMessageCallback(entityKey, parsed.event as CommentEvent);
         }
       } else if (channel.startsWith(BOARD_QUEUE_CHANNEL_PREFIX)) {
-        // Checked before BOARD_PRESENCE for the same intent-clarity reason as
-        // below (the prefixes don't actually overlap — `board-queue:` vs
-        // `board:`).
+        // No ordering requirement relative to any other branch:
+        // `boardsesh:board-queue:` and `boardsesh:board:` are disjoint (the
+        // hyphen after `board` breaks the startsWith match, see the prefix
+        // constants). This branch sits here purely to keep the two
+        // board-keyed domains adjacent.
         const boardId = channel.slice(BOARD_QUEUE_CHANNEL_PREFIX.length);
         if (boardQueueMessageCallback) {
           boardQueueMessageCallback(boardId, parsed.event as BoardQueuePreview);

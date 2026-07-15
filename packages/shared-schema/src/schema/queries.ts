@@ -466,9 +466,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     discovery" to "queue observable on public displays" (documented product
     decision). Also null when no session is bound to the board. The bound
     session resolves from the live board→session binding stamped by
-    \`reportBoardClimb\` (12h TTL), falling back to the newest active
-    \`board_sessions\` row for the board. Items are redacted to climb-catalog
-    fields only — never who added or ticked them.
+    \`reportBoardClimb\` (12h TTL), falling back to the newest active public
+    \`board_sessions\` row for the board when the binding is absent or points
+    at an ended session (a stale binding — bindings are never cleared on
+    session end). A binding pointing at an ACTIVE private session returns
+    null outright, never another session's queue. Items are redacted to
+    climb-catalog fields only — never who added or ticked them.
     """
     boardQueuePreview(boardId: Int!): BoardQueuePreview
 

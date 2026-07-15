@@ -31,8 +31,11 @@ export const boardQueuePreviewQueries = {
     // so the cap is per-connection — reconnect churn mints fresh buckets
     // (same as every other anon WS limit in this domain).
     await applyRateLimit(ctx, 30, 'boardQueuePreview');
-    await requireAnonReadableBoard(boardId, ctx.userId);
-    return getBoardQueuePreviewSnapshot(boardId);
+    // For anonymous viewers this already ran the exact `isBoardAnonReadable`
+    // query gate 1 needs; pass the verification down so the snapshot doesn't
+    // repeat it (logged-in viewers verified nothing — gate 1 still runs).
+    const anonReadableVerified = await requireAnonReadableBoard(boardId, ctx.userId);
+    return getBoardQueuePreviewSnapshot(boardId, { anonReadableVerified });
   },
 };
 
@@ -56,7 +59,8 @@ export const boardQueuePreviewSubscriptions = {
       // 30/min, parity with boardNowPlaying (the seed does DB work). Anon WS
       // callers are keyed per-connection — see the query resolver's note.
       await applyRateLimit(ctx, 30, 'boardQueuePreview');
-      await requireAnonReadableBoard(boardId, ctx.userId);
+      // Same gate-1 dedup as the query resolver (see its comment).
+      const anonReadableVerified = await requireAnonReadableBoard(boardId, ctx.userId);
 
       const boardKey = String(boardId);
 
@@ -69,7 +73,7 @@ export const boardQueuePreviewSubscriptions = {
       const eagerIterator = asyncIterable[Symbol.asyncIterator]();
 
       try {
-        const seed = await getBoardQueuePreviewSnapshot(boardId);
+        const seed = await getBoardQueuePreviewSnapshot(boardId, { anonReadableVerified });
         if (seed) {
           yield { boardQueuePreview: seed };
         }

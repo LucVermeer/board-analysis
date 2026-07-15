@@ -289,8 +289,10 @@ export async function startServer(): Promise<ServerResources> {
   // Wire PubSub queue events to the redacted board-queue preview producer
   // (gym-kiosk "Up next"). Coexists with the APNs hook above on the same
   // multi-hook registry; publisher-side semantics are correct because the
-  // board-queue channel itself Redis-fans-out the published preview.
-  registerBoardQueuePreviewHook();
+  // board-queue channel itself Redis-fans-out the published preview. The
+  // unregister is called in shutdownServices so pending debounce timers can't
+  // fire a publish against closing Redis/DB connections during teardown.
+  const unregisterBoardQueuePreviewHook = registerBoardQueuePreviewHook();
 
   const PORT = parseInt(process.env.PORT || '8080', 10);
   const BOARDSESH_URL = process.env.BOARDSESH_URL || 'https://boardsesh.com';
@@ -648,6 +650,16 @@ export async function startServer(): Promise<ServerResources> {
    */
   async function shutdownServices(): Promise<void> {
     eventBroker.shutdown();
+
+    // Detach the board-queue-preview producer first: it clears any pending
+    // debounce timers, so no preview publish can race the Redis/DB teardown
+    // below (the timers are unref'd, but unref only stops them holding the
+    // process open — they'd still fire during a graceful shutdown).
+    try {
+      unregisterBoardQueuePreviewHook();
+    } catch (error) {
+      logger.error('[Server] Error unregistering board-queue-preview hook:', error);
+    }
 
     if (apnsInstanceConfigInterval !== null) {
       clearInterval(apnsInstanceConfigInterval);

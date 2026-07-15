@@ -44,7 +44,10 @@ export const subscriptionsTypeDefs = /* GraphQL */ `
     \`isPublic: true\` bound session — see the \`boardQueuePreview\` query,
     including the deliberate widening of \`is_public\`'s meaning). The stream
     is seeded with the current snapshot when one exists, since pub/sub has no
-    replay. Items are redacted to climb-catalog fields only. When the bound
+    replay; a snapshot is also published the moment a session first binds to
+    the board (its first wall report), so an always-on display doesn't stay
+    blank until the next queue mutation. Items are redacted to climb-catalog
+    fields only. When the bound
     session stops being previewable (ends, or goes private) an EMPTY snapshot
     (\`current: null, upNext: [], queueLength: 0\`) is published so displays
     clear instead of showing the last queue forever.
