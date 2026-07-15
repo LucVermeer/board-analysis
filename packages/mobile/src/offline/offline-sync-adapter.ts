@@ -47,10 +47,12 @@ const reportSchemaDrift: SchemaDriftReporter = ({ tableName, column }) => {
   });
 };
 
-// Snapshot-bootstrap telemetry. Both handlers are wired unconditionally (like
-// reportSchemaDrift above) — they're inert when no `snapshotSource` is passed
-// in, since the engine only ever calls them from the bootstrap phase, which it
-// skips entirely without one.
+// Offline-download telemetry. Both handlers are wired unconditionally (like
+// reportSchemaDrift above). reportSnapshotBootstrapError is inert without a
+// `snapshotSource` (the engine only calls it from the bootstrap phase, which
+// it skips entirely without one); reportScopeDownloadComplete fires for EVERY
+// scope's first full download — paged crawls included — because the
+// snapshot-vs-paged rollout comparison needs both methods to emit the event.
 const reportSnapshotBootstrapError: SnapshotBootstrapErrorReporter = ({ scopeKey, stage, attempt, cause }) => {
   reportHandledError(new Error(`Snapshot bootstrap failed for ${scopeKey} at stage "${stage}" (attempt ${attempt})`), {
     tags: { source: 'offline-sync', kind: 'snapshot-bootstrap' },
