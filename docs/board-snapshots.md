@@ -5,6 +5,9 @@ offline sync on mobile. Code: `packages/backend/src/scripts/export-board-snapsho
 `packages/shared/offline-sync/src/sync/{snapshot-manifest,snapshot-bootstrap,pull-client,checkpoints}.ts`
 (shared client engine), `packages/mobile/src/offline/snapshot-source.ts` (mobile platform I/O).
 
+The snapshots are also usable as a plain downloadable dataset — manifest URL, schema, and
+consumption guidance live in `board-snapshots-dataset.md`.
+
 ## Why
 
 Enabling a board offline means downloading its whole reference catalog: `board_climbs` +
