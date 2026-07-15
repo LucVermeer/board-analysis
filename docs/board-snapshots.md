@@ -286,9 +286,23 @@ node --import tsx src/scripts/export-board-snapshots.ts [--dry-run] [--gzip] [--
 
 Set on the `Production` GitHub environment (referenced by the workflow): `DATABASE_URL`,
 `AWS_S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL`,
-`AWS_DEFAULT_REGION`. `SYNC_STABILITY_WINDOW_SECONDS` is an optional `vars.*` passthrough (only needed if
-the backend's stability window is ever configured off its 30s default — the export reads the same env var
-so the two stay in lockstep).
+`AWS_DEFAULT_REGION`. The workflow also accepts the Tigris console's exported names
+(`AWS_ENDPOINT_URL_S3`, `AWS_REGION`) so rotating keys stays copy-paste. `SYNC_STABILITY_WINDOW_SECONDS`
+is an optional `vars.*` passthrough (only needed if the backend's stability window is ever configured off
+its 30s default — the export reads the same env var so the two stay in lockstep).
+
+The Production environment restricts deployments to `main`, so `workflow_dispatch` runs of the export
+must be dispatched from `main` — a feature-branch dispatch fails immediately with a branch-policy
+rejection and zero log output.
+
+**Public URL base (Tigris quirk)**: the manifest's per-artifact `url` fields must be fetchable
+unauthenticated. Tigris serves public objects **only** on the bucket's virtual-host domain
+(`https://<bucket>.t3.tigrisfiles.io/<key>`); the S3 endpoint's path-style form that `getPublicUrl`
+builds (`https://t3.storage.dev/<bucket>/<key>`) returns 403 for anonymous GETs even on a public
+bucket. The workflow therefore sets `SNAPSHOT_PUBLIC_BASE_URL` (not a secret — it appears in every
+manifest) and the export re-bases entry URLs onto it. Keep it consistent with
+`EXPO_PUBLIC_SNAPSHOT_BASE_URL` in the mobile workflows: the mobile value is
+`${SNAPSHOT_PUBLIC_BASE_URL}/board-snapshots/v1`.
 
 ### Kill switches
 

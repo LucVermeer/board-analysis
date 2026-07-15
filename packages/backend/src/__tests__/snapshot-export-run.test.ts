@@ -304,3 +304,31 @@ describe('runExport — stale-artifact pruning', () => {
     await expect(runExport([])).resolves.toBeUndefined();
   });
 });
+
+describe('runExport — SNAPSHOT_PUBLIC_BASE_URL', () => {
+  // Tigris only serves public objects on the bucket's virtual-host domain; the
+  // S3 endpoint's path-style URLs (what getPublicUrl builds) 403 unauthenticated
+  // GETs even on a public bucket. The env var re-bases entry URLs onto the
+  // public host so the app can actually download what the manifest points at.
+  it('builds manifest entry URLs on the public base when set (trailing slash tolerated)', async () => {
+    await seedClimb('kilter', 1, 'k1-a');
+    process.env.SNAPSHOT_PUBLIC_BASE_URL = 'https://boardsesh-board-snapshots.t3.tigrisfiles.io/';
+    try {
+      await runExport([]);
+    } finally {
+      delete process.env.SNAPSHOT_PUBLIC_BASE_URL;
+    }
+
+    const entry = uploadedManifest().entries[0];
+    expect(entry.url).toBe(`https://boardsesh-board-snapshots.t3.tigrisfiles.io/${entry.key}`);
+  });
+
+  it('falls back to the store URL when unset', async () => {
+    await seedClimb('kilter', 1, 'k1-a');
+
+    await runExport([]);
+
+    const entry = uploadedManifest().entries[0];
+    expect(entry.url).toBe(`https://cdn.example/${entry.key}`);
+  });
+});

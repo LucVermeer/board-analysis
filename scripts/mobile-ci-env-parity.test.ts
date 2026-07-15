@@ -67,6 +67,10 @@ const SHARED_ENV_KEYS = [
   // off-thread and crashes Hermes (Sentry 7595562195). If it drifts out of one
   // workflow, that channel silently reverts to the crashing expo/fetch.
   'EXPO_PUBLIC_USE_RN_FETCH',
+  // Bundle-only: manifest base for the offline snapshot bootstrap. Drift ships
+  // an OTA whose fresh-board downloads silently fall back to the paged crawl
+  // (or fetch a stale bucket) — a behaviour change, not a delivery failure.
+  'EXPO_PUBLIC_SNAPSHOT_BASE_URL',
   'EXPO_UPDATES_CHANNEL',
   'EXPO_UPDATES_URL',
 ] as const;

@@ -81,6 +81,10 @@ env:
   # build time; without this, analytics.ts sees no key and isAnalyticsEnabled is
   # false, so every track() silently no-ops (the app shipped zero events before).
   EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+  # Manifest base for the offline snapshot bootstrap (bundle-only, no fingerprint
+  # effect). Public Tigris bucket; keep in sync with SNAPSHOT_PUBLIC_BASE_URL in
+  # export-board-snapshots.yml.
+  EXPO_PUBLIC_SNAPSHOT_BASE_URL: https://boardsesh-board-snapshots.t3.tigrisfiles.io/board-snapshots/v1
   # Pin RN's fetch as the global `fetch` (not expo/fetch), which crashes Hermes by
   # tearing down JSI promises off-thread (Sentry 7595562195). Bundle-only flag — it
   # doesn't enter the resolved config, so it never moves the fingerprint. Kept in
@@ -144,6 +148,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_SNAPSHOT_BASE_URL=$EXPO_PUBLIC_SNAPSHOT_BASE_URL
           EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EOF
 
@@ -254,6 +259,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_SNAPSHOT_BASE_URL=$EXPO_PUBLIC_SNAPSHOT_BASE_URL
           EXPO_PUBLIC_USE_RN_FETCH=$EXPO_PUBLIC_USE_RN_FETCH
           EOF
 

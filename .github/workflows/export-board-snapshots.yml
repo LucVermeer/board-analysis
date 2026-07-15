@@ -52,6 +52,12 @@ jobs:
           # as fallback for any other S3-compatible store.
           AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL_S3 || secrets.AWS_ENDPOINT_URL }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || secrets.AWS_DEFAULT_REGION }}
+          # Tigris serves public objects only on the bucket's virtual-host
+          # domain — the S3 endpoint's path-style URLs 403 unauthenticated GETs
+          # even on a public bucket, so manifest entry URLs must be built here.
+          # Not a secret (it's in every manifest the app fetches). Keep in sync
+          # with EXPO_PUBLIC_SNAPSHOT_BASE_URL in the mobile workflows.
+          SNAPSHOT_PUBLIC_BASE_URL: https://boardsesh-board-snapshots.t3.tigrisfiles.io
           # Keep the export's stability window in lockstep with the backend if
           # it's ever configured off-default (empty → the shared 30s default).
           SYNC_STABILITY_WINDOW_SECONDS: ${{ vars.SYNC_STABILITY_WINDOW_SECONDS }}
