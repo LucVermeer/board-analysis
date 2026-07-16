@@ -44,11 +44,14 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Improved
 
+- Smoother scrolling through your logbook and a snappier You tab ([#3718](https://github.com/boardsesh/boardsesh/pull/3718))
 - **Android: instant tab switching.** Hopping between Home, Climbs, and You no longer rebuilds the screen every time — the app keeps each tab ready, so switching is immediate instead of stuttering on the charts-heavy You tab. ([#3688](https://github.com/boardsesh/boardsesh/pull/3688))
 - MoonBoard heatmaps, hold search, and area filters now work from the board's real hold placements. ([#3658](https://github.com/boardsesh/boardsesh/pull/3658))
 
 ### Fixed
 
+- Hold heatmaps keep loading even when the busiest boards are getting hammered — no more failed heatmap loads under heavy search traffic. ([#3694](https://github.com/boardsesh/boardsesh/pull/3694))
+- Fixed: your Settings display name now shows everywhere right away — no more getting stuck with your auto-generated handle in the menu after you change it. ([#3719](https://github.com/boardsesh/boardsesh/pull/3719))
 - Bug reports now default to letting us follow up with you — flip the switch off if you'd rather we didn't. ([#3712](https://github.com/boardsesh/boardsesh/pull/3712))
 - Party sessions ride out a mid-action reconnect cleanly: queueing or switching a climb right as your connection blips no longer throws an error. ([#3693](https://github.com/boardsesh/boardsesh/pull/3693))
   A crew member who drops and rejoins won't flicker out of the roster, and the session won't be left without a leader.
