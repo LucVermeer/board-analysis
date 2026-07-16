@@ -1,7 +1,7 @@
 'use client';
 
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
@@ -36,6 +36,14 @@ export function useMyGyms(enabled: boolean, limit = 50) {
   // serve the previous user's gyms from the query cache.
   const viewerUserId = session?.user?.id ?? 'anonymous';
 
+  // The query key is deliberately NOT keyed on `token`: the ws-auth JWT is
+  // re-minted on its own ~5min revalidation cycle (see use-ws-auth-token.ts)
+  // even when the signed-in user hasn't changed, and gyms data has no reason
+  // to change alongside it — keying on it would re-fetch the whole gyms list
+  // on every silent token refresh. Same convention as
+  // useGroupedNotifications/useUnreadNotificationCount/InsightsTab's gymStats
+  // query. `queryFn` still closes over the latest `token` on every actual
+  // fetch, so a genuine token rotation is never used stale.
   const query = useInfiniteQuery<
     GymConnection,
     Error,
@@ -46,10 +54,15 @@ export function useMyGyms(enabled: boolean, limit = 50) {
     queryKey: ['myGyms', viewerUserId, limit] as const,
     queryFn: async ({ pageParam }) => {
       const client = createGraphQLHttpClient(token);
-      const response = await client.request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, {
-        input: { limit, offset: pageParam },
-      });
-      return response.myGyms;
+      try {
+        const response = await client.request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, {
+          input: { limit, offset: pageParam },
+        });
+        return response.myGyms;
+      } catch (requestError) {
+        console.error('Failed to fetch gyms:', requestError);
+        throw requestError;
+      }
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -62,9 +75,10 @@ export function useMyGyms(enabled: boolean, limit = 50) {
 
   const gyms: Gym[] = useMemo(() => query.data?.pages.flatMap((page) => page.gyms) ?? [], [query.data]);
 
-  const loadMore = () => {
-    void query.fetchNextPage();
-  };
+  const { fetchNextPage } = query;
+  const loadMore = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
 
   return {
     gyms,
