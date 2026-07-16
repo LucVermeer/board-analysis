@@ -39,20 +39,33 @@ applyGeneratedDevDbEnv();
 dotenv.config({ path: '.env.development.local', override: true });
 
 import * as Sentry from '@sentry/node';
+// Leaf config module — pure env-detection helpers with no side effects and no
+// postgres/driver imports, so pulling it in here can't defeat the OTel patching
+// this file must run before.
+import { isLocalDevelopment, isTestEnvironment } from '@boardsesh/db/client/config';
 
-const isProduction = process.env.NODE_ENV === 'production';
+// Enable in any prod-like environment, not only NODE_ENV === 'production':
+// Railway leaves NODE_ENV unset, so the old `=== 'production'` gate meant the
+// backend never reported to Sentry in production (issue #3603 / #3183).
+const dsn =
+  process.env.SENTRY_DSN ??
+  'https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400';
+const isProductionLike = !isLocalDevelopment() && !isTestEnvironment();
 
 Sentry.init({
-  dsn: 'https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400',
-  enabled: isProduction,
+  dsn,
+  enabled: isProductionLike && Boolean(dsn),
   enableLogs: true,
   // Matches the web service. Backend tags events with userId / clientIp from
   // ConnectionContext for incident triage; the data is already in our own
   // logs and is not exfiltrated beyond Sentry.
   sendDefaultPii: true,
-  // Read SENTRY_ENVIRONMENT (Sentry's standard env var) with NODE_ENV as
-  // fallback. Deliberately platform-neutral — no RAILWAY_*-style branching.
-  environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
+  // Read SENTRY_ENVIRONMENT (Sentry's standard env var) first. Otherwise fall
+  // back to 'production' when prod-like (NODE_ENV is unset on Railway), so
+  // real prod events aren't mislabelled 'development'. Platform-neutral — no
+  // RAILWAY_*-style branching.
+  environment:
+    process.env.SENTRY_ENVIRONMENT ?? (isProductionLike ? 'production' : (process.env.NODE_ENV ?? 'development')),
   serverName: 'boardsesh-backend',
 });
 

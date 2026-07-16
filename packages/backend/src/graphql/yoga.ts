@@ -7,8 +7,10 @@ import { validateToken } from '../middleware/auth';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { maxDepthPlugin } from '@escape.tech/graphql-armor-max-depth';
 import { costLimitPlugin } from '@escape.tech/graphql-armor-cost-limit';
+import { isLocalDevelopment, isTestEnvironment } from '@boardsesh/db/client/config';
 import { logger } from '../utils/logger';
 import { wasErrorReported } from '../utils/sentry-dedupe';
+import { maskDatabaseError } from './mask-error';
 
 /**
  * Create and configure the GraphQL Yoga instance
@@ -95,9 +97,12 @@ export function createYogaInstance() {
         }
       },
     },
-    // In development/test, show all errors
-    // In production, errors will be masked by default
-    maskedErrors: process.env.NODE_ENV === 'production',
+    // In local dev / tests, show all errors raw for debugging. In any prod-like
+    // deploy (Railway leaves NODE_ENV unset, so a `=== 'production'` gate was
+    // silently off — issue #3183), enable a TARGETED mask: it sanitizes only
+    // raw database errors so internal SQL never leaks to clients, and lets
+    // every other error through unchanged (see mask-error.ts).
+    maskedErrors: !isLocalDevelopment() && !isTestEnvironment() ? { maskError: maskDatabaseError } : false,
   });
 
   return yoga;

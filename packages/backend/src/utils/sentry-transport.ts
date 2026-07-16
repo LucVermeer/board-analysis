@@ -1,5 +1,20 @@
 import TransportStream from 'winston-transport';
 import * as Sentry from '@sentry/node';
+import { isLocalDevelopment, isTestEnvironment } from '@boardsesh/db/client/config';
+
+// Mirrors the `Sentry.init({ enabled })` gate in instrument.ts: capture in any
+// prod-like environment (Railway leaves NODE_ENV unset), but never in local dev
+// or under the test runner.
+//
+// The optional `nodeEnv` seam lets tests assert the gate without mutating
+// process.env; when supplied it fully determines the decision, so a test that
+// runs with VITEST=1 can still exercise the "production" branch.
+function isSentryLoggingEnabled(nodeEnvOverride?: string): boolean {
+  if (nodeEnvOverride !== undefined) {
+    return nodeEnvOverride !== 'development' && nodeEnvOverride !== 'test';
+  }
+  return !isLocalDevelopment() && !isTestEnvironment();
+}
 
 const SPLAT = Symbol.for('splat');
 // Mirrors the `ERROR_INSTANCE` symbol set by `appendSplatFormat` in logger.ts.
@@ -47,7 +62,7 @@ function extractError(info: LogInfo): Error | null {
  * instance to Sentry via `captureException`. Other levels and message-only
  * error logs are ignored.
  *
- * Gated to NODE_ENV === 'production' to mirror the `Sentry.init({ enabled })`
+ * Gated to prod-like environments to mirror the `Sentry.init({ enabled })`
  * gate in `instrument.ts` — keeps dev/test runs from emitting events.
  */
 export class SentryWinstonTransport extends TransportStream {
@@ -58,7 +73,7 @@ export class SentryWinstonTransport extends TransportStream {
 
   constructor(options: SentryWinstonTransportOptions = {}) {
     super({ ...options, level: 'error' });
-    this.enabled = (options.nodeEnv ?? process.env.NODE_ENV) === 'production';
+    this.enabled = isSentryLoggingEnabled(options.nodeEnv);
     this.capture = options.capture;
   }
 

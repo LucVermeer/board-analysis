@@ -1,5 +1,6 @@
 import { eq, and } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
+import * as Sentry from '@sentry/node';
 import type {
   ConnectionContext,
   UserProfile,
@@ -11,6 +12,9 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { userIsTester } from './tester';
 import { FAVORITE_COUNT_SUBQUERY } from './favorite-count';
+import { logger } from '../../../utils/logger';
+import { markErrorReported } from '../../../utils/sentry-dedupe';
+import { getPostgresErrorCode } from '../../../utils/postgres-errors';
 import {
   UpdateProfileInputSchema,
   SaveAuroraCredentialInputSchema,
@@ -49,63 +53,90 @@ export const userMutations = {
 
     const userId = ctx.userId!;
 
-    // Check if profile exists
-    const existingProfile = await db
-      .select()
-      .from(dbSchema.userProfiles)
-      .where(eq(dbSchema.userProfiles.userId, userId))
-      .limit(1);
+    try {
+      const row = await db.transaction(async (tx) => {
+        // Upsert only the fields the caller actually sent, so an omitted field
+        // keeps its existing value (partial-update semantics). Both fields are
+        // optional in the input schema; with neither present there is nothing
+        // to write, and an empty `set` would be invalid SQL — so skip the
+        // write entirely in that case.
+        const profileUpdates: { displayName?: string; avatarUrl?: string } = {};
+        if (input.displayName !== undefined) profileUpdates.displayName = input.displayName;
+        if (input.avatarUrl !== undefined) profileUpdates.avatarUrl = input.avatarUrl;
 
-    if (existingProfile.length === 0) {
-      // Create new profile
-      await db.insert(dbSchema.userProfiles).values({
-        userId,
-        displayName: input.displayName,
-        avatarUrl: input.avatarUrl,
+        if (Object.keys(profileUpdates).length > 0) {
+          await tx
+            .insert(dbSchema.userProfiles)
+            .values({ userId, ...profileUpdates })
+            .onConflictDoUpdate({ target: dbSchema.userProfiles.userId, set: profileUpdates });
+        }
+
+        // One round trip to load the merged profile, mirroring the `profile`
+        // query so both stay a single correlated-subquery select instead of the
+        // previous 4 sequential, un-transactioned round trips (issue #3603).
+        const [loadedRow] = await tx
+          .select({
+            id: dbSchema.users.id,
+            email: dbSchema.users.email,
+            name: dbSchema.users.name,
+            image: dbSchema.users.image,
+            createdAt: dbSchema.users.createdAt,
+            displayName: dbSchema.userProfiles.displayName,
+            avatarUrl: dbSchema.userProfiles.avatarUrl,
+            favoriteCount: FAVORITE_COUNT_SUBQUERY,
+          })
+          .from(dbSchema.users)
+          .leftJoin(dbSchema.userProfiles, eq(dbSchema.userProfiles.userId, dbSchema.users.id))
+          .where(eq(dbSchema.users.id, userId))
+          .limit(1);
+
+        return loadedRow;
       });
-    } else {
-      // Update existing profile
-      await db
-        .update(dbSchema.userProfiles)
-        .set({
-          displayName: input.displayName ?? existingProfile[0].displayName,
-          avatarUrl: input.avatarUrl ?? existingProfile[0].avatarUrl,
-        })
-        .where(eq(dbSchema.userProfiles.userId, userId));
+
+      if (!row) {
+        // The authenticated user row vanished mid-request — return a clean,
+        // client-safe error instead of dereferencing undefined.
+        throw new GraphQLError('Your account could not be found.', {
+          extensions: { code: 'USER_NOT_FOUND' },
+        });
+      }
+
+      return {
+        id: row.id,
+        email: row.email,
+        displayName: row.displayName || row.name || undefined,
+        avatarUrl: row.avatarUrl || row.image || undefined,
+        isTester: await userIsTester(row.id),
+        createdAt: row.createdAt.toISOString(),
+        favoriteCount: row.favoriteCount,
+      };
+    } catch (error) {
+      // A GraphQLError here is already client-safe and intentional (the
+      // USER_NOT_FOUND above) — let it through untouched.
+      if (error instanceof GraphQLError) throw error;
+
+      // drizzle masks the driver failure as "Failed query: <sql>" and keeps the
+      // real PostgresError on `.cause`. Capture the true cause (with its pg
+      // code) to Sentry, and hand the client a generic message rather than the
+      // raw SQL that used to leak straight through (issues #3603, #3183).
+      const pgCode = getPostgresErrorCode(error);
+      logger.error('[updateProfile] db failure', { userId, pgCode, error });
+      Sentry.captureException(error instanceof Error ? (error.cause ?? error) : error, {
+        tags: { source: 'updateProfile', transport: ctx.transport, pgCode: pgCode ?? 'unknown' },
+        extra: {
+          userId,
+          hasDisplayName: input.displayName !== undefined,
+          hasAvatarUrl: input.avatarUrl !== undefined,
+        },
+      });
+      const clientSafeError = new GraphQLError('Could not save your profile. Please try again.', {
+        extensions: { code: 'PROFILE_UPDATE_FAILED' },
+      });
+      // Dedupe: the generic graphql-yoga error handler skips errors already
+      // reported here, so this failure yields a single Sentry event.
+      markErrorReported(clientSafeError);
+      throw clientSafeError;
     }
-
-    // Fetch and return updated profile
-    const users = await db
-      .select({
-        id: dbSchema.users.id,
-        email: dbSchema.users.email,
-        name: dbSchema.users.name,
-        image: dbSchema.users.image,
-        createdAt: dbSchema.users.createdAt,
-        favoriteCount: FAVORITE_COUNT_SUBQUERY,
-      })
-      .from(dbSchema.users)
-      .where(eq(dbSchema.users.id, userId))
-      .limit(1);
-
-    const profiles = await db
-      .select()
-      .from(dbSchema.userProfiles)
-      .where(eq(dbSchema.userProfiles.userId, userId))
-      .limit(1);
-
-    const user = users[0];
-    const profile = profiles[0];
-
-    return {
-      id: user.id,
-      email: user.email,
-      displayName: profile?.displayName || user.name || undefined,
-      avatarUrl: profile?.avatarUrl || user.image || undefined,
-      isTester: await userIsTester(user.id),
-      createdAt: user.createdAt.toISOString(),
-      favoriteCount: user.favoriteCount,
-    };
   },
 
   /**
