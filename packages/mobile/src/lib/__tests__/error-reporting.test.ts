@@ -134,6 +134,17 @@ describe('reportHandledError', () => {
     });
   });
 
+  it('downgrades a GraphQLEmptyResponseError (2xx with an empty/truncated body) to a warning tagged network (#3190)', () => {
+    const emptyBody = Object.assign(new Error('GraphQL response body was empty or not valid JSON (HTTP 200)'), {
+      name: 'GraphQLEmptyResponseError',
+    });
+    reportHandledError(emptyBody, { tags: { source: 'react-query', kind: 'query' } });
+    expect(mockedCaptureToSentry).toHaveBeenCalledWith(emptyBody, {
+      level: 'warning',
+      tags: { source: 'react-query', kind: 'query', network: true },
+    });
+  });
+
   it('forces warning for a network error even if the caller asked for a higher level', () => {
     const offline = new TypeError('Network request failed');
     reportHandledError(offline, { level: 'fatal', tags: { source: 'x' } });

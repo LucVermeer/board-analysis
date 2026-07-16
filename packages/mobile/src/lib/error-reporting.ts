@@ -36,10 +36,15 @@ function isCancellation(error: unknown): boolean {
  * networks, so we keep it filterable as a low-severity breadcrumb rather than a
  * full `error` that drowns real bugs. RN's fetch rejects offline requests with
  * `TypeError: Network request failed`; graphql-request wraps a fetch failure in
- * a ClientError that carries no HTTP `response.status`.
+ * a ClientError that carries no HTTP `response.status`; our GraphQL client
+ * throws a typed `GraphQLEmptyResponseError` (see `./graphql/client.ts`) when a
+ * nominally-2xx response body arrives empty or truncated — the same offline
+ * blip signature, just caught a layer up (#3190).
  */
 function isNetworkError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
+  const name = (error as { name?: unknown }).name;
+  if (name === 'GraphQLEmptyResponseError') return true;
   const response = (error as { response?: { status?: unknown } }).response;
   // A ClientError with a `response` but no numeric `status` is a transport
   // failure; one with a status is a real server error (4xx/5xx) we want to see.
