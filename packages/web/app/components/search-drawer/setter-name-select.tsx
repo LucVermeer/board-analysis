@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
+import { useTranslation } from 'react-i18next';
 import { useUISearchParams } from '../queue-control/ui-searchparams-provider';
 import { useSearchData } from '../graphql-queue';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
@@ -20,11 +21,24 @@ type SetterOption = {
   count: number;
 };
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+// Throws on a non-2xx response instead of silently resolving the error body
+// (e.g. `{ error: "..." }` from the setters API route) as if it were data.
+// Without this, a transient API failure hands the query an object where an
+// array was expected, which crashed `.map` downstream (issue #2068 /
+// Sentry BOARDSESH-7C). This message is never rendered — it only surfaces
+// via React Query's `error` state / console — so it doesn't need i18n.
+const fetcher = (url: string) =>
+  fetch(url).then((res) => {
+    if (!res.ok) {
+      throw new Error('Failed to fetch setter stats');
+    }
+    return res.json();
+  });
 
 const MIN_SEARCH_LENGTH = 2; // Only search when user has typed at least 2 characters
 
 const SetterNameSelect = () => {
+  const { t } = useTranslation('climbs');
   const { uiSearchParams, updateFilters } = useUISearchParams();
   const { parsedParams } = useSearchData();
   const [searchValue, setSearchValue] = useState('');
@@ -46,9 +60,11 @@ const SetterNameSelect = () => {
     placeholderData: keepPreviousData,
   });
 
-  // Map setter stats to Autocomplete options
+  // Map setter stats to Autocomplete options. Guards against any non-array
+  // shape reaching here (e.g. a future API response drift), not just the
+  // undefined-while-loading case — see the fetcher comment above.
   const options: SetterOption[] = React.useMemo(() => {
-    if (!setterStats) return [];
+    if (!Array.isArray(setterStats)) return [];
 
     return setterStats.map((stat) => ({
       value: stat.setter_username,
@@ -67,11 +83,11 @@ const SetterNameSelect = () => {
 
   let noOptionsText: string;
   if (isLoading) {
-    noOptionsText = 'Loading...';
+    noOptionsText = t('common:actions.loading');
   } else if (!isOpen && searchValue.length === 0) {
-    noOptionsText = 'Open dropdown to see setters';
+    noOptionsText = t('search.fields.setterPromptOpen');
   } else {
-    noOptionsText = 'No setters found';
+    noOptionsText = t('search.fields.setterNoResults');
   }
 
   return (
@@ -100,7 +116,7 @@ const SetterNameSelect = () => {
       renderInput={(params) => (
         <TextField
           {...params}
-          placeholder={selectedOptions.length === 0 ? 'Search setters...' : ''}
+          placeholder={selectedOptions.length === 0 ? t('search.placeholders.setters') : ''}
           slotProps={{
             input: {
               ...params.InputProps,

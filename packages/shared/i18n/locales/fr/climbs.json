@@ -88,7 +88,8 @@
       "gyms": "Rechercher des salles...",
       "users": "Rechercher des grimpeurs...",
       "playlists": "Rechercher des playlists...",
-      "climbs": "Rechercher des blocs..."
+      "climbs": "Rechercher des blocs...",
+      "setters": "Rechercher des ouvreurs..."
     },
     "fields": {
       "climbName": "Nom du bloc",
@@ -116,7 +117,9 @@
       "somewhatAccurate": "Plutôt précise (<0.2)",
       "veryAccurate": "Très précise (<0.1)",
       "extremelyAccurate": "Extrêmement précise (<0.05)",
-      "classicsOnly": "Classiques uniquement"
+      "classicsOnly": "Classiques uniquement",
+      "setterPromptOpen": "Ouvrez la liste pour voir les ouvreurs",
+      "setterNoResults": "Aucun ouvreur trouvé"
     },
     "panels": {
       "quality": "Qualité",

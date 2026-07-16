@@ -88,7 +88,8 @@
       "gyms": "Search gyms...",
       "users": "Search climbers...",
       "playlists": "Search playlists...",
-      "climbs": "Search climbs..."
+      "climbs": "Search climbs...",
+      "setters": "Search setters..."
     },
     "fields": {
       "climbName": "Climb Name",
@@ -116,7 +117,9 @@
       "somewhatAccurate": "Somewhat Accurate (<0.2)",
       "veryAccurate": "Very Accurate (<0.1)",
       "extremelyAccurate": "Extremely Accurate (<0.05)",
-      "classicsOnly": "Classics Only"
+      "classicsOnly": "Classics Only",
+      "setterPromptOpen": "Open dropdown to see setters",
+      "setterNoResults": "No setters found"
     },
     "panels": {
       "quality": "Quality",

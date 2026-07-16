@@ -88,7 +88,8 @@
       "gyms": "Busca rocódromos...",
       "users": "Busca escaladores...",
       "playlists": "Busca listas...",
-      "climbs": "Busca bloques..."
+      "climbs": "Busca bloques...",
+      "setters": "Busca setters..."
     },
     "fields": {
       "climbName": "Nombre del bloque",
@@ -116,7 +117,9 @@
       "classicsOnly": "Solo clásicos",
       "minAscentsOption": "{{value}}+",
       "minRatingOption_one": "{{count}} estrella o más",
-      "minRatingOption_other": "{{count}} estrellas o más"
+      "minRatingOption_other": "{{count}} estrellas o más",
+      "setterPromptOpen": "Abre la lista para ver los setters",
+      "setterNoResults": "No se encontraron setters"
     },
     "panels": {
       "quality": "Calidad",
