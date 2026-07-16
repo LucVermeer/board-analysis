@@ -174,6 +174,31 @@ export function useCreateClimbScreen({
     [],
   );
 
+  // ---- Detach the saved-climb row + queue identity when the working angle
+  // changes. ----
+  // The screen key (createClimbScreenKey) deliberately excludes `angle`, so a
+  // working-angle change keeps this hook mounted (and its in-progress paint —
+  // hold geometry is angle-independent). But `savedClimb` was saved *at* the
+  // old angle, and `handleSetActive` / `handleSave` stamp the live `board.angle`
+  // — so leaving the old row attached would pair the old climb's uuid with the
+  // new angle (Set Active shows the wrong angle; a re-Save would updateClimb the
+  // old row to the new angle). Web has no such bug: its angle is a URL segment,
+  // so an angle change remounts the form and resets `savedClimb` to null. This
+  // mirrors that reset without wiping the paint. Skipped in edit mode, whose
+  // identity is `editClimbUuid` (you're editing one row across any angle).
+  const lastAngleRef = useRef(board.angle);
+  useEffect(() => {
+    if (lastAngleRef.current === board.angle) return;
+    lastAngleRef.current = board.angle;
+    if (isEditing) return;
+    // Fresh authoring context at the new angle: drop the saved-row link so the
+    // next Save creates a new climb, clear any stale duplicate banner, and mint
+    // a new preview uuid so Set Active pushes an independent queue item.
+    setSavedClimb(null);
+    setPublishDuplicateError(null);
+    previewUuidRef.current = randomUUID();
+  }, [board.angle, isEditing]);
+
   // ---- Edit mode: fetch the climb and seed the editor once. ----
   const editVariables = useMemo(
     () =>
