@@ -554,6 +554,34 @@ export const tickMutations = {
       );
     }
 
+    // Resolve session_id. sessionId is a client-supplied string (SaveTickInputSchema
+    // has no format/existence/ownership check) that can outlive its session — the
+    // party session it names may have already ended, or (for an offline-replayed
+    // tick) may never have existed on this backend at all: the offline mutation
+    // outbox has no session-create entry, so a queued tick's sessionId is never
+    // guaranteed server-side. boardsesh_ticks.session_id has ON DELETE SET NULL,
+    // but that only protects rows that already reference a session at the moment
+    // it's deleted — it does nothing for a fresh INSERT naming an id that's
+    // already gone, which raises a raw FK violation and loses the whole tick
+    // (issue #2386). Same best-effort trade-off as the boardUuid/boardId
+    // resolution above: a stale/unknown sessionId records the tick unassociated
+    // rather than rejecting it. No ownership check — party-mode ticks legitimately
+    // reference sessions other users created.
+    let resolvedSessionId: string | null = null;
+    if (validatedInput.sessionId) {
+      const [session] = await db
+        .select({ id: dbSchema.boardSessions.id })
+        .from(dbSchema.boardSessions)
+        .where(eq(dbSchema.boardSessions.id, validatedInput.sessionId))
+        .limit(1);
+
+      if (session) {
+        resolvedSessionId = session.id;
+      } else {
+        logger.warn(`[saveTick] Dropping stale sessionId ${validatedInput.sessionId} — session not found`);
+      }
+    }
+
     // Run write-time beta-link validation before opening the transaction so a
     // bad video URL doesn't leave a half-state. Zod already validated the
     // surface shape; Instagram gets deep public/caption validation, while
@@ -611,7 +639,7 @@ export const tickMutations = {
           climbedAt,
           createdAt: now,
           updatedAt: now,
-          sessionId: validatedInput.sessionId ?? null,
+          sessionId: resolvedSessionId,
           boardId,
           // Aurora sync fields are null - will be populated by periodic sync job
           auroraType: null,
@@ -626,8 +654,8 @@ export const tickMutations = {
 
       if (!createdTick) return [];
 
-      if (validatedInput.sessionId) {
-        await tx.update(sessions).set({ lastActivity: new Date() }).where(eq(sessions.id, validatedInput.sessionId));
+      if (resolvedSessionId) {
+        await tx.update(sessions).set({ lastActivity: new Date() }).where(eq(sessions.id, resolvedSessionId));
       }
 
       // Attach the video URL as community beta for this climb if the user
