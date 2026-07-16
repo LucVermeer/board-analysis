@@ -2,6 +2,7 @@ package com.boardsesh.liveactivity
 
 import android.Manifest
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -18,8 +19,9 @@ import org.robolectric.annotation.Config
 /**
  * Lifecycle of the logical `sessionActive` flag — the source of the
  * "notification freezes mid-session" and "JS thinks the session started when it
- * didn't" bugs. The controller takes an injectable startForegroundService seam so
- * the ForegroundServiceStartNotAllowedException path is drivable without a live
+ * didn't" bugs. The controller takes injectable startForegroundService /
+ * startService seams so the ForegroundServiceStartNotAllowedException and
+ * BackgroundServiceStartNotAllowedException paths are drivable without a live
  * service.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -27,15 +29,28 @@ class SessionPresenceControllerTest {
 
     private val application: Application = ApplicationProvider.getApplicationContext()
 
+    // Records both delivery seams into one ordered list so intent-content
+    // assertions don't care which seam carried a given action. Tests that assert
+    // the delivery MECHANISM (START/STOP via startForegroundService, UPDATE via
+    // startService) inject the seams separately instead.
     private fun recordingController(): Pair<SessionPresenceController, MutableList<Intent>> {
         val launchedIntents = mutableListOf<Intent>()
-        val controller = SessionPresenceController(application) { _, intent -> launchedIntents.add(intent) }
+        val record: (Context, Intent) -> Unit = { _, intent -> launchedIntents.add(intent) }
+        val controller = SessionPresenceController(
+            application,
+            startForegroundService = record,
+            startService = record,
+        )
         return controller to launchedIntents
     }
 
-    // Stands in for ForegroundServiceStartNotAllowedException (API 31+); launchService
-    // catches plain Exception, so the type doesn't matter for the flag logic.
+    // Stands in for ForegroundServiceStartNotAllowedException (API 31+); the catch
+    // handles plain Exception, so the type doesn't matter for the flag logic.
     private fun fgsNotAllowed(): Exception = IllegalStateException("ForegroundServiceStartNotAllowedException")
+
+    // Stands in for BackgroundServiceStartNotAllowedException (API 31+), thrown by
+    // startService when the process is no longer foreground-exempt.
+    private fun bgServiceNotAllowed(): Exception = IllegalStateException("BackgroundServiceStartNotAllowedException")
 
     private fun updateOptions(): SessionUpdateOptions = SessionUpdateOptions().apply {
         climbName = "Test Climb"
@@ -85,7 +100,10 @@ class SessionPresenceControllerTest {
     @Config(sdk = [31])
     fun `startup-path launch failure clears sessionActive and rejects startSession`() {
         val startupFailure = fgsNotAllowed()
-        val controller = SessionPresenceController(application) { _, _ -> throw startupFailure }
+        val controller = SessionPresenceController(
+            application,
+            startForegroundService = { _, _ -> throw startupFailure },
+        )
 
         val thrown = assertThrows(SessionForegroundServiceStartException::class.java) {
             controller.startSession(null)
@@ -100,28 +118,54 @@ class SessionPresenceControllerTest {
 
     @Test
     @Config(sdk = [31])
-    fun `update-path launch failure keeps sessionActive`() {
-        var failNextLaunch = false
-        val launchedIntents = mutableListOf<Intent>()
-        val controller = SessionPresenceController(application) { _, intent ->
-            if (failNextLaunch) throw fgsNotAllowed()
-            launchedIntents.add(intent)
-        }
+    fun `updateActivity delivers via startService, never startForegroundService`() {
+        val fgsIntents = mutableListOf<Intent>()
+        val serviceIntents = mutableListOf<Intent>()
+        val controller = SessionPresenceController(
+            application,
+            startForegroundService = { _, intent -> fgsIntents.add(intent) },
+            startService = { _, intent -> serviceIntents.add(intent) },
+        )
+
+        controller.startSession(null)
+        controller.updateActivity(updateOptions())
+
+        // START promotes via startForegroundService (the one legitimate FGS
+        // start). The UPDATE must go through startService so it never re-arms a
+        // startForeground() deadline — the accumulation of those per-update
+        // deadlines was the ForegroundServiceDidNotStartInTimeException in #3188.
+        assertEquals(listOf(BoardSessionService.ACTION_START), fgsIntents.map { it.action })
+        assertEquals(listOf(BoardSessionService.ACTION_UPDATE), serviceIntents.map { it.action })
+    }
+
+    @Test
+    @Config(sdk = [31])
+    fun `update-path startService failure keeps sessionActive`() {
+        var failNextUpdate = false
+        val updateIntents = mutableListOf<Intent>()
+        val controller = SessionPresenceController(
+            application,
+            startForegroundService = { _, _ -> },
+            startService = { _, intent ->
+                if (failNextUpdate) throw bgServiceNotAllowed()
+                updateIntents.add(intent)
+            },
+        )
 
         controller.startSession(null)
         assertTrue(controller.sessionActive)
 
-        // App briefly backgrounds: the UPDATE re-delivery throws, but the service
-        // is already running — the session must stay active (the regression this
-        // PR fixes; clearing here permanently froze the notification).
-        failNextLaunch = true
+        // Process no longer foreground-exempt: the UPDATE startService throws, but
+        // the service was already promoted — the session must stay active (the
+        // regression this guards; clearing here permanently froze the notification).
+        failNextUpdate = true
         controller.updateActivity(updateOptions())
         assertTrue(controller.sessionActive)
 
         // Back in the foreground, a later update refreshes the notification.
-        failNextLaunch = false
+        failNextUpdate = false
         controller.updateActivity(updateOptions())
-        assertEquals(BoardSessionService.ACTION_UPDATE, launchedIntents.last().action)
+        assertEquals(BoardSessionService.ACTION_UPDATE, updateIntents.last().action)
     }
 
     @Test
@@ -228,9 +272,12 @@ class SessionPresenceControllerTest {
     @Config(sdk = [31])
     fun `endSession falls back to stopService when ACTION_STOP delivery throws`() {
         var failNextLaunch = false
-        val controller = SessionPresenceController(application) { _, _ ->
-            if (failNextLaunch) throw fgsNotAllowed()
-        }
+        val controller = SessionPresenceController(
+            application,
+            startForegroundService = { _, _ ->
+                if (failNextLaunch) throw fgsNotAllowed()
+            },
+        )
         controller.startSession(null)
 
         // Service already gone and app backgrounded: the ACTION_STOP delivery
