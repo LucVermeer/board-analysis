@@ -195,6 +195,18 @@ describe('PersistentQueueBar', () => {
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
 
+  it('renders nothing on the create-board / edit-board screens (regression test for #3298)', () => {
+    // `boards` is a root push, not a top-level tab page — a leftover queued climb
+    // must not float the bar over BoardForm's pinned submit button. Before #3253's
+    // allow-list rewrite the route gate was a deny-list (auth/gyms/player only)
+    // that let this fall through and cover the create-board CTA (#3298).
+    cfg.onTopLevelTab = false;
+    cfg.onAccessorySurface = false;
+    const { container } = render(<PersistentQueueBar />);
+    expect(container.querySelector('[data-capsule]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
+  });
+
   it('renders nothing on the full-screen player route', () => {
     // The /play player owns the whole surface. The native accessory host stays
     // mounted (occluded) under the transparent player, so `onAccessorySurface` is

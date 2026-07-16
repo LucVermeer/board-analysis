@@ -50,6 +50,16 @@ describe('isTopLevelTabRoute', () => {
     expect(isTopLevelTabRoute(['auth', 'login'])).toBe(false);
     expect(isTopLevelTabRoute([])).toBe(false);
   });
+
+  it('is false on the create-board / edit-board screens (regression test for #3298)', () => {
+    // `boards` is a root Stack.Screen (app/_layout.tsx), not nested under `(tabs)`,
+    // so its create/edit screens must never be treated as a top-level tab page.
+    // Before #3253's allow-list rewrite, the accessory bar's route gate was a
+    // deny-list (auth/gyms/player only) that let it fall through and show here,
+    // overlapping BoardForm's pinned submit button (#3298).
+    expect(isTopLevelTabRoute(['boards', 'create'])).toBe(false);
+    expect(isTopLevelTabRoute(['boards', 'edit'])).toBe(false);
+  });
 });
 
 describe('isAccessorySurfaceRoute', () => {
@@ -66,5 +76,12 @@ describe('isAccessorySurfaceRoute', () => {
     expect(isAccessorySurfaceRoute(['gyms'])).toBe(false);
     expect(isAccessorySurfaceRoute(['auth', 'login'])).toBe(false);
     expect(isAccessorySurfaceRoute([])).toBe(false);
+  });
+
+  it('is false on the create-board / edit-board screens (regression test for #3298)', () => {
+    // Pins the JS PersistentQueueBar's mount gate off the create/edit board
+    // screens — see the isTopLevelTabRoute case above for the full context.
+    expect(isAccessorySurfaceRoute(['boards', 'create'])).toBe(false);
+    expect(isAccessorySurfaceRoute(['boards', 'edit'])).toBe(false);
   });
 });
