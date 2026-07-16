@@ -103,6 +103,7 @@ type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   setCurrentClimb: ReturnType<typeof useQueue>['setCurrentClimb'];
+  setQueue: ReturnType<typeof useQueue>['setQueue'];
 };
 
 function makeClimb(uuid: string, angle: number, difficulty: string): Climb {
@@ -129,8 +130,13 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
   const queue = useQueue();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   useEffect(() => {
-    onSnapshot({ state: queue.state, playlistSuggestionSource, setCurrentClimb: queue.setCurrentClimb });
-  }, [queue.state, playlistSuggestionSource, queue.setCurrentClimb, onSnapshot]);
+    onSnapshot({
+      state: queue.state,
+      playlistSuggestionSource,
+      setCurrentClimb: queue.setCurrentClimb,
+      setQueue: queue.setQueue,
+    });
+  }, [queue.state, playlistSuggestionSource, queue.setCurrentClimb, queue.setQueue, onSnapshot]);
   return null;
 }
 
@@ -191,5 +197,54 @@ describe('QueueProvider angle-change re-grade of the playlist suggestion peek', 
     const fetchedUuids = http.request.mock.calls.map((call) => (call[1] as { climbUuid: string }).climbUuid);
     expect(fetchedUuids).toContain('climb-next');
     expect(fetchedUuids).not.toContain('climb-current');
+  });
+
+  it('re-grades upcoming items but never re-fetches history on angle change', async () => {
+    // Live board angle is 25. Queue laid out as [history, current, upcoming]:
+    //   - history climb baked at 40 (already sent — keeps its climbed-at angle)
+    //   - current climb already at the live angle 25 (nothing to fetch)
+    //   - upcoming climb baked at 40 (stale — must be re-graded to 25)
+    // Only the upcoming climb should be fetched; history must be left alone.
+    const historyClimb = makeClimb('climb-history', 40, 'V7');
+    const currentClimb = makeClimb('climb-current', 25, 'V3');
+    const upcomingClimb = makeClimb('climb-upcoming', 40, 'V6');
+
+    http.request.mockImplementation(async (_query: string, variables: { climbUuid: string; angle: number }) => {
+      if (variables.climbUuid === 'climb-upcoming' && variables.angle === 25) {
+        return { climb: makeClimb('climb-upcoming', 25, 'V4') };
+      }
+      return { climb: null };
+    });
+
+    const snapshots: Snapshot[] = [];
+    render(createElement(QueueProvider, null, createElement(Probe, { onSnapshot: (snap) => snapshots.push(snap) })));
+
+    await waitFor(() => expect(snapshots.at(-1)).toBeTruthy());
+
+    // Seed the exact history/current/upcoming arrangement. The current item is
+    // in the queue so the history/upcoming split is positional (currentIndex 1).
+    await act(async () => {
+      snapshots
+        .at(-1)
+        ?.setQueue([makeItem(historyClimb), makeItem(currentClimb), makeItem(upcomingClimb)], makeItem(currentClimb));
+    });
+
+    // The upcoming climb is re-graded to the live angle.
+    await waitFor(() => {
+      const patched = snapshots.at(-1)?.state.queue.find((item) => item.climb.uuid === 'climb-upcoming');
+      expect(patched?.climb.angle).toBe(25);
+      expect(patched?.climb.difficulty).toBe('V4');
+    });
+
+    const fetchedUuids = http.request.mock.calls.map((call) => (call[1] as { climbUuid: string }).climbUuid);
+    expect(fetchedUuids).toContain('climb-upcoming');
+    // History is never fetched, and the already-live current item isn't either.
+    expect(fetchedUuids).not.toContain('climb-history');
+    expect(fetchedUuids).not.toContain('climb-current');
+
+    // History keeps the grade for the angle it was climbed at.
+    const history = snapshots.at(-1)?.state.queue.find((item) => item.climb.uuid === 'climb-history');
+    expect(history?.climb.angle).toBe(40);
+    expect(history?.climb.difficulty).toBe('V7');
   });
 });

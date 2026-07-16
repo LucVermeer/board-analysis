@@ -284,6 +284,14 @@ function QueueItemRowComponent({
   const showTick = isHistoryItem && !isEditMode && !!onTickHistory;
   const showDragHandle = !!dragHandleGesture && !isEditMode;
 
+  // History rows pin the grade for the angle the climb was CLIMBED at, which can
+  // differ from the live board angle (e.g. the session moved on after the send).
+  // Surface the climbed-at angle only when it differs — no chip on the common
+  // case where history and the wall share an angle.
+  const climbedAtAngle = item.climb?.angle;
+  const showSentAtAngle =
+    isHistoryItem && !isEditMode && typeof climbedAtAngle === 'number' && climbedAtAngle !== board.angle;
+
   const rowContent = (
     <AnimatedPressable
       onPress={handlePress}
@@ -318,6 +326,18 @@ function QueueItemRowComponent({
         setIds={board.setIds}
         angle={board.angle}
       />
+
+      {/* Sent-at-angle chip: history climbed at an angle other than the wall's */}
+      {showSentAtAngle && (
+        <Text
+          variant="caption1"
+          color={iosSystemColors.systemGray}
+          style={styles.sentAtAngle}
+          accessibilityLabel={t('mobile.queue.sentAtAngle', { angle: climbedAtAngle })}
+        >
+          {t('mobile.queue.sentAtAngle', { angle: climbedAtAngle })}
+        </Text>
+      )}
 
       {/* Trailing action: tick (history) or drag handle (upcoming) */}
       {showTick ? (
@@ -411,6 +431,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  sentAtAngle: {
+    flexShrink: 0,
+    fontVariant: ['tabular-nums'],
   },
   deleteAction: {
     position: 'absolute',

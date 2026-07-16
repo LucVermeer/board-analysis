@@ -58,7 +58,18 @@ export function useQueueRegrade({
         uuids.add(item.climb.uuid);
       }
     };
-    queue.forEach(consider);
+    // Only the current climb + upcoming items follow the live angle. History
+    // items (everything before the current climb — the same split
+    // buildQueueListModel uses) keep the grade for the angle they were CLIMBED
+    // at, so we skip fetching for them. REGRADE_CLIMBS also guards this, but
+    // skipping the fetch here avoids wasted GET_CLIMB round-trips for the past.
+    const currentIndex = currentClimbQueueItem
+      ? queue.findIndex((item) => item.uuid === currentClimbQueueItem.uuid)
+      : -1;
+    queue.forEach((item, index) => {
+      if (index < currentIndex) return;
+      consider(item);
+    });
     consider(currentClimbQueueItem);
     // Also re-grade the single displayed playlist peek (the next-up suggestion
     // shown at the queue tail). It lives in playlistSuggestionSource.climbs —
