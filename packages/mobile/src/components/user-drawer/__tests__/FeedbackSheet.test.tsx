@@ -174,4 +174,15 @@ describe('FeedbackSheet bug report contact consent', () => {
     await vi.waitFor(() => expect(feedbackMutation.mutateAsync).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(switchRow(container)?.getAttribute('data-value')).toBe('true'));
   });
+
+  it('resets the switch back to on when the sheet mode changes away and back', () => {
+    const sheetRef = createRef<BottomSheetModal>();
+    const { container, rerender } = render(<FeedbackSheet sheetRef={sheetRef} mode="bug" />);
+    fireEvent.click(switchRow(container)!);
+    expect(switchRow(container)?.getAttribute('data-value')).toBe('false');
+
+    rerender(<FeedbackSheet sheetRef={sheetRef} mode="rating" />);
+    rerender(<FeedbackSheet sheetRef={sheetRef} mode="bug" />);
+    expect(switchRow(container)?.getAttribute('data-value')).toBe('true');
+  });
 });
