@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Own a gym? Your gym now greets you on the homepage — jump straight to managing its boards or your public page. ([#3697](https://github.com/boardsesh/boardsesh/pull/3697))
+  Climb somewhere with boards? Find your gym from the homepage and pull up its boards and crew.
+- After a duplicate-gym cleanup, old gym links and printed kiosk QR codes now land on the right gym instead of a dead page. ([#3669](https://github.com/boardsesh/boardsesh/pull/3669))
 - Gym owners get an Insights tab — see how many climbers hit your boards this week, the climbs everyone's projecting, and your busiest nights, all with a week-over-week read on whether the wall's picking up. ([#3681](https://github.com/boardsesh/boardsesh/pull/3681))
 - Boardsesh on the web gets a fresh look — the same violet **Velvet Send** style as the app, in light and dark. ([#3678](https://github.com/boardsesh/boardsesh/pull/3678))
   Keyboard climbers get visible focus rings everywhere.

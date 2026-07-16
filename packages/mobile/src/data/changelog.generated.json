@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-16T11:24:24.599Z",
+  "generatedAt": "2026-07-16T11:41:44.683Z",
   "entries": [
+    {
+      "prNumber": 3697,
+      "category": "new",
+      "title": "Own a gym? Your gym now greets you on the homepage — jump straight to managing its boards or your public page.",
+      "mergedAt": "2026-07-16T11:40:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3697",
+      "body": "Climb somewhere with boards? Find your gym from the homepage and pull up its boards and crew."
+    },
+    {
+      "prNumber": 3669,
+      "category": "new",
+      "title": "After a duplicate-gym cleanup, old gym links and printed kiosk QR codes now land on the right gym instead of a dead page.",
+      "mergedAt": "2026-07-16T11:40:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3669"
+    },
     {
       "prNumber": 3681,
       "category": "new",
