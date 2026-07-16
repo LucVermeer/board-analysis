@@ -149,10 +149,96 @@ const sharedComponents: Components<Theme> = {
       size: 'small',
     },
   },
+  // Every MUI input renders at 16px so iOS Safari never zooms the viewport on focus.
+  // Replaces the old max-width:768px `!important` media guard in index.css (which missed
+  // iPads and any wider input). Applies to all input variants via the shared base.
+  MuiInputBase: {
+    styleOverrides: {
+      input: ({ theme }) => ({
+        fontSize: 16,
+        // Single source of truth for field text — the same var the autofill guard uses,
+        // so palette drift can't desync typed vs autofilled text.
+        color: 'var(--input-text)',
+        // A direct rule on the input beats colour inherited from the disabled wrapper,
+        // so the disabled tier must be restated here (WebKit needs text-fill-color too).
+        '&.Mui-disabled': {
+          color: theme.palette.text.disabled,
+          WebkitTextFillColor: theme.palette.text.disabled,
+        },
+        '&::placeholder': {
+          color: 'var(--input-placeholder)',
+          opacity: 1,
+        },
+      }),
+    },
+  },
+  // Input surface + borders ride the scheme-aware `--input-*` CSS vars (light: white field,
+  // #7B7591 border; dark: elevated violet #2F234A, translucent border). The focused outline
+  // uses the FOREGROUND violet `palette.primary.main` (#6D28D9 light, #A78BFA dark) at 2px;
+  // the field surface itself never changes on hover/focus — hover is carried by the border.
   MuiOutlinedInput: {
     styleOverrides: {
-      root: {
+      root: ({ theme }) => ({
         borderRadius: themeTokens.borderRadius.button,
+        backgroundColor: 'var(--input-bg)',
+        '& .MuiOutlinedInput-notchedOutline': {
+          borderColor: 'var(--input-border)',
+        },
+        '&:hover .MuiOutlinedInput-notchedOutline': {
+          borderColor: 'var(--input-border-hover)',
+        },
+        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+          borderColor: theme.palette.primary.main,
+          borderWidth: 2,
+        },
+        '&.Mui-disabled': {
+          // Field surface dimmed + the disabled text tier (#7B7591 light, #6F6882 dark),
+          // never a light-scale grey stranded on the dark field. The hover surface is the
+          // opaque fallback for browsers without color-mix() (Safari < 16.2).
+          backgroundColor: 'var(--input-bg-hover)',
+          '@supports (background-color: color-mix(in srgb, red 50%, transparent))': {
+            backgroundColor: 'color-mix(in srgb, var(--input-bg) 50%, transparent)',
+          },
+          color: theme.palette.text.disabled,
+        },
+      }),
+    },
+  },
+  // Legacy floating labels (unmigrated forms, until the FormField waves land): the
+  // resting label sits INSIDE the field, the shrunk label floats over the page/card —
+  // text.secondary clears AA on both in both schemes (guard-tested). Focus keeps the
+  // label quiet; the 2px violet outline carries focus.
+  MuiInputLabel: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        color: theme.palette.text.secondary,
+        '&.Mui-focused': {
+          color: theme.palette.text.secondary,
+        },
+        '&.Mui-error': {
+          color: theme.palette.error.main,
+        },
+      }),
+    },
+  },
+  // Filled-variant inputs (climbs list, bulk import, snackbar) ride the same field
+  // surface family as outlined ones.
+  MuiFilledInput: {
+    styleOverrides: {
+      root: {
+        backgroundColor: 'var(--input-bg)',
+        '&:hover': {
+          backgroundColor: 'var(--input-bg-hover)',
+        },
+        '&.Mui-focused': {
+          backgroundColor: 'var(--input-bg-focused)',
+        },
+        '&.Mui-disabled': {
+          backgroundColor: 'var(--input-bg-hover)',
+          '@supports (background-color: color-mix(in srgb, red 50%, transparent))': {
+            backgroundColor: 'color-mix(in srgb, var(--input-bg) 50%, transparent)',
+          },
+        },
       },
     },
   },
@@ -161,6 +247,9 @@ const sharedComponents: Components<Theme> = {
       root: {
         borderRadius: themeTokens.borderRadius.button,
       },
+      icon: ({ theme }) => ({
+        color: theme.palette.text.secondary,
+      }),
     },
   },
   MuiDrawer: {
@@ -364,124 +453,72 @@ const lightShadows = [
   ...Array(16).fill(themeTokens.shadows.xl),
 ] as unknown as typeof createTheme extends (o: { shadows?: infer S }) => unknown ? S : never;
 
-// Dark mode component overrides — extends shared overrides with white input fields.
+// Dark mode component overrides. Input fields now ride the shared `--input-*` CSS vars
+// (elevated violet #2F234A, violet focus ring) — no dark-only input block remains. Two
+// dark-only concerns stay:
+// (1) MUI v7 composites a white elevation overlay onto every Paper in dark mode via
+//     `backgroundImage`. Kill it, or dialog paper drifts to ~#49415B where secondary
+//     text fails AA.
+// (2) Pin the floating surfaces (dialog/drawer/menu/popover) to the elevated dark
+//     surface (#2F234A) with a hairline separator border, so they read as one
+//     deliberate Velvet layer instead of an elevation-tinted grey.
+const darkElevatedPaper = {
+  backgroundColor: darkTokens.semantic.surfaceElevated,
+  border: '1px solid var(--separator)',
+} as const;
+
 const darkComponents: Components<Theme> = {
   ...sharedComponents,
-  MuiInputBase: {
+  MuiPaper: {
     styleOverrides: {
       root: {
-        backgroundColor: darkTokens.semantic.inputSurface,
-        color: themeTokens.neutral[800],
-        '&.Mui-disabled': {
-          backgroundColor: themeTokens.neutral[200],
-        },
-      },
-      input: {
-        '&::placeholder': {
-          // Inputs are white in dark mode, so the placeholder must be a dark grey
-          // that clears AA on white — the LIGHT neutral scale, not the inverted one.
-          color: themeTokens.neutral[500],
-          opacity: 1,
-        },
+        backgroundImage: 'none',
       },
     },
   },
-  MuiOutlinedInput: {
-    ...sharedComponents.MuiOutlinedInput,
+  MuiDialog: {
     styleOverrides: {
-      root: ({ theme }) => ({
-        borderRadius: themeTokens.borderRadius.button,
-        backgroundColor: darkTokens.semantic.inputSurface,
-        color: themeTokens.neutral[800],
-        '& .MuiOutlinedInput-notchedOutline': {
-          borderColor: themeTokens.neutral[300],
-        },
-        '&:hover .MuiOutlinedInput-notchedOutline': {
-          borderColor: themeTokens.neutral[400],
-        },
-        // Focus border uses the FILL violet (#7C3AED, 5.70:1 on the white input), not
-        // the lifted foreground #A78BFA (2.72:1 on white — fails).
-        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-          borderColor: theme.palette.primaryFill.main,
-        },
-        '&.Mui-disabled': {
-          backgroundColor: themeTokens.neutral[200],
-        },
-      }),
+      paper: {
+        borderRadius: themeTokens.borderRadius.lg,
+        ...darkElevatedPaper,
+      },
     },
   },
-  MuiFilledInput: {
+  MuiDrawer: {
     styleOverrides: {
-      root: {
-        backgroundColor: darkTokens.semantic.inputSurface,
-        color: themeTokens.neutral[800],
-        '&:hover': {
-          backgroundColor: themeTokens.neutral[100],
-        },
-        '&.Mui-focused': {
-          backgroundColor: darkTokens.semantic.inputSurface,
-        },
-        '&.Mui-disabled': {
-          backgroundColor: themeTokens.neutral[200],
-        },
+      // Preserve the shared anchor-specific radius/padding slots; only the base `paper`
+      // slot gains the elevated surface + border.
+      ...sharedComponents.MuiDrawer?.styleOverrides,
+      paper: {
+        borderRadius: themeTokens.borderRadius.lg,
+        ...darkElevatedPaper,
       },
     },
   },
-  MuiSelect: {
-    ...sharedComponents.MuiSelect,
+  MuiMenu: {
     styleOverrides: {
-      root: {
-        borderRadius: themeTokens.borderRadius.button,
-        backgroundColor: darkTokens.semantic.inputSurface,
-        color: themeTokens.neutral[800],
-      },
-      icon: {
-        color: themeTokens.neutral[500],
+      paper: {
+        borderRadius: themeTokens.borderRadius.md,
+        ...darkElevatedPaper,
       },
     },
   },
+  MuiPopover: {
+    styleOverrides: {
+      paper: {
+        borderRadius: themeTokens.borderRadius.md,
+        ...darkElevatedPaper,
+      },
+    },
+  },
+  // Autocomplete popups render through a Popper (not Menu/Popover), so the elevated
+  // paper needs its own pin.
   MuiAutocomplete: {
     styleOverrides: {
-      inputRoot: {
-        backgroundColor: darkTokens.semantic.inputSurface,
-        color: themeTokens.neutral[800],
+      paper: {
+        borderRadius: themeTokens.borderRadius.md,
+        ...darkElevatedPaper,
       },
-    },
-  },
-  MuiInputLabel: {
-    styleOverrides: {
-      root: ({ theme }) => ({
-        // Resting label sits inside the white input — needs dark text.
-        color: themeTokens.neutral[700],
-        // Shrunk label floats over the dark page bg — needs light text.
-        '&.MuiInputLabel-shrink': {
-          color: darkTokens.neutral[700],
-        },
-        '&.Mui-focused': {
-          color: theme.palette.primary.main,
-        },
-      }),
-    },
-  },
-  MuiTextField: {
-    ...sharedComponents.MuiTextField,
-    styleOverrides: {
-      root: ({ theme }) => ({
-        '& .MuiOutlinedInput-root': {
-          borderRadius: themeTokens.borderRadius.button,
-          backgroundColor: darkTokens.semantic.inputSurface,
-          color: themeTokens.neutral[800],
-        },
-        '& .MuiInputLabel-root': {
-          color: themeTokens.neutral[700],
-        },
-        '& .MuiInputLabel-root.MuiInputLabel-shrink': {
-          color: darkTokens.neutral[700],
-        },
-        '& .MuiInputLabel-root.Mui-focused': {
-          color: theme.palette.primary.main,
-        },
-      }),
     },
   },
 };

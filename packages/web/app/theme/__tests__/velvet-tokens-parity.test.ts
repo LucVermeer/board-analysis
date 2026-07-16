@@ -79,6 +79,9 @@ describe('index.css ↔ theme-config parity', () => {
     ['--semantic-surface', themeTokens.semantic.surface, darkTokens.semantic.surface],
     ['--semantic-selected-border', themeTokens.semantic.selectedBorder, darkTokens.semantic.selectedBorder],
     ['--separator', themeTokens.semantic.separator, darkTokens.semantic.separator],
+    // Input surface: light white field, dark elevated violet. Rest of the --input-*
+    // family (no theme-config counterpart) is pinned in its own block below.
+    ['--input-bg', themeTokens.semantic.inputSurface, darkTokens.semantic.inputSurface],
     ['--neutral-50', themeTokens.neutral[50], darkTokens.neutral[50]],
     ['--neutral-500', themeTokens.neutral[500], darkTokens.neutral[500]],
     ['--neutral-900', themeTokens.neutral[900], darkTokens.neutral[900]],
@@ -109,6 +112,22 @@ function contrast(a: string, b: string): number {
   const la = luminance(a);
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+// Composite a translucent `rgba()` colour over an opaque hex background → the opaque
+// colour the eye actually sees. Needed to contrast-check the semi-transparent input
+// border (rgba(195,188,211,0.x)) against the field it sits on.
+function blendOpaque(rgba: string, bgHex: string): string {
+  const match = rgba.match(/rgba?\(([^)]+)\)/);
+  if (!match) throw new Error(`not an rgba() colour: ${rgba}`);
+  const parts = match[1].split(',').map((part) => part.trim());
+  const alpha = parts[3] === undefined ? 1 : parseFloat(parts[3]);
+  const foreground = parts.slice(0, 3).map((channel) => parseInt(channel, 10));
+  const cleanBg = bgHex.replace('#', '');
+  const fullBg = cleanBg.length === 3 ? cleanBg.replace(/(.)/g, '$1$1') : cleanBg;
+  const background = [0, 2, 4].map((i) => parseInt(fullBg.slice(i, i + 2), 16));
+  const blended = foreground.map((channel, i) => Math.round(channel * alpha + background[i] * (1 - alpha)));
+  return `#${blended.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
 }
 
 describe('MUI theme wires the foreground/fill split correctly', () => {
@@ -148,13 +167,105 @@ describe('Velvet palette clears WCAG AA at its load-bearing pairings', () => {
     expect(contrast(darkTokens.colors.primary, darkTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('the dark focus ring (fill violet) clears the 3:1 UI floor on the white dark-mode input', () => {
-    expect(contrast(darkTokens.colors.primaryFill, '#ffffff')).toBeGreaterThanOrEqual(3);
+  it('the dark focus ring (foreground violet #A78BFA) clears the 3:1 UI floor on the field, card, and page', () => {
+    // Inputs are no longer white in dark mode, so the focus ring is the FOREGROUND violet
+    // everywhere (index.css dropped the fill-violet override). It must clear 3:1 on the
+    // elevated input field, the card, and the page.
+    expect(contrast(darkTokens.colors.primary, darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(3);
+    expect(contrast(darkTokens.colors.primary, darkTokens.semantic.surface)).toBeGreaterThanOrEqual(3);
+    expect(contrast(darkTokens.colors.primary, darkTokens.semantic.background)).toBeGreaterThanOrEqual(3);
   });
 
   it('secondary text clears AA on its surface (both schemes)', () => {
     expect(contrast(themeTokens.neutral[500], themeTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(darkTokens.neutral[500], darkTokens.semantic.surface)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('Velvet dark input surface is defined, legible, and free of the elevation overlay', () => {
+  // The rest of the --input-* family has no theme-config counterpart (only --input-bg
+  // maps to semantic.inputSurface, asserted in the parity block). Pin the literal values
+  // in both schemes so a silent drift in either scheme fails.
+  const inputRows: Array<[string, string, string]> = [
+    ['--input-bg-hover', '#f1eef7', '#2f234a'],
+    ['--input-bg-focused', '#ffffff', '#2f234a'],
+    ['--input-text', '#26222d', '#e7e2f0'],
+    ['--input-placeholder', '#6b6577', '#a9a2b6'],
+    ['--input-border', '#7b7591', 'rgba(195,188,211,0.5)'],
+    ['--input-border-hover', '#595464', 'rgba(195,188,211,0.7)'],
+  ];
+  it.each(inputRows)('%s is set in both schemes', (cssVar, lightValue, darkValue) => {
+    expect(lightVars[cssVar], `${cssVar} missing from :root`).toBeDefined();
+    expect(darkVars[cssVar], `${cssVar} missing from dark block`).toBeDefined();
+    expect(norm(lightVars[cssVar])).toBe(norm(lightValue));
+    expect(norm(darkVars[cssVar])).toBe(norm(darkValue));
+  });
+
+  it('dark input text (#E7E2F0) clears AA on the field (#2F234A)', () => {
+    expect(contrast(darkVars['--input-text'], darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('dark placeholder (#A9A2B6) clears AA on the field (#2F234A)', () => {
+    expect(contrast(darkVars['--input-placeholder'], darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the dark resting border, composited over the field, clears 3:1 vs the field and vs the page', () => {
+    const composited = blendOpaque(darkVars['--input-border'], darkTokens.semantic.surfaceElevated);
+    expect(contrast(composited, darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(3);
+    expect(contrast(composited, darkTokens.semantic.background)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the light resting border (#7B7591) clears 3:1 on the white field and on the page', () => {
+    expect(contrast(lightVars['--input-border'], themeTokens.semantic.inputSurface)).toBeGreaterThanOrEqual(3);
+    expect(contrast(lightVars['--input-border'], themeTokens.semantic.background)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('error text clears AA on the input field and the page in both schemes (light is now #B91C1C)', () => {
+    expect(contrast(themeTokens.colors.error, themeTokens.semantic.inputSurface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(themeTokens.colors.error, themeTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkTokens.colors.error, darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkTokens.colors.error, darkTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the dark theme disables the MUI v7 Paper elevation overlay (backgroundImage: none)', () => {
+    const paperRoot = darkTheme.components?.MuiPaper?.styleOverrides?.root as { backgroundImage?: string } | undefined;
+    expect(paperRoot?.backgroundImage).toBe('none');
+  });
+
+  // Legacy floating labels (theme text.secondary) survive until the FormField waves:
+  // the SHRUNK label floats over the page or a card, not the field — assert those
+  // pairings so removing the old dual-tone MuiInputLabel hack can't regress contrast.
+  it('floating-label text (text.secondary) clears AA over the page and the card in both schemes', () => {
+    expect(contrast(themeTokens.neutral[500], themeTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(themeTokens.neutral[500], themeTokens.semantic.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkTokens.neutral[500], darkTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkTokens.neutral[500], darkTokens.semantic.surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // Filled-variant inputs and Autocomplete ride the same --input-* family; the popup
+  // paper is pinned to the elevated surface — assert its text pairing too.
+  it('input text clears AA on the field in both schemes (covers filled + autocomplete inputs)', () => {
+    expect(contrast(lightVars['--input-text'], themeTokens.semantic.inputSurface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkVars['--input-text'], darkTokens.semantic.inputSurface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('primary text clears AA on the elevated popup paper (autocomplete/menu) in dark', () => {
+    expect(contrast(darkTokens.neutral[800], darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The input slot sets `color` DIRECTLY on the <input>, which beats colour inherited
+  // from the disabled wrapper — the disabled tier must be restated on the input itself
+  // (both engines: color + WebkitTextFillColor) or disabled text renders full-opacity.
+  it.each([
+    ['light', lightTheme],
+    ['dark', darkTheme],
+  ] as const)('disabled input text dims to text.disabled on the input slot itself (%s)', (_scheme, theme) => {
+    const inputOverride = theme.components?.MuiInputBase?.styleOverrides?.input;
+    expect(typeof inputOverride).toBe('function');
+    const resolved = (inputOverride as (props: { theme: typeof theme }) => Record<string, unknown>)({ theme });
+    const disabled = resolved['&.Mui-disabled'] as { color?: string; WebkitTextFillColor?: string };
+    expect(disabled?.color).toBe(theme.palette.text.disabled);
+    expect(disabled?.WebkitTextFillColor).toBe(theme.palette.text.disabled);
   });
 });
 

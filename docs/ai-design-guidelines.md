@@ -538,6 +538,11 @@ The web app renders Velvet Send in light and dark. Wiring notes specific to web:
 - **Scheme-awareness.** A direct `themeTokens.colors.{primary,success,error,warning,info}` read renders
   the _light_ value in dark mode — use the scheme-aware CSS vars instead: `var(--color-primary)`
   (foreground), `var(--color-primary-fill)` (fills), `var(--color-success|error|warning|info)` (status).
+- **Input fields.** The `--input-*` family in `index.css` (bg / bg-hover / text / placeholder / border /
+  border-hover, both scheme blocks) is the source of truth for form fields; the MUI theme and the
+  `.module.css` files both read it. Light fields are white; dark fields ride the elevated violet
+  (`darkTokens.semantic.inputSurface`, `#2F234A`) with a 2px foreground-violet focus outline — never
+  force white fields in dark. All pairings are contrast-guarded in the parity test.
 
 **Shared across web and mobile:** the brand palette + colour helpers (`@boardsesh/velvet-tokens`) and the
 climbing **grade colours** (`@boardsesh/board-constants`). Both are platform-agnostic and stay shared.

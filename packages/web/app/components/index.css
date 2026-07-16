@@ -50,10 +50,11 @@
   --color-success: #047857;
   --color-success-hover: #036b4d;
   --color-success-bg: #e7f4ee;
-  --color-error: #c81e1e;
+  /* Darkened from Velvet #c81e1e so error TEXT clears AA (4.96:1) on the #E8DDF6 page. */
+  --color-error: #b91c1c;
   --color-error-bg: #fbe9e9;
-  --color-error-muted: rgba(200, 30, 30, 0.18);
-  --color-error-muted-hover: rgba(200, 30, 30, 0.28);
+  --color-error-muted: rgba(185, 28, 28, 0.18);
+  --color-error-muted-hover: rgba(185, 28, 28, 0.28);
   --color-warning: #a04a08;
   --color-warning-bg: #fbf0e3;
 
@@ -108,12 +109,18 @@
   --border-radius-xl: 16px;
   --border-radius-full: 9999px;
 
-  /* Input field backgrounds */
+  /* Input field tokens — the source of truth for input surface/text/border in BOTH
+     schemes. The MUI theme (mui-theme.ts) and ~150 module.css files read these. */
   --input-bg: #ffffff;
   --input-bg-hover: #f1eef7;
   --input-bg-focused: #ffffff;
-  /* Placeholder text on the (always light) input surface — fixed dark grey ≥4.5:1. */
+  /* Dark-on-white body text inside the field. */
+  --input-text: #26222d;
+  /* Placeholder — fixed dark grey ≥4.5:1 on the white field. */
   --input-placeholder: #6b6577;
+  /* Resting outline (≥3:1 on white and on the #E8DDF6 page); one neutral step darker on hover. */
+  --input-border: #7b7591;
+  --input-border-hover: #595464;
 
   /* Safe-area insets, exposed as CSS vars so consumers resolve through
      a single indirection (and so future per-platform or per-view overrides
@@ -224,12 +231,17 @@ html[data-theme='dark'] {
   --color-error-muted-hover: rgba(248, 113, 113, 0.3);
   --color-warning-bg: rgba(251, 191, 36, 0.14);
 
-  /* Input field backgrounds (white in dark mode) */
-  --input-bg: #ffffff;
-  --input-bg-hover: #f1eef7;
-  --input-bg-focused: #ffffff;
-  /* Input text stays dark in dark mode because inputs have white backgrounds */
-  --input-text: #26222d;
+  /* Input field tokens — elevated violet field (#2F234A). The surface is unchanged on
+     hover/focus; the BORDER carries the hover state, the violet ring carries focus. */
+  --input-bg: #2f234a;
+  --input-bg-hover: #2f234a;
+  --input-bg-focused: #2f234a;
+  /* Light-on-violet body text + placeholder (both ≥4.5:1 on the field). */
+  --input-text: #e7e2f0;
+  --input-placeholder: #a9a2b6;
+  /* Translucent resting outline; brighter on hover (both composite to ≥3:1 on the field). */
+  --input-border: rgba(195, 188, 211, 0.5);
+  --input-border-hover: rgba(195, 188, 211, 0.7);
 
   /* Shadows (stronger for dark backgrounds) */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
@@ -319,17 +331,13 @@ button,
 
 /* Firefox scrollbar properties are set in the html rule above */
 
-/* Focus styles for accessibility. The foreground violet clears 3:1 on the page in
-   both schemes, but in dark mode the focus ring can wrap the intentionally-white
-   inputs, where #A78BFA is only 2.72:1 — so dark uses the fill violet (#7C3AED,
-   5.70:1 on white, 3.99:1 on the page). Outline is not transitioned (stays instant). */
+/* Focus styles for accessibility. The foreground violet (`--color-primary`) clears the
+   3:1 UI floor on the page in both schemes — and now on the elevated dark input surface
+   (#2F234A) too — so a single rule covers both. Outline is not transitioned (stays
+   instant). MUI ButtonBase re-emits the same outline at the component layer. */
 :focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-}
-
-html[data-theme='dark'] :focus-visible {
-  outline-color: var(--color-primary-fill);
 }
 
 /* Remove default focus outline when using mouse */
@@ -402,51 +410,25 @@ html[data-theme='dark'] :focus-visible {
   }
 }
 
-/* Dark-mode input overrides — MUI theme darkComponents handles most
-   input styling, but color-scheme:dark can override native input
-   backgrounds. These CSS rules ensure inputs stay white in dark mode
-   using the tokenized custom properties. */
-html[data-theme='dark'] .MuiOutlinedInput-root,
-html[data-theme='dark'] .MuiFilledInput-root {
+/* Autofill + caret. Browsers repaint autofilled fields with their own yellow/blue
+   background and text colour; force the field's own surface + text back so an
+   autofilled input matches an empty one in both schemes. --input-bg / --input-text
+   auto-flip per scheme. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset;
+  -webkit-text-fill-color: var(--input-text);
+  caret-color: var(--input-text);
+}
+
+/* Firefox path — the -webkit-* properties above are inert there; standard
+   properties carry the same repaint. WebKit matches this too, harmlessly. */
+input:autofill {
+  box-shadow: 0 0 0 1000px var(--input-bg) inset;
   background-color: var(--input-bg);
   color: var(--input-text);
-}
-
-html[data-theme='dark'] .MuiOutlinedInput-root:hover {
-  background-color: var(--input-bg-hover);
-}
-
-html[data-theme='dark'] .MuiOutlinedInput-root.Mui-focused {
-  background-color: var(--input-bg-focused);
-}
-
-html[data-theme='dark'] .MuiSelect-icon {
-  color: var(--neutral-500);
-}
-
-html[data-theme='dark'] .MuiOutlinedInput-input::placeholder {
-  color: var(--input-placeholder);
-  opacity: 1;
-}
-
-html[data-theme='dark'] .MuiOutlinedInput-root .MuiSvgIcon-root,
-html[data-theme='dark'] .MuiOutlinedInput-root .MuiInputAdornment-root,
-html[data-theme='dark'] .MuiFilledInput-root .MuiSvgIcon-root,
-html[data-theme='dark'] .MuiFilledInput-root .MuiInputAdornment-root {
-  color: var(--neutral-500);
-}
-
-/* Ensure all interactive elements have minimum 16px font to prevent iOS auto-zoom on focus */
-@media (max-width: 768px) {
-  input,
-  textarea,
-  select,
-  button,
-  .MuiOutlinedInput-input,
-  .MuiSelect-select,
-  .MuiButton-root {
-    font-size: 16px !important;
-  }
+  caret-color: var(--input-text);
 }
 
 /* Override Atlaskit drag-and-drop indicator color to match theme

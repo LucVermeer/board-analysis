@@ -41,10 +41,10 @@ export const themeTokens = {
     successBg: '#E7F4EE',
     warning: '#A04A08', // Nudged up from Velvet #B45309 so warning text clears AA on the tinted bg
     warningBg: '#FBF0E3',
-    error: brandColors.error, // #C81E1E
+    error: '#B91C1C', // Darkened from Velvet #C81E1E so error TEXT clears AA (4.96:1) on the #E8DDF6 page (#C81E1E was 4.40)
     errorBg: '#FBE9E9',
-    errorMuted: 'rgba(200, 30, 30, 0.18)', // Translucent error for non-destructive action buttons
-    errorMutedHover: 'rgba(200, 30, 30, 0.28)',
+    errorMuted: 'rgba(185, 28, 28, 0.18)', // Translucent error for non-destructive action buttons
+    errorMutedHover: 'rgba(185, 28, 28, 0.28)',
     purple: '#9C27B0', // V11 brand purple — Mirror button + chart palette accent (grade token)
     purpleHover: '#7B1FA2', // V12 — Mirror button hover
     amber: '#FBBF24', // Flash/benchmark badges + star ratings (data yellow, distinct from brand accent)
@@ -91,6 +91,7 @@ export const themeTokens = {
     background: '#E8DDF6', // violet-tinted page base (richer than the shared surface)
     surface: '#FAF6FE', // cards/sheets — faintly violet, not stark white
     surfaceElevated: '#FFFFFF', // elevated layers pop one step brighter than the card
+    inputSurface: '#FFFFFF', // input fields on light (matches elevated) — dark diverges to the elevated violet
     surfaceOverlay: 'rgba(250, 246, 254, 0.95)', // Semi-transparent overlay (matches surface)
     overlayLight: 'rgba(0, 0, 0, 0.3)', // Light dark overlay for hover states
     overlayDark: 'rgba(0, 0, 0, 0.6)', // Dark overlay for text backgrounds
@@ -265,7 +266,7 @@ export const darkTokens = {
     background: '#110A20', // deeper violet near-black (richer than a generic dark theme)
     surface: '#251B3A', // cards/sheets — richer violet
     surfaceElevated: '#2F234A',
-    inputSurface: '#FFFFFF', // Intentional white inputs in dark mode (contrast) — do not change
+    inputSurface: '#2F234A', // input fields ride the elevated dark surface (violet focus ring, not white)
     surfaceOverlay: 'rgba(37, 27, 58, 0.95)',
     overlayLight: 'rgba(0, 0, 0, 0.4)',
     overlayDark: 'rgba(0, 0, 0, 0.7)',
