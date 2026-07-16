@@ -166,7 +166,10 @@ describe('disconnectClient reconnect/expiry orchestration (#2135)', () => {
     ]);
 
     expect(distributedState.evictGhostParticipant).toHaveBeenCalledWith(SESSION_ID, USER);
-    expect(onExpired).toHaveBeenCalledWith(SESSION_ID, USER, { leaderId: 'new-participant', leaderConnectionId: 'new-conn' });
+    expect(onExpired).toHaveBeenCalledWith(SESSION_ID, USER, {
+      leaderId: 'new-participant',
+      leaderConnectionId: 'new-conn',
+    });
     expect(newLeader).toEqual({ leaderId: 'new-participant', leaderConnectionId: 'new-conn' });
   });
 });

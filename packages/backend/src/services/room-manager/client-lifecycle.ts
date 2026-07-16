@@ -822,16 +822,20 @@ async function beginParticipantGraceWindow(
       // don't arm a timer, don't emit a spurious RECONNECTING presence.
       return null;
     }
-    // 'reconnecting' carries the fresh presence payload; 'missing' means the
-    // Redis participant hash already expired — fall back to the local snapshot
-    // so peers still see a RECONNECTING event during the grace window (without
-    // it the only signal would be the eventual UserLeft).
+    // Flip local state to RECONNECTING BEFORE building any fallback, so the
+    // local snapshot reports RECONNECTING (matching the pre-change behaviour).
+    participant.connectionState = 'RECONNECTING';
+    // 'reconnecting' carries the fresh Redis presence payload; 'missing' means
+    // the Redis participant hash was pruned (e.g. its TTL lapsed, or a
+    // concurrent roster read swept it as a zero-connection CONNECTED entry
+    // before we could mark it) — fall back to the local snapshot so peers still
+    // see a RECONNECTING event during the grace window (without it the only
+    // signal would be the eventual UserLeft).
     presenceUser = result.status === 'reconnecting' ? result.user : localParticipantToSessionUser(participant);
   } else {
+    participant.connectionState = 'RECONNECTING';
     presenceUser = localParticipantToSessionUser(participant);
   }
-
-  participant.connectionState = 'RECONNECTING';
 
   if (participant.reconnectTimer) {
     clearTimeout(participant.reconnectTimer);
