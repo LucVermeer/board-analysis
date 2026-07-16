@@ -53,16 +53,15 @@ export function useMyGyms(enabled: boolean, limit = 50) {
   >({
     queryKey: ['myGyms', viewerUserId, limit] as const,
     queryFn: async ({ pageParam }) => {
+      // `enabled` guards `token` being non-null whenever this actually runs;
+      // narrow explicitly so a future `createGraphQLHttpClient` signature
+      // change can't silently accept a null token.
+      if (!token) throw new Error('useMyGyms: queryFn ran without a token');
       const client = createGraphQLHttpClient(token);
-      try {
-        const response = await client.request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, {
-          input: { limit, offset: pageParam },
-        });
-        return response.myGyms;
-      } catch (requestError) {
-        console.error('Failed to fetch gyms:', requestError);
-        throw requestError;
-      }
+      const response = await client.request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, {
+        input: { limit, offset: pageParam },
+      });
+      return response.myGyms;
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
