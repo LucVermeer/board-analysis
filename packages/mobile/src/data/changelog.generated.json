@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T10:49:51.018Z",
+  "generatedAt": "2026-07-16T11:18:36.008Z",
   "entries": [
+    {
+      "prNumber": 3680,
+      "category": "fixed",
+      "title": "Party sessions pick back up cleanly when you come back to the app — locking your phone mid-session no longer throws a phantom sync error.",
+      "mergedAt": "2026-07-16T11:10:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3680"
+    },
     {
       "prNumber": 3678,
       "category": "new",
