@@ -4,11 +4,19 @@
 //
 // Buckets (elapsed = now − lastSeenAt):
 //   never  — no signal at all (null / unparseable)
-//   live   — < 5 min: a TV checking in on its ~5-minute poll cadence
-//   recent — 5 min … 48 h: "last seen X ago" (minutes, then hours)
+//   live   — a TV checking in on cadence (see the threshold below)
+//   recent — up to 48 h: "last seen X ago" (minutes, then hours)
 //   stale  — ≥ 48 h: "no signal for X days" — worth a nudge
 
-export const KIOSK_LIVE_THRESHOLD_MS = 5 * 60 * 1000;
+import { KIOSK_HEARTBEAT_INTERVAL_MS } from '@boardsesh/kiosk';
+
+/**
+ * "Live" window: TWO heartbeat cadences. A healthy TV's write-to-write gap is
+ * one cadence, so a single late/dropped poll still lands inside 2× rather than
+ * flipping a working screen to "Last seen 7 minutes ago". Derived from the
+ * shared cadence, never a hand-tuned twin of it.
+ */
+export const KIOSK_LIVE_THRESHOLD_MS = 2 * KIOSK_HEARTBEAT_INTERVAL_MS;
 export const KIOSK_STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
 const MS_PER_MINUTE = 60 * 1000;

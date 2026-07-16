@@ -57,13 +57,10 @@ const emptyLayout = () => JSON.stringify({ version: 1, boards: [], leaderboard: 
 
 const insertKiosk = async (opts: { gymId: number; slug: string; name: string }): Promise<{ uuid: string }> => {
   const uuid = uuidv4();
-  const result = await db.execute(sql`
+  await db.execute(sql`
     INSERT INTO gym_kiosks (uuid, gym_id, slug, name, layout, created_at, updated_at)
     VALUES (${uuid}, ${opts.gymId}, ${opts.slug}, ${opts.name}, ${emptyLayout()}::jsonb, now(), now())
-    RETURNING id
   `);
-  // Touch the returned row so the INSERT is materialised before we read back.
-  void Array.from(result as Iterable<{ id: number }>);
   return { uuid };
 };
 
@@ -138,6 +135,23 @@ describe.skipIf(!redisAvailable)('kiosk heartbeat roundtrip (real Redis)', () =>
     expect(seen!.lastSeenAt).not.toBeNull();
     // Fresh: within a few seconds of now.
     expect(Date.now() - Date.parse(seen!.lastSeenAt!)).toBeLessThan(5000);
+  });
+
+  it('never leaks liveness through the PUBLIC gymKiosk read, even after a heartbeat', async () => {
+    // Pins the invariant that only the edit-guarded gymKiosks query exposes
+    // lastSeenAt. kioskA is the oldest kiosk, so the slug-less public read
+    // returns it — and even with a fresh heartbeat recorded, the public payload
+    // must carry no liveness. Today that holds only because resolveKioskView
+    // omits the field; this guards against it regressing into a public leak.
+    await socialGymKioskMutations.kioskHeartbeat(
+      null,
+      { input: { kioskUuid: kioskA.uuid, gymUuid: gym.uuid } },
+      anonCtx(),
+    );
+
+    const publicKiosk = await socialGymKioskQueries.gymKiosk(null, { gymSlug: gym.slug }, anonCtx());
+    expect(publicKiosk).not.toBeNull();
+    expect((publicKiosk as { lastSeenAt?: string | null }).lastSeenAt ?? null).toBeNull();
   });
 
   it('leaves an un-checked-in kiosk null while the checked-in one is set', async () => {

@@ -15,6 +15,15 @@ import { logger } from '../utils/logger';
  *
  * IMPORTANT for readers: a missing/expired signal means "unknown", never "this
  * TV is definitely down". Treat null as an absence of information.
+ *
+ * ACCEPTED RISK — forged heartbeats. Kiosk and gym UUIDs are public by design:
+ * they're serialized into the kiosk page HTML and embed URLs, so anyone can
+ * replay a valid pair and mark a kiosk "live" without a TV actually running.
+ * This is deliberately tolerated (low severity): the only impact is griefing a
+ * liveness indicator — a dead screen could read as live — with no data exposure
+ * and nothing mutated in Postgres. Optional future hardening, if it ever needs
+ * closing, is a server-rendered per-kiosk HMAC token the heartbeat must echo,
+ * not a change to this store.
  */
 
 /** 30 days — comfortably longer than any realistic gym closure so a kiosk that
@@ -33,7 +42,11 @@ function existsCacheKey(gymUuid: string, kioskUuid: string): string {
   return `boardsesh:kiosk:exists:${gymUuid}:${kioskUuid}`;
 }
 
-/** The JSON value stored per kiosk. `lastSeenAt` is epoch millis. */
+/**
+ * The JSON value stored per kiosk. `lastSeenAt` is epoch millis. `viewport`
+ * (e.g. "1920x1080") is a coarse client marker persisted for future ops/debug
+ * use — it is intentionally write-only today, not surfaced by any read.
+ */
 type HeartbeatValue = { lastSeenAt: number; viewport?: string };
 
 // Test seam: the roundtrip suite injects a real Redis client here (mirrors how

@@ -94,6 +94,9 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
       return response.gymKiosks;
     },
     enabled: !!token,
+    // Re-poll while the tab is open so the liveness chips reflect current
+    // check-ins instead of freezing at load-time data on a parked tab.
+    refetchInterval: 60_000,
   });
 
   // The editor needs the gym's full board list (editors see private/unlisted

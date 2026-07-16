@@ -31,6 +31,7 @@ import {
   type KioskHeartbeatMutationResponse,
   type KioskHeartbeatMutationVariables,
 } from '@boardsesh/graphql/operations';
+import { KIOSK_HEARTBEAT_INTERVAL_MS } from '@boardsesh/kiosk';
 import { executeGraphQL } from '@/app/lib/graphql/client';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
 import { evaluateKioskConfigPoll } from './kiosk-config-poll';
@@ -38,8 +39,13 @@ import type { KioskBoardSnapshot } from './presence/use-kiosk-board-presence';
 
 /** How often each board re-reads the durable history to repair silent drops. */
 const BOARD_FEED_CATCH_UP_INTERVAL_MS = 5 * 60 * 1000;
-/** How often the kiosk config is re-fetched to detect a re-configured layout. */
-const CONFIG_POLL_INTERVAL_MS = 5 * 60 * 1000;
+/**
+ * How often the kiosk config is re-fetched to detect a re-configured layout.
+ * The heartbeat rides this poll (fires on each completed fetch), so it's the
+ * kiosk's single check-in cadence — sourced from the shared constant the
+ * manage-UI liveness window also derives from, so the two never drift.
+ */
+const CONFIG_POLL_INTERVAL_MS = KIOSK_HEARTBEAT_INTERVAL_MS;
 /**
  * Minimum page age before a config mismatch may reload. The server render is
  * cached with `revalidate: 60`, so right after an edit a reload can serve the
@@ -171,13 +177,16 @@ export default function KioskReliability({
   // generous, so a brief gap never reads as "dead".
   useEffect(() => {
     if (dataUpdatedAt === 0) return;
+    // Viewport is a best-effort coarse marker: only send it when the browser
+    // reports real dimensions. A headless/hidden context can report 0 — the
+    // backend's `min(1)` would reject the whole heartbeat, so omit the fields
+    // rather than lose the check-in.
+    const viewport =
+      window.innerWidth > 0 && window.innerHeight > 0
+        ? { viewportWidth: window.innerWidth, viewportHeight: window.innerHeight }
+        : {};
     void executeGraphQL<KioskHeartbeatMutationResponse, KioskHeartbeatMutationVariables>(KIOSK_HEARTBEAT, {
-      input: {
-        kioskUuid,
-        gymUuid,
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
-      },
+      input: { kioskUuid, gymUuid, ...viewport },
     }).catch(() => {
       // Swallow — the next poll tick re-reports.
     });

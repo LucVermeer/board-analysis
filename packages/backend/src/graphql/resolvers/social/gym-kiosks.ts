@@ -35,9 +35,13 @@ const RATE_LIMIT_CREATE_GYM_KIOSK = 60;
 const RATE_LIMIT_UPDATE_GYM_KIOSK = 60;
 const RATE_LIMIT_DELETE_GYM_KIOSK = 60;
 // Heartbeats are unauthenticated (TVs aren't logged in), so this bucket is
-// keyed per client IP in-memory (see applyRateLimit). A live TV checks in once
-// per config-poll cycle (~5 min); 60/min leaves generous headroom for a whole
-// gym's worth of screens behind one NAT while still capping a runaway client.
+// keyed per client (in-memory; see applyRateLimit). A live TV checks in once
+// per config-poll cycle (~5 min), so 60/min leaves generous headroom for a
+// whole gym's worth of screens behind one NAT. This is a best-effort throttle:
+// it reins in a well-behaved client, not a determined one — robust client-IP
+// identification is tracked separately as platform work. Since the write only
+// stamps an ephemeral, non-sensitive timestamp, a loose ceiling here is
+// acceptable.
 const RATE_LIMIT_KIOSK_HEARTBEAT = 60;
 
 // Same slug shape gymBySlug accepts — a public URL segment.
