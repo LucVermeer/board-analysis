@@ -336,6 +336,17 @@ describe('authOptions.callbacks.session', () => {
     expect(result.user?.name).toBe('speedywalker8392');
   });
 
+  it('leaves session.user.name unchanged when the profile row has an empty-string displayName (known gap: clearing the field does not live-revert to the auto-generated handle)', async () => {
+    mockDbLimit.mockResolvedValue([{ avatarUrl: null, displayName: '' }]);
+
+    const result = await callSession({
+      session: { user: { id: 'user-1', name: 'speedywalker8392' }, expires: '2099-01-01' },
+      token: { sub: 'user-1' },
+    });
+
+    expect(result.user?.name).toBe('speedywalker8392');
+  });
+
   it('still overrides session.user.image with userProfiles.avatarUrl when present (regression guard)', async () => {
     mockDbLimit.mockResolvedValue([{ avatarUrl: 'https://cdn.example.com/avatar.jpg', displayName: null }]);
 

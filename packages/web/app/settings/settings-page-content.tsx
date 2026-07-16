@@ -320,9 +320,7 @@ export default function SettingsPageContent() {
       // Refresh profile locally and in context (so queue items show updated avatar)
       await fetchProfile();
       await refreshPartyProfile();
-      // Force NextAuth to re-run the session callback now, so the header/drawer (which read
-      // session.user.name) reflect the new display name immediately instead of waiting for
-      // the next window-focus session refetch.
+      // Refresh the NextAuth session now so the header/drawer show the new name immediately.
       await updateSession();
     } catch (error) {
       console.error('Failed to save settings:', error);
