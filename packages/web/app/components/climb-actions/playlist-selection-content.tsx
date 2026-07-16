@@ -12,6 +12,7 @@ import Stack from '@mui/material/Stack';
 import AddOutlined from '@mui/icons-material/AddOutlined';
 import CheckOutlined from '@mui/icons-material/CheckOutlined';
 import { track } from '@/app/lib/analytics';
+import { FormField } from '@/app/components/form';
 import { usePlaylists } from './use-playlists';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import type { Playlist } from './playlists-batch-context';
@@ -255,7 +256,6 @@ export default function PlaylistSelectionContent({
                 startIcon={<AddOutlined />}
                 onClick={() => setShowCreateForm(true)}
                 fullWidth
-                size="medium"
                 sx={{ marginTop: `${themeTokens.spacing[2]}px` }}
               >
                 {t('actions.playlist.popover.createNew')}
@@ -266,47 +266,45 @@ export default function PlaylistSelectionContent({
           {showCreateForm && (
             <div>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Box>
-                  <MuiTypography variant="body2" fontWeight={600} sx={{ mb: 0.5, fontSize: 12 }}>
-                    {t('actions.playlist.create.nameLabel')}
-                  </MuiTypography>
-                  <TextField
-                    placeholder={t('actions.playlist.create.namePlaceholder')}
-                    autoFocus
-                    fullWidth
-                    size="small"
-                    value={createFormValues.name}
-                    onChange={(e) => setCreateFormValues((prev) => ({ ...prev, name: e.target.value }))}
-                    slotProps={{ htmlInput: { maxLength: 100 } }}
-                  />
-                </Box>
-                <Box>
-                  <MuiTypography variant="body2" fontWeight={600} sx={{ mb: 0.5, fontSize: 12 }}>
-                    {t('actions.playlist.create.descriptionLabel')}
-                  </MuiTypography>
-                  <TextField
-                    placeholder={t('actions.playlist.create.descriptionPlaceholder')}
-                    multiline
-                    rows={2}
-                    fullWidth
-                    size="small"
-                    value={createFormValues.description}
-                    onChange={(e) => setCreateFormValues((prev) => ({ ...prev, description: e.target.value }))}
-                    slotProps={{ htmlInput: { maxLength: 500 } }}
-                  />
-                </Box>
-                <Box>
-                  <MuiTypography variant="body2" fontWeight={600} sx={{ mb: 0.5, fontSize: 12 }}>
-                    {t('actions.playlist.create.colorLabel')}
-                  </MuiTypography>
-                  <TextField
-                    type="color"
-                    value={createFormValues.color || '#000000'}
-                    onChange={(e) => setCreateFormValues((prev) => ({ ...prev, color: e.target.value }))}
-                    size="small"
-                    sx={{ width: 60 }}
-                  />
-                </Box>
+                <FormField label={t('actions.playlist.create.nameLabel')}>
+                  {(field) => (
+                    <TextField
+                      id={field.id}
+                      placeholder={t('actions.playlist.create.namePlaceholder')}
+                      autoFocus
+                      fullWidth
+                      value={createFormValues.name}
+                      onChange={(e) => setCreateFormValues((prev) => ({ ...prev, name: e.target.value }))}
+                      slotProps={{ htmlInput: { maxLength: 100, 'aria-describedby': field.describedBy } }}
+                    />
+                  )}
+                </FormField>
+                <FormField label={t('actions.playlist.create.descriptionLabel')}>
+                  {(field) => (
+                    <TextField
+                      id={field.id}
+                      placeholder={t('actions.playlist.create.descriptionPlaceholder')}
+                      multiline
+                      rows={2}
+                      fullWidth
+                      value={createFormValues.description}
+                      onChange={(e) => setCreateFormValues((prev) => ({ ...prev, description: e.target.value }))}
+                      slotProps={{ htmlInput: { maxLength: 500, 'aria-describedby': field.describedBy } }}
+                    />
+                  )}
+                </FormField>
+                <FormField label={t('actions.playlist.create.colorLabel')}>
+                  {(field) => (
+                    <TextField
+                      id={field.id}
+                      type="color"
+                      value={createFormValues.color || '#000000'}
+                      onChange={(e) => setCreateFormValues((prev) => ({ ...prev, color: e.target.value }))}
+                      sx={{ width: 60 }}
+                      slotProps={{ htmlInput: { 'aria-describedby': field.describedBy } }}
+                    />
+                  )}
+                </FormField>
               </Box>
               <Stack
                 direction="row"

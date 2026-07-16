@@ -124,7 +124,7 @@ describe('ResetPasswordContent', () => {
     await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/auth/login'));
   });
 
-  it('shows error toast when API returns failure', async () => {
+  it('shows a form-level error when the API returns failure (never a toast while the form is visible)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: 'Invalid or expired reset link' }),
@@ -133,7 +133,8 @@ describe('ResetPasswordContent', () => {
     fireEvent.change(screen.getByLabelText(/^new password$/i), { target: { value: 'SecurePass1!' } });
     fireEvent.change(screen.getByLabelText(/confirm new password/i), { target: { value: 'SecurePass1!' } });
     submitForm();
-    await waitFor(() => expect(mockShowMessage).toHaveBeenCalledWith('Invalid or expired reset link', 'error'));
+    expect(await screen.findByText('Invalid or expired reset link')).toBeTruthy();
+    expect(mockShowMessage).not.toHaveBeenCalled();
     expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 });

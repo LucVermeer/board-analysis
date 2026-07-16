@@ -81,7 +81,7 @@ describe('ForgotPasswordContent', () => {
     expect(screen.getByText(/if an account exists/i)).toBeTruthy();
   });
 
-  it('shows error toast when API returns failure', async () => {
+  it('shows a form-level error when the API returns failure (never a toast while the form is visible)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: 'Too many requests' }),
@@ -89,6 +89,7 @@ describe('ForgotPasswordContent', () => {
     const { container } = render(<ForgotPasswordContent />);
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'test@example.com' } });
     submitForm(container);
-    await waitFor(() => expect(mockShowMessage).toHaveBeenCalledWith('Too many requests', 'error'));
+    expect(await screen.findByText('Too many requests')).toBeTruthy();
+    expect(mockShowMessage).not.toHaveBeenCalled();
   });
 });

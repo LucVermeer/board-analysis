@@ -6,19 +6,18 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from '@/app/components/auth/validate-fields';
 import { themeTokens } from '@/app/theme/theme-config';
+import { FormShell, FormField, FormActions } from '@/app/components/form';
 
 export default function ResetPasswordContent() {
   const { t } = useTranslation('auth');
@@ -33,11 +32,13 @@ export default function ResetPasswordContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const isLinkInvalid = !token || !email;
 
   const handleSubmit = async () => {
+    setFormError(null);
     if (!password) {
       setPasswordError(t('resetPassword.validation.passwordRequired'));
       return;
@@ -69,7 +70,7 @@ export default function ResetPasswordContent() {
 
       const data = await response.json();
       if (!response.ok) {
-        showMessage(data.error || t('resetPassword.toasts.failed'), 'error');
+        setFormError(data.error || t('resetPassword.toasts.failed'));
         return;
       }
 
@@ -77,7 +78,7 @@ export default function ResetPasswordContent() {
       router.replace('/auth/login');
     } catch (error) {
       console.error('Reset password error:', error);
-      showMessage(t('resetPassword.toasts.failed'), 'error');
+      setFormError(t('resetPassword.toasts.failed'));
     } finally {
       setLoading(false);
     }
@@ -107,82 +108,89 @@ export default function ResetPasswordContent() {
       <Box component="main" sx={{ padding: '24px', display: 'flex', justifyContent: 'center', paddingTop: '48px' }}>
         <Card sx={{ width: '100%', maxWidth: 400 }}>
           <CardContent>
-            <Stack
-              spacing={2}
-              component="form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void handleSubmit();
-              }}
-              noValidate
-            >
-              {isLinkInvalid ? (
+            {isLinkInvalid ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Typography variant="body1" color="error">
                   {t('resetPassword.invalidLink')}
                 </Typography>
-              ) : (
-                <>
-                  <Typography variant="body1" component="p" color="text.secondary">
-                    {t('resetPassword.description', { email })}
-                  </Typography>
+                <Button component={LocaleLink} variant="text" href="/auth/login">
+                  {t('resetPassword.back')}
+                </Button>
+              </Box>
+            ) : (
+              <FormShell
+                maxWidth={false}
+                error={formError}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSubmit();
+                }}
+              >
+                <Typography variant="body1" component="p" color="text.secondary">
+                  {t('resetPassword.description', { email })}
+                </Typography>
 
-                  <TextField
-                    label={t('resetPassword.fields.newPassword')}
-                    type="password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (passwordError) setPasswordError(null);
-                    }}
-                    error={!!passwordError}
-                    helperText={passwordError}
-                    slotProps={{
-                      input: {
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <LockOutlined />
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
+                <FormField label={t('resetPassword.fields.newPassword')} error={passwordError}>
+                  {(field) => (
+                    <TextField
+                      id={field.id}
+                      type="password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (passwordError) setPasswordError(null);
+                      }}
+                      fullWidth
+                      error={Boolean(field.error)}
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <LockOutlined />
+                            </InputAdornment>
+                          ),
+                        },
+                        htmlInput: { 'aria-describedby': field.describedBy },
+                      }}
+                    />
+                  )}
+                </FormField>
 
-                  <TextField
-                    label={t('resetPassword.fields.confirmPassword')}
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => {
-                      setConfirmPassword(e.target.value);
-                      if (confirmPasswordError) setConfirmPasswordError(null);
-                    }}
-                    error={!!confirmPasswordError}
-                    helperText={confirmPasswordError}
-                    slotProps={{
-                      input: {
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <LockOutlined />
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
+                <FormField label={t('resetPassword.fields.confirmPassword')} error={confirmPasswordError}>
+                  {(field) => (
+                    <TextField
+                      id={field.id}
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (confirmPasswordError) setConfirmPasswordError(null);
+                      }}
+                      fullWidth
+                      error={Boolean(field.error)}
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <LockOutlined />
+                            </InputAdornment>
+                          ),
+                        },
+                        htmlInput: { 'aria-describedby': field.describedBy },
+                      }}
+                    />
+                  )}
+                </FormField>
 
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    disabled={loading}
-                    startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
-                  >
-                    {t('resetPassword.submit')}
-                  </Button>
-                </>
-              )}
+                <FormActions submitLabel={t('resetPassword.submit')} submitting={loading} layout="stacked" />
 
-              <Button component={LocaleLink} variant="text" href="/auth/login">
-                {t('resetPassword.back')}
-              </Button>
-            </Stack>
+                <Button component={LocaleLink} variant="text" href="/auth/login">
+                  {t('resetPassword.back')}
+                </Button>
+              </FormShell>
+            )}
           </CardContent>
         </Card>
       </Box>
