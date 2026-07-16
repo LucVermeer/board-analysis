@@ -31,6 +31,14 @@ import type { GymManageTabProps } from './tab-props';
 // Display weekdays Monday-first; Postgres EXTRACT(DOW) is 0 = Sunday … 6 = Saturday.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 
+// The dashboard reads the rolling week today. Kept as a constant so it stays in
+// the query key alongside the query input — a future period toggle can flip both
+// without silently serving a cached window under the wrong label.
+const INSIGHTS_PERIOD = 'week' as const;
+
+// Rolling weekly aggregate — no need to refetch on every tab remount.
+const INSIGHTS_STALE_MS = 5 * 60_000;
+
 // 2024-01-07 is a Sunday, so +dow lands on the matching weekday. Labels come from
 // Intl so they follow the viewer's locale without seven hand-kept i18n keys.
 function weekdayLabel(dayOfWeek: number, locale: string, style: 'short' | 'long'): string {
@@ -167,15 +175,16 @@ export default function InsightsTab({ gym }: GymManageTabProps) {
     isPending,
     isError,
   } = useQuery({
-    queryKey: ['gymStats', gym.uuid, viewerUserId],
+    queryKey: ['gymStats', gym.uuid, viewerUserId, INSIGHTS_PERIOD],
     queryFn: async () => {
       const client = createGraphQLHttpClient(token);
       const response = await client.request<GetGymStatsQueryResponse, GetGymStatsQueryVariables>(GET_GYM_STATS, {
-        input: { gymUuid: gym.uuid, period: 'week' },
+        input: { gymUuid: gym.uuid, period: INSIGHTS_PERIOD },
       });
       return response.gymStats;
     },
     enabled: !!token,
+    staleTime: INSIGHTS_STALE_MS,
   });
 
   const dayBars = useMemo<CssBarChartBar[]>(() => {
@@ -189,6 +198,13 @@ export default function InsightsTab({ gym }: GymManageTabProps) {
       ],
     }));
   }, [stats, locale, t]);
+
+  // Token settled with no token: the disabled query stays isPending forever, so
+  // treat it as an error rather than an eternal skeleton (the tab is auth-gated,
+  // so this only trips on a silent auth-token fetch failure).
+  if (!isTokenLoading && !token) {
+    return <EmptyState description={t('manage.insights.loadError')} />;
+  }
 
   if (isTokenLoading || isPending) {
     return <InsightsSkeleton />;

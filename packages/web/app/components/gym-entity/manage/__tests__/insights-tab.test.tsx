@@ -109,7 +109,7 @@ describe('InsightsTab', () => {
     expect(screen.getByTestId('insights-top-climbs').textContent).toMatch(/V4/);
   });
 
-  it('shows a flat delta when nothing changed', async () => {
+  it('shows a flat delta on a metric that did not change week-over-week', async () => {
     mockRequest.mockResolvedValue({
       gymStats: makeStats({
         current: { uniqueClimbers: 5, ascentCount: 20 },
