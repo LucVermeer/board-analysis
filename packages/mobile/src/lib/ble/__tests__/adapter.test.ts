@@ -50,7 +50,7 @@ vi.mock('@boardsesh/ble-protocol', () => ({
 
 import { RNBleAdapter } from '../adapter';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
-import { splitMessages } from '@boardsesh/ble-protocol';
+import { parseSerialNumber, splitMessages } from '@boardsesh/ble-protocol';
 import { State } from 'react-native-ble-plx';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -930,6 +930,73 @@ describe('RNBleAdapter', () => {
         const error = await settled;
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toMatch(/no boards found/i);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reconnects silently when the target re-advertises past the old 4s window but within the grace (#3609)', async () => {
+      vi.useFakeTimers();
+      try {
+        mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+        mockBleManager.cancelDeviceConnection.mockResolvedValue(undefined);
+
+        // Capture the scan callback so the test controls WHEN the board re-advertises.
+        const captured: Array<(error: unknown, device: unknown) => void> = [];
+        mockBleManager.startDeviceScan.mockImplementation(
+          (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+            captured.push(callback);
+          },
+        );
+
+        // The re-advertised board parses to the reconnect target serial.
+        vi.mocked(parseSerialNumber).mockReturnValue('NEEDLE-SERIAL');
+
+        // A connectable board so the post-selection connect flow completes.
+        const characteristic = {
+          uuid: 'uart-write-uuid',
+          isWritableWithoutResponse: true,
+          writeWithoutResponse: vi.fn().mockResolvedValue(undefined),
+          writeWithResponse: vi.fn().mockResolvedValue(undefined),
+        };
+        const deviceWithServices = {
+          id: 'needle-device',
+          characteristicsForService: vi.fn().mockResolvedValue([characteristic]),
+          requestMTU: vi.fn().mockResolvedValue({ mtu: 247 }),
+          discoverAllServicesAndCharacteristics: vi.fn().mockReturnThis(),
+        };
+        mockBleManager.connectToDevice.mockResolvedValue({
+          id: 'needle-device',
+          requestMTU: vi.fn().mockResolvedValue({ mtu: 247 }),
+          discoverAllServicesAndCharacteristics: vi.fn().mockReturnValue(deviceWithServices),
+        });
+
+        let pickerOpened = false;
+        const devicePicker: DevicePickerFn = () => {
+          pickerOpened = true;
+          return new Promise<string>(() => {});
+        };
+        const adapter = new RNBleAdapter(devicePicker);
+        const connectPromise = adapter.requestAndConnect('NEEDLE-SERIAL');
+        await Promise.resolve();
+
+        // 6s in — past the OLD 4s grace, before the new 10s grace. With the old
+        // value the picker would already have flashed; it must not now (#3609).
+        await vi.advanceTimersByTimeAsync(6_000);
+        expect(pickerOpened).toBe(false);
+
+        // The board finally re-advertises → silent auto-select, still no picker.
+        captured[0](null, {
+          id: 'needle-device',
+          localName: 'Kilter Board#NEEDLE@3',
+          name: 'Kilter Board#NEEDLE@3',
+          rssi: -40,
+          serviceUUIDs: ['aurora-uuid'],
+        });
+
+        const connection = await connectPromise;
+        expect(pickerOpened).toBe(false);
+        expect(connection.deviceId).toBe('needle-device');
       } finally {
         vi.useRealTimers();
       }
