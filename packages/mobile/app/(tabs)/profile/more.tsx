@@ -17,11 +17,14 @@ import { useBoardDownloads } from '../../../src/offline/use-board-downloads';
 import { useSetting, setSetting, getSetting, offlineBoardKeyForBoard } from '../../../src/settings';
 import { useConfirm } from '../../../src/providers/dialog-provider';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
+import { RECLAIMABLE_VISIBLE_BYTES } from '../../../src/db/storage-usage';
 import {
   getDeadLetterCount,
   getDeadLetters,
   retryDeadLetter,
   getPendingCount,
+  getDownloadedScopeKeys,
+  measureReclaimableBytes,
   type GraphQLFetch,
 } from '@boardsesh/offline-sync';
 import { drainMutationQueue } from '../../../src/offline/offline-sync-adapter';
@@ -123,6 +126,26 @@ export default function MoreScreen() {
     // queued while the flag was on must stay reachable via Retry.
     refetchInterval: offlineEnabled ? 30000 : false,
   });
+
+  // Whether to offer the Storage screen: the offline engine is on, OR this device is
+  // still holding downloaded boards from before (a kill-switch rollback, or a
+  // sign-out — which clears syncEnabledBoards but deliberately keeps the rows as the
+  // shared cache). One cheap indexed read, same cost shape as the dead-letter count.
+  // Shares the ['downloadedScopeKeys'] cache entry with My Boards, so this warms it.
+  const { data: downloadedScopeKeys } = useQuery({
+    queryKey: ['downloadedScopeKeys'],
+    queryFn: () => getDownloadedScopeKeys(db),
+  });
+  // ...AND when a removal deleted its rows but the compaction never landed, so the
+  // freelist is still holding real space. That state clears the scope-complete
+  // markers (so downloadedScopeKeys is empty) and can coincide with the flag being
+  // off — which would hide the one screen that can reclaim it. Two O(1) pragmas.
+  const { data: reclaimableBytes = 0 } = useQuery({
+    queryKey: ['offlineReclaimableBytes'],
+    queryFn: () => measureReclaimableBytes(db),
+  });
+  const showStorage =
+    offlineEnabled || (downloadedScopeKeys?.length ?? 0) > 0 || reclaimableBytes >= RECLAIMABLE_VISIBLE_BYTES;
 
   // Guard against a rapid double-tap spawning overlapping retries (the drain is
   // single-flight internally, but this avoids the wasted re-entrant work).
@@ -517,6 +540,29 @@ export default function MoreScreen() {
       },
     ],
   });
+
+  // Storage (nav) — what the offline downloads occupy, and how to get it back.
+  //
+  // Deliberately NOT gated on the offline flag alone. That flag is a kill switch: a
+  // user who downloaded gigabytes while it was on and then got rolled back would
+  // otherwise have no way to reclaim them, which is the very gap this screen exists
+  // to close. Same reasoning as the sign-out pending-count read above.
+  if (showStorage) {
+    sections.push({
+      key: 'storage',
+      title: t('mobile.more.storage.title'),
+      rows: [
+        {
+          kind: 'nav',
+          key: 'storage',
+          label: t('mobile.more.storage.rowLabel'),
+          subtitle: t('mobile.more.storage.rowSubtitle'),
+          icon: 'storage',
+          onPress: navAction(() => router.push('/(tabs)/profile/storage')),
+        },
+      ],
+    });
+  }
 
   // Diagnostics — Session Recording toggle. Persist + apply live.
   sections.push({
