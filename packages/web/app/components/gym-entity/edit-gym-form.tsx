@@ -44,6 +44,8 @@ export default function EditGymForm({ gym, onSuccess, onCancel }: EditGymFormPro
           website: values.website || null,
           contactEmail: values.contactEmail || undefined,
           contactPhone: values.contactPhone || undefined,
+          latitude: values.latitude,
+          longitude: values.longitude,
           isPublic: values.isPublic,
         },
       });
@@ -68,6 +70,8 @@ export default function EditGymForm({ gym, onSuccess, onCancel }: EditGymFormPro
         contactEmail: gym.contactEmail ?? '',
         contactPhone: gym.contactPhone ?? '',
         isPublic: gym.isPublic,
+        latitude: gym.latitude ?? null,
+        longitude: gym.longitude ?? null,
       }}
       showSlugField
       onSubmit={handleSubmit}

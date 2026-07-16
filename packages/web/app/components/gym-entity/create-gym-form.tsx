@@ -11,6 +11,7 @@ import {
 } from '@boardsesh/graphql/operations';
 import type { Gym } from '@boardsesh/shared-schema';
 import GymForm, { type GymFormFieldValues } from './gym-form';
+import SimilarGymSuggestions from './similar-gym-suggestions';
 
 type CreateGymFormProps = {
   boardUuid?: string;
@@ -42,6 +43,8 @@ export default function CreateGymForm({ boardUuid, onSuccess, onCancel }: Create
           website: values.website || undefined,
           contactEmail: values.contactEmail || undefined,
           contactPhone: values.contactPhone || undefined,
+          latitude: values.latitude ?? undefined,
+          longitude: values.longitude ?? undefined,
           isPublic: values.isPublic,
           boardUuid,
         },
@@ -67,9 +70,14 @@ export default function CreateGymForm({ boardUuid, onSuccess, onCancel }: Create
         contactEmail: '',
         contactPhone: '',
         isPublic: true,
+        latitude: null,
+        longitude: null,
       }}
       onSubmit={handleSubmit}
       onCancel={onCancel}
+      renderSuggestions={({ name, latitude, longitude }) => (
+        <SimilarGymSuggestions name={name} latitude={latitude} longitude={longitude} />
+      )}
     />
   );
 }

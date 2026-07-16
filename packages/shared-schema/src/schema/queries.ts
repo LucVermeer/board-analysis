@@ -571,6 +571,15 @@ export const queriesTypeDefs = /* GraphQL */ `
     searchGyms(input: SearchGymsInput!): GymConnection!
 
     """
+    Live gyms that resemble one the user is about to create, so they can view or
+    claim an existing gym instead of making a duplicate. Authenticated + rate
+    limited. Matches by exact normalized name within 5 km, any name within 150 m,
+    or substring name similarity within 1 km; coordinates optional. Nearest first,
+    capped at five.
+    """
+    findSimilarGyms(input: FindSimilarGymsInput!): [SimilarGym!]!
+
+    """
     Get members of a gym.
     """
     gymMembers(input: GymMembersInput!): GymMemberConnection!

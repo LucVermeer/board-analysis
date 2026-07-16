@@ -19,6 +19,8 @@ import type {
   ReviewGymClaimInput,
   PendingGymClaimsInput,
   GymClaimConnection,
+  FindSimilarGymsInput,
+  SimilarGym,
   UserBoard,
   GymStats,
   GymStatsInput,
@@ -98,6 +100,22 @@ export const SEARCH_GYMS = gql`
       }
       totalCount
       hasMore
+    }
+  }
+`;
+
+export const FIND_SIMILAR_GYMS = gql`
+  query FindSimilarGyms($input: FindSimilarGymsInput!) {
+    findSimilarGyms(input: $input) {
+      uuid
+      slug
+      name
+      address
+      website
+      distanceMeters
+      ownerType
+      isClaimable
+      providerOrigins
     }
   }
 `;
@@ -327,6 +345,14 @@ export type SearchGymsQueryVariables = {
 
 export type SearchGymsQueryResponse = {
   searchGyms: GymConnection;
+};
+
+export type FindSimilarGymsQueryVariables = {
+  input: FindSimilarGymsInput;
+};
+
+export type FindSimilarGymsQueryResponse = {
+  findSimilarGyms: SimilarGym[];
 };
 
 export type GetGymMembersQueryVariables = {

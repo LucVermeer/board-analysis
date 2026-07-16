@@ -30,6 +30,37 @@ export function normalizeGymName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * Normalized gym names too generic to be a reliable physical identity. These are
+ * prod's biggest name-collision classes — home-wall / garage pins and bare board
+ * brands the location sync mints at residential coordinates. A first board named
+ * one of these must NOT auto-attach to a stranger's nearby gym (a claimable SYSTEM
+ * pin), since a false attach ultimately hands board-edit control to whoever claims
+ * that gym. The suggest surface is unaffected (suggest-never-block).
+ *
+ * Compare with `isGenericGymName` (normalized) rather than raw membership.
+ */
+export const GENERIC_GYM_NAMES: ReadonlySet<string> = new Set([
+  'home wall',
+  'homewall',
+  'home',
+  'garage',
+  'cellar',
+  'basement',
+  'kilter',
+  'kilter board',
+  'tension',
+  'tension board',
+  'moonboard',
+  'moon',
+  'moon board',
+]);
+
+/** Whether a gym name is too generic to anchor an auto-attach (normalized comparison). */
+export function isGenericGymName(name: string): boolean {
+  return GENERIC_GYM_NAMES.has(normalizeGymName(name));
+}
+
 export function hasText(value: string | null): boolean {
   return value !== null && value.trim().length > 0;
 }

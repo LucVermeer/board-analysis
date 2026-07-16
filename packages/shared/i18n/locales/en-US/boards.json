@@ -478,6 +478,16 @@
     "noGym": "No gym",
     "createNew": "Create new"
   },
+  "similarGyms": {
+    "heading": "Looks like your gym might already be here",
+    "subtitle": "Claim yours to manage it, or add a new one below.",
+    "distanceMeters": "{{meters}} m away",
+    "distanceKm": "{{km}} km away",
+    "providerBadge": "From {{provider}}",
+    "viewGym": "See the gym",
+    "claim": "This is my gym — claim it",
+    "createAnyway": "None of these? Add your gym with the button below."
+  },
   "selectorDrawer": {
     "customTitle": "Custom Board",
     "createTitle": "Create Board",

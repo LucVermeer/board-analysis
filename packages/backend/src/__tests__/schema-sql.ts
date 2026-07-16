@@ -602,6 +602,16 @@ export const schemaSQL = `
   );
   CREATE UNIQUE INDEX IF NOT EXISTS "gym_follows_unique_gym_user" ON "gym_follows" ("gym_id", "user_id");
 
+  -- Maps upstream provider source keys (e.g. "kilter:123") to the canonical gym.
+  -- findSimilarGyms reads the source-key prefixes to surface provider origins.
+  DROP TABLE IF EXISTS "location_sync_gym_sources" CASCADE;
+  CREATE TABLE IF NOT EXISTS "location_sync_gym_sources" (
+    "source_key" text PRIMARY KEY NOT NULL,
+    "gym_id" bigint NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+
   DROP TABLE IF EXISTS "board_follows" CASCADE;
   CREATE TABLE IF NOT EXISTS "board_follows" (
     "id" bigserial PRIMARY KEY NOT NULL,

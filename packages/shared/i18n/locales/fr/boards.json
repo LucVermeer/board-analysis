@@ -478,6 +478,16 @@
     "noGym": "Aucune salle",
     "createNew": "Créer"
   },
+  "similarGyms": {
+    "heading": "On dirait que votre salle est déjà là",
+    "subtitle": "Revendiquez la vôtre pour la gérer, ou ajoutez-en une nouvelle ci-dessous.",
+    "distanceMeters": "à {{meters}} m",
+    "distanceKm": "à {{km}} km",
+    "providerBadge": "Depuis {{provider}}",
+    "viewGym": "Voir la salle",
+    "claim": "C'est ma salle — la revendiquer",
+    "createAnyway": "Aucune ne correspond ? Ajoutez votre salle avec le bouton ci-dessous."
+  },
   "selectorDrawer": {
     "customTitle": "Board personnalisée",
     "createTitle": "Créer une board",

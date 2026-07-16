@@ -478,6 +478,16 @@
     "noGym": "Sin gimnasio",
     "createNew": "Crear nuevo"
   },
+  "similarGyms": {
+    "heading": "Parece que tu gimnasio ya está aquí",
+    "subtitle": "Reclama el tuyo para gestionarlo, o añade uno nuevo abajo.",
+    "distanceMeters": "a {{meters}} m",
+    "distanceKm": "a {{km}} km",
+    "providerBadge": "Desde {{provider}}",
+    "viewGym": "Ver el gimnasio",
+    "claim": "Este es mi gimnasio: reclamarlo",
+    "createAnyway": "¿Ninguno es el tuyo? Añade tu gimnasio con el botón de abajo."
+  },
   "selectorDrawer": {
     "customTitle": "Plafón personalizado",
     "createTitle": "Crear plafón",

@@ -1582,6 +1582,20 @@ export type FeedbackContextInput = {
   userAgent?: InputMaybe<Scalars['String']['input']>;
 };
 
+/**
+ * Input for finding gyms that resemble one the user is about to create (dedup
+ * suggestions). Coordinates are optional — with them the match adds proximity
+ * tiers; without them it falls back to name-only matching.
+ */
+export type FindSimilarGymsInput = {
+  /** Optional latitude for proximity matching. */
+  latitude?: InputMaybe<Scalars['Float']['input']>;
+  /** Optional longitude for proximity matching. */
+  longitude?: InputMaybe<Scalars['Float']['input']>;
+  /** Proposed gym name to match against existing gyms. */
+  name: Scalars['String']['input'];
+};
+
 /** Input for following/unfollowing a board. */
 export type FollowBoardInput = {
   /** Board UUID */
@@ -2304,6 +2318,13 @@ export type GymMembersInput = {
   /** Offset for pagination */
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
+
+/** Where a gym came from: an upstream provider sync or a Boardsesh user. */
+export type GymOwnerType =
+  /** System-synced from an upstream board provider (Boardsesh catalog). */
+  | 'SYSTEM'
+  /** Created by a Boardsesh user. */
+  | 'USER';
 
 /**
  * A gym owner's activity snapshot for the current window and the window
@@ -4242,6 +4263,14 @@ export type Query = {
    * Returns array of favorited climb UUIDs.
    */
   favorites: Array<Scalars['String']['output']>;
+  /**
+   * Live gyms that resemble one the user is about to create, so they can view or
+   * claim an existing gym instead of making a duplicate. Authenticated + rate
+   * limited. Matches by exact normalized name within 5 km, any name within 150 m,
+   * or substring name similarity within 1 km; coordinates optional. Nearest first,
+   * capped at five.
+   */
+  findSimilarGyms: Array<SimilarGym>;
   /** Get followers of a user. */
   followers: FollowConnection;
   /** Get users that a user is following. */
@@ -4789,6 +4818,11 @@ export type QueryFavoritesArgs = {
   angle: Scalars['Int']['input'];
   boardName: Scalars['String']['input'];
   climbUuids: Array<Scalars['String']['input']>;
+};
+
+/** Root query type for all read operations. */
+export type QueryFindSimilarGymsArgs = {
+  input: FindSimilarGymsInput;
 };
 
 /** Root query type for all read operations. */
@@ -6332,6 +6366,32 @@ export type SimilarClimbsInput = {
   threshold?: InputMaybe<Scalars['Float']['input']>;
 };
 
+/**
+ * A live gym that resembles one the user is about to create — surfaced so they
+ * can view or claim it instead of making a duplicate.
+ */
+export type SimilarGym = {
+  __typename?: 'SimilarGym';
+  /** Physical address */
+  address?: Maybe<Scalars['String']['output']>;
+  /** Distance in metres from the supplied coordinates; null when no coordinates were given. */
+  distanceMeters?: Maybe<Scalars['Float']['output']>;
+  /** Whether the current viewer can start an ownership claim for this gym. */
+  isClaimable: Scalars['Boolean']['output'];
+  /** Gym name */
+  name: Scalars['String']['output'];
+  /** Whether this gym came from an upstream provider sync (SYSTEM) or a user (USER). */
+  ownerType: GymOwnerType;
+  /** Upstream provider origins for a synced gym (e.g. "kilter", "tension"), from source-key prefixes. Empty for user-created gyms. */
+  providerOrigins: Array<Scalars['String']['output']>;
+  /** URL slug for this gym */
+  slug?: Maybe<Scalars['String']['output']>;
+  /** Unique identifier */
+  uuid: Scalars['ID']['output'];
+  /** Website URL (used for domain-verified ownership claims) */
+  website?: Maybe<Scalars['String']['output']>;
+};
+
 /** Climb count for a single smart playlist type (used to render library cards). */
 export type SmartPlaylistCount = {
   __typename?: 'SmartPlaylistCount';
@@ -7357,6 +7417,7 @@ export type ResolversTypes = ResolversObject<{
   >;
   FavoritesCount: ResolverTypeWrapper<FavoritesCount>;
   FeedbackContextInput: FeedbackContextInput;
+  FindSimilarGymsInput: FindSimilarGymsInput;
   Float: ResolverTypeWrapper<Scalars['Float']['output']>;
   FollowBoardInput: FollowBoardInput;
   FollowConnection: ResolverTypeWrapper<FollowConnection>;
@@ -7408,6 +7469,7 @@ export type ResolversTypes = ResolversObject<{
   GymMemberConnection: ResolverTypeWrapper<GymMemberConnection>;
   GymMemberRole: GymMemberRole;
   GymMembersInput: GymMembersInput;
+  GymOwnerType: GymOwnerType;
   GymStats: ResolverTypeWrapper<GymStats>;
   GymStatsInput: GymStatsInput;
   GymStatsPeriod: GymStatsPeriod;
@@ -7544,6 +7606,7 @@ export type ResolversTypes = ResolversObject<{
   SetterStatsInput: SetterStatsInput;
   SimilarClimb: ResolverTypeWrapper<SimilarClimb>;
   SimilarClimbsInput: SimilarClimbsInput;
+  SimilarGym: ResolverTypeWrapper<SimilarGym>;
   SmartPlaylistCount: ResolverTypeWrapper<SmartPlaylistCount>;
   SmartPlaylistMeta: ResolverTypeWrapper<SmartPlaylistMeta>;
   SmartPlaylistResult: ResolverTypeWrapper<SmartPlaylistResult>;
@@ -7683,6 +7746,7 @@ export type ResolversParentTypes = ResolversObject<{
   EventsReplayResponse: Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversParentTypes['QueueEvent']> };
   FavoritesCount: FavoritesCount;
   FeedbackContextInput: FeedbackContextInput;
+  FindSimilarGymsInput: FindSimilarGymsInput;
   Float: Scalars['Float']['output'];
   FollowBoardInput: FollowBoardInput;
   FollowConnection: FollowConnection;
@@ -7857,6 +7921,7 @@ export type ResolversParentTypes = ResolversObject<{
   SetterStatsInput: SetterStatsInput;
   SimilarClimb: SimilarClimb;
   SimilarClimbsInput: SimilarClimbsInput;
+  SimilarGym: SimilarGym;
   SmartPlaylistCount: SmartPlaylistCount;
   SmartPlaylistMeta: SmartPlaylistMeta;
   SmartPlaylistResult: SmartPlaylistResult;
@@ -10323,6 +10388,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryFavoritesArgs, 'angle' | 'boardName' | 'climbUuids'>
   >;
+  findSimilarGyms?: Resolver<
+    Array<ResolversTypes['SimilarGym']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryFindSimilarGymsArgs, 'input'>
+  >;
   followers?: Resolver<
     ResolversTypes['FollowConnection'],
     ParentType,
@@ -11383,6 +11454,22 @@ export type SimilarClimbResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type SimilarGymResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SimilarGym'] = ResolversParentTypes['SimilarGym'],
+> = ResolversObject<{
+  address?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  distanceMeters?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  isClaimable?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  ownerType?: Resolver<ResolversTypes['GymOwnerType'], ParentType, ContextType>;
+  providerOrigins?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
+  slug?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  website?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SmartPlaylistCountResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SmartPlaylistCount'] = ResolversParentTypes['SmartPlaylistCount'],
@@ -11918,6 +12005,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SetterSearchResult?: SetterSearchResultResolvers<ContextType>;
   SetterStat?: SetterStatResolvers<ContextType>;
   SimilarClimb?: SimilarClimbResolvers<ContextType>;
+  SimilarGym?: SimilarGymResolvers<ContextType>;
   SmartPlaylistCount?: SmartPlaylistCountResolvers<ContextType>;
   SmartPlaylistMeta?: SmartPlaylistMetaResolvers<ContextType>;
   SmartPlaylistResult?: SmartPlaylistResultResolvers<ContextType>;
