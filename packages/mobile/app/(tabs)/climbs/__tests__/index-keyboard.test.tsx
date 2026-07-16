@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   getRecentFilters: vi.fn(),
   getLogbook: vi.fn(),
   track: vi.fn(),
+  ensureBackgroundsCached: vi.fn(),
+  imagePrefetch: vi.fn(),
 }));
 
 type FlashListProps<Item> = {
@@ -45,6 +47,10 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {}, hairlineWidth: 1 },
   RefreshControl: () => createElement('div', { 'data-refresh-control': 'true' }),
   Keyboard: { dismiss: mocks.dismissKeyboard },
+  // No `Image.prefetch` should ever fire for board art (#3191 — the native
+  // Android image loader gets a 403 from the CDN/WAF for direct board-art
+  // fetches). Exposed here so the pre-warm test can assert it stays unused.
+  Image: { prefetch: mocks.imagePrefetch },
   // Run deferred work synchronously in tests; the prewarm + background-cache
   // effects schedule through InteractionManager.runAfterInteractions in the screen.
   InteractionManager: {
@@ -291,7 +297,9 @@ vi.mock('../../../../src/lib/graphql/use-active-board', () => ({
 }));
 
 vi.mock('../../../../src/providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
-vi.mock('../../../../src/lib/background-image-cache', () => ({ ensureBackgroundsCached: vi.fn() }));
+vi.mock('../../../../src/lib/background-image-cache', () => ({
+  ensureBackgroundsCached: mocks.ensureBackgroundsCached,
+}));
 
 vi.mock('../../../../src/lib/recent-filter-store', () => ({
   getRecentFilters: mocks.getRecentFilters,
@@ -336,6 +344,8 @@ beforeEach(() => {
   mocks.saveLastSearch.mockResolvedValue(undefined);
   mocks.getRecentFilters.mockResolvedValue([]);
   mocks.track.mockClear();
+  mocks.ensureBackgroundsCached.mockClear();
+  mocks.imagePrefetch.mockClear();
   mocks.searchClimbs = [mocks.climb, mocks.secondClimb];
   mocks.searchState = { filters: {}, boardFilters: {}, name: '' };
 });
@@ -417,5 +427,28 @@ describe('ClimbList zero-result filter snapshot', () => {
     expect(properties).toMatchObject({ resultCount: 1 });
     expect(properties).not.toHaveProperty('zeroResultOnlyTallClimbs');
     expect(properties).not.toHaveProperty('zeroResultStatus');
+  });
+});
+
+// Regression guard for #3191: the native Android image loader was getting a
+// hard 403 from the CDN/WAF fetching board-art PNGs directly (fixed by
+// #2633, which replaced an `Image.prefetch(url)` pre-warm with the bundled
+// `ensureBackgroundsCached` asset lookup — see the effect's comment in
+// ../index.tsx). This locks that behaviour in so a future edit to the
+// pre-warm effect can't silently reintroduce a network board-art fetch.
+describe('ClimbList board-art pre-warm (#3191 regression guard)', () => {
+  it('pre-warms the bundled board background for the active board and never calls Image.prefetch', async () => {
+    render(<ClimbList />);
+
+    await waitFor(() =>
+      expect(mocks.ensureBackgroundsCached).toHaveBeenCalledWith({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: [1],
+      }),
+    );
+
+    expect(mocks.imagePrefetch).not.toHaveBeenCalled();
   });
 });
