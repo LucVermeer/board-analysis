@@ -35,7 +35,9 @@
 }
 
 .searchInput input {
-  font-size: 14px;
+  /* 16px so iOS Safari never zooms the viewport on focus (matches the theme-level input
+     size; the old max-width:768px !important guard used to force this on mobile). */
+  font-size: 16px;
   padding: 6px 0;
 }
 
@@ -84,15 +86,5 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-:global(html[data-theme='dark']) .searchInput :global(.MuiOutlinedInput-root) {
-  background: #ffffff;
-  color: #000000;
-}
-
-:global(html[data-theme='dark']) .searchInput :global(.MuiOutlinedInput-root) fieldset {
-  border-color: #ffffff;
-}
-
-:global(html[data-theme='dark']) .searchInput :global(.MuiSvgIcon-root) {
-  color: #6b7280;
-}
+/* The header search input rides the shared --input-* tokens (elevated violet field,
+   violet focus ring) via the MUI theme — no dark-mode white-field override needed. */
