@@ -70,7 +70,14 @@ export const RATE_LIMIT_SET_QUEUE = 300;
  */
 export function requireSession(ctx: ConnectionContext): string {
   if (!ctx.sessionId) {
-    logger.warn('[Auth] requireSession failed', { connectionId: ctx.connectionId, sessionId: ctx.sessionId });
+    // Benign, high-volume race: a mutation fired on a connection that hasn't
+    // (re)joined yet — the client's optimistic local reducer already applied
+    // and the next reconnect FullSync reconciles. Logged at `debug` so it
+    // stays out of prod error/warn dashboards (issue #2385).
+    logger.debug('[Auth] requireSession denied: no session context', {
+      connectionId: ctx.connectionId,
+      reason: 'no-session-id' satisfies SessionMembershipDenialReason,
+    });
     throw new Error(`Must be in a session to perform this operation (connectionId: ${ctx.connectionId})`);
   }
   return ctx.sessionId;
@@ -88,6 +95,47 @@ export function requireAuthenticated(ctx: ConnectionContext): void {
 }
 
 /**
+ * Extension `code` on every membership-denial error thrown by
+ * `requireSessionMember`. Clients branch on this (via
+ * `GraphQLOperationError.extensions.code`) to distinguish "you are not a
+ * member of this session, stop retrying / clear it" from a transient
+ * transport failure — instead of matching the message string. Mirrors the
+ * `RATE_LIMITED` / `SESSION_ENDED` / `CLIMB_IS_DUPLICATE` extension pattern.
+ */
+export const NOT_SESSION_MEMBER_CODE = 'NOT_SESSION_MEMBER';
+
+/**
+ * Why a membership check was denied — carried in `extensions.reason` and the
+ * structured debug log for triage (issue #2385 asked for a per-reason
+ * breakdown). Kept deliberately coarse: the two cases below are the only ones
+ * the server can tell apart. "Never joined", "join too slow", and "stale
+ * subscriber to an emptied session" all present identically as `no-session-id`
+ * — there is no server-side signal that separates them.
+ */
+export type SessionMembershipDenialReason = 'no-session-id' | 'session-mismatch';
+
+/**
+ * Durable "was ever a member" check: a single PK-indexed read of
+ * `board_session_participants` for `(userId, sessionId)`. The row is written
+ * on join and **never deleted on leave** (see
+ * `room-manager/client-lifecycle.ts`), so this is a "was ever a member"
+ * signal, not "is currently connected". Uses the PRIMARY client (`db`, not
+ * `dbRead`) so a fresh join's row can't be missed via replica lag.
+ *
+ * Shared by the `session` query gate (`isSessionMember`, below) and
+ * `requireSessionMember`'s WS fast-path (above), so both agree on exactly one
+ * definition of durable membership.
+ */
+export async function isDurableSessionMember(userId: string, sessionId: string): Promise<boolean> {
+  const rows = await db
+    .select({ sessionId: boardSessionParticipants.sessionId })
+    .from(boardSessionParticipants)
+    .where(and(eq(boardSessionParticipants.userId, userId), eq(boardSessionParticipants.sessionId, sessionId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
  * Helper to verify user is a member of the session they're trying to access.
  * Used for subscription authorization.
  *
@@ -95,6 +143,23 @@ export function requireAuthenticated(ctx: ConnectionContext): void {
  * where subscriptions may be authorized before joinSession has completed updating the context.
  *
  * In multi-instance mode, it also checks distributed state for cross-instance validation.
+ *
+ * A **durable fast-path** runs first for authenticated WebSocket connections:
+ * graphql-ws auto-replays an active subscription onto a brand-new connection
+ * after a socket drop, and that fresh `ConnectionContext.sessionId` is
+ * `undefined` until the client's rejoin lands. An authenticated caller who
+ * already holds a `board_session_participants` row (from a prior join) is a
+ * member regardless of the new connection's join state, so we authorize
+ * immediately instead of burning the full ~6.4s of retry backoff waiting for
+ * the rejoin to propagate. This is the same past-participant trust signal
+ * `isSessionMember` grants the `session` query (issues #2355 / #2385).
+ *
+ * HTTP callers are deliberately excluded from the fast-path (`transport
+ * !== 'http'` gate): a stateless HTTP `eventsReplay` request must still prove
+ * active connection membership, matching the pre-existing behavior pinned by
+ * `session-query-gate.test.ts`. Anonymous callers have no durable identity and
+ * fall through to the retry loop, which covers the legitimate first-join /
+ * anonymous-reconnect propagation window.
  *
  * @see SESSION_MEMBER_RETRY_CONFIG for timing configuration details
  */
@@ -104,6 +169,12 @@ export async function requireSessionMember(
   maxRetries = SESSION_MEMBER_RETRY_CONFIG.maxRetries,
   initialDelayMs = SESSION_MEMBER_RETRY_CONFIG.initialDelayMs,
 ): Promise<void> {
+  // Durable membership fast-path (authenticated WS connections only). See the
+  // JSDoc above for why this short-circuits the retry loop.
+  if (ctx.transport !== 'http' && ctx.userId && (await isDurableSessionMember(ctx.userId, sessionId))) {
+    return;
+  }
+
   for (let i = 0; i < maxRetries; i++) {
     // First check local context (fast path for same-instance)
     const latestCtx = getContext(ctx.connectionId);
@@ -144,20 +215,36 @@ export async function requireSessionMember(
   }
 
   if (!finalCtx?.sessionId) {
-    logger.warn('[Auth] requireSessionMember failed after retries: not in any session', {
+    // Benign, high-volume race (stale subscriber / anonymous reconnect / slow
+    // join). Logged at `debug` so it stays out of prod error/warn dashboards
+    // — clients now branch on `extensions.code` instead of scraping this line
+    // (issue #2385 suggestions 2 & 4).
+    const reason: SessionMembershipDenialReason = 'no-session-id';
+    logger.debug('[Auth] requireSessionMember denied: not in any session', {
       connectionId: ctx.connectionId,
       requestedSessionId: sessionId,
+      reason,
       maxRetries,
     });
-    throw new Error(`Unauthorized: not in any session (connectionId: ${ctx.connectionId}, requested: ${sessionId})`);
+    throw new GraphQLError(
+      `Unauthorized: not in any session (connectionId: ${ctx.connectionId}, requested: ${sessionId})`,
+      { extensions: { code: NOT_SESSION_MEMBER_CODE, reason } },
+    );
   }
   if (finalCtx.sessionId !== sessionId) {
-    logger.warn('[Auth] requireSessionMember failed: session mismatch', {
+    // Kept at `warn`: a connection joined to session A asking to subscribe to
+    // session B is genuinely unusual (client bug), unlike the benign
+    // no-session-id race above.
+    const reason: SessionMembershipDenialReason = 'session-mismatch';
+    logger.warn('[Auth] requireSessionMember denied: session mismatch', {
       connectionId: ctx.connectionId,
       currentSessionId: finalCtx.sessionId,
       requestedSessionId: sessionId,
+      reason,
     });
-    throw new Error(`Unauthorized: session mismatch (have: ${finalCtx.sessionId}, requested: ${sessionId})`);
+    throw new GraphQLError(`Unauthorized: session mismatch (have: ${finalCtx.sessionId}, requested: ${sessionId})`, {
+      extensions: { code: NOT_SESSION_MEMBER_CODE, reason },
+    });
   }
 }
 
@@ -219,22 +306,18 @@ export async function isSessionMember(ctx: ConnectionContext, sessionId: string)
   }
 
   if (ctx.userId) {
-    // Primary client (`db`, not `dbRead`), matching verifyWidgetSession: the
-    // participant row is written on join, and reading it from a lagging
-    // replica could demote a freshly-joined authenticated HTTP caller to the
-    // preview payload. A single PK-indexed row read is cheap on the primary.
+    // Durable participant-row check (`isDurableSessionMember`, primary `db`):
+    // the row is written on join, and reading it from a lagging replica could
+    // demote a freshly-joined authenticated HTTP caller to the preview
+    // payload. A single PK-indexed row read is cheap on the primary.
     //
     // Note this also grants the full payload to an authenticated WS
     // connection that holds a past-participant row but isn't currently
     // joined. Intentional: it's the same trust signal the HTTP resync path
     // accepts — that user could fetch the same payload over HTTP anyway,
-    // and could simply rejoin.
-    const rows = await db
-      .select({ sessionId: boardSessionParticipants.sessionId })
-      .from(boardSessionParticipants)
-      .where(and(eq(boardSessionParticipants.userId, ctx.userId), eq(boardSessionParticipants.sessionId, sessionId)))
-      .limit(1);
-    if (rows.length > 0) {
+    // and could simply rejoin. `requireSessionMember` reuses the exact same
+    // check for its WS subscription fast-path.
+    if (await isDurableSessionMember(ctx.userId, sessionId)) {
       return true;
     }
   }
