@@ -219,10 +219,13 @@ export function useSessionRealtime({
       // While backgrounded the socket is suspended: defer the join instead of
       // firing one that can only time out (#3605). Supersede any in-flight join
       // (bump the token), tear down subscriptions, and let the AppState listener
-      // below re-run us on foreground.
+      // below re-run us on foreground. Reset the retry counter so the foreground
+      // re-join is a fresh attempt cycle whose first failure still toasts +
+      // reports (the `joinRetryCount === 0` guard below).
       if (isBackgrounded()) {
         subscriptionStartToken++;
         joinDeferredForBackground = true;
+        joinRetryCount = 0;
         cleanupSubscriptions();
         return;
       }
@@ -237,9 +240,11 @@ export function useSessionRealtime({
         // A join in flight when the app backgrounds can't complete over the
         // suspended socket and hits the 30s timeout (#3605). That's expected,
         // not a defect: skip the toast + error report and defer — the AppState
-        // listener re-joins on foreground.
+        // listener re-joins on foreground. Reset the retry counter so that
+        // foreground re-join's first failure still surfaces (see the gate above).
         if (isBackgrounded()) {
           joinDeferredForBackground = true;
+          joinRetryCount = 0;
           clearJoinRetryTimer();
           return;
         }

@@ -375,4 +375,18 @@ describe('QueueProvider backgrounded JoinSession hygiene', () => {
     });
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.syncError', 'error');
   });
+
+  it('does not defer the join for the transient iOS "inactive" state', async () => {
+    // `inactive` (notification center, app switcher, incoming call) leaves the
+    // socket usable, so the gate must fire the join normally — only `background`
+    // defers.
+    appState.setState('inactive');
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(joinExecuteCalls().length).toBeGreaterThan(0);
+    });
+    expect(errorReporter.reportHandledError).not.toHaveBeenCalled();
+  });
 });
