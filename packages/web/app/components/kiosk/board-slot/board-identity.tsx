@@ -45,7 +45,12 @@ export default function BoardIdentity({
       <div className={styles.identity}>
         <span className={styles.overline}>{overline}</span>
         <span className={styles.name}>{t('board.wallsOpen')}</span>
-        {lastLitLine !== null ? <span className={styles.secondary}>{lastLitLine}</span> : null}
+        {/* Reserve the third line (non-breaking space when empty) so idle and
+         * active identity strips share one height, keeping the cards symmetric
+         * across a preset — an idle wall's `flex:1` art can't grow past its peers. */}
+        <span className={styles.secondary} aria-hidden={lastLitLine === null || undefined}>
+          {lastLitLine ?? ' '}
+        </span>
       </div>
     );
   }
@@ -77,7 +82,11 @@ export default function BoardIdentity({
         ) : null}
         <span className={styles.name}>{climb.name ?? t('board.unnamedClimb')}</span>
       </span>
-      {secondarySegments.length > 0 ? <span className={styles.secondary}>{secondarySegments.join(' · ')}</span> : null}
+      {/* Reserve the third line (see the idle branch) so active and idle strips
+       * share one height and the cards stay symmetric across a preset. */}
+      <span className={styles.secondary} aria-hidden={secondarySegments.length === 0 || undefined}>
+        {secondarySegments.length > 0 ? secondarySegments.join(' · ') : ' '}
+      </span>
     </div>
   );
 }
