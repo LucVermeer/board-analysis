@@ -39,6 +39,7 @@ import CommentSection from '@/app/components/social/comment-section';
 import GymPageManageButton from './gym-page-manage-button';
 import GymFollowButton from './gym-follow-button';
 import GymClaimCta from './gym-claim-cta';
+import GymOwnerPrompts from './gym-owner-prompts';
 import { getPublicBackendHttpUrl } from '@/app/lib/backend-url';
 import { resolveGymLogoDisplayUrl } from '@/app/lib/gym-logo-display-url';
 
@@ -243,6 +244,18 @@ export default async function GymPage(props: GymRouteProps) {
           )}
           {gym.canEdit && <GymPageManageButton gymSlug={gym_slug} />}
         </Box>
+
+        {gym.canEdit && (
+          <GymOwnerPrompts
+            gymSlug={gym_slug}
+            canEdit={gym.canEdit}
+            hasBoards={boards.length > 0}
+            hasKiosk={kiosk !== null}
+            hasBranding={Boolean(
+              gym.logoUrl || gym.brandPrimaryColor || gym.brandAccentColor || gym.brandBackgroundColor,
+            )}
+          />
+        )}
 
         {gym.canClaim && <GymClaimCta gymUuid={gym.uuid} gymName={gym.name} website={gym.website} />}
 

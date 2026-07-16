@@ -138,9 +138,10 @@ export default function GymWelcomeCard({ gym }: { gym: Gym }) {
   // Deep-link base: prefer the slug, fall back to the UUID (the manage route resolves both).
   const gymRef = gym.slug || gym.uuid;
   const tabHref = (key: GymChecklistStepKey): string => {
+    // Overview is the default tab now, so every checklist step links explicitly
+    // to its own tab (none of the steps target Overview).
     const tab = CHECKLIST_STEP_TAB[key];
-    // Kiosks is the default tab (no query param in the canonical URL).
-    return tab === 'kiosks' ? `/gym/${gymRef}/manage` : `/gym/${gymRef}/manage?tab=${tab}`;
+    return `/gym/${gymRef}/manage?tab=${tab}`;
   };
 
   const handleDismiss = () => {

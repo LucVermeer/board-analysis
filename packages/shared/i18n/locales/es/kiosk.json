@@ -86,7 +86,21 @@
     "exploreFeed": "Mira qué están encadenando otros escaladores",
     "claimTitle": "¿Es tuyo este rocódromo?",
     "claimBody": "Reclámalo para gestionar los plafones, la marca y lo que se ve en el muro.",
-    "claimCta": "Reclamar este rocódromo"
+    "claimCta": "Reclamar este rocódromo",
+    "owner": {
+      "linkBoards": {
+        "title": "Vincula tus plafones",
+        "body": "Los escaladores todavía no ven ningún muro aquí."
+      },
+      "putOnTv": {
+        "title": "Pon este muro en una tele",
+        "body": "Convierte una pantalla de tu rocódromo en un muro en directo."
+      },
+      "addBranding": {
+        "title": "Añade tu marca",
+        "body": "Añade tu logo y tus colores para que la página sea tuya."
+      }
+    }
   },
   "manage": {
     "welcome": {
@@ -122,7 +136,9 @@
       "branding": "Marca",
       "boards": "Plafones",
       "members": "Miembros",
-      "insights": "Estadísticas"
+      "insights": "Estadísticas",
+      "overview": "Resumen",
+      "profile": "Perfil"
     },
     "insights": {
       "subtitle": "Cómo fueron tus plafones esta semana frente a la anterior.",
@@ -303,6 +319,47 @@
       "discardBody": "Tus cambios de diseño aún no están guardados.",
       "keepEditing": "Seguir editando",
       "discard": "Descartar"
+    },
+    "overview": {
+      "quickLinksHeading": "Gestiona tu rocódromo",
+      "viewPublicPage": "Ver la página pública",
+      "embedAction": "Insertar en tu sitio web",
+      "stats": {
+        "boards": "plafones",
+        "members": "miembros",
+        "followers": "seguidores",
+        "kiosks": "kioscos"
+      },
+      "quickLinks": {
+        "kiosks": {
+          "title": "Ponlo en la tele",
+          "body": "Crea una pantalla para el muro de tu rocódromo"
+        },
+        "branding": {
+          "title": "Elige tus colores",
+          "body": "Añade tu logo y los colores de tu marca"
+        },
+        "boards": {
+          "title": "Vincula tus plafones",
+          "body": "Conecta los muros de tu rocódromo"
+        },
+        "members": {
+          "title": "Invita a tu equipo",
+          "body": "Añade al personal y a los aperturistas que lo llevan"
+        },
+        "insights": {
+          "title": "Mira la actividad de esta semana",
+          "body": "Quién escala y qué se está encadenando"
+        },
+        "profile": {
+          "title": "Edita tu perfil",
+          "body": "Nombre, dirección, sitio web y visibilidad"
+        }
+      }
+    },
+    "profile": {
+      "heading": "Perfil del rocódromo",
+      "description": "El nombre, la dirección y lo que ven los escaladores en la página pública."
     }
   },
   "branding": {

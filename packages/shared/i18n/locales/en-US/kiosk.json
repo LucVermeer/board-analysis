@@ -86,7 +86,21 @@
     "exploreFeed": "See what climbers are sending",
     "claimTitle": "Is this your gym?",
     "claimBody": "Claim it to run the boards, the branding, and what shows up on the wall.",
-    "claimCta": "Claim this gym"
+    "claimCta": "Claim this gym",
+    "owner": {
+      "linkBoards": {
+        "title": "Link your boards",
+        "body": "Climbers can't see any walls here yet."
+      },
+      "putOnTv": {
+        "title": "Put this wall on a TV",
+        "body": "Turn a screen in your gym into a live board display."
+      },
+      "addBranding": {
+        "title": "Add your branding",
+        "body": "Add your logo and colors so your page looks like you."
+      }
+    }
   },
   "manage": {
     "welcome": {
@@ -122,7 +136,9 @@
       "branding": "Branding",
       "boards": "Boards",
       "members": "Members",
-      "insights": "Insights"
+      "insights": "Insights",
+      "overview": "Overview",
+      "profile": "Profile"
     },
     "insights": {
       "subtitle": "How your boards did this week compared with last.",
@@ -303,6 +319,47 @@
       "discardBody": "Your layout edits aren't saved yet.",
       "keepEditing": "Keep editing",
       "discard": "Discard"
+    },
+    "overview": {
+      "quickLinksHeading": "Run your gym",
+      "viewPublicPage": "View public page",
+      "embedAction": "Embed on your website",
+      "stats": {
+        "boards": "boards",
+        "members": "members",
+        "followers": "followers",
+        "kiosks": "kiosks"
+      },
+      "quickLinks": {
+        "kiosks": {
+          "title": "Put it on the TV",
+          "body": "Build a wall display for your gym"
+        },
+        "branding": {
+          "title": "Set your colors",
+          "body": "Add your logo and brand colors"
+        },
+        "boards": {
+          "title": "Link your boards",
+          "body": "Connect the walls in your gym"
+        },
+        "members": {
+          "title": "Invite your crew",
+          "body": "Add the staff and setters who run it"
+        },
+        "insights": {
+          "title": "See this week's activity",
+          "body": "Who's climbing and what's getting sent"
+        },
+        "profile": {
+          "title": "Edit your profile",
+          "body": "Name, address, website, and visibility"
+        }
+      }
+    },
+    "profile": {
+      "heading": "Gym profile",
+      "description": "Your gym's name, address, and what climbers see on the public page."
     }
   },
   "branding": {

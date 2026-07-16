@@ -86,7 +86,21 @@
     "exploreFeed": "Voir ce que les grimpeurs enchaînent",
     "claimTitle": "C'est ta salle ?",
     "claimBody": "Revendique-la pour gérer les boards, l'identité visuelle et ce qui s'affiche sur le mur.",
-    "claimCta": "Revendiquer cette salle"
+    "claimCta": "Revendiquer cette salle",
+    "owner": {
+      "linkBoards": {
+        "title": "Relie tes boards",
+        "body": "Les grimpeurs ne voient encore aucun mur ici."
+      },
+      "putOnTv": {
+        "title": "Mets ce mur sur une TV",
+        "body": "Transforme un écran de ta salle en mur en direct."
+      },
+      "addBranding": {
+        "title": "Ajoute ton identité",
+        "body": "Ajoute ton logo et tes couleurs pour que la page te ressemble."
+      }
+    }
   },
   "manage": {
     "welcome": {
@@ -122,7 +136,9 @@
       "branding": "Identité",
       "boards": "Boards",
       "members": "Membres",
-      "insights": "Statistiques"
+      "insights": "Statistiques",
+      "overview": "Aperçu",
+      "profile": "Profil"
     },
     "insights": {
       "subtitle": "Comment tes boards ont tourné cette semaine par rapport à la dernière.",
@@ -303,6 +319,47 @@
       "discardBody": "Tes changements de disposition ne sont pas encore enregistrés.",
       "keepEditing": "Continuer à modifier",
       "discard": "Abandonner"
+    },
+    "overview": {
+      "quickLinksHeading": "Gère ta salle",
+      "viewPublicPage": "Voir la page publique",
+      "embedAction": "Intégrer à ton site web",
+      "stats": {
+        "boards": "boards",
+        "members": "membres",
+        "followers": "abonnés",
+        "kiosks": "bornes"
+      },
+      "quickLinks": {
+        "kiosks": {
+          "title": "Affiche-la sur la TV",
+          "body": "Crée un écran pour le mur de ta salle"
+        },
+        "branding": {
+          "title": "Choisis tes couleurs",
+          "body": "Ajoute ton logo et tes couleurs"
+        },
+        "boards": {
+          "title": "Relie tes boards",
+          "body": "Connecte les murs de ta salle"
+        },
+        "members": {
+          "title": "Invite ton crew",
+          "body": "Ajoute le staff et les ouvreurs qui la font tourner"
+        },
+        "insights": {
+          "title": "Vois l'activité de la semaine",
+          "body": "Qui grimpe et ce qui s'enchaîne"
+        },
+        "profile": {
+          "title": "Modifie ton profil",
+          "body": "Nom, adresse, site web et visibilité"
+        }
+      }
+    },
+    "profile": {
+      "heading": "Profil de la salle",
+      "description": "Le nom, l'adresse et ce que les grimpeurs voient sur la page publique."
     }
   },
   "branding": {
