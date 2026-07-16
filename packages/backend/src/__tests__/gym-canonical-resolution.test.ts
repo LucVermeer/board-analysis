@@ -179,6 +179,25 @@ describe('merged gym canonical resolution', () => {
     expect(kiosk!.gym.uuid).toBe(canonical.uuid);
   });
 
+  it('returns null when a chain dead-ends in a canonical that was later removed', async () => {
+    // ON DELETE SET NULL: if a chain's survivor is hard-deleted, the row that
+    // pointed at it is left soft-deleted with merged_into_gym_id = NULL. Walking a
+    // multi-hop chain into such a dead end must yield null, never loop or throw.
+    const deadEnd = await insertGym({ name: 'Dead End', slug: 'dead-end', deleted: true, mergedIntoGymId: null });
+    const twin = await insertGym({
+      name: 'Orphan Twin',
+      slug: 'orphan-twin',
+      deleted: true,
+      mergedIntoGymId: deadEnd.id,
+    });
+
+    const byUuid = await resolveCanonicalGymByUuid(twin.uuid);
+    expect(byUuid).toBeNull();
+
+    const bySlug = await socialGymQueries.gymBySlug(null, { slug: 'orphan-twin' }, anonCtx());
+    expect(bySlug).toBeNull();
+  });
+
   it('picks the most-recently-merged twin when several soft-deleted rows share a slug', async () => {
     // A rename+merge sequence can leave two soft-deleted rows with the same slug,
     // pointing at different survivors. The newer one (desc updatedAt) wins.
