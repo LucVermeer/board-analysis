@@ -126,11 +126,17 @@ export default async function EmbedBoardPage(props: EmbedBoardRouteProps) {
           <BoardSlot
             boardId={board.boardId}
             boardName={board.name}
+            slug={board.slug}
             angle={board.angle}
             boardDetails={slotData.boardDetails}
             initialClimb={slotData.initialClimb}
             initialClimbImageUrl={slotData.initialClimbImageUrl}
             bareBoardImageUrl={slotData.bareBoardImageUrl}
+            // Standalone embed widget: display-only, no kiosk layout and no
+            // manage toggle, so the per-board install QR stays off here (the
+            // QR is a kiosk-surface feature driven by the layout's
+            // showInstallQr). Keeps embeds identical to before this feature.
+            showInstallQr={false}
           />
         </KioskPresenceHub>
       </EmbedShell>

@@ -213,6 +213,10 @@ describe('KioskLayoutSchema (strict writer)', () => {
       version: KIOSK_LAYOUT_VERSION,
       boards: [slot(BOARD_A)],
       leaderboard: { boardUuid: BOARD_A, period: 'week' },
+      // showInstallQr is a KNOWN writer-schema field (default false), so it
+      // rides along in the parsed output — the unknown keys (theme/variant/
+      // style) are what this test pins as stripped.
+      showInstallQr: false,
     });
   });
 });
