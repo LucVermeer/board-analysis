@@ -1,6 +1,28 @@
 {
-  "generatedAt": "2026-07-16T20:21:53.203Z",
+  "generatedAt": "2026-07-16T20:39:21.144Z",
   "entries": [
+    {
+      "prNumber": 3704,
+      "category": "fixed",
+      "title": "Embed widgets now show proper titles and descriptions again — the live board and gym-leaderboard embeds were briefly rendering placeholder text instead of real metadata.",
+      "mergedAt": "2026-07-16T20:37:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3704"
+    },
+    {
+      "prNumber": 3700,
+      "category": "new",
+      "title": "Dark mode forms finally look like they belong: input fields sit on the same violet surfaces as the rest of the app, with a clear violet focus ring — no more glaring white boxes.",
+      "mergedAt": "2026-07-16T20:36:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3700",
+      "body": "Autofill no longer flashes your login fields white in dark mode, and iPads stop zooming when you tap a field."
+    },
+    {
+      "prNumber": 3686,
+      "category": "fixed",
+      "title": "Fixed a rare bug where logging a tick right as a party session wrapped up could silently fail to save — your tick is saved every time now, even if the session link can't be kept.",
+      "mergedAt": "2026-07-16T20:29:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3686"
+    },
     {
       "prNumber": 3687,
       "category": "fixed",

@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Dark mode forms finally look like they belong: input fields sit on the same violet surfaces as the rest of the app, with a clear violet focus ring — no more glaring white boxes. ([#3700](https://github.com/boardsesh/boardsesh/pull/3700))
+  Autofill no longer flashes your login fields white in dark mode, and iPads stop zooming when you tap a field.
 - Own a gym? Your gym now greets you on the homepage — jump straight to managing its boards or your public page. ([#3697](https://github.com/boardsesh/boardsesh/pull/3697))
   Climb somewhere with boards? Find your gym from the homepage and pull up its boards and crew.
 - After a duplicate-gym cleanup, old gym links and printed kiosk QR codes now land on the right gym instead of a dead page. ([#3669](https://github.com/boardsesh/boardsesh/pull/3669))
@@ -43,6 +45,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Embed widgets now show proper titles and descriptions again — the live board and gym-leaderboard embeds were briefly rendering placeholder text instead of real metadata. ([#3704](https://github.com/boardsesh/boardsesh/pull/3704))
+- Fixed a rare bug where logging a tick right as a party session wrapped up could silently fail to save — your tick is saved every time now, even if the session link can't be kept. ([#3686](https://github.com/boardsesh/boardsesh/pull/3686))
 - Reconnecting to your board mid-session is quieter now — tap the lightbulb and it slips back onto the same box instead of throwing the board picker at you every few climbs, and it remembers your board across app restarts. ([#3687](https://github.com/boardsesh/boardsesh/pull/3687))
 - Party queues now ride out rate limits. If the app buffers a burst of queue changes while you're offline and replays them the moment you reconnect, they land smoothly with a brief "catching up" note instead of a raw "Rate limit exceeded" error — and a change that's still being throttled is kept and retried instead of lost. ([#3690](https://github.com/boardsesh/boardsesh/pull/3690))
 - Changing your display name or avatar saves reliably again. ([#3679](https://github.com/boardsesh/boardsesh/pull/3679))
