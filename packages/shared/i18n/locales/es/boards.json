@@ -331,7 +331,7 @@
       "name": "Nombre del plafón",
       "slug": "URL personalizada",
       "description": "Descripción",
-      "location": "Ubicación",
+      "location": "Nombre de la ubicación",
       "serialNumber": "Número de serie del controlador",
       "defaultAngle": "Ángulo por defecto",
       "angleAdjustable": "Ángulo ajustable",
@@ -357,6 +357,7 @@
     },
     "sections": {
       "details": "Detalles del plafón",
+      "location": "Ubicación",
       "setup": "Configuración",
       "visibility": "Visibilidad"
     }

@@ -14,8 +14,9 @@ import AddOutlined from '@mui/icons-material/AddOutlined';
 import SearchOutlined from '@mui/icons-material/SearchOutlined';
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
-import { BoardDetailContent } from '../board-entity/board-detail';
+import { BoardDetailContent, type BoardDetailEditHost } from '../board-entity/board-detail';
 import BoardSearchResults from '../social/board-search-results';
+import { FormActions } from '@/app/components/form';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
@@ -42,6 +43,10 @@ export default function MyBoardsDrawer({ open, onClose, onCreateBoard, onTransit
   const { token } = useWsAuthToken();
   const [view, setView] = useState<DrawerView>({ type: 'list' });
   const [searchQuery, setSearchQuery] = useState('');
+  // Set while the board-detail view is in edit mode: the drawer header hosts
+  // the "Edit Board" title + Save/Cancel actions (bottom-drawer ruling), and
+  // the board-detail form drops its own title so it isn't doubled.
+  const [editHost, setEditHost] = useState<BoardDetailEditHost | null>(null);
 
   const handleBack = useCallback(() => {
     if (view.type === 'board-detail') {
@@ -88,31 +93,44 @@ export default function MyBoardsDrawer({ open, onClose, onCreateBoard, onTransit
     return parts.join(' \u00B7 ');
   };
 
-  const drawerTitle =
-    view.type === 'list' ? (
-      t('myBoards.title')
-    ) : (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <IconButton size="small" onClick={handleBack} edge="start" aria-label={t('ariaLabels.back')}>
-          <ArrowBackOutlined fontSize="small" />
-        </IconButton>
-        {view.type === 'search' ? t('myBoards.findBoard') : t('myBoards.boardDetail')}
-      </Box>
-    );
+  // Only honour the edit host while the board-detail view is actually mounted —
+  // guards against a stale descriptor if BoardDetailContent hasn't cleared yet.
+  const activeEditHost = view.type === 'board-detail' ? editHost : null;
 
-  const headerExtra =
-    view.type === 'list' ? (
-      <>
-        <IconButton size="small" onClick={() => setView({ type: 'search' })} aria-label={t('myBoards.ariaFindBoard')}>
-          <SearchOutlined fontSize="small" />
+  const drawerTitle = activeEditHost ? (
+    activeEditHost.title
+  ) : view.type === 'list' ? (
+    t('myBoards.title')
+  ) : (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <IconButton size="small" onClick={handleBack} edge="start" aria-label={t('ariaLabels.back')}>
+        <ArrowBackOutlined fontSize="small" />
+      </IconButton>
+      {view.type === 'search' ? t('myBoards.findBoard') : t('myBoards.boardDetail')}
+    </Box>
+  );
+
+  const headerExtra = activeEditHost ? (
+    <FormActions
+      formId={activeEditHost.formId}
+      submitLabel={activeEditHost.submit.submitLabel}
+      submitting={activeEditHost.submit.submitting}
+      disabled={!activeEditHost.submit.canSubmit}
+      onCancel={activeEditHost.onCancel}
+      layout="row"
+    />
+  ) : view.type === 'list' ? (
+    <>
+      <IconButton size="small" onClick={() => setView({ type: 'search' })} aria-label={t('myBoards.ariaFindBoard')}>
+        <SearchOutlined fontSize="small" />
+      </IconButton>
+      {onCreateBoard && (
+        <IconButton size="small" onClick={onCreateBoard} aria-label={t('myBoards.ariaCreateBoard')}>
+          <AddOutlined fontSize="small" />
         </IconButton>
-        {onCreateBoard && (
-          <IconButton size="small" onClick={onCreateBoard} aria-label={t('myBoards.ariaCreateBoard')}>
-            <AddOutlined fontSize="small" />
-          </IconButton>
-        )}
-      </>
-    ) : null;
+      )}
+    </>
+  ) : null;
 
   const renderListContent = () => {
     if (error && boards.length === 0) {
@@ -219,6 +237,7 @@ export default function MyBoardsDrawer({ open, onClose, onCreateBoard, onTransit
           boardUuid={view.boardUuid}
           initialIsFollowing={view.isFollowedByMe}
           onDeleted={handleBoardDeleted}
+          onEditHostChange={setEditHost}
         />
       )}
     </SwipeableDrawer>

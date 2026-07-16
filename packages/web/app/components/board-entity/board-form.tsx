@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TextField from '@mui/material/TextField';
 import MuiTypography from '@mui/material/Typography';
@@ -11,6 +11,13 @@ import Check from '@mui/icons-material/Check';
 import MuiSelect, { type SelectChangeEvent } from '@mui/material/Select';
 import { FormShell, FormSection, FormField, FormActions, FormSwitchRow } from '@/app/components/form';
 import MapLocationPicker from './map-location-picker';
+
+/** Submit-affordance state the form reports up so a drawer header can host the action. */
+export type BoardFormSubmitState = {
+  submitLabel: React.ReactNode;
+  submitting: boolean;
+  canSubmit: boolean;
+};
 
 type BoardFormFieldValues = {
   name: string;
@@ -61,6 +68,18 @@ type BoardFormProps = {
   onSubmit: (values: BoardFormFieldValues) => Promise<void>;
   /** Optional cancel handler */
   onCancel?: () => void;
+  /**
+   * When hosted in a drawer, the id wired onto the `<form>` so a header-hosted
+   * submit button can target it via `form={formId}`.
+   */
+  formId?: string;
+  /**
+   * When provided, the form reports its submit affordance here (for a header
+   * action bar) instead of rendering the inline submit/cancel buttons. Bottom
+   * drawers carry actions in the header because the iOS keyboard buries a
+   * footer — see docs/mobile-sheets-vs-routes.md.
+   */
+  onSubmitStateChange?: (state: BoardFormSubmitState) => void;
 };
 
 const NAME_MAX_LENGTH = 100;
@@ -84,6 +103,8 @@ export default function BoardForm({
   configEditable,
   onSubmit,
   onCancel,
+  formId,
+  onSubmitStateChange,
 }: BoardFormProps) {
   const { t } = useTranslation('boards');
   const resolvedDescriptionPlaceholder = descriptionPlaceholder ?? t('boardForm.placeholders.description');
@@ -115,6 +136,16 @@ export default function BoardForm({
     configEditable && layoutId && sizeId
       ? (configEditable.sets[`${configEditable.boardType}-${layoutId}-${sizeId}`] ?? [])
       : [];
+
+  const canSubmit = Boolean(name.trim());
+  const hostsActionsExternally = onSubmitStateChange != null;
+
+  // Report the submit affordance to a header-hosted action bar. Fires only when
+  // the label / saving / enabled state actually changes.
+  useEffect(() => {
+    if (!onSubmitStateChange) return;
+    onSubmitStateChange({ submitLabel, submitting: isSubmitting, canSubmit });
+  }, [onSubmitStateChange, submitLabel, isSubmitting, canSubmit]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -149,7 +180,7 @@ export default function BoardForm({
   };
 
   return (
-    <FormShell onSubmit={handleSubmit} maxWidth={640}>
+    <FormShell id={formId} onSubmit={handleSubmit} maxWidth={640}>
       {title ? (
         <MuiTypography variant="h6" component="h2">
           {title}
@@ -209,7 +240,7 @@ export default function BoardForm({
         </FormField>
       </FormSection>
 
-      <FormSection title={t('boardForm.fields.location')}>
+      <FormSection title={t('boardForm.sections.location')}>
         <FormField label={t('boardForm.fields.location')}>
           {(field) => (
             <TextField
@@ -401,13 +432,15 @@ export default function BoardForm({
         <FormSwitchRow label={t('boardForm.fields.isOwned')} checked={isOwned} onChange={setIsOwned} />
       </FormSection>
 
-      <FormActions
-        submitLabel={submitLabel}
-        submitting={isSubmitting}
-        disabled={!name.trim()}
-        onCancel={onCancel}
-        layout="inline"
-      />
+      {!hostsActionsExternally && (
+        <FormActions
+          submitLabel={submitLabel}
+          submitting={isSubmitting}
+          disabled={!canSubmit}
+          onCancel={onCancel}
+          layout="inline"
+        />
+      )}
     </FormShell>
   );
 }

@@ -331,7 +331,7 @@
       "name": "Nom de la board",
       "slug": "Slug d'URL",
       "description": "Description",
-      "location": "Emplacement",
+      "location": "Nom du lieu",
       "serialNumber": "Numéro de série du contrôleur",
       "defaultAngle": "Inclinaison par défaut",
       "angleAdjustable": "Inclinaison réglable",
@@ -357,6 +357,7 @@
     },
     "sections": {
       "details": "Détails de la board",
+      "location": "Emplacement",
       "setup": "Configuration",
       "visibility": "Visibilité"
     }

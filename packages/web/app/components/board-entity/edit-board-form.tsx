@@ -13,15 +13,23 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 import type { BoardName } from '@/app/lib/types';
 import { ANGLES } from '@/app/lib/board-data';
 import { getBoardSelectorOptions } from '@/app/lib/board-constants';
-import BoardForm from './board-form';
+import BoardForm, { type BoardFormSubmitState } from './board-form';
 
 type EditBoardFormProps = {
   board: UserBoard;
   onSuccess?: (board: UserBoard) => void;
   onCancel?: () => void;
+  /** When hosted in a drawer, the id wired onto the form for a header-hosted submit. */
+  formId?: string;
+  /**
+   * When provided, the form reports its submit affordance here and the host
+   * titles the surface + owns the action bar (so the drawer header, not the
+   * form, shows the "Edit Board" title and Save button).
+   */
+  onSubmitStateChange?: (state: BoardFormSubmitState) => void;
 };
 
-export default function EditBoardForm({ board, onSuccess, onCancel }: EditBoardFormProps) {
+export default function EditBoardForm({ board, onSuccess, onCancel, formId, onSubmitStateChange }: EditBoardFormProps) {
   const { t } = useTranslation('boards');
   const { showMessage } = useSnackbar();
 
@@ -100,7 +108,9 @@ export default function EditBoardForm({ board, onSuccess, onCancel }: EditBoardF
 
   return (
     <BoardForm
-      title={t('editBoard.title')}
+      // The host drawer titles the surface + hosts the action bar when it asks
+      // for submit-state reporting; drop the in-form title so it isn't doubled.
+      title={onSubmitStateChange ? '' : t('editBoard.title')}
       submitLabel={t('editBoard.submitLabel')}
       initialValues={{
         name: board.name,
@@ -125,6 +135,8 @@ export default function EditBoardForm({ board, onSuccess, onCancel }: EditBoardF
       configEditable={configEditable}
       onSubmit={handleSubmit}
       onCancel={onCancel}
+      formId={formId}
+      onSubmitStateChange={onSubmitStateChange}
     />
   );
 }

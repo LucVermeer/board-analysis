@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useId, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import { FormActions } from '@/app/components/form';
+import type { BoardFormSubmitState } from '../board-entity/board-form';
 import CollapsibleSection, {
   type CollapsibleSectionConfig,
 } from '@/app/components/collapsible-section/collapsible-section';
@@ -44,6 +46,15 @@ export default function BoardSelectorDrawer({
   const router = useLocaleRouter();
   const guardBoardSwitch = useBoardSwitchGuard();
   const [showCreateBoardForm, setShowCreateBoardForm] = useState(false);
+  // The create form's Save action lives in the create drawer's header (bottom-
+  // drawer ruling — the iOS keyboard buries a footer). The form reports its
+  // label / saving / enabled state here and the header button submits by id.
+  const createFormId = useId();
+  const [createSubmitState, setCreateSubmitState] = useState<BoardFormSubmitState>({
+    submitLabel: t('boardForm.create.submit'),
+    submitting: false,
+    canSubmit: false,
+  });
 
   // Board config form state
   const [selectedBoard, setSelectedBoard] = useState<BoardName | undefined>(undefined);
@@ -263,6 +274,16 @@ export default function BoardSelectorDrawer({
           open={showCreateBoardForm}
           onClose={() => setShowCreateBoardForm(false)}
           height="85dvh"
+          extra={
+            <FormActions
+              formId={createFormId}
+              submitLabel={createSubmitState.submitLabel}
+              submitting={createSubmitState.submitting}
+              disabled={!createSubmitState.canSubmit}
+              onCancel={() => setShowCreateBoardForm(false)}
+              layout="row"
+            />
+          }
         >
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <CollapsibleSection
@@ -318,6 +339,8 @@ export default function BoardSelectorDrawer({
                 sizeId={selectedSize}
                 setIds={selectedSets.join(',')}
                 defaultAngle={selectedAngle}
+                formId={createFormId}
+                onSubmitStateChange={setCreateSubmitState}
                 onSuccess={(board: UserBoard) => {
                   setShowCreateBoardForm(false);
                   const url = constructBoardSlugListUrl(board.slug, board.angle);
