@@ -7,8 +7,10 @@ describe('scan constants', () => {
     // Aurora boxes routinely take longer than a few seconds to re-advertise
     // after a link loss. The grace must be generous enough that a present board
     // reconnects silently, or the "silent" reconnect flashes the picker on most
-    // mid-session reconnects.
-    expect(SERIAL_RECONNECT_GRACE_MS).toBe(10_000);
+    // mid-session reconnects. A lower bound guards against a regression back to
+    // the old 4s value without pinning an exact literal a deliberate future tune
+    // would trip.
+    expect(SERIAL_RECONNECT_GRACE_MS).toBeGreaterThanOrEqual(8_000);
   });
 
   it('keeps the grace window well inside the overall scan window', () => {
