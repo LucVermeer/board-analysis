@@ -2,8 +2,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // auth.ts pulls in several native modules at import time. Mock them so the
 // browser-OAuth fallback can be exercised in a plain node test. The real
-// deep-link parser is kept (it's pure — no native imports).
-vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
+// deep-link parser and the real raceBrowserSignIn are kept (both pure — no
+// native imports).
+//
+// The fallback now drives an openBrowserAsync + OS deep-link race (raceBrowserSignIn)
+// instead of the broken WebBrowser.openAuthSessionAsync (see auth.ts). So the
+// harness captures the Linking 'url' listener the race registers and controls
+// the browser promise, letting each test fire the deep link, close the browser,
+// or fail it to open — in any order.
+let urlListener: ((event: { url: string }) => void) | null = null;
+let resolveBrowser: (() => void) | null = null;
+let rejectBrowser: ((reason: unknown) => void) | null = null;
+
+const removeListenerMock = vi.fn(() => {
+  urlListener = null;
+});
+const addEventListenerMock = vi.fn((_event: string, listener: (event: { url: string }) => void) => {
+  urlListener = listener;
+  return { remove: removeListenerMock };
+});
+
+vi.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
+  Linking: {
+    addEventListener: (event: string, listener: (event: { url: string }) => void) =>
+      addEventListenerMock(event, listener),
+  },
+}));
 vi.mock('expo-apple-authentication', () => ({}));
 vi.mock('expo-crypto', () => ({
   getRandomBytes: () => new Uint8Array(16),
@@ -25,45 +50,85 @@ vi.mock('../auth-store', () => ({
   getRefreshToken: vi.fn(),
 }));
 
-const openAuthSessionAsyncMock = vi.fn();
+// Plain vi.fn() (no inline implementation) so the wrapper's spread call stays
+// permissively typed — an implemented vi.fn narrows the param list and CI's
+// test-inclusive typecheck rejects the spread (TS2556). resetMocks() gives
+// dismissBrowser its resolved-promise behaviour.
+const openBrowserAsyncMock = vi.fn();
+const dismissBrowserMock = vi.fn();
 vi.mock('expo-web-browser', () => ({
-  openAuthSessionAsync: (...args: unknown[]) => openAuthSessionAsyncMock(...args),
+  openBrowserAsync: (...args: unknown[]) => openBrowserAsyncMock(...args),
+  dismissBrowser: (...args: unknown[]) => dismissBrowserMock(...args),
 }));
 
 const { signInWithGoogleWeb, signInWithAppleWeb } = await import('../auth');
+
+// Keep in sync with the web app's NATIVE_OAUTH_CALLBACK_SCHEME
+// (packages/web/app/lib/auth/native-oauth-config.ts) and auth.ts's
+// NATIVE_OAUTH_REDIRECT — the scheme the race listens for and the server's
+// /api/auth/native/callback deep-links back to. If web changes it, this must
+// change too, or the race never captures the token and the browser hangs open.
+const CALLBACK_SCHEME = 'com.boardsesh.app://auth/callback';
+
+// raceBrowserSignIn's executor runs synchronously: it registers the url listener
+// and calls openBrowserAsync (left pending here) before signInWithProviderWeb's
+// await suspends. So after calling the sign-in fn — before awaiting it — the
+// listener is captured and the browser is open; each helper then drives one edge.
+function armBrowser() {
+  openBrowserAsyncMock.mockImplementation(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        resolveBrowser = resolve;
+        rejectBrowser = reject;
+      }),
+  );
+}
+const fireDeepLink = (url: string) => urlListener?.({ url });
+const closeBrowser = () => resolveBrowser?.();
+const failBrowser = (reason: unknown) => rejectBrowser?.(reason);
 
 const okExchange = () =>
   new Response(JSON.stringify({ jwt: 'jwt-1', refreshToken: 'refresh-1', expiresAt: '2026-01-01T00:00:00.000Z' }), {
     status: 200,
   });
 
+function resetMocks() {
+  urlListener = null;
+  resolveBrowser = null;
+  rejectBrowser = null;
+  openBrowserAsyncMock.mockReset();
+  dismissBrowserMock.mockReset();
+  dismissBrowserMock.mockResolvedValue(undefined);
+  removeListenerMock.mockClear();
+  addEventListenerMock.mockClear();
+  storeTokensMock.mockReset();
+  armBrowser();
+}
+
 describe('signInWithGoogleWeb', () => {
-  beforeEach(() => {
-    openAuthSessionAsyncMock.mockReset();
-    storeTokensMock.mockReset();
-  });
+  beforeEach(resetMocks);
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it('drives the web native-start handoff and exchanges the transfer token into a stored session', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({
-      type: 'success',
-      url: 'com.boardsesh.app://auth/callback?transferToken=tok-123&next=%2F',
-    });
     const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okExchange());
 
-    const result = await signInWithGoogleWeb();
+    const racePromise = signInWithGoogleWeb();
+    // A non-callback deep link must be ignored — pins the exact callback scheme
+    // (the race would settle on the wrong URL if the prefix were too loose).
+    fireDeepLink('com.boardsesh.app://join/some-session');
+    fireDeepLink(`${CALLBACK_SCHEME}?transferToken=tok-123&next=%2F`);
+    const result = await racePromise;
 
     expect(result).toEqual({ success: true });
-    const [startUrl, redirect] = openAuthSessionAsyncMock.mock.calls[0];
+    const [startUrl] = openBrowserAsyncMock.mock.calls[0];
     expect(startUrl).toContain('https://web.test/auth/native-start?provider=google');
     expect(startUrl).toContain(encodeURIComponent('https://web.test/api/auth/native/callback?next=%2F'));
-    // Keep in sync with the web app's NATIVE_OAUTH_CALLBACK_SCHEME
-    // (packages/web/app/lib/auth/native-oauth-config.ts) — the redirect the web
-    // /api/auth/native/callback route deep-links back to. If web changes it, this
-    // must change too, or openAuthSessionAsync never captures the token.
-    expect(redirect).toBe('com.boardsesh.app://auth/callback');
+    // The captured callback dismisses the browser left open under the deep-link
+    // hand-off, and the listener is torn down after the race settles.
+    expect(dismissBrowserMock).toHaveBeenCalledTimes(1);
+    expect(removeListenerMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://backend.test/auth/native/exchange',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ transferToken: 'tok-123' }) }),
@@ -71,41 +136,55 @@ describe('signInWithGoogleWeb', () => {
     expect(storeTokensMock).toHaveBeenCalledWith('jwt-1', 'refresh-1', '2026-01-01T00:00:00.000Z');
   });
 
-  it('treats a dismissed browser as a cancellation and never exchanges', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({ type: 'dismiss' });
+  it('treats a closed browser (no callback deep link) as a cancellation and never exchanges', async () => {
     const fetchMock = vi.spyOn(global, 'fetch');
 
-    expect(await signInWithGoogleWeb()).toEqual({ success: false, cancelled: true });
+    const racePromise = signInWithGoogleWeb();
+    closeBrowser();
+
+    expect(await racePromise).toEqual({ success: false, cancelled: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(dismissBrowserMock).not.toHaveBeenCalled();
+  });
+
+  it('reports browser_unavailable (not a cancel, not network) when the browser fails to open', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch');
+
+    const racePromise = signInWithGoogleWeb();
+    // The iOS 26 dead-end this fixes: the in-app browser rejects instead of
+    // presenting. Must be a distinct terminal reason, not a silent cancel.
+    failBrowser(new Error('Another WebBrowser is already being presented.'));
+
+    expect(await racePromise).toEqual({ success: false, status: null, error: 'browser_unavailable' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('surfaces an error param from the callback redirect without exchanging', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({
-      type: 'success',
-      url: 'com.boardsesh.app://auth/callback?error=session_missing',
-    });
     const fetchMock = vi.spyOn(global, 'fetch');
 
-    expect(await signInWithGoogleWeb()).toEqual({ success: false, status: null, error: 'session_missing' });
+    const racePromise = signInWithGoogleWeb();
+    fireDeepLink(`${CALLBACK_SCHEME}?error=session_missing`);
+
+    expect(await racePromise).toEqual({ success: false, status: null, error: 'session_missing' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('returns no_transfer_token when the redirect carries neither a token nor an error', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({ type: 'success', url: 'com.boardsesh.app://auth/callback' });
+    const racePromise = signInWithGoogleWeb();
+    fireDeepLink(CALLBACK_SCHEME);
 
-    expect(await signInWithGoogleWeb()).toEqual({ success: false, status: null, error: 'no_transfer_token' });
+    expect(await racePromise).toEqual({ success: false, status: null, error: 'no_transfer_token' });
   });
 
   it('maps a non-ok exchange to the server status + error message', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({
-      type: 'success',
-      url: 'com.boardsesh.app://auth/callback?transferToken=expired',
-    });
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'Invalid or expired transfer token' }), { status: 401 }),
     );
 
-    expect(await signInWithGoogleWeb()).toEqual({
+    const racePromise = signInWithGoogleWeb();
+    fireDeepLink(`${CALLBACK_SCHEME}?transferToken=expired`);
+
+    expect(await racePromise).toEqual({
       success: false,
       status: 401,
       error: 'Invalid or expired transfer token',
@@ -114,59 +193,45 @@ describe('signInWithGoogleWeb', () => {
   });
 
   it('returns invalid_response when a 200 exchange body is not JSON', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({
-      type: 'success',
-      url: 'com.boardsesh.app://auth/callback?transferToken=tok',
-    });
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response('not json', { status: 200 }));
 
-    expect(await signInWithGoogleWeb()).toEqual({ success: false, status: 200, error: 'invalid_response' });
+    const racePromise = signInWithGoogleWeb();
+    fireDeepLink(`${CALLBACK_SCHEME}?transferToken=tok`);
+
+    expect(await racePromise).toEqual({ success: false, status: 200, error: 'invalid_response' });
     expect(storeTokensMock).not.toHaveBeenCalled();
   });
 
   it('maps an exchange network rejection to a network failure', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({
-      type: 'success',
-      url: 'com.boardsesh.app://auth/callback?transferToken=tok',
-    });
     vi.spyOn(global, 'fetch').mockRejectedValue(new TypeError('Network request failed'));
 
-    expect(await signInWithGoogleWeb()).toEqual({ success: false, status: null, error: 'network' });
-  });
+    const racePromise = signInWithGoogleWeb();
+    fireDeepLink(`${CALLBACK_SCHEME}?transferToken=tok`);
 
-  it('maps an openAuthSessionAsync throw (no browser) to a network failure', async () => {
-    openAuthSessionAsyncMock.mockRejectedValue(new Error('no browser'));
-
-    expect(await signInWithGoogleWeb()).toEqual({ success: false, status: null, error: 'network' });
+    expect(await racePromise).toEqual({ success: false, status: null, error: 'network' });
   });
 });
 
 // signInWithAppleWeb shares signInWithProviderWeb's body with signInWithGoogleWeb
-// (the redirect, deep-link parse, and token exchange are provider-agnostic), so
-// this only pins the one per-provider difference — the native-start provider
-// param — plus the happy path, rather than re-running every shared branch.
+// (the race, deep-link parse, and token exchange are provider-agnostic), so this
+// only pins the one per-provider difference — the native-start provider param —
+// plus the happy path, rather than re-running every shared branch.
 describe('signInWithAppleWeb', () => {
-  beforeEach(() => {
-    openAuthSessionAsyncMock.mockReset();
-    storeTokensMock.mockReset();
-  });
+  beforeEach(resetMocks);
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it('opens native-start with provider=apple and exchanges the transfer token into a stored session', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({
-      type: 'success',
-      url: 'com.boardsesh.app://auth/callback?transferToken=apple-tok&next=%2F',
-    });
     const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okExchange());
 
-    const result = await signInWithAppleWeb();
+    const racePromise = signInWithAppleWeb();
+    fireDeepLink(`${CALLBACK_SCHEME}?transferToken=apple-tok&next=%2F`);
+    const result = await racePromise;
 
     expect(result).toEqual({ success: true });
-    const [startUrl, redirect] = openAuthSessionAsyncMock.mock.calls[0];
+    const [startUrl] = openBrowserAsyncMock.mock.calls[0];
     expect(startUrl).toContain('https://web.test/auth/native-start?provider=apple');
-    expect(redirect).toBe('com.boardsesh.app://auth/callback');
     expect(fetchMock).toHaveBeenCalledWith(
       'https://backend.test/auth/native/exchange',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ transferToken: 'apple-tok' }) }),
@@ -174,11 +239,13 @@ describe('signInWithAppleWeb', () => {
     expect(storeTokensMock).toHaveBeenCalledWith('jwt-1', 'refresh-1', '2026-01-01T00:00:00.000Z');
   });
 
-  it('treats a dismissed browser as a cancellation and never exchanges', async () => {
-    openAuthSessionAsyncMock.mockResolvedValue({ type: 'dismiss' });
+  it('treats a closed browser as a cancellation and never exchanges', async () => {
     const fetchMock = vi.spyOn(global, 'fetch');
 
-    expect(await signInWithAppleWeb()).toEqual({ success: false, cancelled: true });
+    const racePromise = signInWithAppleWeb();
+    closeBrowser();
+
+    expect(await racePromise).toEqual({ success: false, cancelled: true });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

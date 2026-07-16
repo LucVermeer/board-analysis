@@ -36,13 +36,20 @@ vi.mock('react-native', () => ({ Platform: platform }));
 
 const { useNativeOAuthSignIn } = await import('../use-native-oauth-sign-in');
 
-type TrackedEvent = { event: unknown; flow: unknown; reason: unknown; recoverable: unknown };
+type TrackedEvent = {
+  event: unknown;
+  flow: unknown;
+  reason: unknown;
+  recoverable: unknown;
+  mechanism: unknown;
+};
 function trackedEvents(): TrackedEvent[] {
   return trackMock.mock.calls.map(([event, props]) => ({
     event,
     flow: (props as { flow?: unknown })?.flow,
     reason: (props as { failure_reason?: unknown })?.failure_reason,
     recoverable: (props as { recoverable?: unknown })?.recoverable,
+    mechanism: (props as { fallback_mechanism?: unknown })?.fallback_mechanism,
   }));
 }
 
@@ -81,12 +88,14 @@ describe('useNativeOAuthSignIn — Google web fallback (iOS)', () => {
       flow: 'web_fallback',
       reason: undefined,
       recoverable: undefined,
+      mechanism: 'browser_deeplink',
     });
     expect(events).toContainEqual({
       event: 'Login Succeeded',
       flow: 'web_fallback',
       reason: undefined,
       recoverable: undefined,
+      mechanism: 'browser_deeplink',
     });
     // The native throw is logged recoverable on iOS so the failure metric excludes it.
     expect(events).toContainEqual({ event: 'Login Failed', flow: 'native', reason: 'exception', recoverable: true });
@@ -141,7 +150,32 @@ describe('useNativeOAuthSignIn — Google web fallback (iOS)', () => {
       event: 'Login Failed',
       flow: 'web_fallback',
       reason: 'invalid_oauth_token',
+      mechanism: 'browser_deeplink',
     });
+  });
+
+  it('treats browser_unavailable as a Login Failed (not a cancel) and reports it', async () => {
+    // The iOS 26 dead-end: the fallback's in-app browser fails to present, so
+    // signInWithProviderWeb returns { error: 'browser_unavailable' }. Unlike a
+    // user closing the browser (a silent cancel), this is a real failure — it must
+    // surface an error, report to tracking, and stay out of the Cancelled bucket.
+    signInWithGoogleMock.mockRejectedValue(new Error('Unable to open Safari'));
+    signInWithGoogleWebMock.mockResolvedValue({ success: false, status: null, error: 'browser_unavailable' });
+
+    const setError = await runSignIn('google');
+
+    expect(reportErrorMock).toHaveBeenCalledTimes(1);
+    expect(setError).toHaveBeenLastCalledWith('nativeStart.oauthError');
+    const events = trackedEvents();
+    expect(events).toContainEqual({
+      event: 'Login Failed',
+      flow: 'web_fallback',
+      reason: 'browser_unavailable',
+      recoverable: undefined,
+      mechanism: 'browser_deeplink',
+    });
+    // A browser that never opened is a failure, not the user backing out.
+    expect(events).not.toContainEqual(expect.objectContaining({ event: 'Login Cancelled', flow: 'web_fallback' }));
   });
 });
 
@@ -170,8 +204,20 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
     expect(reportErrorMock).not.toHaveBeenCalled();
     expect(setError).toHaveBeenLastCalledWith(null);
     const events = trackedEvents();
-    expect(events).toContainEqual({ event: 'Login Attempted', flow: 'web_fallback', reason: undefined });
-    expect(events).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
+    expect(events).toContainEqual({
+      event: 'Login Attempted',
+      flow: 'web_fallback',
+      reason: undefined,
+      recoverable: undefined,
+      mechanism: 'browser_deeplink',
+    });
+    expect(events).toContainEqual({
+      event: 'Login Succeeded',
+      flow: 'web_fallback',
+      reason: undefined,
+      recoverable: undefined,
+      mechanism: 'browser_deeplink',
+    });
   });
 
   it('falls back and signs in when native Apple returns a non-cancel failure', async () => {
@@ -183,7 +229,13 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
     expect(signInWithAppleWebMock).toHaveBeenCalledTimes(1);
     expect(reportErrorMock).not.toHaveBeenCalled();
     expect(setError).toHaveBeenLastCalledWith(null);
-    expect(trackedEvents()).toContainEqual({ event: 'Login Succeeded', flow: 'web_fallback', reason: undefined });
+    expect(trackedEvents()).toContainEqual({
+      event: 'Login Succeeded',
+      flow: 'web_fallback',
+      reason: undefined,
+      recoverable: undefined,
+      mechanism: 'browser_deeplink',
+    });
   });
 
   it('does NOT fall back when the user cancels native Apple, and logs a cancel (not a failure)', async () => {
@@ -222,6 +274,7 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
       flow: 'web_fallback',
       reason: undefined,
       recoverable: undefined,
+      mechanism: 'browser_deeplink',
     });
     expect(events).not.toContainEqual(expect.objectContaining({ event: 'Login Failed', flow: 'web_fallback' }));
   });
@@ -242,6 +295,7 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
       event: 'Login Failed',
       flow: 'web_fallback',
       reason: 'invalid_oauth_token',
+      mechanism: 'browser_deeplink',
     });
   });
 });
