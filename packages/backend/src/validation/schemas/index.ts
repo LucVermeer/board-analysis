@@ -12,6 +12,7 @@ export * from './feeds';
 export * from './proposals';
 export * from './boards';
 export * from './gyms';
+export * from './gym-kiosks';
 export * from './feedback';
 export * from './board-presence';
 export * from './integrations';

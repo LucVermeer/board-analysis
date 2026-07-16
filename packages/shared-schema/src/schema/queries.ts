@@ -594,6 +594,28 @@ export const queriesTypeDefs = /* GraphQL */ `
     pendingGymClaims(input: PendingGymClaimsInput): GymClaimConnection!
 
     # ============================================
+    # Gym Kiosk Queries
+    # ============================================
+
+    """
+    A gym's public kiosk (smart-TV wall dashboard) by gym slug, with an optional
+    kiosk slug. Public read, rate-limited, no login: a public gym's kiosks are
+    visible to anyone; a private gym's are visible only to a viewer who can edit
+    it (everyone else gets null, indistinguishable from a missing gym/kiosk). When
+    \`kioskSlug\` is omitted the gym's oldest live kiosk is returned as the default.
+    Returns null when the gym or kiosk doesn't exist or isn't visible. The
+    \`boards\` list is resolved in slot order with dead/hidden slots dropped; the
+    \`layout\` JSON is read leniently (a corrupt stored layout degrades to empty).
+    """
+    gymKiosk(gymSlug: String!, kioskSlug: String): GymKiosk
+
+    """
+    All of a gym's live kiosks (oldest first) for the manage UI. Requires gym edit
+    access (owner, gym admin/editor, or a covering community admin/leader).
+    """
+    gymKiosks(gymUuid: ID!): [GymKiosk!]!
+
+    # ============================================
     # Notification Queries (require auth)
     # ============================================
 

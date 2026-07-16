@@ -527,6 +527,31 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     reviewGymClaim(input: ReviewGymClaimInput!): Boolean!
 
+    # ============================================
+    # Gym Kiosk Mutations (require gym edit access)
+    # ============================================
+
+    """
+    Create a kiosk (smart-TV wall dashboard) under a gym. Requires gym edit
+    access. The slug is derived from the name (and made unique per gym) when
+    omitted. Starts with an empty layout — assign boards via updateGymKiosk. Fails
+    when the gym already has the maximum number of kiosks.
+    """
+    createGymKiosk(input: CreateGymKioskInput!): GymKiosk!
+
+    """
+    Update a kiosk's name, slug, and/or layout. Requires gym edit access. A
+    supplied layout is strictly validated (@boardsesh/kiosk KioskLayoutSchema) and
+    persisted as the schema-parsed output — every referenced board must be alive
+    and linked to this kiosk's gym.
+    """
+    updateGymKiosk(input: UpdateGymKioskInput!): GymKiosk!
+
+    """
+    Soft-delete a kiosk. Requires gym edit access. The slug is freed for reuse.
+    """
+    deleteGymKiosk(kioskUuid: ID!): Boolean!
+
     """
     Record that an explicitly-created session has been mirrored to Apple HealthKit,
     storing the workout UUID for de-duplication and UI status.
