@@ -374,12 +374,14 @@ describe('eventsReplay membership check is unaffected by the query gate', () => 
     expect(eventsSinceMock).toHaveBeenCalledWith('session-1', 0);
   });
 
-  it('still rejects an authenticated HTTP caller with a durable participant row — unlike the `session` query, requireSessionMember has no durable fallback', async () => {
-    // This is the key "unchanged" assertion: a caller who the NEW
-    // isSessionMember helper would treat as a member (durable participants
-    // row present) must still be rejected by eventsReplay, because it keeps
-    // using the throwing, retrying requireSessionMember — which only ever
-    // consults local/distributed connection state, never the durable table.
+  it('still rejects an authenticated HTTP caller with a durable participant row — requireSessionMember gates its durable fast-path to WS connections', async () => {
+    // requireSessionMember DID gain a durable fast-path (issues #2355/#2385),
+    // but it is deliberately WS-gated (`transport !== 'http'`): a stateless
+    // HTTP eventsReplay request must still prove active connection membership,
+    // not just a past-participant row. So a caller the `session` query's
+    // isSessionMember would admit via the durable table is still rejected here
+    // over HTTP — the fast-path never runs, and the throwing, retrying loop
+    // only consults local/distributed connection state.
     dbMock.limit.mockResolvedValueOnce([{ sessionId: 'session-1' }]);
     const ctx = makeCtx({
       connectionId: 'http-55555555-5555-5555-5555-555555555555',

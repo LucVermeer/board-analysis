@@ -140,7 +140,18 @@ export function setupWebSocketServer(httpServer: HttpServer): {
           controllerMac,
         );
         await roomManager.registerClient(context.connectionId, undefined, authenticatedUserId);
-        logger.info(`Client connected: ${context.connectionId} (authenticated: ${isAuthenticated})`);
+        // Attribution for connectionId → client identity: a subscription-auth
+        // denial (see requireSessionMember) only carries the connectionId, so
+        // logging the User-Agent + remote address here makes it cheap to trace
+        // a noisy/stale client back to its build (issue #2355).
+        const upgradeRequest = ctx.extra.request;
+        logger.info(`Client connected: ${context.connectionId} (authenticated: ${isAuthenticated})`, {
+          connectionId: context.connectionId,
+          authenticated: isAuthenticated,
+          userAgent: upgradeRequest?.headers['user-agent'],
+          forwardedFor: upgradeRequest?.headers['x-forwarded-for'],
+          remoteAddress: upgradeRequest?.socket?.remoteAddress,
+        });
 
         // Store context in ctx.extra for access in other hooks
         ctx.extra.context = context;
