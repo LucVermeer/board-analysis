@@ -9,6 +9,24 @@ import { getShareExtensionKey } from 'expo-share-intent';
 // through an ACTION_SEND intent (no deep-link path), so it falls through here
 // unchanged and the provider handles it the same way.
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string {
+  // The browser-OAuth fallback (src/lib/auth.ts signInWithProviderWeb via
+  // raceBrowserSignIn) races a Linking 'url' listener against the in-app browser:
+  // the web callback page deep-links back to com.boardsesh.app://auth/callback?
+  // transferToken=… and that listener owns the URL. Expo Router ALSO sees this
+  // deep link and would try to navigate to a non-existent /auth/callback route,
+  // flashing +not-found under the browser before the race dismisses it. Return ''
+  // to skip that navigation. Verified safe against vendored expo-router@57.0.3:
+  // build/link/linking.js subscribe() does `if (href) listener(href)` (warm) and
+  // build/getLinkingConfig.js guards the cold-start getInitialURL the same way, so
+  // a falsy path cleanly no-ops navigation. redirectSystemPath receives the FULL
+  // deep-link URL as `path` (scheme + host, e.g. com.boardsesh.app://auth/callback
+  // — Expo's own docs read it via `new URL(path)`), so match the callback host
+  // form; the leading-slash form is a defensive belt-and-braces for a future Expo
+  // that normalises to a bare path. Checked BEFORE the share-intent branch (pure
+  // string ops, can't throw) so a getShareExtensionKey() throw can't bypass it.
+  if (path.includes('://auth/callback') || path.startsWith('/auth/callback')) {
+    return '';
+  }
   try {
     if (path.includes(`dataUrl=${getShareExtensionKey()}`)) {
       // Cold start (initial): bootstrap to the home route — the ShareTargetProvider

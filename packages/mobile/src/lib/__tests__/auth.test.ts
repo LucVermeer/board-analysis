@@ -29,6 +29,16 @@ describe('classifyNativeAuthFailureReason', () => {
     );
   });
 
+  // The web-OAuth fallback's in-app browser failing to present (iOS 26) returns
+  // { error: 'browser_unavailable', status: null }. It must classify off the
+  // sentinel string, not fall through to 'http_error' — a null status would
+  // otherwise land in the final bucket.
+  it('classifies a browser-unavailable web-fallback failure by its sentinel error, not its null status', () => {
+    expect(
+      classifyNativeAuthFailureReason({ success: false, status: null, error: 'browser_unavailable' }, 'oauth'),
+    ).toBe('browser_unavailable');
+  });
+
   // Regression: the classifier used to string-match the 401 body against
   // 'Invalid credentials', but the backend says 'Invalid email or password' —
   // every real wrong-password attempt was mislabelled. Classify by endpoint.

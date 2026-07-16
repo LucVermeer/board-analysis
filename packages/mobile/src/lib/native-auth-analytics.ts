@@ -1,5 +1,6 @@
 export type NativeAuthFailureReason =
   | 'network'
+  | 'browser_unavailable'
   | 'invalid_credentials'
   | 'invalid_oauth_token'
   | 'invalid_request'
@@ -23,6 +24,9 @@ export function classifyNativeAuthFailureReason(
   source: NativeAuthFailureSource,
 ): NativeAuthFailureReason {
   if (failure.error === 'network') return 'network';
+  // The web-OAuth fallback's in-app browser couldn't present (iOS 26). Carries no
+  // HTTP status — classify off the sentinel error string before the status checks.
+  if (failure.error === 'browser_unavailable') return 'browser_unavailable';
   if (failure.status === 400) return 'invalid_request';
   if (failure.status === 401) {
     return source === 'credentials' ? 'invalid_credentials' : 'invalid_oauth_token';

@@ -1,10 +1,11 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import { getRandomBytes, digestStringAsync, CryptoDigestAlgorithm, CryptoEncoding } from 'expo-crypto';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createTimeoutSignal } from './abort-timeout';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
+import { raceBrowserSignIn } from './auth-session-race';
 import { nativeSignInErrorCode } from './native-auth-analytics';
 import { parseDeepLinkQueryParams } from './deep-link-query';
 import { BACKEND_URL, WEB_BASE_URL } from './env';
@@ -247,14 +248,25 @@ async function exchangeTransferToken(transferToken: string): Promise<OAuthSignIn
 /**
  * Browser-based OAuth sign-in — the fallback for when the native provider SDK
  * can't complete on the device. Opens the web app's /auth/native-start page in an
- * auth-session browser, which runs the proven NextAuth flow for `provider`, mints
- * a single-use transfer token on success, and redirects back to
+ * in-app browser, which runs the proven NextAuth flow for `provider`, mints a
+ * single-use transfer token on success, and deep-links back to
  * NATIVE_OAUTH_REDIRECT; we then exchange that token for our JWT pair. Reuses the
  * same handoff the web app already serves (the Strava/Aurora pattern), with no
  * native OAuth SDK involvement, so it's immune to the native SDK's per-OS-version
  * breakage. The web /auth/native-start page already allows both 'google' and
  * 'apple' (its ALLOWED_PROVIDERS), and the callback + exchange are
  * provider-agnostic, so the only per-provider difference is this query param.
+ *
+ * Uses raceBrowserSignIn (openBrowserAsync + an OS deep-link race), NOT
+ * WebBrowser.openAuthSessionAsync: the latter's ASWebAuthenticationSession fails
+ * to present on iOS 26 (PostHog shows sub-second web_fallback "cancels" en masse
+ * with only a handful of successes), and expo collapses that failure into an
+ * indistinguishable {type: 'cancel'}. openBrowserAsync opens an
+ * SFSafariViewController that presents reliably, and the server's callback page
+ * (packages/web/app/api/auth/native/callback/route.ts) deep-links back via a
+ * JS/meta-refresh redirect built for exactly this hand-off — the same one the
+ * legacy Capacitor app shipped with. This is the restoration of the proven flow
+ * from PR #2721, scoped to the fallback.
  *
  * Never throws: every outcome maps to an OAuthSignInResult (success / cancelled /
  * failure) so the caller treats it exactly like the native path.
@@ -263,18 +275,28 @@ async function signInWithProviderWeb(provider: AuthProvider): Promise<OAuthSignI
   const nativeCallbackUrl = `${WEB_BASE_URL}/api/auth/native/callback?next=${encodeURIComponent('/')}`;
   const startUrl = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${encodeURIComponent(nativeCallbackUrl)}`;
 
-  let result: WebBrowser.WebBrowserAuthSessionResult;
-  try {
-    result = await WebBrowser.openAuthSessionAsync(startUrl, NATIVE_OAUTH_REDIRECT);
-  } catch {
-    // The auth-session browser couldn't open — treat as a network-class failure.
-    return { success: false, status: null, error: 'network' };
-  }
+  // Register the Linking url-listener BEFORE opening the browser (raceBrowserSignIn
+  // does this) so no deep link can arrive un-listened. dismissBrowser is async-
+  // wrapped so a synchronous throw from it can't reject the race's success branch.
+  const race = await raceBrowserSignIn(
+    {
+      addUrlListener: (listener) => Linking.addEventListener('url', listener),
+      openBrowser: (url) => WebBrowser.openBrowserAsync(url),
+      dismissBrowser: async () => WebBrowser.dismissBrowser(),
+    },
+    startUrl,
+    NATIVE_OAUTH_REDIRECT,
+  );
 
-  // Dismissed before the redirect was captured — the user backed out.
-  if (result.type !== 'success') return { success: false, cancelled: true };
+  // The in-app browser failed to present. This is the iOS 26 dead-end we're
+  // fixing — a real "couldn't open the browser", not a user cancel and not a
+  // network-class server failure. Its own analytics reason so it's visible.
+  if (race.type === 'error') return { success: false, status: null, error: 'browser_unavailable' };
 
-  const params = parseDeepLinkQueryParams(result.url);
+  // The user closed the browser before the callback deep link arrived.
+  if (race.type === 'cancel') return { success: false, cancelled: true };
+
+  const params = parseDeepLinkQueryParams(race.url);
   const error = params.get('error');
   if (error) return { success: false, status: null, error };
   const transferToken = params.get('transferToken');

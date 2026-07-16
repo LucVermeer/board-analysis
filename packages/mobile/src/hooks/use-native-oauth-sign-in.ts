@@ -65,7 +65,12 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
       };
       const runWebFallback = async (): Promise<void> => {
         const fallbackStartedAt = Date.now();
-        track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'web_fallback', ...registrationProps });
+        track(SHARED_EVENTS.LoginAttempted, {
+          auth_method: provider,
+          flow: 'web_fallback',
+          fallback_mechanism: 'browser_deeplink',
+          ...registrationProps,
+        });
         let fallback: OAuthSignInResult;
         try {
           fallback = await webFallbackFor[provider]();
@@ -73,6 +78,7 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           track(SHARED_EVENTS.LoginFailed, {
             auth_method: provider,
             flow: 'web_fallback',
+            fallback_mechanism: 'browser_deeplink',
             failure_reason: 'exception',
             failure_detail: fallbackError instanceof Error ? fallbackError.message : undefined,
             duration_ms: Date.now() - fallbackStartedAt,
@@ -85,7 +91,12 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           return;
         }
         if (fallback.success) {
-          track(SHARED_EVENTS.LoginSucceeded, { auth_method: provider, flow: 'web_fallback', ...registrationProps });
+          track(SHARED_EVENTS.LoginSucceeded, {
+            auth_method: provider,
+            flow: 'web_fallback',
+            fallback_mechanism: 'browser_deeplink',
+            ...registrationProps,
+          });
           setError(null);
           // AuthProvider flips isAuthenticated and the redirect handles navigation.
           return;
@@ -96,6 +107,7 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           track(SHARED_EVENTS.LoginCancelled, {
             auth_method: provider,
             flow: 'web_fallback',
+            fallback_mechanism: 'browser_deeplink',
             duration_ms: Date.now() - fallbackStartedAt,
             ...registrationProps,
           });
@@ -105,6 +117,7 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
         track(SHARED_EVENTS.LoginFailed, {
           auth_method: provider,
           flow: 'web_fallback',
+          fallback_mechanism: 'browser_deeplink',
           failure_reason: fallbackReason,
           failure_detail: fallback.error,
           duration_ms: Date.now() - fallbackStartedAt,
