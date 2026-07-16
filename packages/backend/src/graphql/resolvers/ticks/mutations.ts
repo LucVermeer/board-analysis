@@ -554,19 +554,11 @@ export const tickMutations = {
       );
     }
 
-    // Resolve session_id. sessionId is a client-supplied string (SaveTickInputSchema
-    // has no format/existence/ownership check) that can outlive its session — the
-    // party session it names may have already ended, or (for an offline-replayed
-    // tick) may never have existed on this backend at all: the offline mutation
-    // outbox has no session-create entry, so a queued tick's sessionId is never
-    // guaranteed server-side. boardsesh_ticks.session_id has ON DELETE SET NULL,
-    // but that only protects rows that already reference a session at the moment
-    // it's deleted — it does nothing for a fresh INSERT naming an id that's
-    // already gone, which raises a raw FK violation and loses the whole tick
-    // (issue #2386). Same best-effort trade-off as the boardUuid/boardId
-    // resolution above: a stale/unknown sessionId records the tick unassociated
-    // rather than rejecting it. No ownership check — party-mode ticks legitimately
-    // reference sessions other users created.
+    // A stale/unknown sessionId (session ended, or never existed on this
+    // backend — e.g. an offline-replayed tick) would otherwise FK-violate the
+    // insert and lose the whole tick (#2386). Same best-effort drop-the-ref
+    // trade-off as the boardUuid/boardId resolution above; no ownership check,
+    // since party-mode ticks legitimately reference sessions other users made.
     let resolvedSessionId: string | null = null;
     if (validatedInput.sessionId) {
       const [session] = await db

@@ -239,17 +239,19 @@ describe('saveTick idempotent replay', () => {
 // regression here reproduces the original bug (INSERT rejected), not just a
 // mock mismatch.
 describe('saveTick with a stale sessionId (#2386)', () => {
-  const baseInput = {
-    boardType: 'kilter',
-    climbUuid: 'tick-climb-session-fk',
-    angle: 40,
-    isMirror: false,
-    status: 'attempt' as const,
-    attemptCount: 1,
-    isBenchmark: false,
-    comment: 'session fk regression',
-    climbedAt: new Date('2026-05-25T02:43:00Z').toISOString(),
-  };
+  function buildInput(climbUuid: string) {
+    return {
+      boardType: 'kilter',
+      climbUuid,
+      angle: 40,
+      isMirror: false,
+      status: 'attempt' as const,
+      attemptCount: 1,
+      isBenchmark: false,
+      comment: 'session fk regression',
+      climbedAt: new Date('2026-05-25T02:43:00Z').toISOString(),
+    };
+  }
 
   async function insertSession(id: string): Promise<void> {
     await db.execute(sql`
@@ -263,35 +265,44 @@ describe('saveTick with a stale sessionId (#2386)', () => {
     await db.execute(sql`DELETE FROM "board_sessions" WHERE id = ${id}`);
   }
 
+  async function deleteTick(uuid: string): Promise<void> {
+    await db.execute(sql`DELETE FROM boardsesh_ticks WHERE uuid = ${uuid}`);
+  }
+
   it('drops a nonexistent sessionId and still saves the tick', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const staleSessionId = 'session-that-never-existed-2386';
 
-    const result = (await tickMutations.saveTick(
-      undefined,
-      { input: { ...baseInput, sessionId: staleSessionId } },
-      ctx(),
-    )) as TickRow;
+    let result: TickRow | undefined;
+    try {
+      result = (await tickMutations.saveTick(
+        undefined,
+        { input: { ...buildInput('tick-climb-session-fk-missing'), sessionId: staleSessionId } },
+        ctx(),
+      )) as TickRow;
 
-    expect(result.sessionId).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(staleSessionId));
+      expect(result.sessionId).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(staleSessionId));
 
-    const rows = await db.execute(sql`
-      SELECT session_id FROM boardsesh_ticks WHERE uuid = ${result.uuid}
-    `);
-    expect((rows as unknown as Array<{ session_id: string | null }>)[0].session_id).toBeNull();
-
-    warnSpy.mockRestore();
+      const rows = await db.execute(sql`
+        SELECT session_id FROM boardsesh_ticks WHERE uuid = ${result.uuid}
+      `);
+      expect((rows as unknown as Array<{ session_id: string | null }>)[0].session_id).toBeNull();
+    } finally {
+      warnSpy.mockRestore();
+      if (result) await deleteTick(result.uuid);
+    }
   });
 
   it('keeps a real sessionId association', async () => {
     const sessionId = 'session-2386-real';
     await insertSession(sessionId);
 
+    let result: TickRow | undefined;
     try {
-      const result = (await tickMutations.saveTick(
+      result = (await tickMutations.saveTick(
         undefined,
-        { input: { ...baseInput, sessionId } },
+        { input: { ...buildInput('tick-climb-session-fk-real'), sessionId } },
         ctx(),
       )) as TickRow;
 
@@ -302,6 +313,7 @@ describe('saveTick with a stale sessionId (#2386)', () => {
       `);
       expect((rows as unknown as Array<{ session_id: string | null }>)[0].session_id).toBe(sessionId);
     } finally {
+      if (result) await deleteTick(result.uuid);
       await deleteSession(sessionId);
     }
   });
