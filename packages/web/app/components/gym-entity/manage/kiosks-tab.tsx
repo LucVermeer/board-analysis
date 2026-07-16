@@ -1,24 +1,358 @@
 'use client';
 
-import React from 'react';
+// Kiosks tab: the gym's TV configs. Lists every kiosk (name, derived preset,
+// rail on/off, open-TV link), creates new ones (server assigns the URL slug),
+// and hosts the kiosk editor for the one being edited.
+
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CardActions from '@mui/material/CardActions';
+import Chip from '@mui/material/Chip';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
+import AddOutlined from '@mui/icons-material/AddOutlined';
 import TvOutlined from '@mui/icons-material/TvOutlined';
+import LaunchOutlined from '@mui/icons-material/LaunchOutlined';
+import { kioskPresetForBoardCount, MAX_KIOSKS_PER_GYM } from '@boardsesh/kiosk';
+import {
+  DELETE_GYM_KIOSK,
+  GET_GYM_BOARDS,
+  GET_GYM_KIOSKS,
+  type DeleteGymKioskMutationResponse,
+  type DeleteGymKioskMutationVariables,
+  type GetGymBoardsQueryResponse,
+  type GetGymBoardsQueryVariables,
+  type GetGymKiosksQueryResponse,
+  type GetGymKiosksQueryVariables,
+  type GymKioskOperationResult,
+} from '@boardsesh/graphql/operations';
+import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
+import { useEntityMutation } from '@/app/hooks/use-entity-mutation';
+import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
+import LocaleLink from '@/app/components/i18n/locale-link';
+import { themeTokens } from '@/app/theme/theme-config';
+import { buildKioskViewModel } from '../../kiosk/kiosk-view-model';
 import ManageTabEmptyState from './manage-tab-empty-state';
+import ConfirmDialog from './confirm-dialog';
+import KioskCreateDialog from './kiosk-create-dialog';
+import KioskEditor from './kiosk-editor';
 import type { GymManageTabProps } from './tab-props';
 
 /**
- * Placeholder for the Kiosks tab. PR I replaces this body with the kiosk list +
- * editor; the shell keeps passing {@link GymManageTabProps}, so nothing above
- * this component changes.
+ * The URL the TV should load for a kiosk: the DEFAULT kiosk (oldest — the one
+ * the resolver serves for a slug-less lookup) lives at /kiosk/{gym-slug}; any
+ * other kiosk at /kiosk/{gym-slug}/{kiosk-slug}. Null while the gym has no
+ * slug. Single source for the list cards AND the editor header, so an owner
+ * never sees two different URLs for the same kiosk.
  */
-export default function KiosksTab(_props: GymManageTabProps) {
+function kioskTvPath(
+  gymSlug: string | null,
+  kiosk: Pick<GymKioskOperationResult, 'slug'>,
+  isDefaultKiosk: boolean,
+): string | null {
+  if (!gymSlug) return null;
+  return isDefaultKiosk ? `/kiosk/${gymSlug}` : `/kiosk/${gymSlug}/${kiosk.slug}`;
+}
+
+export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
+  const { token, isLoading: isTokenLoading } = useWsAuthToken();
+  const { showMessage } = useSnackbar();
+  const queryClient = useQueryClient();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editingKioskUuid, setEditingKioskUuid] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GymKioskOperationResult | null>(null);
+  const { data: session } = useSession();
+  // Viewer identity in the query keys: both queries are viewer-scoped
+  // (editors see private/unlisted boards), so an in-session login/logout must
+  // key a different cache entry instead of serving the previous viewer's rows.
+  const viewerUserId = session?.user?.id ?? 'anonymous';
+
+  const kiosksQueryKey = ['gymKiosks', gym.uuid, viewerUserId];
+
+  const {
+    data: kiosks,
+    isPending: isKiosksQueryPending,
+    isError: kiosksQueryFailed,
+  } = useQuery({
+    queryKey: kiosksQueryKey,
+    queryFn: async () => {
+      const client = createGraphQLHttpClient(token);
+      const response = await client.request<GetGymKiosksQueryResponse, GetGymKiosksQueryVariables>(GET_GYM_KIOSKS, {
+        gymUuid: gym.uuid,
+      });
+      return response.gymKiosks;
+    },
+    enabled: !!token,
+  });
+
+  // The editor needs the gym's full board list (editors see private/unlisted
+  // boards too). Fetched only once a kiosk is opened for editing.
+  const { data: gymBoards, isError: gymBoardsLoadFailed } = useQuery({
+    queryKey: ['gymBoards', gym.uuid, viewerUserId],
+    queryFn: async () => {
+      const client = createGraphQLHttpClient(token);
+      const response = await client.request<GetGymBoardsQueryResponse, GetGymBoardsQueryVariables>(GET_GYM_BOARDS, {
+        gymUuid: gym.uuid,
+      });
+      return response.gymBoards;
+    },
+    enabled: !!token && editingKioskUuid !== null,
+  });
+
+  const deleteMutation = useEntityMutation<DeleteGymKioskMutationResponse, DeleteGymKioskMutationVariables>(
+    DELETE_GYM_KIOSK,
+    { successMessage: t('manage.kiosks.deleted'), errorMessage: t('manage.kiosks.deleteFailed') },
+  );
+
+  const handleCreated = (kiosk: GymKioskOperationResult) => {
+    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) => (previous ? [...previous, kiosk] : [kiosk]));
+    setCreateDialogOpen(false);
+    showMessage(t('manage.createDialog.created', { slug: kiosk.slug }), 'success');
+    // Straight into the editor — a fresh kiosk has no boards yet.
+    setEditingKioskUuid(kiosk.uuid);
+  };
+
+  const handleSaved = (kiosk: GymKioskOperationResult) => {
+    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
+      previous ? previous.map((existing) => (existing.uuid === kiosk.uuid ? kiosk : existing)) : [kiosk],
+    );
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    const result = await deleteMutation.execute({ kioskUuid: target.uuid });
+    if (result) {
+      queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
+        previous ? previous.filter((existing) => existing.uuid !== target.uuid) : previous,
+      );
+    }
+  };
+
+  // Oldest-first, matching the resolver's default-kiosk pick (orderBy
+  // createdAt asc). Client-side sort makes the index-0 = default invariant
+  // explicit instead of trusting response order; the stable sort keeps server
+  // order for equal timestamps.
+  const kioskList = useMemo(
+    () => [...(kiosks ?? [])].sort((first, second) => first.createdAt.localeCompare(second.createdAt)),
+    [kiosks],
+  );
+
+  const editingKiosk =
+    editingKioskUuid === null ? null : (kioskList.find((candidate) => candidate.uuid === editingKioskUuid) ?? null);
+
+  if (editingKiosk) {
+    return (
+      <KioskEditor
+        tvPath={kioskTvPath(gym.slug ?? null, editingKiosk, kioskList[0]?.uuid === editingKiosk.uuid)}
+        // Remount per kiosk: editor state must never leak from one kiosk into
+        // another (the initial state comes from a useState initializer).
+        key={editingKiosk.uuid}
+        gym={gym}
+        kiosk={editingKiosk}
+        gymBoards={gymBoards ?? null}
+        gymBoardsLoadFailed={gymBoardsLoadFailed}
+        onBack={() => setEditingKioskUuid(null)}
+        onSaved={handleSaved}
+        onDirtyChange={onDirtyChange}
+      />
+    );
+  }
+
+  // While the ws-auth token is loading the query is disabled (isPending stays
+  // true), so this spinner covers both windows — never the false "no kiosks
+  // yet" empty state during auth. A token that settles absent means the list
+  // can't load at all: show the error, not an invitation to create kiosk #1.
+  if (isTokenLoading || (token !== null && isKiosksQueryPending)) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (kiosksQueryFailed || token === null) {
+    return (
+      <Typography variant="body2" color="error" sx={{ py: 2 }}>
+        {t('manage.kiosks.loadError')}
+      </Typography>
+    );
+  }
+
+  const atCap = kioskList.length >= MAX_KIOSKS_PER_GYM;
+
+  if (kioskList.length === 0) {
+    return (
+      <>
+        <ManageTabEmptyState
+          icon={<TvOutlined sx={{ fontSize: 40 }} />}
+          title={t('manage.kiosks.emptyTitle')}
+          body={t('manage.kiosks.emptyBody')}
+          ctaLabel={t('manage.kiosks.cta')}
+          onCtaClick={() => setCreateDialogOpen(true)}
+        />
+        <KioskCreateDialog
+          open={createDialogOpen}
+          gymUuid={gym.uuid}
+          onClose={() => setCreateDialogOpen(false)}
+          onCreated={handleCreated}
+        />
+      </>
+    );
+  }
+
   return (
-    <ManageTabEmptyState
-      icon={<TvOutlined sx={{ fontSize: 40 }} />}
-      title={t('manage.kiosks.emptyTitle')}
-      body={t('manage.kiosks.emptyBody')}
-      ctaLabel={t('manage.kiosks.cta')}
-    />
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 2 }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: themeTokens.typography.fontWeight.bold }}>
+            {t('manage.kiosks.heading')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {t('manage.kiosks.description')}
+          </Typography>
+        </Box>
+        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddOutlined />}
+            onClick={() => setCreateDialogOpen(true)}
+            disabled={atCap}
+            sx={{ textTransform: 'none' }}
+          >
+            {t('manage.kiosks.newKiosk')}
+          </Button>
+          {atCap && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              {t('manage.kiosks.capReached', { max: MAX_KIOSKS_PER_GYM })}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      {!gym.slug && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+          {t('manage.kiosks.needSlugHint')}
+        </Typography>
+      )}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
+        {kioskList.map((kiosk, index) => {
+          const isDefaultKiosk = index === 0;
+          const preset = kioskPresetForBoardCount(kiosk.boards.length);
+          const hasRail = buildKioskViewModel(kiosk).leaderboard !== null;
+          const tvPath = kioskTvPath(gym.slug ?? null, kiosk, isDefaultKiosk);
+
+          return (
+            <Card key={kiosk.uuid} variant="outlined">
+              <CardContent sx={{ pb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+                  <Typography
+                    component="span"
+                    sx={{
+                      fontWeight: themeTokens.typography.fontWeight.semibold,
+                      fontSize: themeTokens.typography.fontSize.base,
+                    }}
+                  >
+                    {kiosk.name}
+                  </Typography>
+                  {isDefaultKiosk && (
+                    <Chip size="small" variant="outlined" color="primary" label={t('manage.kiosks.defaultBadge')} />
+                  )}
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  {tvPath ?? t('manage.kiosks.urlPending', { slug: kiosk.slug })}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={preset === null ? t('manage.presets.none') : t(`manage.presets.${preset}`)}
+                  />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={t('manage.kiosks.boardCount', { count: kiosk.boards.length })}
+                  />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={hasRail ? t('manage.kiosks.railOn') : t('manage.kiosks.railOff')}
+                  />
+                </Box>
+              </CardContent>
+              <CardActions>
+                {tvPath ? (
+                  <Button
+                    component={LocaleLink}
+                    href={tvPath}
+                    target="_blank"
+                    rel="noopener"
+                    size="small"
+                    startIcon={<LaunchOutlined />}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {t('manage.kiosks.openTv')}
+                  </Button>
+                ) : (
+                  <Tooltip title={t('manage.kiosks.openTvNeedsSlug')}>
+                    <span>
+                      <Button size="small" startIcon={<LaunchOutlined />} disabled sx={{ textTransform: 'none' }}>
+                        {t('manage.kiosks.openTv')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
+                <Button size="small" onClick={() => setEditingKioskUuid(kiosk.uuid)} sx={{ textTransform: 'none' }}>
+                  {t('manage.kiosks.edit')}
+                </Button>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={() => setDeleteTarget(kiosk)}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {t('manage.kiosks.delete')}
+                </Button>
+              </CardActions>
+            </Card>
+          );
+        })}
+      </Box>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t('manage.kiosks.deleteTitle')}
+        // Deleting the DEFAULT kiosk doesn't 404 the slug-less URL — the
+        // resolver rolls it over to the next-oldest kiosk, so the copy says so.
+        body={
+          deleteTarget !== null && kioskList.length > 1 && kioskList[0]?.uuid === deleteTarget.uuid
+            ? t('manage.kiosks.deleteBodyDefault', { name: deleteTarget.name })
+            : t('manage.kiosks.deleteBody', { name: deleteTarget?.name ?? '' })
+        }
+        confirmLabel={t('manage.kiosks.deleteConfirm')}
+        cancelLabel={t('manage.kiosks.cancel')}
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      <KioskCreateDialog
+        open={createDialogOpen}
+        gymUuid={gym.uuid}
+        onClose={() => setCreateDialogOpen(false)}
+        onCreated={handleCreated}
+      />
+    </Box>
   );
 }

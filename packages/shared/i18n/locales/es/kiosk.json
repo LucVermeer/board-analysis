@@ -80,6 +80,12 @@
       "boards": "Plafones",
       "members": "Miembros"
     },
+    "navGuard": {
+      "title": "¿Descartar los cambios sin guardar?",
+      "body": "Tienes cambios sin guardar en esta pestaña. Si sales, se descartan.",
+      "discard": "Descartar y salir",
+      "stay": "Quedarme aquí"
+    },
     "slugGuard": {
       "title": "Dale una dirección web a este rocódromo",
       "body": "Tu kiosco y la página pública del rocódromo necesitan un slug de URL corto antes de que alguien pueda abrirlos.",
@@ -93,14 +99,32 @@
       "saveFailed": "No se pudo guardar el slug."
     },
     "kiosks": {
-      "emptyTitle": "La configuración del kiosco llega pronto",
-      "emptyBody": "Apunta una pantalla a tu muro y muestra qué está encendido. El editor de kioscos llega en la próxima actualización.",
-      "cta": "Configurar un kiosco"
-    },
-    "branding": {
-      "emptyTitle": "La personalización de marca llega pronto",
-      "emptyBody": "Añade tu logo y tus colores para que la pantalla del muro se vea como tu rocódromo. Llega en la próxima actualización.",
-      "cta": "Personalizar la marca"
+      "emptyTitle": "Apunta una pantalla a tu muro",
+      "emptyBody": "Un kiosco muestra en directo qué está encendido en tus plafones, en el navegador de cualquier televisor. Crea uno, asigna tus plafones y abre su URL en la pantalla.",
+      "cta": "Configurar un kiosco",
+      "heading": "Kioscos",
+      "description": "Pantallas de televisor que muestran tus muros en directo. Cada kiosco tiene su propia URL.",
+      "newKiosk": "Nuevo kiosco",
+      "capReached": "Un rocódromo puede tener hasta {{max}} kioscos.",
+      "needSlugHint": "Configura arriba el slug de URL de tu rocódromo: las URL de los kioscos lo necesitan antes de que un televisor pueda abrirlas.",
+      "loadError": "No se pudieron cargar los kioscos de este rocódromo.",
+      "defaultBadge": "Por defecto",
+      "boardCount_one": "{{count}} plafón",
+      "boardCount_other": "{{count}} plafones",
+      "railOn": "Con clasificación",
+      "railOff": "Sin clasificación",
+      "openTv": "Abrir vista de TV",
+      "openTvNeedsSlug": "Configura primero el slug de URL de tu rocódromo (mira el aviso de arriba).",
+      "urlPending": "URL: /kiosk/…/{{slug}} — necesita el slug del rocódromo",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "deleteTitle": "¿Eliminar este kiosco?",
+      "deleteBody": "«{{name}}» se apaga: cualquier televisor que lo muestre pasará a una pantalla de no encontrado. No se puede deshacer.",
+      "deleteBodyDefault": "«{{name}}» es tu kiosco por defecto: un televisor en la URL corta /kiosk pasará a tu siguiente kiosco más antiguo, y los televisores en la URL propia de este kiosco verán una pantalla de no encontrado. No se puede deshacer.",
+      "deleteConfirm": "Eliminar",
+      "cancel": "Cancelar",
+      "deleted": "Kiosco eliminado.",
+      "deleteFailed": "No se pudo eliminar el kiosco."
     },
     "boards": {
       "heading": "Plafones de este rocódromo",
@@ -132,6 +156,124 @@
         "link": "Vincular",
         "close": "Cerrar"
       }
+    },
+    "presets": {
+      "single": "Muro único",
+      "dual": "Muro doble",
+      "triple": "Muro triple",
+      "quad": "Muro cuádruple",
+      "none": "Aún sin plafones"
+    },
+    "createDialog": {
+      "title": "Nuevo kiosco",
+      "body": "Ponle el nombre del sitio donde cuelga la pantalla: «TV de recepción», «Rincón Kilter».",
+      "nameLabel": "Nombre del kiosco",
+      "namePlaceholder": "TV del muro principal",
+      "urlHint": "La URL se asigna al crearlo.",
+      "create": "Crear kiosco",
+      "cancel": "Cancelar",
+      "created": "Kiosco creado: su URL termina en /{{slug}}.",
+      "createFailed": "No se pudo crear el kiosco."
+    },
+    "editor": {
+      "back": "Todos los kioscos",
+      "save": "Guardar diseño",
+      "saved": "Kiosco guardado.",
+      "saveFailed": "No se pudo guardar el kiosco.",
+      "needSlug": "Configura el slug del rocódromo para obtener la URL de este kiosco",
+      "boardsHeading": "Plafones en esta pantalla",
+      "boardsLoadError": "No se pudieron cargar los plafones de este rocódromo. Recarga la página para reintentarlo.",
+      "slotLabel": "Posición {{index}}",
+      "slotUnknownBoard": "Este plafón ya no está en este rocódromo: quítalo.",
+      "addBoard": "Añadir un plafón",
+      "addBoardHelper": "El orden de las posiciones es el orden en pantalla.",
+      "addBoardNoneLeft": "Todos los plafones del rocódromo ya están en este kiosco.",
+      "addBoardFullHelper": "Un kiosco muestra hasta {{max}} plafones.",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "removeSlot": "Quitar plafón",
+      "presetNoneHelper": "Añade un plafón y el diseño del televisor aparecerá aquí.",
+      "quadRailHint": "Cuatro plafones más la clasificación van muy justos: cada plafón queda en unos 740×420 píxeles en un televisor 1080p. Comprueba en la vista previa que se lee desde el otro lado del rocódromo.",
+      "leaderboardHeading": "Panel de clasificación",
+      "railSwitch": "Mostrar la clasificación",
+      "railDisabledTooltip": "Asigna al menos un plafón primero: la clasificación ordena los encadenes en los plafones de este kiosco.",
+      "scopeLabel": "Clasifica los encadenes de",
+      "scopeAll": "Todos los plafones del kiosco",
+      "periodLabel": "Ventana de tiempo",
+      "period": {
+        "session": "Sesión",
+        "day": "Últimas 24 horas",
+        "week": "Semana",
+        "month": "Mes"
+      },
+      "previewHeading": "Vista previa en directo",
+      "previewHint": "Es el render real del kiosco: los encadenes aparecen en cuanto ocurren y los cambios sin guardar se previsualizan al instante.",
+      "previewMissingBoard": "Este plafón ya no está en este rocódromo",
+      "previewUnavailable": "{{name}} no se puede mostrar aquí",
+      "slotDuplicateError": "Este plafón ya está en otra posición.",
+      "scopeInvalidError": "Elige uno de los plafones del kiosco.",
+      "discardTitle": "¿Descartar los cambios?",
+      "discardBody": "Tus cambios de diseño aún no están guardados.",
+      "keepEditing": "Seguir editando",
+      "discard": "Descartar"
     }
+  },
+  "branding": {
+    "logo": {
+      "heading": "Logo del rocódromo",
+      "description": "Aparece en la cabecera del kiosco y en las inserciones. Los PNG transparentes quedan mejor en la pantalla oscura del televisor.",
+      "upload": "Subir logo",
+      "replace": "Cambiar logo",
+      "remove": "Quitar",
+      "removed": "Logo eliminado.",
+      "uploaded": "Logo guardado.",
+      "uploadFailed": "No se pudo subir el logo.",
+      "saveFailed": "No se pudo guardar el logo.",
+      "tooLarge": "Ese archivo supera los 10 MB. Elige una imagen más pequeña.",
+      "uploadTooLarge": "Ese archivo supera los 2 MB y los GIF animados no se pueden reducir aquí. Elige uno más pequeño.",
+      "unsupportedType": "Usa una imagen JPG, PNG, GIF o WebP.",
+      "currentAlt": "Logo de {{gymName}}",
+      "emptyPlaceholder": "Sin logo",
+      "formatsHint": "JPG, PNG, GIF o WebP. Se redimensiona a 512 px y la transparencia se conserva."
+    },
+    "colors": {
+      "heading": "Colores de marca",
+      "description": "El kiosco siempre es oscuro; estos colores marcan el acento de las fichas de grado y los destacados.",
+      "primary": "Color primario",
+      "accent": "Color de acento",
+      "invalidHex": "Usa un valor hexadecimal #RRGGBB.",
+      "contrastWarning": "{{colors}}: se lee mal en la pantalla oscura del kiosco (contraste menor de 3:1). El kiosco lo aclara automáticamente hasta que se lea.",
+      "save": "Guardar colores",
+      "saved": "Colores guardados.",
+      "saveFailed": "No se pudieron guardar los colores.",
+      "unsavedHint": "Cambios sin guardar"
+    },
+    "preview": {
+      "heading": "Vista previa del kiosco",
+      "sampleChip": "Muestra del acento",
+      "poweredByNote": "La insignia «Con la tecnología de Boardsesh» aparece en todos los kioscos e inserciones y no se puede quitar."
+    },
+    "reset": {
+      "button": "Restablecer la marca por defecto",
+      "title": "¿Restablecer la marca?",
+      "body": "Borra tu logo y los tres colores. Los kioscos y las inserciones vuelven al aspecto de Boardsesh.",
+      "confirm": "Restablecer",
+      "cancel": "Cancelar",
+      "done": "Marca restablecida."
+    }
+  },
+  "embed": {
+    "boardButton": "Insertar este plafón",
+    "railButton": "Insertar la clasificación",
+    "boardDialogTitle": "Insertar {{name}}",
+    "railDialogTitle": "Insertar la clasificación de {{name}}",
+    "copy": "Copiar",
+    "copied": "Copiado al portapapeles.",
+    "copyFailed": "No se pudo copiar: selecciona el código y cópialo a mano.",
+    "periodNote": "El parámetro period acepta day, week o month.",
+    "docsHint": "Pégalo en cualquier página HTML: se mantiene en directo.",
+    "close": "Cerrar",
+    "publicOnlyBoard": "Solo los plafones públicos se pueden insertar.",
+    "publicOnlyGym": "Solo los rocódromos públicos pueden insertar la clasificación."
   }
 }

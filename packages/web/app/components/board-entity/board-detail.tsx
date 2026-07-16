@@ -51,16 +51,7 @@ import CommentSection from '@/app/components/social/comment-section';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import GymDetail from '@/app/components/gym-entity/gym-detail';
 import GymSelector from '@/app/components/gym-entity/gym-selector';
-
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  kilter: 'Kilter',
-  tension: 'Tension',
-  moonboard: 'MoonBoard',
-  decoy: 'Decoy',
-  touchstone: 'Touchstone',
-  grasshopper: 'Grasshopper',
-  soill: 'So iLL',
-};
+import { boardTypeLabel } from '@boardsesh/board-constants';
 
 export type BoardDetailContentProps = {
   boardUuid: string;
@@ -222,7 +213,7 @@ export function BoardDetailContent({
               </Box>
             )}
           </Box>
-          <Chip label={BOARD_TYPE_LABELS[board.boardType] || board.boardType} size="small" variant="outlined" />
+          <Chip label={boardTypeLabel(board.boardType)} size="small" variant="outlined" />
         </Box>
 
         {/* Owner info */}

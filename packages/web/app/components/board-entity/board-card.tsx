@@ -13,6 +13,7 @@ import PeopleOutlined from '@mui/icons-material/PeopleOutlined';
 import TrendingUpOutlined from '@mui/icons-material/TrendingUpOutlined';
 import PersonOutlined from '@mui/icons-material/PersonOutlined';
 import type { UserBoard } from '@boardsesh/shared-schema';
+import { boardTypeLabel } from '@boardsesh/board-constants';
 import { themeTokens } from '@/app/theme/theme-config';
 import StatItem from '@/app/components/ui/stat-item';
 
@@ -21,16 +22,6 @@ type BoardCardProps = {
   onClick?: (board: UserBoard) => void;
   /** Optional trailing action (e.g. follow button) rendered below the stats row. */
   trailingAction?: React.ReactNode;
-};
-
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  kilter: 'Kilter',
-  tension: 'Tension',
-  moonboard: 'MoonBoard',
-  decoy: 'Decoy',
-  touchstone: 'Touchstone',
-  grasshopper: 'Grasshopper',
-  soill: 'So iLL',
 };
 
 export default function BoardCard({ board, onClick, trailingAction }: BoardCardProps) {
@@ -82,7 +73,7 @@ export default function BoardCard({ board, onClick, trailingAction }: BoardCardP
               )}
             </Box>
             <Chip
-              label={BOARD_TYPE_LABELS[board.boardType] || board.boardType}
+              label={boardTypeLabel(board.boardType)}
               size="small"
               variant="outlined"
               sx={{

@@ -1,0 +1,53 @@
+/* Scaled live kiosk preview for the manage-gym kiosk editor. The REAL kiosk
+ * tree renders at its 1920×1080 logical size and is scaled down with
+ * transform: scale() to fit a 16:9 frame measured from the editor column.
+ * The transform also creates a containing block, so the kiosk's
+ * position: fixed attribution pins to the preview frame, not the viewport.
+ *
+ * Known fidelity limits, accepted for a preview: the kiosk's clamp(..vw..)
+ * type scale and its portrait media queries read the VIEWPORT, not this
+ * stage, so text sizing (and, on a portrait phone, the stacked layout) can
+ * differ slightly from a real 16:9 TV. */
+
+.frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--border-radius-md);
+  /* Matches KIOSK_DARK_SURFACE so the frame never flashes a light backdrop. */
+  background: #0e0e0e;
+}
+
+.stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+/* The kiosk page's root frame (64px brand bar + body) at TV-logical size —
+ * mirrors kiosk-layout.module.css's .root, with the fixed 1920×1080 canvas
+ * standing in for 100dvh. */
+.chrome {
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr);
+  width: 1920px;
+  height: 1080px;
+}
+
+/* Guard tile for a slot whose board can't render here (no presence id for
+ * this viewer, or unresolvable board config). */
+.missingSlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--spacing-4);
+  border: 1px dashed var(--kiosk-border);
+  border-radius: var(--border-radius-md);
+  color: var(--kiosk-text-muted);
+  font-size: var(--kiosk-font-base);
+  min-height: 0;
+  min-width: 0;
+}

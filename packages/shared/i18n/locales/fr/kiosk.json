@@ -80,6 +80,12 @@
       "boards": "Boards",
       "members": "Membres"
     },
+    "navGuard": {
+      "title": "Abandonner les modifications non enregistrées ?",
+      "body": "Tu as des modifications non enregistrées sur cet onglet. En partant, elles seront perdues.",
+      "discard": "Abandonner et quitter",
+      "stay": "Rester ici"
+    },
     "slugGuard": {
       "title": "Donne une adresse web à cette salle",
       "body": "Ta borne et la page publique de la salle ont besoin d'un slug d'URL court avant que quiconque puisse les ouvrir.",
@@ -93,14 +99,32 @@
       "saveFailed": "Impossible d'enregistrer le slug."
     },
     "kiosks": {
-      "emptyTitle": "La configuration des bornes arrive bientôt",
-      "emptyBody": "Pointe un écran vers ton mur et montre ce qui est allumé. L'éditeur de bornes arrive dans la prochaine mise à jour.",
-      "cta": "Configurer une borne"
-    },
-    "branding": {
-      "emptyTitle": "L'identité visuelle arrive bientôt",
-      "emptyBody": "Ajoute ton logo et tes couleurs pour que l'affichage du mur ressemble à ta salle. Ça arrive dans la prochaine mise à jour.",
-      "cta": "Personnaliser l'identité"
+      "emptyTitle": "Pointe un écran vers ton mur",
+      "emptyBody": "Une borne montre en direct ce qui est allumé sur tes boards, dans le navigateur de n'importe quel téléviseur. Crée-en une, assigne tes boards et ouvre son URL sur l'écran.",
+      "cta": "Configurer une borne",
+      "heading": "Bornes",
+      "description": "Des écrans de téléviseur qui montrent tes murs en direct. Chaque borne a sa propre URL.",
+      "newKiosk": "Nouvelle borne",
+      "capReached": "Une salle peut avoir jusqu'à {{max}} bornes.",
+      "needSlugHint": "Définis d'abord le slug d'URL de ta salle ci-dessus : les URL des bornes en ont besoin avant qu'un téléviseur puisse les ouvrir.",
+      "loadError": "Impossible de charger les bornes de cette salle.",
+      "defaultBadge": "Par défaut",
+      "boardCount_one": "{{count}} board",
+      "boardCount_other": "{{count}} boards",
+      "railOn": "Avec classement",
+      "railOff": "Sans classement",
+      "openTv": "Ouvrir la vue TV",
+      "openTvNeedsSlug": "Définis d'abord le slug d'URL de ta salle (voir le bandeau ci-dessus).",
+      "urlPending": "URL : /kiosk/…/{{slug}} — il manque le slug de la salle",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer cette borne ?",
+      "deleteBody": "« {{name}} » s'éteint : tout téléviseur qui l'affiche tombera sur un écran introuvable. C'est irréversible.",
+      "deleteBodyDefault": "« {{name}} » est ta borne par défaut : un téléviseur sur l’URL courte /kiosk basculera vers ta borne la plus ancienne suivante, et les téléviseurs sur l’URL propre de cette borne tomberont sur un écran introuvable. C’est irréversible.",
+      "deleteConfirm": "Supprimer",
+      "cancel": "Annuler",
+      "deleted": "Borne supprimée.",
+      "deleteFailed": "Impossible de supprimer la borne."
     },
     "boards": {
       "heading": "Boards de cette salle",
@@ -132,6 +156,124 @@
         "link": "Relier",
         "close": "Fermer"
       }
+    },
+    "presets": {
+      "single": "Mur unique",
+      "dual": "Mur double",
+      "triple": "Mur triple",
+      "quad": "Mur quadruple",
+      "none": "Pas encore de board"
+    },
+    "createDialog": {
+      "title": "Nouvelle borne",
+      "body": "Nomme-la d'après l'endroit où l'écran est accroché : « TV de l'accueil », « Coin Kilter ».",
+      "nameLabel": "Nom de la borne",
+      "namePlaceholder": "TV du mur principal",
+      "urlHint": "L'URL est attribuée à la création.",
+      "create": "Créer la borne",
+      "cancel": "Annuler",
+      "created": "Borne créée : son URL se termine par /{{slug}}.",
+      "createFailed": "Impossible de créer la borne."
+    },
+    "editor": {
+      "back": "Toutes les bornes",
+      "save": "Enregistrer la disposition",
+      "saved": "Borne enregistrée.",
+      "saveFailed": "Impossible d'enregistrer la borne.",
+      "needSlug": "Définis le slug de la salle pour obtenir l'URL de cette borne",
+      "boardsHeading": "Boards sur cet écran",
+      "boardsLoadError": "Impossible de charger les boards de cette salle. Recharge la page pour réessayer.",
+      "slotLabel": "Emplacement {{index}}",
+      "slotUnknownBoard": "Cette board n'est plus dans cette salle : retire-la.",
+      "addBoard": "Ajouter une board",
+      "addBoardHelper": "L'ordre des emplacements est l'ordre à l'écran.",
+      "addBoardNoneLeft": "Toutes les boards de la salle sont déjà sur cette borne.",
+      "addBoardFullHelper": "Une borne affiche jusqu'à {{max}} boards.",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "removeSlot": "Retirer la board",
+      "presetNoneHelper": "Ajoute une board et la disposition TV apparaîtra ici.",
+      "quadRailHint": "Quatre boards plus le classement, ça rentre juste : chaque board dispose d'environ 740×420 pixels sur un téléviseur 1080p. Vérifie dans l'aperçu que ça se lit depuis l'autre bout de la salle.",
+      "leaderboardHeading": "Panneau de classement",
+      "railSwitch": "Afficher le classement",
+      "railDisabledTooltip": "Assigne d'abord au moins une board : le classement compte les croix sur les boards de cette borne.",
+      "scopeLabel": "Classe les croix sur",
+      "scopeAll": "Toutes les boards de la borne",
+      "periodLabel": "Fenêtre de temps",
+      "period": {
+        "session": "Séance",
+        "day": "Dernières 24 heures",
+        "week": "Semaine",
+        "month": "Mois"
+      },
+      "previewHeading": "Aperçu en direct",
+      "previewHint": "C'est le rendu réel de la borne : les croix s'affichent dès qu'elles tombent et les modifications non enregistrées se prévisualisent immédiatement.",
+      "previewMissingBoard": "Cette board n'est plus dans cette salle",
+      "previewUnavailable": "{{name}} ne peut pas s'afficher ici",
+      "slotDuplicateError": "Cette board occupe déjà un autre emplacement.",
+      "scopeInvalidError": "Choisis une des boards de la borne.",
+      "discardTitle": "Abandonner les modifications ?",
+      "discardBody": "Tes changements de disposition ne sont pas encore enregistrés.",
+      "keepEditing": "Continuer à modifier",
+      "discard": "Abandonner"
     }
+  },
+  "branding": {
+    "logo": {
+      "heading": "Logo de la salle",
+      "description": "S'affiche dans l'en-tête de la borne et dans les intégrations. Les PNG transparents rendent mieux sur l'écran sombre du téléviseur.",
+      "upload": "Importer un logo",
+      "replace": "Changer le logo",
+      "remove": "Retirer",
+      "removed": "Logo retiré.",
+      "uploaded": "Logo enregistré.",
+      "uploadFailed": "Impossible d'importer le logo.",
+      "saveFailed": "Impossible d'enregistrer le logo.",
+      "tooLarge": "Ce fichier dépasse 10 Mo. Choisis une image plus légère.",
+      "uploadTooLarge": "Ce fichier dépasse 2 Mo et les GIF animés ne peuvent pas être réduits ici. Choisis-en un plus léger.",
+      "unsupportedType": "Utilise une image JPG, PNG, GIF ou WebP.",
+      "currentAlt": "Logo de {{gymName}}",
+      "emptyPlaceholder": "Aucun logo",
+      "formatsHint": "JPG, PNG, GIF ou WebP. Redimensionné à 512 px, la transparence est conservée."
+    },
+    "colors": {
+      "heading": "Couleurs de la marque",
+      "description": "La borne reste sombre ; ces couleurs pilotent l'accent des pastilles de cotation et des mises en avant.",
+      "primary": "Couleur principale",
+      "accent": "Couleur d'accent",
+      "invalidHex": "Utilise une valeur hexadécimale #RRGGBB.",
+      "contrastWarning": "{{colors}} : difficile à lire sur l'écran sombre de la borne (contraste sous 3:1). La borne l'éclaircit automatiquement jusqu'à ce que ça se lise.",
+      "save": "Enregistrer les couleurs",
+      "saved": "Couleurs enregistrées.",
+      "saveFailed": "Impossible d'enregistrer les couleurs.",
+      "unsavedHint": "Modifications non enregistrées"
+    },
+    "preview": {
+      "heading": "Aperçu de la borne",
+      "sampleChip": "Exemple d'accent",
+      "poweredByNote": "Le badge « Propulsé par Boardsesh » apparaît sur chaque borne et chaque intégration et ne peut pas être retiré."
+    },
+    "reset": {
+      "button": "Rétablir l'identité par défaut",
+      "title": "Rétablir l'identité ?",
+      "body": "Efface ton logo et les trois couleurs. Les bornes et intégrations reviennent au style Boardsesh.",
+      "confirm": "Rétablir",
+      "cancel": "Annuler",
+      "done": "Identité rétablie."
+    }
+  },
+  "embed": {
+    "boardButton": "Intégrer cette board",
+    "railButton": "Intégrer le classement",
+    "boardDialogTitle": "Intégrer {{name}}",
+    "railDialogTitle": "Intégrer le classement de {{name}}",
+    "copy": "Copier",
+    "copied": "Copié dans le presse-papiers.",
+    "copyFailed": "Impossible de copier : sélectionne le code et copie-le à la main.",
+    "periodNote": "Le paramètre period accepte day, week ou month.",
+    "docsHint": "Colle-le dans n'importe quelle page HTML : ça reste en direct.",
+    "close": "Fermer",
+    "publicOnlyBoard": "Seules les boards publiques peuvent être intégrées.",
+    "publicOnlyGym": "Seules les salles publiques peuvent intégrer le classement."
   }
 }

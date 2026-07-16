@@ -192,3 +192,54 @@ describe('getBackendHttpUrl', () => {
     expect(getBackendHttpUrl()).toBe('http://localhost:4000');
   });
 });
+
+describe('getPublicBackendHttpUrl', () => {
+  const originalEnv = process.env;
+  const originalWindow = global.window;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    Object.defineProperty(global, 'window', {
+      configurable: true,
+      value: originalWindow,
+    });
+  });
+
+  it('server-side: uses NEXT_PUBLIC_WS_URL, never the Docker-internal BACKEND_INTERNAL_URL', async () => {
+    Object.defineProperty(global, 'window', { configurable: true, value: undefined });
+    process.env.BACKEND_INTERNAL_URL = 'ws://backend:8080/graphql';
+    process.env.NEXT_PUBLIC_WS_URL = 'wss://ws.boardsesh.com/graphql';
+
+    const { getPublicBackendHttpUrl, getBackendHttpUrl } = await import('../backend-url');
+    // The public helper must yield a BROWSER-reachable origin...
+    expect(getPublicBackendHttpUrl()).toBe('https://ws.boardsesh.com');
+    // ...unlike the plain helper, which prefers the internal URL server-side.
+    expect(getBackendHttpUrl()).toBe('http://backend:8080');
+  });
+
+  it('server-side: returns null when NEXT_PUBLIC_WS_URL is unset', async () => {
+    Object.defineProperty(global, 'window', { configurable: true, value: undefined });
+    delete process.env.NEXT_PUBLIC_WS_URL;
+    process.env.BACKEND_INTERNAL_URL = 'ws://backend:8080/graphql';
+
+    const { getPublicBackendHttpUrl } = await import('../backend-url');
+    expect(getPublicBackendHttpUrl()).toBeNull();
+  });
+
+  it('client-side: delegates to the host-derived resolution', async () => {
+    Object.defineProperty(global, 'window', {
+      configurable: true,
+      value: {
+        location: { hostname: 'www.boardsesh.com', protocol: 'https:' },
+      },
+    });
+
+    const { getPublicBackendHttpUrl } = await import('../backend-url');
+    expect(getPublicBackendHttpUrl()).toBe('https://ws.boardsesh.com');
+  });
+});

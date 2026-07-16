@@ -9,17 +9,8 @@ import { formatCount, formatSends } from '@/app/lib/format-climb-stats';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
 import type { StoredBoardConfig } from '@/app/lib/saved-boards-db';
 import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
+import { boardTypeLabel } from '@boardsesh/board-constants';
 import styles from './board-scroll.module.css';
-
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  kilter: 'Kilter',
-  tension: 'Tension',
-  moonboard: 'MoonBoard',
-  decoy: 'Decoy',
-  touchstone: 'Touchstone',
-  grasshopper: 'Grasshopper',
-  soill: 'So iLL',
-};
 
 function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.round(meters)}m`;
@@ -63,7 +54,7 @@ export default function BoardScrollCard({
       cardName = userBoard.name;
       if (userBoard.distanceMeters != null) {
         // Nearby/discovered board — show type and location
-        cardMeta = BOARD_TYPE_LABELS[userBoard.boardType] || userBoard.boardType;
+        cardMeta = boardTypeLabel(userBoard.boardType);
         if (userBoard.locationName) {
           cardMeta += ` \u00B7 ${userBoard.locationName}`;
         }

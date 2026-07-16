@@ -44,13 +44,22 @@ export function usePeriodLeaderboard(
   boardUuids: string[],
   period: KioskPeriodLeaderboardPeriod,
   enabled: boolean,
-  options: { refetchIntervalMs?: number } = {},
+  options?: {
+    /**
+     * Keep polling while the tab is hidden. Default true — an unattended TV
+     * must stay fresh. The manage-editor preview passes false so a forgotten
+     * background tab doesn't poll the leaderboard all night.
+     */
+    refetchIntervalInBackground?: boolean;
+    /** Override the 60s kiosk default — embeds poll more gently. */
+    refetchIntervalMs?: number;
+  },
 ): PeriodLeaderboardResult {
   const { data, isError, dataUpdatedAt } = useQuery({
     queryKey: ['kioskPeriodLeaderboard', period, boardUuids],
     enabled: enabled && boardUuids.length > 0,
-    refetchInterval: options.refetchIntervalMs ?? PERIOD_REFETCH_MS,
-    refetchIntervalInBackground: true,
+    refetchInterval: options?.refetchIntervalMs ?? PERIOD_REFETCH_MS,
+    refetchIntervalInBackground: options?.refetchIntervalInBackground ?? true,
     queryFn: async (): Promise<KioskLeaderboardRowData[]> => {
       const settled = await Promise.allSettled(
         boardUuids.map((boardUuid) =>

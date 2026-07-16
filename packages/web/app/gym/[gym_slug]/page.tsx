@@ -32,6 +32,8 @@ import { themeTokens } from '@/app/theme/theme-config';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import GymPageManageButton from './gym-page-manage-button';
+import { getPublicBackendHttpUrl } from '@/app/lib/backend-url';
+import { resolveGymLogoDisplayUrl } from '@/app/lib/gym-logo-display-url';
 
 type GymRouteProps = {
   params: Promise<{ gym_slug: string }>;
@@ -111,7 +113,9 @@ export default async function GymPage(props: GymRouteProps) {
   const { t } = await getServerTranslation('kiosk');
   const [kiosk, boards] = await Promise.all([fetchDefaultKiosk(gym_slug, token), fetchGymBoards(gym.uuid, token)]);
 
-  const logoSrc = gym.logoUrl ?? gym.imageUrl ?? null;
+  // Stored logo paths are backend-relative; resolve for the browser (also
+  // keeps the JSON-LD image absolute, as schema.org expects).
+  const logoSrc = resolveGymLogoDisplayUrl(gym.logoUrl ?? null, getPublicBackendHttpUrl()) ?? gym.imageUrl ?? null;
   // Render-side XSS guard: only http(s) URLs become clickable (legacy rows may
   // predate the backend's GymWebsiteSchema scheme check).
   const websiteHref = safeExternalHref(gym.website);

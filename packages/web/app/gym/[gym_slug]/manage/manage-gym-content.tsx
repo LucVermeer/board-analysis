@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -21,6 +21,8 @@ import GymBoardsTab from '@/app/components/gym-entity/manage/gym-boards-tab';
 import KiosksTab from '@/app/components/gym-entity/manage/kiosks-tab';
 import BrandingTab from '@/app/components/gym-entity/manage/branding-tab';
 import GymSlugGuard from '@/app/components/gym-entity/manage/gym-slug-guard';
+import ConfirmDialog from '@/app/components/gym-entity/manage/confirm-dialog';
+import { decideManageNavigation, type ManageNavigation } from '@/app/components/gym-entity/manage/manage-nav-guard';
 
 type ManageTab = 'kiosks' | 'branding' | 'boards' | 'members';
 const VALID_TABS: ManageTab[] = ['kiosks', 'branding', 'boards', 'members'];
@@ -34,21 +36,50 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
   const basePath = usePathnameWithoutLocale();
   const { data: session } = useSession();
 
+  // Unsaved-edit guard: the active tab reports its dirty state via
+  // GymManageTabProps.onDirtyChange; in-app navigations away from it (tab
+  // switch, "Back to gym") hold behind a discard confirmation while dirty.
+  // Browser back/refresh/close stays on the tabs' own beforeunload handlers.
+  const [isActiveTabDirty, setIsActiveTabDirty] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<ManageNavigation | null>(null);
+
   const currentUserId = session?.user?.id ?? null;
   const isOwnerOrAdmin = canManageGymBoards(gym, currentUserId);
 
   const tabParam = searchParams.get('tab');
   const activeTab: ManageTab = VALID_TABS.includes(tabParam as ManageTab) ? (tabParam as ManageTab) : DEFAULT_TAB;
 
+  // A completed tab switch unmounts the dirty tab; clear the flag so the new
+  // tab doesn't inherit it (the unmounting tab's cleanup also reports false).
+  useEffect(() => {
+    setIsActiveTabDirty(false);
+  }, [activeTab]);
+
+  const performNavigation = useCallback(
+    (navigation: ManageNavigation) => {
+      if (navigation.kind === 'href') {
+        router.push(navigation.href);
+        return;
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      if (navigation.tab === DEFAULT_TAB) {
+        params.delete('tab');
+      } else {
+        params.set('tab', navigation.tab);
+      }
+      const query = params.toString();
+      router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
+    },
+    [router, searchParams, basePath],
+  );
+
   const handleTabChange = (_event: React.SyntheticEvent, value: ManageTab) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value === DEFAULT_TAB) {
-      params.delete('tab');
+    const decision = decideManageNavigation(isActiveTabDirty, { kind: 'tab', tab: value });
+    if (decision.action === 'proceed') {
+      performNavigation(decision.navigation);
     } else {
-      params.set('tab', value);
+      setPendingNavigation(decision.pending);
     }
-    const query = params.toString();
-    router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
   };
 
   const handleSlugSet = (updatedGym: Gym) => {
@@ -66,6 +97,18 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
             component={LocaleLink}
             href={`/gym/${gym.slug}`}
             underline="hover"
+            onClick={(event: React.MouseEvent) => {
+              // Clean tab → let the real link navigate (keeps middle-click /
+              // new-tab semantics). Dirty tab → hold it behind the confirm.
+              const decision = decideManageNavigation(isActiveTabDirty, {
+                kind: 'href',
+                href: `/gym/${gym.slug}`,
+              });
+              if (decision.action === 'confirm') {
+                event.preventDefault();
+                setPendingNavigation(decision.pending);
+              }
+            }}
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: themeTokens.colors.primary }}
           >
             <ArrowBackOutlined sx={{ fontSize: 16 }} />
@@ -93,8 +136,8 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
         <Tab value="members" label={t('manage.tabs.members')} sx={{ textTransform: 'none' }} />
       </Tabs>
 
-      {activeTab === 'kiosks' && <KiosksTab gym={gym} onGymChange={setGym} />}
-      {activeTab === 'branding' && <BrandingTab gym={gym} onGymChange={setGym} />}
+      {activeTab === 'kiosks' && <KiosksTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
+      {activeTab === 'branding' && <BrandingTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
       {activeTab === 'boards' && <GymBoardsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'members' && (
         <GymMemberManagement
@@ -103,6 +146,21 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
           canGrantAccess={gym.canGrantAccess ?? false}
         />
       )}
+
+      <ConfirmDialog
+        open={pendingNavigation !== null}
+        title={t('manage.navGuard.title')}
+        body={t('manage.navGuard.body')}
+        confirmLabel={t('manage.navGuard.discard')}
+        cancelLabel={t('manage.navGuard.stay')}
+        onConfirm={() => {
+          const confirmedNavigation = pendingNavigation;
+          setPendingNavigation(null);
+          setIsActiveTabDirty(false);
+          if (confirmedNavigation) performNavigation(confirmedNavigation);
+        }}
+        onClose={() => setPendingNavigation(null)}
+      />
     </Container>
   );
 }
