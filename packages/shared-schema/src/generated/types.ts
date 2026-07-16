@@ -2228,6 +2228,8 @@ export type GymKioskBoard = {
   setIds: Scalars['String']['output'];
   /** Product size ID. */
   sizeId: Scalars['Int']['output'];
+  /** Public URL slug (userBoards.slug) — the kiosk's per-board install QR deep-links to /b/{slug}. */
+  slug: Scalars['String']['output'];
 };
 
 /** A member of a gym. */
@@ -8718,6 +8720,7 @@ export type GymKioskBoardResolvers<
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   setIds?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   sizeId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  slug?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 

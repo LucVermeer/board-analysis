@@ -2225,6 +2225,8 @@ export type GymKioskBoard = {
   setIds: Scalars['String']['output'];
   /** Product size ID. */
   sizeId: Scalars['Int']['output'];
+  /** Public URL slug (userBoards.slug) — the kiosk's per-board install QR deep-links to /b/{slug}. */
+  slug: Scalars['String']['output'];
 };
 
 /** A member of a gym. */

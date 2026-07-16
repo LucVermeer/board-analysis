@@ -10,6 +10,8 @@ import type { Gym } from './gyms';
 export type GymKioskBoard = {
   boardId: number;
   boardUuid: string;
+  /** Public URL slug (userBoards.slug) — the kiosk's per-board install QR deep-links to /b/{slug}. */
+  slug: string;
   name: string;
   boardType: string;
   layoutId: number;

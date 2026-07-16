@@ -22,6 +22,9 @@
     "litBy": "encendido por {{name}}",
     "unnamedClimb": "Bloque sin nombre"
   },
+  "installQr": {
+    "caption": "Escanea para registrar este muro"
+  },
   "leaderboard": {
     "periodSession": "Clasificación de la sesión",
     "periodLast24h": "Últimas 24 horas",
@@ -212,6 +215,9 @@
       "previewUnavailable": "{{name}} no se puede mostrar aquí",
       "slotDuplicateError": "Este plafón ya está en otra posición.",
       "scopeInvalidError": "Elige uno de los plafones del kiosco.",
+      "installQrHeading": "QR de instalación",
+      "installQrSwitch": "Mostrar el QR de instalación en cada plafón",
+      "installQrHelper": "Cada plafón muestra un código que los escaladores escanean para conseguir Boardsesh y registrar sus encadenes en ese muro.",
       "discardTitle": "¿Descartar los cambios?",
       "discardBody": "Tus cambios de diseño aún no están guardados.",
       "keepEditing": "Seguir editando",

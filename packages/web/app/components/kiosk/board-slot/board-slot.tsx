@@ -18,6 +18,7 @@ import BoardRenderer from '../../board-renderer/board-renderer';
 import { convertLitUpHoldsStringToMap, toFlatFrames } from '../../board-renderer/util';
 import { useKioskBoardPresence } from '../presence/use-kiosk-board-presence';
 import BoardIdentity from './board-identity';
+import BoardInstallQr from './board-install-qr';
 import styles from './board-slot.module.css';
 
 export type BoardSlotProps = {
@@ -33,6 +34,10 @@ export type BoardSlotProps = {
   initialClimbImageUrl: string | null;
   /** Raster URL for the bare board (idle placeholder). */
   bareBoardImageUrl: string;
+  /** The board's public slug (userBoards.slug) — the install-QR deep-link target. */
+  slug: string | null;
+  /** Whether this kiosk shows the per-board install QR (kiosk layout toggle). */
+  showInstallQr: boolean;
 };
 
 export default function BoardSlot({
@@ -43,6 +48,8 @@ export default function BoardSlot({
   initialClimb,
   initialClimbImageUrl,
   bareBoardImageUrl,
+  slug,
+  showInstallQr,
 }: BoardSlotProps) {
   const snapshot = useKioskBoardPresence(boardId);
 
@@ -65,6 +72,7 @@ export default function BoardSlot({
   return (
     <section className={styles.slot}>
       <div className={styles.art}>
+        {showInstallQr && slug !== null ? <BoardInstallQr slug={slug} /> : null}
         {hasLiveData ? (
           <BoardRenderer boardDetails={boardDetails} litUpHoldsMap={litUpHoldsMap} mirrored={false} fillHeight />
         ) : (

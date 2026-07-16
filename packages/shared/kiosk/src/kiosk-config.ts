@@ -52,6 +52,11 @@ export const KioskLayoutSchema = z
     version: z.literal(KIOSK_LAYOUT_VERSION),
     boards: z.array(KioskBoardSlotSchema).max(MAX_KIOSK_BOARDS),
     leaderboard: KioskLeaderboardSchema.nullable().default(null),
+    // Per-kiosk toggle: when true, every board renders its own "install
+    // Boardsesh" QR (a deep link to that board) so climbers on the wall can get
+    // the app and feed the screen. Additive + defaulted, so older stored layouts
+    // (and the lenient reader below) read it as false without a version bump.
+    showInstallQr: z.boolean().default(false),
   })
   .superRefine((layout, ctx) => {
     const seen = new Set<string>();
@@ -84,7 +89,7 @@ export type KioskLayout = z.infer<typeof KioskLayoutSchema>;
 
 /** The default empty layout a freshly created kiosk row stores. */
 export function emptyKioskLayout(): KioskLayout {
-  return { version: KIOSK_LAYOUT_VERSION, boards: [], leaderboard: null };
+  return { version: KIOSK_LAYOUT_VERSION, boards: [], leaderboard: null, showInstallQr: false };
 }
 
 export interface LenientKioskLayoutResult {
@@ -124,7 +129,12 @@ export function parseKioskLayoutLenient(value: unknown): LenientKioskLayoutResul
     return { layout: emptyKioskLayout(), droppedBoardCount: 0, droppedLeaderboard: false };
   }
 
-  const record = value as { version?: unknown; boards?: unknown; leaderboard?: unknown };
+  const record = value as {
+    version?: unknown;
+    boards?: unknown;
+    leaderboard?: unknown;
+    showInstallQr?: unknown;
+  };
 
   if (record.version !== KIOSK_LAYOUT_VERSION) {
     // Wholesale discard: the layout is uninterpretable under this code, but the
@@ -135,6 +145,10 @@ export function parseKioskLayoutLenient(value: unknown): LenientKioskLayoutResul
       droppedLeaderboard: record.leaderboard !== null && record.leaderboard !== undefined,
     };
   }
+
+  // Booleans need no repair: an absent field or any non-`true` value (including a
+  // malformed one) reads as false — the safe off default for a new toggle.
+  const showInstallQr = record.showInstallQr === true;
 
   const boards: KioskBoardSlot[] = [];
   let droppedBoardCount = 0;
@@ -174,7 +188,7 @@ export function parseKioskLayoutLenient(value: unknown): LenientKioskLayoutResul
   }
 
   return {
-    layout: { version: KIOSK_LAYOUT_VERSION, boards, leaderboard },
+    layout: { version: KIOSK_LAYOUT_VERSION, boards, leaderboard, showInstallQr },
     droppedBoardCount,
     droppedLeaderboard,
   };

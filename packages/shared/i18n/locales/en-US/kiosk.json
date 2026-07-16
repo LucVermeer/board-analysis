@@ -22,6 +22,9 @@
     "litBy": "lit by {{name}}",
     "unnamedClimb": "Unnamed climb"
   },
+  "installQr": {
+    "caption": "Scan to log this wall"
+  },
   "leaderboard": {
     "periodSession": "Session leaderboard",
     "periodLast24h": "Last 24 hours",
@@ -212,6 +215,9 @@
       "previewUnavailable": "{{name}} can't render here",
       "slotDuplicateError": "This board is already on another slot.",
       "scopeInvalidError": "Pick one of the kiosk's boards.",
+      "installQrHeading": "App-install QR",
+      "installQrSwitch": "Show the app-install QR on each board",
+      "installQrHelper": "Each board shows a code climbers scan to get Boardsesh and log their sends on that wall.",
       "discardTitle": "Discard changes?",
       "discardBody": "Your layout edits aren't saved yet.",
       "keepEditing": "Keep editing",

@@ -6,6 +6,7 @@ function makeBoard(boardUuid: string, boardId: number): GymKioskBoard {
   return {
     boardId,
     boardUuid,
+    slug: `board-${boardId}`,
     name: `Board ${boardId}`,
     boardType: 'kilter',
     layoutId: 1,
