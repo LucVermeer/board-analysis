@@ -850,7 +850,15 @@ export function useBoardBluetooth({
         connectionDurationSec,
       });
     }
-    await adapter?.disconnect();
+    // The native BLE teardown can reject (e.g. the peripheral is already gone).
+    // Every caller fires this and moves on without awaiting — the light drawer's
+    // handleDisconnect, the tab bar via registerBluetoothConnection, the
+    // board-switch guard — so an unhandled rejection here would surface as a
+    // console error / unhandledrejection with no owner. The UI state above is
+    // already updated, so swallow it after logging.
+    await adapter?.disconnect().catch((error) => {
+      console.error('Error tearing down Bluetooth connection:', error);
+    });
   }, [onConnectionChange]);
 
   // Clean up on unmount — reject any pending picker promise so the adapter's
