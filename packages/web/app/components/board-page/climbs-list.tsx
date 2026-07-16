@@ -21,6 +21,7 @@ import { ClimbCardSkeleton, ClimbListItemSkeleton } from './board-page-skeleton'
 import { themeTokens } from '@/app/theme/theme-config';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
 import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';
+import { LIST_ROW_HEIGHT } from './constants';
 import { classifyClimbListChange } from './climb-list-utils';
 import SwipeHintOrchestrator from './swipe-hint-orchestrator';
 import { getExcludedClimbActions } from '@/app/lib/climb-action-utils';
@@ -556,14 +557,19 @@ const ClimbsList = ({
   const selectionStore = useSelectionStore(selectedClimbUuid ?? null);
 
   // --- List virtualization ---
-  // Overscan of 10 items (~1070px at the 107px estimate) is enough headroom for
-  // fast scrolling while keeping the LCP-time mount count low. Production traces
-  // showed the previous overscan=25 was mounting ~50 items on first paint, with
-  // each item attaching virtualizer.measureElement (a ResizeObserver) — this
-  // dominated the render delay (76% of LCP / 2.2s of forced reflow) on /list.
+  // Overscan of 10 items (~1070px at the LIST_ROW_HEIGHT estimate) is enough
+  // headroom for fast scrolling while keeping the LCP-time mount count low.
+  // Production traces showed the previous overscan=25 was mounting ~50 items on
+  // first paint, with each item attaching virtualizer.measureElement (a
+  // ResizeObserver) — this dominated the render delay (76% of LCP / 2.2s of
+  // forced reflow) on /list.
+  //
+  // The estimate matches the row wrapper's fixed minHeight below, so a row
+  // measures to exactly the estimate on mount: no reflow shifting every row
+  // beneath it (the loading-time CLS this list was flagged for, issue #3086).
   const virtualizer = useWindowVirtualizer({
     count: visibleClimbs.length,
-    estimateSize: () => 107,
+    estimateSize: () => LIST_ROW_HEIGHT,
     overscan: 10,
     getItemKey: (index) => visibleClimbs[index]?.uuid ?? index,
     // Provide a fake viewport so the virtualizer renders items during SSR.
@@ -687,6 +693,13 @@ const ClimbsList = ({
                           top: 0,
                           left: 0,
                           width: '100%',
+                          // Floor at the estimated row height so a plain climb row
+                          // measures to exactly the estimate (no post-mount reflow
+                          // / CLS). Rows with extra content below the item
+                          // (renderItemExtra) still grow past this via
+                          // measureElement.
+                          minHeight: LIST_ROW_HEIGHT,
+                          boxSizing: 'border-box',
                           transform: `translateY(${virtualItem.start}px)`,
                           contain: 'layout style paint',
                         }}

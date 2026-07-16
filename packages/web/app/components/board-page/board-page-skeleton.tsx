@@ -12,6 +12,7 @@ import CallSplitOutlined from '@mui/icons-material/CallSplitOutlined';
 import FavoriteBorderOutlined from '@mui/icons-material/FavoriteBorderOutlined';
 import AddCircleOutlined from '@mui/icons-material/AddCircleOutlined';
 import { themeTokens } from '@/app/theme/theme-config';
+import { LIST_ROW_HEIGHT } from './constants';
 import styles from './board-page-skeleton.module.css';
 
 type BoardPageSkeletonProps = {
@@ -72,22 +73,30 @@ const ClimbCardSkeleton = ({ aspectRatio }: { aspectRatio?: number }) => (
 );
 
 /**
- * Skeleton that mimics the ClimbListItem layout (~60px rows with thumbnail, text, and grade).
+ * Skeleton that mimics the ClimbListItem layout.
+ *
+ * Height is pinned to LIST_ROW_HEIGHT (the real row height) so the
+ * skeleton→content swap on /view and empty /list doesn't grow each row as
+ * placeholders resolve — the loading-time CLS this list was flagged for
+ * (issue #3086).
  */
 const ClimbListItemSkeleton = () => (
   <div
     style={{
       display: 'flex',
       alignItems: 'center',
+      minHeight: LIST_ROW_HEIGHT,
+      boxSizing: 'border-box',
       padding: `${themeTokens.spacing[2]}px ${themeTokens.spacing[3]}px`,
       gap: themeTokens.spacing[3],
       backgroundColor: 'var(--semantic-surface)',
       borderBottom: `1px solid var(--border-subtle)`,
     }}
   >
-    {/* Thumbnail placeholder - matches ClimbListItem width of themeTokens.spacing[16] (64px) */}
+    {/* Thumbnail placeholder — matches the real ClimbThumbnail box: spacing[16]
+        (64px) wide at aspect-ratio 5 / 7 (~90px tall). */}
     <div style={{ width: themeTokens.spacing[16], flexShrink: 0 }}>
-      <MuiSkeleton variant="rounded" width={48} height={48} animation="wave" />
+      <MuiSkeleton variant="rounded" animation="wave" sx={{ width: '100%', aspectRatio: '5 / 7' }} />
     </div>
 
     {/* Center: Name and setter lines */}

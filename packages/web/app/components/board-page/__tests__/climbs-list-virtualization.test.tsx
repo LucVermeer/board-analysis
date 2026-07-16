@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import type { Climb, BoardDetails } from '@/app/lib/types';
 import ClimbsList from '../climbs-list';
+import { LIST_ROW_HEIGHT } from '../constants';
 
 // --- Mocks ---
 
@@ -120,7 +121,7 @@ vi.mock('@/app/theme/theme-config', () => ({
 }));
 
 // Track calls to useWindowVirtualizer
-let lastVirtualizerOpts: { count: number; overscan: number } | null = null;
+let lastVirtualizerOpts: { count: number; overscan: number; estimateSize: () => number } | null = null;
 
 vi.mock('@tanstack/react-virtual', () => ({
   useWindowVirtualizer: (opts: {
@@ -256,11 +257,47 @@ describe('ClimbsList virtualization', () => {
       />,
     );
 
-    // With estimateSize=107, overscan=10 is ~1070px headroom — enough for
-    // smooth fast scrolling without bloating the first-paint mount count.
-    // Production traces tied a 25→10 cut directly to a render-delay drop.
+    // With estimateSize=LIST_ROW_HEIGHT, overscan=10 is ~1070px headroom —
+    // enough for smooth fast scrolling without bloating the first-paint mount
+    // count. Production traces tied a 25→10 cut directly to a render-delay drop.
     expect(lastVirtualizerOpts).not.toBeNull();
     expect(lastVirtualizerOpts!.overscan).toBe(10);
+  });
+
+  it('estimates each row at the fixed LIST_ROW_HEIGHT', () => {
+    render(
+      <ClimbsList
+        boardDetails={makeBoardDetails()}
+        climbs={allClimbs}
+        isFetching={false}
+        hasMore={false}
+        onLoadMore={vi.fn()}
+      />,
+    );
+
+    // The estimate must equal the row wrapper's minHeight below so a mounted
+    // row measures to exactly the estimate — no post-mount reflow / CLS.
+    expect(lastVirtualizerOpts).not.toBeNull();
+    expect(lastVirtualizerOpts!.estimateSize()).toBe(LIST_ROW_HEIGHT);
+  });
+
+  it('floors each virtualized row wrapper at LIST_ROW_HEIGHT (no measure reflow)', () => {
+    const { container } = render(
+      <ClimbsList
+        boardDetails={makeBoardDetails()}
+        climbs={allClimbs}
+        isFetching={false}
+        hasMore={false}
+        onLoadMore={vi.fn()}
+      />,
+    );
+
+    // The measured wrapper (the element carrying ref={measureElement}) must
+    // pin minHeight to the same constant, so a plain row measures to exactly
+    // the estimate. renderItemExtra rows still grow past this floor.
+    const firstRow = container.querySelector<HTMLElement>('[data-index="0"]');
+    expect(firstRow).not.toBeNull();
+    expect(firstRow!.style.minHeight).toBe(`${LIST_ROW_HEIGHT}px`);
   });
 
   it('renders skeleton when fetching with no climbs', () => {
