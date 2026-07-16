@@ -1,4 +1,5 @@
 import { useContext, useEffect } from 'react';
+import { AppState } from 'react-native';
 import { QueryClientContext } from '@tanstack/react-query';
 import { computeQueueStateHash, computeQueueStateHashOrdered } from '@boardsesh/queue';
 import type { QueueAction, QueueState } from '@boardsesh/queue';
@@ -175,6 +176,15 @@ export function useSessionRealtime({
     let joinRetryTimer: ReturnType<typeof setTimeout> | null = null;
     let joinRetryCount = 0;
 
+    // iOS suspends the WebSocket while the app is backgrounded, so a
+    // JOIN_SESSION fired now never completes and trips execute()'s 30s timeout
+    // — reported as a noisy `queue-sync/join` error even though it's expected
+    // (#3605). Track a deferral so the join re-runs on foreground. Gate only on
+    // `background`, not the transient iOS `inactive` (matching app-visibility.ts),
+    // so notification-center / app-switcher blips don't tear a live session down.
+    let joinDeferredForBackground = false;
+    const isBackgrounded = () => AppState.currentState === 'background';
+
     const clearJoinRetryTimer = () => {
       if (!joinRetryTimer) return;
       clearTimeout(joinRetryTimer);
@@ -206,6 +216,17 @@ export function useSessionRealtime({
     };
 
     const startJoinedSubscriptions = async () => {
+      // While backgrounded the socket is suspended: defer the join instead of
+      // firing one that can only time out (#3605). Supersede any in-flight join
+      // (bump the token), tear down subscriptions, and let the AppState listener
+      // below re-run us on foreground.
+      if (isBackgrounded()) {
+        subscriptionStartToken++;
+        joinDeferredForBackground = true;
+        cleanupSubscriptions();
+        return;
+      }
+
       const currentStartToken = ++subscriptionStartToken;
       cleanupSubscriptions();
 
@@ -213,6 +234,15 @@ export function useSessionRealtime({
         await ensureJoined(sessionId);
       } catch (joinError) {
         if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+        // A join in flight when the app backgrounds can't complete over the
+        // suspended socket and hits the 30s timeout (#3605). That's expected,
+        // not a defect: skip the toast + error report and defer — the AppState
+        // listener re-joins on foreground.
+        if (isBackgrounded()) {
+          joinDeferredForBackground = true;
+          clearJoinRetryTimer();
+          return;
+        }
         logJoinFailure(joinError);
         if (joinRetryCount === 0) {
           showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
@@ -504,6 +534,18 @@ export function useSessionRealtime({
       void startJoinedSubscriptions();
     });
 
+    // Re-run a join deferred while backgrounded once the app returns to the
+    // foreground: the socket is usable again, so the JOIN_SESSION we skipped (or
+    // that timed out on the suspended socket) can now complete (#3605). Gate on
+    // `active` only — `inactive` is a transient interruption where the socket is
+    // still fine.
+    const appStateSub = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && joinDeferredForBackground) {
+        joinDeferredForBackground = false;
+        void startJoinedSubscriptions();
+      }
+    });
+
     // Expose the restart path for resyncQueueFromServer's membership
     // fallback (see there): startJoinedSubscriptions bumps the start token
     // and tears down first, so an external call is exactly as safe as the
@@ -522,6 +564,7 @@ export function useSessionRealtime({
       cleanupSubscriptions();
       unsubConnected();
       unsubClosed();
+      appStateSub.remove();
       // Reset live analytics/presence on EVERY session change (not only on
       // teardown to null). A direct A→B switch (joinSession) flips sessionId
       // without an intermediate null, so without this the previous session's
