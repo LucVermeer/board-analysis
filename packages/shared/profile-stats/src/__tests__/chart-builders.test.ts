@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
+import { getGradeColor } from '@boardsesh/board-constants/grade-colors';
 import {
   filterLogbookByTimeframe,
   buildAggregatedStackedBars,
@@ -233,6 +234,57 @@ describe('buildWeeklyBars', () => {
     expect(keys).toContain(
       `${dayjs('2024-10-15T12:00:00Z').isoWeekYear()}-W${dayjs('2024-10-15T12:00:00Z').isoWeek()}`,
     );
+  });
+});
+
+// Regression coverage for #3302: the week-by-week volume chart rendered every
+// bar grey with an unreadable x-axis when the app's grade display is set to
+// "both" (font + V). The axis-width fix lives in mobile's YouCharts.tsx and
+// the color fix lives in mobile's gradeChartColor (now routed through
+// @boardsesh/board-constants' getGradeColor instead of an exact-string
+// lookup) — both landed in commits bcf45eb55 / fdfc061a4. This suite locks in
+// the renderer-agnostic half of the contract those fixes depend on:
+// buildWeeklyBars('both') must keep emitting combined "V<n>[+] / <font>[+]"
+// labels that a real color lookup can actually extract a V-grade from, so a
+// future change to the 'both' label template can't silently reintroduce grey
+// bars on either platform.
+describe("buildWeeklyBars with dual grade format ('both')", () => {
+  it('emits combined V + Font grade labels that a real color lookup resolves', () => {
+    const logbook = [
+      makeEntry({ climbed_at: '2024-01-08T12:00:00Z', difficulty: 16 }), // 6a/V3
+      makeEntry({ climbed_at: '2024-01-08T12:00:00Z', difficulty: 17 }), // 6a+/V3 (needs "+" disambiguation)
+      makeEntry({ climbed_at: '2024-01-08T12:00:00Z', difficulty: 22 }), // 7a/V6
+    ];
+    const result = buildWeeklyBars(logbook, undefined, undefined, 'both');
+    expect(result).not.toBeNull();
+
+    const segments = result!.flatMap((bar) => bar.segments);
+    expect(segments.length).toBeGreaterThan(0);
+
+    for (const segment of segments) {
+      // Combined label shape: "V<n>[+] / <FONT>[+]" — the key a color
+      // resolver keys off of is the same string as the display label.
+      expect(segment.label).toMatch(/^V\d+\+? \/ \S+$/);
+      expect(segment.key).toBe(segment.label);
+      // The exact regression: every combined label must resolve to a real
+      // color, not fall through to the grey "unknown grade" fallback.
+      expect(getGradeColor(segment.label)).toBeDefined();
+    }
+  });
+
+  it('keeps font sub-grades distinguishable (6a vs 6a+ both map to V3, but stay separate bars)', () => {
+    const logbook = [
+      makeEntry({ climbed_at: '2024-01-08T12:00:00Z', difficulty: 16 }), // 6a/V3
+      makeEntry({ climbed_at: '2024-01-08T12:00:00Z', difficulty: 17 }), // 6a+/V3
+    ];
+    const result = buildWeeklyBars(logbook, undefined, undefined, 'both')!;
+    const labels = result.flatMap((bar) => bar.segments.map((segment) => segment.label));
+
+    expect(labels).toContain('V3 / 6A');
+    expect(labels).toContain('V3+ / 6A+');
+    // Distinct font sub-grades resolve to the same underlying V-grade color —
+    // by design, the badge differentiates by V-grade family, not sub-grade.
+    expect(getGradeColor('V3 / 6A')).toBe(getGradeColor('V3+ / 6A+'));
   });
 });
 
