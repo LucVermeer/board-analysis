@@ -244,15 +244,20 @@ export const authOptions: NextAuthOptions = {
       if (session?.user && token?.sub) {
         session.user.id = token.sub;
 
-        // Fetch custom avatar from userProfiles so the drawer/header show the current avatar
+        // Fetch custom avatar/display name from userProfiles on every session read so the
+        // drawer/header reflect the latest Settings edit instead of whatever was baked into
+        // the JWT at sign-in (the JWT's name/image claims are never refreshed otherwise).
         const db = getDb();
         const profiles = await db
-          .select({ avatarUrl: schema.userProfiles.avatarUrl })
+          .select({ avatarUrl: schema.userProfiles.avatarUrl, displayName: schema.userProfiles.displayName })
           .from(schema.userProfiles)
           .where(eq(schema.userProfiles.userId, token.sub))
           .limit(1);
         if (profiles[0]?.avatarUrl) {
           session.user.image = profiles[0].avatarUrl;
+        }
+        if (profiles[0]?.displayName) {
+          session.user.name = profiles[0].displayName;
         }
       }
       return session;

@@ -118,7 +118,7 @@ type UserProfile = {
 };
 
 export default function SettingsPageContent() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const router = useLocaleRouter();
   const { t, i18n } = useTranslation('settings');
   const activeLocale: Locale = isSupportedLocale(i18n.language) ? i18n.language : DEFAULT_LOCALE;
@@ -320,6 +320,8 @@ export default function SettingsPageContent() {
       // Refresh profile locally and in context (so queue items show updated avatar)
       await fetchProfile();
       await refreshPartyProfile();
+      // Refresh the NextAuth session now so the header/drawer show the new name immediately.
+      await updateSession();
     } catch (error) {
       console.error('Failed to save settings:', error);
       showMessage(error instanceof Error ? error.message : t('profile.saveError'), 'error');
