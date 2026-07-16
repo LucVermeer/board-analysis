@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vite-plus/test';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
+import { SITE_URL } from '@/app/lib/seo/base-url';
 import BoardInstallQr from '../board-install-qr';
 
 vi.mock('react-i18next', () => ({
@@ -20,7 +21,9 @@ vi.mock('qrcode.react', () => ({
 describe('BoardInstallQr', () => {
   it('encodes /b/{slug} against the canonical site URL', () => {
     render(<BoardInstallQr slug="main-kilter" />);
-    expect(screen.getByTestId('qr').getAttribute('data-value')).toBe('https://www.boardsesh.com/b/main-kilter');
+    // Derived from SITE_URL rather than a hardcoded domain, so the assertion
+    // tracks the base URL instead of pinning the production host.
+    expect(screen.getByTestId('qr').getAttribute('data-value')).toBe(`${SITE_URL}/b/main-kilter`);
   });
 
   it('renders the install caption from the kiosk catalog', () => {
