@@ -173,7 +173,15 @@ export async function resolveCanonicalGymBySlug(slug: string): Promise<GymRow | 
   const [mergedTwin] = await db
     .select()
     .from(dbSchema.gyms)
-    .where(and(eq(dbSchema.gyms.slug, slug), isNotNull(dbSchema.gyms.mergedIntoGymId)))
+    .where(
+      and(
+        eq(dbSchema.gyms.slug, slug),
+        // A merged twin is always soft-deleted; make that explicit rather than
+        // leaning on the live-row query above having already returned.
+        isNotNull(dbSchema.gyms.deletedAt),
+        isNotNull(dbSchema.gyms.mergedIntoGymId),
+      ),
+    )
     .orderBy(desc(dbSchema.gyms.updatedAt), desc(dbSchema.gyms.id))
     .limit(1);
   if (!mergedTwin) {

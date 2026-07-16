@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vite-plus/test';
 import { v4 as uuidv4 } from 'uuid';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
 import { socialGymQueries, resolveCanonicalGym, resolveCanonicalGymByUuid } from '../graphql/resolvers/social/gyms';
@@ -226,10 +226,6 @@ describe('merged gym canonical resolution', () => {
 
 // Read the full gym row back so resolveCanonicalGym can be exercised directly.
 async function fetchGymRow(id: number): Promise<typeof dbSchema.gyms.$inferSelect> {
-  const [row] = await db
-    .select()
-    .from(dbSchema.gyms)
-    .where(sql`${dbSchema.gyms.id} = ${id}`)
-    .limit(1);
+  const [row] = await db.select().from(dbSchema.gyms).where(eq(dbSchema.gyms.id, id)).limit(1);
   return row;
 }
