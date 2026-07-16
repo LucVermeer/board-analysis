@@ -391,8 +391,11 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
       blockedPermissions: ['android.permission.BLUETOOTH_ADVERTISE'],
       // expo-maps on Android renders Google Maps, which needs an API key. iOS
       // uses Apple Maps and needs none. Supplied via env so iOS works out of the
-      // box; the Android map stays blank until GOOGLE_MAPS_API_KEY is set + a
-      // rebuild. Only emit the block when the key exists to keep config clean.
+      // box; the Android GoogleMaps view is UNSAFE to mount at all without this
+      // (fatal native "API key not found" crash on attach, not just a blank map —
+      // see issue #3187 / GymMap.tsx). Only emit the block when the key exists to
+      // keep config clean; googleMapsApiKeyConfigured below (in `extra`) is how
+      // JS learns whether it's safe to mount the native view.
       ...(process.env.GOOGLE_MAPS_API_KEY
         ? { config: { googleMaps: { apiKey: process.env.GOOGLE_MAPS_API_KEY } } }
         : {}),
@@ -595,6 +598,11 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
           }
         : {}),
       ...(tailscaleHosts.length > 0 ? { tailscaleHosts } : {}),
+      // Read at runtime by GymMap.tsx to decide whether the native Android
+      // GoogleMaps view is safe to mount (see the comment on `android.config`
+      // above and issue #3187). A boolean, not the key itself — the key never
+      // needs to reach JS, only whether the manifest meta-data is present.
+      googleMapsApiKeyConfigured: Boolean(process.env.GOOGLE_MAPS_API_KEY),
     },
   };
 };
