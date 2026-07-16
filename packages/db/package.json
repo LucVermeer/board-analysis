@@ -85,6 +85,7 @@
   "dependencies": {
     "@boardsesh/board-config": "*",
     "@boardsesh/board-constants": "*",
+    "@boardsesh/kiosk": "*",
     "@boardsesh/shared-schema": "*",
     "drizzle-orm": "^0.45.1",
     "postgres": "^3.4.8"

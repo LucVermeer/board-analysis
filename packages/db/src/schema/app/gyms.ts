@@ -40,7 +40,16 @@ export const gyms = pgTable(
     longitude: doublePrecision('longitude'),
     isPublic: boolean('is_public').default(true).notNull(),
     description: text('description'),
+    // imageUrl is the gym's photo (storefront / wall shot). Distinct from
+    // logoUrl below, which is the transparent brand mark used to theme the kiosk.
     imageUrl: text('image_url'),
+    // Kiosk branding. logoUrl is the gym's logo (kept separate from imageUrl, the
+    // gym photo). The three colours are #RRGGBB hex strings (validated in zod);
+    // the kiosk surface is always dark, so brand colour is used as an accent.
+    logoUrl: text('logo_url'),
+    brandPrimaryColor: text('brand_primary_color'),
+    brandAccentColor: text('brand_accent_color'),
+    brandBackgroundColor: text('brand_background_color'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),

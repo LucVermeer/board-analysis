@@ -143,6 +143,7 @@
       "dependencies": {
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
+        "@boardsesh/kiosk": "*",
         "@boardsesh/shared-schema": "*",
         "drizzle-orm": "^0.45.1",
         "postgres": "^3.4.8",
@@ -527,6 +528,16 @@
     "packages/shared/key-value-storage": {
       "name": "@boardsesh/key-value-storage",
       "version": "1.0.0",
+      "devDependencies": {
+        "typescript": "~6.0.3",
+      },
+    },
+    "packages/shared/kiosk": {
+      "name": "@boardsesh/kiosk",
+      "version": "1.0.0",
+      "dependencies": {
+        "zod": "^4.3.6",
+      },
       "devDependencies": {
         "typescript": "~6.0.3",
       },
@@ -1150,6 +1161,8 @@
     "@boardsesh/key-value-storage": ["@boardsesh/key-value-storage@workspace:packages/shared/key-value-storage"],
 
     "@boardsesh/kilter-sync": ["@boardsesh/kilter-sync@workspace:packages/kilter-sync"],
+
+    "@boardsesh/kiosk": ["@boardsesh/kiosk@workspace:packages/shared/kiosk"],
 
     "@boardsesh/location-sync": ["@boardsesh/location-sync@workspace:packages/location-sync"],
 
