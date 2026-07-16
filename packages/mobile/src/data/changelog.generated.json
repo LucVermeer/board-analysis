@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T11:18:36.008Z",
+  "generatedAt": "2026-07-16T11:24:24.599Z",
   "entries": [
+    {
+      "prNumber": 3681,
+      "category": "new",
+      "title": "Gym owners get an Insights tab — see how many climbers hit your boards this week, the climbs everyone's projecting, and your busiest nights, all with a week-over-week read on whether the wall's picking up.",
+      "mergedAt": "2026-07-16T11:21:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3681"
+    },
     {
       "prNumber": 3680,
       "category": "fixed",
