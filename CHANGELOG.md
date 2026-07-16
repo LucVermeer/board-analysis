@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Gym pages are real pages now — tap a gym's name anywhere to see its walls, follow it, claim it, and join the conversation. ([#3670](https://github.com/boardsesh/boardsesh/pull/3670))
+- Your gyms are one tap away — open the menu and hit **My gyms** to jump straight into managing kiosks, boards, and your crew. ([#3668](https://github.com/boardsesh/boardsesh/pull/3668))
+- Your gyms now live in the More tab — jump straight to a gym, tweak its details, and fire up the TV kiosk from the web console. ([#3674](https://github.com/boardsesh/boardsesh/pull/3674))
 - Report a bug from the app and we'll turn it into a tracked issue, not a lost chat message. ([#3307](https://github.com/boardsesh/boardsesh/pull/3307))
   Tick "Can we contact you?" and we'll email you the link so you can follow the fix.
 - Leave a recap when you end your session — how it went, what you almost sent. It shows on your session page. ([#3654](https://github.com/boardsesh/boardsesh/pull/3654))

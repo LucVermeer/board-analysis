@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-07-16T10:00:00.273Z",
+  "generatedAt": "2026-07-16T10:26:19.951Z",
   "entries": [
+    {
+      "prNumber": 3670,
+      "category": "new",
+      "title": "Gym pages are real pages now — tap a gym's name anywhere to see its walls, follow it, claim it, and join the conversation.",
+      "mergedAt": "2026-07-16T10:25:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3670"
+    },
+    {
+      "prNumber": 3668,
+      "category": "new",
+      "title": "Your gyms are one tap away — open the menu and hit **My gyms** to jump straight into managing kiosks, boards, and your crew.",
+      "mergedAt": "2026-07-16T10:24:54Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3668"
+    },
+    {
+      "prNumber": 3674,
+      "category": "new",
+      "title": "Your gyms now live in the More tab — jump straight to a gym, tweak its details, and fire up the TV kiosk from the web console.",
+      "mergedAt": "2026-07-16T10:24:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3674"
+    },
     {
       "prNumber": 3307,
       "category": "new",
