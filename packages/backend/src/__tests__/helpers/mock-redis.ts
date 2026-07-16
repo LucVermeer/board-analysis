@@ -1,5 +1,10 @@
 import { vi } from 'vite-plus/test';
 import type Redis from 'ioredis';
+import {
+  LEAVE_SESSION_SCRIPT,
+  MARK_RECONNECTING_IF_IDLE_SCRIPT,
+  EVICT_PARTICIPANT_IF_GHOST_SCRIPT,
+} from '../../services/distributed-state/lua-scripts';
 
 export type MockRedis = Redis & {
   _store: Map<string, string>;
@@ -242,6 +247,124 @@ export const createMockRedis = (): MockRedis => {
       return chainable;
     }),
     eval: vi.fn(async (_script: string, numkeys: number, ...args: unknown[]) => {
+      // Script-identity dispatch first, for scripts whose (numkeys, args.length)
+      // shape collides with another script the mock already handles. These MUST
+      // precede the shape-based branches below:
+      //   - MARK_RECONNECTING_IF_IDLE (numkeys=3, 2 ARGV) collides with
+      //     REMOVE_PARTICIPANT_CONNECTION (numkeys=3, 2 ARGV).
+      //   - LEAVE_SESSION (now numkeys=4) collides with REMOVE_PARTICIPANT
+      //     (numkeys=4).
+      //   - EVICT_PARTICIPANT_IF_GHOST (numkeys=5) has no shape branch at all.
+      const connLive = (connectionId: string) => hashes.has(`boardsesh:conn:${connectionId}`);
+      const connectedAtOf = (connectionId: string) => Number(hashes.get(`boardsesh:conn:${connectionId}`)?.connectedAt);
+      const clearConnSession = (connectionId: string) => {
+        const cd = hashes.get(`boardsesh:conn:${connectionId}`);
+        if (cd) {
+          cd.sessionId = '';
+          cd.participantId = '';
+          cd.isLeader = 'false';
+        }
+      };
+
+      if (_script === MARK_RECONNECTING_IF_IDLE_SCRIPT) {
+        const participantKey = args[0] as string;
+        const participantConnectionsKey = args[1] as string;
+        const now = args[3] as string;
+        if (!hashes.has(participantKey)) return 'MISSING';
+        const connIds = sets.get(participantConnectionsKey) ? Array.from(sets.get(participantConnectionsKey)!) : [];
+        if (connIds.some(connLive)) return 'HAS_LIVE';
+        const hash = hashes.get(participantKey)!;
+        hash.connectionState = 'RECONNECTING';
+        hash.lastSeenAt = now;
+        return 'RECONNECTING';
+      }
+
+      if (_script === EVICT_PARTICIPANT_IF_GHOST_SCRIPT) {
+        const sessionParticipantsKey = args[0] as string;
+        const participantKey = args[1] as string;
+        const participantConnectionsKey = args[2] as string;
+        const sessionMembersKey = args[3] as string;
+        const leaderKey = args[4] as string;
+        const participantId = args[5] as string;
+
+        if (!hashes.has(participantKey)) return ['MISSING', ''];
+        if (hashes.get(participantKey)!.connectionState !== 'RECONNECTING') return ['NOT_RECONNECTING', ''];
+        const connIds = sets.get(participantConnectionsKey) ? Array.from(sets.get(participantConnectionsKey)!) : [];
+        if (connIds.some(connLive)) return ['HAS_LIVE', ''];
+
+        sets.get(sessionParticipantsKey)?.delete(participantId);
+        hashes.delete(participantKey);
+        sets.delete(participantConnectionsKey);
+        const memberSet = sets.get(sessionMembersKey);
+        for (const cid of connIds) {
+          memberSet?.delete(cid);
+          clearConnSession(cid);
+        }
+
+        const currentLeader = store.get(leaderKey);
+        const leaderStale = currentLeader
+          ? !connLive(currentLeader) || !(memberSet?.has(currentLeader) ?? false)
+          : false;
+        if (!currentLeader || !leaderStale) return ['EVICTED', ''];
+
+        const candidates = (memberSet ? Array.from(memberSet) : [])
+          .map((mid) => ({ mid, at: connectedAtOf(mid) }))
+          .filter((candidate) => !Number.isNaN(candidate.at))
+          .sort((a, b) => a.at - b.at);
+        if (candidates.length === 0) {
+          store.delete(leaderKey);
+          return ['EVICTED', ''];
+        }
+        const newLeaderId = candidates[0].mid;
+        store.set(leaderKey, newLeaderId);
+        const newLeaderConn = hashes.get(`boardsesh:conn:${newLeaderId}`);
+        if (newLeaderConn) newLeaderConn.isLeader = 'true';
+        return ['EVICTED', newLeaderId];
+      }
+
+      if (_script === LEAVE_SESSION_SCRIPT) {
+        const connKey = args[0] as string;
+        const sessionMembersKey = args[1] as string;
+        const leaderKey = args[2] as string;
+        const participantConnectionsKey = args[3] as string;
+        const connectionId = args[4] as string;
+
+        // Clear (not delete) the leaving connection's session fields, mirroring
+        // the real script's conditional HMSET.
+        if (hashes.has(connKey)) {
+          const cd = hashes.get(connKey)!;
+          cd.sessionId = '';
+          cd.participantId = '';
+          cd.isLeader = 'false';
+        }
+        const memberSet = sets.get(sessionMembersKey);
+        if (memberSet) memberSet.delete(connectionId);
+
+        if (store.get(leaderKey) !== connectionId) return null; // wasn't leader
+
+        // Same-participant preference (#2135 crit C): keep leadership with a
+        // sibling connection of the leaving participant when one remains.
+        const sameParticipantConns =
+          participantConnectionsKey && sets.get(participantConnectionsKey)
+            ? new Set(Array.from(sets.get(participantConnectionsKey)!))
+            : new Set<string>();
+        const candidates = (memberSet ? Array.from(memberSet) : [])
+          .filter((mid) => mid !== connectionId)
+          .map((mid) => ({ mid, at: connectedAtOf(mid) }))
+          .filter((candidate) => !Number.isNaN(candidate.at));
+        const preferred = candidates.filter((candidate) => sameParticipantConns.has(candidate.mid));
+        const pool = (preferred.length > 0 ? preferred : candidates).sort((a, b) => a.at - b.at);
+        if (pool.length === 0) {
+          store.delete(leaderKey);
+          return '';
+        }
+        const newLeaderId = pool[0].mid;
+        store.set(leaderKey, newLeaderId);
+        const newLeaderConn = hashes.get(`boardsesh:conn:${newLeaderId}`);
+        if (newLeaderConn) newLeaderConn.isLeader = 'true';
+        return newLeaderId;
+      }
+
       // numkeys=1 covers three scripts; dispatch on args.length:
       //   RELEASE_LOCK_SCRIPT: args.length === 2 (key, expectedValue)
       //   REFRESH_TTL_SCRIPT:  args.length === 3 (connKey, connTTL, sessionTTL)

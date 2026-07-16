@@ -333,7 +333,10 @@ export async function leaveSession(deps: RoomManagerDeps, connectionId: string):
   let newLeaderParticipantId: string | undefined;
 
   if (distributedState) {
-    const result = await distributedState.leaveSession(connectionId, sessionId);
+    // Pass participantId so leader re-election prefers a sibling connection of
+    // the same participant when this leader connection leaves but the
+    // participant stays (multi-tab) — #2135 crit C.
+    const result = await distributedState.leaveSession(connectionId, sessionId, participantId);
     if (result.newLeaderId) {
       newLeaderId = result.newLeaderId;
       // Populated when the leave went through the fallback election (which
@@ -393,13 +396,27 @@ export async function leaveSession(deps: RoomManagerDeps, connectionId: string):
 }
 
 /**
+ * New-leader payload handed to `onParticipantExpired` so the caller can
+ * broadcast a `LeaderChanged` alongside `UserLeft` when a grace-timer eviction
+ * removed a ghost that still held leadership (#2135 expiry leader election).
+ */
+export type ExpiredParticipantLeader = { leaderId: string; leaderConnectionId: string };
+
+/**
+ * Fired when the grace timer expires and the participant is confirmed gone.
+ * `newLeader` is set only when the evicted participant held leadership and a
+ * replacement was elected in the same atomic transition.
+ */
+type OnParticipantExpired = (sessionId: string, participantId: string, newLeader?: ExpiredParticipantLeader) => void;
+
+/**
  * Handle an unintentional WebSocket disconnect without treating the participant
  * as having explicitly left the session.
  */
 export async function disconnectClient(
   deps: RoomManagerDeps,
   connectionId: string,
-  onParticipantExpired?: (sessionId: string, participantId: string) => void,
+  onParticipantExpired?: OnParticipantExpired,
 ): Promise<SessionDisconnectResult | null> {
   const { clients, sessionParticipants, distributedState } = deps;
 
@@ -529,7 +546,12 @@ export async function disconnectClient(
   // contract and the Redis-failure conservatism comments, moved verbatim.
   const presenceUser = await beginParticipantGraceWindow(deps, sessionId, participant, onParticipantExpired);
 
-  return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
+  // `presenceUser` is null when a reconnect already promoted this participant
+  // back to CONNECTED on another connection during cleanup (#2135 crit D): no
+  // grace window was armed and no UserPresenceChanged is owed — the reconnect's
+  // own join emitted the CONNECTED state. Coerce to undefined so the WS-close
+  // handler's `result?.presenceUser` guard skips the broadcast.
+  return { sessionId, participantId, presenceUser: presenceUser ?? undefined, newLeaderId, newLeaderParticipantId };
 }
 
 /**
@@ -772,33 +794,48 @@ function electLocalLeaderFallback(
  * its own get-or-create lookup, and re-deriving here would just repeat that
  * map lookup for no benefit.
  *
- * ORDERING CONTRACT: sets `connectionState = 'RECONNECTING'` before the
- * presence broadcast so `markParticipantPresence`/the local fallback both
- * report the state peers should see during the grace window. Arms the
- * reconnect timer last, after clearing any pre-existing one, so a rapid
- * disconnect/reconnect/disconnect sequence never leaves two timers racing
- * for the same participant.
+ * ORDERING CONTRACT: the RECONNECTING mark is CONDITIONAL (#2135 crit D) —
+ * `markParticipantReconnectingIfIdle` skips the write (and returns 'has-live')
+ * when a reconnect already promoted this participant back to CONNECTED on
+ * another connection during cleanup, so a passive disconnect can't clobber the
+ * fresher state. In that case this returns `null`: no local state change, no
+ * timer armed, and the caller emits no UserPresenceChanged. Otherwise it sets
+ * `connectionState = 'RECONNECTING'` and arms the reconnect timer last, after
+ * clearing any pre-existing one, so a rapid disconnect/reconnect/disconnect
+ * sequence never leaves two timers racing for the same participant.
  */
 async function beginParticipantGraceWindow(
   deps: RoomManagerDeps,
   sessionId: string,
   participant: LocalSessionParticipant,
-  onParticipantExpired?: (sessionId: string, participantId: string) => void,
-): Promise<SessionUser> {
+  onParticipantExpired?: OnParticipantExpired,
+): Promise<SessionUser | null> {
   const { distributedState, sessionGracePeriodMs: SESSION_GRACE_PERIOD_MS } = deps;
   const participantId = participant.id;
 
-  participant.connectionState = 'RECONNECTING';
-  // markParticipantPresence returns null when the Redis participant hash has
-  // already expired (TTL elapsed before the disconnect cleanup ran). Fall
-  // back to the local participant snapshot so peers always see a
-  // UserPresenceChanged event during the grace window — without this
-  // fallback the only signal they'd get is the eventual UserLeft, with no
-  // RECONNECTING state in between.
-  const presenceUser =
-    (distributedState
-      ? await distributedState.markParticipantPresence(sessionId, participantId, 'RECONNECTING')
-      : localParticipantToSessionUser(participant)) || localParticipantToSessionUser(participant);
+  let presenceUser: SessionUser;
+  if (distributedState) {
+    const result = await distributedState.markParticipantReconnectingIfIdle(sessionId, participantId);
+    if (result.status === 'has-live') {
+      // A reconnect landed on another connection during this disconnect's
+      // cleanup — the participant is CONNECTED elsewhere. Don't park a ghost,
+      // don't arm a timer, don't emit a spurious RECONNECTING presence.
+      return null;
+    }
+    // Flip local state to RECONNECTING BEFORE building any fallback, so the
+    // local snapshot reports RECONNECTING (matching the pre-change behaviour).
+    participant.connectionState = 'RECONNECTING';
+    // 'reconnecting' carries the fresh Redis presence payload; 'missing' means
+    // the Redis participant hash was pruned (e.g. its TTL lapsed, or a
+    // concurrent roster read swept it as a zero-connection CONNECTED entry
+    // before we could mark it) — fall back to the local snapshot so peers still
+    // see a RECONNECTING event during the grace window (without it the only
+    // signal would be the eventual UserLeft).
+    presenceUser = result.status === 'reconnecting' ? result.user : localParticipantToSessionUser(participant);
+  } else {
+    participant.connectionState = 'RECONNECTING';
+    presenceUser = localParticipantToSessionUser(participant);
+  }
 
   if (participant.reconnectTimer) {
     clearTimeout(participant.reconnectTimer);
@@ -813,75 +850,69 @@ async function beginParticipantGraceWindow(
 /**
  * Timer body for `beginParticipantGraceWindow`: runs `SESSION_GRACE_PERIOD_MS`
  * after the timer was armed, unless a reconnect within the window cancelled
- * it first. Disambiguates "still reconnecting" from "ghost" and, if the
- * participant is a ghost, evicts them from both distributed and local state.
+ * it first. Decides "still reconnecting" vs. "ghost" and, if a ghost, evicts
+ * them from distributed and local state.
  *
  * ORIGINAL SOURCE (post-B4 numbering): `disconnectClient` lines 631-696 —
  * body of the reconnect-grace-window `setTimeout` callback.
  *
- * The Redis-error handling here is intentionally NOT the same "default to
- * conservative" pattern used elsewhere in this file. A failed
- * `getSessionMembers` previously returned `[]`, the participant looked
- * absent, and we expelled them — the exact opposite of what the grace
- * period is for. On infra failure, keep the participant alive and let the
- * next reconnect run the grace logic again.
+ * The distributed decision + removal is now ONE atomic Lua call
+ * (`evictGhostParticipant`, #2135 crit B): the prior code read the
+ * live-connection count OUTSIDE the delete, so a reconnect that added a live
+ * connection between the check and the unconditional `removeParticipant` was
+ * silently wiped (zombie connection + vanished participant). The script only
+ * evicts a participant STILL parked RECONNECTING with zero live connections,
+ * and — because the old delete never touched the leader key — re-elects a
+ * replacement in the same transition when the ghost held leadership, so peers
+ * don't miss a `LeaderChanged` (expiry leader election).
+ *
+ * The Redis-error handling here is intentionally NOT the "default to
+ * conservative" pattern used elsewhere in this file. On infra failure, keep the
+ * participant alive and let the next reconnect run the grace logic again —
+ * expelling a participant we can't verify is absent is the opposite of what the
+ * grace period is for.
  */
 async function evictParticipantIfGhost(
   deps: RoomManagerDeps,
   sessionId: string,
   participantId: string,
-  onParticipantExpired?: (sessionId: string, participantId: string) => void,
+  onParticipantExpired?: OnParticipantExpired,
 ): Promise<void> {
-  const { distributedState, sessionParticipants } = deps;
+  const { clients, distributedState, sessionParticipants } = deps;
+
+  // `didEvict` gates the UserLeft/LeaderChanged broadcast. Single-instance
+  // (no Redis) keeps the original behaviour: the local zero-connection gate
+  // below is the authority. Distributed mode narrows it to a genuine eviction.
+  let didEvict = true;
+  let expiredLeader: ExpiredParticipantLeader | undefined;
 
   if (distributedState) {
-    let users;
+    let result;
     try {
-      users = await distributedState.getSessionMembers(sessionId);
+      result = await distributedState.evictGhostParticipant(sessionId, participantId);
     } catch (err) {
       logger.error(
-        `[RoomManager] Grace timer failed to query session ${sessionId.slice(0, 8)} members; keeping participant ${participantId.slice(0, 8)} alive:`,
+        `[RoomManager] Grace timer failed to evaluate participant ${participantId.slice(0, 8)}; keeping them alive:`,
         err,
       );
       return;
     }
-    const currentUser = users.find((user) => user.id === participantId);
-    // The participant might be present in the user list as RECONNECTING
-    // with zero live connections — `getSessionParticipants` intentionally
-    // retains those entries so peers continue to see the RECONNECTING
-    // badge during the grace window. So "present in user list" alone
-    // does NOT mean "still reconnecting"; it could equally mean "ghost".
-    // Disambiguate by querying the actual live-connection count.
-    //
-    // - CONNECTED user → live conns > 0 → spare (active participant).
-    // - RECONNECTING + live conns > 0 → in-flight reconnect, spare.
-    // - RECONNECTING + 0 live conns → ghost, evict.
-    // - Not in user list at all → already cleaned up, fall through.
-    if (currentUser?.connectionState === 'CONNECTED') {
+
+    // Spared: a reconnect promoted them back to CONNECTED (has-live) or they
+    // were already CONNECTED (not-reconnecting). Leave local state as-is.
+    if (result.status === 'has-live' || result.status === 'not-reconnecting') {
       return;
     }
-    if (currentUser?.connectionState === 'RECONNECTING') {
-      let liveConnectionCount: number;
-      try {
-        liveConnectionCount = await distributedState.getParticipantLiveConnectionCount(sessionId, participantId);
-      } catch (err) {
-        // Same conservative behaviour as the getSessionMembers failure
-        // above: if Redis can't answer, don't expel; the next reconnect
-        // will run the grace logic again.
-        logger.error(
-          `[RoomManager] Grace timer failed to count live connections for participant ${participantId.slice(0, 8)}; keeping them alive:`,
-          err,
-        );
-        return;
-      }
-      if (liveConnectionCount > 0) {
-        return; // In-flight reconnect; let the rejoin promote them back to CONNECTED.
-      }
-      // Fall through to eviction: RECONNECTING with no live connections is a ghost.
+
+    // 'evicted' — we removed them (and possibly elected a leader). 'missing' —
+    // someone else already removed them, so no new broadcast is owed; just
+    // reconcile local state below.
+    didEvict = result.status === 'evicted';
+    if (result.status === 'evicted' && result.newLeaderId) {
+      const leaderConnectionId = result.newLeaderId;
+      const leaderParticipantId = await resolveLeaderParticipantId(leaderConnectionId, clients, distributedState);
+      expiredLeader = { leaderId: leaderParticipantId, leaderConnectionId };
     }
-    await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
-      logger.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
-    });
   }
 
   const currentParticipants = sessionParticipants.get(sessionId);
@@ -891,7 +922,9 @@ async function evictParticipantIfGhost(
     if (currentParticipants?.size === 0) {
       sessionParticipants.delete(sessionId);
     }
-    onParticipantExpired?.(sessionId, participantId);
+    if (didEvict) {
+      onParticipantExpired?.(sessionId, participantId, expiredLeader);
+    }
   }
 }
 

@@ -27,8 +27,12 @@ import {
   cleanupStaleSessionMembers,
   cleanupEmptySession,
   markParticipantPresence,
+  markParticipantReconnectingIfIdle,
+  evictGhostParticipant,
   removeParticipant,
   removeParticipantConnection,
+  type ReconnectingMarkResult,
+  type EvictGhostResult,
 } from './session-ops';
 import { logger } from '../../utils/logger';
 import {
@@ -159,12 +163,15 @@ export class DistributedStateManager {
     return joinSession(this.redis, connectionId, sessionId, username, avatarUrl, participantId);
   }
 
-  /** Leave a session. Handles leader election if leaving member was leader. */
+  /** Leave a session. Handles leader election if leaving member was leader.
+   *  `participantId` (when known) lets the election keep leadership with the
+   *  leaving participant if it still has a sibling connection (#2135 crit C). */
   async leaveSession(
     connectionId: string,
     sessionId: string,
+    participantId?: string | null,
   ): Promise<{ newLeaderId: string | null; newLeaderParticipantId?: string | null }> {
-    return leaveSession(this.redis, connectionId, sessionId);
+    return leaveSession(this.redis, connectionId, sessionId, participantId);
   }
 
   /** Get all members of a session as SessionUser objects. */
@@ -266,6 +273,26 @@ export class DistributedStateManager {
     connectionState: 'CONNECTED' | 'RECONNECTING',
   ): Promise<SessionUser | null> {
     return markParticipantPresence(this.redis, sessionId, participantId, connectionState);
+  }
+
+  /**
+   * Conditionally mark a participant RECONNECTING on passive disconnect — only
+   * when it has no live connection, so a reconnect that landed on another
+   * connection during cleanup isn't clobbered back to RECONNECTING (#2135 crit
+   * D). Returns whether the mark happened (`reconnecting`, with the presence
+   * payload), was skipped (`has-live`), or the participant was gone (`missing`).
+   */
+  async markParticipantReconnectingIfIdle(sessionId: string, participantId: string): Promise<ReconnectingMarkResult> {
+    return markParticipantReconnectingIfIdle(this.redis, sessionId, participantId);
+  }
+
+  /**
+   * Atomically evict a grace-window ghost — only when it is still RECONNECTING
+   * with zero live connections — and re-elect a leader in the same transition
+   * when the ghost held leadership (#2135 crit B + expiry leader election).
+   */
+  async evictGhostParticipant(sessionId: string, participantId: string): Promise<EvictGhostResult> {
+    return evictGhostParticipant(this.redis, sessionId, participantId);
   }
 
   /** Remove a stable participant from a session. */
