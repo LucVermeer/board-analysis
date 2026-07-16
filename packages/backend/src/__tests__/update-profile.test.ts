@@ -165,6 +165,24 @@ describe('updateProfile mutation', () => {
     expect(result.id).toBe('user-1');
   });
 
+  it('returns USER_NOT_FOUND (no SQL, no Sentry) when the user row is gone', async () => {
+    txState.selectRow = undefined; // authenticated user vanished mid-request
+
+    let thrown: unknown;
+    try {
+      await userMutations.updateProfile({}, { input: { displayName: 'Ghost' } }, makeAuthCtx());
+      throw new Error('expected updateProfile to reject');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(GraphQLError);
+    expect((thrown as GraphQLError).extensions?.code).toBe('USER_NOT_FOUND');
+    expect((thrown as GraphQLError).message).not.toMatch(/select|Failed query/i);
+    // An intentional client-safe error, not a DB failure — nothing to capture.
+    expect(sentryCaptureMock).not.toHaveBeenCalled();
+  });
+
   it('masks a transient DB failure and captures the real pg cause', async () => {
     const pgError = Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' });
     txState.failWith = wrapLikeDrizzle(pgError);
