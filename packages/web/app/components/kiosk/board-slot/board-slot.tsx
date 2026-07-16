@@ -34,8 +34,12 @@ export type BoardSlotProps = {
   initialClimbImageUrl: string | null;
   /** Raster URL for the bare board (idle placeholder). */
   bareBoardImageUrl: string;
-  /** The board's public slug (userBoards.slug) — the install-QR deep-link target. */
-  slug: string | null;
+  /**
+   * The board's public slug (userBoards.slug) — the install-QR deep-link target.
+   * Non-null to match GymKioskBoard.slug (`String!`); the truthy guard below is a
+   * belt-and-braces check against an empty slug, not a null one.
+   */
+  slug: string;
   /** Whether this kiosk shows the per-board install QR (kiosk layout toggle). */
   showInstallQr: boolean;
 };
@@ -72,7 +76,7 @@ export default function BoardSlot({
   return (
     <section className={styles.slot}>
       <div className={styles.art}>
-        {showInstallQr && slug !== null ? <BoardInstallQr slug={slug} /> : null}
+        {showInstallQr && slug ? <BoardInstallQr slug={slug} /> : null}
         {hasLiveData ? (
           <BoardRenderer boardDetails={boardDetails} litUpHoldsMap={litUpHoldsMap} mirrored={false} fillHeight />
         ) : (
