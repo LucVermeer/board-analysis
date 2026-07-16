@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Report a bug from the app and we'll turn it into a tracked issue, not a lost chat message. ([#3307](https://github.com/boardsesh/boardsesh/pull/3307))
+  Tick "Can we contact you?" and we'll email you the link so you can follow the fix.
 - Leave a recap when you end your session — how it went, what you almost sent. It shows on your session page. ([#3654](https://github.com/boardsesh/boardsesh/pull/3654))
   Skipped the recap? Add or edit it from the session summary afterwards.
 - Your gym's wall screen can now show a scannable code on every board — climbers scan it to get Boardsesh, and their sends light up the screen. ([#3656](https://github.com/boardsesh/boardsesh/pull/3656))
