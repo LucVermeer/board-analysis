@@ -79,6 +79,20 @@ describe('rankSessionClimbers', () => {
     expect(ranked[0].sendCount).toBe(1);
   });
 
+  it('does not count empty or whitespace climbUuid entries as distinct climbs', () => {
+    const history: BoardPresenceClimb[] = [
+      makeClimb({ seq: 1, climbUuid: 'climb-a', sentByUserId: 'user-1', sentByDisplayName: 'Climber One' }),
+      makeClimb({ seq: 2, climbUuid: '', sentByUserId: 'user-1', sentByDisplayName: 'Climber One' }),
+      makeClimb({ seq: 3, climbUuid: '   ', sentByUserId: 'user-1', sentByDisplayName: 'Climber One' }),
+      makeClimb({ seq: 4, climbUuid: 'climb-b', sentByUserId: 'user-1', sentByDisplayName: 'Climber One' }),
+    ];
+
+    const ranked = rankSessionClimbers(history, { now: NOW });
+
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0].sendCount).toBe(2);
+  });
+
   it('ranks by distinct-climb count descending', () => {
     const history: BoardPresenceClimb[] = [
       makeClimb({ seq: 1, climbUuid: 'climb-a', sentByUserId: 'user-1', sentByDisplayName: 'Low Sender' }),

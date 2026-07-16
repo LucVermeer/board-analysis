@@ -51,20 +51,22 @@ export function rankSessionClimbers(
 
     const key = userId ? `user:${userId}` : `name:${displayName}`;
     const existing = climbersByKey.get(key);
+    // Empty/whitespace climbUuid can't identify a distinct climb — never add it to the Set.
+    const hasClimbUuid = climb.climbUuid.trim().length > 0;
 
     if (!existing) {
       climbersByKey.set(key, {
         userId,
         displayName,
         avatarUrl: climb.sentByAvatarUrl ?? null,
-        distinctClimbUuids: new Set([climb.climbUuid]),
+        distinctClimbUuids: new Set(hasClimbUuid ? [climb.climbUuid] : []),
         lastSentAt: climb.sentAt,
         lastSentAtMs: sentAtMs,
       });
       continue;
     }
 
-    existing.distinctClimbUuids.add(climb.climbUuid);
+    if (hasClimbUuid) existing.distinctClimbUuids.add(climb.climbUuid);
     if (sentAtMs > existing.lastSentAtMs) {
       existing.lastSentAtMs = sentAtMs;
       existing.lastSentAt = climb.sentAt;
