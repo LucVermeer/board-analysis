@@ -7,6 +7,7 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import Box from '@mui/material/Box';
 import MuiTypography from '@mui/material/Typography';
+import MuiLink from '@mui/material/Link';
 import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import PeopleOutlined from '@mui/icons-material/PeopleOutlined';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';
@@ -14,6 +15,7 @@ import PersonOutlined from '@mui/icons-material/PersonOutlined';
 import type { Gym } from '@boardsesh/shared-schema';
 import { themeTokens } from '@/app/theme/theme-config';
 import StatItem from '@/app/components/ui/stat-item';
+import LocaleLink from '@/app/components/i18n/locale-link';
 
 type GymCardProps = {
   gym: Gym;
@@ -32,7 +34,11 @@ export default function GymCard({ gym, onClick }: GymCardProps) {
         transition: themeTokens.transitions.fast,
       }}
     >
-      <CardActionArea onClick={() => onClick?.(gym)} disabled={!onClick}>
+      {/* Rendered as a div (not the default <button>) so the crawlable gym-name
+          <a> can nest inside it without invalid interactive-in-button markup.
+          ButtonBase still adds role="button" + keyboard handling for the card
+          tap that opens the preview sheet. */}
+      <CardActionArea component="div" onClick={() => onClick?.(gym)} disabled={!onClick}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Box
             sx={{
@@ -43,18 +49,41 @@ export default function GymCard({ gym, onClick }: GymCardProps) {
             }}
           >
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <MuiTypography
-                variant="subtitle1"
-                sx={{
-                  fontWeight: themeTokens.typography.fontWeight.semibold,
-                  lineHeight: themeTokens.typography.lineHeight.tight,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {gym.name}
-              </MuiTypography>
+              {gym.slug ? (
+                <MuiLink
+                  component={LocaleLink}
+                  href={`/gym/${gym.slug}`}
+                  // Let the name link go to the full gym page without also
+                  // opening the card's preview sheet.
+                  onClick={(event: React.MouseEvent) => event.stopPropagation()}
+                  underline="hover"
+                  color="inherit"
+                  variant="subtitle1"
+                  sx={{
+                    display: 'block',
+                    fontWeight: themeTokens.typography.fontWeight.semibold,
+                    lineHeight: themeTokens.typography.lineHeight.tight,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {gym.name}
+                </MuiLink>
+              ) : (
+                <MuiTypography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: themeTokens.typography.fontWeight.semibold,
+                    lineHeight: themeTokens.typography.lineHeight.tight,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {gym.name}
+                </MuiTypography>
+              )}
               {gym.address && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                   <LocationOnOutlined sx={{ fontSize: 14, color: 'var(--neutral-400)' }} />

@@ -51,6 +51,7 @@ import { GYM_KIOSK_FLAG } from '@/app/flags';
 import EditGymForm from './edit-gym-form';
 import GymMemberManagement from './gym-member-management';
 import ClaimGymDialog from './claim-gym-dialog';
+import GymStatChip from './gym-stat-chip';
 import CommentSection from '@/app/components/social/comment-section';
 
 type GymDetailProps = {
@@ -166,9 +167,22 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
             }}
           >
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <MuiTypography variant="h5" sx={{ fontWeight: themeTokens.typography.fontWeight.bold }}>
-                {gym.name}
-              </MuiTypography>
+              {gym.slug ? (
+                <MuiLink
+                  component={LocaleLink}
+                  href={`/gym/${gym.slug}`}
+                  underline="hover"
+                  color="inherit"
+                  variant="h5"
+                  sx={{ display: 'block', fontWeight: themeTokens.typography.fontWeight.bold }}
+                >
+                  {gym.name}
+                </MuiLink>
+              ) : (
+                <MuiTypography variant="h5" sx={{ fontWeight: themeTokens.typography.fontWeight.bold }}>
+                  {gym.name}
+                </MuiTypography>
+              )}
               {gym.address && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                   <LocationOnOutlined sx={{ fontSize: 16, color: 'var(--neutral-400)' }} />
@@ -212,22 +226,22 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
 
           {/* Stats */}
           <Box sx={{ display: 'flex', gap: 2.5, mt: 2, flexWrap: 'wrap' }}>
-            <StatChip
+            <GymStatChip
               icon={<FitnessCenterOutlined sx={{ fontSize: 16 }} />}
               value={gym.boardCount}
               label={t('gymEntity.stats.boards')}
             />
-            <StatChip
+            <GymStatChip
               icon={<PersonOutlined sx={{ fontSize: 16 }} />}
               value={gym.memberCount}
               label={t('gymEntity.stats.members')}
             />
-            <StatChip
+            <GymStatChip
               icon={<PeopleOutlined sx={{ fontSize: 16 }} />}
               value={gym.followerCount}
               label={t('gymEntity.stats.followers')}
             />
-            <StatChip
+            <GymStatChip
               icon={<ChatBubbleOutlined sx={{ fontSize: 16 }} />}
               value={gym.commentCount}
               label={t('gymEntity.stats.comments')}
@@ -360,19 +374,5 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
         </DialogActions>
       </Dialog>
     </>
-  );
-}
-
-function StatChip({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ color: 'var(--neutral-400)', display: 'flex' }}>{icon}</Box>
-      <MuiTypography variant="body2" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold }}>
-        {value}
-      </MuiTypography>
-      <MuiTypography variant="body2" color="text.secondary">
-        {label}
-      </MuiTypography>
-    </Box>
   );
 }
