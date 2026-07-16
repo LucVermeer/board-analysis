@@ -114,7 +114,9 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   );
 
   const handleCreated = (kiosk: GymKioskOperationResult) => {
-    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) => (previous ? [...previous, kiosk] : [kiosk]));
+    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
+      previous ? [...previous, kiosk] : [kiosk],
+    );
     setCreateDialogOpen(false);
     showMessage(t('manage.createDialog.created', { slug: kiosk.slug }), 'success');
     // Straight into the editor — a fresh kiosk has no boards yet.
