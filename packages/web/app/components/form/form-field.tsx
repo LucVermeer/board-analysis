@@ -148,7 +148,8 @@ export function FormField({
           sx={{
             display: 'flex',
             alignItems: 'flex-start',
-            justifyContent: 'space-between',
+            // Counter-only rows right-align without a placeholder element.
+            justifyContent: helperContent != null ? 'space-between' : 'flex-end',
             gap: 1,
             mt: '4px',
           }}
@@ -157,9 +158,7 @@ export function FormField({
             <FormHelperText id={describedById} error={hasError} sx={{ m: 0 }}>
               {helperContent}
             </FormHelperText>
-          ) : (
-            <span />
-          )}
+          ) : null}
           {counter != null ? (
             <Typography
               variant="caption"
