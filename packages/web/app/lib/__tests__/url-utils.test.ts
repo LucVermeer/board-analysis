@@ -53,13 +53,13 @@ describe('searchParamsToUrlParams', () => {
       ...DEFAULT_SEARCH_PARAMS,
       minGrade: 5,
       name: 'test climb',
-      onlyClassics: true,
+      onlyBenchmarks: true,
     });
 
     const params = result.toString();
     expect(params).toContain('minGrade=5');
     expect(params).toContain('name=test+climb');
-    expect(params).toContain('onlyClassics=true');
+    expect(params).toContain('onlyBenchmarks=true');
   });
 
   it('should not include empty strings', () => {
@@ -205,10 +205,10 @@ describe('searchParamsToUrlParams', () => {
   it('should handle boolean values correctly', () => {
     const result = searchParamsToUrlParams({
       ...DEFAULT_SEARCH_PARAMS,
-      onlyClassics: true,
+      onlyBenchmarks: true,
     });
 
-    expect(result.toString()).toBe('onlyClassics=true');
+    expect(result.toString()).toBe('onlyBenchmarks=true');
   });
 
   it('should handle numeric zero values correctly', () => {
@@ -255,7 +255,7 @@ describe('searchParamsToUrlParams', () => {
       sortBy: undefined,
       sortOrder: undefined,
       name: undefined,
-      onlyClassics: undefined,
+      onlyBenchmarks: undefined,
       onlyTallClimbs: undefined,
       onlyWideClimbs: undefined,
       settername: undefined,
@@ -427,7 +427,7 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
       settername: ['john doe'],
       sortBy: 'difficulty' as SearchRequestPagination['sortBy'],
       sortOrder: 'asc' as SearchRequestPagination['sortOrder'],
-      onlyClassics: true,
+      onlyBenchmarks: true,
       holdsFilter: { 142: { ANY: 'include' as const } },
       zoneEdgeLeft: '10',
       zoneEdgeRight: '80',
@@ -442,7 +442,7 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
     expect(result.settername).toEqual(['john doe']);
     expect(result.sortBy).toBe('difficulty');
     expect(result.sortOrder).toBe('asc');
-    expect(result.onlyClassics).toBe(true);
+    expect(result.onlyBenchmarks).toBe(true);
     expect(result.holdsFilter).toEqual({ 142: { ANY: 'include' } });
     expect(result.zoneBox).toEqual({ edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 });
     expect(result.zoneMode).toBe('anyHold');
@@ -528,7 +528,7 @@ describe('urlParamsToSearchParams', () => {
       minGrade: '5',
       maxGrade: '10',
       name: 'test climb',
-      onlyClassics: 'true',
+      onlyBenchmarks: 'true',
       page: '2',
       hold_142: 'ANY:include',
       hold_205: 'STARTING:exclude,FOOT:include',
@@ -539,7 +539,7 @@ describe('urlParamsToSearchParams', () => {
     expect(result.minGrade).toBe(5);
     expect(result.maxGrade).toBe(10);
     expect(result.name).toBe('test climb');
-    expect(result.onlyClassics).toBe(true);
+    expect(result.onlyBenchmarks).toBe(true);
     expect(result.page).toBe(2);
     expect(result.holdsFilter).toEqual({
       142: { ANY: 'include' },

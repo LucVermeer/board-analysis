@@ -90,14 +90,14 @@ describe('AngleSelector', () => {
     // QueueContext writes filter state to the URL via history.replaceState,
     // which Next.js's useSearchParams() does not observe. The selector must
     // read window.location.search directly so filters aren't dropped.
-    window.history.replaceState({}, '', '/kilter/1/10/1,2/40/list?minGrade=10&onlyClassics=true');
+    window.history.replaceState({}, '', '/kilter/1/10/1,2/40/list?minGrade=10&onlyBenchmarks=true');
 
     render(<AngleSelector boardName="kilter" boardDetails={boardDetails} currentAngle={40} currentClimb={null} />);
 
     fireEvent.click(screen.getByRole('button', { name: /40/ }));
     fireEvent.click(screen.getByText('45°'));
 
-    expect(mockPush).toHaveBeenCalledWith('/kilter/1/10/1,2/45/list?minGrade=10&onlyClassics=true');
+    expect(mockPush).toHaveBeenCalledWith('/kilter/1/10/1,2/45/list?minGrade=10&onlyBenchmarks=true');
   });
 
   it('delegates to onAngleChange prop and skips URL navigation when provided', () => {

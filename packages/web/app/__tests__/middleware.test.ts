@@ -158,7 +158,7 @@ describe('hasUserSpecificFilters', () => {
     sortBy: 'ascents' as const,
     sortOrder: 'desc' as const,
     name: '',
-    onlyClassics: false,
+    onlyBenchmarks: false,
     onlyTallClimbs: false,
     onlyWideClimbs: false,
     onlyWithBetaVideos: false,

@@ -94,7 +94,7 @@ const mockSearchParams: SearchRequestPagination = {
   sortBy: 'quality',
   sortOrder: 'desc',
   name: '',
-  onlyClassics: false,
+  onlyBenchmarks: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
   onlyWithBetaVideos: false,
@@ -422,6 +422,35 @@ describe('useQueueDataFetching', () => {
 
       expect(requestInputs.length).toBeGreaterThan(0);
       expect(requestInputs.every((input) => input.onlyWideClimbs === true)).toBe(true);
+    });
+  });
+
+  it('passes onlyBenchmarks filter to GraphQL inputs when active', async () => {
+    const searchParamsWithBenchmarks = {
+      ...mockSearchParams,
+      onlyBenchmarks: true,
+    };
+
+    renderHook(
+      () =>
+        useQueueDataFetching({
+          searchParams: searchParamsWithBenchmarks,
+          countSearchParams: searchParamsWithBenchmarks,
+          queue: mockQueue,
+          parsedParams: mockParsedParams,
+          hasDoneFirstFetch: false,
+          setHasDoneFirstFetch: mockSetHasDoneFirstFetch,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      const requestInputs = mockGraphQLRequest.mock.calls
+        .map((call) => (call[1] as { input?: { onlyBenchmarks?: boolean } } | undefined)?.input)
+        .filter((input): input is { onlyBenchmarks?: boolean } => input !== undefined);
+
+      expect(requestInputs.length).toBeGreaterThan(0);
+      expect(requestInputs.every((input) => input.onlyBenchmarks === true)).toBe(true);
     });
   });
 

@@ -157,7 +157,7 @@ describe('BoardSessionBridge — SessionBoardPathChanged echo suppression', () =
   });
 
   it('preserves the receiver-side query string when replacing the URL', () => {
-    window.history.replaceState({}, '', '/kilter/8/25/28,29,26,27/40/list?minGrade=10&onlyClassics=true');
+    window.history.replaceState({}, '', '/kilter/8/25/28,29,26,27/40/list?minGrade=10&onlyBenchmarks=true');
     renderBridge();
 
     emit({
@@ -166,7 +166,7 @@ describe('BoardSessionBridge — SessionBoardPathChanged echo suppression', () =
       changedByParticipantId: 'someone-else',
     });
 
-    expect(mockReplace).toHaveBeenCalledWith('/kilter/8/25/28,29,26,27/35/list?minGrade=10&onlyClassics=true');
+    expect(mockReplace).toHaveBeenCalledWith('/kilter/8/25/28,29,26,27/35/list?minGrade=10&onlyBenchmarks=true');
   });
 
   it('ignores events for other types (WallDisconnected, UserJoined, etc.)', () => {

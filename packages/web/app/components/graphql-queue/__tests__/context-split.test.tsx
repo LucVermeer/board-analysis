@@ -128,7 +128,7 @@ function makeSearchParams(overrides: Partial<SearchRequestPagination> = {}): Sea
     sortBy: 'popular',
     sortOrder: 'desc',
     name: '',
-    onlyClassics: false,
+    onlyBenchmarks: false,
     onlyTallClimbs: false,
     onlyWideClimbs: false,
     onlyWithBetaVideos: false,

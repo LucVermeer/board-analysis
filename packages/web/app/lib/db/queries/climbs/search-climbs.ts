@@ -82,7 +82,10 @@ function _getCachedFn(boardName: BoardName, revalidate: number): CachedClimbSear
     // Bumped when search result content changes; keep in lockstep with the backend
     // Redis CACHE_VERSION. v4: hold LIKE / minRating / popular NULL / ILIKE / zone.
     // v5: stars now maps quality_average 1-5 to 0-5 (was the saturating 0-15 scale).
-    fn = unstable_cache(_executeClimbSearch, [`climb-search-v5:${boardName}`], {
+    // v6: onlyBenchmarks now included in buildClimbSearchParamsJson (was previously
+    // omitted entirely, so the SSR path never forwarded it — see issue #2320). The key
+    // rotates naturally since the JSON payload gains a field, but bumping documents intent.
+    fn = unstable_cache(_executeClimbSearch, [`climb-search-v6:${boardName}`], {
       revalidate,
       tags: ['climb-search', getBoardClimbSearchTag(boardName)],
     });
@@ -108,6 +111,7 @@ export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination
       ...(searchParams.sortSeed ? { sortSeed: searchParams.sortSeed } : {}),
       name: searchParams.name,
       settername: searchParams.settername,
+      onlyBenchmarks: searchParams.onlyBenchmarks,
       onlyTallClimbs: searchParams.onlyTallClimbs,
       onlyWideClimbs: searchParams.onlyWideClimbs,
       onlyWithBetaVideos: searchParams.onlyWithBetaVideos,

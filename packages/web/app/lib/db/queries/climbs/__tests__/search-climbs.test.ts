@@ -61,4 +61,17 @@ describe('buildClimbSearchParamsJson', () => {
 
     expect(params.onlyWideClimbs).toBe(true);
   });
+
+  it('includes onlyBenchmarks in the cache params, producing a distinct key from the default', () => {
+    // Regression guard for #2320: the SSR cache key previously never keyed on
+    // onlyClassics/onlyBenchmarks at all, which was harmless only because the DB layer
+    // ignored the filter too. Now that the filter is wired through, an identical key for
+    // both states would mean toggling it can return a stale cached result for the other
+    // state — assert the two states hash to different cache arguments.
+    const withBenchmarks = buildClimbSearchParamsJson(makeSearchParams({ onlyBenchmarks: true }));
+    const withoutBenchmarks = buildClimbSearchParamsJson(makeSearchParams({ onlyBenchmarks: false }));
+
+    expect(withBenchmarks).not.toBe(withoutBenchmarks);
+    expect(JSON.parse(withBenchmarks)).toMatchObject({ onlyBenchmarks: true });
+  });
 });

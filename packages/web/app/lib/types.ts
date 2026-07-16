@@ -131,7 +131,7 @@ export type SearchRequest = {
   // across paginated fetches (see newSortSeed / md5(uuid || seed) in the DB query).
   sortSeed?: string;
   name: string;
-  onlyClassics: boolean;
+  onlyBenchmarks: boolean;
   onlyTallClimbs: boolean;
   onlyWideClimbs: boolean;
   onlyWithBetaVideos: boolean;
