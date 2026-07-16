@@ -60,4 +60,16 @@ describe('grade-format-preference', () => {
     await setGradeDisplayFormatPreference('font');
     await expect(loadGradeDisplayFormat()).resolves.toBe('font');
   });
+
+  it('falls back to the default (and does not throw) when the storage read fails (#3610)', async () => {
+    // getPreference swallows a locked-storage read (returns null), so the load
+    // resolves to the default instead of floating an unhandled AsyncStorage rejection.
+    const asyncStorage = (await import('@react-native-async-storage/async-storage')).default as unknown as {
+      getItem: { mockRejectedValueOnce: (error: Error) => void };
+    };
+    asyncStorage.getItem.mockRejectedValueOnce(new Error('Failed to get values for keys'));
+
+    const { loadGradeDisplayFormat } = await import('../grade-format-preference');
+    await expect(loadGradeDisplayFormat()).resolves.toBe('v-grade');
+  });
 });

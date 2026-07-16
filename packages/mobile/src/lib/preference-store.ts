@@ -13,10 +13,21 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/** Read a JSON-serialized preference. Returns null when the key is missing
- *  or the stored payload fails to parse. */
+/** Read a JSON-serialized preference. Returns null when the key is missing, the
+ *  stored payload fails to parse, or the store itself can't be read. */
 export async function getPreference<T>(key: string): Promise<T | null> {
-  const raw = await AsyncStorage.getItem(key);
+  let raw: string | null;
+  try {
+    raw = await AsyncStorage.getItem(key);
+  } catch {
+    // AsyncStorage.getItem can REJECT (not just resolve null) when the OS denies
+    // the read — iOS denies the backing-file read on a background launch before
+    // first unlock ("Failed to get values for keys"). Treat an unreadable store as
+    // "no value" so a locked read falls back to the caller's default instead of
+    // floating an unhandled rejection into error tracking (#3610). Single
+    // chokepoint: every preference consumer is protected without its own catch.
+    return null;
+  }
   if (raw === null) return null;
   try {
     return JSON.parse(raw) as T;

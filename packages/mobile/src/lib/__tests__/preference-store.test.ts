@@ -58,6 +58,18 @@ describe('preference-store', () => {
     await expect(getPreference('corrupt')).resolves.toBeNull();
   });
 
+  it('returns null when AsyncStorage.getItem rejects (locked storage) instead of floating the rejection', async () => {
+    // iOS denies the backing-file read on a background launch before first unlock
+    // ("Failed to get values for keys"); the read rejects rather than returning null.
+    const asyncStorage = (await import('@react-native-async-storage/async-storage')).default as unknown as {
+      getItem: { mockRejectedValueOnce: (error: Error) => void };
+    };
+    asyncStorage.getItem.mockRejectedValueOnce(new Error('Failed to get values for keys'));
+
+    const { getPreference } = await import('../preference-store');
+    await expect(getPreference('locked')).resolves.toBeNull();
+  });
+
   it('removePreference deletes the key', async () => {
     const { getPreference, setPreference, removePreference } = await import('../preference-store');
     await setPreference('k', 1);
