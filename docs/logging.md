@@ -61,9 +61,16 @@ Two rules to remember when adding an `error` log:
 - **Pass the underlying `Error` as the trailing arg.** `logger.error('Auth check failed:', err)` reaches Sentry. `logger.error('Auth check failed')` does not — message-only error logs are intentionally skipped to keep Sentry quiet, since most are operational status lines. Wrap raw strings in `new Error(...)` if you want them captured.
 - **`logger.warn` is never forwarded.** Use `logger.error` (with an `Error`) for events that should page; keep `logger.warn` for noisy operational lines (origin rejections, retry counters, etc.).
 
-The transport itself is gated to `NODE_ENV === 'production'`, matching the `Sentry.init({ enabled: isProduction })` gate in `instrument.ts`, so dev and test runs do not emit Sentry events even when an `Error` is attached.
+The transport is gated to prod-like environments (`!isLocalDevelopment() && !isTestEnvironment()`, from `@boardsesh/db/client/config`), matching the same gate on `Sentry.init({ enabled })` in `instrument.ts`, so dev and test runs do not emit Sentry events even when an `Error` is attached. This is deliberately **not** a bare `NODE_ENV === 'production'` check: the Railway backend deploy leaves `NODE_ENV` unset, so the old equality gate silently disabled Sentry in production (issues #3603 / #3183).
 
 Specialised error paths still call `Sentry.captureException` directly (`graphql/yoga.ts`, `websocket/setup.ts`, `handlers/sync.ts`, `index.ts`) — those exist to attach finer-grained tags or filter out noisy client-input `GraphQLError`s before capture. The winston transport is the default; direct capture is the exception.
+
+### Dedup and DB-error masking
+
+Two small helpers keep the direct-capture paths from double-reporting and from leaking SQL:
+
+- **`utils/sentry-dedupe.ts`** — a resolver that captures a failure itself (e.g. `updateProfile`, `createSession`) calls `markErrorReported(err)`; the generic `graphql/yoga.ts` handler checks `wasErrorReported(err)` (which also inspects a `GraphQLError`'s `originalError`) and skips its own capture, so one failure yields one Sentry event. If you see a backend error reported exactly once with rich tags, that's this marker at work.
+- **`graphql/mask-error.ts`** — in prod-like environments `graphql/yoga.ts` installs a targeted `maskError`. It sanitizes **only** raw database errors (drizzle's `Failed query: …` wrapper, or anything with a PostgresError code on its cause chain) into a generic `GraphQLError`, captures the real cause to Sentry (deduped as above), and passes every other error through unchanged. Global masking stays off so intentional `throw new Error(message)` resolver copy still reaches clients.
 
 ## Out of scope
 

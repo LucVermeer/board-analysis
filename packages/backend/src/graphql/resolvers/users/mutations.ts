@@ -132,8 +132,10 @@ export const userMutations = {
       const clientSafeError = new GraphQLError('Could not save your profile. Please try again.', {
         extensions: { code: 'PROFILE_UPDATE_FAILED' },
       });
-      // Dedupe: the generic graphql-yoga error handler skips errors already
-      // reported here, so this failure yields a single Sentry event.
+      // Defensive dedupe: we've already captured above, so mark the thrown
+      // error reported. The targeted maskError leaves this clean GraphQLError
+      // untouched (not a DB-leak), so no other capture path fires for it today
+      // — but if one ever logs it, `wasErrorReported` keeps it to one event.
       markErrorReported(clientSafeError);
       throw clientSafeError;
     }

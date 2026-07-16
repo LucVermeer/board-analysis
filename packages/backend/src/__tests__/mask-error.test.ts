@@ -72,7 +72,10 @@ describe('maskDatabaseError', () => {
     expect(wasErrorReported(located)).toBe(true);
   });
 
-  it('does not re-capture an error already reported by a resolver catch', () => {
+  it('does not re-capture an error already marked reported (idempotent / prior capture)', () => {
+    // Guards the mask's own idempotency: if the same error passes through
+    // maskError twice (envelop plugin + handleError), or a resolver already
+    // captured and marked the raw DB error, the second pass must not re-report.
     const drizzle = makeDrizzleError(makePgError('57014'));
     markErrorReported(drizzle);
 
