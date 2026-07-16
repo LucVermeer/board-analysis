@@ -187,6 +187,18 @@ export const SearchGymsInputSchema = z.object({
 });
 
 /**
+ * Find similar gyms input validation schema. Powers the "is this gym already on
+ * Boardsesh?" dedup suggestions surfaced during gym creation. Coordinates are
+ * optional — with them the resolver adds proximity tiers, without them it falls
+ * back to name-only matching.
+ */
+export const FindSimilarGymsInputSchema = z.object({
+  name: z.string().min(1, 'Gym name cannot be empty').max(100, 'Gym name too long'),
+  latitude: LatitudeSchema.optional(),
+  longitude: LongitudeSchema.optional(),
+});
+
+/**
  * Gym members input validation schema
  */
 export const GymMembersInputSchema = z.object({

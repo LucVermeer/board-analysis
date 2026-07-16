@@ -71,6 +71,28 @@ export type GymMemberConnection = {
   hasMore: boolean;
 };
 
+export type GymOwnerType = 'SYSTEM' | 'USER';
+
+export type SimilarGym = {
+  uuid: string;
+  slug?: string | null;
+  name: string;
+  address?: string | null;
+  website?: string | null;
+  /** Distance in metres from the supplied coordinates; null when no coordinates were given. */
+  distanceMeters?: number | null;
+  ownerType: GymOwnerType;
+  isClaimable: boolean;
+  /** Upstream provider origins for a synced gym (e.g. "kilter"); empty for user-created gyms. */
+  providerOrigins: string[];
+};
+
+export type FindSimilarGymsInput = {
+  name: string;
+  latitude?: number;
+  longitude?: number;
+};
+
 export type CreateGymInput = {
   name: string;
   description?: string;

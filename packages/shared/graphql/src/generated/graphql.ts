@@ -1579,6 +1579,20 @@ export type FeedbackContextInput = {
   userAgent?: InputMaybe<Scalars['String']['input']>;
 };
 
+/**
+ * Input for finding gyms that resemble one the user is about to create (dedup
+ * suggestions). Coordinates are optional — with them the match adds proximity
+ * tiers; without them it falls back to name-only matching.
+ */
+export type FindSimilarGymsInput = {
+  /** Optional latitude for proximity matching. */
+  latitude?: InputMaybe<Scalars['Float']['input']>;
+  /** Optional longitude for proximity matching. */
+  longitude?: InputMaybe<Scalars['Float']['input']>;
+  /** Proposed gym name to match against existing gyms. */
+  name: Scalars['String']['input'];
+};
+
 /** Input for following/unfollowing a board. */
 export type FollowBoardInput = {
   /** Board UUID */
@@ -2287,6 +2301,13 @@ export type GymMembersInput = {
   /** Offset for pagination */
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
+
+/** Where a gym came from: an upstream provider sync or a Boardsesh user. */
+export type GymOwnerType =
+  /** System-synced from an upstream board provider (Boardsesh catalog). */
+  | 'SYSTEM'
+  /** Created by a Boardsesh user. */
+  | 'USER';
 
 /**
  * A gym owner's activity snapshot for the current window and the window
@@ -4194,6 +4215,14 @@ export type Query = {
    * Returns array of favorited climb UUIDs.
    */
   favorites: Array<Scalars['String']['output']>;
+  /**
+   * Live gyms that resemble one the user is about to create, so they can view or
+   * claim an existing gym instead of making a duplicate. Authenticated + rate
+   * limited. Matches by exact normalized name within 5 km, any name within 150 m,
+   * or substring name similarity within 1 km; coordinates optional. Nearest first,
+   * capped at five.
+   */
+  findSimilarGyms: Array<SimilarGym>;
   /** Get followers of a user. */
   followers: FollowConnection;
   /** Get users that a user is following. */
@@ -4741,6 +4770,11 @@ export type QueryFavoritesArgs = {
   angle: Scalars['Int']['input'];
   boardName: Scalars['String']['input'];
   climbUuids: Array<Scalars['String']['input']>;
+};
+
+/** Root query type for all read operations. */
+export type QueryFindSimilarGymsArgs = {
+  input: FindSimilarGymsInput;
 };
 
 /** Root query type for all read operations. */
@@ -6282,6 +6316,32 @@ export type SimilarClimbsInput = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   /** Jaccard threshold (0..1). Returns climbs at or above this similarity. */
   threshold?: InputMaybe<Scalars['Float']['input']>;
+};
+
+/**
+ * A live gym that resembles one the user is about to create — surfaced so they
+ * can view or claim it instead of making a duplicate.
+ */
+export type SimilarGym = {
+  __typename?: 'SimilarGym';
+  /** Physical address */
+  address?: Maybe<Scalars['String']['output']>;
+  /** Distance in metres from the supplied coordinates; null when no coordinates were given. */
+  distanceMeters?: Maybe<Scalars['Float']['output']>;
+  /** Whether the current viewer can start an ownership claim for this gym. */
+  isClaimable: Scalars['Boolean']['output'];
+  /** Gym name */
+  name: Scalars['String']['output'];
+  /** Whether this gym came from an upstream provider sync (SYSTEM) or a user (USER). */
+  ownerType: GymOwnerType;
+  /** Upstream provider origins for a synced gym (e.g. "kilter", "tension"), from source-key prefixes. Empty for user-created gyms. */
+  providerOrigins: Array<Scalars['String']['output']>;
+  /** URL slug for this gym */
+  slug?: Maybe<Scalars['String']['output']>;
+  /** Unique identifier */
+  uuid: Scalars['ID']['output'];
+  /** Website URL (used for domain-verified ownership claims) */
+  website?: Maybe<Scalars['String']['output']>;
 };
 
 /** Climb count for a single smart playlist type (used to render library cards). */

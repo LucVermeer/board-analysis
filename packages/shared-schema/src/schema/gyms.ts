@@ -114,6 +114,39 @@ export const gymsTypeDefs = /* GraphQL */ `
     hasMore: Boolean!
   }
 
+  "Where a gym came from: an upstream provider sync or a Boardsesh user."
+  enum GymOwnerType {
+    "System-synced from an upstream board provider (Boardsesh catalog)."
+    SYSTEM
+    "Created by a Boardsesh user."
+    USER
+  }
+
+  """
+  A live gym that resembles one the user is about to create — surfaced so they
+  can view or claim it instead of making a duplicate.
+  """
+  type SimilarGym {
+    "Unique identifier"
+    uuid: ID!
+    "URL slug for this gym"
+    slug: String
+    "Gym name"
+    name: String!
+    "Physical address"
+    address: String
+    "Website URL (used for domain-verified ownership claims)"
+    website: String
+    "Distance in metres from the supplied coordinates; null when no coordinates were given."
+    distanceMeters: Float
+    "Whether this gym came from an upstream provider sync (SYSTEM) or a user (USER)."
+    ownerType: GymOwnerType!
+    "Whether the current viewer can start an ownership claim for this gym."
+    isClaimable: Boolean!
+    "Upstream provider origins for a synced gym (e.g. \\"kilter\\", \\"tension\\"), from source-key prefixes. Empty for user-created gyms."
+    providerOrigins: [String!]!
+  }
+
   """
   A member of a gym.
   """
@@ -274,6 +307,20 @@ export const gymsTypeDefs = /* GraphQL */ `
     limit: Int
     "Offset for pagination"
     offset: Int
+  }
+
+  """
+  Input for finding gyms that resemble one the user is about to create (dedup
+  suggestions). Coordinates are optional — with them the match adds proximity
+  tiers; without them it falls back to name-only matching.
+  """
+  input FindSimilarGymsInput {
+    "Proposed gym name to match against existing gyms."
+    name: String!
+    "Optional latitude for proximity matching."
+    latitude: Float
+    "Optional longitude for proximity matching."
+    longitude: Float
   }
 
   """

@@ -21,6 +21,8 @@ import {
   UUIDSchema,
 } from '../../../validation/schemas';
 import { generateUniqueGymSlug, userCanEditGym } from './gyms';
+import { findExactNameMatchesWithin, decideAutoGymAttachment, AUTO_GYM_MATCH_RADIUS_METERS } from './gym-matching';
+import { isGenericGymName } from '@boardsesh/db/queries';
 import { getUserCommunityRoles, hasAdminOrLeader, rolesGrantAdminOrLeader } from './roles';
 import { SYSTEM_BOARD_OWNER_ID, requireAnonReadableBoard } from '../board-presence/shared';
 import { logger } from '../../../utils/logger';
@@ -1635,6 +1637,44 @@ export const socialBoardMutations = {
         .limit(1);
 
       if (!existingGym) {
+        const gymName = validatedInput.locationName || validatedInput.name;
+
+        // Dedup guard: before minting a fresh gym for the user's first board,
+        // look for a live gym of ANY owner at these exact coordinates + name
+        // (mirrors findSimilarGyms's physical-proximity tier). A SYSTEM-synced
+        // gym or one the user already owns is attached instead of duplicated —
+        // UNLESS the name is generic (home wall / garage / bare board brands),
+        // which collides across unrelated walls. Another user's gym, or a generic
+        // match, is left alone (mint a fresh gym as before) but logged so the
+        // admin dedup queue gets a signal.
+        if (validatedInput.latitude != null && validatedInput.longitude != null) {
+          const physicalMatches = await findExactNameMatchesWithin({
+            name: gymName,
+            latitude: validatedInput.latitude,
+            longitude: validatedInput.longitude,
+            radiusMeters: AUTO_GYM_MATCH_RADIUS_METERS,
+          });
+          const nearest = physicalMatches[0];
+          const decision = decideAutoGymAttachment(nearest, userId);
+          if (decision.action === 'attach') {
+            // Fall through to the normal board insert below, which links `gymId`.
+            gymId = decision.gymId;
+          } else if (nearest) {
+            logger.warn('createBoard auto-gym: nearby name match not auto-attached; minting a separate gym', {
+              userId,
+              gymName,
+              matchedGymId: nearest.id,
+              matchedGymUuid: nearest.uuid,
+              matchedOwnerId: nearest.ownerId,
+              matchedOwnerIsSystem: nearest.ownerId === SYSTEM_BOARD_OWNER_ID,
+              genericName: isGenericGymName(nearest.name),
+              distanceMeters: Math.round(nearest.distanceMeters ?? 0),
+            });
+          }
+        }
+      }
+
+      if (!existingGym && gymId === null) {
         // Auto-create a gym for the user. If this fails, fall through
         // and create the board without a gym link rather than failing entirely.
         try {
@@ -1741,11 +1781,22 @@ export const socialBoardMutations = {
       throw error;
     }
 
-    // Populate PostGIS location column if lat/lon provided
+    // Populate the PostGIS location column if lat/lon provided. This is a
+    // denormalization used by proximity search — a failure here (e.g. PostGIS not
+    // installed) must not fail an otherwise-created board; log and continue, the
+    // column can be backfilled. Mirrors the auto-gym mint path, which already
+    // tolerates a location-write failure by falling through.
     if (validatedInput.latitude != null && validatedInput.longitude != null) {
-      await db.execute(
-        sql`UPDATE user_boards SET location = ST_MakePoint(${validatedInput.longitude}, ${validatedInput.latitude})::geography WHERE id = ${board.id}`,
-      );
+      try {
+        await db.execute(
+          sql`UPDATE user_boards SET location = ST_MakePoint(${validatedInput.longitude}, ${validatedInput.latitude})::geography WHERE id = ${board.id}`,
+        );
+      } catch (error) {
+        logger.warn('createBoard: failed to set board location geography; leaving it null', {
+          boardId: board.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     return enrichBoard(board, userId);

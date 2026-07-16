@@ -9,6 +9,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import MuiButton from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import MuiTypography from '@mui/material/Typography';
+import MapLocationPicker from '@/app/components/board-entity/map-location-picker';
 
 export type GymFormFieldValues = {
   name: string;
@@ -19,6 +20,14 @@ export type GymFormFieldValues = {
   contactEmail: string;
   contactPhone: string;
   isPublic: boolean;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+export type GymFormLocationValues = {
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 type GymFormProps = {
@@ -28,6 +37,12 @@ type GymFormProps = {
   showSlugField?: boolean;
   onSubmit: (values: GymFormFieldValues) => Promise<void>;
   onCancel?: () => void;
+  /**
+   * Optional slot rendered just above the action buttons, fed the live name +
+   * coordinates. The create flow uses it to surface "this gym might already
+   * exist" dedup suggestions.
+   */
+  renderSuggestions?: (values: GymFormLocationValues) => React.ReactNode;
 };
 
 export default function GymForm({
@@ -37,6 +52,7 @@ export default function GymForm({
   showSlugField = false,
   onSubmit,
   onCancel,
+  renderSuggestions,
 }: GymFormProps) {
   const { t } = useTranslation('boards');
   const [name, setName] = useState(initialValues.name);
@@ -47,6 +63,8 @@ export default function GymForm({
   const [contactEmail, setContactEmail] = useState(initialValues.contactEmail);
   const [contactPhone, setContactPhone] = useState(initialValues.contactPhone);
   const [isPublic, setIsPublic] = useState(initialValues.isPublic);
+  const [latitude, setLatitude] = useState<number | null>(initialValues.latitude);
+  const [longitude, setLongitude] = useState<number | null>(initialValues.longitude);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,6 +81,8 @@ export default function GymForm({
         contactEmail: contactEmail.trim(),
         contactPhone: contactPhone.trim(),
         isPublic,
+        latitude,
+        longitude,
       });
     } finally {
       setIsSubmitting(false);
@@ -116,6 +136,15 @@ export default function GymForm({
         placeholder={t('gymForm.placeholders.address')}
       />
 
+      <MapLocationPicker
+        latitude={latitude}
+        longitude={longitude}
+        onChange={(lat, lng) => {
+          setLatitude(lat);
+          setLongitude(lng);
+        }}
+      />
+
       <TextField
         label={t('gymForm.fields.website')}
         value={website}
@@ -151,6 +180,8 @@ export default function GymForm({
         control={<Switch checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />}
         label={t('gymForm.fields.isPublic')}
       />
+
+      {renderSuggestions?.({ name: name.trim(), latitude, longitude })}
 
       <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 1 }}>
         {onCancel && (
