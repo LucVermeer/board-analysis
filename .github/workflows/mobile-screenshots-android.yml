@@ -56,6 +56,13 @@ permissions:
 
 jobs:
   android:
+    # Gate the crown-jewel secret (OTA_PUSH_APP_PRIVATE_KEY — a GitHub App key on
+    # main's PR-bypass allowlist) behind the Production environment, whose main-only
+    # branch policy fences it off from a pushed branch. Only a commit_to_main
+    # dispatch mints/uses the token, so cron and capture-only runs resolve to '' (no
+    # environment) and never wait on a future required reviewer — see the
+    # conditional-vs-bare note at android-apk-rn.yml (gate job).
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.commit_to_main) && 'Production' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
 
@@ -101,7 +108,9 @@ jobs:
       # commit.
       - name: Mint push token
         id: push_token
-        if: vars.OTA_PUSH_APP_ID != ''
+        # Only a commit_to_main dispatch pushes back, so only it needs the app
+        # token — the COMMIT_RUN guard keeps the nightly cron from minting it.
+        if: env.COMMIT_RUN == 'true' && vars.OTA_PUSH_APP_ID != ''
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ vars.OTA_PUSH_APP_ID }}

@@ -345,6 +345,13 @@ jobs:
     # Run even if a capture shard failed, so the dimension gate still reports the
     # gap (a missing locale fails it loudly rather than uploading a partial set).
     if: ${{ always() }}
+    # Gate the App Store Connect secrets behind the Production environment — its
+    # main-only branch policy fences them off from anyone who can push a branch and
+    # workflow_dispatch it. The APP_STORE_CONNECT_* secrets are only referenced in
+    # the `UPLOAD_RUN == 'true'` steps, so cron and capture-only runs resolve to ''
+    # (no environment) and never wait on a future required reviewer — see the
+    # conditional-vs-bare note at android-apk-rn.yml (gate job).
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.upload) && 'Production' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
