@@ -23,6 +23,7 @@ import { getLocale } from './lib/i18n/get-locale';
 import { getServerTranslation } from './lib/i18n/server';
 import { LOCALE_HTML_LANG, LOCALE_OG } from './lib/i18n/config';
 import { SITE_URL } from './lib/seo/base-url';
+import { THEME_INIT_SCRIPT } from './theme/theme-init-script';
 import './components/index.css';
 import type { Viewport, Metadata } from 'next';
 
@@ -70,6 +71,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang={LOCALE_HTML_LANG[locale]} data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Runs before first paint to correct data-theme from the saved
+            preference (or OS setting for new visitors), so light-theme users
+            don't get a dark flash. data-theme="dark" above is the SSR default;
+            suppressHydrationWarning on <html> covers the attribute swap. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body suppressHydrationWarning>
         <VercelAnalytics />
         <Suspense fallback={null}>

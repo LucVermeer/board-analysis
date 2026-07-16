@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useEffect, useState } from 'react';
+import { THEME_INIT_SCRIPT } from './theme/theme-init-script';
 
 // This is a Next.js root error boundary that renders when the root layout
 // itself fails. It lives outside the normal provider tree, so we can't rely
@@ -50,6 +51,11 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
 
   return (
     <html lang={copy.htmlLang} data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Same pre-paint theme correction as the root layout — this boundary
+            renders its own document, outside the provider tree. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body
         style={{
           margin: 0,
