@@ -422,9 +422,12 @@ input:-webkit-autofill:focus {
   caret-color: var(--input-text);
 }
 
+/* Firefox path — the -webkit-* properties above are inert there; standard
+   properties carry the same repaint. WebKit matches this too, harmlessly. */
 input:autofill {
-  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset;
-  -webkit-text-fill-color: var(--input-text);
+  box-shadow: 0 0 0 1000px var(--input-bg) inset;
+  background-color: var(--input-bg);
+  color: var(--input-text);
   caret-color: var(--input-text);
 }
 

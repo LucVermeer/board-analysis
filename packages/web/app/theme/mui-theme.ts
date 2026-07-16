@@ -156,6 +156,9 @@ const sharedComponents: Components<Theme> = {
     styleOverrides: {
       input: {
         fontSize: 16,
+        // Single source of truth for field text — the same var the autofill guard uses,
+        // so palette drift can't desync typed vs autofilled text.
+        color: 'var(--input-text)',
         '&::placeholder': {
           color: 'var(--input-placeholder)',
           opacity: 1,
