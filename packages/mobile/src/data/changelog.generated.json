@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-16T05:43:14.284Z",
+  "generatedAt": "2026-07-16T05:50:51.613Z",
   "entries": [
+    {
+      "prNumber": 3635,
+      "category": "new",
+      "title": "Every gym now has a public page — logo, boards, and a one-tap link to the live wall.",
+      "mergedAt": "2026-07-16T05:49:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3635",
+      "body": "Gym owners get a manage hub to link boards and manage their crew (kiosk and branding setup arrive with the editor update)."
+    },
     {
       "prNumber": 3636,
       "category": "new",

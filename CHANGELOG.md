@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Every gym now has a public page — logo, boards, and a one-tap link to the live wall. ([#3635](https://github.com/boardsesh/boardsesh/pull/3635))
+  Gym owners get a manage hub to link boards and manage their crew (kiosk and branding setup arrive with the editor update).
 - Gyms can now embed a live board view and a gym leaderboard straight into their own website — paste one iframe snippet and visitors see what's lit on the wall and who's been sending, powered by Boardsesh. ([#3636](https://github.com/boardsesh/boardsesh/pull/3636))
 - Put your gym's walls on a TV: `/kiosk/your-gym` shows what's lit on every board, live, with your gym's logo and colours ([#3634](https://github.com/boardsesh/boardsesh/pull/3634))
   Run up to four boards on one screen — the layout adapts as you add walls
