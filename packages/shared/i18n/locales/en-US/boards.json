@@ -186,6 +186,23 @@
       "editGym": "Edit gym",
       "editBoard": "Edit board"
     },
+    "myGyms": {
+      "moreRowTitle": "My gyms",
+      "moreRowSubtitle": "Jump to your gyms and tweak their details",
+      "screenTitle": "My gyms",
+      "loadError": "We couldn't load your gyms. Try again.",
+      "retry": "Try again",
+      "emptyTitle": "No gyms yet",
+      "emptyBody": "Claim your gym to keep its boards and details dialed in.",
+      "findGym": "Find your gym",
+      "kioskHint": "Kiosk setup lives on the big screen — open it in a browser to set up your TVs.",
+      "kioskHintDismiss": "Got it",
+      "manageKiosks": "Manage kiosks & TVs",
+      "manageKiosksFor": "Manage kiosks and TVs for {{gym}}",
+      "manageError": "Couldn't open the manage console. Try it in a browser.",
+      "roleOwner": "Owner",
+      "noAddress": "No address yet"
+    },
     "timerPair": {
       "title": "Pair a workout timer",
       "subtitle": "Pick the Rogue or Echo timer next to this board.",

@@ -10,4 +10,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hapticFeedbackEnabled: true,
   notifySessionInvites: true,
   notifyClimbComments: true,
+  kioskHintSeen: false,
 };

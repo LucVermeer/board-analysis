@@ -52,6 +52,7 @@ type SystemImageName = NonNullable<ComponentProps<typeof Image>['systemName']>;
 // `sf-symbols-typescript` union doesn't fail the type-check.
 const IOS_SF_SYMBOL: Record<MoreIconName, string> = {
   playlists: 'music.note.list',
+  gyms: 'building.2',
   integrations: 'heart',
   watch: 'applewatch',
   accessibility: 'accessibility',

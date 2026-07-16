@@ -186,6 +186,23 @@
       "editGym": "Editar gimnasio",
       "editBoard": "Editar plafón"
     },
+    "myGyms": {
+      "moreRowTitle": "Mis gimnasios",
+      "moreRowSubtitle": "Entra a tus gimnasios y ajusta sus datos",
+      "screenTitle": "Mis gimnasios",
+      "loadError": "No pudimos cargar tus gimnasios. Inténtalo de nuevo.",
+      "retry": "Reintentar",
+      "emptyTitle": "Aún no tienes gimnasios",
+      "emptyBody": "Reclama tu gimnasio para mantener sus plafones y datos al día.",
+      "findGym": "Buscar tu gimnasio",
+      "kioskHint": "La configuración del quiosco vive en la pantalla grande: ábrela en un navegador para preparar tus TVs.",
+      "kioskHintDismiss": "Entendido",
+      "manageKiosks": "Gestionar quioscos y TVs",
+      "manageKiosksFor": "Gestionar quioscos y TVs de {{gym}}",
+      "manageError": "No se pudo abrir la consola de gestión. Ábrela en un navegador.",
+      "roleOwner": "Propietario",
+      "noAddress": "Sin dirección todavía"
+    },
     "timerPair": {
       "title": "Vincular un temporizador",
       "subtitle": "Elige el temporizador Rogue o Echo que está junto a este plafón.",

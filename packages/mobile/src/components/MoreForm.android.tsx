@@ -49,6 +49,7 @@ import type { MoreFormProps, MoreIconName, MoreRow, MoreSelectRow } from './More
 // (#FFFFFFFF) so the `tint` recolours them; a missing `icon` renders no leading slot.
 const MORE_ICON_SOURCE: Record<MoreIconName, ImageSourcePropType> = {
   playlists: require('../../assets/material-icons/playlists.xml'),
+  gyms: require('../../assets/material-icons/gyms.xml'),
   integrations: require('../../assets/material-icons/integrations.xml'),
   // No smartwatch glyph in the bundled Material set; the chain-link icon reads as
   // "pair / link a device", the closest sensible fit for the watch-pairing row.

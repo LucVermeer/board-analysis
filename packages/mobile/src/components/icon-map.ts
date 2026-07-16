@@ -64,6 +64,7 @@ export const iconMap = {
   // (sparkles on iOS) so the same feature reads consistently across surfaces.
   changelog: { ios: 'sparkles', android: 'star-four-points' },
   'open.external': { ios: 'arrow.up.right.square', android: 'open-in-new' },
+  tv: { ios: 'tv', android: 'television' },
 
   // Climb/Board
   mirror: { ios: 'arrow.triangle.2.circlepath', android: 'sync' },

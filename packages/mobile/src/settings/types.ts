@@ -9,6 +9,8 @@ export type AppSettings = {
   hapticFeedbackEnabled: boolean;
   notifySessionInvites: boolean;
   notifyClimbComments: boolean;
+  /** One-shot: the "kiosk setup lives on the big screen" hint has been seen on My gyms. */
+  kioskHintSeen: boolean;
 };
 
 export type SettingsKey = keyof AppSettings;
