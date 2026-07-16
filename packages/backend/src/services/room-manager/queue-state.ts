@@ -22,13 +22,21 @@ export async function updateQueueState(
   stateHash: string;
   stateHashOrdered: string;
   previousStateHash: string | null;
+  previousStateHashOrdered: string | null;
 }> {
   const { redisStore, writeScheduler, distributedState } = deps;
 
   // Get current version, sequence, and prior state hash from Redis if
-  // available, otherwise from Postgres. The prior hash is returned so
+  // available, otherwise from Postgres. The prior hashes are returned so
   // callers (currently setQueue) can detect no-op resyncs without a
   // second round-trip.
+  //
+  // We return BOTH the prior order-insensitive (v1) and order-sensitive (v2)
+  // hashes. Redis persists only v1, so the prior v2 is recomputed from the
+  // same snapshot Redis/Postgres just returned (mirrors getQueueState's
+  // read-time derivation). setQueue's no-op check needs both: a pure reorder
+  // leaves v1 unchanged but moves v2, so comparing v1 alone misreports a
+  // legitimate reorder as a no-op (issue #2387).
   //
   // We coerce empty-string hashes to null. Legacy session rows in Redis
   // or Postgres can have `stateHash = ''` (the hash field was added
@@ -44,6 +52,17 @@ export async function updateQueueState(
   let currentVersion = expectedVersion;
   let currentSequence = 0;
   let previousStateHash: string | null = null;
+  let previousStateHashOrdered: string | null = null;
+
+  // Derive the prior order-sensitive (v2) hash from a Redis snapshot's stored
+  // queue — Redis persists only v1, so v2 is recomputed on read (same pattern
+  // as getQueueState). `null` when there's no snapshot to derive from.
+  const orderedHashFromRedisSession = (
+    redisSession: { queue: ClimbQueueItem[]; currentClimbQueueItem: ClimbQueueItem | null } | null | undefined,
+  ): string | null =>
+    redisSession
+      ? computeQueueStateHashOrdered(redisSession.queue, redisSession.currentClimbQueueItem?.uuid || null)
+      : null;
 
   if (currentVersion === undefined) {
     if (redisStore) {
@@ -51,24 +70,28 @@ export async function updateQueueState(
       currentVersion = redisSession?.version ?? 0;
       currentSequence = redisSession?.sequence ?? 0;
       previousStateHash = normalizeHash(redisSession?.stateHash);
+      previousStateHashOrdered = orderedHashFromRedisSession(redisSession);
     }
     if (currentVersion === undefined || currentVersion === 0) {
       const pgState = await getQueueState(sessionId, redisStore);
       currentVersion = pgState.version;
       currentSequence = pgState.sequence;
       previousStateHash ??= normalizeHash(pgState.stateHash);
+      previousStateHashOrdered ??= normalizeHash(pgState.stateHashOrdered);
     }
   } else {
-    // If version is provided, get sequence and prior hash from Redis or Postgres
+    // If version is provided, get sequence and prior hashes from Redis or Postgres
     if (redisStore) {
       const redisSession = await redisStore.getSession(sessionId);
       currentSequence = redisSession?.sequence ?? 0;
       previousStateHash = normalizeHash(redisSession?.stateHash);
+      previousStateHashOrdered = orderedHashFromRedisSession(redisSession);
     }
     if (currentSequence === 0) {
       const pgState = await getQueueState(sessionId, redisStore);
       currentSequence = pgState.sequence;
       previousStateHash ??= normalizeHash(pgState.stateHash);
+      previousStateHashOrdered ??= normalizeHash(pgState.stateHashOrdered);
     }
   }
 
@@ -101,7 +124,14 @@ export async function updateQueueState(
     );
   }
 
-  return { version: newVersion, sequence: newSequence, stateHash, stateHashOrdered, previousStateHash };
+  return {
+    version: newVersion,
+    sequence: newSequence,
+    stateHash,
+    stateHashOrdered,
+    previousStateHash,
+    previousStateHashOrdered,
+  };
 }
 
 /**

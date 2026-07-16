@@ -398,24 +398,34 @@ export const queueMutations = {
       validateInput(ClimbQueueItemSchema, currentClimbQueueItem, 'currentClimbQueueItem');
     }
 
-    // updateQueueState returns `previousStateHash` from the same Redis
+    // updateQueueState returns the prior state hashes from the same Redis
     // read it already does internally, so this no-op check costs nothing
-    // extra. The client's 60s state-hash watchdog (see
-    // packages/web/app/components/persistent-session/hooks/use-session-subscriptions.ts)
-    // triggers setQueue when it thinks local and server state have
-    // diverged. If the resulting hash matches what the server already
-    // had, the client was wrong about the drift — usually a bug in the
-    // local hash computation or event processor — and the loop will fire
-    // again next minute. The warn surfaces those loops.
-    const { sequence, stateHash, stateHashOrdered, previousStateHash } = await roomManager.updateQueueState(
-      sessionId,
-      queue,
-      currentClimbQueueItem || null,
-    );
+    // extra. It surfaces a genuinely redundant full-queue resync: a setQueue
+    // whose incoming queue matched what the server already had in membership,
+    // order, AND current climb — nothing changed, so the FullSync below was
+    // pointless work. Look at the *caller* that re-pushed unchanged state, not
+    // the state hash.
+    //
+    // We require BOTH hashes to match. Comparing only the order-insensitive v1
+    // hash misreported a legitimate reorder (same members, different order) as
+    // a no-op, because v1 is blind to reordering — the whole reason the
+    // order-sensitive v2 hash exists. Web's queue-edit reorder pushes a full
+    // setQueue (not the reorderQueueItem delta), so a v1-only check fired this
+    // warning on every drag-to-reorder and blamed the publisher's hash for a
+    // drift that wasn't there (issue #2387). v2 moves on a reorder, so gating
+    // on both hashes lets a real reorder through silently while still catching
+    // a true no-op.
+    const { sequence, stateHash, stateHashOrdered, previousStateHash, previousStateHashOrdered } =
+      await roomManager.updateQueueState(sessionId, queue, currentClimbQueueItem || null);
 
-    if (previousStateHash !== null && previousStateHash === stateHash) {
+    if (
+      previousStateHash !== null &&
+      previousStateHash === stateHash &&
+      previousStateHashOrdered !== null &&
+      previousStateHashOrdered === stateHashOrdered
+    ) {
       logger.warn(
-        `[setQueue] No-op resync for session ${sessionId} (hash=${stateHash}, queueSize=${queue.length}). Client state already matched server — investigate hash-drift on the publisher.`,
+        `[setQueue] Redundant full-queue resync for session ${sessionId} (hash=${stateHash}, queueSize=${queue.length}). Incoming queue matched server state in membership, order, and current climb — a wasted setQueue; check the caller re-pushing unchanged state.`,
       );
     }
 

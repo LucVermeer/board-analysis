@@ -126,6 +126,57 @@ describe('state-hash', () => {
         expect(() => computeQueueStateHash([null, { uuid: 'climb-a' }], 'climb-a')).not.toThrow();
       });
     });
+
+    // Issue #2387 — the hash must be invariant to the SHAPE of a queue item, so
+    // the server's full ClimbQueueItem (climb metadata, addedBy, angle, …) and a
+    // client's slim `{ uuid }` item hash identically for equivalent state. The
+    // hash consumes only `uuid`, so extra fields, differing key order, and
+    // null-vs-undefined-vs-absent on non-uuid fields can never drift the two
+    // sides. These lock that invariant in so a future refactor can't reintroduce
+    // the cross-side drift the no-op-resync warning was blamed on.
+    describe('issue #2387 — server-shaped vs client-shaped item equivalence', () => {
+      // A rich "server-shaped" item as the backend stores/broadcasts it.
+      const serverShaped = [
+        {
+          uuid: 'q-1',
+          climb: { uuid: 'climb-1', name: 'Crimp Ladder', angle: 40, boardType: 'kilter', layoutId: 1 },
+          addedBy: 'conn-abc',
+          addedByUser: { id: 'user-9', username: 'marco' },
+          suggested: false,
+          tickedBy: null,
+        },
+        {
+          uuid: 'q-2',
+          climb: { uuid: 'climb-2', name: 'Sloper Traverse', angle: 40, boardType: 'kilter', layoutId: 1 },
+          addedBy: undefined,
+          suggested: true,
+        },
+      ] as unknown as Array<{ uuid: string }>;
+
+      // The same queue as a client's slim `{ uuid }` shape.
+      const clientShaped = [{ uuid: 'q-1' }, { uuid: 'q-2' }];
+
+      it('hashes identically for v1 regardless of item shape', () => {
+        expect(computeQueueStateHash(serverShaped, 'q-1')).toBe(computeQueueStateHash(clientShaped, 'q-1'));
+      });
+
+      it('hashes identically for v2 regardless of item shape', () => {
+        expect(computeQueueStateHashOrdered(serverShaped, 'q-1')).toBe(
+          computeQueueStateHashOrdered(clientShaped, 'q-1'),
+        );
+      });
+
+      it('is invariant to key order and null-vs-undefined on non-uuid fields', () => {
+        const reorderedKeys = [
+          { addedBy: null, climb: { name: 'x' }, suggested: true, uuid: 'q-1' },
+          { suggested: undefined, uuid: 'q-2', climb: undefined },
+        ] as unknown as Array<{ uuid: string }>;
+        expect(computeQueueStateHash(reorderedKeys, 'q-1')).toBe(computeQueueStateHash(clientShaped, 'q-1'));
+        expect(computeQueueStateHashOrdered(reorderedKeys, 'q-1')).toBe(
+          computeQueueStateHashOrdered(clientShaped, 'q-1'),
+        );
+      });
+    });
   });
 
   describe('computeQueueStateHashOrdered (v2, order-sensitive)', () => {
