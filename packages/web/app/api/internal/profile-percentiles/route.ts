@@ -4,16 +4,15 @@ import { sql } from 'drizzle-orm';
 import { getDb } from '@/app/lib/db/db';
 import { USER_CLIMB_PERCENTILE_CACHE_TAG } from '@/app/lib/graphql/server-cached-client';
 import { userClimbPercentiles } from '@boardsesh/db/schema';
+import { requireCronAuth } from '@/app/lib/auth/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const CRON_SECRET = process.env.CRON_SECRET;
-
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authError = requireCronAuth(request);
+  if (authError) {
+    return authError;
   }
 
   try {
