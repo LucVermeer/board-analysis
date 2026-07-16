@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T10:26:19.951Z",
+  "generatedAt": "2026-07-16T10:40:47.987Z",
   "entries": [
+    {
+      "prNumber": 3675,
+      "category": "new",
+      "title": "Your gyms are one tap away — open the menu and hit **My gyms** to jump straight into managing kiosks, boards, and your crew.",
+      "mergedAt": "2026-07-16T10:39:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3675"
+    },
     {
       "prNumber": 3670,
       "category": "new",
