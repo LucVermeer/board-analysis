@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Your kiosk TVs now check in — see at a glance which screens are live and which need a nudge, straight from the Kiosks tab. ([#3685](https://github.com/boardsesh/boardsesh/pull/3685))
+- Free up space from Manage storage: see what each downloaded board takes up and clear the ones you're not climbing on. ([#3630](https://github.com/boardsesh/boardsesh/pull/3630))
 - Refreshed Boardsesh's look on the web to match the app — new icon everywhere: browser tab, home screen install, and the header. ([#3711](https://github.com/boardsesh/boardsesh/pull/3711))
   Claude-Session: https://claude.ai/code/session_018jnud1ULod9FZ2BfTgFiih
 - Dark mode forms finally look like they belong: input fields sit on the same violet surfaces as the rest of the app, with a clear violet focus ring — no more glaring white boxes. ([#3700](https://github.com/boardsesh/boardsesh/pull/3700))
@@ -47,6 +49,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Bug reports now default to letting us follow up with you — flip the switch off if you'd rather we didn't. ([#3712](https://github.com/boardsesh/boardsesh/pull/3712))
 - Party sessions ride out a mid-action reconnect cleanly: queueing or switching a climb right as your connection blips no longer throws an error. ([#3693](https://github.com/boardsesh/boardsesh/pull/3693))
   A crew member who drops and rejoins won't flicker out of the roster, and the session won't be left without a leader.
 - Google sign-in on Android now recovers through the browser instead of dead-ending when the native sign-in hits a configuration error. ([#3709](https://github.com/boardsesh/boardsesh/pull/3709))

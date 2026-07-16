@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-07-16T21:46:48.792Z",
+  "generatedAt": "2026-07-16T21:56:33.541Z",
   "entries": [
+    {
+      "prNumber": 3712,
+      "category": "fixed",
+      "title": "Bug reports now default to letting us follow up with you — flip the switch off if you'd rather we didn't.",
+      "mergedAt": "2026-07-16T21:54:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3712"
+    },
+    {
+      "prNumber": 3685,
+      "category": "new",
+      "title": "Your kiosk TVs now check in — see at a glance which screens are live and which need a nudge, straight from the Kiosks tab.",
+      "mergedAt": "2026-07-16T21:53:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3685"
+    },
+    {
+      "prNumber": 3630,
+      "category": "new",
+      "title": "Free up space from Manage storage: see what each downloaded board takes up and clear the ones you're not climbing on.",
+      "mergedAt": "2026-07-16T21:52:54Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3630"
+    },
     {
       "prNumber": 3693,
       "category": "fixed",
