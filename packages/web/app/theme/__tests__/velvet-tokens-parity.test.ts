@@ -252,6 +252,21 @@ describe('Velvet dark input surface is defined, legible, and free of the elevati
   it('primary text clears AA on the elevated popup paper (autocomplete/menu) in dark', () => {
     expect(contrast(darkTokens.neutral[800], darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(4.5);
   });
+
+  // The input slot sets `color` DIRECTLY on the <input>, which beats colour inherited
+  // from the disabled wrapper — the disabled tier must be restated on the input itself
+  // (both engines: color + WebkitTextFillColor) or disabled text renders full-opacity.
+  it.each([
+    ['light', lightTheme],
+    ['dark', darkTheme],
+  ] as const)('disabled input text dims to text.disabled on the input slot itself (%s)', (_scheme, theme) => {
+    const inputOverride = theme.components?.MuiInputBase?.styleOverrides?.input;
+    expect(typeof inputOverride).toBe('function');
+    const resolved = (inputOverride as (props: { theme: typeof theme }) => Record<string, unknown>)({ theme });
+    const disabled = resolved['&.Mui-disabled'] as { color?: string; WebkitTextFillColor?: string };
+    expect(disabled?.color).toBe(theme.palette.text.disabled);
+    expect(disabled?.WebkitTextFillColor).toBe(theme.palette.text.disabled);
+  });
 });
 
 describe('web surface ladder deliberately diverges from the shared velvet-tokens anchors', () => {

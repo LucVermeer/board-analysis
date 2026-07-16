@@ -154,16 +154,22 @@ const sharedComponents: Components<Theme> = {
   // iPads and any wider input). Applies to all input variants via the shared base.
   MuiInputBase: {
     styleOverrides: {
-      input: {
+      input: ({ theme }) => ({
         fontSize: 16,
         // Single source of truth for field text — the same var the autofill guard uses,
         // so palette drift can't desync typed vs autofilled text.
         color: 'var(--input-text)',
+        // A direct rule on the input beats colour inherited from the disabled wrapper,
+        // so the disabled tier must be restated here (WebKit needs text-fill-color too).
+        '&.Mui-disabled': {
+          color: theme.palette.text.disabled,
+          WebkitTextFillColor: theme.palette.text.disabled,
+        },
         '&::placeholder': {
           color: 'var(--input-placeholder)',
           opacity: 1,
         },
-      },
+      }),
     },
   },
   // Input surface + borders ride the scheme-aware `--input-*` CSS vars (light: white field,
