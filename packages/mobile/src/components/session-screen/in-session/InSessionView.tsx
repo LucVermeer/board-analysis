@@ -25,10 +25,11 @@ import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
 import { useQueueSessionControls, useQueueActions, useQueueLiveStats } from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
-import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
+import { useSessionDetail, useSessionPreview, useSessionSummary } from '../../../lib/graphql/hooks';
 import { runSessionEndExports } from '../../../lib/integrations';
 import { SESSION_STORE_REVIEW_CANDIDATE_PARAM, isSessionStoreReviewEligible } from '../../../lib/store-review';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
+import { setDraftComment, clearDraftComment } from '../../../lib/session-comment-draft-store';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
 import { tickToClimb } from '../../../lib/tick-to-climb';
 import { openClimbInPlayDrawer } from '../../../lib/open-climb-in-play-drawer';
@@ -42,6 +43,7 @@ import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection, hapticMedium } from '../../../lib/haptics';
 import { reportHandledError } from '../../../lib/error-reporting';
 import { RecordTopChrome } from '../RecordTopChrome';
+import { SessionTitleSheet } from '../SessionTitleSheet';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
@@ -247,7 +249,7 @@ export function InSessionView({
   screenHeight,
 }: InSessionViewProps) {
   const { t } = useTranslation('session');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, features } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
@@ -263,6 +265,24 @@ export function InSessionView({
   // polling.
   const detailQuery = useSessionDetail(sessionId ?? undefined);
   const detail = detailQuery.data;
+  // The session preview (GET_SESSION) is the primary title source: unlike
+  // sessionDetail — which is null until the first tick — it resolves for a
+  // freshly started session, which is exactly when climbers name it.
+  const { data: sessionPreview } = useSessionPreview(sessionId ?? undefined);
+
+  // The live session title: the creator-set name, or the default "Session" label.
+  // Drives both the in-body glass large title and the Material app-bar title.
+  // Truthy guard (not ??): an empty-string name must still fall back to the
+  // localized default title, matching SessionDetailScreen's guard.
+  const sessionTitle = sessionPreview?.name || detail?.sessionName || t('mobile.session.headerActive');
+
+  // The rename sheet (opened from the title's edit affordance on either variant).
+  const [titleSheetVisible, setTitleSheetVisible] = useState(false);
+  const openTitleSheet = useCallback(() => {
+    hapticSelection();
+    setTitleSheetVisible(true);
+  }, []);
+  const closeTitleSheet = useCallback(() => setTitleSheetVisible(false), []);
 
   // Only trust a live push that belongs to the CURRENT session. After a direct
   // A->B session switch the provider resets liveStats, but this guards the
@@ -364,6 +384,12 @@ export function InSessionView({
     [sessionUsers, participantId],
   );
 
+  // Renaming is creator-only server-side. Hide the affordance only when we
+  // POSITIVELY know the viewer isn't the owner — ownership is unknown for a
+  // fresh zero-tick session (sessionDetail is null), and that is overwhelmingly
+  // the creator's own session, so unknown keeps the affordance.
+  const canEditTitle = !detail?.ownerUserId || !selfUserId || detail.ownerUserId === selfUserId;
+
   const participantByUserId = useMemo(() => {
     const entries = new Map<string, SessionFeedParticipant>();
     for (const participant of participants) {
@@ -432,6 +458,12 @@ export function InSessionView({
   }, [translateY, screenHeight, scrollOffset, startedAtTop]);
 
   const [isEnding, setIsEnding] = useState(false);
+  // Optional end-of-session recap. Cleared whenever the active session changes
+  // (start / join / end) so a new session never inherits the previous draft.
+  const [endNotes, setEndNotes] = useState('');
+  useEffect(() => {
+    setEndNotes('');
+  }, [sessionId]);
   // End moved to the top chrome's trailing slot, so the bottom edge keeps only the
   // global current-climb chrome + tab bar (no third glass band). The Material-vs-glass
   // arbitration — and the tab-bar double-count it avoids — lives in
@@ -440,10 +472,23 @@ export function InSessionView({
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
+    const trimmedNotes = endNotes.trim();
+    // Captured before endSession(), which clears the active session id.
+    const endingSessionId = sessionId;
     try {
-      const summary = await endSession();
+      // Persist the recap BEFORE the mutation so a dropped network write is
+      // recoverable — the summary screen seeds its editor from this draft when
+      // the server notes come back empty.
+      if (trimmedNotes && endingSessionId) {
+        await setDraftComment(endingSessionId, trimmedNotes);
+      }
+      const summary = await endSession({ notes: trimmedNotes });
       onEndDismiss?.();
       if (summary) {
+        // The recap landed with the session — drop the local draft and clear the
+        // field so a re-open starts empty.
+        if (endingSessionId) void clearDraftComment(endingSessionId);
+        setEndNotes('');
         // Fire the device-local integration exports (Apple Health) before we
         // navigate. Fire-and-forget — the export is async + best-effort and must
         // never block or derail the summary navigation; the registry swallows any
@@ -464,7 +509,7 @@ export function InSessionView({
       // confirm button spinning forever and the sheet undismissable.
       setIsEnding(false);
     }
-  }, [endSession, router, onEndDismiss]);
+  }, [endSession, router, onEndDismiss, endNotes, sessionId]);
 
   // Stable dismiss handler so the always-mounted EndSessionSheet doesn't get a fresh
   // onDismiss ref every render (onEndDismiss is optional, hence the wrapper).
@@ -504,7 +549,25 @@ export function InSessionView({
           overlay header strip already names the screen, so it's hidden there. On
           Material the app bar owns the title, so the in-body large title is gated
           off there too. */}
-      {showChrome ? <ScreenTitle style={styles.screenTitle}>{t('mobile.session.headerActive')}</ScreenTitle> : null}
+      {showChrome && features.inBodyLargeTitle ? (
+        <PressableSurface
+          onPress={canEditTitle ? openTitleSheet : undefined}
+          feedback="opacity"
+          opacityTo={0.6}
+          hitSlop={8}
+          accessibilityRole={canEditTitle ? 'button' : undefined}
+          // The label carries the session name; the rename action is the hint so
+          // screen readers never lose the title itself.
+          accessibilityLabel={sessionTitle}
+          accessibilityHint={canEditTitle ? t('mobile.session.editTitleAria') : undefined}
+          style={styles.titleRow}
+        >
+          <ScreenTitle style={styles.screenTitle} numberOfLines={1}>
+            {sessionTitle}
+          </ScreenTitle>
+          {canEditTitle ? <Icon name="edit" size={20} color={systemColors.secondaryLabel} /> : null}
+        </PressableSurface>
+      ) : null}
 
       <SessionPresenceRow users={sessionUsers} />
 
@@ -599,7 +662,8 @@ export function InSessionView({
 
       {showChrome ? (
         <RecordTopChrome
-          title={t('mobile.session.headerActive')}
+          title={sessionTitle}
+          onEditTitle={canEditTitle ? openTitleSheet : undefined}
           onOpenBoardSwitcher={handleOpenBoardSwitcher}
           onHeightChange={setChromeHeight}
           onShare={onShare}
@@ -607,12 +671,21 @@ export function InSessionView({
         />
       ) : null}
 
+      <SessionTitleSheet
+        visible={titleSheetVisible}
+        sessionId={sessionId ?? null}
+        currentName={detail?.sessionName ?? null}
+        onClose={closeTitleSheet}
+      />
+
       <EndSessionSheet
         visible={endVisible}
         onDismiss={handleEndDismiss}
         onConfirm={() => void handleConfirmEnd()}
         isEnding={isEnding}
         climbCount={sessionHistoryTicks.length}
+        notes={endNotes}
+        onNotesChange={setEndNotes}
       />
     </View>
   );
@@ -640,6 +713,15 @@ const styles = StyleSheet.create({
   // needs no extra horizontal padding (it collapses into the chrome capsule).
   screenTitle: {
     paddingBottom: spacing[2],
+    // Truncate long names so the trailing edit glyph always stays on screen.
+    flexShrink: 1,
+  },
+  // The tappable large-title row: the collapsing title plus a trailing edit glyph
+  // that opens the rename sheet.
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
   },
   // SectionHeader self-insets 16px; the list already pads 16, so bleed the header
   // back by 16 to keep its label flush with the screen gutter.

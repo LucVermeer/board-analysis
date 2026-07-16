@@ -60,6 +60,13 @@
     "shareSuccess": "Link copied to clipboard!",
     "shareError": "Failed to share",
     "comments": "Comments",
+    "editSession": "Edit session",
+    "editNameLabel": "Session name",
+    "editRecapLabel": "Recap",
+    "editCancel": "Cancel",
+    "editSave": "Save",
+    "editSaved": "Session updated",
+    "editSaveFailed": "Couldn't save changes. Try again.",
     "deleteAscent": "Delete ascent",
     "deleteAscentConfirm": "Are you sure? This cannot be undone.",
     "delete": "Delete",
@@ -220,7 +227,14 @@
     "effortTitle": "Worth coming back to",
     "effortBody": "That project's not going anywhere. You'll get it.",
     "crew": "The crew",
-    "crewStatLine": "{{sends}} sends · {{flashes}} flashes · {{attempts}} attempts"
+    "crewStatLine": "{{sends}} sends · {{flashes}} flashes · {{attempts}} attempts",
+    "recapTitle": "Recap",
+    "addRecap": "Add a recap",
+    "recapSaveError": "Couldn't save your recap. Try again.",
+    "commentLabel": "Recap",
+    "commentPlaceholder": "How was the sesh? Add a few words…",
+    "commentHelper": "{{count}}/{{max}}",
+    "commentSaveFailed": "Couldn't save your notes. Try again."
   },
   "overview": {
     "goal": "Goal: {{goal}}"
@@ -385,7 +399,10 @@
       "climbCount_other": "{{count}} climbs",
       "logAscent": "Log ascent",
       "alreadyLogged": "Logged",
-      "dragHandleAria": "Drag to reorder {{name}}"
+      "dragHandleAria": "Drag to reorder {{name}}",
+      "endSessionCommentPlaceholder": "Add a recap — how did it go?",
+      "endSessionCommentAria": "Session recap",
+      "endSessionCancel": "Keep climbing"
     },
     "queueSheet": {
       "emptyQueue": "Your queue is empty",
@@ -471,6 +488,11 @@
     "session": {
       "headerStart": "Start a session",
       "headerActive": "Session",
+      "renameTitle": "Session name",
+      "renameSave": "Save",
+      "renameError": "Couldn't save the name. Try again.",
+      "renameNotAllowed": "Only the session creator can rename it.",
+      "editTitleAria": "Edit session name",
       "minimize": "Minimize session",
       "recordTab": "Record",
       "preBoardLabel": "Board",

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, render, waitFor } from '@testing-library/react';
-import { createElement, useEffect } from 'react';
+import { createElement, useEffect, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { SessionStatus, SessionUser, UserBoard } from '@boardsesh/shared-schema';
 
@@ -191,6 +192,8 @@ import {
   useQueueSessionId,
 } from '../queue-provider';
 import { clearStoredSessionId } from '../../lib/session-store';
+import { track } from '../../lib/analytics';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 
 type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
@@ -206,7 +209,7 @@ type Snapshot = {
   nextClimb: ReturnType<typeof useQueue>['nextClimb'];
   setPlaylistSuggestionSource: ReturnType<typeof useQueue>['setPlaylistSuggestionSource'];
   joinSession: (sessionId: string, opts: Parameters<ReturnType<typeof useQueue>['joinSession']>[1]) => Promise<void>;
-  endSession: () => Promise<unknown>;
+  endSession: (options?: { notes?: string }) => Promise<unknown>;
   confirmClimbOnWall: ReturnType<typeof useQueue>['confirmClimbOnWall'];
   reportWallDisconnect: ReturnType<typeof useQueue>['reportWallDisconnect'];
   setSessionBoardSerial: ReturnType<typeof useQueue>['setSessionBoardSerial'];
@@ -338,8 +341,17 @@ function SelectorProbe({ onSnapshot }: { onSnapshot: (snapshot: SelectorSnapshot
   return null;
 }
 
+// useSessionRealtime reads useContext(QueryClientContext) (to invalidate the session-detail
+// cache on SessionNameChanged), so every render needs a QueryClient in context.
+const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const invalidateQueriesSpy = vi.spyOn(testQueryClient, 'invalidateQueries');
+
+function withQueryClient(node: ReactNode) {
+  return createElement(QueryClientProvider, { client: testQueryClient }, node);
+}
+
 function renderProvider(onSnapshot: (snapshot: Snapshot) => void) {
-  return render(createElement(QueueProvider, null, createElement(Probe, { onSnapshot })));
+  return render(withQueryClient(createElement(QueueProvider, null, createElement(Probe, { onSnapshot }))));
 }
 
 function renderProviderWithSelectors(
@@ -347,11 +359,13 @@ function renderProviderWithSelectors(
   onSelectorSnapshot: (snapshot: SelectorSnapshot) => void,
 ) {
   return render(
-    createElement(
-      QueueProvider,
-      null,
-      createElement(Probe, { onSnapshot }),
-      createElement(SelectorProbe, { onSnapshot: onSelectorSnapshot }),
+    withQueryClient(
+      createElement(
+        QueueProvider,
+        null,
+        createElement(Probe, { onSnapshot }),
+        createElement(SelectorProbe, { onSnapshot: onSelectorSnapshot }),
+      ),
     ),
   );
 }
@@ -372,6 +386,7 @@ describe('QueueProvider session update subscription', () => {
     ws.reset();
     ws.client.on.mockClear();
     ws.client.subscribe.mockClear();
+    invalidateQueriesSpy.mockClear();
     activeBoard.stored = {
       uuid: 'board-1',
       slug: 'board-1',
@@ -584,10 +599,12 @@ describe('QueueProvider session update subscription', () => {
     // out of re-rendering QueueProvider, so the updated usePartyProfile mock
     // would never be re-read.
     const makeTree = () =>
-      createElement(
-        QueueProvider,
-        null,
-        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      withQueryClient(
+        createElement(
+          QueueProvider,
+          null,
+          createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+        ),
       );
     const { rerender } = render(makeTree());
 
@@ -618,10 +635,12 @@ describe('QueueProvider session update subscription', () => {
     partyProfile.avatarUrl = 'https://example.com/marco.png';
     const snapshots: Snapshot[] = [];
     const makeTree = () =>
-      createElement(
-        QueueProvider,
-        null,
-        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      withQueryClient(
+        createElement(
+          QueueProvider,
+          null,
+          createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+        ),
       );
     const { rerender } = render(makeTree());
 
@@ -657,10 +676,12 @@ describe('QueueProvider session update subscription', () => {
 
     const snapshots: Snapshot[] = [];
     const makeTree = () =>
-      createElement(
-        QueueProvider,
-        null,
-        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      withQueryClient(
+        createElement(
+          QueueProvider,
+          null,
+          createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+        ),
       );
     const { rerender } = render(makeTree());
 
@@ -697,10 +718,12 @@ describe('QueueProvider session update subscription', () => {
     partyProfile.avatarUrl = undefined;
     const snapshots: Snapshot[] = [];
     const makeTree = () =>
-      createElement(
-        QueueProvider,
-        null,
-        createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+      withQueryClient(
+        createElement(
+          QueueProvider,
+          null,
+          createElement(Probe, { onSnapshot: (snapshot: Snapshot) => snapshots.push(snapshot) }),
+        ),
       );
     const { rerender } = render(makeTree());
 
@@ -947,6 +970,43 @@ describe('QueueProvider session update subscription', () => {
       // Current climb is intentionally NOT cleared by WallDisconnected.
       expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-current');
     });
+  });
+
+  it('invalidates the session-detail cache on SessionNameChanged', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+      expect(ws.getSessionUpdatesSink()).not.toBeNull();
+    });
+
+    const sessionUpdatesSink = ws.getSessionUpdatesSink();
+    if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
+
+    // The sessionUpdates document selects the SessionNameChanged fragment.
+    const sessionUpdatesCall = ws.client.subscribe.mock.calls.find((args) =>
+      (args[0] as { query: string }).query.includes('sessionUpdates'),
+    );
+    expect(sessionUpdatesCall).toBeDefined();
+    expect((sessionUpdatesCall![0] as { query: string }).query).toContain('SessionNameChanged');
+
+    invalidateQueriesSpy.mockClear();
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            // changedByParticipantId is null (our own renames are HTTP), so the
+            // handler can't echo-suppress by participant id — it just invalidates.
+            __typename: 'SessionNameChanged',
+            name: 'Tuesday Projecting',
+            changedByParticipantId: null,
+          },
+        },
+      });
+    });
+
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['sessionDetail', 'session-1'] });
   });
 
   it('clears persisted session state when SessionEnded arrives', async () => {
@@ -1327,6 +1387,65 @@ describe('QueueProvider session update subscription', () => {
     expect(clearStoredSessionId).toHaveBeenCalledTimes(1);
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.toast.sessionEnded', 'success');
+  });
+
+  it('forwards a trimmed recap and the device timezone to END_SESSION, and tracks note counts', async () => {
+    vi.mocked(track).mockClear();
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    await act(async () => {
+      await snapshots.at(-1)?.endSession({ notes: '  crushed it  ' });
+    });
+
+    const endCall = http.request.mock.calls.find(
+      ([operation]) => typeof operation === 'string' && operation.includes('EndSession'),
+    );
+    expect(endCall).toBeDefined();
+    const variables = endCall?.[1] as { sessionId: string; timezone?: string; notes?: string };
+    expect(variables.sessionId).toBe('session-1');
+    // Trimmed before send.
+    expect(variables.notes).toBe('crushed it');
+    // Timezone still travels alongside notes (it was silently dropped before).
+    expect(typeof variables.timezone).toBe('string');
+    expect(variables.timezone).toBeTruthy();
+
+    // Counts only — never the recap text.
+    expect(vi.mocked(track)).toHaveBeenCalledWith(
+      SHARED_EVENTS.SessionEnded,
+      expect.objectContaining({ hasNotes: true, notesLength: 'crushed it'.length }),
+    );
+  });
+
+  it('omits notes and reports hasNotes:false when the recap is blank', async () => {
+    vi.mocked(track).mockClear();
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    await act(async () => {
+      await snapshots.at(-1)?.endSession({ notes: '   ' });
+    });
+
+    const endCall = http.request.mock.calls.find(
+      ([operation]) => typeof operation === 'string' && operation.includes('EndSession'),
+    );
+    const variables = endCall?.[1] as { sessionId: string; timezone?: string; notes?: string };
+    expect(variables.sessionId).toBe('session-1');
+    // A whitespace-only recap is not sent (server-side "clear" semantics aren't
+    // triggered on end).
+    expect('notes' in variables).toBe(false);
+    expect(typeof variables.timezone).toBe('string');
+
+    expect(vi.mocked(track)).toHaveBeenCalledWith(
+      SHARED_EVENTS.SessionEnded,
+      expect.objectContaining({ hasNotes: false, notesLength: 0 }),
+    );
   });
 });
 

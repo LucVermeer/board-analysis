@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { computeQueueStateHash, computeQueueStateHashOrdered } from '@boardsesh/queue';
 import type { QueueAction, QueueState } from '@boardsesh/queue';
 import {
@@ -138,6 +139,13 @@ export function useSessionRealtime({
   locallyEndingSessionIdRef,
   suppressedRemoteEndSessionIdRef,
 }: UseSessionRealtimeParams): void {
+  // Read the QueryClient off its context directly (rather than useQueryClient,
+  // which throws without a provider) so the always-mounted provider stays
+  // renderable in isolation-mounted tests that don't set one up. In the app it's
+  // always present. Stable across renders — safe to read inside the subscription
+  // closure without threading it through the effect deps.
+  const queryClient = useContext(QueryClientContext);
+
   useEffect(() => {
     if (!sessionId) {
       unsubscribeRef.current?.();
@@ -386,6 +394,19 @@ export function useSessionRealtime({
               // bus (drives the BLE provider's dedup + confirmation animations).
               setIsSessionWallLit(true);
               if (event.climbUuid) emitWallConfirm(event.climbUuid);
+              return;
+            }
+
+            if (event.__typename === 'SessionNameChanged') {
+              // A member (or an HTTP updateSession) renamed the session. Our own
+              // renames go over HTTP, so changedByParticipantId is null and we
+              // can't echo-suppress by participant id — just invalidate both
+              // title sources. The preview matters for zero-tick sessions, where
+              // sessionDetail is null; our own optimistic write already updated
+              // the caches locally, so the extra refetch is cheap and
+              // self-consistent.
+              void queryClient?.invalidateQueries({ queryKey: ['sessionPreview', sessionId] });
+              void queryClient?.invalidateQueries({ queryKey: ['sessionDetail', sessionId] });
               return;
             }
 

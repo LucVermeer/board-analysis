@@ -5,6 +5,7 @@ import { formatTickAbsoluteTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { Card } from '../Card';
+import { PressableSurface } from '../PressableSurface';
 import { AvatarGroup } from '../you/AvatarGroup';
 import { FeedSocialRow } from '../you/FeedSocialRow';
 import { spacing } from '../../theme/tokens';
@@ -28,6 +29,8 @@ type SessionSummaryCardProps = {
   titleIsDate: boolean;
   onOpenComments: (entityId: string) => void;
   voteSummary?: { upvotes: number; userVote: number | null };
+  /** Owner-only: open the edit sheet (name + recap). Absent for non-owners. */
+  onEditSession?: () => void;
 };
 
 /**
@@ -43,6 +46,7 @@ export function SessionSummaryCard({
   titleIsDate,
   onOpenComments,
   voteSummary,
+  onEditSession,
 }: SessionSummaryCardProps) {
   const { systemColors } = useTheme();
   const { t } = useTranslation('you');
@@ -69,6 +73,19 @@ export function SessionSummaryCard({
             {whenLine}
           </Text>
         </View>
+        {onEditSession ? (
+          <PressableSurface
+            onPress={onEditSession}
+            feedback="opacity"
+            opacityTo={0.6}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={tSession('detail.editSession')}
+            style={styles.editButton}
+          >
+            <Icon name="edit" size={20} color={systemColors.secondaryLabel} />
+          </PressableSurface>
+        ) : null}
       </View>
 
       {board || duration ? (
@@ -103,6 +120,15 @@ export function SessionSummaryCard({
         </View>
       ) : null}
 
+      {session.notes && session.notes.trim().length > 0 ? (
+        <View style={styles.notes}>
+          <Text variant="caption1" color={systemColors.secondaryLabel}>
+            {tSession('summary.recapTitle')}
+          </Text>
+          <Text variant="body">{session.notes}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.tiles}>
         <StatTile value={session.totalSends} label={t('mobile.sessions.weekly.sends')} icon="tick" />
         <StatTile value={session.totalFlashes} label={t('mobile.sessions.weekly.flashes')} icon="flash" />
@@ -127,10 +153,12 @@ const styles = StyleSheet.create({
   card: { marginHorizontal: spacing[4], marginTop: spacing[4], gap: spacing[1] },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   headerText: { flex: 1 },
+  editButton: { padding: spacing[1] },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[1] },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
   goal: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], marginTop: spacing[2] },
   goalText: { flex: 1 },
+  notes: { marginTop: spacing[2], gap: spacing[1] },
   tiles: { flexDirection: 'row', gap: spacing[2], marginTop: spacing[3] },
   social: { marginTop: spacing[3] },
 });

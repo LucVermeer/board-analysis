@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { View, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, ScrollView, StyleSheet, ActivityIndicator, Keyboard, Platform } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -15,6 +15,7 @@ import { SectionHeader } from '../../../src/components/SectionHeader';
 import { Separator } from '../../../src/components/Separator';
 import { ClimbListThumbnail } from '../../../src/components/ClimbListThumbnail';
 import { StatTile, GradeTile } from '../../../src/components/session/session-stat-tiles';
+import { SessionRecapCard } from '../../../src/components/session/SessionRecapCard';
 import { StackedBarChart } from '../../../src/components/you/YouCharts';
 import { buildSessionGradeBars, gradeBadgeColor } from '../../../src/components/you/profile-chart-colors';
 import { useTheme } from '../../../src/providers/theme-provider';
@@ -123,6 +124,31 @@ function SessionSummaryContent({ summary }: { summary: SessionSummary }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { formatGrade } = useGradeFormat();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // This screen is a modal route: on Android the dialog window ignores
+  // adjustResize, so the keyboard overlays the recap editor's Save/Cancel row
+  // and automaticallyAdjustKeyboardInsets is an iOS-only no-op. Track the
+  // keyboard height ourselves (same listener pattern as ClimbReactionMenu),
+  // pad the scroll content by it, and scroll the editor into view on focus.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const onShow = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+      // Scroll after the padding from the state update has been laid out.
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 50);
+    });
+    const onHide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
+  const handleRecapEditorFocus = useCallback(() => {
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300);
+  }, []);
 
   const participants = summary.participants;
   const isParty = participants.length > 1;
@@ -181,8 +207,15 @@ function SessionSummaryContent({ summary }: { summary: SessionSummary }) {
 
   return (
     <ScrollView
+      ref={scrollViewRef}
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing[6] }]}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing[6] + keyboardHeight }]}
+      // Keep the inline recap editor visible above the keyboard on iOS (no-op on
+      // Android). The recap card lives near the bottom of a scroll surface.
+      automaticallyAdjustKeyboardInsets
+      // Let the recap editor's Save/Cancel receive their first tap while the
+      // keyboard is open instead of only dismissing it.
+      keyboardShouldPersistTaps="handled"
     >
       {/* Hero — the payoff moment */}
       <View style={styles.hero}>
@@ -296,6 +329,14 @@ function SessionSummaryContent({ summary }: { summary: SessionSummary }) {
           <Text variant="body">{summary.goal}</Text>
         </Card>
       ) : null}
+
+      {/* Recap — the ender is the session creator, so the notes are editable here. */}
+      <SessionRecapCard
+        sessionId={summary.sessionId}
+        notes={summary.notes}
+        editable
+        onEditorFocus={handleRecapEditorFocus}
+      />
 
       {/* External integration actions: save this session to Apple Health / share
           to Strava. Each renders only when applicable (iOS / connected account). */}

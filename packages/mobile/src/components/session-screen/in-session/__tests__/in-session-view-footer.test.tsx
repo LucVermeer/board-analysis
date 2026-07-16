@@ -106,6 +106,7 @@ vi.mock('../../../PressableSurface', () => ({
 }));
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
+vi.mock('../../SessionTitleSheet', () => ({ SessionTitleSheet: () => null }));
 vi.mock('../../../ClimbListItemContent', () => ({ ClimbListItemContent: () => null }));
 vi.mock('../../../EndSessionSheet', () => ({
   EndSessionSheet: ({ isEnding, onConfirm }: { isEnding?: boolean; onConfirm?: () => void }) => {
@@ -146,6 +147,7 @@ vi.mock('../../../../lib/graphql/hooks', () => ({
     data: { totalSends: 0, totalFlashes: 0, gradeDistribution: [], participants: [], hardestGrade: null, ticks: [] },
   }),
   useSessionSummary: () => ({ data: { startedAt: '2026-01-01T00:00:00.000Z' } }),
+  useSessionPreview: () => ({ data: null }),
 }));
 vi.mock('../../../../lib/store-review', () => ({
   SESSION_STORE_REVIEW_CANDIDATE_PARAM: '1',

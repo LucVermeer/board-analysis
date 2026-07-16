@@ -60,6 +60,13 @@
     "shareSuccess": "¡Enlace copiado al portapapeles!",
     "shareError": "Error al compartir",
     "comments": "Comentarios",
+    "editSession": "Editar sesión",
+    "editNameLabel": "Nombre de la sesión",
+    "editRecapLabel": "Resumen",
+    "editCancel": "Cancelar",
+    "editSave": "Guardar",
+    "editSaved": "Sesión actualizada",
+    "editSaveFailed": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
     "deleteAscent": "Eliminar ascenso",
     "deleteAscentConfirm": "¿Estás seguro? Esto no se puede deshacer.",
     "delete": "Eliminar",
@@ -220,7 +227,14 @@
     "effortTitle": "Para volver a por ello",
     "effortBody": "Ese proyecto no se va a ningún lado. Caerá.",
     "crew": "El equipo",
-    "crewStatLine": "{{sends}} encadenes · {{flashes}} flashes · {{attempts}} intentos"
+    "crewStatLine": "{{sends}} encadenes · {{flashes}} flashes · {{attempts}} intentos",
+    "recapTitle": "Resumen",
+    "addRecap": "Añadir un resumen",
+    "recapSaveError": "No se pudo guardar tu resumen. Inténtalo de nuevo.",
+    "commentLabel": "Resumen",
+    "commentPlaceholder": "¿Qué tal la sesión? Añade unas palabras…",
+    "commentHelper": "{{count}}/{{max}}",
+    "commentSaveFailed": "No se pudieron guardar tus notas. Inténtalo de nuevo."
   },
   "overview": {
     "goal": "Objetivo: {{goal}}"
@@ -385,7 +399,10 @@
       "climbCount_other": "{{count}} bloques",
       "logAscent": "Registrar ascenso",
       "alreadyLogged": "Registrado",
-      "dragHandleAria": "Arrastra para reordenar {{name}}"
+      "dragHandleAria": "Arrastra para reordenar {{name}}",
+      "endSessionCommentPlaceholder": "Añade un resumen: ¿qué tal ha ido?",
+      "endSessionCommentAria": "Resumen de la sesión",
+      "endSessionCancel": "Sigue escalando"
     },
     "queueSheet": {
       "emptyQueue": "Tu cola está vacía",
@@ -471,6 +488,11 @@
     "session": {
       "headerStart": "Empezar sesión",
       "headerActive": "Sesión",
+      "renameTitle": "Nombre de la sesión",
+      "renameSave": "Guardar",
+      "renameError": "No se pudo guardar el nombre. Inténtalo de nuevo.",
+      "renameNotAllowed": "Solo quien creó la sesión puede cambiarle el nombre.",
+      "editTitleAria": "Editar el nombre de la sesión",
       "minimize": "Minimizar sesión",
       "recordTab": "Grabar",
       "preBoardLabel": "Plafón",

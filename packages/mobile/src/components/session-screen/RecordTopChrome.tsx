@@ -21,6 +21,9 @@ type RecordTopChromeProps = {
   /** The session title — shown in the Material app bar; on glass the board pill +
    *  in-body session content carry context (no scrolled title). */
   title: string;
+  /** Open the rename sheet. Wired to the Material app-bar title (a tappable
+   *  title); on glass the in-body large title carries its own edit affordance. */
+  onEditTitle?: () => void;
   /** Open the full board switcher; the board pill doubles as the board picker. */
   onOpenBoardSwitcher: () => void;
   /** Report the measured chrome height so the list can inset its top padding. */
@@ -52,6 +55,7 @@ type RecordTopChromeProps = {
  */
 export function RecordTopChrome({
   title,
+  onEditTitle,
   onOpenBoardSwitcher,
   onHeightChange,
   onShare,
@@ -100,7 +104,25 @@ export function RecordTopChrome({
               accessibilityLabel={t('mobile.session.invite')}
             />
           ) : null}
-          <Appbar.Content title={title} color={systemColors.label as string} />
+          <Appbar.Content
+            title={title}
+            color={systemColors.label as string}
+            onPress={onEditTitle}
+            // The label must carry the session name (the bar's only rendering of
+            // it); the rename action rides the hint + the pencil action below.
+            accessibilityLabel={title}
+            accessibilityHint={onEditTitle ? t('mobile.session.editTitleAria') : undefined}
+          />
+          {onEditTitle ? (
+            // Visible rename cue: the title's own tap target has no affordance,
+            // and unlike glass there is no in-body pencil on Material.
+            <Appbar.Action
+              icon={iconMap['edit'].android}
+              color={systemColors.secondaryLabel as string}
+              onPress={onEditTitle}
+              accessibilityLabel={t('mobile.session.editTitleAria')}
+            />
+          ) : null}
           {onEndSession ? (
             <Appbar.Action
               icon={iconMap['flag'].android}
