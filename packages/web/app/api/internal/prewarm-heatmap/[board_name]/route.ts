@@ -7,11 +7,10 @@ import { dbzRead as db } from '@/app/lib/db/db';
 import { cachedGetHoldHeatmapData } from '@/app/lib/db/queries/climbs/holds-heatmap-cache';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { ParsedBoardRouteParameters } from '@/app/lib/types';
+import { requireCronAuth } from '@/app/lib/auth/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
-
-const CRON_SECRET = process.env.CRON_SECRET;
 
 // Max concurrent warm-up queries per run. Keeps DB load reasonable while still
 // finishing well inside maxDuration for the largest boards.
@@ -129,9 +128,9 @@ export async function GET(request: Request, props: { params: Promise<PrewarmRout
   const { board_name: boardNameParam } = params;
 
   // Auth check — always require valid CRON_SECRET.
-  const authHeader = request.headers.get('authorization');
-  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authError = requireCronAuth(request);
+  if (authError) {
+    return authError;
   }
 
   if (!isAuroraBoardName(boardNameParam)) {

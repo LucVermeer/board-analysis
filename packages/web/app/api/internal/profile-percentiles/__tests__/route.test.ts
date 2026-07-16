@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 vi.mock('server-only', () => ({}));
 
@@ -26,9 +26,6 @@ vi.mock('@boardsesh/db/schema', () => ({
   userClimbPercentiles: {},
 }));
 
-const originalCronSecret = process.env.CRON_SECRET;
-process.env.CRON_SECRET = 'test-secret';
-
 const routeModule = await import('../route');
 
 describe('GET /api/internal/profile-percentiles', () => {
@@ -39,7 +36,13 @@ describe('GET /api/internal/profile-percentiles', () => {
     mockExecute.mockResolvedValue(undefined);
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('returns 401 when the cron secret is missing or invalid', async () => {
+    vi.stubEnv('CRON_SECRET', 'test-secret');
+
     const response = await routeModule.GET(new Request('http://localhost/api/internal/profile-percentiles'));
 
     expect(response.status).toBe(401);
@@ -47,6 +50,8 @@ describe('GET /api/internal/profile-percentiles', () => {
   });
 
   it('refreshes the snapshot and invalidates the shared percentile cache tag', async () => {
+    vi.stubEnv('CRON_SECRET', 'test-secret');
+
     const response = await routeModule.GET(
       new Request('http://localhost/api/internal/profile-percentiles', {
         headers: {
@@ -63,9 +68,3 @@ describe('GET /api/internal/profile-percentiles', () => {
     expect(body.refreshedUsers).toBe(3);
   });
 });
-
-if (originalCronSecret === undefined) {
-  delete process.env.CRON_SECRET;
-} else {
-  process.env.CRON_SECRET = originalCronSecret;
-}
