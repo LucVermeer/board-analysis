@@ -136,9 +136,7 @@ describe('FeedbackSheet bug report contact consent', () => {
     });
     fireEvent.click(container.querySelector('[data-button="feedbackDialog.submitBug"]')!);
     await vi.waitFor(() => expect(feedbackMutation.mutateAsync).toHaveBeenCalledTimes(1));
-    expect(feedbackMutation.mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ contactConsent: true }),
-    );
+    expect(feedbackMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ contactConsent: true }));
   });
 
   it('respects an explicit opt-out when the reporter flips the switch off', async () => {
@@ -152,8 +150,6 @@ describe('FeedbackSheet bug report contact consent', () => {
     });
     fireEvent.click(container.querySelector('[data-button="feedbackDialog.submitBug"]')!);
     await vi.waitFor(() => expect(feedbackMutation.mutateAsync).toHaveBeenCalledTimes(1));
-    expect(feedbackMutation.mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ contactConsent: false }),
-    );
+    expect(feedbackMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ contactConsent: false }));
   });
 });
