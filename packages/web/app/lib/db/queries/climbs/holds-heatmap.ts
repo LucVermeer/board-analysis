@@ -1,4 +1,4 @@
-import { and, sql } from 'drizzle-orm';
+import { and, sql, type SQL } from 'drizzle-orm';
 import { dbzRead as db, executeRows } from '@/app/lib/db/db';
 import type { ParsedBoardRouteParameters, SearchRequestPagination } from '@/app/lib/types';
 import { UNIFIED_TABLES } from '@/lib/db/queries/util/table-select';
@@ -38,60 +38,52 @@ export const getHoldHeatmapData = async (
 
     let holdStats: Record<string, unknown>[];
 
+    // This GROUP BY over board_climb_holds (millions of rows) LEFT JOIN
+    // board_climb_stats is the same plan-shape class that exhausted Postgres
+    // /dev/shm in #2378: on a broad filter the planner fans it out into a
+    // parallel hash join whose workers each allocate a dynamic-shared-memory
+    // segment, and an under-provisioned shared-memory container then raises
+    // "could not resize shared memory segment". Run it with per-gather
+    // parallelism disabled inside a transaction (SET LOCAL needs one; the pool
+    // runs prepare:false behind PgBouncer transaction pooling), mirroring the
+    // searchClimbs / countClimbs guards in @boardsesh/db.
+    const heatmapWhere = and(
+      ...filters.getClimbWhereConditions(),
+      ...filters.getSizeConditions(),
+      ...filters.getClimbStatsConditions(),
+    );
+
+    // Both the personal-progress and community branches run the identical shape;
+    // only the totalAscents column differs. Share one runner so the guard and the
+    // join/where/groupBy stay in lockstep across both.
+    const runHeatmapAggregate = (totalAscents: SQL<number>) =>
+      db.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);
+        return tx
+          .select({
+            holdId: climbHolds.holdId,
+            totalUses: sql<number>`COUNT(DISTINCT ${climbHolds.climbUuid})`,
+            totalAscents,
+            startingUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'STARTING' THEN 1 ELSE 0 END)`,
+            handUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'HAND' THEN 1 ELSE 0 END)`,
+            footUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'FOOT' THEN 1 ELSE 0 END)`,
+            finishUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'FINISH' THEN 1 ELSE 0 END)`,
+            averageDifficulty: sql<number>`AVG(${climbStats.displayDifficulty})`,
+          })
+          .from(climbHolds)
+          .innerJoin(climbs, and(...filters.getClimbHoldsJoinConditions()))
+          .leftJoin(climbStats, and(...filters.getHoldHeatmapClimbStatsConditions()))
+          .where(heatmapWhere)
+          .groupBy(climbHolds.holdId);
+      });
+
     if (personalProgressFiltersEnabled && userId) {
-      // When personal progress filters are active, we need to compute user-specific hold statistics
-      // Since the filters already limit climbs to user's attempted/completed ones,
-      // we can use the same base query but the results will be user-filtered
-      const baseQuery = db
-        .select({
-          holdId: climbHolds.holdId,
-          totalUses: sql<number>`COUNT(DISTINCT ${climbHolds.climbUuid})`,
-          totalAscents: sql<number>`COUNT(DISTINCT ${climbHolds.climbUuid})`, // For user mode, this represents user's climb count per hold
-          startingUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'STARTING' THEN 1 ELSE 0 END)`,
-          handUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'HAND' THEN 1 ELSE 0 END)`,
-          footUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'FOOT' THEN 1 ELSE 0 END)`,
-          finishUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'FINISH' THEN 1 ELSE 0 END)`,
-          averageDifficulty: sql<number>`AVG(${climbStats.displayDifficulty})`,
-        })
-        .from(climbHolds)
-        .innerJoin(climbs, and(...filters.getClimbHoldsJoinConditions()))
-        .leftJoin(climbStats, and(...filters.getHoldHeatmapClimbStatsConditions()))
-        .where(
-          and(
-            ...filters.getClimbWhereConditions(),
-            ...filters.getSizeConditions(),
-            ...filters.getClimbStatsConditions(),
-          ),
-        )
-        .groupBy(climbHolds.holdId);
-
-      holdStats = await baseQuery;
+      // The filters already limit climbs to the user's attempted/completed ones, so
+      // totalAscents is the user's climb count per hold (same shape as totalUses).
+      holdStats = await runHeatmapAggregate(sql<number>`COUNT(DISTINCT ${climbHolds.climbUuid})`);
     } else {
-      // Use global community stats when no personal progress filters are active
-      const baseQuery = db
-        .select({
-          holdId: climbHolds.holdId,
-          totalUses: sql<number>`COUNT(DISTINCT ${climbHolds.climbUuid})`,
-          totalAscents: sql<number>`SUM(${climbStats.ascensionistCount})`,
-          startingUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'STARTING' THEN 1 ELSE 0 END)`,
-          handUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'HAND' THEN 1 ELSE 0 END)`,
-          footUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'FOOT' THEN 1 ELSE 0 END)`,
-          finishUses: sql<number>`SUM(CASE WHEN ${climbHolds.holdState} = 'FINISH' THEN 1 ELSE 0 END)`,
-          averageDifficulty: sql<number>`AVG(${climbStats.displayDifficulty})`,
-        })
-        .from(climbHolds)
-        .innerJoin(climbs, and(...filters.getClimbHoldsJoinConditions()))
-        .leftJoin(climbStats, and(...filters.getHoldHeatmapClimbStatsConditions()))
-        .where(
-          and(
-            ...filters.getClimbWhereConditions(),
-            ...filters.getSizeConditions(),
-            ...filters.getClimbStatsConditions(),
-          ),
-        )
-        .groupBy(climbHolds.holdId);
-
-      holdStats = await baseQuery;
+      // Global community stats: sum ascents across the matching climbs per hold.
+      holdStats = await runHeatmapAggregate(sql<number>`SUM(${climbStats.ascensionistCount})`);
     }
 
     // Add user-specific data only if not already computed in the main query

@@ -39,6 +39,12 @@ const PARAMS: BoardRouteParams = {
   angle: 40,
 };
 
+// PARAMS with no set-id restriction. Dropping the `required_set_ids <@ …`
+// selectivity removes the GIN bitmap that keeps the count's board_climbs scan
+// cheap, which is what tips countClimbs' plan from a serial bitmap scan to the
+// Parallel Hash Join + Parallel Seq Scan that exhausted /dev/shm in #2378.
+const BROAD_PARAMS: BoardRouteParams = { ...PARAMS, set_ids: [] };
+
 type PlanNode = { type: string; index?: string; rel?: string };
 
 function collectNodes(plan: Record<string, unknown>, acc: PlanNode[] = []): PlanNode[] {
@@ -70,12 +76,25 @@ if (!EXPLAIN_DB_URL) {
   const tableSelects = (statements: Captured[]) =>
     statements.filter((c) => /select/i.test(c.query) && /board_climb/i.test(c.query) && !/^\s*explain/i.test(c.query));
 
-  async function explainNodes(query: string, params: unknown[], standard: boolean): Promise<PlanNode[]> {
+  // Planner GUCs applied as SET LOCAL (inside a transaction) before EXPLAIN.
+  // GUARD mirrors the runtime guard standardSearch / countClimbs wrap their query
+  // in. FORCE_PARALLEL makes the planner strongly prefer a parallel plan so the
+  // "unguarded" control in the count regression is non-vacuous regardless of the
+  // dev DB's default parallelism tuning.
+  const GUARD = ['SET LOCAL max_parallel_workers_per_gather = 0'];
+  const FORCE_PARALLEL = [
+    'SET LOCAL max_parallel_workers_per_gather = 4',
+    'SET LOCAL parallel_setup_cost = 0',
+    'SET LOCAL parallel_tuple_cost = 0',
+    'SET LOCAL min_parallel_table_scan_size = 0',
+    'SET LOCAL min_parallel_index_scan_size = 0',
+  ];
+
+  async function explainNodes(query: string, params: unknown[], sessionSetup: string[] = []): Promise<PlanNode[]> {
     let rows: postgres.RowList<Record<string, unknown>[]>;
-    if (standard) {
-      // Mirror the runtime planner settings of standardSearch's transaction.
+    if (sessionSetup.length > 0) {
       rows = await client.begin(async (tx) => {
-        await tx.unsafe('SET LOCAL max_parallel_workers_per_gather = 0');
+        for (const statement of sessionSetup) await tx.unsafe(statement);
         return tx.unsafe(`EXPLAIN (FORMAT JSON) ${query}`, params as never[]);
       });
     } else {
@@ -93,8 +112,11 @@ if (!EXPLAIN_DB_URL) {
 
   // Reconstruct countClimbs' query shape (it lives in packages/backend and can't be
   // imported here). Keep in sync with packages/backend/.../count-climbs.ts.
-  function buildCountSql(searchParams: ClimbSearchParams): { text: string; params: unknown[] } {
-    const filters = createClimbFilters(PARAMS, searchParams, undefined);
+  function buildCountSql(
+    searchParams: ClimbSearchParams,
+    params: BoardRouteParams = PARAMS,
+  ): { text: string; params: unknown[] } {
+    const filters = createClimbFilters(params, searchParams, undefined);
     const isDraftsQuery = filters.isOnlyDrafts;
     const whereConditions = [
       ...filters.getClimbWhereConditions(),
@@ -142,7 +164,7 @@ if (!EXPLAIN_DB_URL) {
     void it('hot path (ascents DESC, page 0) is a pure index-ordered scan: no sort, no Gather', async () => {
       const selects = tableSelects(await runSearch({ page: 0, pageSize: 20, sortBy: 'ascents', sortOrder: 'desc' }));
       assert.ok(selects.length >= 1, 'expected a stats-driven SELECT');
-      const nodes = await explainNodes(selects[0].query, selects[0].params, false);
+      const nodes = await explainNodes(selects[0].query, selects[0].params);
       assert.ok(
         indexNames(nodes).some((n) => /ascents_covering_v2/.test(n)),
         `hot path should use the v2 ascents covering index; saw: ${indexNames(nodes).join(', ')}`,
@@ -158,7 +180,7 @@ if (!EXPLAIN_DB_URL) {
     void it('quality DESC page 0 is a pure index-ordered scan: no sort, no Gather', async () => {
       const selects = tableSelects(await runSearch({ page: 0, pageSize: 20, sortBy: 'quality', sortOrder: 'desc' }));
       assert.ok(selects.length >= 1);
-      const nodes = await explainNodes(selects[0].query, selects[0].params, false);
+      const nodes = await explainNodes(selects[0].query, selects[0].params);
       assert.ok(
         indexNames(nodes).some((n) => /quality_covering_v2/.test(n)),
         `quality path should use the v2 quality covering index; saw: ${indexNames(nodes).join(', ')}`,
@@ -172,7 +194,7 @@ if (!EXPLAIN_DB_URL) {
     void it('stats-driven deep page (page 3) still uses the ascents covering index', async () => {
       const selects = tableSelects(await runSearch({ page: 3, pageSize: 20, sortBy: 'ascents', sortOrder: 'desc' }));
       assert.ok(selects.length >= 1);
-      const nodes = await explainNodes(selects[0].query, selects[0].params, false);
+      const nodes = await explainNodes(selects[0].query, selects[0].params);
       assert.ok(indexNames(nodes).some((n) => /ascents_covering/.test(n)));
     });
 
@@ -185,7 +207,7 @@ if (!EXPLAIN_DB_URL) {
       assert.ok(setLocalIdx >= 0, 'standard path must issue SET LOCAL max_parallel_workers_per_gather = 0');
       assert.ok(setLocalIdx < selectIdx, 'SET LOCAL must run before the SELECT');
       const selects = tableSelects(statements);
-      const nodes = await explainNodes(selects[0].query, selects[0].params, true);
+      const nodes = await explainNodes(selects[0].query, selects[0].params, GUARD);
       assert.equal(
         nodes.some((n) => /Gather/.test(n.type)),
         false,
@@ -222,7 +244,7 @@ if (!EXPLAIN_DB_URL) {
 
     void it('count without stats filters drops the board_climb_stats LEFT JOIN (PG join elimination)', async () => {
       const { text, params } = buildCountSql({ page: 0, pageSize: 20 });
-      const nodes = await explainNodes(text, params, false);
+      const nodes = await explainNodes(text, params);
       assert.equal(
         nodes.some((n) => /board_climb_stats/.test(n.rel ?? '')),
         false,
@@ -232,7 +254,7 @@ if (!EXPLAIN_DB_URL) {
 
     void it('count with a stats filter keeps the board_climb_stats join', async () => {
       const { text, params } = buildCountSql({ page: 0, pageSize: 20, minAscents: 50 });
-      const nodes = await explainNodes(text, params, false);
+      const nodes = await explainNodes(text, params);
       assert.ok(
         nodes.some((n) => /board_climb_stats/.test(n.rel ?? '')),
         'a minAscents count must still join board_climb_stats',
@@ -241,10 +263,37 @@ if (!EXPLAIN_DB_URL) {
 
     void it('count with projectsOnly keeps the board_climb_stats join (stats column referenced in WHERE)', async () => {
       const { text, params } = buildCountSql({ page: 0, pageSize: 20, projectsOnly: true });
-      const nodes = await explainNodes(text, params, false);
+      const nodes = await explainNodes(text, params);
       assert.ok(
         nodes.some((n) => /board_climb_stats/.test(n.rel ?? '')),
         'projectsOnly references stats.ascensionist_count via COALESCE — join must be retained',
+      );
+    });
+
+    void it('broad count goes parallel unguarded but the countClimbs SET LOCAL guard eliminates the Gather (#2378 DSM regression)', async () => {
+      // set_ids: [] removes the required_set_ids GIN bitmap; minAscents keeps the
+      // board_climb_stats join (PG can't eliminate it), so the planner's cheapest
+      // plan is a Parallel Hash Join + Parallel Seq Scan on board_climbs — the plan
+      // that allocated one /dev/shm DSM segment per worker and raised "could not
+      // resize shared memory segment" in #2378.
+      const { text, params } = buildCountSql({ page: 0, pageSize: 20, minAscents: 1 }, BROAD_PARAMS);
+
+      // Control: when parallelism is available the planner DOES pick a Gather here,
+      // so the guarded assertion below is a real gate, not a vacuous pass.
+      const unguarded = await explainNodes(text, params, FORCE_PARALLEL);
+      assert.equal(
+        hasGatherNode(unguarded),
+        true,
+        `control: the broad count must go parallel when unguarded; saw: ${unguarded.map((n) => n.type).join(', ')}`,
+      );
+
+      // countClimbs runs this exact shape inside a transaction with
+      // SET LOCAL max_parallel_workers_per_gather = 0 — no Gather, no per-worker DSM.
+      const guarded = await explainNodes(text, params, GUARD);
+      assert.equal(
+        hasGatherNode(guarded),
+        false,
+        'the countClimbs SET LOCAL guard must eliminate the parallel Gather that exhausted /dev/shm in #2378',
       );
     });
 
