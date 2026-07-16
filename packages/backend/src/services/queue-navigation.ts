@@ -38,7 +38,20 @@ export async function setCurrentClimbAndPublish(
     let addedInThisAttempt = false;
 
     if (item !== null && shouldAddToQueue && !queue.some((i) => i.uuid === item.uuid)) {
-      queue = [...queue, item];
+      // Insert the new climb immediately after the current climb (issue #2217)
+      // instead of appending it to the end. Activating a climb via the light
+      // bulb should slot it into the "up next" position and push the current
+      // climb into history — exactly like the local "set climb active" flow.
+      // Appending to the end and then broadcasting a FullSync with that order
+      // reordered every peer's queue and jumped the current pointer to the
+      // bottom. Fall back to append when there is no current climb (or it is no
+      // longer in the queue) to anchor the insertion to.
+      const currentItem = currentState.currentClimbQueueItem;
+      const currentIndex = currentItem ? queue.findIndex((i) => i.uuid === currentItem.uuid) : -1;
+      queue =
+        currentIndex === -1
+          ? [...queue, item]
+          : [...queue.slice(0, currentIndex + 1), item, ...queue.slice(currentIndex + 1)];
       addedInThisAttempt = true;
     }
 

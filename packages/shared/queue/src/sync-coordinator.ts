@@ -151,6 +151,10 @@ export function mapQueueEventToAction<TSearchParams extends QueueSearchParams = 
       //   2. Browsing-only navigations on web already pass non-suggested items
       //      that exist in the queue, so the idempotent guard makes
       //      shouldAddToQueue:true a no-op there.
+      // When the item does need inserting (not already queued), place it right
+      // after the current climb, not at the end (issue #2217) — a peer lighting
+      // up a new climb should slot it into the "up next" position, matching the
+      // local "set climb active" behaviour instead of bumping it to the bottom.
       return {
         kind: 'dispatch',
         eventType: 'CurrentClimbChanged',
@@ -160,6 +164,7 @@ export function mapQueueEventToAction<TSearchParams extends QueueSearchParams = 
           payload: {
             item: incoming,
             shouldAddToQueue: incoming != null,
+            insertAfterCurrent: true,
             isServerEvent: true,
             eventClientId: event.clientId ?? undefined,
             myClientId: context?.myClientId ?? undefined,
