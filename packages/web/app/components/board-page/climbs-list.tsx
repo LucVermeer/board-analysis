@@ -585,37 +585,55 @@ const ClimbsList = ({
 
   return (
     <SelectionStoreContext.Provider value={selectionStore}>
-      <Box>
+      {/*
+       * translate="no" on the whole list surface tells well-behaved browser
+       * translators (Chrome/Safari auto-translate) to leave this subtree's
+       * DOM alone. The climb rows below already carried their own
+       * translate="no" (kept, now redundant but harmless) — this closes the
+       * gap for the header row and sentinel/skeleton area, which re-render
+       * at least as often as the rows (angle/search-pill state changes on
+       * nearly every climb tap) but weren't previously covered. See
+       * issue #3604.
+       */}
+      <Box translate="no">
         {header}
         {/* Header: Search pills (left, scrollable) | View toggle + Angle selector (right) */}
-        <Box sx={headerContainerSx}>
-          {/* Left: Search pills (scrollable) */}
-          <Box sx={searchPillsContainerSx}>{headerInline}</Box>
-          {/* Right: View toggle + Angle selector */}
-          <Box sx={rightControlsSx}>
-            <Box sx={viewModeToggleBoxSx}>
-              <IconButton
-                id="onboarding-view-mode-list"
-                onClick={handleListView}
-                aria-label={t('list.viewMode.list')}
-                size="small"
-                sx={listButtonSx}
-              >
-                <FormatListBulletedOutlined fontSize="small" />
-              </IconButton>
-              <IconButton
-                id="onboarding-view-mode-grid"
-                onClick={handleGridView}
-                aria-label={t('list.viewMode.grid')}
-                size="small"
-                sx={gridButtonSx}
-              >
-                <AppsOutlined fontSize="small" />
-              </IconButton>
+        {/*
+         * Separate recoverable ErrorBoundary from the climb-rows one below —
+         * defense-in-depth for translator extensions that ignore
+         * translate="no". Kept isolated so a recovery-remount here doesn't
+         * reset AngleSelector's/RecentSearchPills' unrelated local state.
+         */}
+        <ErrorBoundary recoverable>
+          <Box sx={headerContainerSx}>
+            {/* Left: Search pills (scrollable) */}
+            <Box sx={searchPillsContainerSx}>{headerInline}</Box>
+            {/* Right: View toggle + Angle selector */}
+            <Box sx={rightControlsSx}>
+              <Box sx={viewModeToggleBoxSx}>
+                <IconButton
+                  id="onboarding-view-mode-list"
+                  onClick={handleListView}
+                  aria-label={t('list.viewMode.list')}
+                  size="small"
+                  sx={listButtonSx}
+                >
+                  <FormatListBulletedOutlined fontSize="small" />
+                </IconButton>
+                <IconButton
+                  id="onboarding-view-mode-grid"
+                  onClick={handleGridView}
+                  aria-label={t('list.viewMode.grid')}
+                  size="small"
+                  sx={gridButtonSx}
+                >
+                  <AppsOutlined fontSize="small" />
+                </IconButton>
+              </Box>
+              {angleSelector}
             </Box>
-            {angleSelector}
           </Box>
-        </Box>
+        </ErrorBoundary>
 
         <ErrorBoundary recoverable>
           {viewMode === 'grid' ? (

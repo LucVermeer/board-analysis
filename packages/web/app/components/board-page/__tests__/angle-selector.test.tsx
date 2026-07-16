@@ -163,4 +163,23 @@ describe('AngleSelector', () => {
     expect(mockPush).toHaveBeenCalled();
     expect(mockSetSessionBoardPath).not.toHaveBeenCalled();
   });
+
+  // -------------------------------------------------------------------
+  // #3604: the trigger button re-renders on nearly every climb selection
+  // (angleSelectorElement is memoized on currentClimb). A bare `{currentAngle}°`
+  // compiles to two sibling text nodes; if a browser translator wraps one in
+  // a <font> tag before React updates it, the reconciler's removeChild can
+  // target a node that's no longer where it expects. Wrapping in a single
+  // <span> gives the translator one element to mutate instead.
+  // -------------------------------------------------------------------
+  it('renders the trigger angle as a single element, not bare sibling text nodes', () => {
+    render(<AngleSelector boardName="kilter" boardDetails={boardDetails} currentAngle={40} currentClimb={null} />);
+
+    const trigger = screen.getByRole('button', { name: /40/ });
+    // The angle + degree symbol must live inside one child element (a span),
+    // not as direct bare text children of the button.
+    expect(trigger.children).toHaveLength(1);
+    expect(trigger.children[0].tagName).toBe('SPAN');
+    expect(trigger.children[0].textContent).toBe('40°');
+  });
 });

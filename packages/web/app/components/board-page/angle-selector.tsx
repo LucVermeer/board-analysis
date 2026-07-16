@@ -235,7 +235,13 @@ export default function AngleSelector({
           color: isDark ? '#ffffff' : 'primary.main',
         }}
       >
-        {currentAngle}°
+        {/*
+         * Wrapped in a span (rather than two bare sibling text nodes) so a
+         * browser translator replaces one element instead of orphaning
+         * React's text node — same pattern as logbook-feed-item.tsx. This
+         * button re-renders on nearly every climb selection. See #3604.
+         */}
+        <span>{currentAngle}°</span>
       </MuiButton>
 
       <SwipeableDrawer
