@@ -19,7 +19,16 @@ export const boardPresenceSubscriptions = {
    */
   boardNowPlaying: {
     subscribe: async function* (_: unknown, { boardId }: { boardId: number }, ctx: ConnectionContext) {
-      await applyRateLimit(ctx, 30, 'boardNowPlaying');
+      // Bumped to the same 60/min budget as the sibling anon-tolerant reads
+      // for consistency. Note this subscription is WS-only, so the "multiple
+      // gym TVs behind one NAT" framing used for the HTTP-keyed reads
+      // (boardConnection, boardPresenceStats — keyed on ctx.clientIp for
+      // anon) doesn't apply here as-is: `applyRateLimit` falls back to
+      // `ctx.connectionId` when clientIp is unset, and the WS context never
+      // sets clientIp (see yoga.ts vs websocket/setup.ts), so anonymous
+      // subscribers are already bucketed per-connection, not per-IP — several
+      // TVs behind one NAT never share a bucket here regardless of this limit.
+      await applyRateLimit(ctx, 60, 'boardNowPlaying');
       // Validates the id and, for anonymous viewers, restricts to public /
       // system-shared boards (not a private wall reached by enumerating ids);
       // logged-in callers are unbounded.

@@ -9,8 +9,13 @@ import type {
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
-import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
-import { requireActiveBoardById, requireAnonReadableBoard, resolveBoardHolder } from './shared';
+import { applyRateLimit } from '../shared/helpers';
+import {
+  assertAnonReadableBoard,
+  requireActiveBoardWithVisibilityById,
+  requireAnonReadableBoard,
+  resolveBoardHolder,
+} from './shared';
 import { computeBoardPresenceStats, getCachedBoardPresenceStats, setCachedBoardPresenceStats } from './stats';
 
 export const boardPresenceQueries = {
@@ -30,9 +35,11 @@ export const boardPresenceQueries = {
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
     await applyRateLimit(ctx, 60, 'boardRecentClimbs');
-    await requireActiveBoardById(boardId);
-    // Anonymous viewers only backfill public / system-shared boards.
-    await requireAnonReadableBoard(boardId, ctx.userId);
+    // One by-id lookup covers both the existence check and the isPublic/ownerId
+    // fields the anon gate below needs (anonymous viewers only backfill
+    // public / system-shared boards), instead of two round-trips for the same
+    // row on every anonymous request.
+    assertAnonReadableBoard(await requireActiveBoardWithVisibilityById(boardId), ctx.userId);
     return pubsub.getRecentBoardClimbs(String(boardId));
   },
 
@@ -52,15 +59,23 @@ export const boardPresenceQueries = {
    * so any authenticated user may read any active board's history (no
    * membership check). Proof-of-presence gates *writes* (see reportBoardClimb),
    * not reads. `boardRecentClimbs` is the hot 1-week cache for the same data.
+   *
+   * Auth-optional: anonymous viewers read this same shared history for
+   * public / system-shared boards (same gate as `boardRecentClimbs` /
+   * `boardConnection`); a private board is masked as NOT_FOUND for them, same
+   * as a nonexistent board.
    */
   boardHistory: async (
     _: unknown,
     { boardId, limit, before }: { boardId: number; limit?: number | null; before?: string | null },
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'boardHistory');
-    await requireActiveBoardById(boardId);
+    // One by-id lookup covers both the existence check and the isPublic/ownerId
+    // fields the anon gate below needs (anonymous viewers only read public /
+    // system-shared boards' history), instead of two round-trips for the same
+    // row on every anonymous request.
+    assertAnonReadableBoard(await requireActiveBoardWithVisibilityById(boardId), ctx.userId);
 
     // Parse + validate the cursor before it reaches SQL, so a malformed value
     // returns a clean error instead of a leaked Postgres parse error. Trim
@@ -135,15 +150,26 @@ export const boardPresenceQueries = {
    * changes these stats (`saveTick` / `updateTick` / `deleteTick` via
    * `queueBoardStatsPublish`) refreshes the cache within its own debounce
    * window, so a cache hit is never more than ~60s + the debounce stale.
+   *
+   * Auth-optional: anonymous viewers read these same stats for public /
+   * system-shared boards (same gate as `boardHistory` / `boardRecentClimbs`
+   * / `boardConnection`); a private board is masked as NOT_FOUND for them,
+   * same as a nonexistent board.
    */
   boardPresenceStats: async (
     _: unknown,
     { boardId }: { boardId: number },
     ctx: ConnectionContext,
   ): Promise<BoardPresenceStats> => {
-    requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 30, 'boardPresenceStats');
-    const board = await requireActiveBoardById(boardId);
+    // Multiple gym TVs can sit behind one NAT and reconnect together after a
+    // network blip, so this anon-tolerant read gets the higher 60/min budget.
+    await applyRateLimit(ctx, 60, 'boardPresenceStats');
+    // One by-id lookup covers both the existence check and the isPublic/ownerId
+    // fields the anon gate below needs, instead of two round-trips for the
+    // same row on every anonymous request.
+    const board = await requireActiveBoardWithVisibilityById(boardId);
+    // Anonymous viewers only read public / system-shared boards' stats.
+    assertAnonReadableBoard(board, ctx.userId);
 
     const cached = await getCachedBoardPresenceStats(boardId);
     if (cached) return cached;
@@ -170,7 +196,9 @@ export const boardPresenceQueries = {
     { boardId }: { boardId: number },
     ctx: ConnectionContext,
   ): Promise<BoardConnectionHolder | null> => {
-    await applyRateLimit(ctx, 30, 'boardConnection');
+    // Multiple gym TVs can sit behind one NAT and reconnect together after a
+    // network blip, so this anon-tolerant read gets the higher 60/min budget.
+    await applyRateLimit(ctx, 60, 'boardConnection');
     // Validates the id and, for anonymous viewers, restricts to public /
     // system-shared boards.
     await requireAnonReadableBoard(boardId, ctx.userId);

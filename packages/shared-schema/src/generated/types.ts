@@ -498,7 +498,7 @@ export type BoardLeaderboardInput = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   /** Offset for pagination */
   offset?: InputMaybe<Scalars['Int']['input']>;
-  /** Time period (week, month, year, all) */
+  /** Time period (day, week, month, year, all). 'day' is a rolling last-24-hours window (NOW() - INTERVAL '1 day'), not the calendar day so far. */
   period?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -3775,14 +3775,24 @@ export type Query = {
    * paging never repeats or skips even when several sends share a `sentAt`
    * second. A non-integer `before` is rejected with BAD_USER_INPUT. `limit`
    * is capped at 100. This is the lasting "what was on the wall" record;
-   * `boardRecentClimbs` is the hot 1 week cache.
+   * `boardRecentClimbs` is the hot 1 week cache. Anonymous access is allowed
+   * for public and system-shared boards; private boards are masked as
+   * NOT_FOUND for anonymous callers.
    */
   boardHistory: Array<BoardPresenceClimb>;
-  /** Get leaderboard for a board. */
+  /**
+   * Get leaderboard for a board. Anonymous access is allowed for public and
+   * system-shared boards; private boards are masked as NOT_FOUND for anonymous
+   * callers. The 'day' period is a rolling last-24-hours window, not the
+   * calendar day so far (labelled "Today" for display, but not a UTC/local
+   * midnight boundary).
+   */
   boardLeaderboard: BoardLeaderboard;
   /**
    * Lightweight stats for a board's wall feed — durable counts derived from
    * `boardsesh_ticks` stamped with this board_id, plus the live window.
+   * Anonymous access is allowed for public and system-shared boards; private
+   * boards are masked as NOT_FOUND for anonymous callers.
    */
   boardPresenceStats: BoardPresenceStats;
   /**

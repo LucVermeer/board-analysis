@@ -292,7 +292,10 @@ export async function requireActiveBoardById(boardId: number): Promise<ActivePre
   assertValidBoardId(boardId);
   const board = await findActiveBoardById(boardId);
   if (!board) {
-    throw new GraphQLError('Board not found');
+    // NOT_FOUND matches requireAnonReadableBoard's mask below, so a missing
+    // board and a private board masked from an anonymous viewer produce the
+    // identical error shape (message + extensions.code) on the wire.
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
   return board;
 }
@@ -320,6 +323,57 @@ export async function requireAnonReadableBoard(
     .where(and(eq(dbSchema.userBoards.id, boardId), isNull(dbSchema.userBoards.deletedAt)))
     .limit(1);
   if (!board || (!board.isPublic && board.ownerId !== SYSTEM_BOARD_OWNER_ID)) {
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
+  }
+}
+
+type BoardVisibility = Pick<typeof dbSchema.userBoards.$inferSelect, 'isPublic' | 'ownerId'>;
+
+/**
+ * Same shape as `requireActiveBoardById`, plus the `isPublic`/`ownerId`
+ * columns `requireAnonReadableBoard` needs. Callers that need both checks
+ * (`boardHistory`, `boardPresenceStats`, `boardRecentClimbs`) can do a single
+ * indexed by-id lookup and pass the row to `assertAnonReadableBoard` instead
+ * of `requireActiveBoardById` + `requireAnonReadableBoard` issuing two
+ * separate round-trips for the same row on every anonymous request.
+ */
+export async function requireActiveBoardWithVisibilityById(
+  boardId: number,
+): Promise<ActivePresenceBoard & BoardVisibility> {
+  assertValidBoardId(boardId);
+  const [board] = await db
+    .select({
+      id: dbSchema.userBoards.id,
+      name: dbSchema.userBoards.name,
+      boardType: dbSchema.userBoards.boardType,
+      layoutId: dbSchema.userBoards.layoutId,
+      sizeId: dbSchema.userBoards.sizeId,
+      setIds: dbSchema.userBoards.setIds,
+      serialNumber: dbSchema.userBoards.serialNumber,
+      angle: dbSchema.userBoards.angle,
+      isPublic: dbSchema.userBoards.isPublic,
+      ownerId: dbSchema.userBoards.ownerId,
+    })
+    .from(dbSchema.userBoards)
+    .where(and(eq(dbSchema.userBoards.id, boardId), isNull(dbSchema.userBoards.deletedAt)))
+    .limit(1);
+  if (!board) {
+    // Same NOT_FOUND shape as requireActiveBoardById — see that function's
+    // comment for why the extensions.code matters here.
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
+  }
+  return board;
+}
+
+/**
+ * `requireAnonReadableBoard`'s gate, applied to a board row already loaded via
+ * `requireActiveBoardWithVisibilityById` instead of re-querying by id. Same
+ * masking behaviour: no-op for logged-in callers, NOT_FOUND for anonymous
+ * callers on a non-public board that isn't system-owned.
+ */
+export function assertAnonReadableBoard(board: BoardVisibility, viewerUserId: string | null | undefined): void {
+  if (viewerUserId) return;
+  if (!board.isPublic && board.ownerId !== SYSTEM_BOARD_OWNER_ID) {
     throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
 }
