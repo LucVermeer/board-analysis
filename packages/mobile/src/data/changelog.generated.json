@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-16T20:45:00.715Z",
+  "generatedAt": "2026-07-16T20:51:12.211Z",
   "entries": [
+    {
+      "prNumber": 3692,
+      "category": "fixed",
+      "title": "Importing your Tension Board history now keeps attempts as attempts. Projects you tried but didn't send no longer show up as sends, so your send count and stats stay honest.",
+      "mergedAt": "2026-07-16T20:48:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3692",
+      "body": "Already imported before this fix? Just re-import your history — the mislabeled sends get corrected in place."
+    },
     {
       "prNumber": 3691,
       "category": "fixed",

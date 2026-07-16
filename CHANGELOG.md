@@ -45,6 +45,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Importing your Tension Board history now keeps attempts as attempts. Projects you tried but didn't send no longer show up as sends, so your send count and stats stay honest. ([#3692](https://github.com/boardsesh/boardsesh/pull/3692))
+  Already imported before this fix? Just re-import your history — the mislabeled sends get corrected in place.
 - Party mode: when someone else lights up a climb, it now slots in right after the current climb instead of getting bumped to the bottom of the queue — everyone's up-next order stays put. ([#3691](https://github.com/boardsesh/boardsesh/pull/3691))
 - Embed widgets now show proper titles and descriptions again — the live board and gym-leaderboard embeds were briefly rendering placeholder text instead of real metadata. ([#3704](https://github.com/boardsesh/boardsesh/pull/3704))
 - Fixed a rare bug where logging a tick right as a party session wrapped up could silently fail to save — your tick is saved every time now, even if the session link can't be kept. ([#3686](https://github.com/boardsesh/boardsesh/pull/3686))
