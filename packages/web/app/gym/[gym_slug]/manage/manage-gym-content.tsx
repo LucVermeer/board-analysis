@@ -21,6 +21,7 @@ import GymBoardsTab from '@/app/components/gym-entity/manage/gym-boards-tab';
 import KiosksTab from '@/app/components/gym-entity/manage/kiosks-tab';
 import BrandingTab from '@/app/components/gym-entity/manage/branding-tab';
 import GymSlugGuard from '@/app/components/gym-entity/manage/gym-slug-guard';
+import GymWelcomeCard from '@/app/components/gym-entity/manage/gym-welcome-card';
 import ConfirmDialog from '@/app/components/gym-entity/manage/confirm-dialog';
 import { decideManageNavigation, type ManageNavigation } from '@/app/components/gym-entity/manage/manage-nav-guard';
 
@@ -122,6 +123,8 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
       </Typography>
 
       {!gym.slug && <GymSlugGuard gym={gym} onSlugSet={handleSlugSet} />}
+
+      <GymWelcomeCard gym={gym} />
 
       <Tabs
         value={activeTab}

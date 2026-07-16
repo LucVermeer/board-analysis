@@ -63,6 +63,9 @@ export default function NotificationList({ initialData }: NotificationListProps)
         router.push(`/profile/${notification.actors[0].id}`);
       } else if (notification.type === 'new_climbs_synced' && notification.setterUsername) {
         router.push(`/setter/${encodeURIComponent(notification.setterUsername)}`);
+      } else if (notification.type === 'gym_claim_approved' && notification.entityId) {
+        // entityId is the gym UUID; the manage route resolves it by UUID.
+        router.push(`/gym/${notification.entityId}/manage`);
       } else if (notification.climbUuid && notification.boardType) {
         void navigateToClimb(notification.boardType, notification.climbUuid, notification.proposalUuid);
       }

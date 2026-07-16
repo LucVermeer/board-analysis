@@ -1994,6 +1994,8 @@ export type GroupedNotification = {
   entityId?: Maybe<Scalars['String']['output']>;
   /** Entity type */
   entityType?: Maybe<SocialEntityType>;
+  /** Gym name (for gym_claim_approved notifications) */
+  gymName?: Maybe<Scalars['String']['output']>;
   /** Whether all notifications in the group are read */
   isRead: Scalars['Boolean']['output'];
   /** Proposal UUID (for deep-linking to a specific proposal) */
@@ -3563,6 +3565,8 @@ export type Notification = {
   entityId?: Maybe<Scalars['String']['output']>;
   /** Entity type this notification relates to */
   entityType?: Maybe<SocialEntityType>;
+  /** Gym name (for gym_claim_approved notifications) */
+  gymName?: Maybe<Scalars['String']['output']>;
   /** Whether the notification has been read */
   isRead: Scalars['Boolean']['output'];
   /** Proposal UUID (for proposal notifications, to deep-link to the specific proposal) */
@@ -3597,8 +3601,10 @@ export type NotificationType =
   | 'comment_on_climb'
   | 'comment_on_tick'
   | 'comment_reply'
+  | 'gym_claim_approved'
   | 'new_climb'
   | 'new_climb_global'
+  | 'new_climbs_synced'
   | 'new_follower'
   | 'proposal_approved'
   | 'proposal_created'
@@ -7741,6 +7747,7 @@ export type GetGroupedNotificationsQuery = {
       boardType?: string | null;
       proposalUuid?: string | null;
       setterUsername?: string | null;
+      gymName?: string | null;
       isRead: boolean;
       createdAt: string;
       actors: Array<{
@@ -11530,6 +11537,7 @@ export const GetGroupedNotificationsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'proposalUuid' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'setterUsername' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'gymName' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'isRead' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                     ],

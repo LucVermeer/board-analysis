@@ -32,6 +32,8 @@
     "newClimb": "{{actor}} created a new climb",
     "newClimbsSyncedSetter": "{{setter}} set new climbs",
     "newClimbsSynced": "{{actor}} set new climbs",
+    "gymClaimApproved": "You now manage {{gym}}",
+    "gymClaimApprovedGeneric": "You're the owner now — your gym claim came through",
     "default": "You have a new notification"
   },
   "time": {

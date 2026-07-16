@@ -57,6 +57,7 @@ export const GET_GROUPED_NOTIFICATIONS = gql`
         boardType
         proposalUuid
         setterUsername
+        gymName
         isRead
         createdAt
       }
@@ -115,6 +116,7 @@ export const NOTIFICATION_RECEIVED_SUBSCRIPTION = `
         climbUuid
         boardType
         proposalUuid
+        gymName
         isRead
         createdAt
       }

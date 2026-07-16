@@ -74,6 +74,31 @@
     "exploreFeed": "Mira qué están encadenando otros escaladores"
   },
   "manage": {
+    "welcome": {
+      "title": "Pon tu rocódromo en marcha",
+      "allDoneTitle": "Todo listo",
+      "allDoneBody": "Tu rocódromo está a punto. Cierra esto cuando quieras.",
+      "progress": "{{done}} de {{total}} hechos",
+      "dismiss": "Cerrar",
+      "steps": {
+        "kiosk": {
+          "title": "Ponlo en la tele",
+          "body": "Crea un kiosco para la pantalla del muro"
+        },
+        "branding": {
+          "title": "Configura tu marca",
+          "body": "Añade tu logo y tus colores"
+        },
+        "boards": {
+          "title": "Vincula tus plafones",
+          "body": "Conecta los muros de tu rocódromo"
+        },
+        "members": {
+          "title": "Invita a tu equipo",
+          "body": "Añade al personal y a los aperturistas que ayudan"
+        }
+      }
+    },
     "title": "Gestionar {{gymName}}",
     "backToGym": "Volver a la página del rocódromo",
     "accessDenied": "No tienes permiso para gestionar este rocódromo.",

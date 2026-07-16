@@ -568,7 +568,8 @@
     "backHome": "Volver a Boardsesh",
     "success": {
       "title": "El gimnasio es tuyo",
-      "body": "Ahora eres el propietario. Mantén la ficha y los plafones al día, e invita a tu grupo a ayudar."
+      "body": "Ahora eres el propietario. Mantén la ficha y los plafones al día, e invita a tu grupo a ayudar.",
+      "setupCta": "Configura tu gimnasio"
     },
     "error": {
       "title": "Ese enlace no funcionó",

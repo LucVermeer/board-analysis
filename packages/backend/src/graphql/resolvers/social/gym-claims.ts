@@ -19,6 +19,7 @@ import {
   sendGymClaimApprovedEmail,
   sendGymClaimOwnershipLostEmail,
 } from '../../../email/email-service';
+import { pubsub } from '../../../pubsub/index';
 import { logger } from '../../../utils/logger';
 
 const CLAIM_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -28,7 +29,54 @@ export function hashClaimToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-type ClaimApplied = { gymName: string; claimEmail: string | null; priorOwnerId: string | null };
+type ClaimApplied = {
+  gymName: string;
+  gymUuid: string;
+  /** Slug for a friendly manage URL; null for slug-less (legacy) gyms — fall back to the UUID. */
+  gymSlug: string | null;
+  claimantUserId: string;
+  claimEmail: string | null;
+  priorOwnerId: string | null;
+};
+
+/**
+ * Create the in-app "you now manage this gym" notification for the claimant and
+ * push it live (best-effort). System notification — no actor, so the feed shows
+ * a gym icon rather than a person. The gym name is carried on the live payload
+ * and re-derived from `entityId` (the gym UUID) when the feed is fetched later.
+ */
+export async function createGymClaimApprovedNotification(
+  recipientId: string,
+  gymUuid: string,
+  gymName: string,
+): Promise<void> {
+  try {
+    const uuid = randomUUID();
+    await db.insert(dbSchema.notifications).values({
+      uuid,
+      recipientId,
+      actorId: null,
+      type: 'gym_claim_approved',
+      entityType: 'gym',
+      entityId: gymUuid,
+    });
+
+    pubsub.publishNotificationEvent(recipientId, {
+      notification: {
+        uuid,
+        type: 'gym_claim_approved',
+        actorId: null,
+        entityType: 'gym',
+        entityId: gymUuid,
+        gymName,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error('[GymClaim] Failed to create approval notification:', error);
+  }
+}
 
 /**
  * Apply a claim: transfer gym ownership to the claimant. The pending row is
@@ -87,12 +135,24 @@ export async function applyGymClaim(
         .where(and(eq(dbSchema.gymMembers.gymId, gym.id), eq(dbSchema.gymMembers.userId, claimantId)));
     }
 
-    return { gymName: gym.name, claimEmail: claim.claimEmail, priorOwnerId: notifyPriorOwnerId };
+    return {
+      gymName: gym.name,
+      gymUuid: gym.uuid,
+      gymSlug: gym.slug,
+      claimantUserId: claimantId,
+      claimEmail: claim.claimEmail,
+      priorOwnerId: notifyPriorOwnerId,
+    };
   });
 }
 
-/** Fire the post-transfer notifications (best-effort): claimant gets a confirmation, the displaced owner a heads-up. */
+/**
+ * Fire the post-transfer notifications (best-effort): the claimant gets an in-app
+ * notification (and an email if we have their address), and a displaced real owner
+ * a heads-up.
+ */
 async function notifyClaimApplied(result: ClaimApplied): Promise<void> {
+  await createGymClaimApprovedNotification(result.claimantUserId, result.gymUuid, result.gymName);
   if (result.claimEmail) {
     void sendGymClaimApprovedEmail(result.claimEmail, result.gymName);
   }
@@ -115,7 +175,10 @@ async function notifyClaimApplied(result: ClaimApplied): Promise<void> {
  */
 export async function verifyGymClaimByToken(
   token: string,
-): Promise<{ ok: true; gymName: string } | { ok: false; reason: 'invalid' | 'expired' | 'used' }> {
+): Promise<
+  | { ok: true; gymName: string; gymSlug: string | null; gymUuid: string }
+  | { ok: false; reason: 'invalid' | 'expired' | 'used' }
+> {
   if (!token) return { ok: false, reason: 'invalid' };
   const tokenHash = hashClaimToken(token);
 
@@ -138,7 +201,7 @@ export async function verifyGymClaimByToken(
   const result = await applyGymClaim(claim);
   if (!result) return { ok: false, reason: 'used' };
   await notifyClaimApplied(result);
-  return { ok: true, gymName: result.gymName };
+  return { ok: true, gymName: result.gymName, gymSlug: result.gymSlug, gymUuid: result.gymUuid };
 }
 
 /** The single pending claim (if any) this user has on this gym. */

@@ -74,6 +74,31 @@
     "exploreFeed": "Voir ce que les grimpeurs enchaînent"
   },
   "manage": {
+    "welcome": {
+      "title": "Mets ta salle en route",
+      "allDoneTitle": "Tout est prêt",
+      "allDoneBody": "Ta salle est parée. Ferme ceci quand tu veux.",
+      "progress": "{{done}} sur {{total}} faits",
+      "dismiss": "Fermer",
+      "steps": {
+        "kiosk": {
+          "title": "Affiche-la sur la TV",
+          "body": "Crée une borne pour l'écran du mur"
+        },
+        "branding": {
+          "title": "Personnalise ton identité",
+          "body": "Ajoute ton logo et tes couleurs"
+        },
+        "boards": {
+          "title": "Relie tes boards",
+          "body": "Connecte les murs de ta salle"
+        },
+        "members": {
+          "title": "Invite ton crew",
+          "body": "Ajoute le staff et les ouvreurs qui t'aident"
+        }
+      }
+    },
     "title": "Gérer {{gymName}}",
     "backToGym": "Retour à la page de la salle",
     "accessDenied": "Tu n'as pas la permission de gérer cette salle.",

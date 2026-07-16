@@ -13,6 +13,7 @@ import ChatBubbleOutline from '@mui/icons-material/ChatBubbleOutline';
 import ThumbUpOutlined from '@mui/icons-material/ThumbUpOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import AddCircleOutline from '@mui/icons-material/AddCircleOutline';
+import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { GroupedNotification, NotificationType } from '@boardsesh/shared-schema';
@@ -94,6 +95,10 @@ function getNotificationText(notification: GroupedNotification, t: TFunction): s
       return notification.setterUsername
         ? t('items.newClimbsSyncedSetter', { setter: notification.setterUsername })
         : t('items.newClimbsSynced', { actor });
+    case 'gym_claim_approved':
+      return notification.gymName
+        ? t('items.gymClaimApproved', { gym: notification.gymName })
+        : t('items.gymClaimApprovedGeneric');
     default:
       return t('items.default');
   }
@@ -119,6 +124,8 @@ function getNotificationIcon(type: NotificationType) {
     case 'new_climb_global':
     case 'new_climbs_synced':
       return <AddCircleOutline fontSize="small" />;
+    case 'gym_claim_approved':
+      return <StorefrontOutlined fontSize="small" />;
     default:
       return null;
   }

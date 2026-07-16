@@ -568,7 +568,8 @@
     "backHome": "Retour à Boardsesh",
     "success": {
       "title": "La salle est à vous",
-      "body": "Vous en êtes maintenant le propriétaire. Gardez la fiche et les plafonds à jour, et invitez votre équipe à participer."
+      "body": "Vous en êtes maintenant le propriétaire. Gardez la fiche et les plafonds à jour, et invitez votre équipe à participer.",
+      "setupCta": "Configurez votre salle"
     },
     "error": {
       "title": "Ce lien n’a pas fonctionné",
