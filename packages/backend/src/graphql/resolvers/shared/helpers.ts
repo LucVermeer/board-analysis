@@ -77,6 +77,90 @@ export function requireSession(ctx: ConnectionContext): string {
 }
 
 /**
+ * Grace budget for `requireSessionWithReconnectGrace`. Four checks with
+ * exponential backoff between them: 50 + 100 + 200 = ~350ms of total waiting
+ * (the last check doesn't sleep), plus a final re-check. Well under the mutation
+ * timeout, and above realistic reconnect + JOIN_SESSION latency.
+ */
+export const RECONNECT_GRACE_RETRY_CONFIG = {
+  maxRetries: 4,
+  initialDelayMs: 50,
+} as const;
+
+/**
+ * Reconnect-tolerant `requireSession` for QUEUE mutations (#2397).
+ *
+ * On a socket drop graphql-ws auto-reconnects and the client re-issues
+ * JOIN_SESSION on the fresh connection — but a queue mutation buffered by
+ * graphql-ws can flush onto that new socket *before* its JOIN_SESSION binds
+ * `ctx.sessionId`, tripping the synchronous `requireSession` guard even though
+ * the client is legitimately (re)joining. The mutation carries no sessionId and
+ * the fresh connection isn't bound until JOIN lands, so the server can't
+ * recover it — but since the client always re-joins on the same connection
+ * after a reconnect, the binding lands within a few ms.
+ *
+ * So when `ctx.sessionId` is already set (the overwhelmingly common case) we
+ * return immediately — zero added latency on the hot path. When it's unset we
+ * briefly poll the live per-connection context (and distributed state, for the
+ * cross-instance case) for the imminent JOIN, mirroring `requireSessionMember`'s
+ * subscription-side retry. If the budget expires we throw the same error
+ * `requireSession` does, so a genuine "not in a session" caller still fails —
+ * just after a bounded wait.
+ */
+export async function requireSessionWithReconnectGrace(
+  ctx: ConnectionContext,
+  maxRetries: number = RECONNECT_GRACE_RETRY_CONFIG.maxRetries,
+  initialDelayMs: number = RECONNECT_GRACE_RETRY_CONFIG.initialDelayMs,
+): Promise<string> {
+  // Hot path: sessionId already bound on the operation's context.
+  if (ctx.sessionId) {
+    return ctx.sessionId;
+  }
+
+  for (let i = 0; i < maxRetries; i++) {
+    // JOIN_SESSION binds sessionId via updateContext on the live per-connection
+    // context; re-read it rather than trusting the (possibly pre-join) snapshot
+    // this resolver was invoked with.
+    const latestCtx = getContext(ctx.connectionId);
+    if (latestCtx?.sessionId) {
+      return latestCtx.sessionId;
+    }
+
+    // Cross-instance: the fresh connection may be tracked on another instance,
+    // where JOIN wrote the binding into distributed state first.
+    const distributedState = getDistributedState();
+    if (distributedState) {
+      try {
+        const distributedConnection = await distributedState.getConnection(ctx.connectionId);
+        if (distributedConnection?.sessionId) {
+          return distributedConnection.sessionId;
+        }
+      } catch {
+        // A Redis blip can't grant a session, but it mustn't end the wait
+        // early either — fall through and retry / eventually throw.
+      }
+    }
+
+    if (i < maxRetries - 1) {
+      const delay = initialDelayMs * Math.pow(2, i);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  // Final re-check after the last backoff, then give up with the same error
+  // `requireSession` throws.
+  const finalCtx = getContext(ctx.connectionId);
+  if (finalCtx?.sessionId) {
+    return finalCtx.sessionId;
+  }
+
+  logger.warn('[Auth] requireSessionWithReconnectGrace failed after grace window', {
+    connectionId: ctx.connectionId,
+  });
+  throw new Error(`Must be in a session to perform this operation (connectionId: ${ctx.connectionId})`);
+}
+
+/**
  * Helper to require authentication.
  * Throws if the user is not authenticated.
  * Used for operations that require a logged-in user (e.g., creating sessions).

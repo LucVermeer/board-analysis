@@ -357,11 +357,21 @@ class RoomManager {
   }
 
   async disconnectClient(connectionId: string): Promise<SessionDisconnectResult | null> {
-    return disconnectClientFn(this.deps(), connectionId, (sessionId, participantId) => {
+    return disconnectClientFn(this.deps(), connectionId, (sessionId, participantId, newLeader) => {
       pubsub.publishSessionEvent(sessionId, {
         __typename: 'UserLeft',
         userId: participantId,
       });
+      // A grace-timer eviction of a leader ghost re-elects a replacement in the
+      // same atomic transition (#2135 expiry leader election); broadcast it so
+      // clients don't miss the LeaderChanged.
+      if (newLeader) {
+        pubsub.publishSessionEvent(sessionId, {
+          __typename: 'LeaderChanged',
+          leaderId: newLeader.leaderId,
+          leaderConnectionId: newLeader.leaderConnectionId,
+        });
+      }
     });
   }
 

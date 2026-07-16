@@ -18,6 +18,8 @@ import {
   PRUNE_STALE_SESSION_MEMBERS_SCRIPT,
   REMOVE_PARTICIPANT_CONNECTION_SCRIPT,
   REMOVE_PARTICIPANT_SCRIPT,
+  MARK_RECONNECTING_IF_IDLE_SCRIPT,
+  EVICT_PARTICIPANT_IF_GHOST_SCRIPT,
 } from './lua-scripts';
 import { electNewLeaderAfterRemoval } from './leader-election';
 import { logger } from '../../utils/logger';
@@ -92,17 +94,24 @@ export async function leaveSession(
   redis: Redis,
   connectionId: string,
   sessionId: string,
+  participantId?: string | null,
 ): Promise<{ newLeaderId: string | null; newLeaderParticipantId?: string | null }> {
   validateConnectionId(connectionId);
   validateSessionId(sessionId);
 
   try {
+    // Pass the leaving participant's connection set so the election can keep
+    // leadership with that participant when it still has a sibling connection
+    // (#2135 crit C). '' when no participant identity was supplied — the script
+    // then falls back to the plain earliest-connectedAt election.
+    const participantConnectionsKey = participantId ? KEYS.participantConnections(sessionId, participantId) : '';
     const result = (await redis.eval(
       LEAVE_SESSION_SCRIPT,
-      3,
+      4,
       KEYS.connection(connectionId),
       KEYS.sessionMembers(sessionId),
       KEYS.sessionLeader(sessionId),
+      participantConnectionsKey,
       connectionId,
       TTL.sessionMembership.toString(),
       TTL.sessionMembership.toString(),
@@ -444,6 +453,120 @@ export async function markParticipantPresence(
     userId: data.userId || null,
     connectionState,
   };
+}
+
+/**
+ * Outcome of a conditional RECONNECTING mark.
+ * - `reconnecting`: the participant was parked in the grace window; `user`
+ *   carries the `UserPresenceChanged` payload peers should see.
+ * - `has-live`: a reconnect already promoted the participant back to CONNECTED
+ *   on another connection — nothing was written and no presence event is owed.
+ * - `missing`: the participant hash is gone (already left/expired).
+ */
+export type ReconnectingMarkResult =
+  | { status: 'reconnecting'; user: SessionUser }
+  | { status: 'has-live' }
+  | { status: 'missing' };
+
+/**
+ * Conditionally mark a participant RECONNECTING (passive-disconnect grace),
+ * only when it has no live connection. See MARK_RECONNECTING_IF_IDLE_SCRIPT for
+ * why the read + write must be atomic (#2135 crit D). On a genuine mark this
+ * reads back the participant fields to build the `UserPresenceChanged` payload,
+ * matching `markParticipantPresence`'s shape.
+ */
+export async function markParticipantReconnectingIfIdle(
+  redis: Redis,
+  sessionId: string,
+  participantId: string,
+): Promise<ReconnectingMarkResult> {
+  validateSessionId(sessionId);
+  validateParticipantId(participantId);
+
+  const status = (await redis.eval(
+    MARK_RECONNECTING_IF_IDLE_SCRIPT,
+    3,
+    KEYS.participant(sessionId, participantId),
+    KEYS.participantConnections(sessionId, participantId),
+    KEYS.sessionParticipants(sessionId),
+    Date.now().toString(),
+    TTL.sessionMembership.toString(),
+  )) as string;
+
+  if (status === 'HAS_LIVE') {
+    return { status: 'has-live' };
+  }
+  if (status !== 'RECONNECTING') {
+    return { status: 'missing' };
+  }
+
+  const data = await redis.hgetall(KEYS.participant(sessionId, participantId));
+  if (!data || !data.participantId) {
+    // Raced away between the mark and this read — treat as missing.
+    return { status: 'missing' };
+  }
+  const leaderParticipantId = await getLeaderParticipantId(redis, sessionId);
+  return {
+    status: 'reconnecting',
+    user: {
+      id: data.participantId,
+      username: data.username || `User-${data.participantId.slice(0, 6)}`,
+      isLeader: leaderParticipantId === data.participantId,
+      avatarUrl: data.avatarUrl || undefined,
+      userId: data.userId || null,
+      connectionState: 'RECONNECTING',
+    },
+  };
+}
+
+/**
+ * Result of a conditional grace-timer eviction.
+ * - `status`: whether the participant was evicted, spared (still has a live
+ *   connection / already CONNECTED), or already gone.
+ * - `newLeaderId`: connectionId of a leader elected by the SAME transition that
+ *   evicted a leader ghost, or null when leadership didn't move.
+ */
+export type EvictGhostResult = {
+  status: 'evicted' | 'has-live' | 'not-reconnecting' | 'missing';
+  newLeaderId: string | null;
+};
+
+/**
+ * Atomically evict a participant ONLY if it's still a ghost (RECONNECTING, zero
+ * live connections), re-electing a leader in the same round-trip when the ghost
+ * held leadership. See EVICT_PARTICIPANT_IF_GHOST_SCRIPT (#2135 crit B + expiry
+ * leader election).
+ */
+export async function evictGhostParticipant(
+  redis: Redis,
+  sessionId: string,
+  participantId: string,
+): Promise<EvictGhostResult> {
+  validateSessionId(sessionId);
+  validateParticipantId(participantId);
+
+  const result = (await redis.eval(
+    EVICT_PARTICIPANT_IF_GHOST_SCRIPT,
+    5,
+    KEYS.sessionParticipants(sessionId),
+    KEYS.participant(sessionId, participantId),
+    KEYS.participantConnections(sessionId, participantId),
+    KEYS.sessionMembers(sessionId),
+    KEYS.sessionLeader(sessionId),
+    participantId,
+    TTL.sessionMembership.toString(),
+  )) as [string, string];
+
+  const [status, newLeaderId] = result;
+  const mapped: EvictGhostResult['status'] =
+    status === 'EVICTED'
+      ? 'evicted'
+      : status === 'HAS_LIVE'
+        ? 'has-live'
+        : status === 'NOT_RECONNECTING'
+          ? 'not-reconnecting'
+          : 'missing';
+  return { status: mapped, newLeaderId: newLeaderId ? newLeaderId : null };
 }
 
 export async function removeParticipantConnection(

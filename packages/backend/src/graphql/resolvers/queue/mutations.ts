@@ -3,7 +3,7 @@ import { roomManager, VersionConflictError } from '../../../services/room-manage
 import { pubsub } from '../../../pubsub/index';
 import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
 import {
-  requireSession,
+  requireSessionWithReconnectGrace,
   applyRateLimit,
   validateInput,
   MAX_RETRIES,
@@ -38,7 +38,7 @@ export const queueMutations = {
   ) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     // Validate input
     validateInput(ClimbQueueItemSchema, item, 'item');
@@ -138,7 +138,7 @@ export const queueMutations = {
   removeQueueItem: async (_: unknown, { uuid }: { uuid: string }, ctx: ConnectionContext) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     // Validate input
     validateInput(QueueItemIdSchema, uuid, 'uuid');
@@ -180,7 +180,7 @@ export const queueMutations = {
   ) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     // Validate inputs
     validateInput(QueueItemIdSchema, uuid, 'uuid');
@@ -241,7 +241,7 @@ export const queueMutations = {
   ) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     // Validate input
     if (item !== null) {
@@ -292,7 +292,7 @@ export const queueMutations = {
   mirrorCurrentClimb: async (_: unknown, { mirrored }: { mirrored: boolean }, ctx: ConnectionContext) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     const currentState = await roomManager.getQueueState(sessionId);
     let currentClimb = currentState.currentClimbQueueItem;
@@ -347,7 +347,7 @@ export const queueMutations = {
   ) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     // Validate input
     validateInput(QueueItemIdSchema, uuid, 'uuid');
@@ -390,7 +390,7 @@ export const queueMutations = {
   ) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SET_QUEUE, RATE_LIMIT_SET_QUEUE_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     // Validate queue size to prevent memory exhaustion
     validateInput(QueueArraySchema, queue, 'queue');
@@ -470,7 +470,7 @@ export const queueMutations = {
     ctx: ConnectionContext,
   ) => {
     await applyRateLimit(ctx, RATE_LIMIT_PLAYBACK, RATE_LIMIT_PLAYBACK_OP);
-    const sessionId = requireSession(ctx);
+    const sessionId = await requireSessionWithReconnectGrace(ctx);
 
     const currentState = await roomManager.getQueueState(sessionId);
 

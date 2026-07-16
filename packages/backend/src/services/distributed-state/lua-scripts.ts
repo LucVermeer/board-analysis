@@ -98,6 +98,10 @@ export const LEAVE_SESSION_SCRIPT = `
   local connKey = KEYS[1]
   local sessionMembersKey = KEYS[2]
   local leaderKey = KEYS[3]
+  -- participantConnections set of the LEAVING participant. '' when the caller
+  -- didn't supply a participant identity (see the same-participant preference
+  -- in the election below).
+  local participantConnectionsKey = KEYS[4]
   local connectionId = ARGV[1]
   local membersTTL = tonumber(ARGV[2])
   local leaderTTL = tonumber(ARGV[3])
@@ -125,28 +129,56 @@ export const LEAVE_SESSION_SCRIPT = `
 
   -- Was leader, need to elect new one
   local members = redis.call('SMEMBERS', sessionMembersKey)
+
+  -- Same-participant preference (#2135 crit C): when the leader CONNECTION
+  -- leaves but its participant still holds another live connection (e.g. a
+  -- multi-tab authenticated user leaving one tab), keep leadership with that
+  -- same participant. SessionUser.isLeader is derived from the leader
+  -- connection's participantId, so moving the leader key to a sibling
+  -- connection of the same participant produces NO user-facing LeaderChanged,
+  -- instead of spuriously handing leadership to a different participant who
+  -- happens to have connected earlier.
+  local sameParticipantConns = {}
+  if participantConnectionsKey and participantConnectionsKey ~= '' then
+    local pconns = redis.call('SMEMBERS', participantConnectionsKey)
+    for _, id in ipairs(pconns) do
+      sameParticipantConns[id] = true
+    end
+  end
+
   local candidates = {}
+  local preferred = {}
 
   for _, memberId in ipairs(members) do
     if memberId ~= connectionId then
       local memberConnKey = 'boardsesh:conn:' .. memberId
       local connectedAt = redis.call('HGET', memberConnKey, 'connectedAt')
       if connectedAt then
-        table.insert(candidates, {memberId, tonumber(connectedAt)})
+        local entry = {memberId, tonumber(connectedAt)}
+        table.insert(candidates, entry)
+        if sameParticipantConns[memberId] then
+          table.insert(preferred, entry)
+        end
       end
     end
   end
 
+  -- Prefer a sibling connection of the leaving participant when one exists.
+  local pool = candidates
+  if #preferred > 0 then
+    pool = preferred
+  end
+
   -- No candidates left
-  if #candidates == 0 then
+  if #pool == 0 then
     redis.call('DEL', leaderKey)
     return ''  -- Empty string means was leader but no new leader
   end
 
   -- Sort by connectedAt (earliest first)
-  table.sort(candidates, function(a, b) return a[2] < b[2] end)
+  table.sort(pool, function(a, b) return a[2] < b[2] end)
 
-  local newLeaderId = candidates[1][1]
+  local newLeaderId = pool[1][1]
 
   -- Set new leader with TTL
   redis.call('SET', leaderKey, newLeaderId, 'EX', leaderTTL)
@@ -518,4 +550,169 @@ export const PRUNE_STALE_SESSION_MEMBERS_SCRIPT = `
   end
 
   return staleCount
+`;
+
+/**
+ * Lua script to mark a participant RECONNECTING, but ONLY when it currently has
+ * no live connection (#2135 crit D — "passive disconnect cannot overwrite a
+ * fresher connected state").
+ *
+ * A passive WebSocket drop parks the participant in the grace window. But a
+ * reconnect that lands on ANOTHER connection during the disconnect cleanup
+ * (common on flaky networks / two-tab users) has already promoted the
+ * participant back to CONNECTED via JOIN_SESSION_SCRIPT. Marking RECONNECTING
+ * afterwards would clobber that fresher state and emit a spurious
+ * UserPresenceChanged. Reading the live-connection presence and doing the
+ * conditional write in one round-trip closes that read-then-write window.
+ *
+ * KEYS[1] = participant hash
+ * KEYS[2] = participantConnections set
+ * KEYS[3] = sessionParticipants set
+ * ARGV[1] = now (ms, for lastSeenAt)
+ * ARGV[2] = session TTL
+ * Returns: 'MISSING' (no participant hash), 'HAS_LIVE' (a live connection
+ *          exists — not marked), or 'RECONNECTING' (marked).
+ */
+export const MARK_RECONNECTING_IF_IDLE_SCRIPT = `
+  local participantKey = KEYS[1]
+  local participantConnectionsKey = KEYS[2]
+  local sessionParticipantsKey = KEYS[3]
+  local now = ARGV[1]
+  local sessionTTL = tonumber(ARGV[2])
+
+  if redis.call('EXISTS', participantKey) == 0 then
+    return 'MISSING'
+  end
+
+  -- A live connection means a reconnect already promoted this participant back
+  -- to CONNECTED. Leave it alone.
+  local connectionIds = redis.call('SMEMBERS', participantConnectionsKey)
+  for _, connectionId in ipairs(connectionIds) do
+    if redis.call('EXISTS', 'boardsesh:conn:' .. connectionId) == 1 then
+      return 'HAS_LIVE'
+    end
+  end
+
+  redis.call('HSET', participantKey, 'connectionState', 'RECONNECTING', 'lastSeenAt', now)
+  redis.call('EXPIRE', participantKey, sessionTTL)
+  redis.call('EXPIRE', sessionParticipantsKey, sessionTTL)
+  return 'RECONNECTING'
+`;
+
+/**
+ * Lua script for atomic, conditional grace-timer eviction (#2135 crit B +
+ * expiry leader election). Ties the "is this participant still a ghost?" check
+ * and the removal + leader re-election into a single round-trip.
+ *
+ * The prior code checked live-connection count OUTSIDE the delete
+ * (getParticipantLiveConnectionCount -> removeParticipant), so a reconnect that
+ * added a live connection between the check and the unconditional delete was
+ * wiped out — a zombie connection whose next mutation trips requireSession, and
+ * the participant vanished from the roster. This script only evicts when the
+ * participant is STILL parked RECONNECTING with zero live connections, all
+ * evaluated atomically. And because REMOVE_PARTICIPANT_SCRIPT never touched the
+ * leader key, evicting a ghost that held leadership left the session leaderless
+ * with no LeaderChanged; this re-elects the earliest-connected remaining member
+ * in the same transition so no LeaderChanged is missed.
+ *
+ * KEYS[1] = sessionParticipants set
+ * KEYS[2] = participant hash
+ * KEYS[3] = participantConnections set
+ * KEYS[4] = sessionMembers set
+ * KEYS[5] = sessionLeader key
+ * ARGV[1] = participantId being evicted
+ * ARGV[2] = session TTL (also used as the new leader key TTL)
+ * Returns: { status, newLeaderId }
+ *   status = 'MISSING' | 'NOT_RECONNECTING' | 'HAS_LIVE' | 'EVICTED'
+ *   newLeaderId = connectionId of a newly elected leader, or '' (no change /
+ *                 none remaining / participant wasn't leader).
+ */
+export const EVICT_PARTICIPANT_IF_GHOST_SCRIPT = `
+  local sessionParticipantsKey = KEYS[1]
+  local participantKey = KEYS[2]
+  local participantConnectionsKey = KEYS[3]
+  local sessionMembersKey = KEYS[4]
+  local leaderKey = KEYS[5]
+  local participantId = ARGV[1]
+  local sessionTTL = tonumber(ARGV[2])
+
+  if redis.call('EXISTS', participantKey) == 0 then
+    return { 'MISSING', '' }
+  end
+
+  -- Only evict a participant still parked in the grace window. A concurrent
+  -- rejoin that already flipped it back to CONNECTED must not be evicted.
+  if redis.call('HGET', participantKey, 'connectionState') ~= 'RECONNECTING' then
+    return { 'NOT_RECONNECTING', '' }
+  end
+
+  -- Any live connection means a reconnect landed after the grace timer armed —
+  -- this is the reconnect-before-expiry race. Spare the participant.
+  local connectionIds = redis.call('SMEMBERS', participantConnectionsKey)
+  for _, connectionId in ipairs(connectionIds) do
+    if redis.call('EXISTS', 'boardsesh:conn:' .. connectionId) == 1 then
+      return { 'HAS_LIVE', '' }
+    end
+  end
+
+  -- Ghost confirmed. Remove the participant and detach every connection from
+  -- the member set.
+  redis.call('SREM', sessionParticipantsKey, participantId)
+  redis.call('DEL', participantKey)
+  redis.call('DEL', participantConnectionsKey)
+  for _, connectionId in ipairs(connectionIds) do
+    redis.call('SREM', sessionMembersKey, connectionId)
+    local connKey = 'boardsesh:conn:' .. connectionId
+    if redis.call('EXISTS', connKey) == 1 then
+      redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+    end
+  end
+
+  -- Re-elect only when removal left a STALE leader: the leader key points at a
+  -- connection that is no longer a live member (typically the ghost's own dead
+  -- connection). We can't reliably match the leader back to the evicted
+  -- participant by its connection set — a normal disconnect already SREM'd its
+  -- connections from participantConnections before the grace timer fires, so
+  -- that set is usually empty here. Checking the leader key's liveness directly
+  -- is both correct for that case and a no-op when leadership already moved to a
+  -- live member (e.g. removeConnection re-elected on disconnect). A nil leader
+  -- is left alone — the next join elects.
+  local currentLeader = redis.call('GET', leaderKey)
+  local needElection = false
+  if currentLeader then
+    if redis.call('EXISTS', 'boardsesh:conn:' .. currentLeader) == 0
+       or redis.call('SISMEMBER', sessionMembersKey, currentLeader) == 0 then
+      needElection = true
+    end
+  end
+
+  if not needElection then
+    return { 'EVICTED', '' }
+  end
+
+  -- Elect a replacement leader in the same round-trip: earliest-connectedAt
+  -- among the remaining members.
+  local remaining = redis.call('SMEMBERS', sessionMembersKey)
+  local candidates = {}
+  for _, memberId in ipairs(remaining) do
+    local connKey = 'boardsesh:conn:' .. memberId
+    local connectedAt = redis.call('HGET', connKey, 'connectedAt')
+    if connectedAt then
+      table.insert(candidates, {memberId, tonumber(connectedAt)})
+    end
+  end
+
+  if #candidates == 0 then
+    redis.call('DEL', leaderKey)
+    return { 'EVICTED', '' }
+  end
+
+  table.sort(candidates, function(a, b) return a[2] < b[2] end)
+  local newLeaderId = candidates[1][1]
+  redis.call('SET', leaderKey, newLeaderId, 'EX', sessionTTL)
+  redis.call('HSET', 'boardsesh:conn:' .. newLeaderId, 'isLeader', 'true')
+  if sessionTTL and sessionTTL > 0 then
+    redis.call('EXPIRE', sessionMembersKey, sessionTTL)
+  end
+  return { 'EVICTED', newLeaderId }
 `;
