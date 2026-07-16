@@ -198,3 +198,45 @@ export type LinkBoardToGymInput = {
   boardUuid: string;
   gymUuid?: string | null;
 };
+
+// ============================================
+// Gym Insights (owner activity dashboard)
+// ============================================
+
+export type GymStatsPeriod = 'week' | 'month';
+
+export type GymTopClimb = {
+  climbUuid: string;
+  boardType: string;
+  angle: number;
+  name?: string | null;
+  gradeName?: string | null;
+  ascentCount: number;
+};
+
+export type GymDayActivity = {
+  /** Postgres EXTRACT(DOW): 0 = Sunday … 6 = Saturday. */
+  dayOfWeek: number;
+  ascentCount: number;
+};
+
+export type GymStatsWindow = {
+  uniqueClimbers: number;
+  ascentCount: number;
+};
+
+export type GymStats = {
+  gymUuid: string;
+  periodDays: number;
+  current: GymStatsWindow;
+  previous: GymStatsWindow;
+  /** Top 10 climbs by ascents in the current window. */
+  topClimbs: GymTopClimb[];
+  /** Ascents per day of week in the current window (non-empty days only). */
+  busiestDays: GymDayActivity[];
+};
+
+export type GymStatsInput = {
+  gymUuid: string;
+  period?: GymStatsPeriod;
+};

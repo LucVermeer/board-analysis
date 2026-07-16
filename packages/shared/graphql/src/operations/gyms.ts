@@ -20,6 +20,8 @@ import type {
   PendingGymClaimsInput,
   GymClaimConnection,
   UserBoard,
+  GymStats,
+  GymStatsInput,
 } from '@boardsesh/shared-schema';
 
 // ============================================
@@ -143,6 +145,37 @@ export const GET_GYM_BOARDS = gql`
   query GetGymBoards($gymUuid: ID!) {
     gymBoards(gymUuid: $gymUuid) {
       ${GYM_BOARD_FIELDS}
+    }
+  }
+`;
+
+// Owner Insights dashboard: current + prior window counts (for week-over-week
+// deltas), the top-10 climbs, and busiest weekdays. Requires gym edit access.
+export const GET_GYM_STATS = gql`
+  query GetGymStats($input: GymStatsInput!) {
+    gymStats(input: $input) {
+      gymUuid
+      periodDays
+      current {
+        uniqueClimbers
+        ascentCount
+      }
+      previous {
+        uniqueClimbers
+        ascentCount
+      }
+      topClimbs {
+        climbUuid
+        boardType
+        angle
+        name
+        gradeName
+        ascentCount
+      }
+      busiestDays {
+        dayOfWeek
+        ascentCount
+      }
     }
   }
 `;
@@ -310,6 +343,14 @@ export type GetGymBoardsQueryVariables = {
 
 export type GetGymBoardsQueryResponse = {
   gymBoards: UserBoard[];
+};
+
+export type GetGymStatsQueryVariables = {
+  input: GymStatsInput;
+};
+
+export type GetGymStatsQueryResponse = {
+  gymStats: GymStats;
 };
 
 export type CreateGymMutationVariables = {

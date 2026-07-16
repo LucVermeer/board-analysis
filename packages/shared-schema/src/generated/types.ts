@@ -2168,6 +2168,19 @@ export type GymConnection = {
 };
 
 /**
+ * Ascents bucketed by day of week for the current window. `dayOfWeek` follows
+ * Postgres EXTRACT(DOW): 0 = Sunday … 6 = Saturday. Only days with at least one
+ * ascent appear; the UI fills the missing days with zero.
+ */
+export type GymDayActivity = {
+  __typename?: 'GymDayActivity';
+  /** Ascents (flash + send) on that weekday in the current window. */
+  ascentCount: Scalars['Int']['output'];
+  /** Day of week, 0 = Sunday … 6 = Saturday. */
+  dayOfWeek: Scalars['Int']['output'];
+};
+
+/**
  * A gym kiosk: a preset-based smart-TV wall dashboard, addressed publicly as
  * `/kiosk/{gym-slug}/{kiosk-slug}`. The `layout` is the stored preset config —
  * 1–4 board slots plus an optional leaderboard rail — validated on write against
@@ -2274,6 +2287,85 @@ export type GymMembersInput = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   /** Offset for pagination */
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/**
+ * A gym owner's activity snapshot for the current window and the window
+ * immediately before it (same length), for week-over-week deltas. Every
+ * aggregate is bounded to the gym's linked boards and the time window — no
+ * unbounded tick scans. `topClimbs` and `busiestDays` cover the CURRENT window
+ * only (that's all the dashboard renders). Requires gym edit access.
+ */
+export type GymStats = {
+  __typename?: 'GymStats';
+  /** Ascents per day of week in the current window (only non-empty days). */
+  busiestDays: Array<GymDayActivity>;
+  /** Counts for the current window (last `periodDays` days). */
+  current: GymStatsWindow;
+  /** The gym these stats are for. */
+  gymUuid: Scalars['ID']['output'];
+  /** Window length in days (7 for the default week). */
+  periodDays: Scalars['Int']['output'];
+  /** Counts for the window immediately before the current one (same length). */
+  previous: GymStatsWindow;
+  /** Top 10 climbs by ascents in the current window. */
+  topClimbs: Array<GymTopClimb>;
+};
+
+/**
+ * Input for the gym Insights query. `period` sets the window length: `week`
+ * (7 days, the default) or `month` (30 days). The comparison window is always the
+ * equally-long span immediately before it.
+ */
+export type GymStatsInput = {
+  /** The gym to report on. The caller must have gym edit access. */
+  gymUuid: Scalars['ID']['input'];
+  /** Window length: week (7 days, default) or month (30 days). */
+  period?: InputMaybe<GymStatsPeriod>;
+};
+
+/** Supported Insights window lengths. */
+export type GymStatsPeriod =
+  /** Rolling last 30 days. */
+  | 'month'
+  /** Rolling last 7 days. */
+  | 'week';
+
+/**
+ * The two deltable counts for one window (current or previous). Kept separate
+ * from the top-climb / busiest-day lists because only these scalars feed the
+ * week-over-week deltas; the lists are only rendered for the current window.
+ */
+export type GymStatsWindow = {
+  __typename?: 'GymStatsWindow';
+  /** Total ascents (flash + send) on the gym's boards in this window. */
+  ascentCount: Scalars['Int']['output'];
+  /** Distinct climbers with a flash/send on the gym's boards in this window. */
+  uniqueClimbers: Scalars['Int']['output'];
+};
+
+/**
+ * One climb from the gym's top-10 for the current window, ranked by ascents.
+ * A row is keyed by (climbUuid, boardType, angle) — the same key board_climb_stats
+ * uses — so the same holds set at two angles shows as two rows with their own
+ * grades. `name` and `gradeName` are best-effort: a climb missing its catalog
+ * row (unsynced) or its consensus grade (MoonBoard, too few ascents) returns null
+ * and the UI falls back gracefully.
+ */
+export type GymTopClimb = {
+  __typename?: 'GymTopClimb';
+  /** The angle the ticks were logged at. */
+  angle: Scalars['Int']['output'];
+  /** Ascents (flash + send) on this climb in the current window. */
+  ascentCount: Scalars['Int']['output'];
+  /** Board type (kilter, tension, moonboard, ...). */
+  boardType: Scalars['String']['output'];
+  /** The climb's UUID. */
+  climbUuid: Scalars['ID']['output'];
+  /** Consensus grade name, e.g. "V4" (null when no grade is resolvable). */
+  gradeName?: Maybe<Scalars['String']['output']>;
+  /** Climb display name (null when the catalog row is missing). */
+  name?: Maybe<Scalars['String']['output']>;
 };
 
 /** A scanned post whose climb name matched multiple climbs — the user picks one. */
@@ -4169,6 +4261,14 @@ export type Query = {
   /** Get members of a gym. */
   gymMembers: GymMemberConnection;
   /**
+   * A gym owner's activity snapshot: unique climbers, ascents, top climbs, and
+   * busiest weekdays for the current window plus the equally-long window before
+   * it (for week-over-week deltas). Requires gym edit access (owner, gym
+   * admin/editor, or a covering community admin/leader). Every aggregate is
+   * bounded to the gym's linked boards and the time window.
+   */
+  gymStats: GymStats;
+  /**
    * Resolve scraped Instagram posts against Boardsesh: which beta videos are
    * missing, already linked, ambiguous, or unmatched. Read-only — the client
    * attaches the missing ones via the attachBetaLink mutation.
@@ -4710,6 +4810,11 @@ export type QueryGymKiosksArgs = {
 /** Root query type for all read operations. */
 export type QueryGymMembersArgs = {
   input: GymMembersInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryGymStatsArgs = {
+  input: GymStatsInput;
 };
 
 /** Root query type for all read operations. */
@@ -7245,12 +7350,18 @@ export type ResolversTypes = ResolversObject<{
   GymClaimRequestStatus: GymClaimRequestStatus;
   GymClaimStatus: GymClaimStatus;
   GymConnection: ResolverTypeWrapper<GymConnection>;
+  GymDayActivity: ResolverTypeWrapper<GymDayActivity>;
   GymKiosk: ResolverTypeWrapper<GymKiosk>;
   GymKioskBoard: ResolverTypeWrapper<GymKioskBoard>;
   GymMember: ResolverTypeWrapper<GymMember>;
   GymMemberConnection: ResolverTypeWrapper<GymMemberConnection>;
   GymMemberRole: GymMemberRole;
   GymMembersInput: GymMembersInput;
+  GymStats: ResolverTypeWrapper<GymStats>;
+  GymStatsInput: GymStatsInput;
+  GymStatsPeriod: GymStatsPeriod;
+  GymStatsWindow: ResolverTypeWrapper<GymStatsWindow>;
+  GymTopClimb: ResolverTypeWrapper<GymTopClimb>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   InstagramBetaAmbiguous: ResolverTypeWrapper<InstagramBetaAmbiguous>;
   InstagramBetaCandidate: ResolverTypeWrapper<InstagramBetaCandidate>;
@@ -7560,11 +7671,16 @@ export type ResolversParentTypes = ResolversObject<{
   GymClaim: GymClaim;
   GymClaimConnection: GymClaimConnection;
   GymConnection: GymConnection;
+  GymDayActivity: GymDayActivity;
   GymKiosk: GymKiosk;
   GymKioskBoard: GymKioskBoard;
   GymMember: GymMember;
   GymMemberConnection: GymMemberConnection;
   GymMembersInput: GymMembersInput;
+  GymStats: GymStats;
+  GymStatsInput: GymStatsInput;
+  GymStatsWindow: GymStatsWindow;
+  GymTopClimb: GymTopClimb;
   ID: Scalars['ID']['output'];
   InstagramBetaAmbiguous: InstagramBetaAmbiguous;
   InstagramBetaCandidate: InstagramBetaCandidate;
@@ -8769,6 +8885,15 @@ export type GymConnectionResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type GymDayActivityResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymDayActivity'] = ResolversParentTypes['GymDayActivity'],
+> = ResolversObject<{
+  ascentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  dayOfWeek?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type GymKioskResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['GymKiosk'] = ResolversParentTypes['GymKiosk'],
@@ -8819,6 +8944,41 @@ export type GymMemberConnectionResolvers<
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   members?: Resolver<Array<ResolversTypes['GymMember']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type GymStatsResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymStats'] = ResolversParentTypes['GymStats'],
+> = ResolversObject<{
+  busiestDays?: Resolver<Array<ResolversTypes['GymDayActivity']>, ParentType, ContextType>;
+  current?: Resolver<ResolversTypes['GymStatsWindow'], ParentType, ContextType>;
+  gymUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  periodDays?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  previous?: Resolver<ResolversTypes['GymStatsWindow'], ParentType, ContextType>;
+  topClimbs?: Resolver<Array<ResolversTypes['GymTopClimb']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type GymStatsWindowResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymStatsWindow'] = ResolversParentTypes['GymStatsWindow'],
+> = ResolversObject<{
+  ascentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  uniqueClimbers?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type GymTopClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymTopClimb'] = ResolversParentTypes['GymTopClimb'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  ascentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  gradeName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -10180,6 +10340,7 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryGymMembersArgs, 'input'>
   >;
+  gymStats?: Resolver<ResolversTypes['GymStats'], ParentType, ContextType, RequireFields<QueryGymStatsArgs, 'input'>>;
   instagramBetaScan?: Resolver<
     ResolversTypes['InstagramBetaScanResult'],
     ParentType,
@@ -11608,10 +11769,14 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   GymClaim?: GymClaimResolvers<ContextType>;
   GymClaimConnection?: GymClaimConnectionResolvers<ContextType>;
   GymConnection?: GymConnectionResolvers<ContextType>;
+  GymDayActivity?: GymDayActivityResolvers<ContextType>;
   GymKiosk?: GymKioskResolvers<ContextType>;
   GymKioskBoard?: GymKioskBoardResolvers<ContextType>;
   GymMember?: GymMemberResolvers<ContextType>;
   GymMemberConnection?: GymMemberConnectionResolvers<ContextType>;
+  GymStats?: GymStatsResolvers<ContextType>;
+  GymStatsWindow?: GymStatsWindowResolvers<ContextType>;
+  GymTopClimb?: GymTopClimbResolvers<ContextType>;
   InstagramBetaAmbiguous?: InstagramBetaAmbiguousResolvers<ContextType>;
   InstagramBetaCandidate?: InstagramBetaCandidateResolvers<ContextType>;
   InstagramBetaMatch?: InstagramBetaMatchResolvers<ContextType>;

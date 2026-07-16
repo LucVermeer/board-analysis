@@ -593,6 +593,15 @@ export const queriesTypeDefs = /* GraphQL */ `
     """
     pendingGymClaims(input: PendingGymClaimsInput): GymClaimConnection!
 
+    """
+    A gym owner's activity snapshot: unique climbers, ascents, top climbs, and
+    busiest weekdays for the current window plus the equally-long window before
+    it (for week-over-week deltas). Requires gym edit access (owner, gym
+    admin/editor, or a covering community admin/leader). Every aggregate is
+    bounded to the gym's linked boards and the time window.
+    """
+    gymStats(input: GymStatsInput!): GymStats!
+
     # ============================================
     # Gym Kiosk Queries
     # ============================================
