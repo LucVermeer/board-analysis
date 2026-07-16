@@ -12,7 +12,6 @@ import ChatBubbleOutlineOutlined from '@mui/icons-material/ChatBubbleOutlineOutl
 import { TickIcon, TickButtonWithLabel } from '../logbook/tick-icon';
 import { PersonFallingIcon } from '@/app/components/icons/person-falling-icon';
 import { useBoardProvider } from '../board-provider/board-provider-context';
-import { themeTokens } from '@/app/theme/theme-config';
 import { QuickTickBar, type QuickTickBarHandle } from '../logbook/quick-tick-bar';
 import { hasPriorHistoryForClimb } from '@/app/hooks/use-tick-save';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
@@ -237,11 +236,11 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
                   id="button-tick"
                   onClick={(e) => quickTickBarRef.current?.save(e.currentTarget)}
                   sx={{
-                    backgroundColor: isFlash ? themeTokens.colors.amber : 'var(--color-success)',
-                    color: isFlash ? themeTokens.neutral[900] : 'common.white',
+                    backgroundColor: isFlash ? 'var(--color-amber)' : 'var(--color-success)',
+                    color: isFlash ? 'var(--color-on-accent)' : 'common.white',
                     transition: 'background-color 150ms ease, color 150ms ease',
                     '&:hover': {
-                      backgroundColor: isFlash ? themeTokens.colors.amber : 'var(--color-success-hover)',
+                      backgroundColor: isFlash ? 'var(--color-amber)' : 'var(--color-success-hover)',
                     },
                   }}
                   aria-label={t('playView.tickBar.saveTickAria')}

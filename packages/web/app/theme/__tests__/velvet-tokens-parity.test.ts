@@ -68,6 +68,7 @@ describe('index.css ↔ theme-config parity', () => {
     ['--color-on-primary', themeTokens.colors.onPrimary, themeTokens.colors.onPrimary],
     ['--color-accent', themeTokens.colors.accent, themeTokens.colors.accent],
     ['--color-on-accent', themeTokens.colors.onAccent, themeTokens.colors.onAccent],
+    ['--color-amber', themeTokens.colors.amber, themeTokens.colors.amber],
     ['--color-live', themeTokens.colors.live, darkTokens.colors.live],
     ['--color-info', themeTokens.colors.info, darkTokens.colors.info],
     ['--color-success', themeTokens.colors.success, darkTokens.colors.success],
