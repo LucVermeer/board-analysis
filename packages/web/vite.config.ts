@@ -31,9 +31,15 @@ export default defineConfig({
     },
   },
   resolve: {
+    // Mirror packages/web/tsconfig.json "paths". Order matters: vite matches the
+    // first alias whose key prefixes the import, so the specific @/lib and @/c
+    // aliases must come before the catch-all @ — otherwise @/lib/x resolves to
+    // ./lib/x instead of ./app/lib/x.
     alias: {
-      '@': resolve(__dirname, '.'),
+      '@/lib': resolve(__dirname, './app/lib'),
+      '@/c': resolve(__dirname, './app/components'),
       '@/app': resolve(__dirname, './app'),
+      '@': resolve(__dirname, '.'),
     },
   },
 });
