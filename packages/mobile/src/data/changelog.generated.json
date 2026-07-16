@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-16T22:34:59.134Z",
+  "generatedAt": "2026-07-16T22:58:50.862Z",
   "entries": [
+    {
+      "prNumber": 3701,
+      "category": "new",
+      "title": "Adding your gym? We'll show you if it's already on Boardsesh so you can claim it instead of starting from scratch.",
+      "mergedAt": "2026-07-16T22:57:41Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3701",
+      "body": "The gym form now has a map — drop a pin or search an address so your crew can find the wall."
+    },
     {
       "prNumber": 3694,
       "category": "fixed",

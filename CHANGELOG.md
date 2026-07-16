@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Adding your gym? We'll show you if it's already on Boardsesh so you can claim it instead of starting from scratch. ([#3701](https://github.com/boardsesh/boardsesh/pull/3701))
+  The gym form now has a map — drop a pin or search an address so your crew can find the wall.
 - Your kiosk TVs now check in — see at a glance which screens are live and which need a nudge, straight from the Kiosks tab. ([#3685](https://github.com/boardsesh/boardsesh/pull/3685))
 - Free up space from Manage storage: see what each downloaded board takes up and clear the ones you're not climbing on. ([#3630](https://github.com/boardsesh/boardsesh/pull/3630))
 - Refreshed Boardsesh's look on the web to match the app — new icon everywhere: browser tab, home screen install, and the header. ([#3711](https://github.com/boardsesh/boardsesh/pull/3711))
