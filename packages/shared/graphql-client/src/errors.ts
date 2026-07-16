@@ -44,6 +44,52 @@ export function isRateLimitedExtension(
 }
 
 /**
+ * Type guard for the NOT_SESSION_MEMBER extension shape. The backend's
+ * subscription-auth gate (`requireSessionMember`) rejects a caller who isn't a
+ * member of the session (issues #2355 / #2385). Since #3695 an authenticated
+ * member reconnecting is re-authorized instantly, so this code reaching a
+ * client means the session is genuinely gone for it (ended / emptied / a stale
+ * pointer) — the caller should clear the local session silently rather than
+ * surface a generic sync-error toast. `reason` (`no-session-id` |
+ * `session-mismatch`) is carried for observability.
+ */
+export function isNotSessionMemberExtension(
+  extensions: GraphQLErrorExtensions | null | undefined,
+): extensions is GraphQLErrorExtensions & { code: 'NOT_SESSION_MEMBER'; reason?: string } {
+  return extensions?.code === 'NOT_SESSION_MEMBER';
+}
+
+/** Convenience: does this error carry the NOT_SESSION_MEMBER code? Narrows
+ *  `unknown` for call-sites that only hold the thrown/callback value.
+ *
+ *  Handles both shapes a client can see:
+ *   - a `GraphQLOperationError` — from `execute()` or the `subscribe()` wrapper
+ *     (web's session subscriptions, board-presence);
+ *   - a raw `GraphQLError[]` payload — delivered straight to a graphql-ws
+ *     `client.subscribe` sink's `error` callback (mobile's session
+ *     subscriptions call the ws client directly, so they never pass through the
+ *     `subscribe()` wrapper that would box the array into a
+ *     `GraphQLOperationError`). */
+export function isNotSessionMemberError(error: unknown): boolean {
+  if (error instanceof GraphQLOperationError) {
+    // Iterate every error, not just `error.extensions` — that convenience field
+    // resolves to the FIRST *coded* error, so a NOT_SESSION_MEMBER that trails
+    // another coded error would be missed. Mirrors `parseRateLimitError`'s
+    // graphqlErrors fallback.
+    return error.graphqlErrors.some((graphqlError) => isNotSessionMemberExtension(graphqlError.extensions));
+  }
+  if (Array.isArray(error)) {
+    return error.some(
+      (item): boolean =>
+        typeof item === 'object' &&
+        item !== null &&
+        (item as { extensions?: { code?: unknown } }).extensions?.code === 'NOT_SESSION_MEMBER',
+    );
+  }
+  return false;
+}
+
+/**
  * Error subclass that preserves GraphQL error extensions. Callers can inspect
  * `extensions.code` (or any other extension keys) to branch on a typed error
  * — e.g. CLIMB_IS_DUPLICATE — without resorting to message-string matching.

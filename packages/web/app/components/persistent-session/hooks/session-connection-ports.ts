@@ -11,6 +11,11 @@ import {
   MAX_RETRY_DELAY_MS,
   BACKOFF_MULTIPLIER,
   MAX_TRANSIENT_RETRIES,
+  // Imported from the shared package directly (not the web re-export) so the
+  // many web tests that vi.mock('../../graphql-queue/graphql-client') don't
+  // each need to add this export to their factory — @boardsesh/graphql-client
+  // is never mocked in web tests.
+  isNotSessionMemberError,
 } from '@boardsesh/graphql-client';
 import {
   JOIN_SESSION,
@@ -383,6 +388,20 @@ export function createWebSessionConnectionDeps({
     },
 
     onError: (err) => {
+      // The queue subscription was denied because we're not a member of this
+      // session (NOT_SESSION_MEMBER). Post-#3695 an authenticated member is
+      // re-authorized instantly on reconnect, so reaching here means the
+      // session is genuinely gone for us — force-clear it now instead of
+      // burning MAX_TRANSIENT_RETRIES subscription-recovery strikes before
+      // `onFatal` does the same. Mirrors the SESSION_ENDED join-path branch.
+      // (#2385 follow-up.) setActiveSession(null) pre-empts the controller's
+      // scheduled retry via the React re-render, exactly like SESSION_ENDED.
+      if (isNotSessionMemberError(err)) {
+        if (DEBUG) console.info('[PersistentSession] Not a session member; clearing stored session');
+        removePreference(ACTIVE_SESSION_KEY).catch(() => {});
+        setActiveSession(null);
+        return;
+      }
       console.error('[PersistentSession] Connection error:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsConnecting(false);

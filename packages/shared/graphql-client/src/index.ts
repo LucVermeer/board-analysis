@@ -19,6 +19,8 @@ export {
   GraphQLOperationError,
   isClimbDuplicateExtension,
   isRateLimitedExtension,
+  isNotSessionMemberExtension,
+  isNotSessionMemberError,
   parseRateLimitError,
   isRateLimitedError,
 } from './errors';

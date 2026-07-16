@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { GraphQLOperationError, parseRateLimitError, isRateLimitedError } from '../errors';
+import {
+  GraphQLOperationError,
+  parseRateLimitError,
+  isRateLimitedError,
+  isNotSessionMemberExtension,
+  isNotSessionMemberError,
+} from '../errors';
 
 describe('parseRateLimitError', () => {
   it('reads retryAfterSeconds from the structured RATE_LIMITED extension', () => {
@@ -45,5 +51,77 @@ describe('parseRateLimitError', () => {
     expect(parseRateLimitError(new Error('network down'))).toBeNull();
     expect(parseRateLimitError('rate limit exceeded. try again in 1 seconds.')).toBeNull();
     expect(parseRateLimitError(null)).toBeNull();
+  });
+});
+
+describe('isNotSessionMemberExtension', () => {
+  it('matches the NOT_SESSION_MEMBER code and narrows the reason', () => {
+    const extensions = { code: 'NOT_SESSION_MEMBER', reason: 'no-session-id' };
+    expect(isNotSessionMemberExtension(extensions)).toBe(true);
+    if (isNotSessionMemberExtension(extensions)) {
+      // Type narrowing: `reason` is accessible without a cast.
+      expect(extensions.reason).toBe('no-session-id');
+    }
+  });
+
+  it('does not match other codes, null, or undefined', () => {
+    expect(isNotSessionMemberExtension({ code: 'RATE_LIMITED' })).toBe(false);
+    expect(isNotSessionMemberExtension({ code: 'SESSION_ENDED' })).toBe(false);
+    expect(isNotSessionMemberExtension(null)).toBe(false);
+    expect(isNotSessionMemberExtension(undefined)).toBe(false);
+  });
+});
+
+describe('isNotSessionMemberError', () => {
+  it('is true for a GraphQLOperationError carrying NOT_SESSION_MEMBER', () => {
+    const error = new GraphQLOperationError([
+      {
+        message: 'Unauthorized: not in any session',
+        extensions: { code: 'NOT_SESSION_MEMBER', reason: 'no-session-id' },
+      },
+    ]);
+    expect(isNotSessionMemberError(error)).toBe(true);
+  });
+
+  it('finds NOT_SESSION_MEMBER even when a DIFFERENTLY-coded error comes first', () => {
+    // The harder case: `GraphQLOperationError.extensions` resolves to the first
+    // *coded* error (here SESSION_ENDED), so the guard must iterate every error
+    // rather than trust that convenience field.
+    const error = new GraphQLOperationError([
+      { message: 'This session has ended', extensions: { code: 'SESSION_ENDED' } },
+      {
+        message: 'Unauthorized: session mismatch',
+        extensions: { code: 'NOT_SESSION_MEMBER', reason: 'session-mismatch' },
+      },
+    ]);
+    expect(isNotSessionMemberError(error)).toBe(true);
+  });
+
+  it('is true for a raw graphql-ws GraphQLError[] payload (mobile client.subscribe sink)', () => {
+    // graphql-ws hands a `client.subscribe` sink's `error` callback the raw
+    // error array — mobile session subscriptions never box it into a
+    // GraphQLOperationError, so the guard must recognise this shape too.
+    const rawPayload = [
+      {
+        message: 'Unauthorized: not in any session',
+        extensions: { code: 'NOT_SESSION_MEMBER', reason: 'no-session-id' },
+      },
+    ];
+    expect(isNotSessionMemberError(rawPayload)).toBe(true);
+  });
+
+  it('is false for a raw payload carrying a different code, or malformed entries', () => {
+    expect(isNotSessionMemberError([{ message: 'x', extensions: { code: 'RATE_LIMITED' } }])).toBe(false);
+    expect(isNotSessionMemberError([{ message: 'no extensions' }])).toBe(false);
+    expect(isNotSessionMemberError([null, 'nope'])).toBe(false);
+    expect(isNotSessionMemberError([])).toBe(false);
+  });
+
+  it('is false for other GraphQL errors, plain errors, and non-errors', () => {
+    expect(
+      isNotSessionMemberError(new GraphQLOperationError([{ message: 'x', extensions: { code: 'SESSION_ENDED' } }])),
+    ).toBe(false);
+    expect(isNotSessionMemberError(new Error('Unauthorized: not in any session'))).toBe(false);
+    expect(isNotSessionMemberError(null)).toBe(false);
   });
 });
