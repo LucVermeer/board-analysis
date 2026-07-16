@@ -1,4 +1,5 @@
 import { type SQL, eq, gt, gte, sql, like, notLike, inArray, isNull, or, and } from 'drizzle-orm';
+import { getMoonBoardGeometryByLayoutId } from '@boardsesh/board-config';
 import { getTallWideScope } from '@boardsesh/board-constants/product-sizes';
 import {
   boardClimbs,
@@ -10,6 +11,7 @@ import {
   boardBetaLinks,
 } from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
+import { climbHoldPlacementMatchSql } from './placement-match';
 
 // Escape LIKE/ILIKE metacharacters so user-supplied search text is matched
 // literally. Postgres' default escape character is backslash, so `\%`, `\_`,
@@ -26,6 +28,22 @@ function sizeIdArrayLiteral(sizeIds: readonly number[]): SQL {
     sizeIds.map((sizeId) => sql`${sizeId}`),
     sql`, `,
   )}]::int[]`;
+}
+
+function moonBoardZoneCoordinates(layoutId: number, placementHoleId: SQL): { x: SQL; y: SQL } {
+  const geometry = getMoonBoardGeometryByLayoutId(layoutId);
+  const { leftMargin, rightMargin, topMargin, bottomMargin } = geometry.calibration;
+  const horizontalOrigin = leftMargin * geometry.numColumns;
+  const horizontalScale = 1 - leftMargin - rightMargin;
+  const verticalOrigin = geometry.rowTop * (1 - topMargin);
+  const verticalScale = (geometry.rowTop / geometry.numRows) * (1 - topMargin - bottomMargin);
+  const cellIndex = sql`(${placementHoleId} - 1)`;
+  const row = sql`(FLOOR(${cellIndex} / ${geometry.numColumns}) + 1)`;
+
+  return {
+    x: sql`${horizontalOrigin} + (MOD(${cellIndex}, ${geometry.numColumns}) + 0.5) * ${horizontalScale}`,
+    y: sql`${verticalOrigin} - (${geometry.rowTop} - ${row} + 0.5) * ${verticalScale}`,
+  };
 }
 
 /**
@@ -233,10 +251,10 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     )`);
   }
 
-  // Zone filter — restrict climbs by the user-defined box in board_holes grid
-  // coordinates. `allHolds` keeps the existing denormalized bounding-box path.
-  // `anyHold` needs to inspect individual climb holds because a climb can
-  // extend outside the zone while still using an expansion hold inside it.
+  // Zone filter — restrict climbs by the user-defined box in board grid
+  // coordinates. Aurora boards keep the denormalized `allHolds` path.
+  // MoonBoard uses calibrated layout placements for both modes because its
+  // climbs intentionally do not carry denormalized edge columns.
   // Direct db-layer callers bypass GraphQL validation, so re-check the box.
   const zoneBox = searchParams.zoneBox;
   const hasZoneBox = !!zoneBox;
@@ -250,6 +268,12 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     zoneConditions.push(sql`false`);
   } else if (validZoneBox) {
     if (zoneMode === 'anyHold') {
+      const zonePlacementMatch = climbHoldPlacementMatchSql({
+        boardType: sql.raw('zone_ch.board_type'),
+        climbHoldId: sql.raw('zone_ch.hold_id'),
+        placementId: sql.raw('zone_bp.id'),
+        placementHoleId: sql.raw('zone_bp.hole_id'),
+      });
       const zonePlacementSetCondition =
         params.board_name === 'moonboard' || params.set_ids.length === 0
           ? sql``
@@ -257,12 +281,16 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
               params.set_ids.map((setId) => sql`${setId}`),
               sql`, `,
             )})`;
+      const zoneCoordinates =
+        params.board_name === 'moonboard'
+          ? moonBoardZoneCoordinates(params.layout_id, sql.raw('zone_bp.hole_id'))
+          : { x: sql.raw('zone_bh.x'), y: sql.raw('zone_bh.y') };
       zoneConditions.push(sql`EXISTS (
         SELECT 1
         FROM ${boardClimbHolds} zone_ch
         JOIN ${boardPlacements} zone_bp
           ON zone_bp.board_type = zone_ch.board_type
-          AND zone_bp.id = zone_ch.hold_id
+          AND ${zonePlacementMatch}
           AND zone_bp.layout_id = ${params.layout_id}
         JOIN ${boardHoles} zone_bh
           ON zone_bh.board_type = zone_ch.board_type
@@ -270,11 +298,47 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
         WHERE zone_ch.board_type = ${params.board_name}
           AND zone_ch.climb_uuid = ${boardClimbs.uuid}
           ${zonePlacementSetCondition}
-          AND zone_bh.x >= ${validZoneBox.edgeLeft}
-          AND zone_bh.x <= ${validZoneBox.edgeRight}
-          AND zone_bh.y >= ${validZoneBox.edgeBottom}
-          AND zone_bh.y <= ${validZoneBox.edgeTop}
+          AND ${zoneCoordinates.x} >= ${validZoneBox.edgeLeft}
+          AND ${zoneCoordinates.x} <= ${validZoneBox.edgeRight}
+          AND ${zoneCoordinates.y} >= ${validZoneBox.edgeBottom}
+          AND ${zoneCoordinates.y} <= ${validZoneBox.edgeTop}
       )`);
+    } else if (params.board_name === 'moonboard') {
+      const containedPlacementMatch = climbHoldPlacementMatchSql({
+        boardType: sql.raw('contained_ch.board_type'),
+        climbHoldId: sql.raw('contained_ch.hold_id'),
+        placementId: sql.raw('contained_bp.id'),
+        placementHoleId: sql.raw('contained_bp.hole_id'),
+      });
+      const containedCoordinates = moonBoardZoneCoordinates(params.layout_id, sql.raw('contained_bp.hole_id'));
+      zoneConditions.push(
+        sql`EXISTS (
+          SELECT 1
+          FROM ${boardClimbHolds} contained_ch
+          WHERE contained_ch.board_type = ${params.board_name}
+            AND contained_ch.climb_uuid = ${boardClimbs.uuid}
+        )`,
+        sql`NOT EXISTS (
+          SELECT 1
+          FROM ${boardClimbHolds} contained_ch
+          WHERE contained_ch.board_type = ${params.board_name}
+            AND contained_ch.climb_uuid = ${boardClimbs.uuid}
+            AND NOT EXISTS (
+              SELECT 1
+              FROM ${boardPlacements} contained_bp
+              JOIN ${boardHoles} contained_bh
+                ON contained_bh.board_type = contained_bp.board_type
+                AND contained_bh.id = contained_bp.hole_id
+              WHERE contained_bp.board_type = contained_ch.board_type
+                AND contained_bp.layout_id = ${params.layout_id}
+                AND ${containedPlacementMatch}
+                AND ${containedCoordinates.x} >= ${validZoneBox.edgeLeft}
+                AND ${containedCoordinates.x} <= ${validZoneBox.edgeRight}
+                AND ${containedCoordinates.y} >= ${validZoneBox.edgeBottom}
+                AND ${containedCoordinates.y} <= ${validZoneBox.edgeTop}
+            )
+        )`,
+      );
     } else {
       zoneConditions.push(
         sql`${boardClimbs.edgeLeft} >= ${validZoneBox.edgeLeft}`,
