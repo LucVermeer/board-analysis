@@ -22,6 +22,7 @@ import UserDrawer from '@/app/components/user-drawer/user-drawer';
 import { useIsOnBoardRoute } from '@/app/components/persistent-session/persistent-session-context';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
 import { isBoardCreatePath, isBoardListPath } from '@/app/lib/board-route-paths';
+import { isChromeLessPath } from '@/app/lib/chrome-less-routes';
 
 import TuneOutlined from '@mui/icons-material/TuneOutlined';
 import { usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
@@ -225,6 +226,12 @@ export default function GlobalHeader({ boardConfigs }: GlobalHeaderProps) {
       </Badge>
     </IconButton>
   );
+
+  // Chrome-less surfaces (kiosk TVs, embeds) render zero app chrome — the
+  // kiosk brings its own 64px brand header and a strict 100dvh no-scroll frame.
+  if (isChromeLessPath(pathname)) {
+    return null;
+  }
 
   // On board create routes, hide the header entirely
   if (isBoardCreatePath(pathname)) {

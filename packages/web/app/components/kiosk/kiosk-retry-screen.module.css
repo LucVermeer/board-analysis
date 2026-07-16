@@ -1,0 +1,43 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-3);
+  height: 100dvh;
+  overflow: hidden;
+  text-align: center;
+  padding: var(--spacing-8);
+}
+
+.title {
+  font-size: var(--kiosk-font-hero);
+  font-weight: 700;
+  margin: 0;
+}
+
+.body {
+  font-size: var(--kiosk-font-base);
+  color: var(--kiosk-text-muted);
+  max-width: 32em;
+  margin: 0;
+}
+
+.pulse {
+  width: 0.75em;
+  height: 0.75em;
+  margin-top: var(--spacing-4);
+  border-radius: var(--border-radius-full);
+  background: var(--kiosk-accent);
+  animation: kioskRetryPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes kioskRetryPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}

@@ -21,6 +21,12 @@ export const GARMIN_WATCH_FLAG = 'garmin-watch';
 // until the nightly data-science grading job has enough coverage to surface.
 export const BOARDSESH_GRADE_FLAG = 'boardsesh-grade';
 
+// Gates the gym-kiosk MANAGE entry points (gym manage tab, kiosk editor —
+// landing in a later PR). The public `/kiosk/{gym-slug}` TV pages themselves
+// ship flagless: a 24/7 TV can't be expected to resolve PostHog flags, and the
+// page is only reachable via a URL the gym owner configured on purpose.
+export const GYM_KIOSK_FLAG = 'gym-kiosk';
+
 // Keys read from PostHog by FeatureFlagsProvider. Each must have a matching
 // PostHog feature flag; values stay `undefined` (OFF) until that flag resolves.
 export const FEATURE_FLAG_KEYS = [
@@ -28,6 +34,7 @@ export const FEATURE_FLAG_KEYS = [
   'kilter-oauth-linking',
   GARMIN_WATCH_FLAG,
   BOARDSESH_GRADE_FLAG,
+  GYM_KIOSK_FLAG,
 ] as const;
 
 // Vercel's flags discovery endpoint expects an allFlags export.

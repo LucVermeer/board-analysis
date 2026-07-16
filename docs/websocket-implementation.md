@@ -336,6 +336,8 @@ This ensures `BoardSessionBridge` only calls `activateSession()` when the actual
 
 Board presence powers the mobile "now on the wall" feed, board sheet history, and board sheet stats. It is independent of party-session join: the mobile app resolves a board id for the wall feed before subscribing to `boardNowPlaying` or fetching board-presence history/stats.
 
+The web gym kiosk (`/kiosk/{gym-slug}`, `packages/web/app/components/kiosk/presence/kiosk-presence-hub.tsx`) is a second consumer of the same feed: one graphql-ws client per TV (`connectionName: 'kiosk'`, anonymous-capable — the token from `useWsAuthToken` is simply `null` for a logged-out TV) multiplexes one `boardNowPlaying` subscription per kiosk board through one `BoardPresenceProvider` each. It never resolves board ids itself — the `gymKiosk` query returns each board's presence-channel `boardId` pre-resolved (public boards only for anonymous viewers). Kiosk reliability (5-minute manual catch-ups, config-poll reload) sits on top of the same reconnect/catch-up machinery described below.
+
 Mobile resolves the feed board id in this order:
 
 1. `resolveBoardForUuid(boardUuid)` for the selected named board. This is the default board-sheet path and binds to the actual `user_boards` row, so stats/history are available before Bluetooth connects and stay aligned with board-scoped ticks.

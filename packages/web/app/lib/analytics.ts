@@ -137,6 +137,35 @@ export function reset(): boolean {
   return core.reset();
 }
 
+type PosthogSuperPropertyClient = {
+  registerForSession?: (properties: PosthogProperties) => unknown;
+};
+
+/**
+ * Register SESSION-scoped PostHog super properties — attached to every event
+ * for the current PostHog session only, never persisted to storage. Used by
+ * the kiosk routes to stamp `kiosk: true` so 24/7 TV traffic is
+ * distinguishable from real climbers in product analytics.
+ *
+ * Deliberately session-scoped (`registerForSession`, memory-backed in
+ * @posthog/core) rather than the persistent `register`: the persistent
+ * variant writes to localStorage, so a gym owner who previews their kiosk in
+ * a normal browser would be stamped `kiosk: true` on every future event. The
+ * TV re-registers on every page load anyway (and kiosks reload daily), so
+ * persistence buys nothing. posthog-js-lite exposes `registerForSession` at
+ * runtime but not in its public typings, hence the narrow structural cast
+ * (same pattern as the feature-flag client above). Returns whether the
+ * property was registered.
+ */
+export function registerSessionSuperProperties(properties: PosthogProperties): boolean {
+  const posthog = getPosthog();
+  if (!posthog) return false;
+  const superPropertyClient = posthog as unknown as PosthogSuperPropertyClient;
+  if (typeof superPropertyClient.registerForSession !== 'function') return false;
+  void superPropertyClient.registerForSession(properties);
+  return true;
+}
+
 export function pageview(url: string): void {
   if (isAdminAnalyticsUrl(url)) return;
 
