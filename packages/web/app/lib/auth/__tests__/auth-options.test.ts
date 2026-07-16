@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
+import type { Session } from 'next-auth';
 import { authOptions } from '../auth-options';
 
 // Mock server-only before any imports
@@ -274,6 +275,87 @@ describe('authOptions.callbacks.signIn', () => {
 
       expect(result).toBe(true);
     });
+  });
+});
+
+// =============================================================================
+// session callback — issue #3304: display name must not stay stuck at the
+// sign-in-time JWT value after a Settings edit
+// =============================================================================
+
+type SessionParams = Parameters<NonNullable<NonNullable<typeof authOptions.callbacks>['session']>>[0];
+type SessionResult = Session;
+
+async function callSession(params: Partial<SessionParams>): Promise<SessionResult> {
+  const cb = authOptions.callbacks?.session;
+  if (!cb) throw new Error('session callback not defined');
+  return (await cb(params as SessionParams)) as SessionResult;
+}
+
+describe('authOptions.callbacks.session', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Default DB chain: select().from().where().limit() resolves to empty
+    mockDbSelect.mockReturnValue({ from: mockDbFrom });
+    mockDbFrom.mockReturnValue({ where: mockDbWhere });
+    mockDbWhere.mockReturnValue({ limit: mockDbLimit });
+    mockDbLimit.mockResolvedValue([]);
+  });
+
+  it('overrides session.user.name with userProfiles.displayName when present', async () => {
+    mockDbLimit.mockResolvedValue([{ avatarUrl: null, displayName: 'jojo' }]);
+
+    const result = await callSession({
+      session: { user: { id: 'user-1', name: 'speedywalker8392', email: 'user@example.com' }, expires: '2099-01-01' },
+      token: { sub: 'user-1' },
+    });
+
+    expect(result.user?.name).toBe('jojo');
+  });
+
+  it('leaves session.user.name unchanged when no userProfiles row exists', async () => {
+    mockDbLimit.mockResolvedValue([]);
+
+    const result = await callSession({
+      session: { user: { id: 'user-1', name: 'speedywalker8392' }, expires: '2099-01-01' },
+      token: { sub: 'user-1' },
+    });
+
+    expect(result.user?.name).toBe('speedywalker8392');
+  });
+
+  it('leaves session.user.name unchanged when the profile row has a null displayName', async () => {
+    mockDbLimit.mockResolvedValue([{ avatarUrl: 'https://cdn.example.com/avatar.jpg', displayName: null }]);
+
+    const result = await callSession({
+      session: { user: { id: 'user-1', name: 'speedywalker8392' }, expires: '2099-01-01' },
+      token: { sub: 'user-1' },
+    });
+
+    expect(result.user?.name).toBe('speedywalker8392');
+  });
+
+  it('still overrides session.user.image with userProfiles.avatarUrl when present (regression guard)', async () => {
+    mockDbLimit.mockResolvedValue([{ avatarUrl: 'https://cdn.example.com/avatar.jpg', displayName: null }]);
+
+    const result = await callSession({
+      session: { user: { id: 'user-1', name: 'speedywalker8392', image: 'old.png' }, expires: '2099-01-01' },
+      token: { sub: 'user-1' },
+    });
+
+    expect(result.user?.image).toBe('https://cdn.example.com/avatar.jpg');
+  });
+
+  it('sets session.user.id from token.sub', async () => {
+    mockDbLimit.mockResolvedValue([]);
+
+    const result = await callSession({
+      session: { user: { id: 'user-99', name: 'speedywalker8392' }, expires: '2099-01-01' },
+      token: { sub: 'user-42' },
+    });
+
+    expect(result.user?.id).toBe('user-42');
   });
 });
 
