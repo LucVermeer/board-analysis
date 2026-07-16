@@ -52,6 +52,7 @@ import {
 import {
   SEARCH_GYMS,
   GET_GYM,
+  GET_MY_GYMS,
   UPDATE_GYM,
   GET_GYM_MEMBERS,
   GRANT_GYM_WRITE_ACCESS,
@@ -59,6 +60,7 @@ import {
   REQUEST_GYM_CLAIM,
   type SearchGymsQueryResponse,
   type GetGymQueryResponse,
+  type GetMyGymsQueryResponse,
   type UpdateGymMutationResponse,
   type GetGymMembersQueryResponse,
   type GrantGymWriteAccessMutationResponse,
@@ -240,6 +242,21 @@ export function useGym(gymUuid: string | null) {
     queryFn: () => getHttpClient().request<GetGymQueryResponse>(GET_GYM, { gymUuid }),
     select: (data) => data.gym,
     enabled: !!gymUuid,
+  });
+}
+
+/**
+ * The gyms the signed-in user owns (and, once the backend broadens it, gyms they
+ * help run). Backs the "My gyms" screen off the More tab. The `myGyms` query
+ * scopes to the caller server-side, so no owner filter is passed here. Disabled
+ * until signed in — an anonymous caller has no gyms and the query would 401.
+ */
+export function useMyGyms(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['myGyms'],
+    queryFn: () => getHttpClient().request<GetMyGymsQueryResponse>(GET_MY_GYMS, { input: {} }),
+    select: (data) => data.myGyms,
+    enabled: options?.enabled ?? true,
   });
 }
 

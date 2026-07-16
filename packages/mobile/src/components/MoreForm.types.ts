@@ -25,6 +25,7 @@
  */
 export type MoreIconName =
   | 'playlists'
+  | 'gyms'
   | 'integrations'
   | 'watch'
   | 'accessibility'

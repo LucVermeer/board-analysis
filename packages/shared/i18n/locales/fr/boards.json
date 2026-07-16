@@ -186,6 +186,24 @@
       "editGym": "Modifier la salle",
       "editBoard": "Modifier la board"
     },
+    "myGyms": {
+      "moreRowTitle": "Mes salles",
+      "moreRowSubtitle": "Accède à tes salles et ajuste leurs infos",
+      "screenTitle": "Mes salles",
+      "loadError": "Impossible de charger tes salles. Réessaie.",
+      "retry": "Réessayer",
+      "emptyTitle": "Pas encore de salle",
+      "emptyBody": "Revendique ta salle pour garder ses boards et ses infos à jour.",
+      "findGym": "Trouver ta salle",
+      "kioskHint": "La config des bornes se fait sur grand écran — ouvre-la dans un navigateur pour préparer tes TV.",
+      "kioskHintDismiss": "Compris",
+      "manageKiosks": "Gérer les bornes et TV",
+      "manageKiosksFor": "Gérer les bornes et TV de {{gym}}",
+      "manageError": "Impossible d'ouvrir la console de gestion. Ouvre-la dans un navigateur.",
+      "manageUnavailable": "Cette salle n'est pas encore prête pour les bornes.",
+      "roleOwner": "Propriétaire",
+      "noAddress": "Pas encore d'adresse"
+    },
     "timerPair": {
       "title": "Associer un minuteur",
       "subtitle": "Choisis le minuteur Rogue ou Echo situé à côté de cette board.",

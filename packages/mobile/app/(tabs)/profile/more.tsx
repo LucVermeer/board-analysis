@@ -62,6 +62,7 @@ export default function MoreScreen() {
   const { t: tProfile } = useTranslation('profile');
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSettings } = useTranslation('settings');
+  const { t: tBoards } = useTranslation('boards');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
@@ -294,7 +295,9 @@ export default function MoreScreen() {
     });
   }
 
-  // Library — only when signed in (all-playlists is a profile feature).
+  // Library — only when signed in (all-playlists is a profile feature). "My gyms"
+  // rides here too: it's the owner's home for the gyms they run, and only makes
+  // sense signed in (the `myGyms` query scopes to the caller).
   if (profile?.id) {
     sections.push({
       key: 'library',
@@ -306,6 +309,14 @@ export default function MoreScreen() {
           label: tPlaylists('library.allPlaylists.title'),
           icon: 'playlists',
           onPress: navAction(() => router.push('/(tabs)/discover/all')),
+        },
+        {
+          kind: 'nav',
+          key: 'myGyms',
+          label: tBoards('mobile.myGyms.moreRowTitle'),
+          subtitle: tBoards('mobile.myGyms.moreRowSubtitle'),
+          icon: 'gyms',
+          onPress: navAction(() => router.push('/gyms/mine')),
         },
       ],
     });
