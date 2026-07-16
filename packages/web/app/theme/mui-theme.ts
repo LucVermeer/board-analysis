@@ -183,12 +183,48 @@ const sharedComponents: Components<Theme> = {
           borderWidth: 2,
         },
         '&.Mui-disabled': {
-          // Field surface at reduced alpha + the disabled text tier (#7B7591 light,
-          // #6F6882 dark), never a light-scale grey stranded on the dark field.
-          backgroundColor: 'color-mix(in srgb, var(--input-bg) 50%, transparent)',
+          // Field surface dimmed + the disabled text tier (#7B7591 light, #6F6882 dark),
+          // never a light-scale grey stranded on the dark field. The hover surface is the
+          // opaque fallback for browsers without color-mix() (Safari < 16.2).
+          backgroundColor: 'var(--input-bg-hover)',
+          '@supports (background-color: color-mix(in srgb, red 50%, transparent))': {
+            backgroundColor: 'color-mix(in srgb, var(--input-bg) 50%, transparent)',
+          },
           color: theme.palette.text.disabled,
         },
       }),
+    },
+  },
+  // Legacy floating labels (unmigrated forms, until the FormField waves land): the
+  // resting label sits INSIDE the field, the shrunk label floats over the page/card —
+  // text.secondary clears AA on both in both schemes (guard-tested). Focus keeps the
+  // label quiet; the 2px violet outline carries focus.
+  MuiInputLabel: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        color: theme.palette.text.secondary,
+        '&.Mui-focused': {
+          color: theme.palette.text.secondary,
+        },
+        '&.Mui-error': {
+          color: theme.palette.error.main,
+        },
+      }),
+    },
+  },
+  // Filled-variant inputs (climbs list, bulk import, snackbar) ride the same field
+  // surface family as outlined ones.
+  MuiFilledInput: {
+    styleOverrides: {
+      root: {
+        backgroundColor: 'var(--input-bg)',
+        '&:hover': {
+          backgroundColor: 'var(--input-bg-hover)',
+        },
+        '&.Mui-focused': {
+          backgroundColor: 'var(--input-bg-focused)',
+        },
+      },
     },
   },
   MuiSelect: {
@@ -453,6 +489,16 @@ const darkComponents: Components<Theme> = {
     },
   },
   MuiPopover: {
+    styleOverrides: {
+      paper: {
+        borderRadius: themeTokens.borderRadius.md,
+        ...darkElevatedPaper,
+      },
+    },
+  },
+  // Autocomplete popups render through a Popper (not Menu/Popover), so the elevated
+  // paper needs its own pin.
+  MuiAutocomplete: {
     styleOverrides: {
       paper: {
         borderRadius: themeTokens.borderRadius.md,

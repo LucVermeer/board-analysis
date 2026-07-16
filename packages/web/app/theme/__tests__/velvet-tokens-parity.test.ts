@@ -231,6 +231,27 @@ describe('Velvet dark input surface is defined, legible, and free of the elevati
     const paperRoot = darkTheme.components?.MuiPaper?.styleOverrides?.root as { backgroundImage?: string } | undefined;
     expect(paperRoot?.backgroundImage).toBe('none');
   });
+
+  // Legacy floating labels (theme text.secondary) survive until the FormField waves:
+  // the SHRUNK label floats over the page or a card, not the field — assert those
+  // pairings so removing the old dual-tone MuiInputLabel hack can't regress contrast.
+  it('floating-label text (text.secondary) clears AA over the page and the card in both schemes', () => {
+    expect(contrast(themeTokens.neutral[500], themeTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(themeTokens.neutral[500], themeTokens.semantic.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkTokens.neutral[500], darkTokens.semantic.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkTokens.neutral[500], darkTokens.semantic.surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // Filled-variant inputs and Autocomplete ride the same --input-* family; the popup
+  // paper is pinned to the elevated surface — assert its text pairing too.
+  it('input text clears AA on the field in both schemes (covers filled + autocomplete inputs)', () => {
+    expect(contrast(lightVars['--input-text'], themeTokens.semantic.inputSurface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkVars['--input-text'], darkTokens.semantic.inputSurface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('primary text clears AA on the elevated popup paper (autocomplete/menu) in dark', () => {
+    expect(contrast(darkTokens.neutral[800], darkTokens.semantic.surfaceElevated)).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe('web surface ladder deliberately diverges from the shared velvet-tokens anchors', () => {
