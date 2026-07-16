@@ -691,6 +691,9 @@ export async function mergeGymCluster(
   await rebuildGymVoteCounts(commandDb, [canonicalGym.uuid, ...duplicateGymUuids]);
   await setVoteCountMaintenanceSkipped(commandDb, false);
 
+  // Point each soft-deleted twin at the survivor so the backend's canonical
+  // resolution can follow the pointer — a deduped gym's old uuid/slug (printed
+  // kiosk QRs) then redirects to the canonical gym instead of 404ing.
   const duplicateGymsSoftDeleted = await executeCount(
     commandDb,
     sql`
@@ -698,6 +701,7 @@ export async function mergeGymCluster(
         UPDATE gyms
            SET is_public = false,
                deleted_at = NOW(),
+               merged_into_gym_id = ${canonicalGym.id},
                updated_at = NOW()
          WHERE id IN (${duplicateGymIdList})
          RETURNING 1

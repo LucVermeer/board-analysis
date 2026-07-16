@@ -8,7 +8,7 @@
 // graphql-ws connection.
 
 import React, { cache } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { GET_GYM_KIOSK } from '@boardsesh/graphql/operations';
 import type { GymKiosk, GymKioskBoard } from '@boardsesh/shared-schema';
@@ -118,6 +118,14 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
   const kiosk = fetchResult.kiosk;
   if (kiosk === null) {
     notFound();
+  }
+
+  // The requested gym slug belonged to a merged twin: the backend resolved the
+  // kiosk against the canonical gym, whose slug differs. Redirect a printed QR's
+  // old URL onto the canonical one (308) — preserving the kiosk segment — instead
+  // of leaving the TV on a dead slug. Never happens for a live gym.
+  if (kiosk.gym.slug && kiosk.gym.slug !== gymSlug) {
+    permanentRedirect(kioskSlug === null ? `/kiosk/${kiosk.gym.slug}` : `/kiosk/${kiosk.gym.slug}/${kioskSlug}`);
   }
 
   const locale = await getLocale();

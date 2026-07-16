@@ -1,0 +1,3 @@
+ALTER TABLE "gyms" ADD COLUMN "merged_into_gym_id" bigint;--> statement-breakpoint
+ALTER TABLE "gyms" ADD CONSTRAINT "gyms_merged_into_gym_id_gyms_id_fk" FOREIGN KEY ("merged_into_gym_id") REFERENCES "public"."gyms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "gyms_merged_into_idx" ON "gyms" USING btree ("merged_into_gym_id") WHERE "gyms"."merged_into_gym_id" IS NOT NULL;

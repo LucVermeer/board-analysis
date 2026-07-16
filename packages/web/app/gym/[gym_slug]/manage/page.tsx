@@ -1,6 +1,6 @@
 import React, { cache } from 'react';
 import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { notFound, redirect, permanentRedirect } from 'next/navigation';
 import Container from '@mui/material/Container';
 import Alert from '@mui/material/Alert';
 import type { Gym } from '@boardsesh/shared-schema';
@@ -88,6 +88,14 @@ export default async function ManageGymPage(props: ManageGymRouteProps) {
   // here would confirm the gym exists.
   if (!gym || (!gym.isPublic && !gym.canEdit)) {
     notFound();
+  }
+
+  // A merged twin's slug resolved to the canonical gym under a different slug:
+  // redirect the manage URL onto the canonical slug. Skip when the URL segment is
+  // a UUID — that's the deliberate slug-less-gym-by-uuid addressing path, not a
+  // stale twin slug.
+  if (gym.slug && gym.slug !== gym_slug && !looksLikeGymUuid(gym_slug)) {
+    permanentRedirect(`/gym/${gym.slug}/manage`);
   }
 
   const locale = await getLocale();

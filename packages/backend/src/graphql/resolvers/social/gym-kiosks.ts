@@ -8,7 +8,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import { CreateGymKioskInputSchema, UpdateGymKioskInputSchema, UUIDSchema } from '../../../validation/schemas';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
-import { enrichGym, requireGymEditAccess, userCanEditGym } from './gyms';
+import { enrichGym, requireGymEditAccess, userCanEditGym, resolveCanonicalGymBySlug } from './gyms';
 import { enrichBoards } from './boards';
 
 type GymRow = typeof dbSchema.gyms.$inferSelect;
@@ -268,11 +268,10 @@ export const socialGymKioskQueries = {
       return null;
     }
 
-    const [gym] = await db
-      .select()
-      .from(dbSchema.gyms)
-      .where(and(eq(dbSchema.gyms.slug, gymSlug), isNull(dbSchema.gyms.deletedAt)))
-      .limit(1);
+    // A merged twin's slug resolves to the canonical survivor; the enriched
+    // payload carries the survivor's slug so the kiosk page can redirect a
+    // printed QR's old URL onto the canonical one instead of 404ing the TV.
+    const gym = await resolveCanonicalGymBySlug(gymSlug);
     if (!gym) return null;
 
     const viewerId = ctx.isAuthenticated ? ctx.userId : undefined;
