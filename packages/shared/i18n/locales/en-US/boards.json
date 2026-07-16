@@ -586,7 +586,8 @@
     "backHome": "Back to Boardsesh",
     "success": {
       "title": "The gym is yours",
-      "body": "You're the owner now. Keep the listing and boards accurate, and invite your crew to help."
+      "body": "You're the owner now. Keep the listing and boards accurate, and invite your crew to help.",
+      "setupCta": "Set up your gym"
     },
     "error": {
       "title": "That link didn't work",

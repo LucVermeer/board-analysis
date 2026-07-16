@@ -77,6 +77,31 @@
     "claimCta": "Claim this gym"
   },
   "manage": {
+    "welcome": {
+      "title": "Get your wall live",
+      "allDoneTitle": "You're all set",
+      "allDoneBody": "Your gym's ready to roll. Close this whenever.",
+      "progress": "{{done}} of {{total}} done",
+      "dismiss": "Dismiss",
+      "steps": {
+        "kiosk": {
+          "title": "Put it on the TV",
+          "body": "Build a kiosk for your wall display"
+        },
+        "branding": {
+          "title": "Set your branding",
+          "body": "Add your logo and colors"
+        },
+        "boards": {
+          "title": "Link your boards",
+          "body": "Connect the walls in your gym"
+        },
+        "members": {
+          "title": "Invite your crew",
+          "body": "Add the staff and setters who help run it"
+        }
+      }
+    },
     "title": "Manage {{gymName}}",
     "backToGym": "Back to gym page",
     "accessDenied": "You don't have permission to manage this gym.",

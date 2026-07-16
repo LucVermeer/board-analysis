@@ -32,6 +32,8 @@
     "newClimb": "{{actor}} a créé un nouveau bloc",
     "newClimbsSyncedSetter": "{{setter}} a ouvert de nouveaux blocs",
     "newClimbsSynced": "{{actor}} a ouvert de nouveaux blocs",
+    "gymClaimApproved": "Tu gères maintenant {{gym}}",
+    "gymClaimApprovedGeneric": "Tu es désormais le propriétaire : ta revendication de la salle est validée",
     "default": "Tu as une nouvelle notification"
   },
   "time": {

@@ -15,7 +15,8 @@ export type NotificationType =
   | 'proposal_rejected'
   | 'proposal_vote'
   | 'proposal_created'
-  | 'new_climbs_synced';
+  | 'new_climbs_synced'
+  | 'gym_claim_approved';
 
 export type Notification = {
   uuid: string;
@@ -30,6 +31,8 @@ export type Notification = {
   climbUuid?: string | null;
   boardType?: string | null;
   proposalUuid?: string | null;
+  /** Gym name (for gym_claim_approved notifications). */
+  gymName?: string | null;
   isRead: boolean;
   createdAt: string;
 };
@@ -60,6 +63,8 @@ export type GroupedNotification = {
   boardType?: string | null;
   proposalUuid?: string | null;
   setterUsername?: string | null;
+  /** Gym name (for gym_claim_approved notifications). */
+  gymName?: string | null;
   isRead: boolean;
   createdAt: string;
 };

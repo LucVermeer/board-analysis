@@ -3109,6 +3109,8 @@ enum NotificationType {
   proposal_rejected
   proposal_vote
   proposal_created
+  new_climbs_synced
+  gym_claim_approved
 }
 
 """
@@ -3139,6 +3141,8 @@ type Notification {
   boardType: String
   "Proposal UUID (for proposal notifications, to deep-link to the specific proposal)"
   proposalUuid: String
+  "Gym name (for gym_claim_approved notifications)"
+  gymName: String
   "Whether the notification has been read"
   isRead: Boolean!
   "When the notification was created (ISO 8601)"
@@ -3199,6 +3203,8 @@ type GroupedNotification {
   proposalUuid: String
   "Setter username (for new_climbs_synced notifications)"
   setterUsername: String
+  "Gym name (for gym_claim_approved notifications)"
+  gymName: String
   "Whether all notifications in the group are read"
   isRead: Boolean!
   "When the most recent notification was created"

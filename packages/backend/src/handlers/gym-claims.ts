@@ -22,7 +22,10 @@ export async function handleGymClaimVerify(req: IncomingMessage, res: ServerResp
   try {
     const result = await verifyGymClaimByToken(token);
     if (result.ok) {
-      redirectTo(res, `${web}/gym-claim/success`);
+      // Carry the gym so the success page can offer a "set up your gym" deep link.
+      // Prefer the slug for a friendly URL; the manage route also resolves by UUID.
+      const gymRef = result.gymSlug || result.gymUuid;
+      redirectTo(res, `${web}/gym-claim/success?gym=${encodeURIComponent(gymRef)}`);
       return;
     }
     redirectTo(res, `${web}/gym-claim/error?reason=${encodeURIComponent(result.reason)}`);

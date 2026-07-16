@@ -32,6 +32,8 @@ function formatNotificationMessage(notification: Notification): string {
       return `${actor} liked your ascent`;
     case 'vote_on_comment':
       return `${actor} liked your comment`;
+    case 'gym_claim_approved':
+      return notification.gymName ? `You now manage ${notification.gymName}` : 'Your gym claim was approved';
     default:
       return 'You have a new notification';
   }
@@ -147,6 +149,7 @@ export function useNotificationSubscription() {
                   climbName: notification.climbName,
                   climbUuid: notification.climbUuid,
                   boardType: notification.boardType,
+                  gymName: notification.gymName,
                   isRead: false,
                   createdAt: notification.createdAt,
                 };

@@ -1997,6 +1997,8 @@ export type GroupedNotification = {
   entityId?: Maybe<Scalars['String']['output']>;
   /** Entity type */
   entityType?: Maybe<SocialEntityType>;
+  /** Gym name (for gym_claim_approved notifications) */
+  gymName?: Maybe<Scalars['String']['output']>;
   /** Whether all notifications in the group are read */
   isRead: Scalars['Boolean']['output'];
   /** Proposal UUID (for deep-linking to a specific proposal) */
@@ -3566,6 +3568,8 @@ export type Notification = {
   entityId?: Maybe<Scalars['String']['output']>;
   /** Entity type this notification relates to */
   entityType?: Maybe<SocialEntityType>;
+  /** Gym name (for gym_claim_approved notifications) */
+  gymName?: Maybe<Scalars['String']['output']>;
   /** Whether the notification has been read */
   isRead: Scalars['Boolean']['output'];
   /** Proposal UUID (for proposal notifications, to deep-link to the specific proposal) */
@@ -3600,8 +3604,10 @@ export type NotificationType =
   | 'comment_on_climb'
   | 'comment_on_tick'
   | 'comment_reply'
+  | 'gym_claim_approved'
   | 'new_climb'
   | 'new_climb_global'
+  | 'new_climbs_synced'
   | 'new_follower'
   | 'proposal_approved'
   | 'proposal_created'
@@ -8662,6 +8668,7 @@ export type GroupedNotificationResolvers<
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   entityId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   entityType?: Resolver<Maybe<ResolversTypes['SocialEntityType']>, ParentType, ContextType>;
+  gymName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   isRead?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   proposalUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   setterUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -9665,6 +9672,7 @@ export type NotificationResolvers<
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   entityId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   entityType?: Resolver<Maybe<ResolversTypes['SocialEntityType']>, ParentType, ContextType>;
+  gymName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   isRead?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   proposalUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   type?: Resolver<ResolversTypes['NotificationType'], ParentType, ContextType>;

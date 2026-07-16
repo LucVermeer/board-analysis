@@ -166,6 +166,21 @@ const claimStatus = async (claimId: number): Promise<string> => {
   return Array.from(result as Iterable<{ status: string }>)[0].status;
 };
 
+// The gym_claim_approved notifications a user received, newest first.
+const claimApprovedNotifications = async (
+  recipientId: string,
+): Promise<Array<{ entity_type: string | null; entity_id: string | null; actor_id: string | null }>> => {
+  const result = await db.execute(sql`
+    SELECT entity_type, entity_id, actor_id
+    FROM notifications
+    WHERE recipient_id = ${recipientId} AND type = 'gym_claim_approved'
+    ORDER BY created_at DESC
+  `);
+  return Array.from(
+    result as Iterable<{ entity_type: string | null; entity_id: string | null; actor_id: string | null }>,
+  );
+};
+
 const canEditGym = async (gymUuid: string, ctx: ConnectionContext): Promise<boolean> => {
   const gym = await socialGymQueries.gym(null, { gymUuid }, ctx);
   expect(gym).not.toBeNull();
@@ -181,7 +196,7 @@ beforeEach(async () => {
   await db.execute(sql`
     TRUNCATE TABLE
       "community_roles", "gym_members", "gym_follows", "gym_claims",
-      "board_follows", "boardsesh_ticks", "user_boards", "gyms"
+      "board_follows", "boardsesh_ticks", "user_boards", "gyms", "notifications"
     RESTART IDENTITY CASCADE
   `);
 
@@ -596,7 +611,14 @@ describe('applyGymClaim / verifyGymClaimByToken — ownership transfer', () => {
     expect(claimRow).toBeDefined();
 
     const applied = await applyGymClaim(claimRow);
-    expect(applied).toEqual({ gymName: 'Real Gym', claimEmail: 'boss@realgym.com', priorOwnerId: PRIOR_OWNER });
+    expect(applied).toEqual({
+      gymName: 'Real Gym',
+      gymUuid: claimGym.uuid,
+      gymSlug: claimGym.uuid, // insertGym seeds slug = uuid
+      claimantUserId: CLAIMANT,
+      claimEmail: 'boss@realgym.com',
+      priorOwnerId: PRIOR_OWNER,
+    });
 
     expect(await gymOwnerId(claimGym.uuid)).toBe(CLAIMANT);
     // Prior owner kept on as a gym admin.
@@ -625,7 +647,7 @@ describe('applyGymClaim / verifyGymClaimByToken — ownership transfer', () => {
     });
 
     const result = await verifyGymClaimByToken('tok');
-    expect(result).toEqual({ ok: true, gymName: 'Catalog Gym' });
+    expect(result).toEqual({ ok: true, gymName: 'Catalog Gym', gymSlug: claimGym.uuid, gymUuid: claimGym.uuid });
 
     expect(await gymOwnerId(claimGym.uuid)).toBe(CLAIMANT);
     // System placeholder owner is NOT retained as a member.
@@ -633,6 +655,9 @@ describe('applyGymClaim / verifyGymClaimByToken — ownership transfer', () => {
     expect(await claimStatus(claimId)).toBe('approved');
     // Best-effort approval email fired (claimEmail present).
     expect(sendGymClaimApprovedEmail).toHaveBeenCalledWith('owner@catalog-gym.com', 'Catalog Gym');
+    // The claimant gets an in-app notification deep-linking to the gym (by UUID), no actor.
+    const domainNotifications = await claimApprovedNotifications(CLAIMANT);
+    expect(domainNotifications).toEqual([{ entity_type: 'gym', entity_id: claimGym.uuid, actor_id: null }]);
   });
 
   it('verifyGymClaimByToken rejects an unknown token without transferring anything', async () => {
@@ -691,6 +716,9 @@ describe('reviewGymClaim (admin-gated)', () => {
     expect(await claimStatus(claimId)).toBe('approved');
     // The displaced real owner is notified.
     expect(sendGymClaimOwnershipLostEmail).toHaveBeenCalledWith(`${PRIOR_OWNER}@test.com`, 'Approve Gym');
+    // The claimant gets an in-app "you now manage this gym" notification.
+    const adminNotifications = await claimApprovedNotifications(CLAIMANT);
+    expect(adminNotifications).toEqual([{ entity_type: 'gym', entity_id: claimGym.uuid, actor_id: null }]);
   });
 
   it('admin deny marks the claim denied without transferring', async () => {
@@ -703,6 +731,8 @@ describe('reviewGymClaim (admin-gated)', () => {
 
     expect(await gymOwnerId(claimGym.uuid)).toBe(PRIOR_OWNER);
     expect(await claimStatus(claimId)).toBe('denied');
+    // A denied claim transfers nothing, so no approval notification fires.
+    expect(await claimApprovedNotifications(CLAIMANT)).toEqual([]);
   });
 });
 
@@ -881,7 +911,7 @@ describe('claim security hardening', () => {
     // The new token still transfers ownership.
     expect(await gymOwnerId(claimGym.uuid)).toBe(PRIOR_OWNER);
     const applied = await verifyGymClaimByToken(secondToken);
-    expect(applied).toEqual({ ok: true, gymName: 'Retoken Gym' });
+    expect(applied).toEqual({ ok: true, gymName: 'Retoken Gym', gymSlug: claimGym.uuid, gymUuid: claimGym.uuid });
     expect(await gymOwnerId(claimGym.uuid)).toBe(CLAIMANT);
   });
 

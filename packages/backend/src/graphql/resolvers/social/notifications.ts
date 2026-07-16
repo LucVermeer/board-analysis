@@ -43,6 +43,7 @@ function mapNotificationRow(row: NotificationRow) {
     climbName: undefined,
     climbUuid: undefined,
     boardType: undefined,
+    gymName: undefined,
     isRead: row.readAt !== null,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
@@ -213,6 +214,7 @@ export const socialNotificationQueries = {
         boardType: undefined as string | undefined,
         proposalUuid: undefined as string | undefined,
         setterUsername: undefined as string | undefined,
+        gymName: undefined as string | undefined,
         isRead: row.allRead,
         createdAt:
           row.latestCreatedAt instanceof Date ? row.latestCreatedAt.toISOString() : String(row.latestCreatedAt),
@@ -226,12 +228,15 @@ export const socialNotificationQueries = {
     // Collect entity IDs by type
     const climbEntityIds: string[] = [];
     const proposalEntityIds: string[] = [];
+    const gymEntityIds: string[] = [];
     for (const group of groups) {
       if (!group.entityId) continue;
       if (group.type === 'new_climbs_synced' || climbTypes.includes(group.type)) {
         climbEntityIds.push(group.entityId);
       } else if (proposalTypes.includes(group.type)) {
         proposalEntityIds.push(group.entityId);
+      } else if (group.type === 'gym_claim_approved') {
+        gymEntityIds.push(group.entityId);
       }
     }
 
@@ -295,11 +300,25 @@ export const socialNotificationQueries = {
       }
     }
 
+    // Batch-fetch gym names (entityId is the gym UUID for gym_claim_approved)
+    const gymNameMap = new Map<string, string>();
+    if (gymEntityIds.length > 0) {
+      const gymRows = await db
+        .select({ uuid: dbSchema.gyms.uuid, name: dbSchema.gyms.name })
+        .from(dbSchema.gyms)
+        .where(inArray(dbSchema.gyms.uuid, gymEntityIds));
+      for (const row of gymRows) {
+        gymNameMap.set(row.uuid, row.name);
+      }
+    }
+
     // Enrich groups using map lookups (no DB calls)
     for (const group of groups) {
       if (!group.entityId) continue;
 
-      if (group.type === 'new_climbs_synced') {
+      if (group.type === 'gym_claim_approved') {
+        group.gymName = gymNameMap.get(group.entityId) ?? undefined;
+      } else if (group.type === 'new_climbs_synced') {
         const climb = climbMap.get(group.entityId);
         if (climb) {
           group.climbUuid = group.entityId;
