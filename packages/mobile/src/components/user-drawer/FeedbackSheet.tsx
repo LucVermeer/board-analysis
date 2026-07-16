@@ -43,7 +43,7 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [comment, setComment] = useState('');
   const [captureBleDiag, setCaptureBleDiag] = useState(false);
-  const [contactConsent, setContactConsent] = useState(false);
+  const [contactConsent, setContactConsent] = useState(true);
 
   const isBugReport = mode === 'bug';
   const trimmedComment = comment.trim();
@@ -57,7 +57,7 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
     setSelectedRating(null);
     setComment('');
     setCaptureBleDiag(false);
-    setContactConsent(false);
+    setContactConsent(true);
     reset();
   }, [mode, reset]);
 
@@ -92,7 +92,7 @@ export function FeedbackSheet({ sheetRef, mode, showDiscordLink = false }: Feedb
       showToast(isBugReport ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
       setSelectedRating(null);
       setComment('');
-      setContactConsent(false);
+      setContactConsent(true);
     } catch {
       showToast(t('feedbackDialog.errorRating'), 'error');
     }
