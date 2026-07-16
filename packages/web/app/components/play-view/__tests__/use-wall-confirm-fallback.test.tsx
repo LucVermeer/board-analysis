@@ -2,7 +2,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
-import { useWallConfirmFallback, WALL_CONFIRM_TIMEOUT_MS } from '../use-wall-confirm-fallback';
+import {
+  useWallConfirmFallback,
+  WALL_CONFIRM_RECONCILE_MS,
+  WALL_CONFIRM_TIMEOUT_MS,
+} from '../use-wall-confirm-fallback';
 import { emitWallConfirm } from '@boardsesh/play-view';
 
 const mockTrack = vi.fn();
@@ -345,15 +349,41 @@ describe('useWallConfirmFallback', () => {
     );
   });
 
-  it('is a no-op when a WallConfirmedClimb arrives after the timeout already ran', () => {
+  it('lands a slow confirm inside the widened window as a clean Wall Confirmed', () => {
+    // 2500ms was clipped by the old 2000ms cap; it now confirms cleanly.
     const deps = makeDeps();
-    const { result } = renderHook(() => useWallConfirmFallback(deps));
+    const onConfirmed = vi.fn();
+    const { result } = renderHook(() => useWallConfirmFallback(deps, { onConfirmed } satisfies Callbacks));
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+    act(() => {
+      emitWallConfirm('climb-1');
+    });
+
+    expect(deps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(onConfirmed).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledWith(
+      'Wall Confirmed',
+      expect.objectContaining({ climbUuid: 'climb-1', latencyMs: 2500 }),
+    );
+  });
+
+  it('reconciles a late WallConfirmedClimb into an honest Wall Confirmed after the timeout ran', () => {
+    const deps = makeDeps();
+    const onReconciled = vi.fn();
+    const { result } = renderHook(() => useWallConfirmFallback(deps, { onReconciled } satisfies Callbacks));
 
     act(() => {
       result.current.armWatcher(baseClimb);
     });
 
-    // Timeout fires — fallback runs.
+    // Timeout fires — fallback runs, timeout recorded.
     act(() => {
       vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS);
     });
@@ -361,14 +391,50 @@ describe('useWallConfirmFallback', () => {
     expect(mockTrack).toHaveBeenCalledOnce();
     expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', expect.objectContaining({ fallback: 'picker' }));
 
-    // A late confirm for the same climb arrives — must not double-fire or
-    // tear anything down (the watcher is already gone).
+    // A genuine ack lands 2s after the deadline — still inside the backstop.
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
     act(() => {
       emitWallConfirm('climb-1');
     });
 
+    // No second connect; the confirm is recorded honestly (flagged so it can be
+    // netted against the paired timeout) and the drawer settle callback fires.
     expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
+    expect(onReconciled).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledTimes(2);
+    expect(mockTrack).toHaveBeenLastCalledWith('Wall Confirmed', {
+      climbUuid: 'climb-1',
+      latencyMs: WALL_CONFIRM_TIMEOUT_MS + 2000,
+      confirmedByRole: 'other',
+      mode: 'solo',
+      boardLayout: 'Original',
+      reconciledAfterTimeout: true,
+      previousFallback: 'picker',
+    });
+  });
+
+  it('drops a confirm that only arrives after the reconcile backstop elapses', () => {
+    const deps = makeDeps();
+    const onReconciled = vi.fn();
+    const { result } = renderHook(() => useWallConfirmFallback(deps, { onReconciled } satisfies Callbacks));
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+    act(() => {
+      vi.advanceTimersByTime(WALL_CONFIRM_RECONCILE_MS + 100);
+    });
+
+    // The watcher has fully given up; a much-later ack changes nothing.
+    act(() => {
+      emitWallConfirm('climb-1');
+    });
+
+    expect(onReconciled).not.toHaveBeenCalled();
     expect(mockTrack).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', expect.objectContaining({ fallback: 'picker' }));
   });
 
   it('coalesces repeated emits for the same climbUuid (two-phones racing)', () => {

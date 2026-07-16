@@ -4,13 +4,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import {
   createWallConfirmFallbackController,
   subscribeToWallConfirm,
+  WALL_CONFIRM_RECONCILE_MS,
   WALL_CONFIRM_TIMEOUT_MS,
   type WallConfirmArmArgs,
 } from '@boardsesh/play-view';
 import { track } from '@/app/lib/analytics';
 import { isNativeApp } from '@/app/lib/ble/capacitor-utils';
 
-export { WALL_CONFIRM_TIMEOUT_MS };
+export { WALL_CONFIRM_RECONCILE_MS, WALL_CONFIRM_TIMEOUT_MS };
 
 type Deps = {
   /** Current local BLE connection state. */
@@ -33,14 +34,19 @@ type Deps = {
 
 type Callbacks = {
   /** Fired when a `WallConfirmedClimb` matching the armed `climbUuid` arrives
-   *  inside the 2-second window. Receives the elapsed `latencyMs` and a
+   *  inside the confirm window. Receives the elapsed `latencyMs` and a
    *  `confirmedByRole` hint derived from the local BLE state at confirm time
    *  (`'self'` when the local phone is currently BLE-paired — most likely the
    *  AutoSender that just wrote; `'other'` otherwise). The drawer uses this
    *  to fire the `Wall Confirmed` analytics event and clear pending UI. */
   onConfirmed?: (info: { climbUuid: string; latencyMs: number; confirmedByRole: 'self' | 'other' }) => void;
-  /** Fired when the 2-second window expires and a fallback ran. */
+  /** Fired when the confirm window expires and a fallback ran. */
   onTimeout?: (info: { climbUuid: string }) => void;
+  /** Fired when the wall confirmed *after* the timeout verdict but still inside
+   *  the reconcile backstop — a slow-but-valid ack. The drawer settles any
+   *  lingering pulse; the honest `Wall Confirmed` analytics event is emitted
+   *  here (flagged `reconciledAfterTimeout`). */
+  onReconciled?: (info: { climbUuid: string; latencyMs: number; confirmedByRole: 'self' | 'other' }) => void;
 };
 
 /**
@@ -74,11 +80,27 @@ export function useWallConfirmFallback(deps: Deps, callbacks: Callbacks = {}) {
         {
           onConfirmed: (info) => callbacksRef.current.onConfirmed?.(info),
           onTimeout: (info) => callbacksRef.current.onTimeout?.(info),
+          onReconciled: (info) => callbacksRef.current.onReconciled?.(info),
           onTrackConfirmed: ({ climbUuid, latencyMs, confirmedByRole, mode, boardLayout }) => {
             track('Wall Confirmed', { climbUuid, latencyMs, confirmedByRole, mode, boardLayout });
           },
           onTrackTimeout: ({ mode, fallback, boardLayout }) => {
             track('Wall Confirm Timeout', { mode, fallback, boardLayout });
+          },
+          onTrackReconciled: ({ climbUuid, latencyMs, confirmedByRole, mode, boardLayout, previousFallback }) => {
+            // The wall did light, just after the deadline. Record it as a real
+            // confirm (so the confirm count is honest) but flag it so the
+            // clipped-latency distribution and the paired `Wall Confirm Timeout`
+            // can be netted out.
+            track('Wall Confirmed', {
+              climbUuid,
+              latencyMs,
+              confirmedByRole,
+              mode,
+              boardLayout,
+              reconciledAfterTimeout: true,
+              previousFallback,
+            });
           },
         },
       ),

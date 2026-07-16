@@ -381,12 +381,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     navigate('previous', 'playViewDrawer');
   }, [navigate]);
   // Wall-confirm watcher: armed by handleLightbulbClick, dismissed by the
-  // local wall-confirm bus or fires a connect fallback after 2 s. Owns its
-  // own unmount cleanup so the drawer doesn't need to thread that wiring.
+  // local wall-confirm bus or fires a connect fallback after the confirm
+  // deadline. Owns its own unmount cleanup so the drawer doesn't need to thread
+  // that wiring.
   //
   // `onConfirmed` / `onTimeout` clear the lightbulb's pending pulse state so
   // the UI accurately reflects the round-trip — pulse during the window,
-  // solid lit on confirm, picker (or no-op) on timeout.
+  // solid lit on confirm, picker (or no-op) on timeout. `onReconciled` handles
+  // a slow ack that lands after the deadline: the pulse already cleared, so this
+  // is an idempotent settle (the honest analytics event fires in the hook).
   const handleWallConfirmed = useCallback((info: { climbUuid: string }) => {
     setPendingClimbUuid((current) => (current === info.climbUuid ? null : current));
   }, []);
@@ -401,7 +404,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       isPersistentSessionActive,
       bluetoothConnect,
     },
-    { onConfirmed: handleWallConfirmed, onTimeout: handleWallConfirmTimeout },
+    {
+      onConfirmed: handleWallConfirmed,
+      onTimeout: handleWallConfirmTimeout,
+      onReconciled: handleWallConfirmed,
+    },
   );
 
   // Session-swap during pending: if the watcher hook cancels because the
