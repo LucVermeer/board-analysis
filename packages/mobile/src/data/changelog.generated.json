@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-16T03:28:30.288Z",
+  "generatedAt": "2026-07-16T05:43:14.284Z",
   "entries": [
+    {
+      "prNumber": 3636,
+      "category": "new",
+      "title": "Gyms can now embed a live board view and a gym leaderboard straight into their own website — paste one iframe snippet and visitors see what's lit on the wall and who's been sending, powered by Boardsesh.",
+      "mergedAt": "2026-07-16T05:38:44Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3636"
+    },
+    {
+      "prNumber": 3634,
+      "category": "new",
+      "title": "Put your gym's walls on a TV: `/kiosk/your-gym` shows what's lit on every board, live, with your gym's logo and colours",
+      "mergedAt": "2026-07-16T05:37:42Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3634",
+      "body": "Run up to four boards on one screen — the layout adapts as you add walls\nAdd a leaderboard rail to see who's crushing this session, the last 24 hours, this week, or this month\nThe TV takes care of itself: stays awake, reconnects, and picks up your kiosk edits on its own"
+    },
     {
       "prNumber": 3658,
       "category": "improved",

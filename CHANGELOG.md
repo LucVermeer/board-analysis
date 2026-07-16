@@ -6,6 +6,14 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-16
 
+### New
+
+- Gyms can now embed a live board view and a gym leaderboard straight into their own website — paste one iframe snippet and visitors see what's lit on the wall and who's been sending, powered by Boardsesh. ([#3636](https://github.com/boardsesh/boardsesh/pull/3636))
+- Put your gym's walls on a TV: `/kiosk/your-gym` shows what's lit on every board, live, with your gym's logo and colours ([#3634](https://github.com/boardsesh/boardsesh/pull/3634))
+  Run up to four boards on one screen — the layout adapts as you add walls
+  Add a leaderboard rail to see who's crushing this session, the last 24 hours, this week, or this month
+  The TV takes care of itself: stays awake, reconnects, and picks up your kiosk edits on its own
+
 ### Improved
 
 - MoonBoard heatmaps, hold search, and area filters now work from the board's real hold placements. ([#3658](https://github.com/boardsesh/boardsesh/pull/3658))
