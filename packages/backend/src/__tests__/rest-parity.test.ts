@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vite-plus/test';
+import { ANGLES } from '@boardsesh/board-config';
 import { startServer } from '../server';
 
 const BACKEND_PORT = 8083; // Use different port to avoid conflicts with other tests
@@ -94,24 +95,29 @@ describe('REST vs GraphQL Parity Tests', () => {
       }
     });
 
-    it.skip('angles should match between REST and GraphQL for kilter layout 1', async () => {
-      // Skipped: REST API at www.boardsesh.com/api/v1/angles returns 500
-      // TODO: Re-enable when REST API is fixed
-      const layoutId = 1;
+    it('angles should return the static per-board angle range in ascending order (#2379)', async () => {
+      // `board_products_angles` (GraphQL resolver) and `kilter_products_angles`
+      // (REST) never existed / were dropped from the DB — Aurora deliberately
+      // doesn't sync a per-layout angle table (see
+      // packages/aurora-sync/src/sync/shared-sync.ts). Both endpoints now read
+      // the shared static ANGLES source
+      // (packages/shared/board-config/src/board-data.ts) instead. We assert
+      // against that source directly rather than calling the live production
+      // REST API (like the grades parity tests above do): the REST fix in
+      // this same PR isn't deployed yet, so hitting production here would be
+      // a chicken-and-egg problem — this test could only pass after a
+      // separate deploy step, defeating pre-merge CI.
+      for (const boardName of ['kilter', 'tension', 'moonboard'] as const) {
+        const gqlResult = await fetchGraphQL<{
+          angles: Array<{ angle: number }>;
+        }>(`query { angles(boardName: "${boardName}", layoutId: 1) { angle } }`);
 
-      // REST API call
-      const restResult = await fetchRest<Array<{ angle: number }>>(`/api/v1/angles/kilter/${layoutId}`);
+        const expectedAngles = ANGLES[boardName];
+        expect(gqlResult.angles).toEqual(expectedAngles.map((angle) => ({ angle })));
 
-      // GraphQL API call
-      const gqlResult = await fetchGraphQL<{
-        angles: Array<{ angle: number }>;
-      }>(`query { angles(boardName: "kilter", layoutId: ${layoutId}) { angle } }`);
-
-      // Compare lengths
-      expect(gqlResult.angles.length).toBe(restResult.length);
-
-      // Compare values
-      expect(gqlResult.angles).toEqual(restResult);
+        const angleValues = gqlResult.angles.map((entry) => entry.angle);
+        expect(angleValues).toEqual([...angleValues].sort((a, b) => a - b));
+      }
     });
   });
 

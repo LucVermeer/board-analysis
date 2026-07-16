@@ -105,7 +105,7 @@ registry.registerPath({
   path: '/api/v1/angles/{board_name}/{layout_id}',
   summary: 'Get available angles',
   description:
-    'Returns all available board angles for a specific layout. Angles are typically between 0-70 degrees depending on the board configuration.',
+    'Returns all available angles for a board (the same range applies to every layout). Angles are typically between 0-70 degrees depending on the board configuration.',
   tags: ['Board Configuration'],
   request: {
     params: z.object({

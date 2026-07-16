@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm';
-import { executeRows } from '@/app/lib/db/db';
 import { AURORA_BOARD_NAMES, getBoardSelectorOptions, isAuroraBoardName } from '@/app/lib/board-constants';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
-import { dbzRead as db } from '@/app/lib/db/db';
+import { ANGLES } from '@/app/lib/board-data';
 import { cachedGetHoldHeatmapData } from '@/app/lib/db/queries/climbs/holds-heatmap-cache';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { ParsedBoardRouteParameters } from '@/app/lib/types';
@@ -27,20 +25,12 @@ type WarmTarget = {
   angle: number;
 };
 
-async function getAnglesForLayout(boardName: AuroraBoardName, layoutId: number): Promise<number[]> {
-  // Same query used by packages/backend/src/graphql/resolvers/board/queries.ts:44-50
-  const result = await executeRows<{ angle: number }>(
-    db,
-    sql`
-    SELECT DISTINCT pa.angle
-    FROM board_products_angles pa
-    JOIN board_layouts l
-      ON l.board_type = pa.board_type AND l.product_id = pa.product_id
-    WHERE l.board_type = ${boardName} AND l.id = ${layoutId}
-    ORDER BY pa.angle ASC
-  `,
-  );
-  return result.map((row) => Number(row.angle));
+function getAnglesForBoard(boardName: AuroraBoardName): number[] {
+  // Aurora doesn't sync a per-layout angle table (deliberately excluded —
+  // see packages/aurora-sync/src/sync/shared-sync.ts). Every layout for a
+  // given board type supports the same fixed angle range, hardcoded in
+  // ANGLES. Mirrors packages/backend/src/graphql/resolvers/board/queries.ts.
+  return ANGLES[boardName];
 }
 
 function buildTargetsForBoard(boardName: AuroraBoardName, anglesByLayout: Map<number, number[]>): WarmTarget[] {
@@ -149,19 +139,9 @@ export async function GET(request: Request, props: { params: Promise<PrewarmRout
     const selectorOptions = getBoardSelectorOptions();
     const layouts = selectorOptions.layouts[boardName] ?? [];
 
-    // Fetch angles per layout once (they're the same across all sizes/sets).
-    const anglesByLayout = new Map<number, number[]>();
-    await Promise.all(
-      layouts.map(async (layout) => {
-        try {
-          const angles = await getAnglesForLayout(boardName, layout.id);
-          anglesByLayout.set(layout.id, angles);
-        } catch (error) {
-          console.error(`[prewarm-heatmap] failed to load angles for ${boardName} layout ${layout.id}:`, error);
-          anglesByLayout.set(layout.id, []);
-        }
-      }),
-    );
+    // Angles are the same across all layouts/sizes/sets for a given board type.
+    const angles = getAnglesForBoard(boardName);
+    const anglesByLayout = new Map<number, number[]>(layouts.map((layout) => [layout.id, angles]));
 
     const targets = buildTargetsForBoard(boardName, anglesByLayout);
     console.info(`[prewarm-heatmap] ${boardName}: ${targets.length} combinations to warm`);
