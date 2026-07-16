@@ -17,8 +17,9 @@
  *  3. `item: null` → `pushRecentClimb` is not called. The ring buffer only
  *     accepts authoritative wall climbs; a clear is not one.
  *  4. `item: <climb>, shouldAddToQueue: true, not in queue` → publishes
- *     `FullSync` with the appended queue (regression guard for the original
- *     `addedToQueue` path).
+ *     `FullSync` whose queue has the new climb inserted immediately after the
+ *     current climb (issue #2217), falling back to append when there is no
+ *     current climb to anchor to.
  *  5. `item: <climb>, shouldAddToQueue: true, already in queue` → publishes
  *     `CurrentClimbChanged` (no second copy of the queue item).
  *  6. `clientId` / `correlationId` flow through to `CurrentClimbChanged`
@@ -174,6 +175,81 @@ describe('setCurrentClimbAndPublish — non-null item', () => {
     expect(event.state.queue).toEqual([item]);
     expect(event.state.currentClimbQueueItem).toEqual(item);
     expect(roomManager.pushRecentClimb).toHaveBeenCalledWith('session-1', 'climb-1');
+  });
+
+  it('inserts a new climb immediately after the current climb, not at the end (issue #2217)', async () => {
+    const climbA = makeClimb('item-a', 'climb-a');
+    const climbB = makeClimb('item-b', 'climb-b');
+    const climbC = makeClimb('item-c', 'climb-c');
+    const newClimb = makeClimb('item-x', 'climb-x');
+    const roomManager = makeRoomManager({ queue: [climbA, climbB, climbC], currentClimb: climbA });
+
+    await setCurrentClimbAndPublish(
+      'session-1',
+      newClimb,
+      true,
+      roomManager as unknown as RoomManager,
+      pubsub as unknown as typeof PubSubInstance,
+    );
+
+    const event = pubsub.publishQueueEvent.mock.calls[0][1];
+    expect(event.__typename).toBe('FullSync');
+    // New climb slots in right after the current climb (A), pushing A into
+    // history — NOT appended after C.
+    expect(event.state.queue).toEqual([climbA, newClimb, climbB, climbC]);
+    expect(event.state.currentClimbQueueItem).toEqual(newClimb);
+    // The persisted queue matches the published order.
+    expect(roomManager.updateQueueState).toHaveBeenCalledWith(
+      'session-1',
+      [climbA, newClimb, climbB, climbC],
+      newClimb,
+      0,
+    );
+  });
+
+  it('falls back to appending when there is no current climb to anchor the insertion', async () => {
+    const climbA = makeClimb('item-a', 'climb-a');
+    const climbB = makeClimb('item-b', 'climb-b');
+    const newClimb = makeClimb('item-x', 'climb-x');
+    const roomManager = makeRoomManager({ queue: [climbA, climbB], currentClimb: null });
+
+    await setCurrentClimbAndPublish(
+      'session-1',
+      newClimb,
+      true,
+      roomManager as unknown as RoomManager,
+      pubsub as unknown as typeof PubSubInstance,
+    );
+
+    const event = pubsub.publishQueueEvent.mock.calls[0][1];
+    expect(event.__typename).toBe('FullSync');
+    expect(event.state.queue).toEqual([climbA, climbB, newClimb]);
+    // The persisted queue matches the published order (append fallback).
+    expect(roomManager.updateQueueState).toHaveBeenCalledWith('session-1', [climbA, climbB, newClimb], newClimb, 0);
+  });
+
+  it('inserts after current regardless of the suggested flag (web peek-promotion shape)', async () => {
+    // Web's setCurrentClimbQueueItem promotes a suggested/peek climb via
+    // setCurrentClimb(item, suggested). The positioning here is driven purely by
+    // the current-climb anchor, NOT by `suggested` — pin that so a future change
+    // can't accidentally special-case suggested climbs back to appending.
+    const climbA = makeClimb('item-a', 'climb-a');
+    const climbB = makeClimb('item-b', 'climb-b');
+    const suggestedClimb = { ...makeClimb('item-x', 'climb-x'), suggested: true } as ClimbQueueItem;
+    const roomManager = makeRoomManager({ queue: [climbA, climbB], currentClimb: climbA });
+
+    await setCurrentClimbAndPublish(
+      'session-1',
+      suggestedClimb,
+      true,
+      roomManager as unknown as RoomManager,
+      pubsub as unknown as typeof PubSubInstance,
+    );
+
+    const event = pubsub.publishQueueEvent.mock.calls[0][1];
+    expect(event.__typename).toBe('FullSync');
+    expect(event.state.queue).toEqual([climbA, suggestedClimb, climbB]);
+    expect(event.state.currentClimbQueueItem).toEqual(suggestedClimb);
   });
 
   it('publishes CurrentClimbChanged when shouldAddToQueue=true but the climb is already queued', async () => {

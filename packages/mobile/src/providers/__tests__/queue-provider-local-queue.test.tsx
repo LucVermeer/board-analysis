@@ -308,6 +308,37 @@ describe('QueueProvider local solo queue', () => {
     expect(http.request).not.toHaveBeenCalled();
   });
 
+  it('inserts an activated new climb right after the current climb, not at the end (issue #2217)', async () => {
+    const itemA = makeQueueItem('item-a');
+    const itemB = makeQueueItem('item-b');
+    const itemC = makeQueueItem('item-c');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA, itemB, itemC], itemA));
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a', 'item-b', 'item-c']);
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-a');
+    });
+
+    act(() => {
+      snapshots.at(-1)?.setCurrentClimb(makeQueueItem('item-x'));
+    });
+
+    // The freshly activated climb slots in right after the current climb (A),
+    // pushing A into history — it is NOT appended after C.
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual([
+        'item-a',
+        'item-x',
+        'item-b',
+        'item-c',
+      ]);
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-x');
+    });
+  });
+
   it('persists the solo queue after mutations (debounced)', async () => {
     const snapshots: Snapshot[] = [];
     renderProvider((snapshot) => snapshots.push(snapshot));

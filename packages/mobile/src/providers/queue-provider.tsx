@@ -736,14 +736,29 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // CurrentClimbChanged event (same id in `serverCorrelationId`) is suppressed
   // instead of re-applied.
   const dispatchSetCurrent = useCallback(
-    (item: ClimbQueueItem, shouldAddToQueue: boolean, playlistSuggestionSource?: PlaylistSuggestionSource | null) => {
+    (
+      item: ClimbQueueItem,
+      shouldAddToQueue: boolean,
+      playlistSuggestionSource?: PlaylistSuggestionSource | null,
+      insertAfterCurrent?: boolean,
+    ) => {
       const correlationId = coordinator.generateCorrelationId();
       dispatch({
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
         // playlistSuggestionSource is client-only state — when present the
         // reducer sets it + prunes suggested-after-current; when undefined it's
         // left unchanged. It is intentionally NOT sent to the server mutation.
-        payload: { item, shouldAddToQueue, isServerEvent: false, correlationId, playlistSuggestionSource },
+        // insertAfterCurrent keeps the optimistic queue in step with the server
+        // (issue #2217): a newly activated climb slots in right after the
+        // current climb, not at the end.
+        payload: {
+          item,
+          shouldAddToQueue,
+          isServerEvent: false,
+          correlationId,
+          playlistSuggestionSource,
+          insertAfterCurrent,
+        },
       });
       coordinator.trackPendingMutation(correlationId);
       mutations.setCurrentClimb(item, shouldAddToQueue, correlationId).catch(() => {
@@ -773,12 +788,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         layoutId: activeBoardRef.current?.layoutId,
         source: 'mobile',
       });
-      // Append (fresh-uuid items add to the queue; the reducer's uuid dedup makes
-      // re-selecting an existing queue item a no-op add). Re-tapping a playlist
-      // climb thus starts a fresh pass — forward-swipe re-appends the rest of the
-      // playlist (queue grows 1..10, 1..10), driven by
-      // findNextQueueItemWithSuggestions anchoring on the current climb.
-      dispatchSetCurrent(item, true, options?.playlistSuggestionSource);
+      // Activating a climb slots it right after the current climb (issue #2217),
+      // pushing the current climb into history — matching the local "set climb
+      // active" intent instead of bumping the new climb to the bottom. Fresh-uuid
+      // items add to the queue; the reducer's uuid dedup makes re-selecting an
+      // existing queue item a no-op add. During a playlist forward-swipe the
+      // current climb is already the queue tail, so insert-after-current is
+      // equivalent to append there and the "queue grows 1..10, 1..10" pass
+      // (driven by findNextQueueItemWithSuggestions anchoring on the current
+      // climb) is preserved.
+      dispatchSetCurrent(item, true, options?.playlistSuggestionSource, true);
     },
     [dispatchSetCurrent],
   );

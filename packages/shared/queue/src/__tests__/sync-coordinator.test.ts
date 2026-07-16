@@ -8,6 +8,7 @@ import {
   type SyncQueueEvent,
 } from '../sync-coordinator';
 import type { Climb, ClimbQueueItem, QueueAction } from '../types';
+import { queueReducer, initialState } from '../reducer';
 
 const makeClimb = (uuid: string, name = 'Test Climb'): Climb => ({
   uuid,
@@ -127,6 +128,9 @@ describe('mapQueueEventToAction', () => {
           // Always request insertion when an incoming item is present —
           // reducer's idempotent guard skips climbs already in the queue.
           shouldAddToQueue: true,
+          // And when it does need inserting, slot it after the current climb
+          // rather than at the end (issue #2217).
+          insertAfterCurrent: true,
         },
       });
     });
@@ -182,6 +186,35 @@ describe('mapQueueEventToAction', () => {
     expect(result.kind).toBe('dispatch');
     if (result.kind !== 'dispatch') return;
     expect(result.action).toMatchObject({ payload: { mirroredUuid: null } });
+  });
+});
+
+describe('issue #2217 — peer takes control (map → reducer end-to-end)', () => {
+  it('slots a peer-activated new climb after the current climb, not at the end', () => {
+    const itemA = makeItem('item-a');
+    const itemB = makeItem('item-b');
+    const itemC = makeItem('item-c');
+    const state = {
+      ...initialState({}),
+      queue: [itemA, itemB, itemC],
+      currentClimbQueueItem: itemA,
+    };
+
+    // A peer lights up a brand-new climb → server broadcasts CurrentClimbChanged.
+    const peerItem = makeItem('item-x');
+    const event: SyncQueueEvent = {
+      __typename: 'CurrentClimbChanged',
+      currentItem: peerItem,
+      clientId: 'peer-1',
+    };
+
+    const mapped = mapQueueEventToAction(event, { myClientId: 'me' });
+    expect(mapped.kind).toBe('dispatch');
+    if (mapped.kind !== 'dispatch') return;
+
+    const next = queueReducer(state, mapped.action);
+    expect(next.queue.map((queueItem) => queueItem.uuid)).toEqual(['item-a', 'item-x', 'item-b', 'item-c']);
+    expect(next.currentClimbQueueItem?.uuid).toBe('item-x');
   });
 });
 

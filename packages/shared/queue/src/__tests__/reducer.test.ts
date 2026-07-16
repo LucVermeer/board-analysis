@@ -352,6 +352,48 @@ describe('DELTA_UPDATE_CURRENT_CLIMB', () => {
     expect(result.pendingCurrentClimbUpdates).toContain('local-corr-1');
     expect(result.currentClimbQueueItem?.uuid).toBe('new-climb');
   });
+
+  // Issue #2217: a peer (or the local light bulb) activating a NEW climb should
+  // slot it right after the current climb, pushing the current climb into
+  // history — not append it to the end and jump the current pointer there.
+  it('inserts a not-yet-queued climb right after the current climb when insertAfterCurrent is set', () => {
+    const itemA = makeClimbQueueItem({ uuid: 'item-a' });
+    const itemB = makeClimbQueueItem({ uuid: 'item-b' });
+    const itemC = makeClimbQueueItem({ uuid: 'item-c' });
+    const itemX = makeClimbQueueItem({ uuid: 'item-x' });
+    const state = makeState({ queue: [itemA, itemB, itemC], currentClimbQueueItem: itemA });
+
+    const result = queueReducer(state, {
+      type: 'DELTA_UPDATE_CURRENT_CLIMB',
+      payload: {
+        item: itemX,
+        shouldAddToQueue: true,
+        insertAfterCurrent: true,
+        isServerEvent: true,
+      },
+    });
+
+    expect(result.queue.map((queueItem) => queueItem.uuid)).toEqual(['item-a', 'item-x', 'item-b', 'item-c']);
+    expect(result.currentClimbQueueItem?.uuid).toBe('item-x');
+  });
+
+  it('appends a not-yet-queued climb to the end when insertAfterCurrent is NOT set (documents the pre-#2217 behaviour the mapper now avoids)', () => {
+    const itemA = makeClimbQueueItem({ uuid: 'item-a' });
+    const itemB = makeClimbQueueItem({ uuid: 'item-b' });
+    const itemX = makeClimbQueueItem({ uuid: 'item-x' });
+    const state = makeState({ queue: [itemA, itemB], currentClimbQueueItem: itemA });
+
+    const result = queueReducer(state, {
+      type: 'DELTA_UPDATE_CURRENT_CLIMB',
+      payload: {
+        item: itemX,
+        shouldAddToQueue: true,
+        isServerEvent: true,
+      },
+    });
+
+    expect(result.queue.map((queueItem) => queueItem.uuid)).toEqual(['item-a', 'item-b', 'item-x']);
+  });
 });
 
 describe('REGRADE_CLIMBS', () => {
