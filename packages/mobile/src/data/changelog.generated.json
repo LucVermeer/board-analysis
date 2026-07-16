@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-16T06:30:15.287Z",
+  "generatedAt": "2026-07-16T09:35:12.920Z",
   "entries": [
+    {
+      "prNumber": 3654,
+      "category": "new",
+      "title": "Leave a recap when you end your session — how it went, what you almost sent. It shows on your session page.",
+      "mergedAt": "2026-07-16T09:34:17Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3654",
+      "body": "Skipped the recap? Add or edit it from the session summary afterwards."
+    },
     {
       "prNumber": 3656,
       "category": "new",

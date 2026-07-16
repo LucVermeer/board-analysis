@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Leave a recap when you end your session — how it went, what you almost sent. It shows on your session page. ([#3654](https://github.com/boardsesh/boardsesh/pull/3654))
+  Skipped the recap? Add or edit it from the session summary afterwards.
 - Your gym's wall screen can now show a scannable code on every board — climbers scan it to get Boardsesh, and their sends light up the screen. ([#3656](https://github.com/boardsesh/boardsesh/pull/3656))
 - Gym owners: make the TV yours — upload your logo and set your colours, with a live preview of exactly what the kiosk will show. ([#3637](https://github.com/boardsesh/boardsesh/pull/3637))
   Build your TV layout in the new kiosk editor: pick up to four walls, reorder them, and toggle the leaderboard with a session, 24-hour, week, or month ranking.
