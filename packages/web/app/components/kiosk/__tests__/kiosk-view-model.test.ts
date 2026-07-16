@@ -93,6 +93,14 @@ describe('buildKioskViewModel', () => {
     expect(viewModel.leaderboard).toBeNull();
   });
 
+  it('propagates showInstallQr from the layout (default false when absent)', () => {
+    const boards = [makeBoard(UUID_A, 1)];
+    expect(buildKioskViewModel({ layout: layoutFor([UUID_A]), boards }).showInstallQr).toBe(false);
+    expect(
+      buildKioskViewModel({ layout: { ...layoutFor([UUID_A]), showInstallQr: true }, boards }).showInstallQr,
+    ).toBe(true);
+  });
+
   it('tolerates a corrupt layout (rail dropped, boards still render)', () => {
     const boards = [makeBoard(UUID_A, 1)];
     const viewModel = buildKioskViewModel({ layout: 'not json at all', boards });
