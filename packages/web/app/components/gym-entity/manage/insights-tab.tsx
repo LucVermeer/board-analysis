@@ -41,9 +41,9 @@ const INSIGHTS_STALE_MS = 5 * 60_000;
 
 // 2024-01-07 is a Sunday, so +dow lands on the matching weekday. Labels come from
 // Intl so they follow the viewer's locale without seven hand-kept i18n keys.
-function weekdayLabel(dayOfWeek: number, locale: string, style: 'short' | 'long'): string {
+function weekdayLabel(dayOfWeek: number, locale: string): string {
   const date = new Date(Date.UTC(2024, 0, 7 + dayOfWeek));
-  return new Intl.DateTimeFormat(locale, { weekday: style, timeZone: 'UTC' }).format(date);
+  return new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(date);
 }
 
 export type WowDelta = {
@@ -192,7 +192,7 @@ export default function InsightsTab({ gym }: GymManageTabProps) {
     const countByDow = new Map(stats.busiestDays.map((day) => [day.dayOfWeek, day.ascentCount]));
     return WEEK_ORDER.map((dow) => ({
       key: String(dow),
-      label: weekdayLabel(dow, locale, 'short'),
+      label: weekdayLabel(dow, locale),
       segments: [
         { value: countByDow.get(dow) ?? 0, color: themeTokens.colors.primary, label: t('manage.insights.ascents') },
       ],
@@ -256,7 +256,7 @@ export default function InsightsTab({ gym }: GymManageTabProps) {
           deltaTestId="insights-delta-ascents"
         />
         <StatCard
-          value={busiestDow === null ? '—' : weekdayLabel(busiestDow, locale, 'short')}
+          value={busiestDow === null ? '—' : weekdayLabel(busiestDow, locale)}
           label={t('manage.insights.busiestDay')}
         />
       </Box>

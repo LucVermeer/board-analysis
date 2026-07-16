@@ -85,6 +85,11 @@ export const socialGymInsightsQueries = {
     const outerStart = sql`NOW() - make_interval(days => ${windowDays * 2}::int)`;
 
     const inGymBoards = inArray(dbSchema.boardseshTicks.boardId, boardIds);
+    // Day-of-week bucket is UTC: climbed_at is a naive (no-tz) timestamp and
+    // EXTRACT(DOW) reads it verbatim, so there's no per-gym local-time shift — a
+    // gym west of UTC sees a Friday-evening send land in Saturday's bucket. This
+    // is the accepted v1 (no gym-timezone column exists yet); gym-local bucketing
+    // is a possible follow-up. 0 = Sunday … 6 = Saturday.
     const dayOfWeekExpr = sql<number>`EXTRACT(DOW FROM ${dbSchema.boardseshTicks.climbedAt})::int`;
 
     const [countsRows, topClimbRows, busiestDayRows] = await Promise.all([
