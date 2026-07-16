@@ -31,6 +31,7 @@ import {
   useToggleUserFollow,
 } from '../../lib/graphql/hooks';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { getCachedNumberFormat } from '../../lib/intl-formatter-cache';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -259,7 +260,7 @@ function SocialStatCard({
     >
       <Icon name={icon} size={20} color={color} />
       <Text variant="title3" style={styles.statValue}>
-        {value.toLocaleString()}
+        {getCachedNumberFormat(undefined).format(value)}
       </Text>
       <Text variant="footnote" color={systemColors.secondaryLabel}>
         {label}

@@ -8,6 +8,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { normalizeAscentStatus, type AscentStatusValue } from '../../lib/ascent-status-utils';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { getCachedDateTimeFormat } from '../../lib/intl-formatter-cache';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -18,16 +19,20 @@ type LogbookEntryRowProps = {
   showAngleChip?: boolean;
 };
 
+// Hoisted so every row shares one cache lookup key instead of allocating a
+// fresh options object per call (#3155).
+const CLIMBED_AT_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+};
+
 function formatClimbedAt(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+  return getCachedDateTimeFormat(undefined, CLIMBED_AT_FORMAT_OPTIONS).format(date);
 }
 
 // Canonical difficulty_id → "6a/V3" name, which always carries both scales so
@@ -84,12 +89,14 @@ export const LogbookEntryRow = memo(function LogbookEntryRow({
     ));
   }, [isSuccess, entry.effectiveQuality, entry.quality]);
 
+  const climbedAtLabel = useMemo(() => formatClimbedAt(entry.climbed_at), [entry.climbed_at]);
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Icon name={statusIcon.name} size={16} color={statusIcon.color} />
         <Text variant="subheadline" style={styles.date} numberOfLines={1}>
-          {formatClimbedAt(entry.climbed_at)}
+          {climbedAtLabel}
         </Text>
         {showAngleChip ? (
           <View style={styles.angleChip}>

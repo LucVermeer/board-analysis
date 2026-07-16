@@ -16,6 +16,7 @@ import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { OnboardingTipBanner } from '../onboarding/OnboardingTipBanner';
 import { hasSeenTip, markTipSeen } from '../../lib/onboarding/onboarding-storage';
+import { getCachedNumberFormat } from '../../lib/intl-formatter-cache';
 import { ONBOARDING_TIP_RECORD_KEY } from '@boardsesh/key-value-storage';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -196,7 +197,9 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, userId }:
               <SectionHeader title={t('stats.vPoints')} />
               <Card style={styles.chartCard}>
                 <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.vpTotal}>
-                  {t('stats.vPointsTotal', { value: data.vPointsTimeline.totalPoints.toLocaleString() })}
+                  {t('stats.vPointsTotal', {
+                    value: getCachedNumberFormat(undefined).format(data.vPointsTimeline.totalPoints),
+                  })}
                 </Text>
                 <TotalAreaChart timeline={data.vPointsTimeline} color={brandColors.primary} emptyLabel={noAscentData} />
               </Card>
