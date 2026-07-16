@@ -203,13 +203,24 @@ describe('MyGymsScreen', () => {
     expect(setKioskHintSeen).toHaveBeenCalledWith(true);
   });
 
-  it('toasts a "not set up yet" message when a gym has no slug to manage', () => {
+  it('falls back to the gym uuid when the slug is null', () => {
     state.myGyms = { data: { gyms: [makeGym({ slug: null })] }, isLoading: false, isError: false };
     const { getByRole } = render(<MyGymsScreen />);
     fireEvent.click(getByRole('button', { name: 'manage-g1' }));
+    // The web manage route resolves a uuid too, so a slugless gym still opens.
+    expect(openUrl.openValidatedUrl).toHaveBeenCalledWith(
+      'https://www.boardsesh.com/gym/g1/manage',
+      expect.any(Function),
+    );
+  });
+
+  it('toasts a "not set up yet" message when a gym has neither slug nor uuid', () => {
+    state.myGyms = { data: { gyms: [makeGym({ slug: null, uuid: '' })] }, isLoading: false, isError: false };
+    const { getByRole } = render(<MyGymsScreen />);
+    // The stub keys its manage button off the uuid, so target an empty-uuid gym
+    // by the "manage-" prefix.
+    fireEvent.click(getByRole('button', { name: 'manage-' }));
     expect(openUrl.openValidatedUrl).not.toHaveBeenCalled();
-    // A slug-less gym has no manage URL — a browser can't help, so we don't reuse
-    // the "try a browser" copy.
     expect(toastMock.showToast).toHaveBeenCalledWith('This gym is not set up for kiosks yet', 'error');
   });
 
