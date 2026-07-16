@@ -52,6 +52,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed a rare Android crash that could close the app during a climbing session while the ongoing session notification updated. ([#3723](https://github.com/boardsesh/boardsesh/pull/3723))
 - Hold heatmaps keep loading even when the busiest boards are getting hammered — no more failed heatmap loads under heavy search traffic. ([#3694](https://github.com/boardsesh/boardsesh/pull/3694))
 - Fixed: your Settings display name now shows everywhere right away — no more getting stuck with your auto-generated handle in the menu after you change it. ([#3719](https://github.com/boardsesh/boardsesh/pull/3719))
 - Bug reports now default to letting us follow up with you — flip the switch off if you'd rather we didn't. ([#3712](https://github.com/boardsesh/boardsesh/pull/3712))

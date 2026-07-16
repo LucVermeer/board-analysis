@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T22:58:50.862Z",
+  "generatedAt": "2026-07-16T23:15:54.451Z",
   "entries": [
+    {
+      "prNumber": 3723,
+      "category": "fixed",
+      "title": "Fixed a rare Android crash that could close the app during a climbing session while the ongoing session notification updated.",
+      "mergedAt": "2026-07-16T23:09:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3723"
+    },
     {
       "prNumber": 3701,
       "category": "new",
