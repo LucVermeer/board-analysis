@@ -1,8 +1,17 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { SubscriptionQueueEvent, SessionUser } from '@boardsesh/shared-schema';
+import { isRateLimitedError } from '@boardsesh/graphql-client';
 import type { ClimbQueueItem } from '../../queue-control/types';
 
 const RECONCILIATION_TIMEOUT_MS = 15000;
+
+// Space out replayed additions so a big buffered batch (built up while offline)
+// can't fire faster than the per-user rate limit allows on reconnect (#2655).
+// `execute` also retries an individual throttled add, but pacing keeps us from
+// tripping the limit in the first place.
+const DEFAULT_REPLAY_PACING_MS = 80;
+
+const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 export type UseOfflineReconciliationParams = {
   offlineBuffer: {
@@ -24,6 +33,11 @@ export type UseOfflineReconciliationParams = {
   };
   currentQueue: ClimbQueueItem[];
   currentClimbQueueItem: ClimbQueueItem | null;
+  /** Delay between replayed additions (ms). Defaults to ~80ms; tests pass 0 to
+   *  disable pacing so replays are synchronous. */
+  replayPacingMs?: number;
+  /** Injectable sleep for the pacing delay (tests). */
+  sleep?: (ms: number) => Promise<void>;
 };
 
 /**
@@ -54,6 +68,8 @@ export function useOfflineReconciliation({
   persistentSession,
   currentQueue,
   currentClimbQueueItem,
+  replayPacingMs = DEFAULT_REPLAY_PACING_MS,
+  sleep = defaultSleep,
 }: UseOfflineReconciliationParams) {
   const wasDisconnectedRef = useRef(isDisconnected);
   const currentQueueRef = useRef(currentQueue);
@@ -107,6 +123,7 @@ export function useOfflineReconciliation({
     async function reconcileClientWins() {
       const localQueue = currentQueueRef.current;
       const localCurrentClimb = currentClimbRef.current;
+      let stillRateLimited = false;
       try {
         if (isSuperseded()) return;
         await persistentSession.setQueue(localQueue, localCurrentClimb);
@@ -114,9 +131,13 @@ export function useOfflineReconciliation({
           await persistentSession.setCurrentClimb(localCurrentClimb, false);
         }
       } catch (error) {
+        // Throttled even after `execute`'s own retries — keep the buffer so a
+        // later reconnect re-pushes instead of dropping the offline additions
+        // (#2655). Any other failure clears as before (nothing more we can do).
+        stillRateLimited = isRateLimitedError(error);
         console.error('[OfflineReconciliation] Failed to push full local state:', error);
       }
-      if (!isSuperseded()) {
+      if (!isSuperseded() && !stillRateLimited) {
         offlineBuffer.clearBuffer();
       }
     }
@@ -124,19 +145,35 @@ export function useOfflineReconciliation({
     async function reconcileAdditionsOnly(serverQueue: ClimbQueueItem[]) {
       const pending = offlineBuffer.getBufferedAdditions();
       const serverUuids = new Set(serverQueue.map((item) => item.uuid));
+      // Items the server is still throttling after `execute`'s retries — kept
+      // buffered so the next reconnect replays them instead of losing them.
+      const stillThrottled: ClimbQueueItem[] = [];
 
-      for (const item of pending) {
+      for (let index = 0; index < pending.length; index++) {
+        const item = pending[index];
         if (isSuperseded()) return;
         if (serverUuids.has(item.uuid)) continue;
         try {
           await persistentSession.addQueueItem(item);
         } catch (error) {
-          console.error('[OfflineReconciliation] Failed to add buffered item:', item.climb?.name, error);
+          if (isRateLimitedError(error)) {
+            stillThrottled.push(item);
+          } else {
+            console.error('[OfflineReconciliation] Failed to add buffered item:', item.climb?.name, error);
+          }
+        }
+        // Pace the batch so it can't blow the per-minute budget in one burst.
+        if (replayPacingMs > 0 && index < pending.length - 1 && !isSuperseded()) {
+          await sleep(replayPacingMs);
         }
       }
 
       if (!isSuperseded()) {
         offlineBuffer.clearBuffer();
+        // Re-seed anything still throttled so it survives to the next reconnect.
+        for (const item of stillThrottled) {
+          offlineBuffer.bufferAddition(item);
+        }
       }
     }
 

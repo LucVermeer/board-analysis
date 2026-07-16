@@ -20,6 +20,7 @@ import type {
 import { useEventProcessor } from './hooks/use-event-processor';
 import { useQueueStorage } from './hooks/use-queue-storage';
 import { useQueueMutations } from './hooks/use-queue-mutations';
+import { useRateLimitSnackbar } from './hooks/use-rate-limit-snackbar';
 import { useSessionSubscriptions } from './hooks/use-session-subscriptions';
 import { useSessionLifecycle } from './hooks/use-session-lifecycle';
 import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
@@ -159,10 +160,15 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     dispatch: eventProcessor.dispatch,
   });
 
-  // 4. Queue mutations: GraphQL mutation wrappers
+  // 4. Queue mutations: GraphQL mutation wrappers. `onRateLimited` surfaces a
+  // debounced "catching up" snackbar while a throttled mutation backs off to
+  // retry (e.g. a reconnect burst of buffered adds), instead of the alarming
+  // generic failure toast (#2655).
+  const onRateLimited = useRateLimitSnackbar();
   const mutations = useQueueMutations({
     client: lifecycle.client,
     session: lifecycle.session,
+    onRateLimited,
   });
 
   // 5. Session subscriptions: periodic verification, event subscriptions, corruption checks

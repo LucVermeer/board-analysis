@@ -299,7 +299,8 @@
     "tickHistoryClimb": "Log a tick for {{name}}"
   },
   "queueProvider": {
-    "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
+    "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs.",
+    "rateLimitCatchUp": "Catching up on your changes…"
   },
   "mobile": {
     "logbook": {

@@ -299,7 +299,8 @@
     "tickHistoryClimb": "Registrar un tick para {{name}}"
   },
   "queueProvider": {
-    "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
+    "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías.",
+    "rateLimitCatchUp": "Sincronizando tus cambios…"
   },
   "mobile": {
     "logbook": {
