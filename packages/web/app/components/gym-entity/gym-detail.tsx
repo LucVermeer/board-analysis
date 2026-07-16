@@ -19,6 +19,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import VerifiedUserOutlined from '@mui/icons-material/VerifiedUserOutlined';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';
@@ -30,6 +31,7 @@ import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer'
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
+import { safeExternalHref } from '@/app/lib/safe-external-url';
 import {
   GET_GYM,
   DELETE_GYM,
@@ -43,6 +45,9 @@ import {
 import { useSession } from 'next-auth/react';
 import { themeTokens } from '@/app/theme/theme-config';
 import FollowButton from '@/app/components/ui/follow-button';
+import LocaleLink from '@/app/components/i18n/locale-link';
+import { useFeatureFlag } from '@/app/components/providers/feature-flags-provider';
+import { GYM_KIOSK_FLAG } from '@/app/flags';
 import EditGymForm from './edit-gym-form';
 import GymMemberManagement from './gym-member-management';
 import ClaimGymDialog from './claim-gym-dialog';
@@ -58,6 +63,8 @@ type GymDetailProps = {
 
 export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 'bottom' }: GymDetailProps) {
   const { t } = useTranslation('boards');
+  const { t: tKiosk } = useTranslation('kiosk');
+  const kioskFlag = useFeatureFlag(GYM_KIOSK_FLAG);
   const [gym, setGym] = useState<Gym | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -170,17 +177,17 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
                   </MuiTypography>
                 </Box>
               )}
-              {gym.website && (
+              {safeExternalHref(gym.website) && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                   <LanguageOutlined sx={{ fontSize: 16, color: 'var(--neutral-400)' }} />
                   <MuiLink
-                    href={gym.website}
+                    href={safeExternalHref(gym.website) ?? undefined}
                     target="_blank"
                     rel="noopener noreferrer"
                     variant="body2"
                     underline="hover"
                   >
-                    {gym.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    {(gym.website ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '')}
                   </MuiLink>
                 </Box>
               )}
@@ -249,6 +256,18 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
                 sx={{ textTransform: 'none' }}
               >
                 {t('gymEntity.actions.edit')}
+              </MuiButton>
+            )}
+            {gym.canEdit && kioskFlag && (
+              <MuiButton
+                component={LocaleLink}
+                href={`/gym/${gym.slug ?? gym.uuid}/manage`}
+                variant="outlined"
+                size="small"
+                startIcon={<SettingsOutlined />}
+                sx={{ textTransform: 'none' }}
+              >
+                {tKiosk('gymPage.manageGym')}
               </MuiButton>
             )}
             {gym.canClaim && (

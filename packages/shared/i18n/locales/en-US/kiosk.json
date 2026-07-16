@@ -56,5 +56,82 @@
       "errorTitle": "Leaderboard unavailable",
       "errorBody": "Couldn't load the latest sends. It'll retry on its own."
     }
+  },
+  "gymPage": {
+    "metaTitle": "{{gymName}} climbing gym",
+    "metaDescription": "See the boards and live wall at {{gymName}} on Boardsesh.",
+    "breadcrumbHome": "Boardsesh",
+    "manageGym": "Manage gym",
+    "seeOnTheWall": "See what's on the wall",
+    "boardsHeading": "Boards",
+    "boardCount_one": "{{count}} board",
+    "boardCount_other": "{{count}} boards",
+    "visitWebsite": "Visit website",
+    "noBoardsYet": "No boards listed here yet.",
+    "exploreFeed": "See what climbers are sending"
+  },
+  "manage": {
+    "title": "Manage {{gymName}}",
+    "backToGym": "Back to gym page",
+    "accessDenied": "You don't have permission to manage this gym.",
+    "tabs": {
+      "kiosks": "Kiosks",
+      "branding": "Branding",
+      "boards": "Boards",
+      "members": "Members"
+    },
+    "slugGuard": {
+      "title": "Give this gym a web address",
+      "body": "Your kiosk and public gym page need a short URL slug before anyone can open them.",
+      "label": "URL slug",
+      "helper": "boardsesh.com/gym/{{slug}}",
+      "placeholder": "your-gym",
+      "save": "Save slug",
+      "errorEmpty": "Enter a slug.",
+      "errorInvalid": "Use lowercase letters, numbers, and hyphens only.",
+      "saved": "Slug saved.",
+      "saveFailed": "Couldn't save the slug."
+    },
+    "kiosks": {
+      "emptyTitle": "Kiosk setup lands here soon",
+      "emptyBody": "Point a screen at your wall and show what's lit. The kiosk editor arrives in the next update.",
+      "cta": "Set up a kiosk"
+    },
+    "branding": {
+      "emptyTitle": "Branding lands here soon",
+      "emptyBody": "Add your logo and colours so the wall display looks like your gym. Coming in the next update.",
+      "cta": "Customise branding"
+    },
+    "boards": {
+      "heading": "Boards at this gym",
+      "description": "Link the boards you own so they show up on your gym page and kiosks.",
+      "addBoard": "Add a board",
+      "empty": "No boards linked yet. Add one to get started.",
+      "loadError": "Couldn't load this gym's boards.",
+      "unlink": "Unlink",
+      "onlyOwnerCanUnlink": "Only the board's owner can unlink it",
+      "readOnlyHint": "Only the gym owner or an admin can link boards.",
+      "unlinkTitle": "Unlink this board?",
+      "unlinkBody": "\"{{name}}\" stops showing on this gym's page and kiosks. You can re-link it anytime.",
+      "unlinkConfirm": "Unlink",
+      "cancel": "Cancel",
+      "linked": "Board linked.",
+      "linkFailed": "Couldn't link the board.",
+      "unlinked": "Board unlinked.",
+      "unlinkFailed": "Couldn't unlink the board.",
+      "visibility": {
+        "public": "Public",
+        "unlisted": "Unlisted",
+        "private": "Private"
+      },
+      "addDialog": {
+        "title": "Add one of your boards",
+        "body": "Pick a board you own to link to this gym.",
+        "empty": "You don't have any boards left to link.",
+        "loading": "Loading your boards…",
+        "link": "Link",
+        "close": "Close"
+      }
+    }
   }
 }

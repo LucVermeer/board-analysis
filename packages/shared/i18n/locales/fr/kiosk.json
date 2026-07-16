@@ -56,5 +56,82 @@
       "errorTitle": "Classement indisponible",
       "errorBody": "Impossible de charger les dernières croix. Le widget réessaie tout seul."
     }
+  },
+  "gymPage": {
+    "metaTitle": "Salle d'escalade {{gymName}}",
+    "metaDescription": "Découvre les boards et le mur en direct de {{gymName}} sur Boardsesh.",
+    "breadcrumbHome": "Boardsesh",
+    "manageGym": "Gérer la salle",
+    "seeOnTheWall": "Voir ce qui est sur le mur",
+    "boardsHeading": "Boards",
+    "boardCount_one": "{{count}} board",
+    "boardCount_other": "{{count}} boards",
+    "visitWebsite": "Visiter le site web",
+    "noBoardsYet": "Aucune board ici pour l'instant.",
+    "exploreFeed": "Voir ce que les grimpeurs enchaînent"
+  },
+  "manage": {
+    "title": "Gérer {{gymName}}",
+    "backToGym": "Retour à la page de la salle",
+    "accessDenied": "Tu n'as pas la permission de gérer cette salle.",
+    "tabs": {
+      "kiosks": "Bornes",
+      "branding": "Identité",
+      "boards": "Boards",
+      "members": "Membres"
+    },
+    "slugGuard": {
+      "title": "Donne une adresse web à cette salle",
+      "body": "Ta borne et la page publique de la salle ont besoin d'un slug d'URL court avant que quiconque puisse les ouvrir.",
+      "label": "Slug d'URL",
+      "helper": "boardsesh.com/gym/{{slug}}",
+      "placeholder": "ta-salle",
+      "save": "Enregistrer le slug",
+      "errorEmpty": "Saisis un slug.",
+      "errorInvalid": "Utilise uniquement des minuscules, des chiffres et des tirets.",
+      "saved": "Slug enregistré.",
+      "saveFailed": "Impossible d'enregistrer le slug."
+    },
+    "kiosks": {
+      "emptyTitle": "La configuration des bornes arrive bientôt",
+      "emptyBody": "Pointe un écran vers ton mur et montre ce qui est allumé. L'éditeur de bornes arrive dans la prochaine mise à jour.",
+      "cta": "Configurer une borne"
+    },
+    "branding": {
+      "emptyTitle": "L'identité visuelle arrive bientôt",
+      "emptyBody": "Ajoute ton logo et tes couleurs pour que l'affichage du mur ressemble à ta salle. Ça arrive dans la prochaine mise à jour.",
+      "cta": "Personnaliser l'identité"
+    },
+    "boards": {
+      "heading": "Boards de cette salle",
+      "description": "Relie les boards que tu possèdes pour qu'elles apparaissent sur la page de ta salle et sur les bornes.",
+      "addBoard": "Ajouter une board",
+      "empty": "Aucune board reliée pour l'instant. Ajoutes-en une pour commencer.",
+      "loadError": "Impossible de charger les boards de cette salle.",
+      "unlink": "Détacher",
+      "onlyOwnerCanUnlink": "Seul le propriétaire de la board peut la détacher",
+      "readOnlyHint": "Seul le propriétaire de la salle ou un admin peut relier des boards.",
+      "unlinkTitle": "Détacher cette board ?",
+      "unlinkBody": "« {{name}} » n'apparaîtra plus sur la page ni sur les bornes de cette salle. Tu peux la relier à tout moment.",
+      "unlinkConfirm": "Détacher",
+      "cancel": "Annuler",
+      "linked": "Board reliée.",
+      "linkFailed": "Impossible de relier la board.",
+      "unlinked": "Board détachée.",
+      "unlinkFailed": "Impossible de détacher la board.",
+      "visibility": {
+        "public": "Publique",
+        "unlisted": "Non répertoriée",
+        "private": "Privée"
+      },
+      "addDialog": {
+        "title": "Ajoute une de tes boards",
+        "body": "Choisis une board que tu possèdes pour la relier à cette salle.",
+        "empty": "Il ne te reste aucune board à relier.",
+        "loading": "Chargement de tes boards…",
+        "link": "Relier",
+        "close": "Fermer"
+      }
+    }
   }
 }
