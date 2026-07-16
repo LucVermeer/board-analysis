@@ -391,6 +391,35 @@ const sharedComponents: Components<Theme> = {
       },
     },
   },
+  // Form kit label: 14/500, primary text colour (labels read as content, not muted
+  // captions). The required asterisk carries the error hue; focus is signalled by the
+  // input's ring, so the label deliberately does NOT flash violet on focus.
+  MuiFormLabel: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        fontSize: 14,
+        fontWeight: themeTokens.typography.fontWeight.medium,
+        lineHeight: 20 / 14,
+        color: theme.palette.text.primary,
+        '& .MuiFormLabel-asterisk': {
+          color: theme.palette.error.main,
+        },
+        '&.Mui-focused': {
+          color: 'inherit',
+        },
+      }),
+    },
+  },
+  // Helper text sits flush-left under the field with a 4px gap; 12px caption size.
+  MuiFormHelperText: {
+    styleOverrides: {
+      root: {
+        marginLeft: 0,
+        marginTop: '4px',
+        fontSize: 12,
+      },
+    },
+  },
 };
 
 // Velvet motion: Glass-leaning. M3 'standard' easing on utility transitions; MUI's
@@ -405,10 +434,17 @@ const sharedOptions: Partial<ThemeOptions> = {
     fontSize: themeTokens.typography.fontSize.base,
     h1: { fontWeight: themeTokens.typography.fontWeight.bold },
     h2: { fontWeight: themeTokens.typography.fontWeight.bold },
-    h3: { fontWeight: themeTokens.typography.fontWeight.semibold },
-    h4: { fontWeight: themeTokens.typography.fontWeight.semibold },
-    h5: { fontWeight: themeTokens.typography.fontWeight.semibold },
-    h6: { fontWeight: themeTokens.typography.fontWeight.medium },
+    // Pin the heading ramp in px. MUI derives unpinned variants from a 16/14 coefficient
+    // (htmlFontSize / fontSize), which inflates them — an unpinned h6 renders 22.86px
+    // instead of the intended 16. Pinning fontSize side-steps the coefficient.
+    h3: {
+      fontSize: themeTokens.typography.fontSize['2xl'],
+      fontWeight: themeTokens.typography.fontWeight.bold,
+      lineHeight: 32 / 24,
+    },
+    h4: { fontSize: themeTokens.typography.fontSize.xl, fontWeight: themeTokens.typography.fontWeight.semibold },
+    h5: { fontSize: themeTokens.typography.fontSize.lg, fontWeight: themeTokens.typography.fontWeight.semibold },
+    h6: { fontSize: themeTokens.typography.fontSize.base, fontWeight: themeTokens.typography.fontWeight.semibold },
     body1: {
       fontSize: themeTokens.typography.fontSize.base,
       lineHeight: themeTokens.typography.lineHeight.normal,
@@ -416,6 +452,16 @@ const sharedOptions: Partial<ThemeOptions> = {
     body2: {
       fontSize: themeTokens.typography.fontSize.sm,
       lineHeight: themeTokens.typography.lineHeight.normal,
+    },
+    button: {
+      fontSize: themeTokens.typography.fontSize.base,
+      fontWeight: themeTokens.typography.fontWeight.medium,
+      textTransform: 'none' as const,
+    },
+    caption: {
+      fontSize: themeTokens.typography.fontSize.xs,
+      fontWeight: themeTokens.typography.fontWeight.normal,
+      lineHeight: 16 / 12,
     },
   },
   shape: {
