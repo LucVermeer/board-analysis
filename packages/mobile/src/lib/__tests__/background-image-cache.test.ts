@@ -205,19 +205,24 @@ describe('ensureBackgroundsCached', () => {
     });
     downloadAsyncMock.mockRejectedValueOnce(new Error('simulated asset resolution failure'));
 
-    const result = await ensureBackgroundsCached({
-      boardName: 'kilter',
-      layoutId: 1,
-      sizeId: 10,
-      setIds: [24],
-    });
+    try {
+      const result = await ensureBackgroundsCached({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: [24],
+      });
 
-    // If this ever regressed to an uncaught rejection, `await` above would
-    // throw and fail the test — resolving here proves the catch-and-degrade
-    // contract holds.
-    expect(result).toEqual({ paths: [], missingCount: 1 });
-
-    fromModuleSpy.mockRestore();
+      // If this ever regressed to an uncaught rejection, `await` above would
+      // throw and fail the test — resolving here proves the catch-and-degrade
+      // contract holds.
+      expect(result).toEqual({ paths: [], missingCount: 1 });
+    } finally {
+      // try/finally so a failed assertion above still restores the spy —
+      // otherwise a failure here would leak a mocked fromModule() into
+      // every later test in this file.
+      fromModuleSpy.mockRestore();
+    }
   });
 });
 
