@@ -14,6 +14,7 @@ import type {
   BluetoothAdapter,
   BleConnection,
   BleConnectDiagnostics,
+  BleConnectFailureReason,
   BleDisconnectInfo,
   BleWriteDiagnostics,
   BoardScanFamily,
@@ -78,6 +79,11 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
   // connect attempt so both the failure analytics event and the Sentry report
   // can read it.
   private lastConnectDiagnostics: BleConnectDiagnostics | null = null;
+  // Sub-reason of the most recent failed connect (#3676): watchdog / didFailToConnect
+  // / discovery-timeout, fetched from the native stash after a rejected connect.
+  // Held until the next connect attempt so both the failure analytics event and
+  // the Sentry report can read it.
+  private lastConnectFailureReason: BleConnectFailureReason | null = null;
 
   constructor(
     private readonly devicePicker: DevicePickerFn,
@@ -239,9 +245,10 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       }
     }
 
-    // Fresh attempt: drop any stale connect diagnostics so a later read can't
-    // re-attribute a previous failure to this connect.
+    // Fresh attempt: drop any stale connect diagnostics/sub-reason so a later
+    // read can't re-attribute a previous failure to this connect.
     this.lastConnectDiagnostics = null;
+    this.lastConnectFailureReason = null;
     try {
       await native.connect(selectedDeviceId);
     } catch (error) {
@@ -251,6 +258,12 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       // outrun the native build) — then there's simply nothing to fetch.
       if (typeof native.getLastConnectDiagnostics === 'function') {
         this.lastConnectDiagnostics = await native.getLastConnectDiagnostics().catch(() => null);
+      }
+      // Likewise fetch the connect-failure sub-reason (watchdog / didFailToConnect
+      // / discovery-timeout) for the connect_failed split (#3676). Also absent on
+      // older binaries.
+      if (typeof native.getLastConnectFailureReason === 'function') {
+        this.lastConnectFailureReason = await native.getLastConnectFailureReason().catch(() => null);
       }
       throw error;
     }
@@ -374,6 +387,12 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
   // Sentry report) without a read consuming it.
   async getLastConnectDiagnostics(): Promise<BleConnectDiagnostics | null> {
     return this.lastConnectDiagnostics;
+  }
+
+  // Sub-reason of the most recent failed connect (#3676), held until the next
+  // connect attempt like the diagnostics above so a read doesn't consume it.
+  async getLastConnectFailureReason(): Promise<BleConnectFailureReason | null> {
+    return this.lastConnectFailureReason;
   }
 
   onDisconnect(callback: (info?: BleDisconnectInfo) => void): () => void {

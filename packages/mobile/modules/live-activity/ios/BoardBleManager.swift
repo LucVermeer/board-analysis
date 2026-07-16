@@ -168,6 +168,60 @@ enum BoardBleError: LocalizedError {
     }
 }
 
+/// Sub-reason a connect attempt failed (#3676), stashed so JS can attach it to
+/// the `BluetoothConnectionFailed` event. On iOS a `connect_failed` event
+/// otherwise carries no cause — the native error string alone can't tell our 8 s
+/// watchdog firing apart from a CoreBluetooth `didFailToConnect` or a
+/// reconnect-scan discovery timeout. Mirrors the write-side telemetry (#3230)
+/// and connect-diagnostics (#3480) clear-on-read stashes. The `analyticsDictionary`
+/// shape is what crosses the JS bridge (see `getLastConnectFailureReason`).
+enum BoardBleConnectFailureReason: Equatable {
+    /// Our 8 s `connectTimeout` watchdog fired: `centralManager.connect` never
+    /// called back `didConnect`/`didFailToConnect`.
+    case watchdogTimeout
+    /// CoreBluetooth's `didFailToConnect` delegate settled the attempt. Carries
+    /// the underlying `CBError` code/domain (nil when iOS supplied no NSError).
+    case didFailToConnect(code: Int?, domain: String?)
+    /// The widget-lightbulb reconnect-by-last-known scan timed out before the
+    /// stored board advertised.
+    case discoveryTimeout
+
+    var reason: String {
+        switch self {
+        case .watchdogTimeout:
+            return "watchdog_timeout"
+        case .didFailToConnect:
+            return "did_fail_to_connect"
+        case .discoveryTimeout:
+            return "discovery_timeout"
+        }
+    }
+
+    /// Build the `didFailToConnect` case from CoreBluetooth's optional NSError,
+    /// reading its `CBError` code + domain. Pure so it's unit-testable without a
+    /// real `CBCentralManager` (#3676).
+    static func from(didFailToConnectError error: Error?) -> BoardBleConnectFailureReason {
+        let nsError = error as NSError?
+        return .didFailToConnect(code: nsError?.code, domain: nsError?.domain)
+    }
+
+    /// The bridge payload. Only the `didFailToConnect` case adds `cbErrorCode` /
+    /// `cbErrorDomain`, and only when iOS actually supplied them, so older JS /
+    /// PostHog sees no empty fields.
+    var analyticsDictionary: [String: Any] {
+        var dictionary: [String: Any] = ["reason": reason]
+        if case let .didFailToConnect(code, domain) = self {
+            if let code {
+                dictionary["cbErrorCode"] = code
+            }
+            if let domain {
+                dictionary["cbErrorDomain"] = domain
+            }
+        }
+        return dictionary
+    }
+}
+
 final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     static let shared = BoardBleManager()
 
@@ -273,6 +327,14 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     // decoy peripheral) or an unknown third controller generation. Clear-on-read
     // via takeLastConnectFailureDiagnostics(). See #3480.
     private var lastConnectFailureDiscoveredServices: [String]?
+    // Sub-reason the most recent connect attempt failed (#3676): our 8 s watchdog,
+    // a CoreBluetooth didFailToConnect (+CBError), or a reconnect-scan discovery
+    // timeout. Stashed at each failure site so JS can attach it to
+    // `BluetoothConnectionFailed` (an Expo reject can't carry structured data).
+    // Clear-on-read via takeConnectFailureReasonAnalytics(), and cleared at the
+    // start of every fresh connectOnBleQueue so a discovery_timeout the widget
+    // reconnect scan left unread can't be misattributed to a later JS connect.
+    private var lastConnectFailureReason: BoardBleConnectFailureReason?
     private var writeQueue: [WriteRequest] = []
     private var writeGeneration: UInt64 = 0
     private var isWriting = false
@@ -450,6 +512,18 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
     }
 
+    /// The bridge payload for the most recent failed connect's sub-reason, or nil
+    /// when there's no failure to report. Clear-on-read so a single failure is
+    /// attributed to a single analytics event. Exposed to JS as
+    /// `getLastConnectFailureReason` (read right after a `connect` rejection). See
+    /// #3676.
+    func takeConnectFailureReasonAnalytics() -> [String: Any]? {
+        runOnBleQueueSync {
+            defer { lastConnectFailureReason = nil }
+            return lastConnectFailureReason?.analyticsDictionary
+        }
+    }
+
     func setEventHandlers(
         onScanResult: ((BoardBleScanResult) -> Void)?,
         onDisconnect: ((String, [String: Any]?) -> Void)?,
@@ -622,6 +696,14 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     private func connectOnBleQueue(deviceId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Fresh attempt: drop any stale connect-failure sub-reason (#3676). A
+        // discovery_timeout the widget reconnect scan stashed is never consumed by
+        // JS (its completion is the native ReconnectBoardIntent, not the JS
+        // `connect`), so without this it would survive and be taken by the NEXT JS
+        // connect failure — misattributing a watchdog/didFailToConnect as
+        // discovery_timeout. All JS connects route through here, so one clear
+        // covers the class.
+        lastConnectFailureReason = nil
         // Supersede any in-flight reconnect-by-last-known scan: this is a no-op
         // when called from the reconnect path itself (which already nils the scan
         // state first), but settles a stranded scan immediately when an unrelated
@@ -687,6 +769,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                 self.writeCharacteristic = nil
             }
             self.centralManager.cancelPeripheralConnection(peripheral)
+            // Attribute this connect_failed to our watchdog before settling, so
+            // JS can distinguish it from a CoreBluetooth didFailToConnect (#3676).
+            self.lastConnectFailureReason = .watchdogTimeout
             self.completePendingConnect(.failure(BoardBleError.connectTimedOut))
         }
         connectTimeoutWorkItem = timeoutWorkItem
@@ -736,6 +821,11 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         reconnectScanCompletion = completion
 
         let timeout = DispatchWorkItem { [weak self] in
+            // The stored board never advertised in time. Attribute it as a
+            // discovery timeout, distinct from the direct-connect watchdog (#3676).
+            // The work item is cancelled the moment the scan settles any other
+            // way, so if it fires the scan is genuinely still pending.
+            self?.lastConnectFailureReason = .discoveryTimeout
             self?.failReconnectScan(BoardBleError.connectTimedOut)
         }
         reconnectScanTimeoutWorkItem = timeout
@@ -1162,6 +1252,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             connectedPeripheral = nil
             writeCharacteristic = nil
         }
+        // Attribute this connect_failed to CoreBluetooth, carrying its CBError
+        // code/domain, before settling — so JS can tell it apart from our own
+        // watchdog timeout (#3676).
+        lastConnectFailureReason = .from(didFailToConnectError: error)
         completePendingConnect(.failure(error ?? BoardBleError.notConnected))
     }
 
@@ -2350,6 +2444,12 @@ extension BoardBleManager {
         /// The Nordic UART and RedBearLab write-service UUIDs, in probe order,
         /// so tests can assert the decision without hardcoding them.
         var writeServiceUuidsForTesting: [CBUUID] { manager.writeServiceUuids() }
+
+        /// Seed the connect-failure sub-reason stash so a test can exercise the
+        /// clear-on-read `takeConnectFailureReasonAnalytics()` contract (#3676).
+        func setConnectFailureReason(_ reason: BoardBleConnectFailureReason?) {
+            manager.runOnBleQueueSync { manager.lastConnectFailureReason = reason }
+        }
 
         var hasPendingWriteResume: Bool { manager.pendingWriteResume != nil }
         var capturedPendingWriteResume: (() -> Void)? { manager.pendingWriteResume }
