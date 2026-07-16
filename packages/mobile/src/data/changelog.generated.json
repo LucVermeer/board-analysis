@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T00:35:46.202Z",
+  "generatedAt": "2026-07-16T03:28:30.288Z",
   "entries": [
+    {
+      "prNumber": 3658,
+      "category": "improved",
+      "title": "MoonBoard heatmaps, hold search, and area filters now work from the board's real hold placements.",
+      "mergedAt": "2026-07-16T02:22:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3658"
+    },
     {
       "prNumber": 3653,
       "category": "fixed",

@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-16
 
+### Improved
+
+- MoonBoard heatmaps, hold search, and area filters now work from the board's real hold placements. ([#3658](https://github.com/boardsesh/boardsesh/pull/3658))
+
 ### Fixed
 
 - When a board won't connect on Android, you now get the real reason — Bluetooth off, board not found, or a connection that dropped — instead of a blanket "unknown error". ([#3653](https://github.com/boardsesh/boardsesh/pull/3653))
