@@ -220,6 +220,16 @@ describe('TickButton', () => {
       expect(button!.className).toContain('MuiIconButton');
     });
 
+    it('flash state rides the scheme vars, not direct theme tokens', () => {
+      render(<TickButton {...defaultProps} tickBarActive isFlash />);
+      const button = document.getElementById('button-tick')!;
+      const style = window.getComputedStyle(button);
+      // Amber ships as --color-amber (parity-guarded); text pairs via --color-on-accent
+      // so a future amber retune propagates instead of stranding a stale literal here.
+      expect(style.backgroundColor).toBe('var(--color-amber)');
+      expect(style.color).toBe('var(--color-on-accent)');
+    });
+
     it('renders the tick button when tickBarActive and not isFlash', () => {
       render(<TickButton {...defaultProps} tickBarActive isFlash={false} />);
       const button = document.getElementById('button-tick');
