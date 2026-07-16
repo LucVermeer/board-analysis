@@ -7,13 +7,25 @@ export {
   MAX_TRANSIENT_RETRIES,
   KEEP_ALIVE_MS,
   MUTATION_TIMEOUT_MS,
+  RATE_LIMIT_MAX_RETRIES,
+  RATE_LIMIT_FALLBACK_DELAY_MS,
+  RATE_LIMIT_MAX_WAIT_MS,
+  RATE_LIMIT_RETRY_JITTER_MS,
+  RECONNECT_JITTER_RATIO,
 } from './constants';
 
-export type { GraphQLErrorExtensions } from './errors';
-export { GraphQLOperationError, isClimbDuplicateExtension, isRateLimitedExtension } from './errors';
+export type { GraphQLErrorExtensions, ParsedRateLimit } from './errors';
+export {
+  GraphQLOperationError,
+  isClimbDuplicateExtension,
+  isRateLimitedExtension,
+  parseRateLimitError,
+  isRateLimitedError,
+} from './errors';
 
 export { getOperationName } from './operation-name';
 
+export type { ExecuteOptions, RateLimitRetryEvent } from './execute';
 export { execute } from './execute';
 export { subscribe } from './subscribe';
 

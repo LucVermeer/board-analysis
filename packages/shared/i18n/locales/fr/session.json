@@ -299,7 +299,8 @@
     "tickHistoryClimb": "Enregistrer une croix pour {{name}}"
   },
   "queueProvider": {
-    "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
+    "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs.",
+    "rateLimitCatchUp": "Synchronisation de tes modifications…"
   },
   "mobile": {
     "logbook": {

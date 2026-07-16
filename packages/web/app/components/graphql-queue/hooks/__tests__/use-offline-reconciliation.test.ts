@@ -1,9 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
+import { GraphQLOperationError } from '@boardsesh/graphql-client';
 import { useOfflineReconciliation, type UseOfflineReconciliationParams } from '../use-offline-reconciliation';
 import type { ClimbQueueItem } from '../../../queue-control/types';
 import type { Climb } from '@/app/lib/types';
 import type { SubscriptionQueueEvent, SessionUser } from '@boardsesh/shared-schema';
+
+function rateLimitError() {
+  return new GraphQLOperationError([
+    {
+      message: 'Rate limit exceeded. Try again in 3 seconds.',
+      extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 3 },
+    },
+  ]);
+}
+
+const FULL_SYNC_MULTI_USER: SubscriptionQueueEvent = {
+  __typename: 'FullSync',
+  sequence: 10,
+  state: { queue: [] as never[], currentClimbQueueItem: null, stateHash: 'abc', sequence: 10 },
+};
 
 const mockClimb: Climb = {
   uuid: 'climb-1',
@@ -101,6 +117,7 @@ describe('useOfflineReconciliation', () => {
         },
         currentQueue: overrides.currentQueue ?? [],
         currentClimbQueueItem: overrides.currentClimbQueueItem ?? null,
+        replayPacingMs: 0,
       },
     });
   }
@@ -133,6 +150,7 @@ describe('useOfflineReconciliation', () => {
       },
       currentQueue: overrides.currentQueue ?? [],
       currentClimbQueueItem: overrides.currentClimbQueueItem ?? null,
+      replayPacingMs: 0,
     });
   }
 
@@ -541,6 +559,115 @@ describe('useOfflineReconciliation', () => {
       expect(callCount).toBeGreaterThanOrEqual(1);
       // No setQueue should have been called (multi-user, sequence changed)
       expect(mockSetQueue).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- Rate-limit resilience (#2655) ---
+
+  describe('rate-limit resilience (#2655)', () => {
+    function renderRateLimitCase(params: {
+      items: ClimbQueueItem[];
+      bufferAddition: (item: ClimbQueueItem) => void;
+      replayPacingMs?: number;
+      sleep?: (ms: number) => Promise<void>;
+    }) {
+      const offlineBuffer = {
+        getBufferedAdditions: mockGetBufferedAdditions,
+        clearBuffer: mockClearBuffer,
+        hasPendingAdditions: true,
+        bufferAddition: params.bufferAddition,
+      };
+      const persistentSession = {
+        addQueueItem: mockAddQueueItem,
+        setQueue: mockSetQueue,
+        setCurrentClimb: mockSetCurrentClimb,
+        subscribeToQueueEvents: mockSubscribeToQueueEvents,
+      };
+      const baseProps: UseOfflineReconciliationParams = {
+        offlineBuffer,
+        isDisconnected: true,
+        isPersistentSessionActive: true,
+        hasConnected: true,
+        users: [createUser('me'), createUser('other')],
+        lastReceivedSequenceRef: mockLastReceivedSequenceRef,
+        persistentSession,
+        currentQueue: [],
+        currentClimbQueueItem: null,
+        replayPacingMs: params.replayPacingMs ?? 0,
+        sleep: params.sleep,
+      };
+      // eslint-disable-next-line typescript/no-invalid-void-type -- hook returns void.
+      const hook = renderHook<void, UseOfflineReconciliationParams>((props) => useOfflineReconciliation(props), {
+        initialProps: baseProps,
+      });
+      hook.rerender({ ...baseProps, isDisconnected: false });
+      return hook;
+    }
+
+    it('re-buffers a rate-limited addition instead of dropping it', async () => {
+      const item1 = createItem('offline-1');
+      const item2 = createItem('offline-2');
+      const item3 = createItem('offline-3');
+      mockGetBufferedAdditions.mockReturnValue([item1, item2, item3]);
+      mockAddQueueItem
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(rateLimitError())
+        .mockResolvedValueOnce(undefined);
+      const mockBufferAddition = vi.fn();
+
+      renderRateLimitCase({ items: [item1, item2, item3], bufferAddition: mockBufferAddition });
+
+      await act(async () => {
+        subscriberCallback!(FULL_SYNC_MULTI_USER);
+      });
+
+      // All three attempted; the throttled one is re-buffered, not lost.
+      expect(mockAddQueueItem).toHaveBeenCalledTimes(3);
+      expect(mockClearBuffer).toHaveBeenCalled();
+      expect(mockBufferAddition).toHaveBeenCalledTimes(1);
+      expect(mockBufferAddition).toHaveBeenCalledWith(item2);
+    });
+
+    it('does NOT re-buffer a non-rate-limit failure', async () => {
+      const item1 = createItem('offline-1');
+      const item2 = createItem('offline-2');
+      mockGetBufferedAdditions.mockReturnValue([item1, item2]);
+      mockAddQueueItem.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Network error'));
+      const mockBufferAddition = vi.fn();
+
+      renderRateLimitCase({ items: [item1, item2], bufferAddition: mockBufferAddition });
+
+      await act(async () => {
+        subscriberCallback!(FULL_SYNC_MULTI_USER);
+      });
+
+      expect(mockClearBuffer).toHaveBeenCalled();
+      expect(mockBufferAddition).not.toHaveBeenCalled();
+    });
+
+    it('paces replayed additions between sends but not after the last', async () => {
+      // `vi.clearAllMocks()` in beforeEach only clears call history, not the
+      // persistent `mockImplementation` an earlier test left on addQueueItem —
+      // override it so every replayed add resolves.
+      mockAddQueueItem.mockReset();
+      mockAddQueueItem.mockResolvedValue(undefined);
+      const items = [createItem('p-1'), createItem('p-2'), createItem('p-3')];
+      mockGetBufferedAdditions.mockReturnValue(items);
+      const sleepCalls: number[] = [];
+      const sleep = (ms: number) => {
+        sleepCalls.push(ms);
+        return Promise.resolve();
+      };
+
+      renderRateLimitCase({ items, bufferAddition: vi.fn(), replayPacingMs: 80, sleep });
+
+      await act(async () => {
+        subscriberCallback!(FULL_SYNC_MULTI_USER);
+      });
+
+      expect(mockAddQueueItem).toHaveBeenCalledTimes(3);
+      // Spaced between the 3 sends (2 gaps), never after the final one.
+      expect(sleepCalls).toEqual([80, 80]);
     });
   });
 });

@@ -249,6 +249,9 @@ export type SessionConnectionDeps<
    *  `setTimeout`/`clearTimeout`. */
   scheduleTimer?: (callback: () => void, delayMs: number) => SessionConnectionTimerHandle;
   clearTimer?: (handle: SessionConnectionTimerHandle) => void;
+  /** Injectable randomness for the reconnect-backoff jitter. Defaults to
+   *  `Math.random`; tests pass a constant to assert exact delays. */
+  random?: () => number;
 };
 
 export type SessionConnectionController = {
@@ -275,6 +278,14 @@ export type SessionConnectionController = {
  *  exported: this is purely internal control flow, not a capability callers
  *  need. */
 class JoinReturnedNoPayloadError extends Error {}
+
+/**
+ * Fraction of the reconnect backoff turned into random jitter — spreads each
+ * retry over [0.5·delay, delay] so a fleet that all dropped at once doesn't
+ * re-join in lockstep (#2655). Mirrors `RECONNECT_JITTER_RATIO` in
+ * `@boardsesh/graphql-client`; kept local so queue-runtime needn't depend on it.
+ */
+const RECONNECT_JITTER_RATIO = 0.5;
 
 export function createSessionConnectionController<
   TClient extends SessionConnectionClient,
@@ -343,10 +354,16 @@ export function createSessionConnectionController<
   }
 
   function computeBackoffDelay(attempt: number): number {
-    return Math.min(
+    const base = Math.min(
       deps.retryPolicy.initialRetryDelayMs * Math.pow(deps.retryPolicy.backoffMultiplier, attempt - 1),
       deps.retryPolicy.maxRetryDelayMs,
     );
+    // Jitter over [0.5·base, base] so a fleet whose sessions all dropped at once
+    // (backend restart) doesn't re-join in lockstep and re-trip the joinSession
+    // rate limit in synchronized waves (#2655). `deps.random` is injectable for
+    // deterministic tests; defaults to `Math.random`.
+    const random = deps.random ?? Math.random;
+    return base - random() * RECONNECT_JITTER_RATIO * base;
   }
 
   /** Mirrors `scheduleSubscriptionRecovery` (`use-session-lifecycle.ts:613-643`). */

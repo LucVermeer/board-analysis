@@ -1,5 +1,11 @@
 import { type Client, createClient } from 'graphql-ws';
-import { INITIAL_RETRY_DELAY_MS, MAX_RETRY_DELAY_MS, BACKOFF_MULTIPLIER, KEEP_ALIVE_MS } from './constants';
+import {
+  INITIAL_RETRY_DELAY_MS,
+  MAX_RETRY_DELAY_MS,
+  BACKOFF_MULTIPLIER,
+  KEEP_ALIVE_MS,
+  RECONNECT_JITTER_RATIO,
+} from './constants';
 
 export type ExtendedClient = {
   onReconnect?: (callback: () => void) => void;
@@ -73,7 +79,12 @@ export function createGraphQLClient(options: CreateGraphQLClientOptions): Extend
     retryAttempts: 10,
     shouldRetry: shouldRetry ?? (() => true),
     retryWait: async (retryCount) => {
-      const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, retryCount), MAX_RETRY_DELAY_MS);
+      // Exponential backoff with jitter. Without the jitter, a fleet that all
+      // dropped at once (backend restart) reconnects in lockstep and re-trips
+      // the per-user rate limiter in synchronized waves; spreading each attempt
+      // over [0.5·delay, delay] de-syncs the herd (#2655).
+      const base = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, retryCount), MAX_RETRY_DELAY_MS);
+      const delay = base - Math.random() * RECONNECT_JITTER_RATIO * base;
       await new Promise((resolve) => setTimeout(resolve, delay));
     },
     lazy: true,
