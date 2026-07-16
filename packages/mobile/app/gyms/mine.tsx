@@ -76,10 +76,10 @@ export default function MyGymsScreen() {
 
   const manageKiosks = useCallback(
     async (gym: Gym) => {
-      // A gym without a slug can't have a manage URL — surface the same error as a
-      // failed open rather than routing to a broken page.
+      // A gym without a slug has no manage URL at all — that's a "not set up yet"
+      // state, not a failed open, so the "try a browser" copy would be wrong advice.
       if (!gym.slug) {
-        showToast(t('mobile.myGyms.manageError'), 'error');
+        showToast(t('mobile.myGyms.manageUnavailable'), 'error');
         return;
       }
       // First hand-off teaches that kiosk setup is a big-screen job; dismiss the

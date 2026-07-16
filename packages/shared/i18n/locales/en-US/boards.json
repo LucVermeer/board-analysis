@@ -200,6 +200,7 @@
       "manageKiosks": "Manage kiosks & TVs",
       "manageKiosksFor": "Manage kiosks and TVs for {{gym}}",
       "manageError": "Couldn't open the manage console. Try it in a browser.",
+      "manageUnavailable": "This gym isn't set up for kiosks yet.",
       "roleOwner": "Owner",
       "noAddress": "No address yet"
     },

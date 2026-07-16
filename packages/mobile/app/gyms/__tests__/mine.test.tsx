@@ -48,6 +48,7 @@ vi.mock('react-i18next', () => ({
         'mobile.myGyms.kioskHintDismiss': 'Got it',
         'mobile.myGyms.manageKiosks': 'Manage kiosks & TVs',
         'mobile.myGyms.manageError': 'Could not open the manage console',
+        'mobile.myGyms.manageUnavailable': 'This gym is not set up for kiosks yet',
         'mobile.myGyms.noAddress': 'No address yet',
         'mobile.myGyms.roleOwner': 'Owner',
       };
@@ -202,12 +203,14 @@ describe('MyGymsScreen', () => {
     expect(setKioskHintSeen).toHaveBeenCalledWith(true);
   });
 
-  it('toasts an error when a gym has no slug to manage', () => {
+  it('toasts a "not set up yet" message when a gym has no slug to manage', () => {
     state.myGyms = { data: { gyms: [makeGym({ slug: null })] }, isLoading: false, isError: false };
     const { getByRole } = render(<MyGymsScreen />);
     fireEvent.click(getByRole('button', { name: 'manage-g1' }));
     expect(openUrl.openValidatedUrl).not.toHaveBeenCalled();
-    expect(toastMock.showToast).toHaveBeenCalledWith('Could not open the manage console', 'error');
+    // A slug-less gym has no manage URL — a browser can't help, so we don't reuse
+    // the "try a browser" copy.
+    expect(toastMock.showToast).toHaveBeenCalledWith('This gym is not set up for kiosks yet', 'error');
   });
 
   it('toasts when the manage console fails to open', async () => {
