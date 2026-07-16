@@ -191,6 +191,69 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
   }
 
   """
+  One redacted entry of a board's public queue preview. Deliberately exposes
+  ONLY climb-catalog display fields — never who added the item, who ticked it,
+  or any other user-identifying data. The kiosk audience is anonymous, so the
+  payload must stay safe to show on a public gym display.
+  """
+  type BoardQueuePreviewItem {
+    "Queue item UUID (stable identity for list diffing; carries no user info)"
+    queueItemUuid: ID!
+    "UUID of the queued climb"
+    climbUuid: String!
+    "Climb name"
+    name: String
+    "Grade name (e.g. V6 / 7A+) as carried by the queue item"
+    grade: String
+    "Grade colour as a hex string (null until a shared server-side palette exists)"
+    gradeColor: String
+    "Aurora frames string for rendering a thumbnail"
+    frames: String
+    "Board angle in degrees. Null means unspecified (0 is a valid angle)."
+    angle: Int
+    "Catalog route setter display name (who set the climb)"
+    setter: String
+  }
+
+  """
+  Redacted snapshot of the party-session queue currently bound to a shared
+  board, for public "Up next" displays (gym kiosks). Party queues are
+  membership-gated and keyed by session UUID; this preview is the anonymous,
+  board-keyed bridge — it only exists while BOTH privacy gates hold:
+
+  1. The board is anonymously readable (public, or a system-owned shared
+     per-config board) — same gate as \`boardNowPlaying\`.
+  2. The bound session has \`board_sessions.is_public = true\`.
+
+  NOTE on gate 2: this deliberately widens \`isPublic\`'s meaning from
+  "appears in session discovery" to "queue is observable on public displays"
+  (user-approved product decision). \`is_public\` is the ONLY session
+  visibility knob: \`discoverable\` controls nearby-search listing, not
+  privacy — every session is joinable by anyone with its link, and no
+  invite/approval mechanism exists. Today nothing sets \`is_public = false\`
+  (\`CreateSessionInput\` has no such field), so every session on an
+  anon-readable board is previewable after its first wall report; the gate is
+  enforced now so the contract already holds when a session-privacy control
+  ships.
+
+  Every item is redacted to climb-catalog fields only (see
+  \`BoardQueuePreviewItem\`) — no addedBy/tickedBy/user identities ever leave
+  the session boundary. \`upNext\` is capped at 10 items.
+  """
+  type BoardQueuePreview {
+    "Shared board id (userBoards.id) this preview is keyed on"
+    boardId: Int!
+    "The climb currently active in the bound session's queue, if any"
+    current: BoardQueuePreviewItem
+    "Queue items after the current one, in order, capped at 10"
+    upNext: [BoardQueuePreviewItem!]!
+    "Total number of items in the session queue (uncapped, independent of the upNext cap)"
+    queueLength: Int!
+    "ISO 8601 timestamp of when this snapshot was built (server-stamped)"
+    updatedAt: String!
+  }
+
+  """
   Lightweight live + durable stats for a board's wall feed. Durable counts are
   derived from \`boardsesh_ticks\` stamped with this board_id; "right now" comes
   from the live Redis window.

@@ -457,6 +457,29 @@ export const queriesTypeDefs = /* GraphQL */ `
     boardConnection(boardId: Int!): BoardConnectionHolder
 
     """
+    Redacted "Up next" snapshot of the party-session queue bound to a shared
+    board, for anonymous public displays (gym kiosks). Auth-optional; for
+    anonymous viewers a private board reads as NOT_FOUND (same existence
+    hiding as \`boardNowPlaying\`).
+
+    Double privacy gate — returns null unless BOTH hold:
+    1. the board is anonymously readable (public / system-shared), and
+    2. the bound session is \`isPublic: true\` and still active.
+
+    Gate 2 deliberately widens \`board_sessions.is_public\` from "appears in
+    discovery" to "queue observable on public displays" (documented product
+    decision). Also null when no session is bound to the board. The bound
+    session resolves from the live board→session binding stamped by
+    \`reportBoardClimb\` (12h TTL), falling back to the newest active public
+    \`board_sessions\` row for the board when the binding is absent or points
+    at an ended session (a stale binding — bindings are never cleared on
+    session end). A binding pointing at an ACTIVE private session returns
+    null outright, never another session's queue. Items are redacted to
+    climb-catalog fields only — never who added or ticked them.
+    """
+    boardQueuePreview(boardId: Int!): BoardQueuePreview
+
+    """
     Get the current user's new climb subscriptions.
     Requires authentication.
     """

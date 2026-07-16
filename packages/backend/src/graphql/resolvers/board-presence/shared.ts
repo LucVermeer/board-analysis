@@ -301,30 +301,49 @@ export async function requireActiveBoardById(boardId: number): Promise<ActivePre
 }
 
 /**
- * Bound anonymous reads of the live "now on the wall" feed (boardNowPlaying /
- * boardRecentClimbs / boardConnection) to boards an anonymous viewer is allowed
- * to see. Logged-in callers keep the pre-existing membership-free access to any
- * active board (a board's send feed is shared, leaderboard-style data among
- * authenticated users). Anonymous callers — who could otherwise enumerate the
- * sequential board ids — are restricted to **public** boards and the
- * system-owned shared per-config boards (the serial-less MoonBoard-style feeds
- * anon is first-class for). Throws the same `Board not found` as a missing board
- * so a private board's existence isn't revealed to anon. No-op for logged-in.
+ * Whether a board is readable by an anonymous viewer: an active **public**
+ * board or a system-owned shared per-config board (the serial-less
+ * MoonBoard-style feeds anon is first-class for). Viewer-independent — this is
+ * also the publish gate for the board-queue-preview producer, which has no
+ * viewer at all. False for missing/deleted boards.
  */
-export async function requireAnonReadableBoard(
-  boardId: number,
-  viewerUserId: string | null | undefined,
-): Promise<void> {
+export async function isBoardAnonReadable(boardId: number): Promise<boolean> {
   assertValidBoardId(boardId);
-  if (viewerUserId) return;
   const [board] = await db
     .select({ isPublic: dbSchema.userBoards.isPublic, ownerId: dbSchema.userBoards.ownerId })
     .from(dbSchema.userBoards)
     .where(and(eq(dbSchema.userBoards.id, boardId), isNull(dbSchema.userBoards.deletedAt)))
     .limit(1);
-  if (!board || (!board.isPublic && board.ownerId !== SYSTEM_BOARD_OWNER_ID)) {
+  return Boolean(board && (board.isPublic || board.ownerId === SYSTEM_BOARD_OWNER_ID));
+}
+
+/**
+ * Bound anonymous reads of the live "now on the wall" feed (boardNowPlaying /
+ * boardRecentClimbs / boardConnection) to boards an anonymous viewer is allowed
+ * to see. Logged-in callers keep the pre-existing membership-free access to any
+ * active board (a board's send feed is shared, leaderboard-style data among
+ * authenticated users). Anonymous callers — who could otherwise enumerate the
+ * sequential board ids — are restricted to the `isBoardAnonReadable` set.
+ * Throws the same `Board not found` as a missing board so a private board's
+ * existence isn't revealed to anon. No-op for logged-in.
+ *
+ * Returns whether anon-readability was actually VERIFIED — true only on the
+ * anonymous path (where not throwing means `isBoardAnonReadable` held), false
+ * for logged-in viewers (nothing was checked). Callers that re-apply the same
+ * viewer-independent gate downstream (boardQueuePreview) use it to skip a
+ * duplicate `isBoardAnonReadable` query — never treat `false` as "not
+ * readable", only as "not verified here".
+ */
+export async function requireAnonReadableBoard(
+  boardId: number,
+  viewerUserId: string | null | undefined,
+): Promise<boolean> {
+  assertValidBoardId(boardId);
+  if (viewerUserId) return false;
+  if (!(await isBoardAnonReadable(boardId))) {
     throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
+  return true;
 }
 
 type BoardVisibility = Pick<typeof dbSchema.userBoards.$inferSelect, 'isPublic' | 'ownerId'>;

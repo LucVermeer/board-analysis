@@ -265,3 +265,57 @@ export const BOARD_CONNECTION = `query BoardConnection($boardId: Int!) { boardCo
 // Mutation — release this client's hold on a board (e.g. on BLE disconnect).
 // Returns Boolean! (accepted).
 export const REPORT_BOARD_DISCONNECT = `mutation ReportBoardDisconnect($boardId: Int!) { reportBoardDisconnect(boardId: $boardId) }`;
+
+// All fields of a redacted BoardQueuePreview (gym-kiosk "Up next"). Items
+// deliberately carry ONLY climb-catalog display fields — never who added or
+// ticked them. Shared between the cold-fetch query and the live subscription
+// so both decode the same shape.
+const BOARD_QUEUE_PREVIEW_FIELDS = `
+  boardId
+  current {
+    queueItemUuid
+    climbUuid
+    name
+    grade
+    gradeColor
+    frames
+    angle
+    setter
+  }
+  upNext {
+    queueItemUuid
+    climbUuid
+    name
+    grade
+    gradeColor
+    frames
+    angle
+    setter
+  }
+  queueLength
+  updatedAt
+`;
+
+// Query — the current redacted "Up next" snapshot for a board, or null when
+// no publicly previewable session is bound (double gate: anon-readable board
+// AND isPublic active session). Used by kiosks for initial paint before the
+// live subscription takes over.
+export const BOARD_QUEUE_PREVIEW = `
+  query BoardQueuePreview($boardId: Int!) {
+    boardQueuePreview(boardId: $boardId) {
+      ${BOARD_QUEUE_PREVIEW_FIELDS}
+    }
+  }
+`;
+
+// Subscription — live redacted "Up next" previews for a board. Every event is
+// a full snapshot (latest wins); the stream is seeded with the current
+// snapshot when one exists, so late-joining kiosks paint without a separate
+// query round-trip.
+export const BOARD_QUEUE_PREVIEW_SUBSCRIPTION = `
+  subscription BoardQueuePreviewUpdates($boardId: Int!) {
+    boardQueuePreview(boardId: $boardId) {
+      ${BOARD_QUEUE_PREVIEW_FIELDS}
+    }
+  }
+`;

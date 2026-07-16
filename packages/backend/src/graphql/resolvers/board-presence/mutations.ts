@@ -22,6 +22,7 @@ import { pubsub } from '../../../pubsub/index';
 import { roomManager } from '../../../services/room-manager';
 import { isApnsConfigured, sendLiveActivityUpdate } from '../../../services/apns';
 import { buildContentStateFromQueueState } from '../../../services/apns/content-state';
+import { publishBoardQueuePreviewForSession } from '../../../services/board-queue-preview';
 import {
   assertValidBoardId,
   candidateToActiveBoard,
@@ -556,7 +557,7 @@ export const boardPresenceMutations = {
     // One Redis pipeline: durable FIFO history append, connection-holder
     // handoff (atomic SET..GET), the A2 dedup marker, and the session→board
     // mapping. Non-fatal on failure (see commitBoardClimb's contract).
-    const { previousWriter, writerSlotOk } = await pubsub.commitBoardClimb({
+    const { previousWriter, writerSlotOk, sessionBindingChanged } = await pubsub.commitBoardClimb({
       boardId: String(boardId),
       emitterId,
       climb: presenceClimb,
@@ -564,6 +565,23 @@ export const boardPresenceMutations = {
       effectiveAngle,
       sessionId: reportingSessionId,
     });
+
+    // This send just bound a NEW session to the wall (first report, or a
+    // hand-off from another session). Seed public kiosk subscribers with the
+    // session's current queue right away: the board-queue-preview producer
+    // only fires on queue events, so without this seed a kiosk subscribed
+    // before anyone took the wall would stay blank until the next queue
+    // mutation. publishBoardQueuePreviewForSession re-applies both privacy
+    // gates and the superseded-binding re-check, and is publisher-instance-
+    // only like every producer publish. Fire-and-forget — a failed preview
+    // seed must never fail the accepted report.
+    if (sessionBindingChanged && reportingSessionId) {
+      publishBoardQueuePreviewForSession(reportingSessionId).catch((error: unknown) => {
+        logger.warn(
+          `[board-presence] board-queue-preview seed on session bind failed for ${reportingSessionId}: ${String(error)}`,
+        );
+      });
+    }
 
     // Store before publish: commitBoardClimb above already awaited the history
     // append, so a late joiner reading the FIFO right after this publish will
