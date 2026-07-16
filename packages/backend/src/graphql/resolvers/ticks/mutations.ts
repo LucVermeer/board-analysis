@@ -554,6 +554,26 @@ export const tickMutations = {
       );
     }
 
+    // A stale/unknown sessionId (session ended, or never existed on this
+    // backend — e.g. an offline-replayed tick) would otherwise FK-violate the
+    // insert and lose the whole tick (#2386). Same best-effort drop-the-ref
+    // trade-off as the boardUuid/boardId resolution above; no ownership check,
+    // since party-mode ticks legitimately reference sessions other users made.
+    let resolvedSessionId: string | null = null;
+    if (validatedInput.sessionId) {
+      const [session] = await db
+        .select({ id: dbSchema.boardSessions.id })
+        .from(dbSchema.boardSessions)
+        .where(eq(dbSchema.boardSessions.id, validatedInput.sessionId))
+        .limit(1);
+
+      if (session) {
+        resolvedSessionId = session.id;
+      } else {
+        logger.warn(`[saveTick] Dropping stale sessionId ${validatedInput.sessionId} — session not found`);
+      }
+    }
+
     // Run write-time beta-link validation before opening the transaction so a
     // bad video URL doesn't leave a half-state. Zod already validated the
     // surface shape; Instagram gets deep public/caption validation, while
@@ -611,7 +631,7 @@ export const tickMutations = {
           climbedAt,
           createdAt: now,
           updatedAt: now,
-          sessionId: validatedInput.sessionId ?? null,
+          sessionId: resolvedSessionId,
           boardId,
           // Aurora sync fields are null - will be populated by periodic sync job
           auroraType: null,
@@ -626,8 +646,8 @@ export const tickMutations = {
 
       if (!createdTick) return [];
 
-      if (validatedInput.sessionId) {
-        await tx.update(sessions).set({ lastActivity: new Date() }).where(eq(sessions.id, validatedInput.sessionId));
+      if (resolvedSessionId) {
+        await tx.update(sessions).set({ lastActivity: new Date() }).where(eq(sessions.id, resolvedSessionId));
       }
 
       // Attach the video URL as community beta for this climb if the user
