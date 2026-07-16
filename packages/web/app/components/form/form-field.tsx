@@ -7,6 +7,7 @@ import FormLabel from '@mui/material/FormLabel';
 import FormHelperText from '@mui/material/FormHelperText';
 import Typography from '@mui/material/Typography';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { themeTokens } from '@/app/theme/theme-config';
 
 /** Counter is emphasised once the value reaches 80% of its max. */
 const COUNTER_EMPHASIS_RATIO = 0.8;
@@ -165,7 +166,13 @@ export function FormField({
               component="span"
               data-emphasized={nearMax ? 'true' : 'false'}
               color={nearMax ? 'text.primary' : 'text.secondary'}
-              sx={{ flexShrink: 0, fontWeight: nearMax ? 600 : 400, whiteSpace: 'nowrap' }}
+              sx={{
+                flexShrink: 0,
+                fontWeight: nearMax
+                  ? themeTokens.typography.fontWeight.semibold
+                  : themeTokens.typography.fontWeight.normal,
+                whiteSpace: 'nowrap',
+              }}
             >
               {counter.value} / {counter.max}
             </Typography>

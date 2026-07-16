@@ -51,6 +51,22 @@ describe('FormActions', () => {
     expect(submit.getAttribute('form')).toBe('my-form');
   });
 
+  it('submits a form it sits outside of via formId (header-hosted action path)', () => {
+    // This is how drawer headers submit: the FormShell carries the id, the
+    // header's FormActions lives outside the <form> and targets it by id.
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(
+      <>
+        <form id="external-form" onSubmit={onSubmit}>
+          <input name="field" defaultValue="value" />
+        </form>
+        <FormActions submitLabel="Save" formId="external-form" />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a secondary action', () => {
     render(<FormActions submitLabel="Save" secondaryAction={<button type="button">Save draft</button>} />);
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();

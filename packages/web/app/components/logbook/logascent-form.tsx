@@ -87,6 +87,9 @@ type LogAscentFormProps = {
    * action bar) instead of rendering inline submit/cancel buttons. Bottom
    * drawers carry actions in the header because the iOS keyboard buries a
    * footer — see docs/mobile-sheets-vs-routes.md.
+   *
+   * Must be referentially stable (a setState or `useCallback`) — it sits in the
+   * report effect's deps, so a per-render identity re-fires the effect every render.
    */
   onSubmitStateChange?: (state: LogAscentSubmitState) => void;
 };
@@ -312,7 +315,13 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({
             exclusive
             fullWidth
             value={logType}
-            onChange={(_, val) => val && setLogType(val as LogType)}
+            onChange={(_, val) => {
+              if (!val) return;
+              setLogType(val as LogType);
+              // Ascent-only validation errors (the flash/send attempts guard)
+              // don't apply across modes — clear the banner so it can't go stale.
+              setFormError(null);
+            }}
           >
             <ToggleButton value="ascent">{tProfile('logbook.form.ascent')}</ToggleButton>
             <ToggleButton value="attempt">{tProfile('logbook.form.attempt')}</ToggleButton>

@@ -445,6 +445,12 @@ const sharedOptions: Partial<ThemeOptions> = {
     h4: { fontSize: themeTokens.typography.fontSize.xl, fontWeight: themeTokens.typography.fontWeight.semibold },
     h5: { fontSize: themeTokens.typography.fontSize.lg, fontWeight: themeTokens.typography.fontWeight.semibold },
     h6: { fontSize: themeTokens.typography.fontSize.base, fontWeight: themeTokens.typography.fontWeight.semibold },
+    // Section-heading variant (FormSection titles and friends): 14/600/20.
+    subtitle2: {
+      fontSize: themeTokens.typography.fontSize.sm,
+      fontWeight: themeTokens.typography.fontWeight.semibold,
+      lineHeight: 20 / 14,
+    },
     body1: {
       fontSize: themeTokens.typography.fontSize.base,
       lineHeight: themeTokens.typography.lineHeight.normal,

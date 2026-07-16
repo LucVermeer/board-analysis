@@ -78,6 +78,9 @@ type BoardFormProps = {
    * action bar) instead of rendering the inline submit/cancel buttons. Bottom
    * drawers carry actions in the header because the iOS keyboard buries a
    * footer — see docs/mobile-sheets-vs-routes.md.
+   *
+   * Must be referentially stable (a setState or `useCallback`) — it sits in the
+   * report effect's deps, so a per-render identity re-fires the effect every render.
    */
   onSubmitStateChange?: (state: BoardFormSubmitState) => void;
 };
@@ -268,9 +271,7 @@ export default function BoardForm({
       <FormSection title={t('boardForm.sections.setup')}>
         {configEditable && (
           <>
-            <Alert severity="info" sx={{ fontSize: '0.8rem' }}>
-              {t('boardForm.alerts.configEditable')}
-            </Alert>
+            <Alert severity="info">{t('boardForm.alerts.configEditable')}</Alert>
 
             <FormField label={t('boardForm.fields.layout')}>
               {(field) => (

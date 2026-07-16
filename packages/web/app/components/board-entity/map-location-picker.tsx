@@ -224,7 +224,7 @@ export default function MapLocationPicker({ latitude, longitude, onChange }: Map
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <MapOutlined fontSize="small" color="action" />
-          <MuiTypography sx={{ fontSize: 14, fontWeight: 500 }}>
+          <MuiTypography variant="body2" sx={{ fontWeight: themeTokens.typography.fontWeight.medium }}>
             {hasLocation
               ? t('mapLocationPicker.locationDisplay', {
                   lat: latitude.toFixed(4),

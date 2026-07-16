@@ -28,11 +28,7 @@ export function FormSection({ title, description, children, sx }: FormSectionPro
       {hasHeader ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px', mb: '12px' }}>
           {title != null ? (
-            <Typography
-              variant="subtitle2"
-              color="text.secondary"
-              sx={{ fontSize: 14, fontWeight: 600, lineHeight: '20px' }}
-            >
+            <Typography variant="subtitle2" color="text.secondary">
               {title}
             </Typography>
           ) : null}
