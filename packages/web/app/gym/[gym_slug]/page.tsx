@@ -49,10 +49,7 @@ const fetchGymBySlug = cache(async (slug: string, token: string | undefined): Pr
   }
 });
 
-async function fetchDefaultKiosk(
-  gymSlug: string,
-  token: string | undefined,
-): Promise<GymKioskOperationResult | null> {
+async function fetchDefaultKiosk(gymSlug: string, token: string | undefined): Promise<GymKioskOperationResult | null> {
   try {
     const response = await executeAuthenticatedGraphQL<GetGymKioskQueryResponse>(
       GET_GYM_KIOSK,
