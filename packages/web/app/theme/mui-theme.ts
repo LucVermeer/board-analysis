@@ -233,6 +233,12 @@ const sharedComponents: Components<Theme> = {
         '&.Mui-focused': {
           backgroundColor: 'var(--input-bg-focused)',
         },
+        '&.Mui-disabled': {
+          backgroundColor: 'var(--input-bg-hover)',
+          '@supports (background-color: color-mix(in srgb, red 50%, transparent))': {
+            backgroundColor: 'color-mix(in srgb, var(--input-bg) 50%, transparent)',
+          },
+        },
       },
     },
   },
