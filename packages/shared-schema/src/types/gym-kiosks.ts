@@ -34,6 +34,12 @@ export type GymKiosk = {
   boards: GymKioskBoard[];
   createdAt: string;
   updatedAt: string;
+  /**
+   * When a live TV last checked in (ISO 8601), or null when it never has / its
+   * ephemeral Redis signal has expired. Populated only on the edit-guarded
+   * `gymKiosks` query — a null means "no signal", never "definitely down".
+   */
+  lastSeenAt: string | null;
 };
 
 export type CreateGymKioskInput = {
@@ -47,4 +53,11 @@ export type UpdateGymKioskInput = {
   name?: string;
   slug?: string;
   layout?: unknown;
+};
+
+export type KioskHeartbeatInput = {
+  kioskUuid: string;
+  gymUuid: string;
+  viewportWidth?: number | null;
+  viewportHeight?: number | null;
 };

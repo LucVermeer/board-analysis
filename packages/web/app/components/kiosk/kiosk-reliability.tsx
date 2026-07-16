@@ -24,7 +24,14 @@ import {
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
 } from '@boardsesh/board-presence-react';
-import { GET_GYM_KIOSK, type GetGymKioskQueryResponse } from '@boardsesh/graphql/operations';
+import {
+  GET_GYM_KIOSK,
+  KIOSK_HEARTBEAT,
+  type GetGymKioskQueryResponse,
+  type KioskHeartbeatMutationResponse,
+  type KioskHeartbeatMutationVariables,
+} from '@boardsesh/graphql/operations';
+import { KIOSK_HEARTBEAT_INTERVAL_MS } from '@boardsesh/kiosk';
 import { executeGraphQL } from '@/app/lib/graphql/client';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
 import { evaluateKioskConfigPoll } from './kiosk-config-poll';
@@ -32,8 +39,13 @@ import type { KioskBoardSnapshot } from './presence/use-kiosk-board-presence';
 
 /** How often each board re-reads the durable history to repair silent drops. */
 const BOARD_FEED_CATCH_UP_INTERVAL_MS = 5 * 60 * 1000;
-/** How often the kiosk config is re-fetched to detect a re-configured layout. */
-const CONFIG_POLL_INTERVAL_MS = 5 * 60 * 1000;
+/**
+ * How often the kiosk config is re-fetched to detect a re-configured layout.
+ * The heartbeat rides this poll (fires on each completed fetch), so it's the
+ * kiosk's single check-in cadence — sourced from the shared constant the
+ * manage-UI liveness window also derives from, so the two never drift.
+ */
+const CONFIG_POLL_INTERVAL_MS = KIOSK_HEARTBEAT_INTERVAL_MS;
 /**
  * Minimum page age before a config mismatch may reload. The server render is
  * cached with `revalidate: 60`, so right after an edit a reload can serve the
@@ -89,10 +101,18 @@ export function KioskBoardFeedBridge({
 export default function KioskReliability({
   gymSlug,
   kioskSlug,
+  kioskUuid,
+  gymUuid,
   initialUpdatedAt,
 }: {
   gymSlug: string;
   kioskSlug: string | null;
+  /** The kiosk's UUID — the heartbeat key (only the display pages send one; the
+   * manage preview builds its own tree without this component, so heartbeats are
+   * display-only by construction). */
+  kioskUuid: string;
+  /** The owning gym's UUID — scopes the heartbeat keyspace. */
+  gymUuid: string;
   /** The kiosk's `updatedAt` at server-render time; any change forces a reload. */
   initialUpdatedAt: string;
 }) {
@@ -146,6 +166,31 @@ export default function KioskReliability({
     decide();
     return () => clearTimeout(recheckTimeoutId);
   }, [kioskConfigData, dataUpdatedAt, initialUpdatedAt, mountedAtMs]);
+
+  // Heartbeat: check in so owners can see this TV is live, straight from the
+  // Kiosks tab. Piggybacks the config poll's cadence rather than adding a second
+  // timer — `dataUpdatedAt` advances on the first successful fetch (initial
+  // load) and on every 5-minute refetch, which is exactly when we want to
+  // report. Tying it to a completed poll also means "live" reflects the TV
+  // actually reaching the backend, not just a mounted component. A failed send
+  // is inconsequential: the next poll re-reports, and the backend TTL is
+  // generous, so a brief gap never reads as "dead".
+  useEffect(() => {
+    if (dataUpdatedAt === 0) return;
+    // Viewport is a best-effort coarse marker: only send it when the browser
+    // reports real dimensions. A headless/hidden context can report 0 — the
+    // backend's `min(1)` would reject the whole heartbeat, so omit the fields
+    // rather than lose the check-in.
+    const viewport =
+      window.innerWidth > 0 && window.innerHeight > 0
+        ? { viewportWidth: window.innerWidth, viewportHeight: window.innerHeight }
+        : {};
+    void executeGraphQL<KioskHeartbeatMutationResponse, KioskHeartbeatMutationVariables>(KIOSK_HEARTBEAT, {
+      input: { kioskUuid, gymUuid, ...viewport },
+    }).catch(() => {
+      // Swallow — the next poll tick re-reports.
+    });
+  }, [dataUpdatedAt, kioskUuid, gymUuid]);
 
   useEffect(() => {
     const now = new Date();

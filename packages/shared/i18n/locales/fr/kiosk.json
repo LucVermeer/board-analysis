@@ -189,7 +189,26 @@
       "deleteConfirm": "Supprimer",
       "cancel": "Annuler",
       "deleted": "Borne supprimée.",
-      "deleteFailed": "Impossible de supprimer la borne."
+      "deleteFailed": "Impossible de supprimer la borne.",
+      "liveness": {
+        "live": "En direct",
+        "lastSeenMinutes_one": "Vu il y a {{count}} minute",
+        "lastSeenMinutes_other": "Vu il y a {{count}} minutes",
+        "lastSeenHours_one": "Vu il y a {{count}} heure",
+        "lastSeenHours_other": "Vu il y a {{count}} heures",
+        "noSignalDays_one": "Aucun signal depuis {{count}} jour",
+        "noSignalDays_other": "Aucun signal depuis {{count}} jours",
+        "noSignalYet": "Aucun signal pour l’instant",
+        "reinstall": "Rouvrir sur la TV"
+      },
+      "reinstall": {
+        "title": "Remets cet écran en marche",
+        "body": "Ouvre cette URL dans le navigateur du téléviseur pour récupérer « {{name}} », ou scanne-la avec un téléphone pour l’envoyer.",
+        "scanHint": "Scanne pour ouvrir sur un téléphone",
+        "openTv": "Ouvrir la vue TV",
+        "close": "Terminé",
+        "noUrl": "Définis d’abord le slug d’URL de ta salle ; cette borne aura alors un lien à mettre sur n’importe quel écran."
+      }
     },
     "boards": {
       "heading": "Boards de cette salle",

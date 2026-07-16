@@ -2203,6 +2203,14 @@ export type GymKiosk = {
   createdAt: Scalars['String']['output'];
   /** The owning gym, enriched with branding for the kiosk chrome. */
   gym: Gym;
+  /**
+   * When a live TV last checked in (ISO 8601), or null when it never has — or its
+   * ephemeral signal has expired. Populated only on the edit-guarded `gymKiosks`
+   * query; the public `gymKiosk` read never exposes liveness. Backed by Redis
+   * with a generous TTL, so a null here means "no signal", never "definitely
+   * down".
+   */
+  lastSeenAt?: Maybe<Scalars['String']['output']>;
   /** Preset layout config (@boardsesh/kiosk KioskLayoutSchema): 1–4 board slots + optional leaderboard rail. Read leniently. */
   layout: Scalars['JSON']['output'];
   /** Kiosk display name. */
@@ -2477,6 +2485,24 @@ export type IntegrationStatus = {
   status?: Maybe<Scalars['String']['output']>;
 };
 
+/**
+ * Input for a kiosk check-in. Sent by the PUBLIC kiosk TV pages (unauthenticated)
+ * on load and on each config-poll tick so owners can see which screens are live.
+ * `gymUuid` scopes the ephemeral keyspace; both UUIDs are validated against a
+ * live kiosk before anything is recorded — nothing here is trusted beyond that
+ * lookup. `viewportWidth`/`viewportHeight` are an optional coarse client marker.
+ */
+export type KioskHeartbeatInput = {
+  /** The gym the kiosk belongs to (keyspace scoping). */
+  gymUuid: Scalars['ID']['input'];
+  /** The kiosk that's checking in. */
+  kioskUuid: Scalars['ID']['input'];
+  /** Optional viewport height in CSS pixels. */
+  viewportHeight?: InputMaybe<Scalars['Int']['input']>;
+  /** Optional viewport width in CSS pixels. */
+  viewportWidth?: InputMaybe<Scalars['Int']['input']>;
+};
+
 /** Statistics for a specific board layout. */
 export type LayoutStats = {
   __typename?: 'LayoutStats';
@@ -2715,6 +2741,14 @@ export type Mutation = {
    * Returns the session with current state.
    */
   joinSession: Session;
+  /**
+   * Public, unauthenticated kiosk check-in. A kiosk TV page calls this on load
+   * and on its config-poll cadence; after validating the kiosk exists, the
+   * backend records an ephemeral last-seen timestamp (Redis, ~30-day TTL) that
+   * the edit-guarded gymKiosks query surfaces. Returns false when the
+   * kiosk/gym pair doesn't resolve to a live kiosk. Rate-limited per client.
+   */
+  kioskHeartbeat: Scalars['Boolean']['output'];
   /** Leave the current session. */
   leaveSession: Scalars['Boolean']['output'];
   /** Link or unlink a board to/from a gym. */
@@ -3204,6 +3238,11 @@ export type MutationJoinSessionArgs = {
   sessionId: Scalars['ID']['input'];
   sessionName?: InputMaybe<Scalars['String']['input']>;
   username?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationKioskHeartbeatArgs = {
+  input: KioskHeartbeatInput;
 };
 
 /** Root mutation type for all write operations. */

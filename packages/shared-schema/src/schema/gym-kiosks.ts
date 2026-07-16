@@ -64,6 +64,14 @@ export const gymKiosksTypeDefs = /* GraphQL */ `
     createdAt: String!
     "When the kiosk was last updated (ISO 8601)."
     updatedAt: String!
+    """
+    When a live TV last checked in (ISO 8601), or null when it never has — or its
+    ephemeral signal has expired. Populated only on the edit-guarded \`gymKiosks\`
+    query; the public \`gymKiosk\` read never exposes liveness. Backed by Redis
+    with a generous TTL, so a null here means "no signal", never "definitely
+    down".
+    """
+    lastSeenAt: String
   }
 
   """
@@ -96,5 +104,23 @@ export const gymKiosksTypeDefs = /* GraphQL */ `
     slug: String
     "New preset layout config (@boardsesh/kiosk KioskLayoutSchema). Persisted as the schema-parsed output."
     layout: JSON
+  }
+
+  """
+  Input for a kiosk check-in. Sent by the PUBLIC kiosk TV pages (unauthenticated)
+  on load and on each config-poll tick so owners can see which screens are live.
+  \`gymUuid\` scopes the ephemeral keyspace; both UUIDs are validated against a
+  live kiosk before anything is recorded — nothing here is trusted beyond that
+  lookup. \`viewportWidth\`/\`viewportHeight\` are an optional coarse client marker.
+  """
+  input KioskHeartbeatInput {
+    "The kiosk that's checking in."
+    kioskUuid: ID!
+    "The gym the kiosk belongs to (keyspace scoping)."
+    gymUuid: ID!
+    "Optional viewport width in CSS pixels."
+    viewportWidth: Int
+    "Optional viewport height in CSS pixels."
+    viewportHeight: Int
   }
 `;

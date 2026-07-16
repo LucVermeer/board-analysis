@@ -28,6 +28,16 @@ export const MAX_KIOSK_BOARDS = 4;
 export const MAX_KIOSKS_PER_GYM = 10;
 
 /**
+ * How often a live kiosk TV checks in with the backend. The heartbeat rides the
+ * existing config poll, so this is one cadence: config refresh AND heartbeat.
+ * The manage-UI "Live" liveness window is DERIVED from this (2×, see
+ * `KIOSK_LIVE_THRESHOLD_MS`) so a single dropped poll never flips a healthy TV
+ * to "Last seen …". Keep the two linked through this constant rather than
+ * hand-tuning twin magic numbers in two files.
+ */
+export const KIOSK_HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
  * Preset layout names, indexed by board count (1 board → 'single', 4 → 'quad').
  * The preset is DERIVED from `layout.boards.length` rather than stored, so there
  * is no picker and no way for the stored count and the named preset to disagree.
