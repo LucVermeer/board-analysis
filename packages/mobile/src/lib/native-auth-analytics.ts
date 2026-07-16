@@ -54,3 +54,30 @@ export function nativeSignInErrorCode(error: unknown): string | undefined {
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' || typeof code === 'number' ? String(code) : undefined;
 }
+
+// The two GMS Google-Sign-In failure codes that dead-end Android login and are
+// recoverable via the browser fallback (a full NextAuth flow with no native SDK,
+// so it's immune to the SHA-1 / OAuth-client misconfig behind them). DEVELOPER_ERROR
+// is the classic unregistered-signing-cert SHA-1; INTERNAL_ERROR (8) is frequently
+// the same mismatch (or transient Play Services). Deliberately narrow — NETWORK_ERROR
+// (7), PLAY_SERVICES_NOT_AVAILABLE and friends are left to surface the real native
+// error instead of bouncing into a browser. `com.google.android.gms.common.api.ApiException`
+// surfaces these inconsistently across builds: a numeric `.code` (8 / 10), a string
+// `.code` ('INTERNAL_ERROR'), or no usable `.code` at all with the name only in the
+// message ("DEVELOPER_ERROR: Follow troubleshooting…"). Match all three forms.
+const RECOVERABLE_ANDROID_GOOGLE_CODES = new Set(['8', '10', 'DEVELOPER_ERROR', 'INTERNAL_ERROR']);
+
+/**
+ * Whether a thrown Android Google-Sign-In error is a config-class failure
+ * (DEVELOPER_ERROR / INTERNAL_ERROR) that the browser fallback can recover, vs a
+ * failure that should surface its native error. Checks the `.code` (numeric or
+ * string form) first, then falls back to the error message for the builds that
+ * throw these with no usable code. The caller gates this on Platform.OS ===
+ * 'android' && provider === 'google'.
+ */
+export function isRecoverableAndroidGoogleSignInError(error: unknown): boolean {
+  const code = nativeSignInErrorCode(error);
+  if (code !== undefined && RECOVERABLE_ANDROID_GOOGLE_CODES.has(code)) return true;
+  const message = error instanceof Error ? error.message : '';
+  return message.includes('DEVELOPER_ERROR') || message.includes('INTERNAL_ERROR');
+}
