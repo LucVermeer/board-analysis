@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T20:39:21.144Z",
+  "generatedAt": "2026-07-16T20:45:00.715Z",
   "entries": [
+    {
+      "prNumber": 3691,
+      "category": "fixed",
+      "title": "Party mode: when someone else lights up a climb, it now slots in right after the current climb instead of getting bumped to the bottom of the queue — everyone's up-next order stays put.",
+      "mergedAt": "2026-07-16T20:39:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3691"
+    },
     {
       "prNumber": 3704,
       "category": "fixed",
