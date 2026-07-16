@@ -16,6 +16,10 @@
   --color-accent: #ff8a3d;
   --color-on-accent: #16111f;
 
+  /* Flash/benchmark data yellow (badges, star ratings) — scheme-invariant by design,
+     distinct from the brand accent. Pair with --color-on-accent for text. */
+  --color-amber: #fbbf24;
+
   /* Lit-climb status hue — "now on the wall". Its own role (not --color-warning) so a
      future warning retune can't silently shift the board-presence affordance. */
   --color-live: #b45309;
@@ -188,6 +192,7 @@ html[data-theme='dark'] {
   --color-on-primary: #ffffff;
   --color-accent: #ff8a3d;
   --color-on-accent: #16111f;
+  --color-amber: #fbbf24;
   /* Lit-climb status hue lifts to the brighter amber on dark surfaces. */
   --color-live: #fbbf24;
   --color-info: #a5abd6;

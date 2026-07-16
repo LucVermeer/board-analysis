@@ -110,15 +110,15 @@ export const TickButton: React.FC<TickButtonProps> = ({
       backgroundColor = 'var(--color-error)';
       hoverBackgroundColor = 'var(--color-error)';
     } else if (isFlashVariant) {
-      backgroundColor = themeTokens.colors.amber;
-      hoverBackgroundColor = themeTokens.colors.amber;
+      backgroundColor = 'var(--color-amber)';
+      hoverBackgroundColor = 'var(--color-amber)';
     } else {
       backgroundColor = 'var(--color-success)';
       hoverBackgroundColor = 'var(--color-success-hover)';
     }
     buttonSx = {
       backgroundColor,
-      color: isFlashVariant ? themeTokens.neutral[900] : 'common.white',
+      color: isFlashVariant ? 'var(--color-on-accent)' : 'common.white',
       transition: 'background-color 150ms ease, color 150ms ease',
       '&:hover': {
         backgroundColor: hoverBackgroundColor,

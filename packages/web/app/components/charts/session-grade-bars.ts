@@ -1,15 +1,15 @@
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import type { CssBarChartBar } from './css-bar-chart';
 import { formatVGrade } from '@/app/lib/grade-colors';
-import { themeTokens } from '@/app/theme/theme-config';
 
-// Flash/send legend colours (60% opacity). Scheme-neutral mid-tones so the bars stay
+// Legend colours (60% opacity). Scheme-neutral mid-tones so the bars stay
 // legible on both the light and the dark card surface — the brand success/error tones
 // are tuned per scheme and would wash out in the other one (these feed chart data, not
-// CSS, so a scheme-aware var() can't be used here).
+// CSS, so a scheme-aware var() can't be used here). Attempt matches the light-scheme
+// neutral-300 lavender for the same reason.
 const FLASH_COLOR = '#10b98199';
 const SEND_COLOR = '#ef444499';
-const ATTEMPT_COLOR = `${themeTokens.neutral[300]}99`;
+const ATTEMPT_COLOR = '#ad9ecc99';
 
 export const SESSION_GRADE_LEGEND = [
   { label: 'Flash', color: FLASH_COLOR },
