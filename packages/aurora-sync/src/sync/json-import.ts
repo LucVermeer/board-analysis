@@ -35,10 +35,18 @@ const auroraExportAscentSchema = z.object({
   climb: z.string(),
   angle: z.number(),
   count: z.number(),
-  stars: z.number(),
+  // The legacy Kilter export always carries stars + grade on an ascent. The
+  // live Aurora backend (Tension / TB2) instead delivers the WHOLE logbook in
+  // `ascents` and flags a bid the user never sent with `is_ascent: false` —
+  // those attempt-shaped rows can lack stars/grade, so both are optional. A
+  // missing/true `is_ascent` keeps the row an ascent (legacy path unchanged);
+  // an explicit false reroutes it to the attempt path. #3301
+  stars: z.number().optional(),
   climbed_at: z.string(),
   created_at: z.string(),
-  grade: z.string(),
+  grade: z.string().optional(),
+  is_ascent: z.boolean().optional(),
+  tries: z.number().optional(),
 });
 
 export type AuroraExportAscent = z.infer<typeof auroraExportAscentSchema>;
@@ -50,6 +58,8 @@ const auroraExportAttemptSchema = z.object({
   climbed_at: z.string(),
   created_at: z.string(),
 });
+
+export type AuroraExportAttempt = z.infer<typeof auroraExportAttemptSchema>;
 
 const auroraExportCircuitSchema = z.object({
   name: z.string(),
@@ -197,7 +207,9 @@ export function buildJsonImportAscentTickRow(
     // Rows imported before this conversion existed were rescaled by the
     // backfill migration scoped to aurora_id LIKE 'json-import-%'.
     quality: convertQuality(ascent.stars),
-    difficulty: fontGradeToDifficultyId(ascent.grade),
+    // A merged-shape ascent can omit `grade`; fontGradeToDifficultyId('')
+    // intentionally returns null (unrecognised grade → no personal override).
+    difficulty: fontGradeToDifficultyId(ascent.grade ?? ''),
     isBenchmark: false,
     comment: '',
     climbedAt,
@@ -210,6 +222,32 @@ export function buildJsonImportAscentTickRow(
     auroraType: 'ascents' as const,
     auroraId: generateJsonImportAuroraId(userId, climbUuid, ascent.angle, climbedAt, 'ascents'),
     auroraSyncedAt: now,
+  };
+}
+
+/**
+ * An `ascents` entry that the current Aurora backend (Tension / TB2) marked as
+ * a bid the user never sent. The legacy Kilter export splits sends and attempts
+ * into separate top-level arrays and never sets this flag, so a missing or true
+ * `is_ascent` stays an ascent — the legacy path is byte-for-byte unchanged. Only
+ * an explicit `false` reroutes the record to the attempt path. #3301
+ */
+export function isExportAscentActuallyAttempt(ascent: AuroraExportAscent): boolean {
+  return ascent.is_ascent === false;
+}
+
+/**
+ * Coerce a merged-shape attempt (an `ascents` row with `is_ascent: false`) into
+ * the flat attempt shape the importer's attempt path consumes. In the merged
+ * shape `tries` is the bid count; fall back to `count` when it's absent.
+ */
+export function exportAscentToAttempt(ascent: AuroraExportAscent): AuroraExportAttempt {
+  return {
+    climb: ascent.climb,
+    angle: ascent.angle,
+    count: ascent.tries ?? ascent.count,
+    climbed_at: ascent.climbed_at,
+    created_at: ascent.created_at,
   };
 }
 
@@ -822,6 +860,91 @@ async function batchInsertTicks(
 }
 
 // ---------------------------------------------------------------------------
+// Self-healing remediation for #3301
+// ---------------------------------------------------------------------------
+
+/** Natural key of a merged-shape attempt whose earlier import may have created a mislabeled send. */
+type MislabeledAttemptKey = {
+  climbUuid: string;
+  angle: number;
+  climbedAt: string;
+  attemptCount: number;
+};
+
+/**
+ * Fix rows an earlier (pre-#3301) import mislabeled: a Tension/TB2 attempt that
+ * arrived inside the `ascents` array was written as a `send`. When the fixed
+ * importer now classifies the SAME record as an attempt, flip the stale row in
+ * place — status → 'attempt', clear the star/grade an attempt can't carry, and
+ * point aurora_type at 'bids'. Matched strictly on the natural key
+ * (climb_uuid, angle, climbed_at) of an existing json_import ascent for this
+ * user + board, so a legitimate send is never touched.
+ *
+ * This is an UPDATE only — it never deletes. `aurora_id` is intentionally left
+ * as the original `json-import-…` (ascents) hash: it's still a unique synthetic
+ * id, it stays claimable by the live Aurora pull (`aurora_id LIKE 'json-import-%'`),
+ * and rewriting it would risk colliding with the global aurora_id unique index.
+ * Returns the number of rows healed.
+ */
+async function healMislabeledJsonImportAttempts(
+  db: PgDatabase<PgQueryResultHKT, Record<string, unknown>>,
+  boardType: BoardType,
+  userId: string,
+  keys: MislabeledAttemptKey[],
+  now: string,
+): Promise<number> {
+  if (keys.length === 0) return 0;
+
+  let healed = 0;
+  for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+    const batch = keys.slice(i, i + BATCH_SIZE);
+    const payload = JSON.stringify(
+      batch.map((key) => ({
+        climb_uuid: key.climbUuid,
+        angle: key.angle,
+        climbed_at: key.climbedAt,
+        attempt_count: key.attemptCount,
+      })),
+    );
+
+    const result = await db.execute(sql`
+      UPDATE boardsesh_ticks AS t SET
+        -- String literals coerce to the column's type (enum in prod, text in the
+        -- test schema) by assignment, so no explicit ::enum cast is needed.
+        status = 'attempt',
+        quality = NULL,
+        difficulty = NULL,
+        attempt_count = u.attempt_count,
+        aurora_type = 'bids',
+        updated_at = ${now}::timestamp,
+        aurora_synced_at = ${now}::timestamp
+      FROM jsonb_to_recordset(${payload}::jsonb) AS u(
+        climb_uuid text,
+        angle integer,
+        climbed_at text,
+        attempt_count integer
+      )
+      WHERE t.user_id = ${userId}
+        AND t.board_type = ${boardType}
+        AND t.origin = 'json_import'
+        AND t.aurora_type = 'ascents'
+        AND t.status IN ('flash', 'send')
+        AND t.climb_uuid = u.climb_uuid
+        AND t.angle = u.angle
+        AND t.climbed_at = u.climbed_at::timestamp
+      RETURNING t.uuid
+    `);
+
+    // drizzle's execute() return shape differs by driver (postgres-js returns
+    // the rows array; Neon HTTP wraps them in { rows }), so normalize both.
+    const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
+    healed += rows.length;
+  }
+
+  return healed;
+}
+
+// ---------------------------------------------------------------------------
 // Main import function
 // ---------------------------------------------------------------------------
 
@@ -1071,16 +1194,25 @@ export async function importJsonExportData(
   });
   const nameToUuid = await resolveClimbNames(db, boardType, [...allClimbNames], userId);
 
+  // Split the `ascents` array into true sends and merged-shape attempts. The
+  // live Aurora backend (Tension / TB2) delivers a unified logbook in `ascents`
+  // and flags a never-sent bid with `is_ascent: false`; classifying purely by
+  // array membership stamped every one as a send (#3301). A missing/true flag —
+  // every legacy Kilter export — stays an ascent, so that path is unchanged.
+  const trueAscents = data.ascents.filter((ascent) => !isExportAscentActuallyAttempt(ascent));
+  const reclassifiedAttempts = data.ascents.filter(isExportAscentActuallyAttempt).map(exportAscentToAttempt);
+  const allAttempts = [...data.attempts, ...reclassifiedAttempts];
+
   // Track unresolved names, split per-source so the UI can show each section
   // separately (an ascent with an unmatched climb is a different user story
   // from a circuit referencing an unmatched climb).
   const unresolvedAscentSet = new Set<string>();
   const unresolvedAttemptSet = new Set<string>();
   const unresolvedCircuitSet = new Set<string>();
-  for (const ascent of data.ascents) {
+  for (const ascent of trueAscents) {
     if (!nameToUuid.has(ascent.climb)) unresolvedAscentSet.add(ascent.climb);
   }
-  for (const attempt of data.attempts) {
+  for (const attempt of allAttempts) {
     if (!nameToUuid.has(attempt.climb)) unresolvedAttemptSet.add(attempt.climb);
   }
   for (const circuit of data.circuits) {
@@ -1097,8 +1229,22 @@ export async function importJsonExportData(
   onProgress?.({ type: 'progress', step: 'dedup', message: 'Checking for duplicates...' });
   const existingKeys = await getExistingTickKeys(db, userId, boardType);
 
+  // Natural keys of the merged-shape attempts, used to heal any send an earlier
+  // (pre-#3301) import wrote for the same record (see self-heal below).
+  const reclassifiedAttemptKeys: MislabeledAttemptKey[] = [];
+  for (const attempt of reclassifiedAttempts) {
+    const climbUuid = nameToUuid.get(attempt.climb);
+    if (!climbUuid) continue;
+    reclassifiedAttemptKeys.push({
+      climbUuid,
+      angle: attempt.angle,
+      climbedAt: normalizeTimestamp(attempt.climbed_at),
+      attemptCount: attempt.count,
+    });
+  }
+
   // Step 5: Collect ascent rows to insert (in-memory dedup first)
-  const ascentRows = data.ascents.reduce<JsonImportTickRow[]>((rows, ascent) => {
+  const ascentRows = trueAscents.reduce<JsonImportTickRow[]>((rows, ascent) => {
     const climbUuid = nameToUuid.get(ascent.climb);
     if (!climbUuid) {
       result.ascents.failed++;
@@ -1117,8 +1263,9 @@ export async function importJsonExportData(
     return rows;
   }, []);
 
-  // Step 6: Collect attempt rows to insert
-  const attemptRows = data.attempts.reduce<JsonImportTickRow[]>((rows, attempt) => {
+  // Step 6: Collect attempt rows to insert (both native `attempts` and any
+  // merged-shape `is_ascent: false` records pulled out of `ascents` above).
+  const attemptRows = allAttempts.reduce<JsonImportTickRow[]>((rows, attempt) => {
     const climbUuid = nameToUuid.get(attempt.climb);
     if (!climbUuid) {
       result.attempts.failed++;
@@ -1157,7 +1304,9 @@ export async function importJsonExportData(
     return rows;
   }, []);
 
-  // Step 7: Batch-insert ascents and attempts in a transaction
+  // Step 7: Batch-insert ascents and attempts, plus self-heal any pre-#3301
+  // mislabeled sends, all in one transaction.
+  let healedMislabeledSends = 0;
   await db.transaction(async (tx) => {
     result.ascents.imported = await batchInsertTicks(
       tx,
@@ -1178,7 +1327,7 @@ export async function importJsonExportData(
         auroraSyncedAt: sql`excluded.aurora_synced_at`,
       },
       'ascents',
-      data.ascents.length,
+      trueAscents.length,
       onProgress,
     );
 
@@ -1194,10 +1343,28 @@ export async function importJsonExportData(
         auroraSyncedAt: sql`excluded.aurora_synced_at`,
       },
       'attempts',
-      data.attempts.length,
+      allAttempts.length,
       onProgress,
     );
+
+    // Remediation (#3301): flip any send a prior buggy import wrote for a record
+    // that is now correctly classified as an attempt. The dedup above already
+    // skips inserting a twin for these keys, so this UPDATE is what actually
+    // corrects the stale row. Never deletes.
+    healedMislabeledSends = await healMislabeledJsonImportAttempts(tx, boardType, userId, reclassifiedAttemptKeys, now);
   });
+
+  // Structured breadcrumb (info-level, not an error) so we can measure how often
+  // the merged-shape Aurora export path actually fires in prod — and confirm the
+  // #3301 discriminator assumption against real Tension/TB2 imports. Uses
+  // console (with key=value fields) rather than the backend winston logger on
+  // purpose: this shared package must not depend on `packages/backend`, and it
+  // already logs via console elsewhere. The backend captures stdout regardless.
+  if (reclassifiedAttempts.length > 0 || healedMislabeledSends > 0) {
+    console.info(
+      `[aurora-import][3301] merged-shape logbook: boardType=${boardType} reclassifiedAttempts=${reclassifiedAttempts.length} healedMislabeledSends=${healedMislabeledSends}`,
+    );
+  }
 
   // Fold this chunk's imported ascents into board_climb_stats. json_import
   // ticks don't add to the Boardsesh count (they're already upstream), but the
@@ -1209,6 +1376,16 @@ export async function importJsonExportData(
       boardType,
       climbUuid: row.climbUuid,
       angle: row.angle,
+    });
+  }
+  // A self-heal flips a send → attempt, which drops an ascent from that
+  // (climb, angle) — recompute those keys too so the ascensionist count and any
+  // stale Boardsesh crown follow the correction.
+  for (const key of reclassifiedAttemptKeys) {
+    importedAscentKeys.set(`${key.climbUuid} ${key.angle}`, {
+      boardType,
+      climbUuid: key.climbUuid,
+      angle: key.angle,
     });
   }
   const importedAscentKeyList = [...importedAscentKeys.values()];

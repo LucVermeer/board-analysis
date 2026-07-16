@@ -337,6 +337,12 @@ export const schemaSQL = `
     "kilter_sync_error" text,
     "kilter_detached_at" timestamp
   );
+  -- Mirror the prod cross-system unique indexes so the aurora/kilter sync and
+  -- JSON-import upserts (ON CONFLICT (aurora_id) / (kilter_id)) resolve an
+  -- arbiter index. Postgres allows many NULLs under a unique index, so pending
+  -- (unsynced) ticks are unaffected.
+  CREATE UNIQUE INDEX IF NOT EXISTS "boardsesh_ticks_aurora_id_unique" ON "boardsesh_ticks" ("aurora_id");
+  CREATE UNIQUE INDEX IF NOT EXISTS "boardsesh_ticks_kilter_id_unique" ON "boardsesh_ticks" ("kilter_id");
 
   DROP TABLE IF EXISTS "board_placements" CASCADE;
   CREATE TABLE IF NOT EXISTS "board_placements" (

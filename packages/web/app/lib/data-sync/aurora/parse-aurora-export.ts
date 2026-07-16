@@ -2,6 +2,8 @@
  * Utilities for parsing and preparing Aurora JSON export files for import.
  */
 
+import { isMergedShapeAttempt } from '@boardsesh/shared-schema';
+
 export type AuroraExportPreview = {
   ascents: number;
   attempts: number;
@@ -55,6 +57,12 @@ export function parseAuroraExport(json: Record<string, unknown>, boardType: stri
   const circuits = Array.isArray(json.circuits) ? (json.circuits as unknown[]) : [];
   const userClimbs = Array.isArray(json.climbs) ? (json.climbs as unknown[]) : [];
 
+  // The live Aurora backend (Tension / TB2) delivers a unified logbook in
+  // `ascents` and flags a never-sent bid with `is_ascent: false`. The server
+  // reclassifies those at import; here we only keep the preview counts honest so
+  // the dialog doesn't overstate sends. Legacy Kilter exports omit the flag. #3301
+  const mergedShapeAttemptCount = ascents.filter(isMergedShapeAttempt).length;
+
   return {
     data: {
       user: user as StrippedExportData['user'],
@@ -64,8 +72,8 @@ export function parseAuroraExport(json: Record<string, unknown>, boardType: stri
       climbs: userClimbs,
     },
     preview: {
-      ascents: ascents.length,
-      attempts: attempts.length,
+      ascents: ascents.length - mergedShapeAttemptCount,
+      attempts: attempts.length + mergedShapeAttemptCount,
       circuits: circuits.length,
       climbs: userClimbs.length,
       username: user.username,
