@@ -103,6 +103,15 @@ describe('OverviewTab', () => {
     expect(screen.getByText('kiosks')).toBeTruthy();
   });
 
+  it('shows a placeholder for the kiosk count until the query resolves, not a hard 0', () => {
+    mockRequest.mockReset();
+    mockRequest.mockReturnValue(new Promise(() => {})); // never resolves
+    renderTab(makeGym());
+    // Em-dash placeholder while pending; the server-passed counts still render.
+    expect(screen.getByText('—')).toBeTruthy();
+    expect(screen.getByText('7')).toBeTruthy();
+  });
+
   it('mounts the relocated welcome checklist at the top of the surface', () => {
     renderTab(makeGym());
     expect(screen.getByTestId('welcome-card')).toBeTruthy();

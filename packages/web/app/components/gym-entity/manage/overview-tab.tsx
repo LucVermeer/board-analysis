@@ -65,7 +65,10 @@ export default function OverviewTab({ gym }: { gym: Gym }) {
     },
     enabled: !!token,
   });
-  const kioskCount = (kiosks ?? []).length;
+  // The other three counts are server-passed and stable; the kiosk count is the
+  // one async value. Hold a placeholder until it resolves rather than flashing a
+  // hard 0 (a gym with kiosks would briefly read as having none).
+  const kioskCountDisplay: React.ReactNode = kiosks === undefined ? '—' : kiosks.length;
 
   const logoDisplayUrl = resolveGymLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
 
@@ -149,7 +152,7 @@ export default function OverviewTab({ gym }: { gym: Gym }) {
         />
         <GymStatChip
           icon={<TvOutlined sx={{ fontSize: 18 }} />}
-          value={kioskCount}
+          value={kioskCountDisplay}
           label={t('manage.overview.stats.kiosks')}
         />
       </Box>

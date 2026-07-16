@@ -24,6 +24,7 @@ export const dynamic = 'force-dynamic';
 
 type ManageGymRouteProps = {
   params: Promise<{ gym_slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 /**
@@ -76,6 +77,7 @@ export async function generateMetadata(props: ManageGymRouteProps): Promise<Meta
 
 export default async function ManageGymPage(props: ManageGymRouteProps) {
   const { gym_slug } = await props.params;
+  const { tab } = await props.searchParams;
   const token = await getServerAuthToken();
 
   if (!token) {
@@ -93,9 +95,11 @@ export default async function ManageGymPage(props: ManageGymRouteProps) {
   // A merged twin's slug resolved to the canonical gym under a different slug:
   // redirect the manage URL onto the canonical slug. Skip when the URL segment is
   // a UUID — that's the deliberate slug-less-gym-by-uuid addressing path, not a
-  // stale twin slug.
+  // stale twin slug. Carry the ?tab= param so a tab-carrying deep-link (e.g. a
+  // stale ?tab=members link) lands on the right tab after the redirect.
   if (gym.slug && gym.slug !== gym_slug && !looksLikeGymUuid(gym_slug)) {
-    permanentRedirect(`/gym/${gym.slug}/manage`);
+    const tabQuery = typeof tab === 'string' && tab ? `?tab=${encodeURIComponent(tab)}` : '';
+    permanentRedirect(`/gym/${gym.slug}/manage${tabQuery}`);
   }
 
   const locale = await getLocale();

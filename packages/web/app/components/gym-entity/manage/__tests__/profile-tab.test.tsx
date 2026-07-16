@@ -17,6 +17,12 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: vi.fn() }),
 }));
 
+// The shared form embeds a Leaflet-backed location picker; stub it so this test
+// stays focused on the profile fields.
+vi.mock('@/app/components/board-entity/map-location-picker', () => ({
+  default: () => <div data-testid="map-picker" />,
+}));
+
 // The console profile form must save through the SAME mutation the sheet used
 // (UPDATE_GYM via useEntityMutation). Capture the execute call at the hook seam.
 const mockExecute = vi.fn();
@@ -69,6 +75,22 @@ describe('ProfileTab', () => {
 
     await waitFor(() => {
       expect(onGymChange).toHaveBeenCalledWith(updatedGym);
+    });
+  });
+
+  it('bubbles the form dirty state so the shell can guard tab switches', async () => {
+    const onDirtyChange = vi.fn();
+    render(<ProfileTab gym={makeGym()} onGymChange={vi.fn()} onDirtyChange={onDirtyChange} />);
+
+    // Clean on mount.
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+
+    // Editing a field flips it to dirty.
+    fireEvent.change(screen.getByDisplayValue('Test Gym'), { target: { value: 'Test Gym 2' } });
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
     });
   });
 });

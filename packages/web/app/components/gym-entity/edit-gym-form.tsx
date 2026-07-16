@@ -16,9 +16,11 @@ type EditGymFormProps = {
   gym: Gym;
   onSuccess?: (gym: Gym) => void;
   onCancel?: () => void;
+  /** Bubbles the form's unsaved-edit state (used by the console's dirty guard). */
+  onDirtyChange?: (isDirty: boolean) => void;
 };
 
-export default function EditGymForm({ gym, onSuccess, onCancel }: EditGymFormProps) {
+export default function EditGymForm({ gym, onSuccess, onCancel, onDirtyChange }: EditGymFormProps) {
   const { t } = useTranslation('boards');
   const { showMessage } = useSnackbar();
 
@@ -76,6 +78,7 @@ export default function EditGymForm({ gym, onSuccess, onCancel }: EditGymFormPro
       showSlugField
       onSubmit={handleSubmit}
       onCancel={onCancel}
+      onDirtyChange={onDirtyChange}
     />
   );
 }

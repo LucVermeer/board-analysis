@@ -3,7 +3,9 @@
 // Profile tab: the gym's core identity (name, address, website, description,
 // public/private). It mounts the SAME EditGymForm the GymDetail sheet used —
 // single-source, no duplicate form — and pushes saves back to the shell via
-// onGymChange so sibling tabs and the Overview see the update.
+// onGymChange so sibling tabs and the Overview see the update. onDirtyChange
+// bubbles the form's unsaved-edit state so the shell routes tab switches
+// through the discard confirmation (parity with Kiosks/Branding).
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,7 +15,7 @@ import EditGymForm from '@/app/components/gym-entity/edit-gym-form';
 import { themeTokens } from '@/app/theme/theme-config';
 import type { GymManageTabProps } from './tab-props';
 
-export default function ProfileTab({ gym, onGymChange }: GymManageTabProps) {
+export default function ProfileTab({ gym, onGymChange, onDirtyChange }: GymManageTabProps) {
   const { t } = useTranslation('kiosk');
 
   return (
@@ -26,7 +28,7 @@ export default function ProfileTab({ gym, onGymChange }: GymManageTabProps) {
           {t('manage.profile.description')}
         </Typography>
       </Box>
-      <EditGymForm gym={gym} onSuccess={onGymChange} />
+      <EditGymForm gym={gym} onSuccess={onGymChange} onDirtyChange={onDirtyChange} />
     </Box>
   );
 }

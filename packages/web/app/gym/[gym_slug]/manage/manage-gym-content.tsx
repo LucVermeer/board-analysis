@@ -92,6 +92,18 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
     router.replace(`/gym/${updatedGym.slug}/manage${query}`, { scroll: false });
   };
 
+  // The Profile tab's form can rename the slug. When it does, the shell's
+  // basePath still points at the old slug, so the next tab switch would push
+  // `${oldSlug}?tab=X` and 404 (a renamed slug resolves to nothing). Reuse the
+  // slug-guard's replace to move onto the new slug; otherwise just sync state.
+  const handleProfileSaved = (updatedGym: Gym) => {
+    if (updatedGym.slug && updatedGym.slug !== gym.slug) {
+      handleSlugSet(updatedGym);
+    } else {
+      setGym(updatedGym);
+    }
+  };
+
   return (
     <Container
       maxWidth="md"
@@ -149,7 +161,9 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
       {activeTab === 'kiosks' && <KiosksTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
       {activeTab === 'insights' && <InsightsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'branding' && <BrandingTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
-      {activeTab === 'profile' && <ProfileTab gym={gym} onGymChange={setGym} />}
+      {activeTab === 'profile' && (
+        <ProfileTab gym={gym} onGymChange={handleProfileSaved} onDirtyChange={setIsActiveTabDirty} />
+      )}
       {activeTab === 'boards' && <GymBoardsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'members' && (
         <GymMemberManagement
