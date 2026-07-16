@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-16T20:51:12.211Z",
+  "generatedAt": "2026-07-16T21:41:27.752Z",
   "entries": [
+    {
+      "prNumber": 3710,
+      "category": "fixed",
+      "title": "No more spurious \"Queue sync error\" when a party session you were in has ended or moved on — the app quietly drops the stale session instead.",
+      "mergedAt": "2026-07-16T21:39:39Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3710"
+    },
+    {
+      "prNumber": 3711,
+      "category": "new",
+      "title": "Refreshed Boardsesh's look on the web to match the app — new icon everywhere: browser tab, home screen install, and the header.",
+      "mergedAt": "2026-07-16T21:14:54Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3711",
+      "body": "Claude-Session: https://claude.ai/code/session_018jnud1ULod9FZ2BfTgFiih"
+    },
     {
       "prNumber": 3692,
       "category": "fixed",

@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Refreshed Boardsesh's look on the web to match the app — new icon everywhere: browser tab, home screen install, and the header. ([#3711](https://github.com/boardsesh/boardsesh/pull/3711))
+  Claude-Session: https://claude.ai/code/session_018jnud1ULod9FZ2BfTgFiih
 - Dark mode forms finally look like they belong: input fields sit on the same violet surfaces as the rest of the app, with a clear violet focus ring — no more glaring white boxes. ([#3700](https://github.com/boardsesh/boardsesh/pull/3700))
   Autofill no longer flashes your login fields white in dark mode, and iPads stop zooming when you tap a field.
 - Own a gym? Your gym now greets you on the homepage — jump straight to managing its boards or your public page. ([#3697](https://github.com/boardsesh/boardsesh/pull/3697))
@@ -45,6 +47,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- No more spurious "Queue sync error" when a party session you were in has ended or moved on — the app quietly drops the stale session instead. ([#3710](https://github.com/boardsesh/boardsesh/pull/3710))
 - Importing your Tension Board history now keeps attempts as attempts. Projects you tried but didn't send no longer show up as sends, so your send count and stats stay honest. ([#3692](https://github.com/boardsesh/boardsesh/pull/3692))
   Already imported before this fix? Just re-import your history — the mislabeled sends get corrected in place.
 - Party mode: when someone else lights up a climb, it now slots in right after the current climb instead of getting bumped to the bottom of the queue — everyone's up-next order stays put. ([#3691](https://github.com/boardsesh/boardsesh/pull/3691))
