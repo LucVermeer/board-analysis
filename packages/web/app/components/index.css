@@ -53,8 +53,8 @@
   /* Darkened from Velvet #c81e1e so error TEXT clears AA (4.96:1) on the #E8DDF6 page. */
   --color-error: #b91c1c;
   --color-error-bg: #fbe9e9;
-  --color-error-muted: rgba(200, 30, 30, 0.18);
-  --color-error-muted-hover: rgba(200, 30, 30, 0.28);
+  --color-error-muted: rgba(185, 28, 28, 0.18);
+  --color-error-muted-hover: rgba(185, 28, 28, 0.28);
   --color-warning: #a04a08;
   --color-warning-bg: #fbf0e3;
 
