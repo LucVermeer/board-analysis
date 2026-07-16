@@ -44,6 +44,14 @@ vi.mock('../../settings/SessionRecordingSwitchRow', () => ({
   SessionRecordingSwitchRow: () => createElement('div', { 'data-testid': 'session-recording-switch' }),
 }));
 
+// Real tokens.ts pulls in ios-colors.ts, which reads Platform.OS at module load —
+// stub the constants FeedbackSheet actually consumes instead of widening the
+// react-native mock to support that transitive chain.
+vi.mock('../../../theme/tokens', () => ({
+  spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24 },
+  borderRadius: { lg: 12 },
+}));
+
 type SwitchRowMockProps = { label: string; value: boolean; onValueChange: (next: boolean) => void };
 vi.mock('../../SwitchRow', () => ({
   SwitchRow: ({ label, value, onValueChange }: SwitchRowMockProps) =>
