@@ -25,6 +25,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Snackbar from '@mui/material/Snackbar';
+import { useTheme } from '@mui/material/styles';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
@@ -46,12 +47,6 @@ const TYPE_LABELS: Record<string, string> = {
   benchmark: 'Benchmark',
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  grade: themeTokens.colors.primary,
-  classic: themeTokens.colors.amber,
-  benchmark: themeTokens.colors.purple,
-};
-
 type ProposalCardProps = {
   proposal: Proposal;
   isAdminOrLeader?: boolean;
@@ -62,6 +57,7 @@ type ProposalCardProps = {
 
 export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDelete, highlight }: ProposalCardProps) {
   const { t } = useTranslation('common');
+  const theme = useTheme();
   const pathname = usePathname();
   const isDark = useIsDarkMode();
   const { token } = useWsAuthToken();
@@ -179,7 +175,12 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
     return { climb, boardDetails };
   }, [localProposal]);
 
-  const typeColor = TYPE_COLORS[localProposal.type] || themeTokens.neutral[500];
+  const typeColorByType: Record<string, string> = {
+    grade: theme.palette.primary.main,
+    classic: themeTokens.colors.amber,
+    benchmark: themeTokens.colors.purple,
+  };
+  const typeColor = typeColorByType[localProposal.type] || 'var(--neutral-500)';
 
   return (
     <>
@@ -189,9 +190,9 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
         data-testid="proposal-card"
         sx={{
           mb: 1.5,
-          borderColor: highlight ? themeTokens.colors.primary : themeTokens.neutral[200],
-          boxShadow: highlight ? `0 0 0 1px ${themeTokens.colors.primary}` : undefined,
-          '&:hover': { borderColor: themeTokens.neutral[300] },
+          borderColor: highlight ? 'var(--color-primary)' : 'var(--neutral-200)',
+          boxShadow: highlight ? '0 0 0 1px var(--color-primary)' : undefined,
+          '&:hover': { borderColor: 'var(--neutral-300)' },
         }}
       >
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -229,12 +230,12 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
           {/* Value change */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
             <Chip label={localProposal.currentValue} size="small" variant="outlined" sx={{ fontSize: 13 }} />
-            <ArrowForwardIcon sx={{ fontSize: 16, color: themeTokens.neutral[400] }} />
+            <ArrowForwardIcon sx={{ fontSize: 16, color: 'var(--neutral-400)' }} />
             <Chip
               label={localProposal.proposedValue}
               size="small"
               sx={{
-                bgcolor: themeTokens.colors.primary,
+                bgcolor: 'var(--color-primary-fill)',
                 color: '#fff',
                 fontWeight: 600,
                 fontSize: 13,
@@ -244,7 +245,7 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
 
           {/* Reason */}
           {localProposal.reason && (
-            <Typography variant="body2" sx={{ color: themeTokens.neutral[600], mb: 1.5, fontStyle: 'italic' }}>
+            <Typography variant="body2" sx={{ color: 'var(--neutral-600)', mb: 1.5, fontStyle: 'italic' }}>
               {t('feed:proposalCard.quotedReason', { reason: localProposal.reason })}
             </Typography>
           )}
@@ -266,7 +267,7 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
                   disabled={loading}
                   onClick={() => handleVote(1)}
                   sx={{
-                    color: localProposal.userVote === 1 ? themeTokens.colors.success : themeTokens.neutral[400],
+                    color: localProposal.userVote === 1 ? 'var(--color-success)' : 'var(--neutral-400)',
                   }}
                 >
                   {localProposal.userVote === 1 ? (
@@ -282,7 +283,7 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
                   disabled={loading}
                   onClick={() => handleVote(-1)}
                   sx={{
-                    color: localProposal.userVote === -1 ? themeTokens.colors.error : themeTokens.neutral[400],
+                    color: localProposal.userVote === -1 ? 'var(--color-error)' : 'var(--neutral-400)',
                   }}
                 >
                   {localProposal.userVote === -1 ? (
@@ -302,8 +303,8 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
                     disabled={loading}
                     onClick={() => handleResolve('approved')}
                     sx={{
-                      color: themeTokens.colors.success,
-                      borderColor: themeTokens.colors.success,
+                      color: 'var(--color-success)',
+                      borderColor: 'var(--color-success)',
                       fontSize: 12,
                       textTransform: 'none',
                     }}
@@ -317,8 +318,8 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
                     disabled={loading}
                     onClick={() => handleResolve('rejected')}
                     sx={{
-                      color: themeTokens.colors.error,
-                      borderColor: themeTokens.colors.error,
+                      color: 'var(--color-error)',
+                      borderColor: 'var(--color-error)',
                       fontSize: 12,
                       textTransform: 'none',
                     }}
@@ -340,8 +341,8 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
                 disabled={loading}
                 onClick={() => setShowDeleteDialog(true)}
                 sx={{
-                  color: themeTokens.colors.error,
-                  borderColor: themeTokens.colors.error,
+                  color: 'var(--color-error)',
+                  borderColor: 'var(--color-error)',
                   fontSize: 12,
                   textTransform: 'none',
                 }}
@@ -357,7 +358,7 @@ export default function ProposalCard({ proposal, isAdminOrLeader, onUpdate, onDe
           </Box>
 
           {/* Timestamp */}
-          <Typography variant="caption" sx={{ color: themeTokens.neutral[400], mt: 1, display: 'block' }}>
+          <Typography variant="caption" sx={{ color: 'var(--neutral-400)', mt: 1, display: 'block' }}>
             {new Date(localProposal.createdAt).toLocaleDateString()}
           </Typography>
         </CardContent>

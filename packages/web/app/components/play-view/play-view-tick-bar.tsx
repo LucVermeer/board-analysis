@@ -223,9 +223,9 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
                 <IconButton
                   onClick={(e) => quickTickBarRef.current?.saveAttempt(e.currentTarget)}
                   sx={{
-                    backgroundColor: themeTokens.colors.errorMuted,
-                    color: themeTokens.colors.error,
-                    '&:hover': { backgroundColor: themeTokens.colors.errorMutedHover },
+                    backgroundColor: 'var(--color-error-muted)',
+                    color: 'var(--color-error)',
+                    '&:hover': { backgroundColor: 'var(--color-error-muted-hover)' },
                   }}
                   aria-label={t('playView.tickBar.logAttemptAria')}
                 >
@@ -237,11 +237,11 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
                   id="button-tick"
                   onClick={(e) => quickTickBarRef.current?.save(e.currentTarget)}
                   sx={{
-                    backgroundColor: isFlash ? themeTokens.colors.amber : themeTokens.colors.success,
+                    backgroundColor: isFlash ? themeTokens.colors.amber : 'var(--color-success)',
                     color: isFlash ? themeTokens.neutral[900] : 'common.white',
                     transition: 'background-color 150ms ease, color 150ms ease',
                     '&:hover': {
-                      backgroundColor: isFlash ? themeTokens.colors.amber : themeTokens.colors.successHover,
+                      backgroundColor: isFlash ? themeTokens.colors.amber : 'var(--color-success-hover)',
                     },
                   }}
                   aria-label={t('playView.tickBar.saveTickAria')}

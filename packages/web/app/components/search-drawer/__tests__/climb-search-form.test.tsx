@@ -10,6 +10,7 @@ import type {
   ZoneBox,
 } from '@/app/lib/types';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
+import { themeTokens } from '@/app/theme/theme-config';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import { gridToSvg, svgToGrid, type BoardDimensions } from '../climb-zone-math';
 
@@ -249,7 +250,7 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
       for (const [name, value] of Object.entries(attrs)) {
         expect(node.getAttribute(name)).toBe(value);
       }
-      expect(node.getAttribute('fill')).toBe('#111827');
+      expect(node.getAttribute('fill')).toBe(themeTokens.neutral[900]);
       expect(node.getAttribute('fill-opacity')).toBe('0.42');
       // Exclusion rects must absorb pointer events so taps on dimmed holds
       // outside the zone never reach BoardRenderer underneath (issue #2040).
@@ -267,7 +268,9 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     expect(outline.getAttribute('width')).toBe('645');
     expect(outline.getAttribute('height')).toBe('705');
     expect(outline.getAttribute('fill')).toBe('none');
-    expect(outline.getAttribute('stroke')).toBe('#8C4A52');
+    // Velvet: the zone outline stroke is the scheme-aware foreground violet, applied
+    // via a style prop (so the CSS var resolves) rather than the SVG stroke attribute.
+    expect(outline.style.stroke).toBe('var(--color-primary)');
     expect(outline.getAttribute('pointer-events')).toBe('none');
   });
 

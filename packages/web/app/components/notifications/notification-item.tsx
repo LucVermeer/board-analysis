@@ -17,7 +17,6 @@ import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { GroupedNotification, NotificationType } from '@boardsesh/shared-schema';
-import { themeTokens } from '@/app/theme/theme-config';
 
 type NotificationItemProps = {
   notification: GroupedNotification;
@@ -141,7 +140,7 @@ export default function NotificationItem({ notification, onClick }: Notification
       onClick={() => onClick(notification)}
       sx={{
         cursor: 'pointer',
-        backgroundColor: notification.isRead ? 'transparent' : `${themeTokens.colors.primary}08`,
+        backgroundColor: notification.isRead ? 'transparent' : 'var(--semantic-selected-light)',
         '&:hover': { backgroundColor: 'var(--neutral-100)' },
         borderBottom: `1px solid var(--neutral-200)`,
         py: 1.5,
@@ -191,7 +190,7 @@ export default function NotificationItem({ notification, onClick }: Notification
                   width: 6,
                   height: 6,
                   borderRadius: '50%',
-                  backgroundColor: themeTokens.colors.primary,
+                  backgroundColor: 'var(--color-primary-fill)',
                   ml: 0.5,
                 }}
               />
