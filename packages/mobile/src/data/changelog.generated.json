@@ -1,6 +1,36 @@
 {
-  "generatedAt": "2026-07-16T21:41:27.752Z",
+  "generatedAt": "2026-07-16T21:46:48.792Z",
   "entries": [
+    {
+      "prNumber": 3693,
+      "category": "fixed",
+      "title": "Party sessions ride out a mid-action reconnect cleanly: queueing or switching a climb right as your connection blips no longer throws an error.",
+      "mergedAt": "2026-07-16T21:43:11Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3693",
+      "body": "A crew member who drops and rejoins won't flicker out of the roster, and the session won't be left without a leader."
+    },
+    {
+      "prNumber": 3709,
+      "category": "fixed",
+      "title": "Google sign-in on Android now recovers through the browser instead of dead-ending when the native sign-in hits a configuration error.",
+      "mergedAt": "2026-07-16T21:42:27Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3709",
+      "body": "Fixes #3100"
+    },
+    {
+      "prNumber": 3707,
+      "category": "fixed",
+      "title": "Fixed a rare crash on the climb list when a browser translate extension (like Chrome's auto-translate) was switched on.",
+      "mergedAt": "2026-07-16T21:41:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3707"
+    },
+    {
+      "prNumber": 3706,
+      "category": "fixed",
+      "title": "Fixed a bug where the setter filter on the climb list could crash the page if search results failed to load.",
+      "mergedAt": "2026-07-16T21:41:21Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3706"
+    },
     {
       "prNumber": 3710,
       "category": "fixed",

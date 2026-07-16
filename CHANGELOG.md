@@ -47,6 +47,12 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Party sessions ride out a mid-action reconnect cleanly: queueing or switching a climb right as your connection blips no longer throws an error. ([#3693](https://github.com/boardsesh/boardsesh/pull/3693))
+  A crew member who drops and rejoins won't flicker out of the roster, and the session won't be left without a leader.
+- Google sign-in on Android now recovers through the browser instead of dead-ending when the native sign-in hits a configuration error. ([#3709](https://github.com/boardsesh/boardsesh/pull/3709))
+  Fixes #3100
+- Fixed a rare crash on the climb list when a browser translate extension (like Chrome's auto-translate) was switched on. ([#3707](https://github.com/boardsesh/boardsesh/pull/3707))
+- Fixed a bug where the setter filter on the climb list could crash the page if search results failed to load. ([#3706](https://github.com/boardsesh/boardsesh/pull/3706))
 - No more spurious "Queue sync error" when a party session you were in has ended or moved on — the app quietly drops the stale session instead. ([#3710](https://github.com/boardsesh/boardsesh/pull/3710))
 - Importing your Tension Board history now keeps attempts as attempts. Projects you tried but didn't send no longer show up as sends, so your send count and stats stay honest. ([#3692](https://github.com/boardsesh/boardsesh/pull/3692))
   Already imported before this fix? Just re-import your history — the mislabeled sends get corrected in place.
