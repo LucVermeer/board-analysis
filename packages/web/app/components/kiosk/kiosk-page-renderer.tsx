@@ -10,16 +10,14 @@
 import React, { cache } from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { BOARD_RECENT_CLIMBS, GET_GYM_KIOSK } from '@boardsesh/graphql/operations';
-import type { BoardPresenceClimb, GymKiosk, GymKioskBoard } from '@boardsesh/shared-schema';
+import { GET_GYM_KIOSK } from '@boardsesh/graphql/operations';
+import type { GymKiosk, GymKioskBoard } from '@boardsesh/shared-schema';
 import { getGraphQLHttpUrl } from '@/app/lib/graphql/client';
-import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
-import type { BoardDetails } from '@/app/lib/types';
 import I18nProvider from '../providers/i18n-provider';
-import { buildBoardRenderUrl, toFlatFrames } from '../board-renderer/util';
+import { buildBoardSlotData, type BoardSlotData } from './board-slot-data';
 import { buildKioskViewModel } from './kiosk-view-model';
 import KioskThemeScope from './kiosk-theme-scope';
 import KioskPresenceHub from './presence/kiosk-presence-hub';
@@ -72,24 +70,6 @@ export const fetchGymKiosk = cache(async (gymSlug: string, kioskSlug: string | n
   }
 });
 
-/** Latest climbs for a board (newest first; index 0 = current). Anonymous,
- * uncached — this is the SSR seed for what's lit right now. */
-async function fetchInitialClimbs(boardId: number): Promise<BoardPresenceClimb[]> {
-  try {
-    const response = await fetch(getGraphQLHttpUrl(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: BOARD_RECENT_CLIMBS, variables: { boardId } }),
-      cache: 'no-store',
-    });
-    if (!response.ok) return [];
-    const payload = (await response.json()) as { data?: { boardRecentClimbs?: BoardPresenceClimb[] | null } };
-    return payload.data?.boardRecentClimbs ?? [];
-  } catch {
-    return [];
-  }
-}
-
 export async function buildKioskMetadata(gymSlug: string, kioskSlug: string | null): Promise<Metadata> {
   const [{ t, locale }, fetchResult] = await Promise.all([
     getServerTranslation('kiosk'),
@@ -113,29 +93,7 @@ export async function buildKioskMetadata(gymSlug: string, kioskSlug: string | nu
   });
 }
 
-type RenderableSlot = {
-  board: GymKioskBoard;
-  boardDetails: BoardDetails;
-  initialClimb: BoardPresenceClimb | null;
-  initialClimbImageUrl: string | null;
-  bareBoardImageUrl: string;
-};
-
-function resolveBoardDetails(board: GymKioskBoard): BoardDetails | null {
-  try {
-    return getBoardDetailsForBoard({
-      board_name: board.boardType,
-      layout_id: board.layoutId,
-      size_id: board.sizeId,
-      set_ids: board.setIds.split(',').map(Number),
-    });
-  } catch (error) {
-    // An unknown layout/size/set combination (e.g. stale board config) drops
-    // the slot instead of crashing the whole TV; the preset degrades below.
-    console.warn(`[kiosk] Skipping board ${board.boardUuid}: no board details`, error);
-    return null;
-  }
-}
+type RenderableSlot = { board: GymKioskBoard } & BoardSlotData;
 
 export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlug: string; kioskSlug: string | null }) {
   const fetchResult = await fetchGymKiosk(gymSlug, kioskSlug);
@@ -166,22 +124,9 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
   const slots: RenderableSlot[] = (
     await Promise.all(
       kiosk.boards.map(async (board): Promise<RenderableSlot | null> => {
-        const boardDetails = resolveBoardDetails(board);
-        if (boardDetails === null) return null;
-
-        const recentClimbs = await fetchInitialClimbs(board.boardId);
-        const initialClimb = recentClimbs[0] ?? null;
-        const flatFrames = toFlatFrames(initialClimb?.frames, boardDetails.board_name);
-        return {
-          board,
-          boardDetails,
-          initialClimb,
-          initialClimbImageUrl:
-            initialClimb === null || flatFrames.length === 0
-              ? null
-              : buildBoardRenderUrl(boardDetails, flatFrames, { includeBackground: true }),
-          bareBoardImageUrl: buildBoardRenderUrl(boardDetails, '', { includeBackground: true }),
-        };
+        const slotData = await buildBoardSlotData(board);
+        if (slotData === null) return null;
+        return { board, ...slotData };
       }),
     )
   ).filter((slot): slot is RenderableSlot => slot !== null);

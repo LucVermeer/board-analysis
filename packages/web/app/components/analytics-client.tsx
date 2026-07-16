@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { onCLS, onFCP, onINP, onLCP, type Metric } from 'web-vitals';
 import { capturePosthog, pageview } from '@/app/lib/analytics';
-import { analyticsPathname, isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
+import { analyticsPathname, isAdminAnalyticsUrl, isEmbedAnalyticsUrl } from '@/app/lib/analytics-paths';
 
 // PostHog's Web Vitals dashboard widget surfaces LCP, CLS, FCP, INP and
 // expects a single batched `$web_vitals` event per page with metric-prefixed
@@ -34,7 +34,9 @@ function flushVitalsBuffer(buffer: VitalsBuffer): void {
   buffer.metrics = new Map();
   buffer.pageUrl = null;
 
-  if (!pageUrl || isAdminAnalyticsUrl(pageUrl)) return;
+  // No web-vitals off /admin, and none off /embed/** — embeds run inside
+  // third-party sites with no consent surface (see isEmbedAnalyticsUrl).
+  if (!pageUrl || isAdminAnalyticsUrl(pageUrl) || isEmbedAnalyticsUrl(pageUrl)) return;
 
   const props: Record<string, string | number | boolean | null> = {
     $current_url: analyticsPathname(pageUrl),
@@ -60,6 +62,11 @@ export default function AnalyticsClient() {
     // StrictMode's effect re-run can't double-register them and double-count
     // each metric.
     if (vitalsRegistered.current) return;
+    // /embed/** widgets are full-document loads with no in-app navigation
+    // away, so skipping registration at mount disables web-vitals capture
+    // there entirely (GDPR: no consent surface inside a third-party iframe —
+    // see isEmbedAnalyticsUrl). The flush-time check above is the backstop.
+    if (isEmbedAnalyticsUrl(window.location.href)) return;
     vitalsRegistered.current = true;
 
     const reportVital = (metric: Metric): void => {
@@ -91,6 +98,9 @@ export default function AnalyticsClient() {
   useEffect(() => {
     if (!pathname) return;
     if (isAdminAnalyticsUrl(pathname)) return;
+    // No PostHog pageviews off /embed/** (third-party iframe, no consent
+    // surface — see isEmbedAnalyticsUrl). Kiosk keeps first-party telemetry.
+    if (isEmbedAnalyticsUrl(pathname)) return;
 
     // Flush metrics buffered against the previous URL before recording the new
     // pageview, so each `$web_vitals` event stays bound to the page it

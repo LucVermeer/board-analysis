@@ -23,7 +23,14 @@ export function retryDelayMs(attempt: number): number {
   return Math.min(BASE_RETRY_DELAY_MS * 2 ** attempt, MAX_RETRY_DELAY_MS);
 }
 
-export default function KioskRetryScreen() {
+export default function KioskRetryScreen({
+  fill = 'viewport',
+}: {
+  /** 'viewport' fills 100dvh (kiosk TVs, rendered bare); 'container' fills the
+   * parent (embeds, rendered inside EmbedShell's content cell so the
+   * non-removable attribution bar stays visible during error states). */
+  fill?: 'viewport' | 'container';
+}) {
   const { t } = useTranslation('kiosk');
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
@@ -37,7 +44,7 @@ export default function KioskRetryScreen() {
   }, [attempt, router]);
 
   return (
-    <div className={styles.screen}>
+    <div className={fill === 'container' ? `${styles.screen} ${styles.containerFill}` : styles.screen}>
       <h1 className={styles.title}>{t('retry.title')}</h1>
       <p className={styles.body}>{t('retry.body')}</p>
       <span className={styles.pulse} aria-hidden="true" />
