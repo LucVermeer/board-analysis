@@ -50,6 +50,13 @@ const materialTabIcon =
 // navigation), while the navigator still owns routing + per-tab state.
 const renderHiddenTabBar = () => null;
 
+// freezeOnBlur only takes effect where inactive screens stay detach-managed
+// (iOS < 26 iPhone). It's inert where detachInactiveScreens={false} below, because
+// react-native-screens' Screen.js gates DelayedFreeze behind `enabled` (the detach
+// flag): enabled=false renders a plain display:none View, skipping freeze
+// (react-native-screens Screen.js:63,123).
+const JS_TABS_SCREEN_OPTIONS = { headerShown: false, freezeOnBlur: true } as const;
+
 /**
  * Bottom tabs. The system Liquid Glass tab bar (`expo-router/unstable-native-tabs`)
  * — with a native `BottomAccessory` platter for the current climb + tick — is used
@@ -92,6 +99,11 @@ export default function TabLayout() {
   const onAccessorySurface = useOnAccessorySurface();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = Platform.OS === 'android';
+  // Keep blurred tabs' native (Fabric) trees resident on Android so a tab switch is a
+  // re-attach, not a createNode/completeRoot rebuild (#3153). Android-only: on iOS < 26
+  // iPhones keeping every tab resident would add to the 4GB-device board-art OOM risk
+  // (#3479, docs/react-native-performance.md §7), so those stay on the default + freeze.
+  const keepInactiveTabsResident = Platform.OS === 'android';
   // Regular-width iPad opts into the sidebar shell; compact width (every iPhone,
   // a narrow iPad split) keeps the native / Material tab bars below verbatim.
   // (deviceLayout.expanded is computed but intentionally unconsumed here — it's
@@ -233,7 +245,10 @@ export default function TabLayout() {
     const tabsNavigator = (
       <Tabs
         tabBar={isRegular ? renderHiddenTabBar : (props) => <MaterialTabBar {...props} />}
-        screenOptions={{ headerShown: false }}
+        screenOptions={JS_TABS_SCREEN_OPTIONS}
+        // iPads have the RAM headroom, and the sidebar shell hits the same
+        // detach-and-rebuild cost on every destination change (#3153).
+        detachInactiveScreens={false}
       >
         {tabScreens}
       </Tabs>
@@ -276,7 +291,11 @@ export default function TabLayout() {
 
   if (!nativeTabBar) {
     return (
-      <Tabs tabBar={(props) => <MaterialTabBar {...props} />} screenOptions={{ headerShown: false }}>
+      <Tabs
+        tabBar={(props) => <MaterialTabBar {...props} />}
+        screenOptions={JS_TABS_SCREEN_OPTIONS}
+        detachInactiveScreens={keepInactiveTabsResident ? false : undefined}
+      >
         {tabScreens}
       </Tabs>
     );

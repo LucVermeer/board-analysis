@@ -144,7 +144,26 @@ vi.mock('../../../src/hooks/use-bottom-accessory', () => ({
 // Stub the Material-variant path so it doesn't pull in native modules.
 vi.mock('expo-router', () => {
   const Tabs = Object.assign(
-    ({ children }: { children?: ReactNode }) => createElement('nav', { 'data-tabs-material': 'true' }, children),
+    ({
+      children,
+      detachInactiveScreens,
+      screenOptions,
+    }: {
+      children?: ReactNode;
+      detachInactiveScreens?: boolean;
+      screenOptions?: { freezeOnBlur?: boolean };
+    }) =>
+      createElement(
+        'nav',
+        {
+          'data-tabs-material': 'true',
+          // Surface the #3153 residency props so tests can pin the platform matrix.
+          'data-detach-inactive-screens': detachInactiveScreens === undefined ? 'unset' : String(detachInactiveScreens),
+          'data-freeze-on-blur':
+            screenOptions?.freezeOnBlur === undefined ? 'unset' : String(screenOptions.freezeOnBlur),
+        },
+        children,
+      ),
     {
       Screen: ({ name, options }: { name: string; options?: { lazy?: boolean } }) => {
         const screen = { name, options };
@@ -597,6 +616,53 @@ describe('TabLayout', () => {
     render(<TabLayout />);
 
     expect(cfg.materialScreens.find((screen) => screen.name === 'record')?.options).toMatchObject({ lazy: false });
+  });
+
+  // #3153: Android/iPad keep blurred tabs' native trees resident (detach off) so a
+  // switch is a re-attach, not a Fabric rebuild; iOS < 26 iPhones stay on default
+  // detach where freezeOnBlur actually takes effect.
+  it('keeps Android tabs resident with freeze declared (#3153)', () => {
+    cfg.variant = 'material';
+    cfg.platformOS = 'android';
+
+    const { container } = render(<TabLayout />);
+    const materialNav = container.querySelector('[data-tabs-material="true"]');
+
+    expect(materialNav?.getAttribute('data-detach-inactive-screens')).toBe('false');
+    expect(materialNav?.getAttribute('data-freeze-on-blur')).toBe('true');
+  });
+
+  it('leaves iOS < 26 iPhones on default detach with freeze active (#3153)', () => {
+    cfg.variant = 'liquidGlass';
+    cfg.glassCapable = false;
+    cfg.platformOS = 'ios';
+
+    const { container } = render(<TabLayout />);
+    const materialNav = container.querySelector('[data-tabs-material="true"]');
+
+    expect(materialNav?.getAttribute('data-detach-inactive-screens')).toBe('unset');
+    expect(materialNav?.getAttribute('data-freeze-on-blur')).toBe('true');
+  });
+
+  it('keeps iPad shell tabs resident (#3153)', () => {
+    cfg.widthClass = 'regular';
+
+    const { container } = render(<TabLayout />);
+    const materialNav = container.querySelector('[data-tabs-material="true"]');
+
+    expect(materialNav?.getAttribute('data-detach-inactive-screens')).toBe('false');
+    expect(materialNav?.getAttribute('data-freeze-on-blur')).toBe('true');
+  });
+
+  it('keeps residency props off the iOS 26 NativeTabs path (#3153)', () => {
+    cfg.variant = 'liquidGlass';
+    cfg.glassCapable = true;
+    cfg.platformOS = 'ios';
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tabs="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tabs-material="true"]')).toBeNull();
   });
 
   it('renders the Record badge when a session is active', () => {
