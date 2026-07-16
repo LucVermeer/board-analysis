@@ -250,11 +250,15 @@ export function useGym(gymUuid: string | null) {
  * help run). Backs the "My gyms" screen off the More tab. The `myGyms` query
  * scopes to the caller server-side, so no owner filter is passed here. Disabled
  * until signed in — an anonymous caller has no gyms and the query would 401.
+ *
+ * Requests the server-max page (50) in one shot rather than paginating: an owner
+ * runs a handful of gyms, so 50 clears every realistic case and keeps the screen a
+ * plain list instead of an `onEndReached` drain.
  */
 export function useMyGyms(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['myGyms'],
-    queryFn: () => getHttpClient().request<GetMyGymsQueryResponse>(GET_MY_GYMS, { input: {} }),
+    queryFn: () => getHttpClient().request<GetMyGymsQueryResponse>(GET_MY_GYMS, { input: { limit: 50 } }),
     select: (data) => data.myGyms,
     enabled: options?.enabled ?? true,
   });
@@ -470,7 +474,8 @@ export function useUpdateBoard() {
  * for one of its board types — the server enforces the access check). Invalidate
  * the single-gym cache plus the nearby-gym search results so the wall finder's
  * list/pins reflect the rename or visibility change without a manual reload.
- * Also refresh the board lists, whose rows render the gym's name (`gymName`).
+ * Also refresh the board lists, whose rows render the gym's name (`gymName`), and
+ * the My gyms list, whose rows render the gym's name/address.
  */
 export function useUpdateGym() {
   const queryClient = useQueryClient();
@@ -484,6 +489,7 @@ export function useUpdateGym() {
       void queryClient.invalidateQueries({ queryKey: ['nearbyGyms'] });
       void queryClient.invalidateQueries({ queryKey: ['nearbyBoards'] });
       void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['myGyms'] });
     },
   });
 }

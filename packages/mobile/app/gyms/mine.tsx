@@ -21,10 +21,12 @@ import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing, borderRadius } from '../../src/theme/tokens';
 
 // Kiosk/TV management is web-only by design; the mobile row hands off to the
-// browser console at /gym/{slug}/manage. `WEB_BASE_URL` respects the
-// EXPO_PUBLIC_WEB_URL override, so it points at whatever web build we're testing.
-function buildManageUrl(slug: string): string {
-  return `${WEB_BASE_URL}/gym/${encodeURIComponent(slug)}/manage`;
+// browser console at /gym/{slug|uuid}/manage. The web route resolves either a
+// slug or a uuid, so a slugless legacy gym still reaches setup via its uuid.
+// `WEB_BASE_URL` respects the EXPO_PUBLIC_WEB_URL override, so it points at
+// whatever web build we're testing.
+function buildManageUrl(slugOrUuid: string): string {
+  return `${WEB_BASE_URL}/gym/${encodeURIComponent(slugOrUuid)}/manage`;
 }
 
 /**
@@ -76,9 +78,12 @@ export default function MyGymsScreen() {
 
   const manageKiosks = useCallback(
     async (gym: Gym) => {
-      // A gym without a slug has no manage URL at all — that's a "not set up yet"
-      // state, not a failed open, so the "try a browser" copy would be wrong advice.
-      if (!gym.slug) {
+      // Prefer the slug, fall back to the uuid: the web manage route resolves
+      // either, so a slugless legacy gym still opens its kiosk setup. Only a gym
+      // with neither (a data-corruption edge — uuid is normally always present)
+      // is genuinely unmanageable.
+      const slugOrUuid = gym.slug ?? gym.uuid;
+      if (!slugOrUuid) {
         showToast(t('mobile.myGyms.manageUnavailable'), 'error');
         return;
       }
@@ -88,7 +93,7 @@ export default function MyGymsScreen() {
       hapticSelection();
       // openURL (never canOpenURL — false for https on Android 11+ package
       // visibility); a genuine failure rejects and we toast.
-      const opened = await openValidatedUrl(buildManageUrl(gym.slug), (url) => url.startsWith(WEB_BASE_URL));
+      const opened = await openValidatedUrl(buildManageUrl(slugOrUuid), (url) => url.startsWith(WEB_BASE_URL));
       if (!opened) showToast(t('mobile.myGyms.manageError'), 'error');
     },
     [kioskHintSeen, setKioskHintSeen, showToast, t],
