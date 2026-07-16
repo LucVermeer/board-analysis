@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-15T23:51:12.061Z",
+  "generatedAt": "2026-07-16T00:35:46.202Z",
   "entries": [
+    {
+      "prNumber": 3653,
+      "category": "fixed",
+      "title": "When a board won't connect on Android, you now get the real reason — Bluetooth off, board not found, or a connection that dropped — instead of a blanket \"unknown error\".",
+      "mergedAt": "2026-07-16T00:34:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3653"
+    },
     {
       "prNumber": 3612,
       "category": "fixed",
