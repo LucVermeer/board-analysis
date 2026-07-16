@@ -26,6 +26,14 @@ export type Gym = {
   longitude?: number | null;
   isPublic: boolean;
   imageUrl?: string | null;
+  /** Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, the gym photo. */
+  logoUrl?: string | null;
+  /** Kiosk/embed brand primary colour as #RRGGBB (null when unset). */
+  brandPrimaryColor?: string | null;
+  /** Kiosk/embed brand accent colour as #RRGGBB (null when unset). */
+  brandAccentColor?: string | null;
+  /** Kiosk/embed brand background colour as #RRGGBB (null when unset). */
+  brandBackgroundColor?: string | null;
   createdAt: string;
   boardCount: number;
   boardTypes: string[];
@@ -90,6 +98,12 @@ export type UpdateGymInput = {
   longitude?: number | null;
   isPublic?: boolean;
   imageUrl?: string;
+  // Branding: `undefined` leaves the column untouched; explicit `null` clears it
+  // (reset-to-default in the manage UI).
+  logoUrl?: string | null;
+  brandPrimaryColor?: string | null;
+  brandAccentColor?: string | null;
+  brandBackgroundColor?: string | null;
 };
 
 export type GrantGymWriteAccessInput = {

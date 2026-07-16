@@ -10,7 +10,8 @@ import { initCors, applyCorsHeaders } from './handlers/cors';
 import { handleHealthCheck } from './handlers/health';
 import { handleSessionJoin } from './handlers/join';
 import { handleAvatarUpload } from './handlers/avatars';
-import { handleStaticAvatar, handleStaticBetaThumbnail } from './handlers/static';
+import { handleGymLogoUpload } from './handlers/gym-logos';
+import { handleStaticAvatar, handleStaticBetaThumbnail, handleStaticGymLogo } from './handlers/static';
 import { parseSizeParam } from './lib/image-resize';
 import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
@@ -330,6 +331,12 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      // Gym logo upload endpoint (handle OPTIONS for CORS preflight)
+      if (pathname === '/api/gym-logos' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleGymLogoUpload(req, res);
+        return;
+      }
+
       // OCR test data upload endpoint (handle OPTIONS for CORS preflight)
       if (pathname === '/api/ocr-test-data' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleOcrTestDataUpload(req, res);
@@ -416,6 +423,15 @@ export async function startServer(): Promise<ServerResources> {
         const fileName = pathname.slice('/static/avatars/'.length);
         if (fileName) {
           await handleStaticAvatar(req, res, fileName, parseSizeParam(url.searchParams.get('size')));
+          return;
+        }
+      }
+
+      // Static gym-logo files (optional ?size= for a resized variant)
+      if (pathname.startsWith('/static/gym-logos/')) {
+        const fileName = pathname.slice('/static/gym-logos/'.length);
+        if (fileName) {
+          await handleStaticGymLogo(req, res, fileName, parseSizeParam(url.searchParams.get('size')));
           return;
         }
       }
@@ -598,6 +614,8 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Join session: ${httpScheme}://0.0.0.0:${PORT}/join/:sessionId`);
     logger.info(`  Avatar upload: ${httpScheme}://0.0.0.0:${PORT}/api/avatars`);
     logger.info(`  Avatar files: ${httpScheme}://0.0.0.0:${PORT}/static/avatars/`);
+    logger.info(`  Gym logo upload: ${httpScheme}://0.0.0.0:${PORT}/api/gym-logos`);
+    logger.info(`  Gym logo files: ${httpScheme}://0.0.0.0:${PORT}/static/gym-logos/`);
     logger.info(`  OCR test data: ${httpScheme}://0.0.0.0:${PORT}/api/ocr-test-data`);
     logger.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
     logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);

@@ -32,6 +32,8 @@ export type UserBoard = {
   commentCount: number;
   isFollowedByMe: boolean;
   gymId?: number | null;
+  /** Numeric board-presence channel id (userBoards.id); null unless the board is public or the viewer can edit it. Feeds boardNowPlaying(boardId) for kiosk/embed surfaces. */
+  boardId?: number | null;
   gymUuid?: string | null;
   gymName?: string | null;
   distanceMeters?: number | null;

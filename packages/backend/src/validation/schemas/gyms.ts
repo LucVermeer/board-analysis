@@ -26,6 +26,38 @@ export const GymWebsiteSchema = z
   .refine((value) => /^https?:\/\//i.test(value), 'Website must start with http:// or https://');
 
 /**
+ * Brand colour: exactly #RRGGBB (six hex digits). The kiosk and embed surfaces
+ * read these straight into CSS custom properties, so anything looser is rejected.
+ */
+export const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colour must be #RRGGBB');
+
+/**
+ * Gym logo URL: either a backend-relative static path we serve ourselves
+ * (exactly `/static/gym-logos/<uuid>.<ext>[?v=...]`, as written by
+ * POST /api/gym-logos — full-pattern matched so no traversal or other-path
+ * strings slip through) or a well-formed https URL, capped at 500 chars.
+ * Rejecting other schemes (javascript:, data:, http:) matters because the logo
+ * renders as an `<img src>` on the kiosk/embed surfaces.
+ */
+const STATIC_GYM_LOGO_PATH_REGEX = /^\/static\/gym-logos\/[0-9a-f-]{36}\.(jpg|jpeg|png|gif|webp)(\?v=[\w-]+)?$/i;
+
+function isValidHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export const GymLogoUrlSchema = z
+  .string()
+  .max(500)
+  .refine(
+    (value) => STATIC_GYM_LOGO_PATH_REGEX.test(value) || isValidHttpsUrl(value),
+    'Logo URL must be an https URL or a Boardsesh static gym-logo path',
+  );
+
+/**
  * Create gym input validation schema
  */
 export const CreateGymInputSchema = z.object({
@@ -58,6 +90,10 @@ export const UpdateGymInputSchema = z.object({
   longitude: LongitudeSchema.optional().nullable(),
   isPublic: z.boolean().optional(),
   imageUrl: z.string().url().max(500).optional().nullable(),
+  logoUrl: GymLogoUrlSchema.optional().nullable(),
+  brandPrimaryColor: HexColorSchema.optional().nullable(),
+  brandAccentColor: HexColorSchema.optional().nullable(),
+  brandBackgroundColor: HexColorSchema.optional().nullable(),
 });
 
 /**

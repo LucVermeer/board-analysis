@@ -2236,6 +2236,8 @@ type UserBoard {
   isFollowedByMe: Boolean!
   "Gym ID if linked to a gym"
   gymId: Int
+  "Numeric board-presence channel id (userBoards.id); null unless the board is public or the viewer can edit it. Feeds boardNowPlaying(boardId) for kiosk/embed surfaces."
+  boardId: Int
   "Gym UUID if linked to a gym"
   gymUuid: String
   "Gym name if linked to a gym"
@@ -2619,6 +2621,14 @@ type Gym {
   isPublic: Boolean!
   "Image URL"
   imageUrl: String
+  "Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, which is the gym photo."
+  logoUrl: String
+  "Kiosk/embed brand primary colour as #RRGGBB (null when unset)."
+  brandPrimaryColor: String
+  "Kiosk/embed brand accent colour as #RRGGBB (null when unset)."
+  brandAccentColor: String
+  "Kiosk/embed brand background colour as #RRGGBB (null when unset)."
+  brandBackgroundColor: String
   "When created"
   createdAt: String!
   "Number of linked boards"
@@ -2741,6 +2751,14 @@ input UpdateGymInput {
   isPublic: Boolean
   "New image URL"
   imageUrl: String
+  "Square gym logo (transparent brand mark) for the kiosk and embeds — distinct from imageUrl, the gym photo. Pass null to clear it."
+  logoUrl: String
+  "Kiosk/embed brand primary colour as #RRGGBB. Pass null to clear it."
+  brandPrimaryColor: String
+  "Kiosk/embed brand accent colour as #RRGGBB. Pass null to clear it."
+  brandAccentColor: String
+  "Kiosk/embed brand background colour as #RRGGBB. Pass null to clear it."
+  brandBackgroundColor: String
 }
 
 """
@@ -4805,6 +4823,19 @@ type Query {
   Get members of a gym.
   """
   gymMembers(input: GymMembersInput!): GymMemberConnection!
+
+  """
+  A gym's linked, non-deleted boards (user_boards.gym_id = gym.id), ordered by
+  name. Auth-optional and viewer-scoped: viewers who can edit the gym (owner,
+  gym admin/editor, or a covering community admin/leader) see every linked
+  board; everyone else — including anonymous callers — sees only publicly
+  listed boards (isPublic AND NOT isUnlisted, matching searchBoards' discovery
+  convention: unlisted = link-only, never enumerated). Powers the manage-gym
+  board pickers and the anonymous leaderboard embed. A missing gym, or a
+  private gym seen by a non-editor, throws NOT_FOUND (existence is masked).
+  Rate-limited.
+  """
+  gymBoards(gymUuid: ID!): [UserBoard!]!
 
   """
   List pending gym ownership claims for the admin review queue (admin only).

@@ -9,6 +9,7 @@ import {
   type PutObjectCommandInput,
 } from '@aws-sdk/client-s3';
 import type { Readable } from 'stream';
+import { logger } from '../utils/logger';
 
 let s3Client: S3Client | null = null;
 let bucketName: string | null = null;
@@ -284,6 +285,31 @@ export async function deleteUserAvatarsFromS3(userId: string): Promise<void> {
         await deleteFromS3(`avatars/${userId}.${ext}`);
       } catch {
         // File doesn't exist, ignore
+      }
+    }),
+  );
+}
+
+/**
+ * Delete a gym's logo files (the key is `gym-logos/<uuid>.<ext>`). Called AFTER
+ * a new logo is written, with `keepExt` set to the new file's extension, so a
+ * re-upload at a different extension can't leave a stale file behind — and a
+ * failed replacement never destroys the existing logo (write-first, clean-after).
+ *
+ * S3 DeleteObject is idempotent (deleting a missing key succeeds), so any error
+ * here is a real failure (network/auth), not "already gone" — it's logged and
+ * swallowed: the new logo is already saved, and a leftover stale-ext object is
+ * unreferenced (the stored logoUrl points at the new key).
+ */
+export async function deleteGymLogosFromS3(gymUuid: string, keepExt?: string): Promise<void> {
+  const extensions = ['jpg', 'png', 'gif', 'webp'].filter((ext) => ext !== keepExt);
+
+  await Promise.all(
+    extensions.map(async (ext) => {
+      try {
+        await deleteFromS3(`gym-logos/${gymUuid}.${ext}`);
+      } catch (deleteError) {
+        logger.warn(`Failed to delete stale gym logo gym-logos/${gymUuid}.${ext} from S3:`, deleteError);
       }
     }),
   );
