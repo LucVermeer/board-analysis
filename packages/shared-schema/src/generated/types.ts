@@ -2173,12 +2173,18 @@ export type GymConnection = {
  * Ascents bucketed by day of week for the current window. `dayOfWeek` follows
  * Postgres EXTRACT(DOW): 0 = Sunday … 6 = Saturday. Only days with at least one
  * ascent appear; the UI fills the missing days with zero.
+ *
+ * Bucketing is by UTC day: `climbed_at` is a naive (no-timezone) timestamp and
+ * EXTRACT(DOW) reads it as-is, so a gym has no local-time correction. For a gym
+ * west of UTC a Friday-evening send can land in Saturday's bucket. This is the
+ * accepted v1 behaviour — there is no per-gym timezone yet; gym-local bucketing
+ * is a possible follow-up once a timezone is stored.
  */
 export type GymDayActivity = {
   __typename?: 'GymDayActivity';
   /** Ascents (flash + send) on that weekday in the current window. */
   ascentCount: Scalars['Int']['output'];
-  /** Day of week, 0 = Sunday … 6 = Saturday. */
+  /** Day of week (UTC), 0 = Sunday … 6 = Saturday. */
   dayOfWeek: Scalars['Int']['output'];
 };
 

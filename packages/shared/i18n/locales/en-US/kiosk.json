@@ -45,6 +45,20 @@
     "poweredBy": "Powered by"
   },
   "embed": {
+    "metadata": {
+      "boardTitle": "{{boardName}} — live board view",
+      "boardDescription": "See what's lit on {{boardName}} right now. Powered by Boardsesh.",
+      "boardFallbackTitle": "Live board view",
+      "boardFallbackDescription": "Live climbing board widget. Powered by Boardsesh.",
+      "leaderboardTitle": "{{gymName}} — leaderboard",
+      "leaderboardDescription": "Who's sending at {{gymName}}. Powered by Boardsesh.",
+      "leaderboardFallbackTitle": "Gym leaderboard",
+      "leaderboardFallbackDescription": "Gym leaderboard widget. Powered by Boardsesh."
+    },
+    "leaderboard": {
+      "errorTitle": "Leaderboard unavailable",
+      "errorBody": "Couldn't load the latest sends. It'll retry on its own."
+    },
     "boardButton": "Embed this board",
     "railButton": "Embed leaderboard",
     "boardDialogTitle": "Embed {{name}}",

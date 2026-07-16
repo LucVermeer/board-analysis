@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vite-plus/test';
+import { describe, it, expect, beforeEach, afterAll } from 'vite-plus/test';
 import { v4 as uuidv4 } from 'uuid';
 import { sql } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
@@ -28,6 +28,12 @@ const ALL_USERS = [OWNER, ADMIN, EDITOR, MEMBER, RANDOM];
 
 const CLIMB_PREFIX = 'gym-insights-test-climb-';
 const BOARD_TYPE = 'kilter';
+
+// A synthetic grade id well outside the real (kilter, 1..~40) catalog range, so
+// seeding/clearing our consensus-grade row can never touch a difficulty another
+// test in the same worker DB reads. display 99.2 → ROUND → 99 joins this row.
+const SYNTHETIC_GRADE_ID = 99;
+const SYNTHETIC_DISPLAY_DIFFICULTY = 99.2;
 
 let connectionCounter = 0;
 const authCtx = (userId: string): ConnectionContext =>
@@ -137,7 +143,9 @@ beforeEach(async () => {
   `);
   await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${CLIMB_PREFIX + '%'}`);
-  await db.execute(sql`DELETE FROM board_difficulty_grades WHERE board_type = ${BOARD_TYPE} AND difficulty = 13`);
+  await db.execute(
+    sql`DELETE FROM board_difficulty_grades WHERE board_type = ${BOARD_TYPE} AND difficulty = ${SYNTHETIC_GRADE_ID}`,
+  );
 
   await Promise.all(ALL_USERS.map(insertUser));
 
@@ -151,11 +159,11 @@ beforeEach(async () => {
   const otherGym = await insertGym({ ownerId: RANDOM, name: 'Other Gym', slug: 'other-gym' });
   otherGymBoard = await insertBoard({ gymId: otherGym.id, ownerId: RANDOM, name: 'Elsewhere Wall' });
 
-  // Catalog: two climbs; CLIMB_X carries a consensus grade (display 13.2 → 13 → "V4").
+  // Catalog: two climbs; CLIMB_X carries a consensus grade (display 99.2 → 99 → "V4").
   await insertClimb(CLIMB_X, 'Crimpy Traverse');
   await insertClimb(CLIMB_Y, 'Sloper Heaven');
-  await insertClimbStats(CLIMB_X, 40, 13.2);
-  await insertGrade(13, 'V4');
+  await insertClimbStats(CLIMB_X, 40, SYNTHETIC_DISPLAY_DIFFICULTY);
+  await insertGrade(SYNTHETIC_GRADE_ID, 'V4');
 
   // Current window (last 7 days): 3 ascents, 3 distinct climbers, CLIMB_X twice.
   await insertTick({ userId: OWNER, boardId: boardA.id, climbUuid: CLIMB_X, climbedAt: daysAgoIso(1) });
@@ -182,6 +190,14 @@ beforeEach(async () => {
     status: 'attempt',
   });
   await insertTick({ userId: RANDOM, boardId: otherGymBoard.id, climbUuid: CLIMB_X, climbedAt: daysAgoIso(1) });
+});
+
+// Leave the shared worker DB as we found it: drop the synthetic grade row the
+// last test left behind (beforeEach clears it between tests, not after the last).
+afterAll(async () => {
+  await db.execute(
+    sql`DELETE FROM board_difficulty_grades WHERE board_type = ${BOARD_TYPE} AND difficulty = ${SYNTHETIC_GRADE_ID}`,
+  );
 });
 
 describe('gymStats access guard', () => {
