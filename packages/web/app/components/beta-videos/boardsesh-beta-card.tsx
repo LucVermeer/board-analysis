@@ -29,9 +29,23 @@ type BoardseshBetaCardProps = {
    * can measure CTR per placement.
    */
   source?: BoardseshBetaCardSource;
+  /**
+   * When true, this card's thumbnail is the Largest Contentful Paint element
+   * (the first card of the above-the-fold home rail). Load it eagerly at high
+   * priority instead of the default lazy — a lazy above-the-fold image is a
+   * well-known LCP anti-pattern (the browser discovers it late and
+   * deprioritizes the fetch). Only the first home-rail card sets this.
+   */
+  priority?: boolean;
 };
 
-const BoardseshBetaCard: React.FC<BoardseshBetaCardProps> = ({ link, climbName, climbHref, source = 'drawer' }) => {
+const BoardseshBetaCard: React.FC<BoardseshBetaCardProps> = ({
+  link,
+  climbName,
+  climbHref,
+  source = 'drawer',
+  priority = false,
+}) => {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const thumbnailSrc = !thumbnailFailed ? link.thumbnail : null;
   const isTikTok = isTikTokUrl(link.link);
@@ -75,7 +89,8 @@ const BoardseshBetaCard: React.FC<BoardseshBetaCardProps> = ({ link, climbName, 
               src={thumbnailSrc}
               alt={`Beta by ${link.foreign_username || 'unknown'}`}
               className={styles.thumbnail}
-              loading="lazy"
+              loading={priority ? 'eager' : 'lazy'}
+              fetchPriority={priority ? 'high' : undefined}
               referrerPolicy="no-referrer"
               onError={() => setThumbnailFailed(true)}
             />

@@ -24,6 +24,13 @@ type BoardseshBetaListProps = {
    */
   getClimbHref?: (link: BetaLink) => string | null | undefined;
   source?: BoardseshBetaListSource;
+  /**
+   * When true, the first card's thumbnail loads eagerly at high priority
+   * because it's the above-the-fold LCP element. Only the home rail (which
+   * renders directly under the hero) sets this; the drawer and profile lists
+   * open behind an interaction and are never the page's LCP.
+   */
+  priorityFirstCard?: boolean;
 };
 
 const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({
@@ -32,6 +39,7 @@ const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({
   getClimbName,
   getClimbHref,
   source = 'drawer',
+  priorityFirstCard = false,
 }) => {
   const { t } = useTranslation('common');
   return (
@@ -47,13 +55,14 @@ const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({
           ))
         ) : (
           <>
-            {links.map((link) => (
+            {links.map((link, index) => (
               <BoardseshBetaCard
                 key={link.link}
                 link={link}
                 climbName={getClimbName?.(link) ?? null}
                 climbHref={getClimbHref?.(link) ?? null}
                 source={source}
+                priority={priorityFirstCard && index === 0}
               />
             ))}
             {links.length === 0 && <span className={styles.emptyText}>{t('betaVideos.empty')}</span>}
