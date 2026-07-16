@@ -92,6 +92,16 @@ vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));
 
+// The remembered-board persistence store pulls in AsyncStorage transitively;
+// mock it so the hook's persist/hydrate wiring can be asserted without a native
+// module, and so its behaviour is observable via these spies (#3609).
+const mockLastConnectedBoardStore = vi.hoisted(() => ({
+  getStoredLastConnectedBoard: vi.fn(async (): Promise<{ serial: string; configKey: string } | null> => null),
+  setStoredLastConnectedBoard: vi.fn(async () => {}),
+  clearStoredLastConnectedBoard: vi.fn(async () => {}),
+}));
+vi.mock('../last-connected-board-store', () => mockLastConnectedBoardStore);
+
 // Spy on reportHandledError (keep the real noise-policy/other exports) so a
 // connect failure's Sentry tags can be asserted (#3480).
 vi.mock('../../error-reporting', async (importOriginal) => {
@@ -1333,6 +1343,97 @@ describe('useBoardBluetooth config-switch teardown', () => {
     });
     expect(fakeAdapter.disconnect).toHaveBeenCalled();
     expect(result.current.isConnected).toBe(false);
+  });
+});
+
+describe('useBoardBluetooth remembered-board persistence (#3609)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetReactNativePermissionHarness();
+    mockBleManager.state.mockResolvedValue('PoweredOn');
+    // Default device name 'Kilter Board#123@3' parses to serial '123'.
+    vi.mocked(parseSerialNumber).mockImplementation((name?: string) => name?.match(/#([^@]+)/)?.[1]);
+    // Reset the store spies (including any leftover once-implementations) to a
+    // clean "nothing stored" default so each test starts from the same baseline.
+    mockLastConnectedBoardStore.getStoredLastConnectedBoard.mockReset();
+    mockLastConnectedBoardStore.getStoredLastConnectedBoard.mockResolvedValue(null);
+    mockLastConnectedBoardStore.setStoredLastConnectedBoard.mockReset();
+    mockLastConnectedBoardStore.setStoredLastConnectedBoard.mockResolvedValue(undefined);
+    mockLastConnectedBoardStore.clearStoredLastConnectedBoard.mockReset();
+    mockLastConnectedBoardStore.clearStoredLastConnectedBoard.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.mocked(parseSerialNumber).mockReset();
+  });
+
+  it('persists the board on a successful connect', async () => {
+    const fakeAdapter = makeFakeAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.reconnectSerialForCurrentBoard).toBe('123');
+    expect(mockLastConnectedBoardStore.setStoredLastConnectedBoard).toHaveBeenCalledWith({
+      serial: '123',
+      configKey: 'kilter::1::1',
+    });
+  });
+
+  it('clears the persisted board on a deliberate disconnect', async () => {
+    const fakeAdapter = makeFakeAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.reconnectSerialForCurrentBoard).toBe('123');
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+
+    expect(mockLastConnectedBoardStore.clearStoredLastConnectedBoard).toHaveBeenCalled();
+    expect(result.current.reconnectSerialForCurrentBoard).toBeNull();
+  });
+
+  it('rehydrates a stored board on mount, guarded by the active config', async () => {
+    // A board remembered for kilter/2/1 in a previous session (cold start).
+    mockLastConnectedBoardStore.getStoredLastConnectedBoard.mockResolvedValueOnce({
+      serial: '999',
+      configKey: 'kilter::2::1',
+    });
+    const fakeAdapter = makeFakeAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result, rerender } = renderHook((props) => useBoardBluetooth(props), {
+      initialProps: { boardName: 'kilter', layoutId: 1, sizeId: 1 },
+    });
+
+    // While looking at a different config the stored board is never offered.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.reconnectSerialForCurrentBoard).toBeNull();
+
+    // Switching to the stored board's config offers the silent reconnect —
+    // hydrated from storage, no connect needed.
+    await act(async () => {
+      rerender({ boardName: 'kilter', layoutId: 2, sizeId: 1 });
+    });
+    await waitFor(() => expect(result.current.reconnectSerialForCurrentBoard).toBe('999'));
   });
 });
 

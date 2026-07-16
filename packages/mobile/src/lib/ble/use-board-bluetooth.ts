@@ -44,6 +44,11 @@ import { track } from '../analytics';
 import { reportHandledError } from '../error-reporting';
 import { clearBleDiagnosticsTags, setBleDiagnosticsTags } from '../sentry';
 import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
+import {
+  clearStoredLastConnectedBoard,
+  getStoredLastConnectedBoard,
+  setStoredLastConnectedBoard,
+} from './last-connected-board-store';
 
 // Exported for testing. Decides how a connect-failure category reaches error
 // tracking:
@@ -332,6 +337,20 @@ export function useBoardBluetooth({
   const [lastConnectedBoard, setLastConnectedBoard] = useState<{ serial: string; configKey: string } | null>(null);
   const lastConnectedBoardRef = useRef(lastConnectedBoard);
   lastConnectedBoardRef.current = lastConnectedBoard;
+
+  // Persist / forget the remembered board alongside the in-memory state so a
+  // one-tap silent reconnect survives a cold start or provider remount, not just
+  // the current session (#3609). Storage writes are fire-and-forget: a failure
+  // just means the next launch falls back to the picker, never a thrown error.
+  const rememberConnectedBoard = useCallback((serial: string, configKey: string) => {
+    const board = { serial, configKey };
+    setLastConnectedBoard(board);
+    void setStoredLastConnectedBoard(board).catch(() => {});
+  }, []);
+  const forgetConnectedBoard = useCallback(() => {
+    setLastConnectedBoard(null);
+    void clearStoredLastConnectedBoard().catch(() => {});
+  }, []);
 
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
@@ -839,7 +858,7 @@ export function useBoardBluetooth({
         // serial. Without a full config there is no usable key (and the
         // reconnect comparison against currentConfigKey could never match).
         if (parsedSerial && layoutId !== undefined && sizeId !== undefined) {
-          setLastConnectedBoard({ serial: parsedSerial, configKey: boardConfigKey(boardName, layoutId, sizeId) });
+          rememberConnectedBoard(parsedSerial, boardConfigKey(boardName, layoutId, sizeId));
         }
 
         // Send initial frames if provided; seed the AutoSender's dedup with
@@ -998,6 +1017,7 @@ export function useBoardBluetooth({
       onConnectionChange,
       onConnectSuccess,
       getConnectedViaMismatchOverride,
+      rememberConnectedBoard,
       sendFramesToBoard,
       sanitizedColorOverrides,
       colorSignature,
@@ -1032,10 +1052,11 @@ export function useBoardBluetooth({
 
   const disconnect = useCallback(async () => {
     // A deliberate disconnect forgets the board — only an involuntary drop or a
-    // config switch keeps the silent same-board reconnect memory alive.
-    setLastConnectedBoard(null);
+    // config switch keeps the silent same-board reconnect memory alive. Clears
+    // the persisted copy too so the next launch doesn't resurrect it.
+    forgetConnectedBoard();
     await teardownConnection();
-  }, [teardownConnection]);
+  }, [forgetConnectedBoard, teardownConnection]);
 
   // If the active board config changes while a connection is live, tear it down.
   // BluetoothProvider is mounted once globally; without this a board/layout/size
@@ -1118,7 +1139,7 @@ export function useBoardBluetooth({
 
       const serial = deviceName ? (parseSerialNumber(deviceName) ?? null) : (rememberedBoard?.serial ?? null);
       if (serial) {
-        setLastConnectedBoard({ serial, configKey: currentConfigKey });
+        rememberConnectedBoard(serial, currentConfigKey);
       }
       connectedConfigKeyRef.current = currentConfigKey;
       lastDisconnectInfoRef.current = null;
@@ -1169,6 +1190,7 @@ export function useBoardBluetooth({
     handleDisconnection,
     onConnectionChange,
     onConnectSuccess,
+    rememberConnectedBoard,
     sanitizedColorOverrides,
   ]);
 
@@ -1207,6 +1229,25 @@ export function useBoardBluetooth({
     lastConnectedBoard && currentConfigKey && lastConnectedBoard.configKey === currentConfigKey
       ? lastConnectedBoard.serial
       : null;
+
+  // Rehydrate the remembered board from storage on mount so a one-tap silent
+  // reconnect survives a cold start / provider remount, not just the in-memory
+  // session (#3609). A live connect that lands during the async read wins — only
+  // seed when nothing has been remembered yet. reconnectSerialForCurrentBoard
+  // self-guards on configKey, so a stored board for a different config is simply
+  // never offered as a reconnect target. This only sets the target for a user
+  // tap; it never auto-connects, so the no-auto-reconnect policy is untouched.
+  useEffect(() => {
+    let cancelled = false;
+    void getStoredLastConnectedBoard().then((stored) => {
+      if (cancelled || !stored) return;
+      if (lastConnectedBoardRef.current) return;
+      setLastConnectedBoard(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Clean up on unmount
   useEffect(() => {
