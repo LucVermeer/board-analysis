@@ -160,4 +160,18 @@ describe('FeedbackSheet bug report contact consent', () => {
     await vi.waitFor(() => expect(feedbackMutation.mutateAsync).toHaveBeenCalledTimes(1));
     expect(feedbackMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ contactConsent: false }));
   });
+
+  it('resets the switch back to on after a successful submit, even from an opt-out', async () => {
+    const sheetRef = createRef<BottomSheetModal>();
+    const { container, getByPlaceholderText } = render(<FeedbackSheet sheetRef={sheetRef} mode="bug" />);
+    fireEvent.click(switchRow(container)!);
+    expect(switchRow(container)?.getAttribute('data-value')).toBe('false');
+
+    fireEvent.change(getByPlaceholderText('feedbackForm.bugPlaceholder'), {
+      target: { value: 'the board disconnects on start' },
+    });
+    fireEvent.click(container.querySelector('[data-button="feedbackDialog.submitBug"]')!);
+    await vi.waitFor(() => expect(feedbackMutation.mutateAsync).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(switchRow(container)?.getAttribute('data-value')).toBe('true'));
+  });
 });
