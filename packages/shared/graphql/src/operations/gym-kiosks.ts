@@ -1,5 +1,11 @@
 import { gql } from 'graphql-request';
-import type { Gym, GymKiosk, CreateGymKioskInput, UpdateGymKioskInput } from '@boardsesh/shared-schema';
+import type {
+  Gym,
+  GymKiosk,
+  CreateGymKioskInput,
+  UpdateGymKioskInput,
+  KioskHeartbeatInput,
+} from '@boardsesh/shared-schema';
 
 // ============================================
 // Gym Kiosk Operations
@@ -56,10 +62,15 @@ export const GET_GYM_KIOSK = gql`
   }
 `;
 
+// The manage list additionally reads per-kiosk liveness (edit-guarded). The
+// public GET_GYM_KIOSK deliberately omits lastSeenAt — the resolver never
+// populates it there, and owners are the only ones who should see whether a
+// screen is live.
 export const GET_GYM_KIOSKS = gql`
   query GetGymKiosks($gymUuid: ID!) {
     gymKiosks(gymUuid: $gymUuid) {
       ${GYM_KIOSK_FIELDS}
+      lastSeenAt
     }
   }
 `;
@@ -86,6 +97,15 @@ export const DELETE_GYM_KIOSK = gql`
   }
 `;
 
+// Public, unauthenticated check-in fired by the kiosk TV pages. Returns a plain
+// boolean — recorded / not recorded — so a since-deleted kiosk just stops being
+// counted live without erroring the page.
+export const KIOSK_HEARTBEAT = gql`
+  mutation KioskHeartbeat($input: KioskHeartbeatInput!) {
+    kioskHeartbeat(input: $input)
+  }
+`;
+
 // ============================================
 // Query/Mutation Variable Types
 // ============================================
@@ -109,8 +129,16 @@ export type GymKioskOperationGym = Pick<
   | 'canEdit'
 >;
 
-/** A GymKiosk as returned by these operations: full kiosk, narrowed gym. */
-export type GymKioskOperationResult = Omit<GymKiosk, 'gym'> & { gym: GymKioskOperationGym };
+/**
+ * A GymKiosk as returned by the shared selection: full kiosk minus `lastSeenAt`
+ * (only the edit-guarded manage list selects that), with a narrowed gym. Both
+ * omissions keep a consumer honest — reading a field the query didn't select is
+ * a compile error rather than an `undefined` at runtime.
+ */
+export type GymKioskOperationResult = Omit<GymKiosk, 'gym' | 'lastSeenAt'> & { gym: GymKioskOperationGym };
+
+/** The manage-list variant: the shared result plus per-kiosk liveness. */
+export type GymKioskManageResult = GymKioskOperationResult & Pick<GymKiosk, 'lastSeenAt'>;
 
 export type GetGymKioskQueryVariables = {
   gymSlug: string;
@@ -126,7 +154,7 @@ export type GetGymKiosksQueryVariables = {
 };
 
 export type GetGymKiosksQueryResponse = {
-  gymKiosks: GymKioskOperationResult[];
+  gymKiosks: GymKioskManageResult[];
 };
 
 export type CreateGymKioskMutationVariables = {
@@ -151,4 +179,12 @@ export type DeleteGymKioskMutationVariables = {
 
 export type DeleteGymKioskMutationResponse = {
   deleteGymKiosk: boolean;
+};
+
+export type KioskHeartbeatMutationVariables = {
+  input: KioskHeartbeatInput;
+};
+
+export type KioskHeartbeatMutationResponse = {
+  kioskHeartbeat: boolean;
 };

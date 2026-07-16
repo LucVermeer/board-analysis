@@ -24,7 +24,13 @@ import {
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
 } from '@boardsesh/board-presence-react';
-import { GET_GYM_KIOSK, type GetGymKioskQueryResponse } from '@boardsesh/graphql/operations';
+import {
+  GET_GYM_KIOSK,
+  KIOSK_HEARTBEAT,
+  type GetGymKioskQueryResponse,
+  type KioskHeartbeatMutationResponse,
+  type KioskHeartbeatMutationVariables,
+} from '@boardsesh/graphql/operations';
 import { executeGraphQL } from '@/app/lib/graphql/client';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
 import { evaluateKioskConfigPoll } from './kiosk-config-poll';
@@ -89,10 +95,18 @@ export function KioskBoardFeedBridge({
 export default function KioskReliability({
   gymSlug,
   kioskSlug,
+  kioskUuid,
+  gymUuid,
   initialUpdatedAt,
 }: {
   gymSlug: string;
   kioskSlug: string | null;
+  /** The kiosk's UUID — the heartbeat key (only the display pages send one; the
+   * manage preview builds its own tree without this component, so heartbeats are
+   * display-only by construction). */
+  kioskUuid: string;
+  /** The owning gym's UUID — scopes the heartbeat keyspace. */
+  gymUuid: string;
   /** The kiosk's `updatedAt` at server-render time; any change forces a reload. */
   initialUpdatedAt: string;
 }) {
@@ -146,6 +160,28 @@ export default function KioskReliability({
     decide();
     return () => clearTimeout(recheckTimeoutId);
   }, [kioskConfigData, dataUpdatedAt, initialUpdatedAt, mountedAtMs]);
+
+  // Heartbeat: check in so owners can see this TV is live, straight from the
+  // Kiosks tab. Piggybacks the config poll's cadence rather than adding a second
+  // timer — `dataUpdatedAt` advances on the first successful fetch (initial
+  // load) and on every 5-minute refetch, which is exactly when we want to
+  // report. Tying it to a completed poll also means "live" reflects the TV
+  // actually reaching the backend, not just a mounted component. A failed send
+  // is inconsequential: the next poll re-reports, and the backend TTL is
+  // generous, so a brief gap never reads as "dead".
+  useEffect(() => {
+    if (dataUpdatedAt === 0) return;
+    void executeGraphQL<KioskHeartbeatMutationResponse, KioskHeartbeatMutationVariables>(KIOSK_HEARTBEAT, {
+      input: {
+        kioskUuid,
+        gymUuid,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      },
+    }).catch(() => {
+      // Swallow — the next poll tick re-reports.
+    });
+  }, [dataUpdatedAt, kioskUuid, gymUuid]);
 
   useEffect(() => {
     const now = new Date();

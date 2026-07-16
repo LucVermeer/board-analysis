@@ -160,7 +160,13 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
     <I18nProvider locale={locale} namespaces={['common', 'kiosk']}>
       <KioskThemeScope gym={kiosk.gym}>
         <KioskAnalytics />
-        <KioskReliability gymSlug={gymSlug} kioskSlug={kioskSlug} initialUpdatedAt={kiosk.updatedAt} />
+        <KioskReliability
+          gymSlug={gymSlug}
+          kioskSlug={kioskSlug}
+          kioskUuid={kiosk.uuid}
+          gymUuid={kiosk.gym.uuid}
+          initialUpdatedAt={kiosk.updatedAt}
+        />
         <KioskPresenceHub boardIds={distinctBoardIds}>
           <div className={layoutStyles.root}>
             <KioskHeader

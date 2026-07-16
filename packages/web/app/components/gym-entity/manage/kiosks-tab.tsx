@@ -31,6 +31,7 @@ import {
   type GetGymBoardsQueryVariables,
   type GetGymKiosksQueryResponse,
   type GetGymKiosksQueryVariables,
+  type GymKioskManageResult,
   type GymKioskOperationResult,
 } from '@boardsesh/graphql/operations';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
@@ -44,6 +45,7 @@ import ManageTabEmptyState from './manage-tab-empty-state';
 import ConfirmDialog from './confirm-dialog';
 import KioskCreateDialog from './kiosk-create-dialog';
 import KioskEditor from './kiosk-editor';
+import KioskLivenessChip from './kiosk-liveness-chip';
 import type { GymManageTabProps } from './tab-props';
 
 /**
@@ -114,9 +116,12 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   );
 
   const handleCreated = (kiosk: GymKioskOperationResult) => {
-    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
-      previous ? [...previous, kiosk] : [kiosk],
-    );
+    // A fresh kiosk has never checked in — seed lastSeenAt null so the card
+    // shows "No signal yet" until it's opened on a TV.
+    queryClient.setQueryData<GymKioskManageResult[]>(kiosksQueryKey, (previous) => {
+      const created: GymKioskManageResult = { ...kiosk, lastSeenAt: null };
+      return previous ? [...previous, created] : [created];
+    });
     setCreateDialogOpen(false);
     showMessage(t('manage.createDialog.created', { slug: kiosk.slug }), 'success');
     // Straight into the editor — a fresh kiosk has no boards yet.
@@ -124,8 +129,14 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
   };
 
   const handleSaved = (kiosk: GymKioskOperationResult) => {
-    queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
-      previous ? previous.map((existing) => (existing.uuid === kiosk.uuid ? kiosk : existing)) : [kiosk],
+    // The update response doesn't carry liveness — keep whatever last-seen we
+    // already had for this kiosk so an edit doesn't blank its status chip.
+    queryClient.setQueryData<GymKioskManageResult[]>(kiosksQueryKey, (previous) =>
+      previous
+        ? previous.map((existing) =>
+            existing.uuid === kiosk.uuid ? { ...kiosk, lastSeenAt: existing.lastSeenAt } : existing,
+          )
+        : [{ ...kiosk, lastSeenAt: null }],
     );
   };
 
@@ -135,7 +146,7 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
     setDeleteTarget(null);
     const result = await deleteMutation.execute({ kioskUuid: target.uuid });
     if (result) {
-      queryClient.setQueryData<GymKioskOperationResult[]>(kiosksQueryKey, (previous) =>
+      queryClient.setQueryData<GymKioskManageResult[]>(kiosksQueryKey, (previous) =>
         previous ? previous.filter((existing) => existing.uuid !== target.uuid) : previous,
       );
     }
@@ -276,6 +287,9 @@ export default function KiosksTab({ gym, onDirtyChange }: GymManageTabProps) {
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                   {tvPath ?? t('manage.kiosks.urlPending', { slug: kiosk.slug })}
                 </Typography>
+                <Box sx={{ mb: 1 }}>
+                  <KioskLivenessChip lastSeenAt={kiosk.lastSeenAt} kioskName={kiosk.name} tvPath={tvPath} />
+                </Box>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   <Chip
                     size="small"

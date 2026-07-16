@@ -175,7 +175,26 @@
       "deleteConfirm": "Eliminar",
       "cancel": "Cancelar",
       "deleted": "Kiosco eliminado.",
-      "deleteFailed": "No se pudo eliminar el kiosco."
+      "deleteFailed": "No se pudo eliminar el kiosco.",
+      "liveness": {
+        "live": "En directo",
+        "lastSeenMinutes_one": "Visto hace {{count}} minuto",
+        "lastSeenMinutes_other": "Visto hace {{count}} minutos",
+        "lastSeenHours_one": "Visto hace {{count}} hora",
+        "lastSeenHours_other": "Visto hace {{count}} horas",
+        "noSignalDays_one": "Sin señal desde hace {{count}} día",
+        "noSignalDays_other": "Sin señal desde hace {{count}} días",
+        "noSignalYet": "Sin señal todavía",
+        "reinstall": "Volver a abrir en la TV"
+      },
+      "reinstall": {
+        "title": "Vuelve a poner esta pantalla en marcha",
+        "body": "Abre esta URL en el navegador del televisor para recuperar «{{name}}», o escanéala con el móvil para enviarla.",
+        "scanHint": "Escanea para abrir en el móvil",
+        "openTv": "Abrir vista de TV",
+        "close": "Listo",
+        "noUrl": "Primero define el slug de URL de tu rocódromo; luego este kiosco tendrá un enlace para cualquier pantalla."
+      }
     },
     "boards": {
       "heading": "Plafones de este rocódromo",

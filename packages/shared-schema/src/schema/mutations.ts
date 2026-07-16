@@ -562,6 +562,15 @@ export const mutationsTypeDefs = /* GraphQL */ `
     deleteGymKiosk(kioskUuid: ID!): Boolean!
 
     """
+    Public, unauthenticated kiosk check-in. A kiosk TV page calls this on load
+    and on its config-poll cadence; after validating the kiosk exists, the
+    backend records an ephemeral last-seen timestamp (Redis, ~30-day TTL) that
+    the edit-guarded gymKiosks query surfaces. Returns false when the
+    kiosk/gym pair doesn't resolve to a live kiosk. Rate-limited per client.
+    """
+    kioskHeartbeat(input: KioskHeartbeatInput!): Boolean!
+
+    """
     Record that an explicitly-created session has been mirrored to Apple HealthKit,
     storing the workout UUID for de-duplication and UI status.
     Must be a participant of the session.

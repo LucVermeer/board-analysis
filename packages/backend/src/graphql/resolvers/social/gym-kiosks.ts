@@ -6,8 +6,19 @@ import { MAX_KIOSKS_PER_GYM, emptyKioskLayout, parseKioskLayoutLenient, type Kio
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
-import { CreateGymKioskInputSchema, UpdateGymKioskInputSchema, UUIDSchema } from '../../../validation/schemas';
+import {
+  CreateGymKioskInputSchema,
+  UpdateGymKioskInputSchema,
+  KioskHeartbeatInputSchema,
+  UUIDSchema,
+} from '../../../validation/schemas';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
+import {
+  recordKioskHeartbeat,
+  readKioskLastSeen,
+  isKioskExistenceCached,
+  cacheKioskExistence,
+} from '../../../services/kiosk-heartbeat';
 import { enrichGym, requireGymEditAccess, userCanEditGym, resolveCanonicalGymBySlug } from './gyms';
 import { enrichBoards } from './boards';
 
@@ -23,6 +34,11 @@ const RATE_LIMIT_GYM_KIOSKS = 60;
 const RATE_LIMIT_CREATE_GYM_KIOSK = 60;
 const RATE_LIMIT_UPDATE_GYM_KIOSK = 60;
 const RATE_LIMIT_DELETE_GYM_KIOSK = 60;
+// Heartbeats are unauthenticated (TVs aren't logged in), so this bucket is
+// keyed per client IP in-memory (see applyRateLimit). A live TV checks in once
+// per config-poll cycle (~5 min); 60/min leaves generous headroom for a whole
+// gym's worth of screens behind one NAT while still capping a runaway client.
+const RATE_LIMIT_KIOSK_HEARTBEAT = 60;
 
 // Same slug shape gymBySlug accepts — a public URL segment.
 const GYM_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
@@ -223,6 +239,34 @@ async function loadKioskForWrite(kioskUuid: string): Promise<{ kiosk: KioskRow; 
   return { kiosk, gym };
 }
 
+/**
+ * Cheap "does this live kiosk belong to this gym?" check for the public
+ * heartbeat path. Tries the Redis existence cache first (heartbeats are hot),
+ * falls back to one indexed join, and caches a positive result. Both UUIDs must
+ * match — nothing from the unauthenticated input is trusted beyond this lookup.
+ */
+async function kioskExistsForGym(kioskUuid: string, gymUuid: string): Promise<boolean> {
+  if (await isKioskExistenceCached(gymUuid, kioskUuid)) return true;
+
+  const [row] = await db
+    .select({ id: dbSchema.gymKiosks.id })
+    .from(dbSchema.gymKiosks)
+    .innerJoin(dbSchema.gyms, eq(dbSchema.gymKiosks.gymId, dbSchema.gyms.id))
+    .where(
+      and(
+        eq(dbSchema.gymKiosks.uuid, kioskUuid),
+        isNull(dbSchema.gymKiosks.deletedAt),
+        eq(dbSchema.gyms.uuid, gymUuid),
+        isNull(dbSchema.gyms.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!row) return false;
+  await cacheKioskExistence(gymUuid, kioskUuid);
+  return true;
+}
+
 /** Verify every board referenced by a layout is alive and linked to this gym. */
 async function assertLayoutBoardsInGym(gymId: number, layout: KioskLayout): Promise<void> {
   const referenced = new Set<string>(layout.boards.map((slot) => slot.boardUuid));
@@ -323,7 +367,17 @@ export const socialGymKioskQueries = {
     // The viewer just passed requireGymEditAccess, so they're a gym editor.
     // Every kiosk shares this one gym — enrich it once, not once per kiosk.
     const enrichedGym = await enrichGym(gym, userId);
-    return Promise.all(kiosks.map((kiosk) => resolveKioskView(kiosk, enrichedGym, userId, true)));
+    const resolved = await Promise.all(kiosks.map((kiosk) => resolveKioskView(kiosk, enrichedGym, userId, true)));
+
+    // Attach ephemeral liveness from Redis in one batch MGET. A missing signal
+    // reads as null ("No signal yet") — never an error and never proof a TV is
+    // down (see services/kiosk-heartbeat.ts). Only this edit-guarded query
+    // exposes liveness; the public `gymKiosk` read leaves lastSeenAt null.
+    const lastSeenByUuid = await readKioskLastSeen(
+      gym.uuid,
+      resolved.map((kiosk) => kiosk.uuid),
+    );
+    return resolved.map((kiosk) => ({ ...kiosk, lastSeenAt: lastSeenByUuid.get(kiosk.uuid) ?? null }));
   },
 };
 
@@ -459,6 +513,36 @@ export const socialGymKioskMutations = {
     }
 
     await db.update(dbSchema.gymKiosks).set({ deletedAt: new Date() }).where(eq(dbSchema.gymKiosks.id, kiosk.id));
+
+    return true;
+  },
+
+  /**
+   * Public, UNAUTHENTICATED kiosk check-in. Called by the kiosk TV pages on load
+   * and on their config-poll cadence. Rate-limited per client IP, validates the
+   * (kiosk, gym) pair against a live kiosk, then records an ephemeral last-seen
+   * timestamp in Redis. Returns false — never an error — when the pair doesn't
+   * resolve, so a TV showing a since-deleted kiosk just stops being counted
+   * live instead of surfacing a fault.
+   */
+  kioskHeartbeat: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
+    await applyRateLimit(ctx, RATE_LIMIT_KIOSK_HEARTBEAT, 'kioskHeartbeat');
+    const validated = validateInput(KioskHeartbeatInputSchema, input, 'input');
+
+    if (!(await kioskExistsForGym(validated.kioskUuid, validated.gymUuid))) {
+      return false;
+    }
+
+    const viewport =
+      validated.viewportWidth != null && validated.viewportHeight != null
+        ? `${validated.viewportWidth}x${validated.viewportHeight}`
+        : null;
+
+    await recordKioskHeartbeat({
+      gymUuid: validated.gymUuid,
+      kioskUuid: validated.kioskUuid,
+      viewport,
+    });
 
     return true;
   },

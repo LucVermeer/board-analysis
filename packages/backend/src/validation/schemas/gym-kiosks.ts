@@ -38,3 +38,16 @@ export const UpdateGymKioskInputSchema = z.object({
   slug: KioskSlugSchema.optional(),
   layout: KioskLayoutSchema.optional(),
 });
+
+/**
+ * Public, unauthenticated kiosk check-in input. Nothing here is trusted beyond
+ * the two UUIDs, which are matched against a live kiosk before any write. The
+ * viewport marker is a coarse client hint, clamped to a sane pixel range so a
+ * hostile TV can't stuff arbitrary values into the ephemeral record.
+ */
+export const KioskHeartbeatInputSchema = z.object({
+  kioskUuid: UUIDSchema,
+  gymUuid: UUIDSchema,
+  viewportWidth: z.number().int().min(1).max(20000).optional(),
+  viewportHeight: z.number().int().min(1).max(20000).optional(),
+});

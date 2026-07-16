@@ -175,7 +175,26 @@
       "deleteConfirm": "Delete",
       "cancel": "Cancel",
       "deleted": "Kiosk deleted.",
-      "deleteFailed": "Couldn't delete the kiosk."
+      "deleteFailed": "Couldn't delete the kiosk.",
+      "liveness": {
+        "live": "Live",
+        "lastSeenMinutes_one": "Last seen {{count}} minute ago",
+        "lastSeenMinutes_other": "Last seen {{count}} minutes ago",
+        "lastSeenHours_one": "Last seen {{count}} hour ago",
+        "lastSeenHours_other": "Last seen {{count}} hours ago",
+        "noSignalDays_one": "No signal for {{count}} day",
+        "noSignalDays_other": "No signal for {{count}} days",
+        "noSignalYet": "No signal yet",
+        "reinstall": "Reinstall on TV"
+      },
+      "reinstall": {
+        "title": "Get this screen back up",
+        "body": "Open this URL in the TV's browser to bring “{{name}}” back, or scan it with a phone to send it over.",
+        "scanHint": "Scan to open on a phone",
+        "openTv": "Open TV view",
+        "close": "Done",
+        "noUrl": "Set your gym's URL slug first — then this kiosk gets a link you can put on any screen."
+      }
     },
     "boards": {
       "heading": "Boards at this gym",
