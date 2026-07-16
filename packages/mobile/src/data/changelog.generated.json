@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-16T10:40:47.987Z",
+  "generatedAt": "2026-07-16T10:49:51.018Z",
   "entries": [
+    {
+      "prNumber": 3678,
+      "category": "new",
+      "title": "Boardsesh on the web gets a fresh look — the same violet **Velvet Send** style as the app, in light and dark.",
+      "mergedAt": "2026-07-16T10:43:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3678",
+      "body": "Keyboard climbers get visible focus rings everywhere.\nYour profile card's grade spread shows as a colourful donut instead of a flat bar."
+    },
     {
       "prNumber": 3675,
       "category": "new",

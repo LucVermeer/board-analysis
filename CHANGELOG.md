@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Boardsesh on the web gets a fresh look — the same violet **Velvet Send** style as the app, in light and dark. ([#3678](https://github.com/boardsesh/boardsesh/pull/3678))
+  Keyboard climbers get visible focus rings everywhere.
+  Your profile card's grade spread shows as a colourful donut instead of a flat bar.
 - Your gyms are one tap away — open the menu and hit **My gyms** to jump straight into managing kiosks, boards, and your crew. ([#3675](https://github.com/boardsesh/boardsesh/pull/3675))
 - Gym pages are real pages now — tap a gym's name anywhere to see its walls, follow it, claim it, and join the conversation. ([#3670](https://github.com/boardsesh/boardsesh/pull/3670))
 - Your gyms are one tap away — open the menu and hit **My gyms** to jump straight into managing kiosks, boards, and your crew. ([#3668](https://github.com/boardsesh/boardsesh/pull/3668))
