@@ -17,7 +17,7 @@ vi.mock('@/app/lib/auth/password-reset', () => ({
 }));
 
 const mockSendPasswordResetEmail = vi.fn();
-vi.mock('@/app/lib/email/email-service', () => ({
+vi.mock('@boardsesh/email', () => ({
   sendPasswordResetEmail: (...args: unknown[]) => mockSendPasswordResetEmail(...args),
 }));
 

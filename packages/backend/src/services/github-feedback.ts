@@ -1,0 +1,247 @@
+/**
+ * Turns a submitted bug report into a GitHub issue in the public tracker.
+ *
+ * Fire-and-forget from the resolver's side-effect: a slow or broken GitHub API
+ * must never fail the originating mutation, so `createFeedbackGithubIssue`
+ * never throws and no-ops when unconfigured.
+ *
+ * Privacy: the repo is PUBLIC, so the issue body carries NO user identity
+ * (no userId/email/UUID) — only the `app_feedback` row id, which an admin
+ * resolves to the reporter privately. Free-text comments are run through
+ * `redactSensitiveText` before they land in a world-readable issue.
+ */
+
+import type { AppFeedbackPlatform, AppFeedbackSource, FeedbackContextInput } from '@boardsesh/shared-schema';
+import { logger } from '../utils/logger';
+
+const GITHUB_API = 'https://api.github.com';
+const DEFAULT_REPO = 'boardsesh/boardsesh';
+const TITLE_LIMIT = 120;
+
+const BUG_SOURCES: ReadonlySet<AppFeedbackSource> = new Set(['shake-bug', 'drawer-bug']);
+
+// Colors mirror the TestFlight→issues sync (scripts/testflight-feedback-to-issues.ts)
+// so labels created by either path look consistent.
+const LABEL_COLORS: Record<string, string> = {
+  bug: 'd73a4a',
+  'user-feedback': 'fbca04',
+  ios: '1d76db',
+  android: '0e8a16',
+  web: '5319e7',
+};
+
+export type FeedbackIssuePayload = {
+  feedbackId: string | number | bigint;
+  rating: number | null;
+  comment: string | null;
+  platform: AppFeedbackPlatform;
+  appVersion: string | null;
+  source: AppFeedbackSource;
+  boardName?: string | null;
+  layoutId?: number | null;
+  sizeId?: number | null;
+  setIds?: number[] | null;
+  angle?: number | null;
+  context?: FeedbackContextInput | null;
+  contactConsent?: boolean | null;
+};
+
+export type FeedbackIssueDraft = {
+  title: string;
+  body: string;
+  labels: string[];
+};
+
+export type CreatedIssue = {
+  number: number;
+  htmlUrl: string;
+};
+
+/**
+ * Redact obvious PII before free text lands in a public issue. Ported from
+ * scripts/testflight-feedback-to-issues.ts (kept in sync via this file's test).
+ */
+export function redactSensitiveText(text: string): string {
+  let redacted = text.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted email]');
+  redacted = redacted.replace(/\/Users\/[^/\s]+/g, '/Users/[redacted]');
+  redacted = redacted.replace(
+    /\b((?:first|last|full)\s+name|name|tester|email)\s*[:=]\s*([^\n\r,;]+)/gi,
+    (_match: string, label: string) => `${label}: [redacted]`,
+  );
+  redacted = redacted.replace(
+    /\b(my name is|i am|i'm)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/gi,
+    (_match: string, prefix: string) => `${prefix} [redacted name]`,
+  );
+  return redacted;
+}
+
+function formatBoard(payload: FeedbackIssuePayload): string | null {
+  if (!payload.boardName) return null;
+  const parts: string[] = [payload.boardName];
+  if (payload.layoutId != null) parts.push(`layout ${payload.layoutId}`);
+  if (payload.sizeId != null) parts.push(`size ${payload.sizeId}`);
+  if (payload.setIds && payload.setIds.length > 0) parts.push(`sets [${payload.setIds.join(',')}]`);
+  const base = parts.join(' / ');
+  return payload.angle != null ? `${base} @ ${payload.angle}°` : base;
+}
+
+function formatClimb(context: FeedbackContextInput | null | undefined): string | null {
+  if (!context?.climbName && !context?.climbUuid) return null;
+  if (context.climbName) {
+    return context.difficulty ? `${context.climbName} (${context.difficulty})` : context.climbName;
+  }
+  return context.climbUuid ?? null;
+}
+
+function formatSession(context: FeedbackContextInput | null | undefined): string | null {
+  if (!context?.sessionId) return null;
+  return context.sessionName ? `${context.sessionName} (${context.sessionId})` : context.sessionId;
+}
+
+function escapeTableCell(value: string): string {
+  return value.replaceAll('|', '\\|').replace(/\r?\n/g, '<br>');
+}
+
+function buildTitle(redactedComment: string): string {
+  const snippet = redactedComment.replace(/\s+/g, ' ').trim();
+  const base = snippet ? `🐞 Bug report: ${snippet}` : '🐞 Bug report';
+  return base.length <= TITLE_LIMIT ? base : `${base.slice(0, TITLE_LIMIT - 3).trimEnd()}...`;
+}
+
+function buildMetadataTable(payload: FeedbackIssuePayload): string {
+  const rows: Array<[string, string | null]> = [
+    ['Platform', payload.platform],
+    ['App version', payload.appVersion ?? null],
+    ['Source', payload.source],
+    ['Board', formatBoard(payload)],
+    ['Climb', formatClimb(payload.context)],
+    ['Session', formatSession(payload.context)],
+    ['URL', payload.context?.url ?? null],
+    ['User agent', payload.context?.userAgent ?? null],
+    ['Feedback row', `app_feedback #${payload.feedbackId}`],
+  ];
+  return [
+    '## Metadata',
+    '',
+    '| Field | Value |',
+    '| --- | --- |',
+    ...rows.map(([field, value]) => `| ${field} | ${escapeTableCell(value ?? 'unknown')} |`),
+  ].join('\n');
+}
+
+function buildContactLine(payload: FeedbackIssuePayload): string {
+  if (payload.contactConsent) {
+    return `## Contact\n\n✅ Reporter agreed to follow-up — resolve **app_feedback #${payload.feedbackId}** in the DB to reach them.`;
+  }
+  return '## Contact\n\n🚫 No contact consent — do not reach out.';
+}
+
+/**
+ * Build the GitHub issue draft for a bug report. Returns null for non-bug
+ * (rating) sources, which don't become issues.
+ *
+ * @internal exported for testing; resolver code should call createFeedbackGithubIssue.
+ */
+export function buildFeedbackIssue(payload: FeedbackIssuePayload): FeedbackIssueDraft | null {
+  if (!BUG_SOURCES.has(payload.source)) return null;
+
+  const rawComment = payload.comment?.trim() ?? '';
+  const redactedComment = rawComment ? redactSensitiveText(rawComment) : '';
+
+  const body = [
+    `<!-- app-feedback:${payload.feedbackId} -->`,
+    'Reported from the Boardsesh mobile app.',
+    '',
+    '## Comment',
+    '',
+    redactedComment || '_No comment provided._',
+    '',
+    buildMetadataTable(payload),
+    '',
+    buildContactLine(payload),
+  ].join('\n');
+
+  return {
+    title: buildTitle(redactedComment),
+    body,
+    labels: ['bug', 'user-feedback', payload.platform],
+  };
+}
+
+function githubHeaders(token: string): Record<string, string> {
+  return {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'boardsesh-backend',
+  };
+}
+
+// Best-effort: create each label if it doesn't exist. 422 = already exists (the
+// common case), which is fine. Failures here never block issue creation.
+async function ensureLabels(owner: string, repo: string, token: string, labels: string[]): Promise<void> {
+  for (const label of labels) {
+    try {
+      const response = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/labels`, {
+        method: 'POST',
+        headers: githubHeaders(token),
+        body: JSON.stringify({ name: label, color: LABEL_COLORS[label] ?? 'ededed' }),
+      });
+      if (!response.ok && response.status !== 422) {
+        const errorText = await response.text().catch(() => '<unreadable>');
+        logger.warn(`[GitHub feedback] ensureLabel ${label}: ${response.status} ${errorText}`);
+      }
+    } catch (error) {
+      logger.warn(`[GitHub feedback] ensureLabel ${label} error:`, error);
+    }
+  }
+}
+
+/**
+ * Create a GitHub issue from a bug report. Never throws. Returns the created
+ * issue's number + html_url, or null when it no-ops or fails:
+ *  - non-bug (rating) source → null,
+ *  - FEEDBACK_GITHUB_TOKEN unset (local dev) → null,
+ *  - any API error → logged and null.
+ */
+export async function createFeedbackGithubIssue(payload: FeedbackIssuePayload): Promise<CreatedIssue | null> {
+  const draft = buildFeedbackIssue(payload);
+  if (!draft) return null;
+
+  const token = process.env.FEEDBACK_GITHUB_TOKEN;
+  if (!token) return null;
+
+  const repo = process.env.FEEDBACK_GITHUB_REPO ?? DEFAULT_REPO;
+  const [owner, name] = repo.split('/');
+  if (!owner || !name) {
+    logger.error(`[GitHub feedback] Invalid FEEDBACK_GITHUB_REPO "${repo}" (expected owner/name)`);
+    return null;
+  }
+
+  try {
+    await ensureLabels(owner, name, token, draft.labels);
+
+    const response = await fetch(`${GITHUB_API}/repos/${owner}/${name}/issues`, {
+      method: 'POST',
+      headers: githubHeaders(token),
+      body: JSON.stringify({ title: draft.title, body: draft.body, labels: draft.labels }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '<unreadable>');
+      logger.error(`[GitHub feedback] Create issue failed: ${response.status} ${errorText}`);
+      return null;
+    }
+
+    const created = (await response.json()) as { number?: number; html_url?: string };
+    if (typeof created.number !== 'number' || typeof created.html_url !== 'string') {
+      logger.error('[GitHub feedback] Create issue returned an unexpected response shape');
+      return null;
+    }
+    return { number: created.number, htmlUrl: created.html_url };
+  } catch (error) {
+    logger.error('[GitHub feedback] Create issue error:', error);
+    return null;
+  }
+}

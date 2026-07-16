@@ -64,6 +64,7 @@
         "@boardsesh/board-constants": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
+        "@boardsesh/email": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/gym-claim": "*",
         "@boardsesh/kilter-sync": "*",
@@ -488,6 +489,19 @@
         "react": "^19",
       },
     },
+    "packages/shared/email": {
+      "name": "@boardsesh/email",
+      "version": "1.0.0",
+      "dependencies": {
+        "nodemailer": "^8.0.1",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/node": "^25.3.3",
+        "@types/nodemailer": "^7.0.11",
+        "typescript": "~6.0.3",
+      },
+    },
     "packages/shared/graphql": {
       "name": "@boardsesh/graphql",
       "version": "1.0.0",
@@ -726,6 +740,7 @@
         "@boardsesh/create-climb-react": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
+        "@boardsesh/email": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
         "@boardsesh/gym-claim": "*",
@@ -1152,6 +1167,8 @@
     "@boardsesh/crypto": ["@boardsesh/crypto@workspace:packages/crypto"],
 
     "@boardsesh/db": ["@boardsesh/db@workspace:packages/db"],
+
+    "@boardsesh/email": ["@boardsesh/email@workspace:packages/shared/email"],
 
     "@boardsesh/graphql": ["@boardsesh/graphql@workspace:packages/shared/graphql"],
 

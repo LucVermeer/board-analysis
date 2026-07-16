@@ -39,4 +39,9 @@ export type SubmitAppFeedbackInput = {
   setIds?: number[] | null;
   angle?: number | null;
   context?: FeedbackContextInput | null;
+  /**
+   * Whether the reporter opted in to follow-up contact about a bug report.
+   * Only set for bug-report sources; null/false means "do not contact".
+   */
+  contactConsent?: boolean | null;
 };

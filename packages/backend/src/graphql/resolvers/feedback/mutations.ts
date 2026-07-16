@@ -1,10 +1,13 @@
 import type { ConnectionContext, FeedbackContextInput } from '@boardsesh/shared-schema';
+import { eq } from 'drizzle-orm';
+import { sendBugReportIssueEmail } from '@boardsesh/email';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import type { FeedbackContext } from '@boardsesh/db/schema';
 import { applyRateLimit, validateInput } from '../shared/helpers';
 import { SubmitAppFeedbackInputSchema } from '../../../validation/schemas';
-import { postFeedbackToDiscord } from '../../../services/discord';
+import { createFeedbackGithubIssue } from '../../../services/github-feedback';
+import { logger } from '../../../utils/logger';
 
 export const feedbackMutations = {
   submitAppFeedback: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
@@ -19,12 +22,14 @@ export const feedbackMutations = {
     const sizeId = validated.sizeId ?? null;
     const setIds = validated.setIds ?? null;
     const angle = validated.angle ?? null;
+    const contactConsent = validated.contactConsent ?? null;
     const context = normalizeContext(validated.context);
+    const userId = ctx.userId ?? null;
 
     const rows = await db
       .insert(dbSchema.appFeedback)
       .values({
-        userId: ctx.userId ?? null,
+        userId,
         rating,
         comment,
         platform: validated.platform,
@@ -35,30 +40,56 @@ export const feedbackMutations = {
         sizeId,
         setIds,
         angle,
+        contactConsent,
         context,
       })
       .returning();
     const row = rows[0];
 
-    // Fire-and-forget. postFeedbackToDiscord swallows all errors internally.
-    // Guard on row existence — an insert that doesn't return a row means
-    // something's wrong at the DB layer (not our contract), so skip the
-    // side-effect rather than crash the mutation.
+    // Fire-and-forget side effect for bug reports: open a GitHub issue, then —
+    // if the reporter opted in to contact and is signed in — email them the
+    // link. Bug-vs-rating gating lives in createFeedbackGithubIssue (rating
+    // sources return null and no email is sent). Errors are logged and never
+    // bubble up; this must not block or fail the mutation. Guard on row
+    // existence — a missing returned row means a DB-layer problem, not our
+    // contract, so skip the side effect.
     if (row) {
-      void postFeedbackToDiscord({
-        feedbackId: row.id,
-        rating,
-        comment,
-        platform: validated.platform,
-        appVersion,
-        source: validated.source,
-        boardName,
-        layoutId,
-        sizeId,
-        setIds,
-        angle,
-        context,
-      });
+      void (async () => {
+        try {
+          const issue = await createFeedbackGithubIssue({
+            feedbackId: row.id,
+            rating,
+            comment,
+            platform: validated.platform,
+            appVersion,
+            source: validated.source,
+            boardName,
+            layoutId,
+            sizeId,
+            setIds,
+            angle,
+            context,
+            contactConsent,
+          });
+
+          if (issue && contactConsent && userId) {
+            const [reporter] = await db
+              .select({ email: dbSchema.users.email })
+              .from(dbSchema.users)
+              .where(eq(dbSchema.users.id, userId))
+              .limit(1);
+            if (reporter?.email) {
+              await sendBugReportIssueEmail({
+                to: reporter.email,
+                issueUrl: issue.htmlUrl,
+                issueNumber: issue.number,
+              });
+            }
+          }
+        } catch (error) {
+          logger.error('[feedback] issue/email side-effect failed:', error);
+        }
+      })();
     }
 
     return true;

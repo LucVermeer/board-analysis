@@ -30,6 +30,7 @@
     "@boardsesh/board-constants": "*",
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
+    "@boardsesh/email": "*",
     "@boardsesh/graphql": "*",
     "@boardsesh/gym-claim": "*",
     "@boardsesh/kilter-sync": "*",
