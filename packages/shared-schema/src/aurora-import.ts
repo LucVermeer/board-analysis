@@ -65,6 +65,18 @@ function readStringProperty(value: unknown, property: string): string | undefine
   return typeof record[property] === 'string' ? record[property] : undefined;
 }
 
+/**
+ * True for a merged-shape attempt: an `ascents` entry the live Aurora backend
+ * (Tension / TB2) flagged as a bid the user never sent (`is_ascent: false`).
+ * Legacy Kilter exports omit the flag, so those stay ascents. The server-side
+ * importer does the authoritative reclassification; this only keeps the preview
+ * counts honest. Exported so web's `parse-aurora-export.ts` shares one copy. #3301
+ */
+export function isMergedShapeAttempt(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  return (value as Record<string, unknown>).is_ascent === false;
+}
+
 function detectBoardFromLayoutName(layoutName: string): string | null {
   const normalizedLayoutName = layoutName.toLowerCase();
   for (const boardType of AURORA_BOARDS) {
@@ -86,6 +98,10 @@ export function parseAuroraExportJson(json: Record<string, unknown>, boardType: 
   const attempts = Array.isArray(json.attempts) ? json.attempts : [];
   const circuits = Array.isArray(json.circuits) ? json.circuits : [];
   const climbs = Array.isArray(json.climbs) ? json.climbs : [];
+
+  // Merged-shape attempts still live in `ascents` here — the server reclassifies
+  // them at import — but the preview should count them as attempts, not sends.
+  const mergedShapeAttemptCount = ascents.filter(isMergedShapeAttempt).length;
 
   let boardMismatchLayoutName: string | undefined;
   if (climbs.length > 0) {
@@ -112,8 +128,8 @@ export function parseAuroraExportJson(json: Record<string, unknown>, boardType: 
       climbs,
     },
     preview: {
-      ascents: ascents.length,
-      attempts: attempts.length,
+      ascents: ascents.length - mergedShapeAttemptCount,
+      attempts: attempts.length + mergedShapeAttemptCount,
       circuits: circuits.length,
       climbs: climbs.length,
       username,

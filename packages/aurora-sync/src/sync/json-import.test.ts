@@ -3,8 +3,10 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   buildImportedClimbRow,
   buildJsonImportAscentTickRow,
+  exportAscentToAttempt,
   generateJsonImportAuroraId,
   importedPlaceholderConflictPolicy,
+  isExportAscentActuallyAttempt,
   publishedClimbKey,
   type AuroraExportAscent,
 } from './json-import';
@@ -49,6 +51,22 @@ describe('buildJsonImportAscentTickRow', () => {
     expect(row.quality).toBe(5);
   });
 
+  // #3301: the merged Aurora shape can omit stars/grade on an attempt-shaped
+  // `ascents` row. The builder must tolerate that (null quality/difficulty)
+  // rather than throw, while the legacy shape (always present) is unchanged.
+  it('tolerates a missing grade (merged shape) with null difficulty', () => {
+    const row = buildJsonImportAscentTickRow(
+      USER_ID,
+      'tension',
+      makeAscent({ grade: undefined, stars: undefined }),
+      CLIMB_UUID,
+      CLIMBED_AT,
+      NOW,
+    );
+    expect(row.difficulty).toBeNull();
+    expect(row.quality).toBeNull();
+  });
+
   it('builds the row with the deterministic json-import aurora id and matching sync timestamps', () => {
     const ascent = makeAscent();
     const row = buildJsonImportAscentTickRow(USER_ID, 'kilter', ascent, CLIMB_UUID, CLIMBED_AT, NOW);
@@ -64,6 +82,31 @@ describe('buildJsonImportAscentTickRow', () => {
     // timestamp here.
     expect(row.updatedAt).toBe(NOW);
     expect(row.auroraSyncedAt).toBe(NOW);
+  });
+});
+
+describe('merged-shape attempt reclassification (#3301)', () => {
+  it('flags only an explicit is_ascent=false as an attempt', () => {
+    expect(isExportAscentActuallyAttempt(makeAscent({ is_ascent: false }))).toBe(true);
+    // Legacy Kilter exports omit the flag → stays an ascent.
+    expect(isExportAscentActuallyAttempt(makeAscent())).toBe(false);
+    expect(isExportAscentActuallyAttempt(makeAscent({ is_ascent: true }))).toBe(false);
+  });
+
+  it('coerces a merged-shape attempt to the flat attempt shape, preferring tries over count', () => {
+    const attempt = exportAscentToAttempt(makeAscent({ is_ascent: false, count: 2, tries: 5 }));
+    expect(attempt).toEqual({
+      climb: 'Test Climb',
+      angle: 40,
+      count: 5,
+      climbed_at: '2026-06-01 10:00:00',
+      created_at: '2026-06-01 10:05:00',
+    });
+  });
+
+  it('falls back to count when tries is absent', () => {
+    const attempt = exportAscentToAttempt(makeAscent({ is_ascent: false, count: 3 }));
+    expect(attempt.count).toBe(3);
   });
 });
 
