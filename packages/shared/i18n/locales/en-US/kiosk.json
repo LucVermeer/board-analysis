@@ -45,20 +45,18 @@
     "poweredBy": "Powered by"
   },
   "embed": {
-    "metadata": {
-      "boardTitle": "{{boardName}} — live board view",
-      "boardDescription": "See what's lit on {{boardName}} right now. Powered by Boardsesh.",
-      "boardFallbackTitle": "Live board view",
-      "boardFallbackDescription": "Live climbing board widget. Powered by Boardsesh.",
-      "leaderboardTitle": "{{gymName}} — leaderboard",
-      "leaderboardDescription": "Who's sending at {{gymName}}. Powered by Boardsesh.",
-      "leaderboardFallbackTitle": "Gym leaderboard",
-      "leaderboardFallbackDescription": "Gym leaderboard widget. Powered by Boardsesh."
-    },
-    "leaderboard": {
-      "errorTitle": "Leaderboard unavailable",
-      "errorBody": "Couldn't load the latest sends. It'll retry on its own."
-    }
+    "boardButton": "Embed this board",
+    "railButton": "Embed leaderboard",
+    "boardDialogTitle": "Embed {{name}}",
+    "railDialogTitle": "Embed the {{name}} leaderboard",
+    "copy": "Copy",
+    "copied": "Copied to clipboard.",
+    "copyFailed": "Couldn't copy — select the code and copy it manually.",
+    "periodNote": "The period parameter accepts day, week, or month.",
+    "docsHint": "Paste into any HTML page — it stays live.",
+    "close": "Close",
+    "publicOnlyBoard": "Only public boards can be embedded.",
+    "publicOnlyGym": "Only public gyms can embed the leaderboard."
   },
   "gymPage": {
     "metaTitle": "{{gymName}} climbing gym",
@@ -109,7 +107,29 @@
       "kiosks": "Kiosks",
       "branding": "Branding",
       "boards": "Boards",
-      "members": "Members"
+      "members": "Members",
+      "insights": "Insights"
+    },
+    "insights": {
+      "subtitle": "How your boards did this week compared with last.",
+      "uniqueClimbers": "Climbers",
+      "ascents": "Sends",
+      "busiestDay": "Busiest day",
+      "byDay": "Sends by day",
+      "byDayAria": "Sends per day of the week",
+      "topClimbs": "What everyone's projecting",
+      "noTopClimbs": "No sends logged yet this week.",
+      "unnamedClimb": "Unnamed climb",
+      "ascentsCount_one": "{{count}} send",
+      "ascentsCount_other": "{{count}} sends",
+      "deltaUp": "+{{count}} vs last week",
+      "deltaDown": "−{{count}} vs last week",
+      "deltaFlat": "Same as last week",
+      "loadError": "Couldn't load this week's numbers.",
+      "empty": {
+        "title": "No sends this week",
+        "body": "Time to reset the wall? As soon as climbers log a send here, you'll see who showed up and what they're projecting."
+      }
     },
     "navGuard": {
       "title": "Discard unsaved changes?",
@@ -295,19 +315,5 @@
       "cancel": "Cancel",
       "done": "Branding reset."
     }
-  },
-  "embed": {
-    "boardButton": "Embed this board",
-    "railButton": "Embed leaderboard",
-    "boardDialogTitle": "Embed {{name}}",
-    "railDialogTitle": "Embed the {{name}} leaderboard",
-    "copy": "Copy",
-    "copied": "Copied to clipboard.",
-    "copyFailed": "Couldn't copy — select the code and copy it manually.",
-    "periodNote": "The period parameter accepts day, week, or month.",
-    "docsHint": "Paste into any HTML page — it stays live.",
-    "close": "Close",
-    "publicOnlyBoard": "Only public boards can be embedded.",
-    "publicOnlyGym": "Only public gyms can embed the leaderboard."
   }
 }

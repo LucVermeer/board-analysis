@@ -45,20 +45,18 @@
     "poweredBy": "Propulsé par"
   },
   "embed": {
-    "metadata": {
-      "boardTitle": "{{boardName}} — vue de la board en direct",
-      "boardDescription": "Ce qui est allumé sur {{boardName}} en ce moment. Propulsé par Boardsesh.",
-      "boardFallbackTitle": "Vue de la board en direct",
-      "boardFallbackDescription": "Widget de board en direct. Propulsé par Boardsesh.",
-      "leaderboardTitle": "{{gymName}} — classement",
-      "leaderboardDescription": "Qui enchaîne à {{gymName}}. Propulsé par Boardsesh.",
-      "leaderboardFallbackTitle": "Classement de la salle",
-      "leaderboardFallbackDescription": "Widget de classement de salle. Propulsé par Boardsesh."
-    },
-    "leaderboard": {
-      "errorTitle": "Classement indisponible",
-      "errorBody": "Impossible de charger les dernières croix. Le widget réessaie tout seul."
-    }
+    "boardButton": "Intégrer cette board",
+    "railButton": "Intégrer le classement",
+    "boardDialogTitle": "Intégrer {{name}}",
+    "railDialogTitle": "Intégrer le classement de {{name}}",
+    "copy": "Copier",
+    "copied": "Copié dans le presse-papiers.",
+    "copyFailed": "Impossible de copier : sélectionne le code et copie-le à la main.",
+    "periodNote": "Le paramètre period accepte day, week ou month.",
+    "docsHint": "Colle-le dans n'importe quelle page HTML : ça reste en direct.",
+    "close": "Fermer",
+    "publicOnlyBoard": "Seules les boards publiques peuvent être intégrées.",
+    "publicOnlyGym": "Seules les salles publiques peuvent intégrer le classement."
   },
   "gymPage": {
     "metaTitle": "Salle d'escalade {{gymName}}",
@@ -109,7 +107,29 @@
       "kiosks": "Bornes",
       "branding": "Identité",
       "boards": "Boards",
-      "members": "Membres"
+      "members": "Membres",
+      "insights": "Statistiques"
+    },
+    "insights": {
+      "subtitle": "Comment tes boards ont tourné cette semaine par rapport à la dernière.",
+      "uniqueClimbers": "Grimpeurs",
+      "ascents": "Croix",
+      "busiestDay": "Jour le plus actif",
+      "byDay": "Croix par jour",
+      "byDayAria": "Croix par jour de la semaine",
+      "topClimbs": "Ce que tout le monde projette",
+      "noTopClimbs": "Pas encore de croix cette semaine.",
+      "unnamedClimb": "Bloc sans nom",
+      "ascentsCount_one": "{{count}} croix",
+      "ascentsCount_other": "{{count}} croix",
+      "deltaUp": "+{{count}} par rapport à la semaine dernière",
+      "deltaDown": "−{{count}} par rapport à la semaine dernière",
+      "deltaFlat": "Comme la semaine dernière",
+      "loadError": "Impossible de charger les chiffres de cette semaine.",
+      "empty": {
+        "title": "Pas de croix cette semaine",
+        "body": "Il est temps de refaire le mur ? Dès que les grimpeurs enregistrent une croix ici, tu verras qui est passé et ce qu'ils projettent."
+      }
     },
     "navGuard": {
       "title": "Abandonner les modifications non enregistrées ?",
@@ -295,19 +315,5 @@
       "cancel": "Annuler",
       "done": "Identité rétablie."
     }
-  },
-  "embed": {
-    "boardButton": "Intégrer cette board",
-    "railButton": "Intégrer le classement",
-    "boardDialogTitle": "Intégrer {{name}}",
-    "railDialogTitle": "Intégrer le classement de {{name}}",
-    "copy": "Copier",
-    "copied": "Copié dans le presse-papiers.",
-    "copyFailed": "Impossible de copier : sélectionne le code et copie-le à la main.",
-    "periodNote": "Le paramètre period accepte day, week ou month.",
-    "docsHint": "Colle-le dans n'importe quelle page HTML : ça reste en direct.",
-    "close": "Fermer",
-    "publicOnlyBoard": "Seules les boards publiques peuvent être intégrées.",
-    "publicOnlyGym": "Seules les salles publiques peuvent intégrer le classement."
   }
 }

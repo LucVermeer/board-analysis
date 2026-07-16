@@ -202,3 +202,13 @@ export const LinkBoardToGymInputSchema = z.object({
   boardUuid: UUIDSchema,
   gymUuid: UUIDSchema.optional().nullable(),
 });
+
+/**
+ * Gym insights (owner activity dashboard) input validation schema. `period`
+ * chooses the window length; the resolver derives the day count and the equally
+ * long prior comparison window from it.
+ */
+export const GymStatsInputSchema = z.object({
+  gymUuid: UUIDSchema,
+  period: z.enum(['week', 'month']).optional().default('week'),
+});

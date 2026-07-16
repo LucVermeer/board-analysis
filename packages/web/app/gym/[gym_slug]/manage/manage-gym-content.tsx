@@ -19,14 +19,15 @@ import GymMemberManagement from '@/app/components/gym-entity/gym-member-manageme
 import { canManageGymBoards } from '@/app/components/gym-entity/manage/gym-board-permissions';
 import GymBoardsTab from '@/app/components/gym-entity/manage/gym-boards-tab';
 import KiosksTab from '@/app/components/gym-entity/manage/kiosks-tab';
+import InsightsTab from '@/app/components/gym-entity/manage/insights-tab';
 import BrandingTab from '@/app/components/gym-entity/manage/branding-tab';
 import GymSlugGuard from '@/app/components/gym-entity/manage/gym-slug-guard';
 import GymWelcomeCard from '@/app/components/gym-entity/manage/gym-welcome-card';
 import ConfirmDialog from '@/app/components/gym-entity/manage/confirm-dialog';
 import { decideManageNavigation, type ManageNavigation } from '@/app/components/gym-entity/manage/manage-nav-guard';
 
-type ManageTab = 'kiosks' | 'branding' | 'boards' | 'members';
-const VALID_TABS: ManageTab[] = ['kiosks', 'branding', 'boards', 'members'];
+type ManageTab = 'kiosks' | 'insights' | 'branding' | 'boards' | 'members';
+const VALID_TABS: ManageTab[] = ['kiosks', 'insights', 'branding', 'boards', 'members'];
 const DEFAULT_TAB: ManageTab = 'kiosks';
 
 export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
@@ -134,12 +135,14 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
       >
         <Tab value="kiosks" label={t('manage.tabs.kiosks')} sx={{ textTransform: 'none' }} />
+        <Tab value="insights" label={t('manage.tabs.insights')} sx={{ textTransform: 'none' }} />
         <Tab value="branding" label={t('manage.tabs.branding')} sx={{ textTransform: 'none' }} />
         <Tab value="boards" label={t('manage.tabs.boards')} sx={{ textTransform: 'none' }} />
         <Tab value="members" label={t('manage.tabs.members')} sx={{ textTransform: 'none' }} />
       </Tabs>
 
       {activeTab === 'kiosks' && <KiosksTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
+      {activeTab === 'insights' && <InsightsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'branding' && <BrandingTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
       {activeTab === 'boards' && <GymBoardsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'members' && (

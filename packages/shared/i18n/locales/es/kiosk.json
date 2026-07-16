@@ -45,20 +45,18 @@
     "poweredBy": "Con la tecnología de"
   },
   "embed": {
-    "metadata": {
-      "boardTitle": "{{boardName}} — vista del plafón en directo",
-      "boardDescription": "Mira qué está encendido en {{boardName}} ahora mismo. Con la tecnología de Boardsesh.",
-      "boardFallbackTitle": "Vista del plafón en directo",
-      "boardFallbackDescription": "Widget del plafón en directo. Con la tecnología de Boardsesh.",
-      "leaderboardTitle": "{{gymName}} — clasificación",
-      "leaderboardDescription": "Quién está encadenando en {{gymName}}. Con la tecnología de Boardsesh.",
-      "leaderboardFallbackTitle": "Clasificación del rocódromo",
-      "leaderboardFallbackDescription": "Widget de clasificación del rocódromo. Con la tecnología de Boardsesh."
-    },
-    "leaderboard": {
-      "errorTitle": "Clasificación no disponible",
-      "errorBody": "No se han podido cargar los últimos encadenes. Se reintentará automáticamente."
-    }
+    "boardButton": "Insertar este plafón",
+    "railButton": "Insertar la clasificación",
+    "boardDialogTitle": "Insertar {{name}}",
+    "railDialogTitle": "Insertar la clasificación de {{name}}",
+    "copy": "Copiar",
+    "copied": "Copiado al portapapeles.",
+    "copyFailed": "No se pudo copiar: selecciona el código y cópialo a mano.",
+    "periodNote": "El parámetro period acepta day, week o month.",
+    "docsHint": "Pégalo en cualquier página HTML: se mantiene en directo.",
+    "close": "Cerrar",
+    "publicOnlyBoard": "Solo los plafones públicos se pueden insertar.",
+    "publicOnlyGym": "Solo los rocódromos públicos pueden insertar la clasificación."
   },
   "gymPage": {
     "metaTitle": "Rocódromo {{gymName}}",
@@ -109,7 +107,29 @@
       "kiosks": "Kioscos",
       "branding": "Marca",
       "boards": "Plafones",
-      "members": "Miembros"
+      "members": "Miembros",
+      "insights": "Estadísticas"
+    },
+    "insights": {
+      "subtitle": "Cómo fueron tus plafones esta semana frente a la anterior.",
+      "uniqueClimbers": "Escaladores",
+      "ascents": "Encadenes",
+      "busiestDay": "Día más activo",
+      "byDay": "Encadenes por día",
+      "byDayAria": "Encadenes por día de la semana",
+      "topClimbs": "Lo que todos están proyectando",
+      "noTopClimbs": "Aún no hay encadenes esta semana.",
+      "unnamedClimb": "Bloque sin nombre",
+      "ascentsCount_one": "{{count}} encadene",
+      "ascentsCount_other": "{{count}} encadenes",
+      "deltaUp": "+{{count}} frente a la semana pasada",
+      "deltaDown": "−{{count}} frente a la semana pasada",
+      "deltaFlat": "Igual que la semana pasada",
+      "loadError": "No se pudieron cargar los datos de esta semana.",
+      "empty": {
+        "title": "Sin encadenes esta semana",
+        "body": "¿Toca renovar el muro? En cuanto los escaladores registren un encadene aquí, verás quién vino y qué están proyectando."
+      }
     },
     "navGuard": {
       "title": "¿Descartar los cambios sin guardar?",
@@ -295,19 +315,5 @@
       "cancel": "Cancelar",
       "done": "Marca restablecida."
     }
-  },
-  "embed": {
-    "boardButton": "Insertar este plafón",
-    "railButton": "Insertar la clasificación",
-    "boardDialogTitle": "Insertar {{name}}",
-    "railDialogTitle": "Insertar la clasificación de {{name}}",
-    "copy": "Copiar",
-    "copied": "Copiado al portapapeles.",
-    "copyFailed": "No se pudo copiar: selecciona el código y cópialo a mano.",
-    "periodNote": "El parámetro period acepta day, week o month.",
-    "docsHint": "Pégalo en cualquier página HTML: se mantiene en directo.",
-    "close": "Cerrar",
-    "publicOnlyBoard": "Solo los plafones públicos se pueden insertar.",
-    "publicOnlyGym": "Solo los rocódromos públicos pueden insertar la clasificación."
   }
 }
