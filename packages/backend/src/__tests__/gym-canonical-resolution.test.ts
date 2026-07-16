@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
 import { socialGymQueries, resolveCanonicalGym, resolveCanonicalGymByUuid } from '../graphql/resolvers/social/gyms';
+import { socialGymKioskQueries } from '../graphql/resolvers/social/gym-kiosks';
 import * as dbSchema from '@boardsesh/db/schema';
 
 /**
@@ -31,30 +32,43 @@ const insertUser = (id: string) =>
   `);
 
 // Insert a gym with full control over the merge-relevant columns. A merged twin
-// is soft-deleted (deletedAt set) and carries a merged_into_gym_id pointer.
+// is soft-deleted (deletedAt set) and carries a merged_into_gym_id pointer. An
+// explicit updatedAt makes the same-slug tiebreak (desc updatedAt) deterministic.
 const insertGym = async (opts: {
   name: string;
   slug: string;
   deleted?: boolean;
   mergedIntoGymId?: number | null;
+  updatedAt?: Date;
 }): Promise<{ id: number; uuid: string; slug: string }> => {
-  const { name, slug, deleted = false, mergedIntoGymId = null } = opts;
+  const { name, slug, deleted = false, mergedIntoGymId = null, updatedAt } = opts;
   const uuid = uuidv4();
+  const updatedAtSql = updatedAt ? sql`${updatedAt.toISOString()}::timestamptz` : sql`now()`;
   const result = await db.execute(sql`
     INSERT INTO gyms (uuid, name, slug, owner_id, is_public, merged_into_gym_id, deleted_at, created_at, updated_at)
     VALUES (
       ${uuid}, ${name}, ${slug}, ${OWNER}, ${!deleted},
-      ${mergedIntoGymId}, ${deleted ? sql`now()` : sql`NULL`}, now(), now()
+      ${mergedIntoGymId}, ${deleted ? sql`now()` : sql`NULL`}, now(), ${updatedAtSql}
     )
     RETURNING id
   `);
   return { id: Number(Array.from(result as Iterable<{ id: number }>)[0].id), uuid, slug };
 };
 
+// Seed a kiosk under a gym so the public gymKiosk read path is exercisable.
+const insertKiosk = async (gymId: number, slug: string, name: string): Promise<{ uuid: string }> => {
+  const uuid = uuidv4();
+  await db.execute(sql`
+    INSERT INTO gym_kiosks (uuid, gym_id, slug, name, layout, created_at, updated_at)
+    VALUES (${uuid}, ${gymId}, ${slug}, ${name}, ${'{"version":1,"boards":[],"leaderboard":null}'}::jsonb, now(), now())
+  `);
+  return { uuid };
+};
+
 beforeEach(async () => {
   await db.execute(sql`
     TRUNCATE TABLE
-      "gym_members", "gym_follows", "gym_claims", "user_boards", "gyms"
+      "gym_kiosks", "gym_members", "gym_follows", "gym_claims", "user_boards", "gyms"
     RESTART IDENTITY CASCADE
   `);
   await insertUser(OWNER);
@@ -148,6 +162,46 @@ describe('merged gym canonical resolution', () => {
 
     const byUuid = await socialGymQueries.gym(null, { gymUuid: gone.uuid }, anonCtx());
     expect(byUuid).toBeNull();
+  });
+
+  it('serves a merged twin slug through the public kiosk read (QR still lands)', async () => {
+    const canonical = await insertGym({ name: 'Canonical Gym', slug: 'canonical-gym' });
+    await insertKiosk(canonical.id, 'main', 'Main Wall');
+    await insertGym({ name: 'Duplicate Gym', slug: 'duplicate-gym', deleted: true, mergedIntoGymId: canonical.id });
+
+    // Default kiosk lookup (kioskSlug null) via the merged twin's slug resolves to
+    // the canonical gym's kiosk, and the payload carries the canonical slug so the
+    // kiosk page can redirect the printed QR's URL onto it.
+    const kiosk = await socialGymKioskQueries.gymKiosk(null, { gymSlug: 'duplicate-gym', kioskSlug: null }, anonCtx());
+    expect(kiosk).not.toBeNull();
+    expect(kiosk!.slug).toBe('main');
+    expect(kiosk!.gym.slug).toBe('canonical-gym');
+    expect(kiosk!.gym.uuid).toBe(canonical.uuid);
+  });
+
+  it('picks the most-recently-merged twin when several soft-deleted rows share a slug', async () => {
+    // A rename+merge sequence can leave two soft-deleted rows with the same slug,
+    // pointing at different survivors. The newer one (desc updatedAt) wins.
+    const older = await insertGym({ name: 'Older Survivor', slug: 'older-survivor' });
+    const newer = await insertGym({ name: 'Newer Survivor', slug: 'newer-survivor' });
+    await insertGym({
+      name: 'Shared A',
+      slug: 'shared-slug',
+      deleted: true,
+      mergedIntoGymId: older.id,
+      updatedAt: new Date('2024-01-01T00:00:00Z'),
+    });
+    await insertGym({
+      name: 'Shared B',
+      slug: 'shared-slug',
+      deleted: true,
+      mergedIntoGymId: newer.id,
+      updatedAt: new Date('2024-06-01T00:00:00Z'),
+    });
+
+    const resolved = await socialGymQueries.gymBySlug(null, { slug: 'shared-slug' }, anonCtx());
+    expect(resolved).not.toBeNull();
+    expect(resolved!.uuid).toBe(newer.uuid);
   });
 });
 
