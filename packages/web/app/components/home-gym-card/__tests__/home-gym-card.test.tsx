@@ -17,6 +17,10 @@ vi.mock('react-i18next', () => ({
 let mockGyms: Array<Record<string, unknown>> = [];
 let mockIsLoading = false;
 let mockError: string | null = null;
+// Mirrors the real hook's `hasResolved` (React Query `isFetched`): false while
+// the ws-auth token is still in flight, true once the fetch has settled
+// (success or error). Defaults true so most tests don't need to think about it.
+let mockHasResolved = true;
 let mockStatus: 'authenticated' | 'unauthenticated' | 'loading' = 'authenticated';
 let mockUserId: string | null = 'user-1';
 let mockKioskFlag = true;
@@ -32,6 +36,7 @@ vi.mock('@/app/hooks/use-my-gyms', () => ({
     hasMore: false,
     loadMore: vi.fn(),
     error: mockError,
+    hasResolved: mockHasResolved,
   }),
 }));
 
@@ -106,6 +111,7 @@ describe('HomeGymCard', () => {
     mockGyms = [];
     mockIsLoading = false;
     mockError = null;
+    mockHasResolved = true;
     mockStatus = 'authenticated';
     mockUserId = 'user-1';
     mockKioskFlag = true;
@@ -122,6 +128,20 @@ describe('HomeGymCard', () => {
 
     it('renders nothing while the gyms request is still loading', () => {
       mockIsLoading = true;
+      mockHasResolved = false;
+      mockGyms = [];
+      render(<HomeGymCard />);
+      expect(screen.queryByTestId('home-gym-card-owner')).toBeNull();
+      expect(screen.queryByTestId('home-gym-card-find')).toBeNull();
+    });
+
+    it('renders nothing while the ws-auth token is still in flight (pre-token, not yet resolved)', () => {
+      // The bug this pins: the hook used to report isLoading=false AND gyms=[]
+      // while idle pre-token, which the old gate misread as "loaded with zero
+      // gyms" and flashed the non-owner nudge. hasResolved=false is the
+      // definitive "we don't know yet" signal regardless of isLoading.
+      mockIsLoading = false;
+      mockHasResolved = false;
       mockGyms = [];
       render(<HomeGymCard />);
       expect(screen.queryByTestId('home-gym-card-owner')).toBeNull();
@@ -162,6 +182,19 @@ describe('HomeGymCard', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('home-gym-card-find')).toBeNull();
       });
+    });
+
+    it('still shows the owner card when dismissed=true and the user has a gym (owner branch precedes the dismissal gate)', async () => {
+      // Dismissal only ever applies to the non-owner "find your gym" nudge. An
+      // owner who dismissed the nudge before joining/creating a gym must still
+      // see their owner card — the owner check has to run before the
+      // dismissal gate is ever consulted.
+      mockGyms = [makeGym()];
+      mockDismissed = true;
+      render(<HomeGymCard />);
+      const card = await screen.findByTestId('home-gym-card-owner');
+      expect(card).toBeTruthy();
+      expect(screen.queryByTestId('home-gym-card-find')).toBeNull();
     });
   });
 

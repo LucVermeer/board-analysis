@@ -77,7 +77,7 @@ type OnboardingCardProps = {
 const accentSurface: Record<OnboardingCardAccent, string> = {
   action: 'var(--semantic-selected-light)', // existing rose tint
   social: 'rgba(156, 39, 176, 0.10)', // V11 purple
-  help: 'rgba(94, 100, 145, 0.12)', // violet-slate (Velvet info) — same family as the rest
+  help: themeTokens.colors.infoTint, // violet-slate (Velvet info) — same family as the rest
   v11: 'rgba(156, 39, 176, 0.10)', // V11 #9C27B0
   v12: 'rgba(123, 31, 162, 0.10)', // V12 #7B1FA2
   v13: 'rgba(106, 27, 154, 0.10)', // V13 #6A1B9A

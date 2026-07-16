@@ -36,6 +36,7 @@ export const themeTokens = {
     live: brandColors.live, // #B45309 — "now on the wall / physically lit" status hue (own role, not warning)
     secondary: '#5B5563', // violet-grey for info/secondary
     info: '#5E6491', // Violet-slate — help/guide accent, re-pulled into the violet family
+    infoTint: 'rgba(94, 100, 145, 0.12)', // 12%-alpha `info` — shared low-key icon-chip bg (OnboardingCard 'help', homepage gym card)
     success: brandColors.success, // #047857
     successHover: '#036B4D',
     successBg: '#E7F4EE',
