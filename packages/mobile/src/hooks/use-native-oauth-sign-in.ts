@@ -4,7 +4,11 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useAuth } from '../providers/auth-provider';
 import { track } from '../lib/analytics';
 import { reportError } from '../lib/error-reporting';
-import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../lib/native-auth-analytics';
+import {
+  classifyNativeAuthFailureReason,
+  isRecoverableAndroidGoogleSignInError,
+  nativeSignInErrorCode,
+} from '../lib/native-auth-analytics';
 import type { OAuthSignInResult } from '../lib/auth';
 import { useTranslation } from 'react-i18next';
 
@@ -185,26 +189,27 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
         // signing/client-id mismatch, …). Prefer the native `.code` for
         // failure_detail — far more actionable than the opaque message.
         const nativeErrorCode = nativeSignInErrorCode(oauthError);
-        // On iOS the browser fallback runs next (recoverable); on Android the
-        // native throw dead-ends and is terminal.
+        // Recover in the browser when the native throw is recoverable there:
+        // every iOS throw (the fallback owns the outcome), plus — now that the
+        // fallback uses the reliable openBrowserAsync + deep-link race instead of
+        // the openAuthSessionAsync that didn't return on Android (#3083) — the
+        // config-class Android Google throws (DEVELOPER_ERROR / INTERNAL_ERROR)
+        // that otherwise dead-end login while the signing-cert SHA-1 is fixed
+        // (see #3100). Other Android throws (NETWORK_ERROR, PLAY_SERVICES_*, and
+        // Apple, which isn't offered on Android) still surface their native error.
+        const willFallBack =
+          Platform.OS === 'ios' ||
+          (Platform.OS === 'android' && provider === 'google' && isRecoverableAndroidGoogleSignInError(oauthError));
         track(SHARED_EVENTS.LoginFailed, {
           auth_method: provider,
           flow: 'native',
           failure_reason: 'exception',
           failure_detail: nativeErrorCode ?? (oauthError instanceof Error ? oauthError.message : undefined),
-          recoverable: Platform.OS === 'ios',
+          recoverable: willFallBack,
           duration_ms: Date.now() - attemptStartedAt,
           ...registrationProps,
         });
-        // Native throws land here — on iOS, recover via the browser flow instead
-        // of reporting and dead-ending the user. Google's is the iOS 26.5.1
-        // "Unable to open Safari" GIDSignIn throw; Apple's is
-        // ASAuthorizationError.unknown (code 1000). On Android a Google throw is
-        // almost always an unregistered signing-cert SHA-1 (DEVELOPER_ERROR) and
-        // Apple isn't offered, so fall through and let reportError tag it with
-        // native_error_code for PostHog rather than hide it behind a fallback that
-        // can't complete.
-        if (Platform.OS === 'ios') {
+        if (willFallBack) {
           await runWebFallback();
           return;
         }

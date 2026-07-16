@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../native-auth-analytics';
+import {
+  classifyNativeAuthFailureReason,
+  isRecoverableAndroidGoogleSignInError,
+  nativeSignInErrorCode,
+} from '../native-auth-analytics';
 
 describe('classifyNativeAuthFailureReason', () => {
   it('maps native credential and OAuth failures to low-cardinality analytics reasons', () => {
@@ -84,5 +88,40 @@ describe('nativeSignInErrorCode', () => {
     expect(nativeSignInErrorCode(undefined)).toBeUndefined();
     expect(nativeSignInErrorCode(null)).toBeUndefined();
     expect(nativeSignInErrorCode('DEVELOPER_ERROR')).toBeUndefined();
+  });
+});
+
+describe('isRecoverableAndroidGoogleSignInError', () => {
+  // GMS surfaces DEVELOPER_ERROR / INTERNAL_ERROR inconsistently across builds:
+  // a numeric `.code`, a string `.code`, or no code with the name only in the
+  // message. All three must recover (the browser fallback bypasses the native SDK).
+  it('recovers the config-class codes in every representation GMS throws', () => {
+    expect(isRecoverableAndroidGoogleSignInError(Object.assign(new Error('x'), { code: 'DEVELOPER_ERROR' }))).toBe(
+      true,
+    );
+    expect(isRecoverableAndroidGoogleSignInError(Object.assign(new Error('x'), { code: 'INTERNAL_ERROR' }))).toBe(true);
+    expect(isRecoverableAndroidGoogleSignInError(Object.assign(new Error('x'), { code: 10 }))).toBe(true);
+    expect(isRecoverableAndroidGoogleSignInError(Object.assign(new Error('x'), { code: 8 }))).toBe(true);
+    // No usable code — the name is only in the message (observed on builds 350+).
+    expect(
+      isRecoverableAndroidGoogleSignInError(new Error('DEVELOPER_ERROR: Follow troubleshooting instructions at ...')),
+    ).toBe(true);
+    expect(isRecoverableAndroidGoogleSignInError(new Error('INTERNAL_ERROR'))).toBe(true);
+  });
+
+  // Strict scope: everything else surfaces its native error rather than bouncing
+  // into a browser — transient network, Play Services gaps, cancels, unknown.
+  it('does not recover non-config failures', () => {
+    expect(isRecoverableAndroidGoogleSignInError(Object.assign(new Error('network'), { code: 7 }))).toBe(false);
+    expect(isRecoverableAndroidGoogleSignInError(Object.assign(new Error('no play services'), { code: 2 }))).toBe(
+      false,
+    );
+    expect(
+      isRecoverableAndroidGoogleSignInError(Object.assign(new Error('cancelled'), { code: 'SIGN_IN_CANCELLED' })),
+    ).toBe(false);
+    expect(isRecoverableAndroidGoogleSignInError(new Error('some other failure'))).toBe(false);
+    expect(isRecoverableAndroidGoogleSignInError(undefined)).toBe(false);
+    expect(isRecoverableAndroidGoogleSignInError(null)).toBe(false);
+    expect(isRecoverableAndroidGoogleSignInError('DEVELOPER_ERROR')).toBe(false);
   });
 });

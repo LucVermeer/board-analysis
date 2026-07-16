@@ -300,7 +300,7 @@ describe('useNativeOAuthSignIn — Apple web fallback (iOS)', () => {
   });
 });
 
-describe('useNativeOAuthSignIn — Android has no web fallback', () => {
+describe('useNativeOAuthSignIn — Android Google config-class fallback (#3100)', () => {
   beforeEach(() => {
     platform.OS = 'android';
     trackMock.mockReset();
@@ -311,22 +311,70 @@ describe('useNativeOAuthSignIn — Android has no web fallback', () => {
     signInWithAppleWebMock.mockReset();
   });
 
-  it('surfaces the native error (no fallback) when Google throws — the SHA-1/DEVELOPER_ERROR case', async () => {
+  it('falls back to the browser when native Google throws DEVELOPER_ERROR (string code) and signs in', async () => {
+    // The SHA-1 / OAuth-client dead-end (#3100): the fallback runs a full NextAuth
+    // flow with no native SDK, so it recovers login while the signing cert is fixed.
     signInWithGoogleMock.mockRejectedValue(Object.assign(new Error('developer error'), { code: 'DEVELOPER_ERROR' }));
+    signInWithGoogleWebMock.mockResolvedValue({ success: true });
+
+    const setError = await runSignIn('google');
+
+    expect(signInWithGoogleWebMock).toHaveBeenCalledTimes(1);
+    // The fallback owns the outcome, so the handled native throw no longer reports.
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(null);
+    const events = trackedEvents();
+    // The native throw is now recoverable on Android too, so the failure metric excludes it.
+    expect(events).toContainEqual({ event: 'Login Failed', flow: 'native', reason: 'exception', recoverable: true });
+    expect(events).toContainEqual({
+      event: 'Login Succeeded',
+      flow: 'web_fallback',
+      reason: undefined,
+      recoverable: undefined,
+      mechanism: 'browser_deeplink',
+    });
+  });
+
+  it('falls back when native Google throws INTERNAL_ERROR as a numeric code (8)', async () => {
+    signInWithGoogleMock.mockRejectedValue(Object.assign(new Error('internal'), { code: 8 }));
+    signInWithGoogleWebMock.mockResolvedValue({ success: true });
+
+    await runSignIn('google');
+
+    expect(signInWithGoogleWebMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back when DEVELOPER_ERROR arrives only in the message (no usable code)', async () => {
+    // Some builds throw with no `.code`, the name only in the message — must still recover.
+    signInWithGoogleMock.mockRejectedValue(
+      new Error('DEVELOPER_ERROR: Follow troubleshooting instructions at https://.../troubleshooting'),
+    );
+    signInWithGoogleWebMock.mockResolvedValue({ success: true });
+
+    await runSignIn('google');
+
+    expect(signInWithGoogleWebMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the native error (no fallback) for a non-config Google throw — NETWORK_ERROR (7)', async () => {
+    // Strict scope: only DEVELOPER_ERROR / INTERNAL_ERROR recover. A transient
+    // NETWORK_ERROR keeps surfacing its native error rather than bouncing to a browser.
+    signInWithGoogleMock.mockRejectedValue(Object.assign(new Error('network error'), { code: 7 }));
 
     const setError = await runSignIn('google');
 
     expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
-    // Reported once, tagged with the native code so PostHog records DEVELOPER_ERROR.
     expect(reportErrorMock).toHaveBeenCalledTimes(1);
     expect(reportErrorMock).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
-        tags: expect.objectContaining({ provider: 'google', flow: 'native', native_error_code: 'DEVELOPER_ERROR' }),
+        tags: expect.objectContaining({ provider: 'google', flow: 'native', native_error_code: '7' }),
       }),
     );
     expect(setError).toHaveBeenLastCalledWith('nativeStart.oauthError');
-    // No fallback on Android, so the native throw is terminal, not recoverable.
+    // Not recoverable, so it counts toward the terminal failure metric.
     expect(trackedEvents()).toContainEqual({
       event: 'Login Failed',
       flow: 'native',
@@ -335,7 +383,9 @@ describe('useNativeOAuthSignIn — Android has no web fallback', () => {
     });
   });
 
-  it('surfaces the native error (no fallback) when Google returns a non-cancel failure', async () => {
+  it('does not fall back when native Google RETURNS a non-cancel failure (result path stays iOS-only)', async () => {
+    // Config errors are throws, not returns; a returned backend failure on Android
+    // isn't a native-SDK dead-end, so the result path keeps surfacing it.
     signInWithGoogleMock.mockResolvedValue({ success: false, status: 401, error: 'invalid' });
 
     const setError = await runSignIn('google');
@@ -362,10 +412,10 @@ describe('useNativeOAuthSignIn — Android has no web fallback', () => {
     expect(events).not.toContainEqual(expect.objectContaining({ event: 'Login Failed' }));
   });
 
-  it('does not run the Apple web fallback on Android (the iOS gate holds)', async () => {
-    // Apple sign-in isn't offered on Android, but guard the gate anyway: a native
-    // throw must surface the real error, not silently open a browser fallback.
-    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 1000 }));
+  it('does not run the Apple web fallback on Android even for a config-class-looking throw', async () => {
+    // The gate is provider === 'google': Apple isn't offered on Android, so a
+    // native Apple throw must surface the real error, never open a browser fallback.
+    signInWithAppleMock.mockRejectedValue(Object.assign(new Error('unknown'), { code: 'DEVELOPER_ERROR' }));
 
     const setError = await runSignIn('apple');
 
