@@ -154,6 +154,25 @@ describe('merged gym canonical resolution', () => {
     expect(canonicalRow!.id).toBe(live.id);
   });
 
+  it('resolves a LIVE gym carrying a stale non-null pointer to itself (never redirects away)', async () => {
+    // Defensive: a live row must never follow its own merged_into_gym_id. The
+    // resolver checks deletedAt BEFORE reading the pointer, so a live gym that
+    // somehow carries a stale pointer resolves to itself — this pins that order
+    // so a future refactor can't reintroduce a self-redirect.
+    const other = await insertGym({ name: 'Other Gym', slug: 'other-gym' });
+    const live = await insertGym({ name: 'Live Gym', slug: 'live-with-stale-pointer', mergedIntoGymId: other.id });
+
+    const byUuid = await resolveCanonicalGymByUuid(live.uuid);
+    expect(byUuid).not.toBeNull();
+    expect(byUuid!.id).toBe(live.id);
+
+    // The public read returns the live gym under its own slug — no redirect.
+    const bySlug = await socialGymQueries.gymBySlug(null, { slug: 'live-with-stale-pointer' }, anonCtx());
+    expect(bySlug).not.toBeNull();
+    expect(bySlug!.uuid).toBe(live.uuid);
+    expect(bySlug!.slug).toBe('live-with-stale-pointer');
+  });
+
   it('still 404s a plain soft-deleted gym with no merge pointer', async () => {
     const gone = await insertGym({ name: 'Gone Gym', slug: 'gone-gym', deleted: true, mergedIntoGymId: null });
 
