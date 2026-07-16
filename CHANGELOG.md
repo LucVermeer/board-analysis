@@ -8,6 +8,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Gym owners: make the TV yours — upload your logo and set your colours, with a live preview of exactly what the kiosk will show. ([#3637](https://github.com/boardsesh/boardsesh/pull/3637))
+  Build your TV layout in the new kiosk editor: pick up to four walls, reorder them, and toggle the leaderboard with a session, 24-hour, week, or month ranking.
+  Watch your edits live — the editor preview is the real kiosk, showing what's lit on your walls as it happens.
+  Grab a copy-paste embed code for any public board or your gym leaderboard and drop the live view straight into your own website.
 - Every gym now has a public page — logo, boards, and a one-tap link to the live wall. ([#3635](https://github.com/boardsesh/boardsesh/pull/3635))
   Gym owners get a manage hub to link boards and manage their crew (kiosk and branding setup arrive with the editor update).
 - Gyms can now embed a live board view and a gym leaderboard straight into their own website — paste one iframe snippet and visitors see what's lit on the wall and who's been sending, powered by Boardsesh. ([#3636](https://github.com/boardsesh/boardsesh/pull/3636))

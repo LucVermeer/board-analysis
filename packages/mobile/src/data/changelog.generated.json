@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-16T05:50:51.613Z",
+  "generatedAt": "2026-07-16T06:00:08.681Z",
   "entries": [
+    {
+      "prNumber": 3637,
+      "category": "new",
+      "title": "Gym owners: make the TV yours — upload your logo and set your colours, with a live preview of exactly what the kiosk will show.",
+      "mergedAt": "2026-07-16T05:58:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3637",
+      "body": "Build your TV layout in the new kiosk editor: pick up to four walls, reorder them, and toggle the leaderboard with a session, 24-hour, week, or month ranking.\nWatch your edits live — the editor preview is the real kiosk, showing what's lit on your walls as it happens.\nGrab a copy-paste embed code for any public board or your gym leaderboard and drop the live view straight into your own website."
+    },
     {
       "prNumber": 3635,
       "category": "new",
