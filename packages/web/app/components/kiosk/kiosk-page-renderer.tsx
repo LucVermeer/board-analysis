@@ -181,6 +181,8 @@ export default async function KioskPageRenderer({ gymSlug, kioskSlug }: { gymSlu
                     initialClimb={slot.initialClimb}
                     initialClimbImageUrl={slot.initialClimbImageUrl}
                     bareBoardImageUrl={slot.bareBoardImageUrl}
+                    slug={slot.board.slug}
+                    showInstallQr={viewModel.showInstallQr}
                   />
                 ))}
               </KioskLayout>

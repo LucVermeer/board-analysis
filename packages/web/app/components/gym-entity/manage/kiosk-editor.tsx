@@ -7,7 +7,7 @@
 // strict KioskLayoutSchema (the same gate the backend applies) and persists
 // via updateGymKiosk.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -34,6 +34,7 @@ import {
   moveBoardSlot,
   removeBoardSlot,
   serializeKioskLayout,
+  setInstallQrEnabled,
   setLeaderboardEnabled,
   setLeaderboardPeriod,
   setLeaderboardScope,
@@ -45,6 +46,7 @@ import ConfirmDialog from './confirm-dialog';
 import KioskBoardSlots, { type KioskEditorSlot } from './kiosk-board-slots';
 import KioskLayoutBadge from './kiosk-layout-badge';
 import KioskLeaderboardSettings from './kiosk-leaderboard-settings';
+import KioskInstallQrSettings from './kiosk-install-qr-settings';
 import KioskPreview from './kiosk-preview';
 import EmbedCodeDialog, { type EmbedCodeDialogState } from './embed-code-dialog';
 
@@ -127,15 +129,28 @@ export default function KioskEditor({
   // Single slot→board resolution feeding the rows, the save gate, and the
   // leaderboard settings, so "board no longer at this gym" can't be judged
   // differently by different panels. board === null means unknown board.
-  const slotBoards: KioskEditorSlot[] = editorState.boardUuids.map((boardUuid) => ({
-    boardUuid,
-    board: gymBoards?.find((gymBoard) => gymBoard.uuid === boardUuid) ?? null,
-  }));
-  const assignedBoards = slotBoards.map((slot) => slot.board).filter((board): board is UserBoard => board !== null);
+  // Memoised on the slot uuids + gym board list so a leaderboard-only or
+  // install-QR-only edit doesn't rebuild these arrays and defeat the child
+  // memoisation downstream.
+  const slotBoards: KioskEditorSlot[] = useMemo(
+    () =>
+      editorState.boardUuids.map((boardUuid) => ({
+        boardUuid,
+        board: gymBoards?.find((gymBoard) => gymBoard.uuid === boardUuid) ?? null,
+      })),
+    [editorState.boardUuids, gymBoards],
+  );
+  const assignedBoards = useMemo(
+    () => slotBoards.map((slot) => slot.board).filter((board): board is UserBoard => board !== null),
+    [slotBoards],
+  );
 
   // Slots whose board isn't (or no longer is) one of the gym's boards can't
   // save — the backend rejects layouts naming boards not linked to the gym.
-  const hasUnknownSlots = gymBoards !== null && slotBoards.some((slot) => slot.board === null);
+  const hasUnknownSlots = useMemo(
+    () => gymBoards !== null && slotBoards.some((slot) => slot.board === null),
+    [gymBoards, slotBoards],
+  );
 
   const handleSave = async () => {
     const parsed = KioskLayoutSchema.safeParse(serializeKioskLayout(editorState));
@@ -274,6 +289,18 @@ export default function KioskEditor({
                 })
               }
               isGymPublic={gym.isPublic}
+            />
+          </Box>
+
+          <Divider />
+
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold, mb: 1 }}>
+              {t('manage.editor.installQrHeading')}
+            </Typography>
+            <KioskInstallQrSettings
+              showInstallQr={editorState.showInstallQr}
+              onToggle={(enabled) => applyStateChange(setInstallQrEnabled(editorState, enabled))}
             />
           </Box>
         </Box>

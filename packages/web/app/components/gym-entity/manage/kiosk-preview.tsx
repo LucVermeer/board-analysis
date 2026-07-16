@@ -56,6 +56,7 @@ function toGymKioskBoard(board: UserBoard): GymKioskBoard | null {
   return {
     boardId: board.boardId,
     boardUuid: board.uuid,
+    slug: board.slug,
     name: board.name,
     boardType: board.boardType,
     layoutId: board.layoutId,
@@ -172,6 +173,8 @@ export default function KioskPreview({ gym, kioskName, state, gymBoards }: Kiosk
                           initialClimb={null}
                           initialClimbImageUrl={null}
                           bareBoardImageUrl={slot.bareBoardImageUrl}
+                          slug={slot.board.slug}
+                          showInstallQr={state.showInstallQr}
                         />
                       ) : (
                         <div key={`${slot.boardUuid}-${slotIndex}`} className={styles.missingSlot}>

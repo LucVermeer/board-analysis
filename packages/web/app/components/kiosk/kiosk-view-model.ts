@@ -32,6 +32,8 @@ export type KioskViewModel = {
   preset: KioskPreset | null;
   /** Leaderboard rail config, or null when the rail is off. */
   leaderboard: KioskLeaderboardConfig | null;
+  /** When true, every board renders its own "install Boardsesh" QR (deep link to that board). */
+  showInstallQr: boolean;
 };
 
 /**
@@ -74,5 +76,6 @@ export function buildKioskViewModel(kiosk: Pick<GymKiosk, 'layout' | 'boards'>):
     boards,
     preset: kioskPresetForBoardCount(boards.length),
     leaderboard,
+    showInstallQr: layout.showInstallQr,
   };
 }

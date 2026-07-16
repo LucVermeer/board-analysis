@@ -7,6 +7,7 @@ import {
   moveBoardSlot,
   removeBoardSlot,
   serializeKioskLayout,
+  setInstallQrEnabled,
   setLeaderboardEnabled,
   setLeaderboardPeriod,
   setLeaderboardScope,
@@ -20,8 +21,12 @@ const boardC = '33333333-3333-4333-8333-333333333333';
 const boardD = '44444444-4444-4444-8444-444444444444';
 const boardE = '55555555-5555-4555-8555-555555555555';
 
-function stateWith(boardUuids: string[], leaderboard: KioskEditorState['leaderboard'] = null): KioskEditorState {
-  return { boardUuids, leaderboard };
+function stateWith(
+  boardUuids: string[],
+  leaderboard: KioskEditorState['leaderboard'] = null,
+  showInstallQr = false,
+): KioskEditorState {
+  return { boardUuids, leaderboard, showInstallQr };
 }
 
 describe('editorStateFromLayout', () => {
@@ -36,8 +41,22 @@ describe('editorStateFromLayout', () => {
   });
 
   it('degrades corrupt input to an empty state instead of throwing', () => {
-    expect(editorStateFromLayout('garbage')).toEqual({ boardUuids: [], leaderboard: null });
-    expect(editorStateFromLayout(emptyKioskLayout())).toEqual({ boardUuids: [], leaderboard: null });
+    expect(editorStateFromLayout('garbage')).toEqual({ boardUuids: [], leaderboard: null, showInstallQr: false });
+    expect(editorStateFromLayout(emptyKioskLayout())).toEqual({
+      boardUuids: [],
+      leaderboard: null,
+      showInstallQr: false,
+    });
+  });
+
+  it('reads the showInstallQr toggle', () => {
+    const state = editorStateFromLayout({
+      version: 1,
+      boards: [{ boardUuid: boardA }],
+      leaderboard: null,
+      showInstallQr: true,
+    });
+    expect(state.showInstallQr).toBe(true);
   });
 });
 
@@ -116,7 +135,12 @@ describe('removeBoardSlot', () => {
   it('turns the rail off when the last board goes (editor invariant)', () => {
     const initial = stateWith([boardA], { boardUuid: null, period: 'session' });
     const state = removeBoardSlot(initial, 0);
-    expect(state).toEqual({ boardUuids: [], leaderboard: null });
+    expect(state).toEqual({ boardUuids: [], leaderboard: null, showInstallQr: false });
+  });
+
+  it('preserves the install-QR toggle when the last board goes', () => {
+    const initial = stateWith([boardA], { boardUuid: null, period: 'session' }, true);
+    expect(removeBoardSlot(initial, 0).showInstallQr).toBe(true);
   });
 });
 
@@ -160,12 +184,39 @@ describe('serializeKioskLayout', () => {
       version: 1,
       boards: [{ boardUuid: boardA }, { boardUuid: boardB }],
       leaderboard: { boardUuid: boardA, period: 'day' },
+      showInstallQr: false,
     });
   });
 
+  it('serialises the install-QR toggle', () => {
+    const layout = serializeKioskLayout(stateWith([boardA], null, true));
+    expect(layout.showInstallQr).toBe(true);
+    expect(() => KioskLayoutSchema.parse(layout)).not.toThrow();
+  });
+
   it('round-trips through editorStateFromLayout', () => {
-    const state = stateWith([boardC, boardA], { boardUuid: null, period: 'month' });
+    const state = stateWith([boardC, boardA], { boardUuid: null, period: 'month' }, true);
     expect(editorStateFromLayout(serializeKioskLayout(state))).toEqual(state);
+  });
+});
+
+describe('setInstallQrEnabled', () => {
+  it('turns the toggle on and off', () => {
+    const off = stateWith([boardA]);
+    const on = setInstallQrEnabled(off, true);
+    expect(on.showInstallQr).toBe(true);
+    expect(setInstallQrEnabled(on, false).showInstallQr).toBe(false);
+  });
+
+  it('is a no-op (same reference) when the value is unchanged', () => {
+    const state = stateWith([boardA], null, true);
+    expect(setInstallQrEnabled(state, true)).toBe(state);
+  });
+
+  it('is independent of board count and the rail', () => {
+    // No boards, no rail — still togglable (QR is per-board, not per-slot).
+    const empty = stateWith([]);
+    expect(setInstallQrEnabled(empty, true).showInstallQr).toBe(true);
   });
 });
 
@@ -177,5 +228,11 @@ describe('editorStatesEqual', () => {
     expect(editorStatesEqual(first, stateWith([boardA]))).toBe(false);
     expect(editorStatesEqual(first, stateWith([boardA], { boardUuid: null, period: 'day' }))).toBe(false);
     expect(editorStatesEqual(first, stateWith([boardB], { boardUuid: null, period: 'session' }))).toBe(false);
+  });
+
+  it('treats a changed install-QR toggle as dirty', () => {
+    const off = stateWith([boardA], { boardUuid: null, period: 'session' }, false);
+    const on = stateWith([boardA], { boardUuid: null, period: 'session' }, true);
+    expect(editorStatesEqual(off, on)).toBe(false);
   });
 });

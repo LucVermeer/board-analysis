@@ -515,6 +515,8 @@ describe('updateGymKiosk layout validation', () => {
     );
     expect(updated.boards.map((b) => b.boardUuid)).toEqual([boardPub1.uuid, boardPub2.uuid]);
     expect(updated.boards.every((b) => b.boardId != null)).toBe(true);
+    // The install-QR needs each board's public slug. insertBoard seeds slug = uuid.
+    expect(updated.boards.map((b) => b.slug)).toEqual([boardPub1.uuid, boardPub2.uuid]);
   });
 
   it('persists the schema-parsed layout, stripping unknown keys', async () => {
@@ -643,6 +645,8 @@ describe('gymKiosk public read', () => {
     );
     // The private board is dropped from the resolved boards...
     expect(kiosk!.boards.map((b) => b.boardUuid)).toEqual([boardPub1.uuid]);
+    // ...and the surviving public board exposes its slug for the install QR.
+    expect(kiosk!.boards.map((b) => b.slug)).toEqual([boardPub1.uuid]);
     // ...but the layout JSON still records the slot (renderer degrades the preset).
     expect(kiosk!.layout.boards.map((slot) => slot.boardUuid)).toEqual([boardPub1.uuid, boardPriv.uuid]);
   });

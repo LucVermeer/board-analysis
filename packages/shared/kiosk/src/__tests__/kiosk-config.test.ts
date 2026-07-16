@@ -121,6 +121,37 @@ describe('KioskLayoutSchema (strict writer)', () => {
     expect(KioskLayoutSchema.safeParse({ version: 2, boards: [], leaderboard: null }).success).toBe(false);
   });
 
+  it('defaults showInstallQr to false when omitted', () => {
+    const parsed = KioskLayoutSchema.safeParse({ version: KIOSK_LAYOUT_VERSION, boards: [], leaderboard: null });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.showInstallQr).toBe(false);
+    }
+  });
+
+  it('accepts an explicit showInstallQr toggle', () => {
+    const parsed = KioskLayoutSchema.safeParse({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [slot(BOARD_A)],
+      leaderboard: null,
+      showInstallQr: true,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.showInstallQr).toBe(true);
+    }
+  });
+
+  it('rejects a non-boolean showInstallQr', () => {
+    const parsed = KioskLayoutSchema.safeParse({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [],
+      leaderboard: null,
+      showInstallQr: 'yes',
+    });
+    expect(parsed.success).toBe(false);
+  });
+
   it('accepts a rail scoped to all boards (boardUuid null)', () => {
     const parsed = KioskLayoutSchema.safeParse({
       version: KIOSK_LAYOUT_VERSION,
@@ -182,6 +213,10 @@ describe('KioskLayoutSchema (strict writer)', () => {
       version: KIOSK_LAYOUT_VERSION,
       boards: [slot(BOARD_A)],
       leaderboard: { boardUuid: BOARD_A, period: 'week' },
+      // showInstallQr is a KNOWN writer-schema field (default false), so it
+      // rides along in the parsed output — the unknown keys (theme/variant/
+      // style) are what this test pins as stripped.
+      showInstallQr: false,
     });
   });
 });
@@ -347,6 +382,35 @@ describe('parseKioskLayoutLenient (forward-compat reader)', () => {
     });
     expect(result.layout.leaderboard).toEqual({ boardUuid: BOARD_B, period: 'day' });
     expect(result.droppedLeaderboard).toBe(false);
+  });
+
+  it('defaults showInstallQr to false when the field is absent', () => {
+    const result = parseKioskLayoutLenient({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [slot(BOARD_A)],
+      leaderboard: null,
+    });
+    expect(result.layout.showInstallQr).toBe(false);
+  });
+
+  it('keeps an explicit showInstallQr: true', () => {
+    const result = parseKioskLayoutLenient({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [slot(BOARD_A)],
+      leaderboard: null,
+      showInstallQr: true,
+    });
+    expect(result.layout.showInstallQr).toBe(true);
+  });
+
+  it('drops a malformed showInstallQr to false', () => {
+    const result = parseKioskLayoutLenient({
+      version: KIOSK_LAYOUT_VERSION,
+      boards: [slot(BOARD_A)],
+      leaderboard: null,
+      showInstallQr: 'yes',
+    });
+    expect(result.layout.showInstallQr).toBe(false);
   });
 
   it('produces a layout the strict schema re-accepts', () => {

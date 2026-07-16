@@ -2983,6 +2983,8 @@ type GymKioskBoard {
   boardId: Int!
   "The board's immutable UUID (stable across board renames)."
   boardUuid: ID!
+  "Public URL slug (userBoards.slug) — the kiosk's per-board install QR deep-links to /b/{slug}."
+  slug: String!
   "Board display name."
   name: String!
   "Board type (kilter, tension, moonboard, ...)."

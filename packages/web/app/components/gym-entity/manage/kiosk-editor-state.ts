@@ -34,6 +34,8 @@ export type KioskEditorState = {
   boardUuids: string[];
   /** Leaderboard rail config, or null when the rail is off. */
   leaderboard: KioskEditorLeaderboard | null;
+  /** When true, every board on the kiosk renders its own install-Boardsesh QR. */
+  showInstallQr: boolean;
 };
 
 /**
@@ -46,6 +48,7 @@ export function editorStateFromLayout(layout: unknown): KioskEditorState {
   return {
     boardUuids: parsed.boards.map((slot) => slot.boardUuid),
     leaderboard: parsed.leaderboard === null ? null : { ...parsed.leaderboard },
+    showInstallQr: parsed.showInstallQr,
   };
 }
 
@@ -70,7 +73,11 @@ export function setSlotBoard(state: KioskEditorState, index: number, boardUuid: 
 
   const boardUuids = state.boardUuids.slice();
   boardUuids[index] = boardUuid;
-  return { boardUuids, leaderboard: widenScopeIfDangling(state.leaderboard, boardUuids) };
+  return {
+    ...state,
+    boardUuids,
+    leaderboard: widenScopeIfDangling(state.leaderboard, boardUuids),
+  };
 }
 
 /**
@@ -96,9 +103,13 @@ export function removeBoardSlot(state: KioskEditorState, index: number): KioskEd
   if (index < 0 || index >= state.boardUuids.length) return state;
   const boardUuids = state.boardUuids.filter((_, slotIndex) => slotIndex !== index);
   if (boardUuids.length === 0) {
-    return { boardUuids, leaderboard: null };
+    return { ...state, boardUuids, leaderboard: null };
   }
-  return { boardUuids, leaderboard: widenScopeIfDangling(state.leaderboard, boardUuids) };
+  return {
+    ...state,
+    boardUuids,
+    leaderboard: widenScopeIfDangling(state.leaderboard, boardUuids),
+  };
 }
 
 /**
@@ -129,12 +140,19 @@ export function setLeaderboardPeriod(state: KioskEditorState, period: KioskLeade
   return { ...state, leaderboard: { ...state.leaderboard, period } };
 }
 
+/** Toggle the per-board install QR. Independent of board count and the rail. */
+export function setInstallQrEnabled(state: KioskEditorState, enabled: boolean): KioskEditorState {
+  if (state.showInstallQr === enabled) return state;
+  return { ...state, showInstallQr: enabled };
+}
+
 /** Serialise editor state to the wire/storage `KioskLayout` shape. */
 export function serializeKioskLayout(state: KioskEditorState): KioskLayout {
   return {
     version: KIOSK_LAYOUT_VERSION,
     boards: state.boardUuids.map((boardUuid) => ({ boardUuid })),
     leaderboard: state.leaderboard === null ? null : { ...state.leaderboard },
+    showInstallQr: state.showInstallQr,
   };
 }
 
@@ -142,6 +160,7 @@ export function serializeKioskLayout(state: KioskEditorState): KioskLayout {
 export function editorStatesEqual(first: KioskEditorState, second: KioskEditorState): boolean {
   if (first.boardUuids.length !== second.boardUuids.length) return false;
   if (first.boardUuids.some((uuid, index) => uuid !== second.boardUuids[index])) return false;
+  if (first.showInstallQr !== second.showInstallQr) return false;
   if (first.leaderboard === null || second.leaderboard === null) {
     return first.leaderboard === second.leaderboard;
   }

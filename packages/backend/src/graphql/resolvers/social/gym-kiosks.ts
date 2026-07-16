@@ -81,6 +81,7 @@ async function deriveUniqueKioskSlug(gymId: number, name: string): Promise<strin
 type ResolvedKioskBoard = {
   boardId: number;
   boardUuid: string;
+  slug: string;
   name: string;
   boardType: string;
   layoutId: number;
@@ -143,6 +144,7 @@ async function resolveKioskView(
         visibleByUuid.set(row.uuid, {
           boardId: row.id,
           boardUuid: row.uuid,
+          slug: row.slug,
           name: row.name,
           boardType: row.boardType,
           layoutId: Number(row.layoutId),
@@ -161,6 +163,7 @@ async function resolveKioskView(
         visibleByUuid.set(board.uuid, {
           boardId: board.boardId,
           boardUuid: board.uuid,
+          slug: board.slug,
           name: board.name,
           boardType: board.boardType,
           layoutId: board.layoutId,

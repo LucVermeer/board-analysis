@@ -6,6 +6,7 @@ function makeBoard(boardUuid: string, boardId: number): GymKioskBoard {
   return {
     boardId,
     boardUuid,
+    slug: `board-${boardId}`,
     name: `Board ${boardId}`,
     boardType: 'kilter',
     layoutId: 1,
@@ -90,6 +91,14 @@ describe('buildKioskViewModel', () => {
   it('keeps the rail off when the layout has no leaderboard', () => {
     const viewModel = buildKioskViewModel({ layout: layoutFor([UUID_A]), boards: [makeBoard(UUID_A, 1)] });
     expect(viewModel.leaderboard).toBeNull();
+  });
+
+  it('propagates showInstallQr from the layout (default false when absent)', () => {
+    const boards = [makeBoard(UUID_A, 1)];
+    expect(buildKioskViewModel({ layout: layoutFor([UUID_A]), boards }).showInstallQr).toBe(false);
+    expect(buildKioskViewModel({ layout: { ...layoutFor([UUID_A]), showInstallQr: true }, boards }).showInstallQr).toBe(
+      true,
+    );
   });
 
   it('tolerates a corrupt layout (rail dropped, boards still render)', () => {

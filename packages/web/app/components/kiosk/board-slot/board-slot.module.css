@@ -10,8 +10,11 @@
 }
 
 /* Hero art region: takes all remaining height; art contain-fits inside it
- * (board aspect ratios run 0.43–1.81) and nothing is overlaid on it. */
+ * (board aspect ratios run 0.43–1.81). position: relative anchors the optional
+ * per-board install QR tile to a corner of this region (never overlapping the
+ * identity strip below). */
 .art {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;

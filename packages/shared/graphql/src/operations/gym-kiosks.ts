@@ -10,6 +10,7 @@ import type { Gym, GymKiosk, CreateGymKioskInput, UpdateGymKioskInput } from '@b
 const GYM_KIOSK_BOARD_FIELDS = `
   boardId
   boardUuid
+  slug
   name
   boardType
   layoutId

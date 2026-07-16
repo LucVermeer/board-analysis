@@ -22,6 +22,9 @@
     "litBy": "allumé par {{name}}",
     "unnamedClimb": "Bloc sans nom"
   },
+  "installQr": {
+    "caption": "Scanne pour enregistrer ce mur"
+  },
   "leaderboard": {
     "periodSession": "Classement de la séance",
     "periodLast24h": "Dernières 24 heures",
@@ -212,6 +215,9 @@
       "previewUnavailable": "{{name}} ne peut pas s'afficher ici",
       "slotDuplicateError": "Cette board occupe déjà un autre emplacement.",
       "scopeInvalidError": "Choisis une des boards de la borne.",
+      "installQrHeading": "QR d'installation",
+      "installQrSwitch": "Afficher le QR d'installation sur chaque board",
+      "installQrHelper": "Chaque board affiche un code que les grimpeurs scannent pour installer Boardsesh et enregistrer leurs croix sur ce mur.",
       "discardTitle": "Abandonner les modifications ?",
       "discardBody": "Tes changements de disposition ne sont pas encore enregistrés.",
       "keepEditing": "Continuer à modifier",

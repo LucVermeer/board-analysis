@@ -36,7 +36,18 @@ export const gymKiosks = pgTable(
     // would pull @boardsesh/kiosk (TS `main`) into the compiled drizzle output,
     // breaking `drizzle-kit generate` (it loads dist as JS). A layout-version
     // bump is a documented hard cutover and must update this literal in lockstep.
-    layout: jsonb('layout').$type<KioskLayout>().default({ version: 1, boards: [], leaderboard: null }).notNull(),
+    //
+    // `showInstallQr` (an additive, optional field) is deliberately omitted from
+    // this literal: the lenient reader defaults an absent value to false, so a
+    // row created from this column default reads correctly without carrying the
+    // key — and keeping the literal byte-identical means the additive field
+    // needs no column-default migration. New kiosks are inserted with
+    // emptyKioskLayout() (which sets it) by the resolver regardless. The cast
+    // reconciles the intentionally-partial literal with the full KioskLayout type.
+    layout: jsonb('layout')
+      .$type<KioskLayout>()
+      .default({ version: 1, boards: [], leaderboard: null } as unknown as KioskLayout)
+      .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
