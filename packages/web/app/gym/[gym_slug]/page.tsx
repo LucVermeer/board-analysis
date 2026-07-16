@@ -1,6 +1,6 @@
 import React, { cache } from 'react';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -111,6 +111,13 @@ export default async function GymPage(props: GymRouteProps) {
 
   if (!isGymViewable(gym)) {
     notFound();
+  }
+
+  // The requested slug belonged to a merged twin: the backend resolved it to the
+  // canonical gym, whose slug differs. Send the old URL (e.g. a printed kiosk QR)
+  // to the canonical one with a 308 rather than serving the gym under a dead slug.
+  if (gym.slug && gym.slug !== gym_slug) {
+    permanentRedirect(`/gym/${gym.slug}`);
   }
 
   const locale = await getLocale();

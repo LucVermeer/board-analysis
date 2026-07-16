@@ -520,10 +520,12 @@ export const schemaSQL = `
     "brand_primary_color" text,
     "brand_accent_color" text,
     "brand_background_color" text,
+    "merged_into_gym_id" bigint REFERENCES "gyms"("id") ON DELETE SET NULL,
     "created_at" timestamp DEFAULT now() NOT NULL,
     "updated_at" timestamp DEFAULT now() NOT NULL,
     "deleted_at" timestamp
   );
+  CREATE INDEX IF NOT EXISTS "gyms_merged_into_idx" ON "gyms" ("merged_into_gym_id") WHERE "merged_into_gym_id" IS NOT NULL;
 
   DROP TABLE IF EXISTS "user_boards" CASCADE;
   CREATE TABLE IF NOT EXISTS "user_boards" (

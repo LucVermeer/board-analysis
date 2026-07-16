@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, count, isNull, sql, ilike, or, desc, inArray, type SQL } from 'drizzle-orm';
+import { eq, and, count, isNull, isNotNull, sql, ilike, or, desc, inArray, type SQL } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { rowsFromResult } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
@@ -88,6 +88,7 @@ function mapRawGymRow(row: Record<string, unknown>): typeof dbSchema.gyms.$infer
     brandPrimaryColor: (row.brand_primary_color as string | null) ?? null,
     brandAccentColor: (row.brand_accent_color as string | null) ?? null,
     brandBackgroundColor: (row.brand_background_color as string | null) ?? null,
+    mergedIntoGymId: row.merged_into_gym_id != null ? Number(row.merged_into_gym_id) : null,
     // Raw `db.execute` returns timestamps as strings (the Drizzle query builder
     // hydrates them to Date). Coerce here so downstream `.toISOString()` works
     // regardless of which path produced the row. `new Date(Date)` is a no-op, so
@@ -96,6 +97,89 @@ function mapRawGymRow(row: Record<string, unknown>): typeof dbSchema.gyms.$infer
     updatedAt: row.updated_at != null ? new Date(row.updated_at as string) : (null as unknown as Date),
     deletedAt: row.deleted_at != null ? new Date(row.deleted_at as string) : null,
   };
+}
+
+type GymRow = typeof dbSchema.gyms.$inferSelect;
+
+// A real merge chain is 1–2 hops; the cap is a safety net against a corrupt or
+// cyclic pointer in prod data so the resolver can never spin.
+const MAX_MERGE_HOPS = 10;
+
+/**
+ * Follow a gym's `merged_into_gym_id` chain to the canonical LIVE row.
+ *
+ * A merge keeps one canonical row live and soft-deletes the twin with
+ * `merged_into_gym_id` pointing at the survivor. Given any starting row:
+ *  - a live row (deletedAt null) is already canonical — returned as-is;
+ *  - a soft-deleted row WITHOUT a pointer is a plain deletion — returns null,
+ *    preserving the historical 404 for genuinely deleted gyms;
+ *  - a soft-deleted row WITH a pointer is a merged twin — walk to the survivor.
+ *
+ * Bounded to MAX_MERGE_HOPS with a visited-id cycle guard, so a corrupt loop in
+ * the data resolves to null instead of hanging.
+ */
+export async function resolveCanonicalGym(startGym: GymRow): Promise<GymRow | null> {
+  let current = startGym;
+  const visited = new Set<number>([current.id]);
+
+  for (let hop = 0; hop < MAX_MERGE_HOPS; hop++) {
+    if (current.deletedAt == null) {
+      return current;
+    }
+    const nextId = current.mergedIntoGymId;
+    if (nextId == null || visited.has(nextId)) {
+      return null;
+    }
+    visited.add(nextId);
+    const [parent] = await db.select().from(dbSchema.gyms).where(eq(dbSchema.gyms.id, nextId)).limit(1);
+    if (!parent) {
+      return null;
+    }
+    current = parent;
+  }
+  return null;
+}
+
+/**
+ * Look up a gym by uuid (soft-deleted rows included) and resolve it to the
+ * canonical live row. Used by every by-uuid read/write lookup so a deduped gym's
+ * old uuid resolves to the survivor instead of 404ing.
+ */
+export async function resolveCanonicalGymByUuid(gymUuid: string): Promise<GymRow | null> {
+  const [gym] = await db.select().from(dbSchema.gyms).where(eq(dbSchema.gyms.uuid, gymUuid)).limit(1);
+  if (!gym) {
+    return null;
+  }
+  return resolveCanonicalGym(gym);
+}
+
+/**
+ * Look up a gym by slug and resolve it to the canonical live row. A live row
+ * (unique among live rows via the partial slug index) is preferred and returned
+ * directly. Otherwise the slug may belong to a merged twin — the twin's slug
+ * isn't in the live-only unique index, so match the most-recently-merged
+ * soft-deleted row carrying that slug and follow its chain.
+ */
+export async function resolveCanonicalGymBySlug(slug: string): Promise<GymRow | null> {
+  const [live] = await db
+    .select()
+    .from(dbSchema.gyms)
+    .where(and(eq(dbSchema.gyms.slug, slug), isNull(dbSchema.gyms.deletedAt)))
+    .limit(1);
+  if (live) {
+    return live;
+  }
+
+  const [mergedTwin] = await db
+    .select()
+    .from(dbSchema.gyms)
+    .where(and(eq(dbSchema.gyms.slug, slug), isNotNull(dbSchema.gyms.mergedIntoGymId)))
+    .orderBy(desc(dbSchema.gyms.updatedAt), desc(dbSchema.gyms.id))
+    .limit(1);
+  if (!mergedTwin) {
+    return null;
+  }
+  return resolveCanonicalGym(mergedTwin);
 }
 
 /**
@@ -262,11 +346,10 @@ async function loadGymWithMemberRole(
   gymUuid: string,
   userId: string,
 ): Promise<{ gym: typeof dbSchema.gyms.$inferSelect; isOwner: boolean; memberRole: GymMemberRole | null }> {
-  const [gym] = await db
-    .select()
-    .from(dbSchema.gyms)
-    .where(and(eq(dbSchema.gyms.uuid, gymUuid), isNull(dbSchema.gyms.deletedAt)))
-    .limit(1);
+  // Resolve merged twins to the canonical survivor so every write-access gate
+  // (edit / grant / owner-or-admin) runs against the live row a stale uuid now
+  // points at, never the soft-deleted twin.
+  const gym = await resolveCanonicalGymByUuid(gymUuid);
 
   if (!gym) {
     throw new Error('Gym not found');
@@ -382,11 +465,9 @@ export const socialGymQueries = {
   gym: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
     validateInput(UUIDSchema, gymUuid, 'gymUuid');
 
-    const [gym] = await db
-      .select()
-      .from(dbSchema.gyms)
-      .where(and(eq(dbSchema.gyms.uuid, gymUuid), isNull(dbSchema.gyms.deletedAt)))
-      .limit(1);
+    // A deduped gym's old uuid resolves to the canonical survivor (enrichGym then
+    // returns the survivor's slug/uuid so the client can canonicalize its URL).
+    const gym = await resolveCanonicalGymByUuid(gymUuid);
 
     if (!gym) return null;
     return enrichGym(gym, ctx.isAuthenticated ? ctx.userId : undefined);
@@ -397,11 +478,8 @@ export const socialGymQueries = {
       return null;
     }
 
-    const [gym] = await db
-      .select()
-      .from(dbSchema.gyms)
-      .where(and(eq(dbSchema.gyms.slug, slug), isNull(dbSchema.gyms.deletedAt)))
-      .limit(1);
+    // A merged twin's slug resolves to the canonical survivor instead of 404ing.
+    const gym = await resolveCanonicalGymBySlug(slug);
 
     if (!gym) return null;
     return enrichGym(gym, ctx.isAuthenticated ? ctx.userId : undefined);

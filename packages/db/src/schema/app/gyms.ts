@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
   pgEnum,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from '../auth/users';
@@ -50,6 +51,15 @@ export const gyms = pgTable(
     brandPrimaryColor: text('brand_primary_color'),
     brandAccentColor: text('brand_accent_color'),
     brandBackgroundColor: text('brand_background_color'),
+    // When two gym rows represent the same physical location, a "merge" keeps one
+    // canonical row live and soft-deletes the twin with this pointer set to the
+    // survivor's id. Read paths follow the chain so a deduped gym's old uuid/slug
+    // (printed kiosk QR codes) resolves to the canonical row instead of 404ing.
+    // Self-referencing FK; ON DELETE SET NULL so a hard-deleted survivor doesn't
+    // strand its twins with a dangling pointer.
+    mergedIntoGymId: bigint('merged_into_gym_id', { mode: 'number' }).references((): AnyPgColumn => gyms.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
@@ -65,6 +75,12 @@ export const gyms = pgTable(
     publicIdx: index('gyms_public_idx')
       .on(table.isPublic)
       .where(sql`${table.deletedAt} IS NULL`),
+    // Only merged twins carry a pointer, so a partial index keeps it tiny — it
+    // serves the reverse lookup ("which twins point at this survivor") the merge
+    // + admin tooling needs.
+    mergedIntoIdx: index('gyms_merged_into_idx')
+      .on(table.mergedIntoGymId)
+      .where(sql`${table.mergedIntoGymId} IS NOT NULL`),
   }),
 );
 
