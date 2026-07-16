@@ -28,6 +28,11 @@ vi.mock('../board-backgrounds-manifest', () => ({
     // thumb-variant fallback-to-full path is exercised below.
     'kilter/product_sizes_layouts_sets/thumbs/36-1.webp': 300,
     'tension/product_sizes_layouts_sets/12.webp': 200,
+    // Dedicated key for the asset-resolution-failure regression test below —
+    // module 999 is never touched by any other test, so the module-scoped
+    // `resolvedPaths` cache in background-image-cache.ts can't short-circuit
+    // it with a stale success from an earlier test in this file.
+    'kilter/product_sizes_layouts_sets/999-failure-test.webp': 999,
   },
 }));
 
@@ -167,6 +172,52 @@ describe('ensureBackgroundsCached', () => {
     // placeholder for the missing one. Previously this returned just
     // ['/bundled/100.webp'] and the consumer never knew a layer was lost.
     expect(result).toEqual({ paths: ['/bundled/100.webp'], missingCount: 1 });
+  });
+
+  // Regression guard for #3191: the Sentry crash was an *unhandled promise
+  // rejection* from a network board-art fetch that 403'd. That call site was
+  // removed (see index.tsx), but ensureBackgroundsCached itself must stay
+  // reject-proof for any asset-resolution failure — a failed layer degrades
+  // to a missing-count gap the caller renders visibly, never an uncaught
+  // rejection that crashes the surrounding effect.
+  it('resolves with a missing layer instead of rejecting when native asset resolution fails', async () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
+      holdsData: [],
+      // Dedicated manifest key (module 999) — see the manifest mock comment —
+      // so this test's fromModule() call can't be served by another test's
+      // already-cached success.
+      backgroundImageKeys: ['kilter/product_sizes_layouts_sets/999-failure-test.webp'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    // Simulate the dev-mode / not-yet-materialized case (localUri unset), so
+    // resolution falls through to downloadAsync() — then make that reject,
+    // standing in for any native asset-resolution failure.
+    const fromModuleSpy = vi.spyOn(MockAsset, 'fromModule').mockImplementationOnce((moduleId: number) => {
+      const asset = new MockAsset(moduleId);
+      asset.localUri = null;
+      return asset;
+    });
+    downloadAsyncMock.mockRejectedValueOnce(new Error('simulated asset resolution failure'));
+
+    const result = await ensureBackgroundsCached({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+    });
+
+    // If this ever regressed to an uncaught rejection, `await` above would
+    // throw and fail the test — resolving here proves the catch-and-degrade
+    // contract holds.
+    expect(result).toEqual({ paths: [], missingCount: 1 });
+
+    fromModuleSpy.mockRestore();
   });
 });
 
