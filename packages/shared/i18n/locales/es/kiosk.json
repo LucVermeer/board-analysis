@@ -71,7 +71,10 @@
     "boardCount_other": "{{count}} plafones",
     "visitWebsite": "Visitar el sitio web",
     "noBoardsYet": "Aún no hay plafones aquí.",
-    "exploreFeed": "Mira qué están encadenando otros escaladores"
+    "exploreFeed": "Mira qué están encadenando otros escaladores",
+    "claimTitle": "¿Es tuyo este rocódromo?",
+    "claimBody": "Reclámalo para gestionar los plafones, la marca y lo que se ve en el muro.",
+    "claimCta": "Reclamar este rocódromo"
   },
   "manage": {
     "title": "Gestionar {{gymName}}",

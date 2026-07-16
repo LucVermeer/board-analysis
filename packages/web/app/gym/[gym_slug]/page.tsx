@@ -11,6 +11,9 @@ import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import TvOutlined from '@mui/icons-material/TvOutlined';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';
+import PersonOutlined from '@mui/icons-material/PersonOutlined';
+import PeopleOutlined from '@mui/icons-material/PeopleOutlined';
+import ChatBubbleOutlined from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import type { Gym, UserBoard } from '@boardsesh/shared-schema';
 import {
   GET_GYM_BY_SLUG,
@@ -31,7 +34,11 @@ import { safeExternalHref } from '@/app/lib/safe-external-url';
 import { themeTokens } from '@/app/theme/theme-config';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import LocaleLink from '@/app/components/i18n/locale-link';
+import GymStatChip from '@/app/components/gym-entity/gym-stat-chip';
+import CommentSection from '@/app/components/social/comment-section';
 import GymPageManageButton from './gym-page-manage-button';
+import GymFollowButton from './gym-follow-button';
+import GymClaimCta from './gym-claim-cta';
 import { getPublicBackendHttpUrl } from '@/app/lib/backend-url';
 import { resolveGymLogoDisplayUrl } from '@/app/lib/gym-logo-display-url';
 
@@ -107,7 +114,7 @@ export default async function GymPage(props: GymRouteProps) {
   }
 
   const locale = await getLocale();
-  const { t } = await getServerTranslation('kiosk');
+  const [{ t }, { t: tBoards }] = await Promise.all([getServerTranslation('kiosk'), getServerTranslation('boards')]);
   const [kiosk, boards] = await Promise.all([fetchDefaultKiosk(gym_slug, token), fetchGymBoards(gym.uuid, token)]);
 
   // Stored logo paths are backend-relative; resolve for the browser (also
@@ -176,7 +183,31 @@ export default async function GymPage(props: GymRouteProps) {
           </Typography>
         )}
 
+        <Box sx={{ display: 'flex', gap: 2.5, flexWrap: 'wrap', mb: 3 }}>
+          <GymStatChip
+            icon={<FitnessCenterOutlined sx={{ fontSize: 18 }} />}
+            value={gym.boardCount}
+            label={tBoards('gymEntity.stats.boards')}
+          />
+          <GymStatChip
+            icon={<PersonOutlined sx={{ fontSize: 18 }} />}
+            value={gym.memberCount}
+            label={tBoards('gymEntity.stats.members')}
+          />
+          <GymStatChip
+            icon={<PeopleOutlined sx={{ fontSize: 18 }} />}
+            value={gym.followerCount}
+            label={tBoards('gymEntity.stats.followers')}
+          />
+          <GymStatChip
+            icon={<ChatBubbleOutlined sx={{ fontSize: 18 }} />}
+            value={gym.commentCount}
+            label={tBoards('gymEntity.stats.comments')}
+          />
+        </Box>
+
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 3 }}>
+          <GymFollowButton gymUuid={gym.uuid} ownerId={gym.ownerId} isFollowedByMe={gym.isFollowedByMe} />
           {kiosk && (
             <Button
               component={LocaleLink}
@@ -202,6 +233,8 @@ export default async function GymPage(props: GymRouteProps) {
           )}
           {gym.canEdit && <GymPageManageButton gymSlug={gym_slug} />}
         </Box>
+
+        {gym.canClaim && <GymClaimCta gymUuid={gym.uuid} gymName={gym.name} website={gym.website} />}
 
         <Divider sx={{ mb: 3 }} />
 
@@ -244,6 +277,10 @@ export default async function GymPage(props: GymRouteProps) {
             ))}
           </Box>
         )}
+
+        <Divider sx={{ my: 4 }} />
+
+        <CommentSection entityType="gym" entityId={gym.uuid} title={tBoards('gymEntity.comments.title')} />
 
         <Box sx={{ mt: 4 }}>
           <MuiLink component={LocaleLink} href="/feed" underline="hover" sx={{ color: themeTokens.colors.primary }}>
