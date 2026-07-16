@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T11:41:44.683Z",
+  "generatedAt": "2026-07-16T20:14:46.771Z",
   "entries": [
+    {
+      "prNumber": 3688,
+      "category": "improved",
+      "title": "**Android: instant tab switching.** Hopping between Home, Climbs, and You no longer rebuilds the screen every time — the app keeps each tab ready, so switching is immediate instead of stuttering on the charts-heavy You tab.",
+      "mergedAt": "2026-07-16T20:13:44Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3688"
+    },
     {
       "prNumber": 3697,
       "category": "new",

@@ -38,6 +38,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Improved
 
+- **Android: instant tab switching.** Hopping between Home, Climbs, and You no longer rebuilds the screen every time — the app keeps each tab ready, so switching is immediate instead of stuttering on the charts-heavy You tab. ([#3688](https://github.com/boardsesh/boardsesh/pull/3688))
 - MoonBoard heatmaps, hold search, and area filters now work from the board's real hold placements. ([#3658](https://github.com/boardsesh/boardsesh/pull/3658))
 
 ### Fixed
