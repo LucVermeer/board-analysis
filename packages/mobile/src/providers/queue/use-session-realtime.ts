@@ -17,6 +17,7 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { parseBoardPath, parseNamedBoardPath } from '@boardsesh/board-config';
 import type { SessionUser, SubscriptionQueueEvent, UserBoard } from '@boardsesh/shared-schema';
 import { emitWallConfirm } from '@boardsesh/play-view';
+import { isNotSessionMemberError } from '@boardsesh/graphql-client';
 import { getWsClient } from '../../lib/graphql/ws-client';
 import {
   QUEUE_UPDATES_SUBSCRIPTION,
@@ -369,7 +370,20 @@ export function useSessionRealtime({
                 break;
             }
           },
-          error: () => {
+          error: (subscriptionError) => {
+            // The server denied our queue subscription because this connection
+            // isn't a member of the session (NOT_SESSION_MEMBER). Post-#3695 an
+            // authenticated member reconnecting is re-authorized instantly, so
+            // reaching here means the session is genuinely gone for us
+            // (ended / emptied / a stale pointer) — clear the local session
+            // silently. A "Queue sync error" toast for a session that no longer
+            // exists is just noise. (#2385 follow-up.) Guarded on the still-
+            // active session so a late error from a superseded A→B switch can't
+            // clear the new session.
+            if (sessionIdRef.current === sessionId && isNotSessionMemberError(subscriptionError)) {
+              void clearSessionRef.current();
+              return;
+            }
             // i18n-keep session:mobile.queue.syncError — called through `tRef.current`,
             // which the orphan checker can't trace back to the session-bound `t`.
             showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
