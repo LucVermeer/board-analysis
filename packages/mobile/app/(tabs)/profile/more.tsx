@@ -17,12 +17,14 @@ import { useBoardDownloads } from '../../../src/offline/use-board-downloads';
 import { useSetting, setSetting, getSetting, offlineBoardKeyForBoard } from '../../../src/settings';
 import { useConfirm } from '../../../src/providers/dialog-provider';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
+import { RECLAIMABLE_VISIBLE_BYTES } from '../../../src/db/storage-usage';
 import {
   getDeadLetterCount,
   getDeadLetters,
   retryDeadLetter,
   getPendingCount,
   getDownloadedScopeKeys,
+  measureReclaimableBytes,
   type GraphQLFetch,
 } from '@boardsesh/offline-sync';
 import { drainMutationQueue } from '../../../src/offline/offline-sync-adapter';
@@ -134,7 +136,16 @@ export default function MoreScreen() {
     queryKey: ['downloadedScopeKeys'],
     queryFn: () => getDownloadedScopeKeys(db),
   });
-  const showStorage = offlineEnabled || (downloadedScopeKeys?.length ?? 0) > 0;
+  // ...AND when a removal deleted its rows but the compaction never landed, so the
+  // freelist is still holding real space. That state clears the scope-complete
+  // markers (so downloadedScopeKeys is empty) and can coincide with the flag being
+  // off — which would hide the one screen that can reclaim it. Two O(1) pragmas.
+  const { data: reclaimableBytes = 0 } = useQuery({
+    queryKey: ['offlineReclaimableBytes'],
+    queryFn: () => measureReclaimableBytes(db),
+  });
+  const showStorage =
+    offlineEnabled || (downloadedScopeKeys?.length ?? 0) > 0 || reclaimableBytes >= RECLAIMABLE_VISIBLE_BYTES;
 
   // Guard against a rapid double-tap spawning overlapping retries (the drain is
   // single-flight internally, but this avoids the wasted re-entrant work).
