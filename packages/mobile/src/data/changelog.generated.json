@@ -1,6 +1,35 @@
 {
-  "generatedAt": "2026-07-16T20:14:46.771Z",
+  "generatedAt": "2026-07-16T20:21:53.203Z",
   "entries": [
+    {
+      "prNumber": 3687,
+      "category": "fixed",
+      "title": "Reconnecting to your board mid-session is quieter now — tap the lightbulb and it slips back onto the same box instead of throwing the board picker at you every few climbs, and it remembers your board across app restarts.",
+      "mergedAt": "2026-07-16T20:19:57Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3687"
+    },
+    {
+      "prNumber": 3690,
+      "category": "fixed",
+      "title": "Party queues now ride out rate limits. If the app buffers a burst of queue changes while you're offline and replays them the moment you reconnect, they land smoothly with a brief \"catching up\" note instead of a raw \"Rate limit exceeded\" error — and a change that's still being throttled is kept and retried instead of lost.",
+      "mergedAt": "2026-07-16T20:18:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3690"
+    },
+    {
+      "prNumber": 3679,
+      "category": "fixed",
+      "title": "Changing your display name or avatar saves reliably again.",
+      "mergedAt": "2026-07-16T20:16:09Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3679",
+      "body": "And if a save ever does hiccup, you'll get a plain \"couldn't save, try again\" instead of a wall of database text."
+    },
+    {
+      "prNumber": 3684,
+      "category": "fixed",
+      "title": "Sign in with Apple and Google now go through reliably on the latest iOS — no more bouncing straight back to the login screen.",
+      "mergedAt": "2026-07-16T20:14:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3684"
+    },
     {
       "prNumber": 3688,
       "category": "improved",

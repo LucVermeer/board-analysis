@@ -43,6 +43,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Reconnecting to your board mid-session is quieter now — tap the lightbulb and it slips back onto the same box instead of throwing the board picker at you every few climbs, and it remembers your board across app restarts. ([#3687](https://github.com/boardsesh/boardsesh/pull/3687))
+- Party queues now ride out rate limits. If the app buffers a burst of queue changes while you're offline and replays them the moment you reconnect, they land smoothly with a brief "catching up" note instead of a raw "Rate limit exceeded" error — and a change that's still being throttled is kept and retried instead of lost. ([#3690](https://github.com/boardsesh/boardsesh/pull/3690))
+- Changing your display name or avatar saves reliably again. ([#3679](https://github.com/boardsesh/boardsesh/pull/3679))
+  And if a save ever does hiccup, you'll get a plain "couldn't save, try again" instead of a wall of database text.
+- Sign in with Apple and Google now go through reliably on the latest iOS — no more bouncing straight back to the login screen. ([#3684](https://github.com/boardsesh/boardsesh/pull/3684))
 - Party sessions pick back up cleanly when you come back to the app — locking your phone mid-session no longer throws a phantom sync error. ([#3680](https://github.com/boardsesh/boardsesh/pull/3680))
 - When a board won't connect on Android, you now get the real reason — Bluetooth off, board not found, or a connection that dropped — instead of a blanket "unknown error". ([#3653](https://github.com/boardsesh/boardsesh/pull/3653))
 
