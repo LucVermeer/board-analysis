@@ -24,13 +24,12 @@ import { getBackendWsUrl } from '@/app/lib/backend-url';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { KioskBoardFeedBridge } from '../kiosk-reliability';
 import {
+  createKioskPresenceStore,
   KioskConnectionStatusContext,
-  KioskPresenceSnapshotsContext,
+  KioskPresenceStoreContext,
   type KioskBoardSnapshot,
   type KioskConnectionStatus,
 } from './use-kiosk-board-presence';
-
-const EMPTY_SNAPSHOTS: ReadonlyMap<number, KioskBoardSnapshot> = new Map();
 
 export default function KioskPresenceHub({ boardIds, children }: { boardIds: number[]; children: ReactNode }) {
   const { token, isLoading: isTokenLoading } = useWsAuthToken();
@@ -39,7 +38,10 @@ export default function KioskPresenceHub({ boardIds, children }: { boardIds: num
   const [activeWsClient, setActiveWsClient] = useState<Client | null>(null);
   const clientRef = useRef<Client | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<KioskConnectionStatus>('connecting');
-  const [snapshots, setSnapshots] = useState<ReadonlyMap<number, KioskBoardSnapshot>>(EMPTY_SNAPSHOTS);
+  // The presence store lives outside React's render tree so a single board's
+  // event notifies only its own subscribers — one wall going live doesn't
+  // re-render every other board's art. Created once for the hub's lifetime.
+  const [store] = useState(createKioskPresenceStore);
 
   useEffect(() => {
     if (!hasBoards) return;
@@ -82,17 +84,16 @@ export default function KioskPresenceHub({ boardIds, children }: { boardIds: num
     });
   }, [activeWsClient]);
 
-  const publishSnapshot = useCallback((boardId: number, snapshot: KioskBoardSnapshot) => {
-    setSnapshots((previousSnapshots) => {
-      const nextSnapshots = new Map(previousSnapshots);
-      nextSnapshots.set(boardId, snapshot);
-      return nextSnapshots;
-    });
-  }, []);
+  const publishSnapshot = useCallback(
+    (boardId: number, snapshot: KioskBoardSnapshot) => {
+      store.publish(boardId, snapshot);
+    },
+    [store],
+  );
 
   return (
     <KioskConnectionStatusContext.Provider value={connectionStatus}>
-      <KioskPresenceSnapshotsContext.Provider value={snapshots}>
+      <KioskPresenceStoreContext.Provider value={store}>
         {boardIds.map((boardId) => (
           <BoardPresenceProvider
             key={boardId}
@@ -103,7 +104,7 @@ export default function KioskPresenceHub({ boardIds, children }: { boardIds: num
           </BoardPresenceProvider>
         ))}
         {children}
-      </KioskPresenceSnapshotsContext.Provider>
+      </KioskPresenceStoreContext.Provider>
     </KioskConnectionStatusContext.Provider>
   );
 }
