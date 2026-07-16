@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-16T06:00:08.681Z",
+  "generatedAt": "2026-07-16T06:30:15.287Z",
   "entries": [
+    {
+      "prNumber": 3656,
+      "category": "new",
+      "title": "Your gym's wall screen can now show a scannable code on every board — climbers scan it to get Boardsesh, and their sends light up the screen.",
+      "mergedAt": "2026-07-16T06:29:17Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3656"
+    },
     {
       "prNumber": 3637,
       "category": "new",
