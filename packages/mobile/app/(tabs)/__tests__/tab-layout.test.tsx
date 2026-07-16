@@ -159,7 +159,8 @@ vi.mock('expo-router', () => {
           'data-tabs-material': 'true',
           // Surface the #3153 residency props so tests can pin the platform matrix.
           'data-detach-inactive-screens': detachInactiveScreens === undefined ? 'unset' : String(detachInactiveScreens),
-          'data-freeze-on-blur': screenOptions?.freezeOnBlur === undefined ? 'unset' : String(screenOptions.freezeOnBlur),
+          'data-freeze-on-blur':
+            screenOptions?.freezeOnBlur === undefined ? 'unset' : String(screenOptions.freezeOnBlur),
         },
         children,
       ),
