@@ -129,7 +129,17 @@
       "cancel": "Cancelar",
       "wallMoved": "El muro pasó a {{wallClimb}}. ¿Sigues registrando {{loggingClimb}}?",
       "switchClimb": "Cambiar a {{climbName}}",
-      "switchDirtyConfirm": "Perderás lo que escribiste. ¿Cambiar igual?"
+      "switchDirtyConfirm": "Perderás lo que escribiste. ¿Cambiar igual?",
+      "logType": "Tipo de registro",
+      "saveFailed": "No se pudo guardar tu registro. Inténtalo de nuevo.",
+      "sections": {
+        "details": "Detalles",
+        "howItFelt": "Cómo fue"
+      },
+      "validation": {
+        "flashOneAttempt": "El flash requiere exactamente 1 intento",
+        "sendMoreAttempts": "El encadene requiere más de 1 intento"
+      }
     },
     "feed": {
       "deleteSwipeLabel": "Eliminar",

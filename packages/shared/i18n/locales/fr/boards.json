@@ -345,7 +345,8 @@
     },
     "placeholders": {
       "description": "Description facultative",
-      "serialNumber": "ex. ABC-12345"
+      "serialNumber": "ex. ABC-12345",
+      "select": "Sélectionner…"
     },
     "helperText": {
       "unlisted": "Masqué des résultats de recherche, mais accessible par lien direct",
@@ -353,6 +354,11 @@
     },
     "alerts": {
       "configEditable": "Vous pouvez modifier le layout, la taille et les jeux de prises. Les blocs déjà enregistrés restent intacts."
+    },
+    "sections": {
+      "details": "Détails de la board",
+      "setup": "Configuration",
+      "visibility": "Visibilité"
     }
   },
   "editBoard": {

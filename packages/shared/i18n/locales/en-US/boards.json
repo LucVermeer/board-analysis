@@ -345,7 +345,8 @@
     },
     "placeholders": {
       "description": "Optional description",
-      "serialNumber": "e.g. ABC-12345"
+      "serialNumber": "e.g. ABC-12345",
+      "select": "Select…"
     },
     "helperText": {
       "unlisted": "Hidden from search results but accessible via direct link",
@@ -353,6 +354,11 @@
     },
     "alerts": {
       "configEditable": "You can change the layout, size, and hold sets. Climbs already logged stay put."
+    },
+    "sections": {
+      "details": "Board details",
+      "setup": "Setup",
+      "visibility": "Visibility"
     }
   },
   "editBoard": {

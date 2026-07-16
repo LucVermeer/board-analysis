@@ -1,24 +1,19 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MuiRating from '@mui/material/Rating';
 import Chip from '@mui/material/Chip';
 import MuiTooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
-import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 import MuiAlert from '@mui/material/Alert';
 import MuiSelect from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import FormHelperText from '@mui/material/FormHelperText';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { track } from '@/app/lib/analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -30,6 +25,7 @@ import { getGradesForBoard, ANGLES } from '@/app/lib/board-data';
 import { isBetaVideoUrl, BETA_VIDEO_URL_VALIDATION_MESSAGE } from '@/app/lib/beta-video-url';
 import { useEffectiveAngle } from '@/app/hooks/use-effective-angle';
 import { useOptionalCurrentClimb } from '../graphql-queue/QueueContext';
+import { FormShell, FormSection, FormField, FormRow, FormActions, FormDateTimePicker } from '@/app/components/form';
 
 import dayjs from 'dayjs';
 
@@ -49,6 +45,13 @@ type LogAscentFormValues = {
   difficulty: number | undefined;
   notes?: string;
   videoUrl?: string;
+};
+
+/** Submit-affordance state the form reports up so a drawer header can host the action. */
+export type LogAscentSubmitState = {
+  submitLabel: string;
+  submitting: boolean;
+  canSubmit: boolean;
 };
 
 // Helper to determine tick status from attempt count (for ascents)
@@ -74,9 +77,28 @@ type LogAscentFormProps = {
    * form, which remounts with the new climb's initial values.
    */
   onSwitchClimb?: (climb: Climb) => void;
+  /**
+   * When hosted in a drawer, the id wired onto the form so a header-hosted
+   * submit button can target it via `form={formId}`.
+   */
+  formId?: string;
+  /**
+   * When provided, the form reports its submit affordance here (for a header
+   * action bar) instead of rendering inline submit/cancel buttons. Bottom
+   * drawers carry actions in the header because the iOS keyboard buries a
+   * footer — see docs/mobile-sheets-vs-routes.md.
+   */
+  onSubmitStateChange?: (state: LogAscentSubmitState) => void;
 };
 
-export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boardDetails, onClose, onSwitchClimb }) => {
+export const LogAscentForm: React.FC<LogAscentFormProps> = ({
+  currentClimb,
+  boardDetails,
+  onClose,
+  onSwitchClimb,
+  formId,
+  onSubmitStateChange,
+}) => {
   const { t } = useTranslation('climbs');
   const { t: tProfile } = useTranslation('profile');
   const { saveTick, isAuthenticated } = useBoardProvider();
@@ -85,7 +107,7 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
   const angleOptions = ANGLES[boardDetails.board_name];
   // Resolve the wall's current angle (route → party session → climb record).
   // Never `|| 0` here — group-session feedback fix. If nothing resolves the
-  // submit button is disabled until the user picks one in the angle Select.
+  // submit action stays disabled until the user picks one in the angle Select.
   const effectiveAngle = useEffectiveAngle(currentClimb);
 
   const getInitialValues = (): LogAscentFormValues => ({
@@ -101,6 +123,9 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
   const [isSaving, setIsSaving] = useState(false);
   const [logType, setLogType] = useState<LogType>('ascent');
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  // Surfaced above the fields via FormShell. Covers backend/save failures and
+  // the flash/send guard so a failed submit is never silent.
+  const [formError, setFormError] = useState<string | null>(null);
 
   // TODO: Tension spray doesnt support mirroring
   const showMirrorTag = boardDetails.supportsMirroring;
@@ -140,7 +165,8 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
       ? BETA_VIDEO_URL_VALIDATION_MESSAGE
       : null;
 
-  // Validation function matching backend rules
+  // Validation function matching backend rules. Returns a translated,
+  // user-facing message (surfaced in the form-level Alert) or null.
   const validateTickInput = (values: LogAscentFormValues): string | null => {
     // Attempts don't need flash/send validation
     if (logType === 'attempt') {
@@ -151,16 +177,12 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
 
     // Flash requires attemptCount === 1
     if (status === 'flash' && values.attempts !== 1) {
-      return 'Flash requires exactly 1 attempt';
+      return tProfile('logbook.form.validation.flashOneAttempt');
     }
 
     // Send requires attemptCount > 1
     if (status === 'send' && values.attempts <= 1) {
-      return 'Send requires more than 1 attempt';
-    }
-
-    if (values.videoUrl && !isBetaVideoUrl(values.videoUrl)) {
-      return BETA_VIDEO_URL_VALIDATION_MESSAGE;
+      return tProfile('logbook.form.validation.sendMoreAttempts');
     }
 
     return null; // Valid
@@ -170,18 +192,20 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
     if (!currentClimb?.uuid || !isAuthenticated) {
       return;
     }
-    // Guard against a programmatic submit slipping past the disabled
-    // button — never send `angle: null` (would coerce to 0° on the wire
-    // and silently miscredit the climb).
+    setFormError(null);
+
+    // Guard against a submit slipping past the disabled action — never send
+    // `angle: null` (would coerce to 0° on the wire and silently miscredit the
+    // climb). The angle FormField already shows an inline error whenever the
+    // angle is unset, so returning here surfaces the reason without a toast.
     if (values.angle == null) {
-      console.error('Validation error: angle is required before logging');
       return;
     }
 
     // Client-side validation
     const validationError = validateTickInput(values);
     if (validationError) {
-      console.error('Validation error:', validationError);
+      setFormError(validationError);
       return;
     }
 
@@ -223,7 +247,10 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
       setLogType('ascent');
       onClose();
     } catch (error) {
+      // Keep the drawer open and tell the user — a failed save must never be
+      // silent (previously this only console.error'd and dropped the tick).
       console.error('Failed to save tick:', error);
+      setFormError(tProfile('logbook.form.saveFailed'));
       track('Tick Save Failed', {
         boardLayout: boardDetails.layout_name || '',
       });
@@ -232,11 +259,27 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
     }
   };
 
+  const submitDisabled = isSaving || !!videoUrlError || formValues.angle == null;
+  const submitLabel =
+    formValues.angle != null
+      ? tProfile('logbook.form.submitAtAngle', { angle: formValues.angle })
+      : tProfile('logbook.form.submit');
+  const hostsActionsExternally = onSubmitStateChange != null;
+
+  // Report the submit affordance to a header-hosted action bar. Fires only when
+  // the label / saving / enabled state actually changes.
+  useEffect(() => {
+    if (!onSubmitStateChange) return;
+    onSubmitStateChange({ submitLabel, submitting: isSaving, canSubmit: !submitDisabled });
+  }, [onSubmitStateChange, submitLabel, isSaving, submitDisabled]);
+
   return (
-    <Box
-      component="form"
-      onSubmit={(e: React.FormEvent) => {
-        e.preventDefault();
+    <FormShell
+      id={formId}
+      error={formError}
+      maxWidth={640}
+      onSubmit={(event: React.FormEvent) => {
+        event.preventDefault();
         void handleSubmit(formValues);
       }}
     >
@@ -246,7 +289,7 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
         // long climb names (Aurora's "Tortured Soul on Sloping Crystal"
         // shape) don't wrap awkwardly inside MuiAlert's right-aligned
         // action slot on narrow phones (UI review E).
-        <MuiAlert severity="warning" sx={{ mb: 2 }} onClose={() => setBannerDismissed(true)}>
+        <MuiAlert severity="warning" onClose={() => setBannerDismissed(true)}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
             <Box component="span">
               {tProfile('logbook.form.wallMoved', {
@@ -263,20 +306,24 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
         </MuiAlert>
       )}
 
-      <Box sx={{ mb: 2 }}>
-        <ToggleButtonGroup exclusive fullWidth value={logType} onChange={(_, val) => val && setLogType(val as LogType)}>
-          <ToggleButton value="ascent">{tProfile('logbook.form.ascent')}</ToggleButton>
-          <ToggleButton value="attempt">{tProfile('logbook.form.attempt')}</ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
+      <FormSection title={tProfile('logbook.form.sections.details')}>
+        <FormField label={tProfile('logbook.form.logType')}>
+          <ToggleButtonGroup
+            exclusive
+            fullWidth
+            value={logType}
+            onChange={(_, val) => val && setLogType(val as LogType)}
+          >
+            <ToggleButton value="ascent">{tProfile('logbook.form.ascent')}</ToggleButton>
+            <ToggleButton value="attempt">{tProfile('logbook.form.attempt')}</ToggleButton>
+          </ToggleButtonGroup>
+        </FormField>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-        <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.boulder')}</Typography>
-        <Box sx={{ flex: 1 }}>
-          <Stack direction="row" spacing={1}>
+        <FormField label={tProfile('logbook.form.boulder')}>
+          <Stack direction="row" spacing={1} alignItems="center">
             <strong>{currentClimb?.name || 'N/A'}</strong>
             {showMirrorTag && (
-              <Stack direction="row" spacing={0.5}>
+              <Stack direction="row" spacing={0.5} alignItems="center">
                 <Chip
                   label={tProfile('logbook.form.mirrored')}
                   size="small"
@@ -290,160 +337,158 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
               </Stack>
             )}
           </Stack>
-        </Box>
-      </Box>
+        </FormField>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-        <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.dateAndTime')}</Typography>
-        <Box sx={{ flex: 1 }}>
-          <DateTimePicker
-            value={formValues.date}
-            onChange={(val) => setFormValues((prev) => ({ ...prev, date: val || dayjs() }))}
-            views={['year', 'month', 'day', 'hours', 'minutes']}
-            slotProps={{ textField: { size: 'small' } }}
-          />
-        </Box>
-      </Box>
+        <FormField label={tProfile('logbook.form.dateAndTime')}>
+          {(field) => (
+            <FormDateTimePicker
+              id={field.id}
+              describedBy={field.describedBy}
+              value={formValues.date}
+              onChange={(val) => setFormValues((prev) => ({ ...prev, date: val || dayjs() }))}
+              views={['year', 'month', 'day', 'hours', 'minutes']}
+              slotProps={{ textField: { size: 'small', fullWidth: true } }}
+            />
+          )}
+        </FormField>
 
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.5 }}>
-        <Typography sx={{ width: 120, flexShrink: 0, pt: 1 }}>{tProfile('logbook.form.angle')}</Typography>
-        <Box sx={{ flex: 1 }}>
-          {/* FormControl + FormHelperText so screen readers hear *why* the
-              Select is in an error state ("Pick an angle") rather than only
-              "field is invalid" (UI review C). */}
-          <FormControl error={formValues.angle == null} size="small">
-            <MuiSelect
-              // `?? ''` not `|| ''` — 0° is a real selectable angle on
-              // vertical boards. Truthy fallthrough here would have rendered
-              // the "Pick an angle" placeholder over a valid 0° selection.
-              value={formValues.angle ?? ''}
-              onChange={(e) => setFormValues((prev) => ({ ...prev, angle: Number(e.target.value) }))}
-              sx={{ width: 100 }}
-              displayEmpty
-            >
-              <MenuItem value="" disabled>
-                <em>{tProfile('logbook.form.pickAngle')}</em>
-              </MenuItem>
-              {angleOptions.map((angle) => (
-                <MenuItem key={angle} value={angle}>
-                  {angle}°
+        <FormRow>
+          <FormField
+            label={tProfile('logbook.form.angle')}
+            error={formValues.angle == null ? tProfile('logbook.form.pickAngle') : undefined}
+          >
+            {(field) => (
+              <MuiSelect
+                labelId={field.labelId}
+                id={field.id}
+                // `?? ''` not `|| ''` — 0° is a real selectable angle on
+                // vertical boards. Truthy fallthrough here would have rendered
+                // the "Pick an angle" placeholder over a valid 0° selection.
+                value={formValues.angle ?? ''}
+                onChange={(event) => setFormValues((prev) => ({ ...prev, angle: Number(event.target.value) }))}
+                error={Boolean(field.error)}
+                displayEmpty
+                size="small"
+                fullWidth
+              >
+                <MenuItem value="" disabled>
+                  <em>{tProfile('logbook.form.pickAngle')}</em>
                 </MenuItem>
-              ))}
-            </MuiSelect>
-            {formValues.angle == null && <FormHelperText>{tProfile('logbook.form.pickAngle')}</FormHelperText>}
-          </FormControl>
-        </Box>
-      </Box>
+                {angleOptions.map((angleOption) => (
+                  <MenuItem key={angleOption} value={angleOption}>
+                    {angleOption}°
+                  </MenuItem>
+                ))}
+              </MuiSelect>
+            )}
+          </FormField>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-        <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.attempts')}</Typography>
-        <Box sx={{ flex: 1 }}>
-          <TextField
-            type="number"
-            value={formValues.attempts}
-            onChange={(e) => setFormValues((prev) => ({ ...prev, attempts: Number(e.target.value) }))}
-            slotProps={{ htmlInput: { min: 1, max: 999 } }}
-            size="small"
-            sx={{ width: 80 }}
-          />
-        </Box>
-      </Box>
+          <FormField label={tProfile('logbook.form.attempts')}>
+            {(field) => (
+              <TextField
+                id={field.id}
+                type="number"
+                value={formValues.attempts}
+                onChange={(event) => setFormValues((prev) => ({ ...prev, attempts: Number(event.target.value) }))}
+                size="small"
+                fullWidth
+                slotProps={{ htmlInput: { min: 1, max: 999, 'aria-describedby': field.describedBy } }}
+              />
+            )}
+          </FormField>
+        </FormRow>
+      </FormSection>
 
-      {logType === 'ascent' && (
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-          <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.quality')}</Typography>
-          <Box sx={{ flex: 1 }}>
+      <FormSection title={tProfile('logbook.form.sections.howItFelt')}>
+        {logType === 'ascent' && (
+          <FormField label={tProfile('logbook.form.quality')}>
             <MuiRating
               value={formValues.quality}
               onChange={(_, val) => setFormValues((prev) => ({ ...prev, quality: val ?? 0 }))}
               max={5}
             />
-          </Box>
-        </Box>
-      )}
+          </FormField>
+        )}
 
-      {logType === 'ascent' && (
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-          <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.difficulty')}</Typography>
-          <Box sx={{ flex: 1 }}>
-            <MuiSelect<number | ''>
-              value={formValues.difficulty ?? ''}
-              onChange={(e) =>
-                setFormValues((prev) => ({
-                  ...prev,
-                  difficulty: e.target.value === '' ? undefined : Number(e.target.value),
-                }))
-              }
-              size="small"
-              sx={{ width: 120 }}
-              displayEmpty
-            >
-              <MenuItem value="">
-                <em>{tProfile('logbook.form.difficultyNoOverride')}</em>
-              </MenuItem>
-              {grades.map((grade) => (
-                <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
-                  {grade.difficulty_name}
+        {logType === 'ascent' && (
+          <FormField label={tProfile('logbook.form.difficulty')}>
+            {(field) => (
+              <MuiSelect<number | ''>
+                labelId={field.labelId}
+                id={field.id}
+                value={formValues.difficulty ?? ''}
+                onChange={(event) =>
+                  setFormValues((prev) => ({
+                    ...prev,
+                    difficulty: event.target.value === '' ? undefined : Number(event.target.value),
+                  }))
+                }
+                size="small"
+                fullWidth
+                displayEmpty
+              >
+                <MenuItem value="">
+                  <em>{tProfile('logbook.form.difficultyNoOverride')}</em>
                 </MenuItem>
-              ))}
-            </MuiSelect>
-          </Box>
-        </Box>
-      )}
+                {grades.map((grade) => (
+                  <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
+                    {grade.difficulty_name}
+                  </MenuItem>
+                ))}
+              </MuiSelect>
+            )}
+          </FormField>
+        )}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-        <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.notes')}</Typography>
-        <Box sx={{ flex: 1 }}>
-          <TextField
-            multiline
-            rows={3}
-            variant="outlined"
-            size="small"
-            fullWidth
-            value={formValues.notes || ''}
-            onChange={(e) => setFormValues((prev) => ({ ...prev, notes: e.target.value }))}
-          />
-        </Box>
-      </Box>
-
-      {logType === 'ascent' && (
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.5 }}>
-          <Typography sx={{ width: 120, flexShrink: 0, pt: 1 }}>{tProfile('logbook.form.video')}</Typography>
-          <Box sx={{ flex: 1 }}>
+        <FormField label={tProfile('logbook.form.notes')}>
+          {(field) => (
             <TextField
-              placeholder={tProfile('logbook.form.videoPlaceholder')}
+              id={field.id}
+              multiline
+              rows={3}
               variant="outlined"
               size="small"
               fullWidth
-              value={formValues.videoUrl || ''}
-              onChange={(e) => setFormValues((prev) => ({ ...prev, videoUrl: e.target.value }))}
-              error={!!videoUrlError}
-              helperText={videoUrlError ?? tProfile('logbook.form.videoHelper')}
+              value={formValues.notes || ''}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, notes: event.target.value }))}
+              slotProps={{ htmlInput: { 'aria-describedby': field.describedBy } }}
             />
-          </Box>
-        </Box>
+          )}
+        </FormField>
+
+        {logType === 'ascent' && (
+          <FormField
+            label={tProfile('logbook.form.video')}
+            error={videoUrlError ?? undefined}
+            helper={tProfile('logbook.form.videoHelper')}
+          >
+            {(field) => (
+              <TextField
+                id={field.id}
+                placeholder={tProfile('logbook.form.videoPlaceholder')}
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={formValues.videoUrl || ''}
+                onChange={(event) => setFormValues((prev) => ({ ...prev, videoUrl: event.target.value }))}
+                error={Boolean(field.error)}
+                slotProps={{ htmlInput: { 'aria-describedby': field.describedBy } }}
+              />
+            )}
+          </FormField>
+        )}
+      </FormSection>
+
+      {!hostsActionsExternally && (
+        <FormActions
+          submitLabel={submitLabel}
+          submitting={isSaving}
+          disabled={submitDisabled}
+          onCancel={onClose}
+          cancelLabel={tProfile('logbook.form.cancel')}
+          layout="stacked"
+        />
       )}
-
-      <Box sx={{ mb: 1 }}>
-        <Button
-          variant="contained"
-          type="submit"
-          disabled={isSaving || !!videoUrlError || formValues.angle == null}
-          startIcon={isSaving ? <CircularProgress size={16} /> : undefined}
-          fullWidth
-          size="large"
-        >
-          {formValues.angle != null
-            ? tProfile('logbook.form.submitAtAngle', { angle: formValues.angle })
-            : tProfile('logbook.form.submit')}
-        </Button>
-      </Box>
-
-      <Box>
-        <Button variant="outlined" fullWidth size="large" onClick={onClose} disabled={isSaving}>
-          {tProfile('logbook.form.cancel')}
-        </Button>
-      </Box>
-    </Box>
+    </FormShell>
   );
 };

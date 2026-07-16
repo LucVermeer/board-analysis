@@ -1,9 +1,10 @@
 'use client';
 
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LogAscentForm } from './logascent-form';
+import { LogAscentForm, type LogAscentSubmitState } from './logascent-form';
+import { FormActions } from '@/app/components/form';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 
 type LogAscentDrawerProps = {
@@ -15,6 +16,18 @@ type LogAscentDrawerProps = {
 
 export const LogAscentDrawer: React.FC<LogAscentDrawerProps> = ({ open, onClose, currentClimb, boardDetails }) => {
   const { t } = useTranslation('climbs');
+  const { t: tProfile } = useTranslation('profile');
+
+  // The form's submit button lives in the drawer HEADER, not a footer: the iOS
+  // keyboard buries a bottom action bar (see docs/mobile-sheets-vs-routes.md).
+  // The form reports its label / saving / enabled state here and the header
+  // button submits the form by id.
+  const formId = useId();
+  const [submitState, setSubmitState] = useState<LogAscentSubmitState>({
+    submitLabel: tProfile('logbook.form.submit'),
+    submitting: false,
+    canSubmit: false,
+  });
 
   // Pin the climb the user opened the form on. A remote queue advance
   // (driver moves the wall on to the next climb while User A is mid-log)
@@ -45,6 +58,17 @@ export const LogAscentDrawer: React.FC<LogAscentDrawerProps> = ({ open, onClose,
       open={open}
       fullHeight
       styles={{ wrapper: { height: '100%' } }}
+      extra={
+        lockedClimb ? (
+          <FormActions
+            formId={formId}
+            submitLabel={submitState.submitLabel}
+            submitting={submitState.submitting}
+            disabled={!submitState.canSubmit}
+            layout="row"
+          />
+        ) : undefined
+      }
     >
       {lockedClimb && (
         <LogAscentForm
@@ -53,6 +77,8 @@ export const LogAscentDrawer: React.FC<LogAscentDrawerProps> = ({ open, onClose,
           onSwitchClimb={setLockedClimb}
           boardDetails={boardDetails}
           onClose={onClose}
+          formId={formId}
+          onSubmitStateChange={setSubmitState}
         />
       )}
     </SwipeableDrawer>

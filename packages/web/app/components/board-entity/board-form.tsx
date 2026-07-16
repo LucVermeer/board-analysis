@@ -2,21 +2,14 @@
 
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
-import Switch from '@mui/material/Switch';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import MuiButton from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import MuiTypography from '@mui/material/Typography';
 import MenuItem from '@mui/material/MenuItem';
 import Alert from '@mui/material/Alert';
 import ListItemText from '@mui/material/ListItemText';
 import Check from '@mui/icons-material/Check';
 import MuiSelect, { type SelectChangeEvent } from '@mui/material/Select';
-import FormControl from '@mui/material/FormControl';
-import FormHelperText from '@mui/material/FormHelperText';
-import InputLabel from '@mui/material/InputLabel';
+import { FormShell, FormSection, FormField, FormActions, FormSwitchRow } from '@/app/components/form';
 import MapLocationPicker from './map-location-picker';
 
 type BoardFormFieldValues = {
@@ -39,7 +32,7 @@ type BoardFormFieldValues = {
 };
 
 type BoardFormProps = {
-  /** Form title displayed at the top */
+  /** Surface title. Pass an empty string when the host chrome already titles the surface. */
   title: string;
   /** Submit button label */
   submitLabel: string;
@@ -69,6 +62,10 @@ type BoardFormProps = {
   /** Optional cancel handler */
   onCancel?: () => void;
 };
+
+const NAME_MAX_LENGTH = 100;
+const DESCRIPTION_MAX_LENGTH = 500;
+const SERIAL_MAX_LENGTH = 100;
 
 /**
  * Shared form component for creating and editing boards.
@@ -119,8 +116,8 @@ export default function BoardForm({
       ? (configEditable.sets[`${configEditable.boardType}-${layoutId}-${sizeId}`] ?? [])
       : [];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsSubmitting(true);
 
     try {
@@ -152,212 +149,265 @@ export default function BoardForm({
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {title && <MuiTypography variant="h6">{title}</MuiTypography>}
+    <FormShell onSubmit={handleSubmit} maxWidth={640}>
+      {title ? (
+        <MuiTypography variant="h6" component="h2">
+          {title}
+        </MuiTypography>
+      ) : null}
 
-      {configEditable && (
-        <>
-          <Alert severity="info" sx={{ fontSize: '0.8rem' }}>
-            {t('boardForm.alerts.configEditable')}
-          </Alert>
-
-          <FormControl size="small" fullWidth>
-            <InputLabel>{t('boardForm.fields.layout')}</InputLabel>
-            <MuiSelect
-              value={layoutId ?? ''}
-              label={t('boardForm.fields.layout')}
-              onChange={(e: SelectChangeEvent<number | string>) => {
-                const newLayout = e.target.value as number;
-                setLayoutId(newLayout);
-                // Reset dependent fields
-                const newSizes = configEditable.sizes[`${configEditable.boardType}-${newLayout}`] ?? [];
-                setSizeId(newSizes.length > 0 ? newSizes[0].id : undefined);
-                setSelectedSets([]);
-              }}
-            >
-              {configEditable.layouts.map(({ id, name: layoutName }) => (
-                <MenuItem key={id} value={id}>
-                  {layoutName}
-                </MenuItem>
-              ))}
-            </MuiSelect>
-          </FormControl>
-
-          {availableSizes.length > 0 && (
-            <FormControl size="small" fullWidth>
-              <InputLabel>{t('boardForm.fields.size')}</InputLabel>
-              <MuiSelect
-                value={sizeId ?? ''}
-                label={t('boardForm.fields.size')}
-                onChange={(e: SelectChangeEvent<number | string>) => {
-                  setSizeId(e.target.value as number);
-                  setSelectedSets([]);
-                }}
-              >
-                {availableSizes.map(({ id, name: sizeName, description: sizeDesc }) => (
-                  <MenuItem key={id} value={id}>{`${sizeName} ${sizeDesc}`}</MenuItem>
-                ))}
-              </MuiSelect>
-            </FormControl>
+      <FormSection title={t('boardForm.sections.details')}>
+        <FormField label={t('boardForm.fields.name')} required counter={{ value: name.length, max: NAME_MAX_LENGTH }}>
+          {(field) => (
+            <TextField
+              id={field.id}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+              fullWidth
+              size="small"
+              placeholder={namePlaceholder}
+              error={Boolean(field.error)}
+              slotProps={{ htmlInput: { maxLength: NAME_MAX_LENGTH, 'aria-describedby': field.describedBy } }}
+            />
           )}
+        </FormField>
 
-          {availableSets.length > 0 && (
-            <FormControl size="small" fullWidth>
-              <InputLabel>{t('boardForm.fields.holdSets')}</InputLabel>
+        {showSlugField && (
+          <FormField label={t('boardForm.fields.slug')} helper={`${slugHelperPrefix}${slug || '...'}`}>
+            {(field) => (
+              <TextField
+                id={field.id}
+                value={slug}
+                onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                fullWidth
+                size="small"
+                slotProps={{ htmlInput: { 'aria-describedby': field.describedBy } }}
+              />
+            )}
+          </FormField>
+        )}
+
+        <FormField
+          label={t('boardForm.fields.description')}
+          counter={{ value: description.length, max: DESCRIPTION_MAX_LENGTH }}
+        >
+          {(field) => (
+            <TextField
+              id={field.id}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              minRows={2}
+              maxRows={4}
+              placeholder={resolvedDescriptionPlaceholder}
+              slotProps={{ htmlInput: { maxLength: DESCRIPTION_MAX_LENGTH, 'aria-describedby': field.describedBy } }}
+            />
+          )}
+        </FormField>
+      </FormSection>
+
+      <FormSection title={t('boardForm.fields.location')}>
+        <FormField label={t('boardForm.fields.location')}>
+          {(field) => (
+            <TextField
+              id={field.id}
+              value={locationName}
+              onChange={(event) => setLocationName(event.target.value)}
+              fullWidth
+              size="small"
+              placeholder={locationPlaceholder}
+              slotProps={{ htmlInput: { 'aria-describedby': field.describedBy } }}
+            />
+          )}
+        </FormField>
+
+        <MapLocationPicker
+          latitude={latitude}
+          longitude={longitude}
+          onChange={(lat, lng) => {
+            setLatitude(lat);
+            setLongitude(lng);
+          }}
+        />
+      </FormSection>
+
+      <FormSection title={t('boardForm.sections.setup')}>
+        {configEditable && (
+          <>
+            <Alert severity="info" sx={{ fontSize: '0.8rem' }}>
+              {t('boardForm.alerts.configEditable')}
+            </Alert>
+
+            <FormField label={t('boardForm.fields.layout')}>
+              {(field) => (
+                <MuiSelect
+                  labelId={field.labelId}
+                  id={field.id}
+                  value={layoutId ?? ''}
+                  displayEmpty
+                  fullWidth
+                  size="small"
+                  error={Boolean(field.error)}
+                  onChange={(event: SelectChangeEvent<number | string>) => {
+                    const newLayout = event.target.value as number;
+                    setLayoutId(newLayout);
+                    // Reset dependent fields
+                    const newSizes = configEditable.sizes[`${configEditable.boardType}-${newLayout}`] ?? [];
+                    setSizeId(newSizes.length > 0 ? newSizes[0].id : undefined);
+                    setSelectedSets([]);
+                  }}
+                >
+                  <MenuItem value="" disabled>
+                    {t('boardForm.placeholders.select')}
+                  </MenuItem>
+                  {configEditable.layouts.map(({ id, name: layoutName }) => (
+                    <MenuItem key={id} value={id}>
+                      {layoutName}
+                    </MenuItem>
+                  ))}
+                </MuiSelect>
+              )}
+            </FormField>
+
+            {availableSizes.length > 0 && (
+              <FormField label={t('boardForm.fields.size')}>
+                {(field) => (
+                  <MuiSelect
+                    labelId={field.labelId}
+                    id={field.id}
+                    value={sizeId ?? ''}
+                    displayEmpty
+                    fullWidth
+                    size="small"
+                    error={Boolean(field.error)}
+                    onChange={(event: SelectChangeEvent<number | string>) => {
+                      setSizeId(event.target.value as number);
+                      setSelectedSets([]);
+                    }}
+                  >
+                    <MenuItem value="" disabled>
+                      {t('boardForm.placeholders.select')}
+                    </MenuItem>
+                    {availableSizes.map(({ id, name: sizeName, description: sizeDesc }) => (
+                      <MenuItem key={id} value={id}>{`${sizeName} ${sizeDesc}`}</MenuItem>
+                    ))}
+                  </MuiSelect>
+                )}
+              </FormField>
+            )}
+
+            {availableSets.length > 0 && (
+              <FormField label={t('boardForm.fields.holdSets')}>
+                {(field) => (
+                  <MuiSelect
+                    labelId={field.labelId}
+                    id={field.id}
+                    multiple
+                    value={selectedSets}
+                    fullWidth
+                    size="small"
+                    error={Boolean(field.error)}
+                    onChange={(event) => {
+                      const selected = event.target.value as unknown as number[];
+                      setSelectedSets(selected);
+                    }}
+                    renderValue={() =>
+                      availableSets
+                        .filter((set) => selectedSets.includes(set.id))
+                        .map((set) => set.name)
+                        .join(', ')
+                    }
+                  >
+                    {availableSets.map(({ id, name: setName }) => (
+                      <MenuItem key={id} value={id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                        <ListItemText
+                          primary={setName}
+                          primaryTypographyProps={{
+                            color: selectedSets.includes(id) ? 'text.primary' : 'text.secondary',
+                          }}
+                        />
+                        {selectedSets.includes(id) && (
+                          <Check fontSize="small" sx={{ color: 'primary.main', flexShrink: 0 }} />
+                        )}
+                      </MenuItem>
+                    ))}
+                  </MuiSelect>
+                )}
+              </FormField>
+            )}
+          </>
+        )}
+
+        <FormField label={t('boardForm.fields.serialNumber')}>
+          {(field) => (
+            <TextField
+              id={field.id}
+              value={serialNumber}
+              onChange={(event) => setSerialNumber(event.target.value)}
+              fullWidth
+              size="small"
+              placeholder={t('boardForm.placeholders.serialNumber')}
+              slotProps={{ htmlInput: { maxLength: SERIAL_MAX_LENGTH, 'aria-describedby': field.describedBy } }}
+            />
+          )}
+        </FormField>
+
+        {availableAngles && availableAngles.length > 0 && (
+          <FormField label={t('boardForm.fields.defaultAngle')}>
+            {(field) => (
               <MuiSelect
-                multiple
-                value={selectedSets}
-                label={t('boardForm.fields.holdSets')}
-                onChange={(e) => {
-                  const val = e.target.value as unknown as number[];
-                  setSelectedSets(val);
-                }}
-                renderValue={() =>
-                  availableSets
-                    .filter((s) => selectedSets.includes(s.id))
-                    .map((s) => s.name)
-                    .join(', ')
-                }
+                labelId={field.labelId}
+                id={field.id}
+                value={angle}
+                fullWidth
+                size="small"
+                error={Boolean(field.error)}
+                onChange={(event: SelectChangeEvent<number | string>) => setAngle(Number(event.target.value))}
               >
-                {availableSets.map(({ id, name: setName }) => (
-                  <MenuItem key={id} value={id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                    <ListItemText
-                      primary={setName}
-                      primaryTypographyProps={{
-                        color: selectedSets.includes(id) ? 'text.primary' : 'text.secondary',
-                      }}
-                    />
-                    {selectedSets.includes(id) && (
-                      <Check fontSize="small" sx={{ color: 'primary.main', flexShrink: 0 }} />
-                    )}
+                {availableAngles.map((availableAngle) => (
+                  <MenuItem key={availableAngle} value={availableAngle}>
+                    {availableAngle}°
                   </MenuItem>
                 ))}
               </MuiSelect>
-            </FormControl>
-          )}
-        </>
-      )}
-
-      <TextField
-        label={t('boardForm.fields.name')}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-        fullWidth
-        size="small"
-        placeholder={namePlaceholder}
-        inputProps={{ maxLength: 100 }}
-      />
-
-      {showSlugField && (
-        <TextField
-          label={t('boardForm.fields.slug')}
-          value={slug}
-          onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-          fullWidth
-          size="small"
-          helperText={`${slugHelperPrefix}${slug || '...'}`}
-        />
-      )}
-
-      <TextField
-        label={t('boardForm.fields.description')}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        fullWidth
-        size="small"
-        multiline
-        minRows={2}
-        maxRows={4}
-        placeholder={resolvedDescriptionPlaceholder}
-      />
-
-      <TextField
-        label={t('boardForm.fields.location')}
-        value={locationName}
-        onChange={(e) => setLocationName(e.target.value)}
-        fullWidth
-        size="small"
-        placeholder={locationPlaceholder}
-      />
-
-      <MapLocationPicker
-        latitude={latitude}
-        longitude={longitude}
-        onChange={(lat, lng) => {
-          setLatitude(lat);
-          setLongitude(lng);
-        }}
-      />
-
-      <TextField
-        label={t('boardForm.fields.serialNumber')}
-        value={serialNumber}
-        onChange={(e) => setSerialNumber(e.target.value)}
-        fullWidth
-        size="small"
-        placeholder={t('boardForm.placeholders.serialNumber')}
-        inputProps={{ maxLength: 100 }}
-      />
-
-      {availableAngles && availableAngles.length > 0 && (
-        <TextField
-          label={t('boardForm.fields.defaultAngle')}
-          value={angle}
-          onChange={(e) => setAngle(Number(e.target.value))}
-          select
-          fullWidth
-          size="small"
-        >
-          {availableAngles.map((a) => (
-            <MenuItem key={a} value={a}>
-              {a}°
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
-
-      <FormControlLabel
-        control={<Switch checked={isAngleAdjustable} onChange={(e) => setIsAngleAdjustable(e.target.checked)} />}
-        label={t('boardForm.fields.angleAdjustable')}
-      />
-
-      <FormControlLabel
-        control={<Switch checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />}
-        label={t('boardForm.fields.isPublic')}
-      />
-
-      <Box>
-        <FormControlLabel
-          control={<Switch checked={isUnlisted} onChange={(e) => setIsUnlisted(e.target.checked)} />}
-          label={t('boardForm.fields.unlisted')}
-        />
-        <FormHelperText sx={{ mt: -0.5, ml: 7 }}>{t('boardForm.helperText.unlisted')}</FormHelperText>
-      </Box>
-
-      <Box>
-        <FormControlLabel
-          control={<Switch checked={hideLocation} onChange={(e) => setHideLocation(e.target.checked)} />}
-          label={t('boardForm.fields.hideLocation')}
-        />
-        <FormHelperText sx={{ mt: -0.5, ml: 7 }}>{t('boardForm.helperText.hideLocation')}</FormHelperText>
-      </Box>
-
-      <FormControlLabel
-        control={<Switch checked={isOwned} onChange={(e) => setIsOwned(e.target.checked)} />}
-        label={t('boardForm.fields.isOwned')}
-      />
-
-      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 1 }}>
-        {onCancel && (
-          <MuiButton variant="text" onClick={onCancel} disabled={isSubmitting}>
-            {t('common:actions.cancel')}
-          </MuiButton>
+            )}
+          </FormField>
         )}
-        <MuiButton type="submit" variant="contained" disabled={isSubmitting || !name.trim()}>
-          {isSubmitting ? <CircularProgress size={20} color="inherit" /> : submitLabel}
-        </MuiButton>
-      </Box>
-    </Box>
+
+        <FormSwitchRow
+          label={t('boardForm.fields.angleAdjustable')}
+          checked={isAngleAdjustable}
+          onChange={setIsAngleAdjustable}
+        />
+      </FormSection>
+
+      <FormSection title={t('boardForm.sections.visibility')}>
+        <FormSwitchRow label={t('boardForm.fields.isPublic')} checked={isPublic} onChange={setIsPublic} />
+        <FormSwitchRow
+          label={t('boardForm.fields.unlisted')}
+          description={t('boardForm.helperText.unlisted')}
+          checked={isUnlisted}
+          onChange={setIsUnlisted}
+        />
+        <FormSwitchRow
+          label={t('boardForm.fields.hideLocation')}
+          description={t('boardForm.helperText.hideLocation')}
+          checked={hideLocation}
+          onChange={setHideLocation}
+        />
+        <FormSwitchRow label={t('boardForm.fields.isOwned')} checked={isOwned} onChange={setIsOwned} />
+      </FormSection>
+
+      <FormActions
+        submitLabel={submitLabel}
+        submitting={isSubmitting}
+        disabled={!name.trim()}
+        onCancel={onCancel}
+        layout="inline"
+      />
+    </FormShell>
   );
 }
