@@ -36,7 +36,15 @@ export default async function GymClaimSuccessPage({ searchParams }: { searchPara
 
   return (
     <I18nProvider locale={locale} namespaces={['common', 'boards']}>
-      <Container maxWidth="sm" sx={{ py: 8, pt: 'calc(var(--global-header-height) + 48px)', textAlign: 'center' }}>
+      <Container
+        maxWidth="sm"
+        sx={{
+          py: 8,
+          pt: 'calc(var(--global-header-height) + 48px)',
+          pb: 'var(--bottom-bar-height)',
+          textAlign: 'center',
+        }}
+      >
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
           <CheckCircleOutlined color="success" sx={{ fontSize: 56 }} />
           <Typography variant="h5" sx={{ fontWeight: 700 }}>
