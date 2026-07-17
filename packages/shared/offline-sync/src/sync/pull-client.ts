@@ -678,6 +678,7 @@ export async function pullSync(
   // Sign-out never hit this because `isSigningOut()` is a persistent flag that stays
   // true for every subsequent table; the epoch alone is not a substitute for it.
   const cycleEpoch = getWipeEpoch();
+  // isBackgrounded() is a live check (unlike the other two, which latch): a cycle that resumes foreground mid-pull is meant to keep going, not restart.
   const cycleAborted = (): boolean => isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded();
 
   // Parse the enabled scope keys once; malformed keys are dropped (a stray value

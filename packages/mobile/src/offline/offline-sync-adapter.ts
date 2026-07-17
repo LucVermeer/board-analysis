@@ -77,7 +77,7 @@ const warnCycleError = (error: unknown) => {
   }
 };
 
-// Feeds the offline-sync engine's setBackgrounded() guard (Sentry BOARDSESH-AN); call once, unconditionally, for the app's lifetime — see OfflineSyncBridge.
+// Feeds setBackgrounded() (Sentry BOARDSESH-AN); call once for the app's lifetime — see OfflineSyncBridge.
 export function startBackgroundTracking(): () => void {
   const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
     if (nextState === 'background') setBackgrounded(true);

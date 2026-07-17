@@ -69,7 +69,7 @@ export function getWipeEpoch(): number {
   return _wipeEpoch;
 }
 
-// Backgrounding guard (Sentry BOARDSESH-AN): stops new SQLite calls once the app backgrounds, same shape as the sign-out guard above.
+// Backgrounding guard (Sentry BOARDSESH-AN), same shape as the sign-out guard above.
 let _isBackgrounded = false;
 
 export function setBackgrounded(value: boolean): void {
