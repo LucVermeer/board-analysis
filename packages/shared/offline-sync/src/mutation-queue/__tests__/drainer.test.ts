@@ -291,8 +291,9 @@ describe('drainMutationQueue', () => {
       expect(mockProcessMutation).toHaveBeenCalledTimes(1);
       expect(mockPeekPending).toHaveBeenCalledTimes(1);
     } finally {
-      // Explicit reset (not just relying on the next test's beforeEach) —
-      // mirrors the early-return test above.
+      // Explicit reset (not just relying on the next test's beforeEach —
+      // __resetDrainerStateForTests already covers it, but a leaked `true`
+      // would otherwise silently skip every subsequent test until then).
       setBackgrounded(false);
     }
   });
