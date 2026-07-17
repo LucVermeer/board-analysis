@@ -9,6 +9,7 @@ import { blendedQualityAverageSql } from '../src/queries/climb-stats/quality-ble
 import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
 import {
   HOLDSETUP_TO_LAYOUT,
+  catalogAliasRows,
   catalogProblemToClimbs,
   isBetterCatalogClimb,
   type MoonBoardCatalogFile,
@@ -202,6 +203,22 @@ async function importMoonBoardCatalog() {
         }
         for (const mapped of climbs) {
           const { uuid, matched: matchedExisting } = resolveUuid(mapped, existingIndex);
+
+          // Record the aliases before the dedupe below: when two problems collapse
+          // onto one climb (same holds+angle) we drop the weaker climb row, but we
+          // still want BOTH problem ids to resolve to the survivor. The self-alias
+          // lets resolveCanonicalClimbUuid hit; the id-based alias (only added when
+          // the merge reused a legacy UUID) makes the climb addressable by its
+          // MoonBoard problem id — the fix for 2024 logbook imports.
+          for (const aliasRow of catalogAliasRows(mapped.uuid, uuid)) {
+            aliasByUuid.set(aliasRow.aliasUuid, {
+              boardType: 'moonboard',
+              aliasUuid: aliasRow.aliasUuid,
+              canonicalUuid: aliasRow.canonicalUuid,
+              source: 'moonboard-catalog-import',
+            });
+          }
+
           const incumbent = bestByUuid.get(uuid);
           if (incumbent) {
             // Same holds+angle as an already-seen problem — keep the stronger one.
@@ -273,13 +290,6 @@ async function importMoonBoardCatalog() {
               holdState: hold.holdState,
             });
           }
-
-          aliasByUuid.set(uuid, {
-            boardType: 'moonboard',
-            aliasUuid: uuid,
-            canonicalUuid: uuid,
-            source: 'moonboard-catalog-import',
-          });
         }
       }
 
@@ -355,7 +365,9 @@ async function importMoonBoardCatalog() {
             .onConflictDoNothing();
         }
 
-        // Self-aliases so resolveCanonicalClimbUuid always hits.
+        // Self-aliases so resolveCanonicalClimbUuid always hits, plus id-based
+        // aliases (moonboard:{id}:{angle} → canonical) so problem-id lookups from
+        // the logbook importer resolve merged/legacy climbs.
         for (let i = 0; i < aliasRecords.length; i += BATCH_SIZE) {
           await tx
             .insert(boardClimbAliases)

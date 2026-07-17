@@ -74,6 +74,17 @@ async function insertMoonBoardAlias(problemId: number, canonicalUuid: string): P
   `);
 }
 
+// The 2024-board fix: the catalog importer merges each problem onto its
+// pre-existing legacy (name-based) climb and records an alias keyed off the
+// stable problem-id UUID `moonboard:{id}:40` (the resolver's angle-suffixed
+// candidate), so the climb is addressable by problem id.
+async function insertMoonBoardAngleAlias(problemId: number, canonicalUuid: string): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO board_climb_aliases (board_type, alias_uuid, canonical_uuid, source)
+    VALUES ('moonboard', ${uuidv5(`moonboard:${problemId}:40`, UUID_NAMESPACE)}, ${canonicalUuid}, 'moonboard-catalog-import')
+  `);
+}
+
 async function importedTicks(): Promise<ImportedTickRow[]> {
   return (await db.execute(sql`
     SELECT
@@ -186,6 +197,29 @@ describeWithDatabase('importMoonBoardExportData', () => {
     expect(result.ticks).toEqual({ imported: 1, skipped: 0, failed: 1 });
     expect(result.ascents).toEqual({ imported: 1, skipped: 0, failed: 1 });
     expect(result.unresolvedClimbs).toEqual(['104']);
+    expect(await importedTicks()).toEqual([
+      { climb_uuid: canonicalUuid, status: 'flash', attempt_count: 1, climbed_on: '2026-02-13' },
+    ]);
+  });
+
+  it('resolves a legacy (name-based) 2024 climb via its moonboard:{id}:40 alias', async () => {
+    // A MoonBoard 2024 climb whose canonical UUID has no problem id in it (seeded
+    // under the name+setter+frames scheme). Before the importer wrote the
+    // angle-suffixed alias, neither `moonboard:{id}` nor `moonboard:{id}:40`
+    // reached it, so every 2024 tick dropped as "unknown problem".
+    const canonicalUuid = 'moonboard-2024-legacy-name-based-uuid';
+    await insertMoonBoardClimb({ problemId: 509834, canonicalUuid });
+    await insertMoonBoardAngleAlias(509834, canonicalUuid);
+
+    const result = await importMoonBoardExportData(
+      db,
+      TEST_USER_ID,
+      moonBoardImportData([moonBoardLogRow({ lineNumber: 1, problemId: 509834, tries: 'Flashed' })]),
+      () => {},
+    );
+
+    expect(result.ticks).toEqual({ imported: 1, skipped: 0, failed: 0 });
+    expect(result.unresolvedClimbs).toEqual([]);
     expect(await importedTicks()).toEqual([
       { climb_uuid: canonicalUuid, status: 'flash', attempt_count: 1, climbed_on: '2026-02-13' },
     ]);

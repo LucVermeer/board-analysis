@@ -9,6 +9,7 @@ import {
   parseMovesString,
   holdsToFrames,
   catalogClimbUuid,
+  catalogAliasRows,
   isImportableProblem,
   isImportableConfig,
   mapCatalogConfig,
@@ -105,6 +106,23 @@ void test('catalogClimbUuid is deterministic, id+angle keyed, distinct per angle
   assert.equal(uuid, uuidv5('moonboard:541453:40', MOONBOARD_UUID_NAMESPACE));
   assert.match(uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.notEqual(uuid, catalogClimbUuid({ id: 541453, angle: 25 }));
+});
+
+void test('catalogAliasRows aliases the problem-id UUID onto a reused legacy UUID', () => {
+  const idBased = catalogClimbUuid({ id: 509834, angle: 40 });
+
+  // New climb (no merge): the id-based UUID *is* the canonical, so only a
+  // self-alias — no redundant second row.
+  assert.deepEqual(catalogAliasRows(idBased, idBased), [{ aliasUuid: idBased, canonicalUuid: idBased }]);
+
+  // Merged onto a legacy (name-based) UUID — as every MoonBoard 2024 climb was.
+  // We must alias the stable problem-id UUID to the canonical, otherwise the
+  // logbook importer's `moonboard:{id}:{angle}` lookup never finds the climb.
+  const legacy = 'moonboard-legacy-name-based-uuid';
+  assert.deepEqual(catalogAliasRows(idBased, legacy), [
+    { aliasUuid: legacy, canonicalUuid: legacy },
+    { aliasUuid: idBased, canonicalUuid: legacy },
+  ]);
 });
 
 void test('isImportableProblem rejects deleted / inactive / holdless / config-less problems', () => {

@@ -151,6 +151,29 @@ export function catalogClimbUuid(args: { id: number; angle: number }): string {
   return uuidv5(`moonboard:${args.id}:${args.angle}`, MOONBOARD_UUID_NAMESPACE);
 }
 
+/**
+ * The alias rows to persist for a resolved catalog climb.
+ *
+ * Always a self-alias on the canonical UUID so `resolveCanonicalClimbUuid` hits.
+ * When the non-destructive merge reused an existing (legacy) UUID, the climb's
+ * stable problem-id UUID (`moonboard:{id}:{angle}`) differs from the canonical —
+ * so alias that too, pointing at the canonical. Without it a logbook import that
+ * looks a tick up by problem id (`uuidv5("moonboard:{id}:{angle}")`) resolves to
+ * nothing: MoonBoard 2024 problems were first seeded under name-based UUIDs, then
+ * merged in place, so their canonical UUID has no problem id in it and every 2024
+ * tick drops as "unknown problem". Idempotent — a re-run yields the same rows.
+ */
+export function catalogAliasRows(
+  idBasedUuid: string,
+  canonicalUuid: string,
+): { aliasUuid: string; canonicalUuid: string }[] {
+  const rows = [{ aliasUuid: canonicalUuid, canonicalUuid }];
+  if (idBasedUuid !== canonicalUuid) {
+    rows.push({ aliasUuid: idBasedUuid, canonicalUuid });
+  }
+  return rows;
+}
+
 /** A problem is importable if it isn't soft-deleted and has holds + configs. */
 export function isImportableProblem(problem: MoonBoardCatalogProblem): boolean {
   if (problem.dateDeleted) return false;
