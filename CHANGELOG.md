@@ -4,6 +4,18 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-17
+
+### Improved
+
+- The Home feed scrolls smoother — flinging through your crew's sessions drops fewer frames, especially on Android. ([#3727](https://github.com/boardsesh/boardsesh/pull/3727))
+- The home screen's community beta clips and boards show up faster on phones and patchy signal — the first thumbnail loads right away instead of waiting on the rest of the page to wake up. ([#3730](https://github.com/boardsesh/boardsesh/pull/3730))
+
+### Fixed
+
+- Gym pages no longer hide their last few rows behind the queue or tab bar — the comments, links, and manage settings all clear the bottom. ([#3721](https://github.com/boardsesh/boardsesh/pull/3721))
+- The homepage gym card no longer flickers between states while it figures out whose gym is whose. ([#3714](https://github.com/boardsesh/boardsesh/pull/3714))
+
 ## 2026-07-16
 
 ### New

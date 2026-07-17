@@ -1,6 +1,34 @@
 {
-  "generatedAt": "2026-07-16T23:15:54.451Z",
+  "generatedAt": "2026-07-17T01:13:13.854Z",
   "entries": [
+    {
+      "prNumber": 3727,
+      "category": "improved",
+      "title": "The Home feed scrolls smoother — flinging through your crew's sessions drops fewer frames, especially on Android.",
+      "mergedAt": "2026-07-17T01:12:07Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3727"
+    },
+    {
+      "prNumber": 3730,
+      "category": "improved",
+      "title": "The home screen's community beta clips and boards show up faster on phones and patchy signal — the first thumbnail loads right away instead of waiting on the rest of the page to wake up.",
+      "mergedAt": "2026-07-17T01:12:02Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3730"
+    },
+    {
+      "prNumber": 3721,
+      "category": "fixed",
+      "title": "Gym pages no longer hide their last few rows behind the queue or tab bar — the comments, links, and manage settings all clear the bottom.",
+      "mergedAt": "2026-07-17T01:05:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3721"
+    },
+    {
+      "prNumber": 3714,
+      "category": "fixed",
+      "title": "The homepage gym card no longer flickers between states while it figures out whose gym is whose.",
+      "mergedAt": "2026-07-17T01:05:05Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3714"
+    },
     {
       "prNumber": 3723,
       "category": "fixed",
