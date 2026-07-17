@@ -50,12 +50,12 @@ function extractTemplateConst(source: string, constName: string): string {
   return match[1];
 }
 
+function readMobileOperationsSource(): string {
+  return readFileSync(new URL('../../../../packages/mobile/src/lib/graphql/operations.ts', import.meta.url), 'utf-8');
+}
+
 function readMobileSubscriptionClimbFields(): string {
-  const mobileOperationsSource = readFileSync(
-    new URL('../../../../packages/mobile/src/lib/graphql/operations.ts', import.meta.url),
-    'utf-8',
-  );
-  return extractTemplateConst(mobileOperationsSource, 'SUBSCRIPTION_CLIMB_FIELDS');
+  return extractTemplateConst(readMobileOperationsSource(), 'SUBSCRIPTION_CLIMB_FIELDS');
 }
 
 // Collect the field names selected inside every `climb { ... }` selection set of
@@ -127,6 +127,77 @@ describe('shared-schema operations validate against the executable schema', () =
       if (errors.length > 0) {
         const detail = errors.map((e, i) => `  ${i + 1}. ${e.message}`).join('\n');
         throw new Error(`Operation ${name} has GraphQL validation errors:\n${detail}`);
+      }
+    });
+  }
+});
+
+/**
+ * The actual offender behind #2381: packages/mobile/src/lib/graphql/operations.ts
+ * hand-maintains its subscriptions as plain strings, not `gql`-tagged, because they
+ * ride graphql-ws rather than graphql-request's HTTP transport (see the "Subscriptions
+ * are plain strings" comment above them in that file). Plain strings mean neither
+ * graphql-codegen (codegen.ts only scans packages/shared/graphql and packages/web/app
+ * documents) nor the `shared-schema operations validate against the executable schema`
+ * describe block above (which only covers `@boardsesh/graphql` exports) ever parses or
+ * validates them.
+ *
+ * QUEUE_UPDATES_SUBSCRIPTION shipped with an unaliased `item` selection spread across
+ * QueueItemAdded (ClimbQueueItem!) and CurrentClimbChanged (ClimbQueueItem), plus an
+ * unaliased `uuid` spread across ClimbMirrored (ID) and its sibling union arms (ID!) —
+ * the exact OverlappingFieldsCanBeMergedRule hazard this file's docstring already
+ * tracks two prior incidents of. Every real client that opened a party session hit
+ * "Fields \"item\"/\"uuid\" conflict ... Use different aliases" (issue #2381, 18x over
+ * 6 days) until PR #2340 aliased the fields — a fix that landed by manual catch, with
+ * no test asserting it stays fixed.
+ *
+ * Extract the plain-string documents from source text (same regex-extraction
+ * technique already used for SUBSCRIPTION_CLIMB_FIELDS, to avoid importing the RN-only
+ * mobile package into this backend test) and run them through the same
+ * parse() + validate() guard as the shared operations above.
+ */
+describe('mobile plain-string subscription documents validate against the executable schema', () => {
+  const mobileOperationsSource = readMobileOperationsSource();
+  const subscriptionClimbFields = extractTemplateConst(mobileOperationsSource, 'SUBSCRIPTION_CLIMB_FIELDS');
+
+  // QUEUE_UPDATES_SUBSCRIPTION interpolates `${SUBSCRIPTION_CLIMB_FIELDS}` at build
+  // time via a JS template literal. The regex extraction below reads raw source text,
+  // so it captures that placeholder literally — substitute the extracted field list
+  // in its place to reproduce what the real template literal evaluates to before
+  // parsing as GraphQL.
+  function readMobilePlainOperation(constName: string): string {
+    const rawSource = extractTemplateConst(mobileOperationsSource, constName);
+    return rawSource.replaceAll('${SUBSCRIPTION_CLIMB_FIELDS}', subscriptionClimbFields);
+  }
+
+  const mobilePlainOperationNames = [
+    'SESSION_UPDATES_SUBSCRIPTION',
+    'QUEUE_UPDATES_SUBSCRIPTION',
+    'NOTIFICATION_RECEIVED_SUBSCRIPTION',
+  ] as const;
+
+  const operationEntries: Array<[string, string]> = mobilePlainOperationNames.map((constName) => [
+    constName,
+    readMobilePlainOperation(constName),
+  ]);
+
+  it('found every known mobile plain-string subscription', () => {
+    expect(operationEntries).toHaveLength(mobilePlainOperationNames.length);
+  });
+
+  for (const [name, source] of operationEntries) {
+    it(`operations.ts.${name} parses and validates against the schema`, () => {
+      let document: DocumentNode;
+      try {
+        document = parse(source);
+      } catch (error) {
+        throw new Error(`Mobile operation ${name} failed to parse: ${(error as Error).message}`);
+      }
+
+      const errors = validate(schema, document);
+      if (errors.length > 0) {
+        const detail = errors.map((error, index) => `  ${index + 1}. ${error.message}`).join('\n');
+        throw new Error(`Mobile operation ${name} has GraphQL validation errors:\n${detail}`);
       }
     });
   }
