@@ -1,8 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+'use client';
+
+import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_MY_GYMS, type GetMyGymsQueryResponse, type GetMyGymsQueryVariables } from '@boardsesh/graphql/operations';
-import type { Gym } from '@boardsesh/shared-schema';
+import type { Gym, GymConnection } from '@boardsesh/shared-schema';
 
 /**
  * Fetches the gyms the current user owns via GraphQL. Membership-based listing
@@ -12,79 +16,78 @@ import type { Gym } from '@boardsesh/shared-schema';
  * includes gym_members.
  * Gyms are fetched when `enabled` becomes true and the user is authenticated.
  *
- * Call `loadMore` to fetch the next page; `hasMore` indicates whether more pages exist.
- * Mirrors {@link import('./use-my-boards').useMyBoards} so the My Gyms drawer follows
- * the same load/paginate/error shape as My Boards.
+ * Built on `useInfiniteQuery` so the homepage card and the My Gyms drawer share a
+ * single cache entry per viewer — opening the drawer after the homepage has
+ * already resolved reuses the cached first page instead of refetching.
+ *
+ * Call `loadMore` to fetch the next page; `hasMore` indicates whether more pages
+ * exist. Mirrors {@link import('./use-my-boards').useMyBoards}'s shape so the My
+ * Gyms drawer follows the same load/paginate/error contract as My Boards.
+ *
+ * `hasResolved` is the definitive "we know the answer" signal: it stays false
+ * while the ws-auth token is still in flight (the query is `enabled: false`
+ * with no cached data), so callers can gate a variant decision on it instead of
+ * misreading "not loading yet" as "loaded with zero gyms" — see home-gym-card.tsx.
  */
 export function useMyGyms(enabled: boolean, limit = 50) {
   const { token, isAuthenticated } = useWsAuthToken();
-  const [gyms, setGyms] = useState<Gym[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data: session } = useSession();
+  // Scope the cache entry to the viewer so an in-session login/logout can't
+  // serve the previous user's gyms from the query cache.
+  const viewerUserId = session?.user?.id ?? 'anonymous';
 
-  const offsetRef = useRef(0);
-  // Synchronous guard prevents double-fires from the IntersectionObserver
-  const isFetchingMoreRef = useRef(false);
-  const hasDataRef = useRef(false);
-
-  useEffect(() => {
-    if (!enabled || !isAuthenticated || !token) return;
-
-    let cancelled = false;
-    if (!hasDataRef.current) {
-      setIsLoading(true);
-    }
-    setError(null);
-    offsetRef.current = 0;
-
-    const client = createGraphQLHttpClient(token);
-    client
-      .request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, { input: { limit, offset: 0 } })
-      .then((response) => {
-        if (!cancelled) {
-          setGyms(response.myGyms.gyms);
-          setHasMore(response.myGyms.hasMore);
-          offsetRef.current = response.myGyms.gyms.length;
-          hasDataRef.current = true;
-        }
-      })
-      .catch((requestError) => {
-        console.error('Failed to fetch gyms:', requestError);
-        if (!cancelled) setError('Failed to load your gyms');
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
+  // The query key is deliberately NOT keyed on `token`: the ws-auth JWT is
+  // re-minted on its own ~5min revalidation cycle (see use-ws-auth-token.ts)
+  // even when the signed-in user hasn't changed, and gyms data has no reason
+  // to change alongside it — keying on it would re-fetch the whole gyms list
+  // on every silent token refresh. Same convention as
+  // useGroupedNotifications/useUnreadNotificationCount/InsightsTab's gymStats
+  // query. `queryFn` still closes over the latest `token` on every actual
+  // fetch, so a genuine token rotation is never used stale.
+  const query = useInfiniteQuery<
+    GymConnection,
+    Error,
+    InfiniteData<GymConnection>,
+    readonly ['myGyms', string, number],
+    number
+  >({
+    queryKey: ['myGyms', viewerUserId, limit] as const,
+    queryFn: async ({ pageParam }) => {
+      // `enabled` guards `token` being non-null whenever this actually runs;
+      // narrow explicitly so a future `createGraphQLHttpClient` signature
+      // change can't silently accept a null token.
+      if (!token) throw new Error('useMyGyms: queryFn ran without a token');
+      const client = createGraphQLHttpClient(token);
+      const response = await client.request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, {
+        input: { limit, offset: pageParam },
       });
+      return response.myGyms;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      if (!lastPage.hasMore) return undefined;
+      return lastPageParam + lastPage.gyms.length;
+    },
+    enabled: enabled && isAuthenticated && !!token,
+    staleTime: 60 * 1000,
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, isAuthenticated, token, limit]);
+  const gyms: Gym[] = useMemo(() => query.data?.pages.flatMap((page) => page.gyms) ?? [], [query.data]);
 
+  const { fetchNextPage } = query;
   const loadMore = useCallback(() => {
-    if (!hasMore || isFetchingMoreRef.current || !token || !isAuthenticated) return;
+    void fetchNextPage();
+  }, [fetchNextPage]);
 
-    isFetchingMoreRef.current = true;
-    setIsFetchingMore(true);
-    const offset = offsetRef.current;
-    const client = createGraphQLHttpClient(token);
-    client
-      .request<GetMyGymsQueryResponse, GetMyGymsQueryVariables>(GET_MY_GYMS, { input: { limit, offset } })
-      .then((response) => {
-        setGyms((prev) => [...prev, ...response.myGyms.gyms]);
-        setHasMore(response.myGyms.hasMore);
-        offsetRef.current = offset + response.myGyms.gyms.length;
-      })
-      .catch((requestError) => {
-        console.error('Failed to load more gyms:', requestError);
-      })
-      .finally(() => {
-        isFetchingMoreRef.current = false;
-        setIsFetchingMore(false);
-      });
-  }, [hasMore, token, isAuthenticated, limit]);
-
-  return { gyms, isLoading, isFetchingMore, hasMore, loadMore, error };
+  return {
+    gyms,
+    isLoading: query.isPending,
+    isFetchingMore: query.isFetchingNextPage,
+    hasMore: query.hasNextPage ?? false,
+    loadMore,
+    error: query.isError ? 'Failed to load your gyms' : null,
+    // True once the first fetch attempt has settled (success or error) — false
+    // while disabled (no token yet) or genuinely in flight for the first time.
+    hasResolved: query.isFetched,
+  };
 }

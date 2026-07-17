@@ -55,7 +55,7 @@ const iconChipSx = {
   width: 44,
   height: 44,
   borderRadius: `${themeTokens.borderRadius.md}px`,
-  backgroundColor: 'rgba(94, 100, 145, 0.12)',
+  backgroundColor: themeTokens.colors.infoTint,
   color: 'var(--color-info)',
   display: 'flex',
   alignItems: 'center',
@@ -81,7 +81,7 @@ export default function HomeGymCard() {
 function AuthedHomeGymCard({ currentUserId }: { currentUserId: string | null }) {
   const { t } = useTranslation('marketing');
   const { t: tCommon } = useTranslation('common');
-  const { gyms, isLoading, error } = useMyGyms(true);
+  const { gyms, error, hasResolved } = useMyGyms(true);
   // Kill switch for the manage surface — mirrors the My Gyms drawer, which
   // hides the Manage button until the gym-kiosk feature ships broadly. The
   // View action stays ungated.
@@ -154,9 +154,12 @@ function AuthedHomeGymCard({ currentUserId }: { currentUserId: string | null }) 
     track('Homepage Gym Card Click', { action: 'dismiss' });
   }, []);
 
-  // Wait for the gyms fetch before deciding which variant to show — don't
-  // guess non-owner while the request is still in flight.
-  if (error || (isLoading && gyms.length === 0)) return null;
+  // Wait for the gyms fetch to definitively resolve before deciding which
+  // variant to show. `hasResolved` stays false while the ws-auth token is
+  // still in flight, so this never misreads "idle, pre-token" as "loaded with
+  // zero gyms" and flashes the non-owner nudge before swapping to the owner
+  // card (see use-my-gyms.ts).
+  if (error || !hasResolved) return null;
 
   if (gyms.length > 0) {
     return (
