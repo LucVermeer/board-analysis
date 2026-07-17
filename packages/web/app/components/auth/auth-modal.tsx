@@ -185,7 +185,17 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
             </Typography>
           </Stack>
 
-          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} centered>
+          <Tabs
+            value={activeTab}
+            onChange={(_, selectedTab) => {
+              setActiveTab(selectedTab);
+              // A server error belongs to the submit that produced it — don't
+              // resurface a stale one after a tab round-trip.
+              setLoginServerError(null);
+              setRegisterServerError(null);
+            }}
+            centered
+          >
             <Tab label={t('login.tabs.signIn')} value="login" />
             <Tab label={t('login.tabs.signUp')} value="register" />
           </Tabs>
