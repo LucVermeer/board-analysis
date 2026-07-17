@@ -13,6 +13,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Removing a vote or like on a session now works every time — it used to get silently rejected. ([#3744](https://github.com/boardsesh/boardsesh/pull/3744))
 - Fixed a crash on Android when opening the gym/board map — a build missing the Google Maps configuration now shows the gym list instead of closing the app. ([#3726](https://github.com/boardsesh/boardsesh/pull/3726))
 - Send a climb and the board takes an extra second to light up? The bulb keeps waiting instead of flashing a false miss — a slow-but-good confirm now shows as lit. ([#3731](https://github.com/boardsesh/boardsesh/pull/3731))
 - Defensive correctness guard for a path users can't currently reach (see decision note above). No user-visible behavior change to describe today. If we later make create track the live session angle, that becomes user-facing and warrants a real note. ([#3738](https://github.com/boardsesh/boardsesh/pull/3738))

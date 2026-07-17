@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-17T01:33:29.516Z",
+  "generatedAt": "2026-07-17T01:40:55.332Z",
   "entries": [
+    {
+      "prNumber": 3744,
+      "category": "fixed",
+      "title": "Removing a vote or like on a session now works every time — it used to get silently rejected.",
+      "mergedAt": "2026-07-17T01:38:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3744"
+    },
     {
       "prNumber": 3726,
       "category": "fixed",
