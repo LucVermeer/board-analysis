@@ -20,7 +20,7 @@ vi.mock('../table-config', async () => {
 });
 
 import { pullSync } from '../pull-client';
-import { setSigningOut } from '../../mutation-queue/drainer';
+import { setSigningOut, setBackgrounded } from '../../mutation-queue/drainer';
 import { getCheckpoint, setCheckpoint, getCheckpointKey, markScopeDownloadComplete } from '../checkpoints';
 import { TABLE_CONFIGS, USER_DATA_TABLES, BOARD_DATA_TABLES } from '../table-config';
 
@@ -761,5 +761,54 @@ describe('pullSync', () => {
       String(args[1]).includes('boardsesh_ticks'),
     );
     expect(tickCheckpointWrites).toHaveLength(0);
+  });
+
+  it('stops pulling while the app is backgrounded (no fetches, no writes, no checkpoint advance)', async () => {
+    // Sentry BOARDSESH-AN: a SQLite call dispatched right as iOS suspends the
+    // process crashed natively. Mirrors the sign-out guard above.
+    setupGraphqlFetchForAllTables();
+    setBackgrounded(true);
+    try {
+      await pullSync(db, queryClient, graphqlFetch);
+      expect(graphqlFetch).not.toHaveBeenCalled();
+      expect(sqlCalls.filter((call) => call.sql.startsWith('INSERT OR REPLACE'))).toHaveLength(0);
+      expect(setCheckpoint).not.toHaveBeenCalled();
+    } finally {
+      setBackgrounded(false);
+    }
+  });
+
+  it('stops mid-cycle when the app backgrounds while a page is on the wire', async () => {
+    graphqlFetch.mockImplementation(async (query: string) => {
+      if (query.includes('syncDeletions')) {
+        return makeDeletionsResult([], false);
+      }
+      if (query.includes('syncTicks')) {
+        // The app backgrounds while this page is "on the wire".
+        setBackgrounded(true);
+        return makeSyncResult('syncTicks', [{ uuid: 'some-tick' }], false);
+      }
+      for (const config of Object.values(TABLE_CONFIGS)) {
+        if (query.includes(config.queryName)) {
+          return makeSyncResult(config.queryName, [], false);
+        }
+      }
+      throw new Error(`Unexpected query: ${query}`);
+    });
+
+    try {
+      await pullSync(db, queryClient, graphqlFetch);
+
+      // The page already in flight when backgrounding was detected must not be
+      // upserted, and its checkpoint must not advance.
+      const tickWrites = sqlCalls.filter((call) => call.params?.some((value) => value === 'some-tick'));
+      expect(tickWrites).toHaveLength(0);
+      const tickCheckpointWrites = (setCheckpoint as ReturnType<typeof vi.fn>).mock.calls.filter((args: unknown[]) =>
+        String(args[1]).includes('boardsesh_ticks'),
+      );
+      expect(tickCheckpointWrites).toHaveLength(0);
+    } finally {
+      setBackgrounded(false);
+    }
   });
 });

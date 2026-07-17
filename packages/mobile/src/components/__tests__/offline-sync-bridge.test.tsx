@@ -159,6 +159,14 @@ describe('OfflineSyncBridge — flag ON', () => {
     expect(startSyncSchedulerStop).toHaveBeenCalledTimes(1);
   });
 
+  it('starts background tracking on mount and tears it down on unmount', async () => {
+    const { unmount } = render(<Harness flags={FLAG_ON} queryClient={makeQueryClient()} />);
+    await waitFor(() => expect(startBackgroundTrackingMock).toHaveBeenCalledTimes(1));
+    expect(startBackgroundTrackingStop).not.toHaveBeenCalled();
+    unmount();
+    expect(startBackgroundTrackingStop).toHaveBeenCalledTimes(1);
+  });
+
   it('passes no snapshotSource when offline-snapshot-bootstrap is off', async () => {
     render(<Harness flags={FLAG_ON} queryClient={makeQueryClient()} />);
     await waitFor(() => expect(startSyncSchedulerMock).toHaveBeenCalledTimes(1));
@@ -199,14 +207,21 @@ describe('OfflineSyncBridge — flag OFF', () => {
     render(<Harness flags={FLAG_OFF} queryClient={makeQueryClient()} />);
     await waitFor(() => expect(setupNotificationHandlersMock).toHaveBeenCalledTimes(1));
   });
+
+  it('still starts background tracking (not flag-gated — covers the leftover drain too)', async () => {
+    render(<Harness flags={FLAG_OFF} queryClient={makeQueryClient()} />);
+    await waitFor(() => expect(startBackgroundTrackingMock).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe('OfflineSyncBridge — auth gating', () => {
   it('signed out: no scheduler, no leftover drain, no sync traffic at all', async () => {
     isAuthenticated = false;
     render(<Harness flags={FLAG_ON} queryClient={makeQueryClient()} />);
-    // Notifications still set up — they are the only auth-independent effect.
+    // Notifications and background tracking still set up — they are
+    // auth-independent effects.
     await waitFor(() => expect(setupNotificationHandlersMock).toHaveBeenCalledTimes(1));
+    expect(startBackgroundTrackingMock).toHaveBeenCalledTimes(1);
     expect(startSyncSchedulerMock).not.toHaveBeenCalled();
     expect(getPendingCountMock).not.toHaveBeenCalled();
     expect(drainMutationQueueMock).not.toHaveBeenCalled();

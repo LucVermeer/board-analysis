@@ -18,7 +18,7 @@ vi.mock('../error-classification', () => ({
   isNetworkError: vi.fn().mockReturnValue(false),
 }));
 
-import { drainMutationQueue, __resetDrainerStateForTests, setSigningOut } from '../drainer';
+import { drainMutationQueue, __resetDrainerStateForTests, setSigningOut, setBackgrounded } from '../drainer';
 import { peekPending, markCompleted, recordFailure, markDeadLetter } from '../queue';
 import { processMutation } from '../handlers';
 import { isRetryable, isNetworkError } from '../error-classification';
@@ -246,6 +246,47 @@ describe('drainMutationQueue', () => {
     await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
     // Mutation #2 must never have been sent.
+    expect(mockProcessMutation).toHaveBeenCalledTimes(1);
+    expect(mockPeekPending).toHaveBeenCalledTimes(1);
+  });
+
+  it('early-returns without touching the queue while the app is backgrounded', async () => {
+    const mutation = makeMutation({ id: 1 });
+    mockPeekPending.mockResolvedValue([mutation]);
+
+    const queryClient = createMockQueryClient();
+
+    // Backgrounded (Sentry BOARDSESH-AN): further SQLite calls risk running
+    // right as iOS suspends the process — a scheduler/listener drain must not
+    // start until the app is foregrounded again.
+    setBackgrounded(true);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
+
+    expect(mockPeekPending).not.toHaveBeenCalled();
+    expect(mockProcessMutation).not.toHaveBeenCalled();
+
+    // Once foregrounded, draining resumes normally.
+    setBackgrounded(false);
+    mockPeekPending.mockResolvedValueOnce([mutation]).mockResolvedValueOnce([]);
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
+    expect(mockProcessMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts mid-batch when the app backgrounds during a mutation send', async () => {
+    const first = makeMutation({ id: 1, idempotency_key: 'key-1' });
+    const second = makeMutation({ id: 2, idempotency_key: 'key-2' });
+    mockPeekPending.mockResolvedValue([first, second]);
+
+    mockProcessMutation.mockImplementationOnce(async () => {
+      // The app backgrounds while mutation #1 is on the wire.
+      setBackgrounded(true);
+    });
+
+    const queryClient = createMockQueryClient();
+    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
+
+    // Mutation #2 must never have been sent — issuing it risks a SQLite call
+    // (markCompleted) landing right as the process suspends.
     expect(mockProcessMutation).toHaveBeenCalledTimes(1);
     expect(mockPeekPending).toHaveBeenCalledTimes(1);
   });
