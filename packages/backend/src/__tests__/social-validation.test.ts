@@ -9,6 +9,7 @@ import {
   SetterClimbsInputSchema,
   SetterClimbsFullInputSchema,
   BulkVoteSummaryInputSchema,
+  VoteInputSchema,
 } from '../validation/schemas';
 
 describe('Social Validation Schemas', () => {
@@ -333,6 +334,53 @@ describe('Social Validation Schemas', () => {
         entityIds: Array.from({ length: 101 }, (_unused, index) => `id-${index}`),
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  // Regression coverage for issue #3189: the mobile client sent `value: 0` on
+  // un-vote, which this schema rejects — but nothing exercised it directly,
+  // so the gap shipped. Pins the exact domain (+1/-1 only) at the boundary
+  // that produced the Sentry error ("Vote value must be +1 or -1").
+  describe('VoteInputSchema', () => {
+    it('should accept a value of +1', () => {
+      const result = VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1', value: 1 });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept a value of -1', () => {
+      const result = VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1', value: -1 });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject a value of 0 (the un-vote bug from #3189)', () => {
+      const result = VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1', value: 0 });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe('Vote value must be +1 or -1');
+      }
+    });
+
+    it('should reject values other than +1/-1 (2, -2, non-integer)', () => {
+      expect(VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1', value: 2 }).success).toBe(false);
+      expect(VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1', value: -2 }).success).toBe(
+        false,
+      );
+      expect(VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1', value: 0.5 }).success).toBe(
+        false,
+      );
+    });
+
+    it('should reject a missing value', () => {
+      const result = VoteInputSchema.safeParse({ entityType: 'session', entityId: 'session-1' });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject an empty entityId', () => {
+      const result = VoteInputSchema.safeParse({ entityType: 'session', entityId: '', value: 1 });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain('cannot be empty');
+      }
     });
   });
 });

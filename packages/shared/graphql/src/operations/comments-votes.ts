@@ -254,7 +254,10 @@ export type VoteMutationVariables = {
   input: {
     entityType: SocialEntityType;
     entityId: string;
-    value: number;
+    // The backend rejects anything but +1/-1 (see VoteInputSchema in
+    // packages/backend) — narrowed to a literal union so a stray 0/undefined
+    // can never type-check onto the wire.
+    value: 1 | -1;
   };
 };
 

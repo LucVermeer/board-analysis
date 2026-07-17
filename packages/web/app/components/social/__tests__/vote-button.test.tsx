@@ -220,6 +220,71 @@ describe('VoteButton', () => {
     });
   });
 
+  describe('wire payload: value is always +1/-1, never 0 (pins every UI transition)', () => {
+    // The backend rejects any `value` that isn't +1 or -1 — un-voting is done
+    // by resending the same value already on record, which the resolver
+    // detects and deletes. `0` only ever exists as local "not voted" UI state
+    // (see `newUserVote = 0` in vote-button.tsx) and must never reach the wire.
+    // These tests exercise the full upvote -> un-vote -> downvote -> un-vote
+    // sequence and assert every outgoing VOTE payload.
+    function mockVoteResponse(summary: { upvotes: number; downvotes: number; voteScore: number; userVote: number }) {
+      mockRequest.mockResolvedValueOnce({
+        vote: { entityType: 'climb', entityId: 'climb-1', ...summary },
+      });
+    }
+
+    it('sends value: 1 on first upvote, then value: 1 again to un-vote (never 0)', async () => {
+      renderVoteButton({ initialUserVote: 0, initialUpvotes: 0, initialDownvotes: 0 });
+
+      mockVoteResponse({ upvotes: 1, downvotes: 0, voteScore: 1, userVote: 1 });
+      fireEvent.click(screen.getByLabelText('Upvote'));
+      await waitFor(() =>
+        expect(mockRequest).toHaveBeenCalledWith('VOTE', {
+          input: { entityType: 'climb', entityId: 'climb-1', value: 1 },
+        }),
+      );
+
+      mockVoteResponse({ upvotes: 0, downvotes: 0, voteScore: 0, userVote: 0 });
+      fireEvent.click(screen.getByLabelText('Upvote'));
+      await waitFor(() => expect(mockRequest).toHaveBeenCalledTimes(2));
+      expect(mockRequest).toHaveBeenLastCalledWith('VOTE', {
+        input: { entityType: 'climb', entityId: 'climb-1', value: 1 },
+      });
+    });
+
+    it('sends value: -1 on downvote, then value: -1 again to un-vote (never 0)', async () => {
+      renderVoteButton({ initialUserVote: 0, initialUpvotes: 0, initialDownvotes: 0 });
+
+      mockVoteResponse({ upvotes: 0, downvotes: 1, voteScore: -1, userVote: -1 });
+      fireEvent.click(screen.getByLabelText('Downvote'));
+      await waitFor(() =>
+        expect(mockRequest).toHaveBeenCalledWith('VOTE', {
+          input: { entityType: 'climb', entityId: 'climb-1', value: -1 },
+        }),
+      );
+
+      mockVoteResponse({ upvotes: 0, downvotes: 0, voteScore: 0, userVote: 0 });
+      fireEvent.click(screen.getByLabelText('Downvote'));
+      await waitFor(() => expect(mockRequest).toHaveBeenCalledTimes(2));
+      expect(mockRequest).toHaveBeenLastCalledWith('VOTE', {
+        input: { entityType: 'climb', entityId: 'climb-1', value: -1 },
+      });
+    });
+
+    it('switching from upvote to downvote sends the new literal value, not a delta', async () => {
+      renderVoteButton({ initialUserVote: 1, initialUpvotes: 1, initialDownvotes: 0 });
+
+      mockVoteResponse({ upvotes: 0, downvotes: 1, voteScore: -1, userVote: -1 });
+      fireEvent.click(screen.getByLabelText('Downvote'));
+
+      await waitFor(() =>
+        expect(mockRequest).toHaveBeenCalledWith('VOTE', {
+          input: { entityType: 'climb', entityId: 'climb-1', value: -1 },
+        }),
+      );
+    });
+  });
+
   describe('likeOnly mode', () => {
     it('shows Unlike aria-label when userVote is 1 (filled heart)', () => {
       renderVoteButton({ likeOnly: true, initialUserVote: 1, initialUpvotes: 3 });
