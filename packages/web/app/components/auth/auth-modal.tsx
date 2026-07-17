@@ -368,7 +368,11 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
                   )}
                 </FormField>
 
-                <FormField label={t('login.fields.password')} htmlFor="register_password" error={registerErrors.password}>
+                <FormField
+                  label={t('login.fields.password')}
+                  htmlFor="register_password"
+                  error={registerErrors.password}
+                >
                   {(field) => (
                     <TextField
                       id={field.id}
@@ -413,7 +417,11 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
                   )}
                 </FormField>
 
-                <FormField label={t('login.fields.confirmPassword')} htmlFor="register_confirm_password" error={registerErrors.confirmPassword}>
+                <FormField
+                  label={t('login.fields.confirmPassword')}
+                  htmlFor="register_confirm_password"
+                  error={registerErrors.confirmPassword}
+                >
                   {(field) => (
                     <TextField
                       id={field.id}
