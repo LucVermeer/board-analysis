@@ -44,14 +44,14 @@ serve the right APKs for its supported device set.
 The release APK is signed with the **shared Android release keystore** (the same
 key the Capacitor app used), via the existing repo secrets — no new secrets:
 
-| Secret                              | Used for                                                                                                                                                                  |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ANDROID_KEYSTORE_BASE64`           | base64 of the `.keystore`, decoded at build time                                                                                                                          |
-| `ANDROID_KEYSTORE_PASSWORD`         | store password                                                                                                                                                            |
-| `ANDROID_KEY_ALIAS`                 | key alias                                                                                                                                                                 |
-| `ANDROID_KEY_PASSWORD`              | key password                                                                                                                                                              |
-| `GOOGLE_MAPS_API_KEY` (optional)    | Android Google Maps meta-data; the /gyms map degrades to list-only without it (GymMap.tsx never mounts the native view — a fatal native crash otherwise, see issue #3187) |
-| `DISCORD_DEPLOY_WEBHOOK` (optional) | best-effort release notification                                                                                                                                          |
+| Secret                              | Used for                                         |
+| ----------------------------------- | ------------------------------------------------ |
+| `ANDROID_KEYSTORE_BASE64`           | base64 of the `.keystore`, decoded at build time |
+| `ANDROID_KEYSTORE_PASSWORD`         | store password                                   |
+| `ANDROID_KEY_ALIAS`                 | key alias                                        |
+| `ANDROID_KEY_PASSWORD`              | key password                                     |
+| `GOOGLE_MAPS_API_KEY` (optional)    | Android map tiles; map is blank without it       |
+| `DISCORD_DEPLOY_WEBHOOK` (optional) | best-effort release notification                 |
 
 Signing is injected by the `with-android-release-signing` config plugin
 (`packages/mobile/plugins/`), which rewrites the prebuild-generated
@@ -268,11 +268,6 @@ It installs **side-by-side** with the production app. `app.config.ts` reads
 
 `scheme`, the iOS bundle id, and the iOS entitlement/App-Group block stay on the
 production values — the variant is Android-identity + icons only.
-
-The job also sets `GOOGLE_MAPS_API_KEY` (same repo-level secret as the
-production build) so the dev-client APK's manifest carries the Google Maps
-meta-data too — otherwise the /gyms map would degrade to list-only on every
-dev-client install (see the table above and issue #3187).
 
 The reddish icons are generated from the production brand PNGs by
 `scripts/mobile-make-dev-icons.ts` (a hue rotation via `sharp`, not new art).

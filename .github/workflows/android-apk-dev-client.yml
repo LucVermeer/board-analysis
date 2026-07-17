@@ -60,17 +60,6 @@ jobs:
       EXPO_PUBLIC_USE_RN_FETCH: '1'
       # Switches app.config.ts to the "Boardsesh Dev" identity + reddish icons.
       BOARDSESH_APP_VARIANT: dev
-      # Android Google Maps key, read directly by app.config.ts (not inlined into
-      # the JS bundle, so it does NOT go in the .env heredoc below — see the
-      # production workflow's identical convention). Without it, app.config.ts
-      # omits the com.google.android.geo.API_KEY manifest meta-data and mounting
-      # the native GoogleMaps view is a FATAL crash on attach, not just a blank
-      # map (issue #3187). GymMap.tsx also gates the view on this at runtime, but
-      # setting it here is what makes the dev-client map actually render instead
-      # of degrading to list-only. Repo-level secret (see
-      # scripts/mobile-ota-setup.ts) — no `environment:` scoping needed, unlike
-      # the signing secrets this job doesn't use.
-      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
     steps:
       - name: Checkout repository
