@@ -58,6 +58,8 @@ describe('AuthModal — login server errors', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+    // Failed assertions must not leak a fetch stub into later tests.
+    vi.unstubAllGlobals();
   });
 
   it('shows the invalid-credentials alert when signIn reports an auth error', async () => {
@@ -99,7 +101,6 @@ describe('AuthModal — login server errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Email already registered/i);
-    vi.unstubAllGlobals();
   });
 
   it('surfaces a thrown register fetch (network down) in the register form alert', async () => {
@@ -110,7 +111,6 @@ describe('AuthModal — login server errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Registration failed\. Please try again/i);
-    vi.unstubAllGlobals();
   });
 
   it('does not resurface a stale register error after a tab round-trip', async () => {
@@ -123,7 +123,6 @@ describe('AuthModal — login server errors', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Login' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));
     expect(screen.queryByRole('alert')).toBeNull();
-    vi.unstubAllGlobals();
   });
 
   it('clears the alert on a successful retry', async () => {
