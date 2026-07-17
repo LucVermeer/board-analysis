@@ -53,6 +53,14 @@ async function submitLogin() {
   fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 }
 
+async function submitRegister() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'climber@example.com' } });
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'hunter2222' } });
+  fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'hunter2222' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+}
+
 describe('AuthPageContent — login server errors', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -86,6 +94,44 @@ describe('AuthPageContent — login server errors', () => {
     expect(alert.textContent).toMatch(/Authentication failed/i);
     // The form must stay interactive — no frozen state.
     expect((screen.getByRole('button', { name: 'Login' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('surfaces a register API error in the register form alert', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: 'Email already registered' }) }),
+    );
+    render(<AuthPageContent />);
+
+    await submitRegister();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/Email already registered/i);
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces a thrown register fetch (network down) in the register form alert', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')));
+    render(<AuthPageContent />);
+
+    await submitRegister();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/Registration failed\. Please try again/i);
+    vi.unstubAllGlobals();
+  });
+
+  it('does not resurface a stale register error after a tab round-trip', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')));
+    render(<AuthPageContent />);
+
+    await submitRegister();
+    await screen.findByRole('alert');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Login' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it('moves focus to the first invalid field after a failed-validation submit', async () => {

@@ -284,10 +284,12 @@ export default function AuthPageContent() {
               value={activeTab}
               onChange={(_, selectedTab) => {
                 setActiveTab(selectedTab);
-                // A server error belongs to the submit that produced it — don't
-                // resurface a stale one after a tab round-trip.
+                // Errors belong to the submit that produced them — don't
+                // resurface stale ones after a tab round-trip.
                 setLoginServerError(null);
                 setRegisterServerError(null);
+                setLoginErrors({});
+                setRegisterErrors({});
               }}
               centered
             >
