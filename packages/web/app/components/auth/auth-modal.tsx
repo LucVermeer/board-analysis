@@ -440,7 +440,9 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
                             <InputAdornment position="end">
                               <IconButton
                                 aria-label={
-                                  showConfirmPassword ? t('login.a11y.hidePassword') : t('login.a11y.showPassword')
+                                  showConfirmPassword
+                                    ? t('login.a11y.hideConfirmPassword')
+                                    : t('login.a11y.showConfirmPassword')
                                 }
                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                 onMouseDown={(e) => e.preventDefault()}

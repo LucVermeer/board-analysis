@@ -55,6 +55,7 @@ async function submitLogin() {
 
 async function submitRegister() {
   fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Crusher' } });
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'climber@example.com' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'hunter2222' } });
   fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'hunter2222' } });
