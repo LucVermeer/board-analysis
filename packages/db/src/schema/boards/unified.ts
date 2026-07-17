@@ -416,9 +416,9 @@ export const boardClimbs = pgTable(
 //     UUIDs — the alias_uuid is precisely the UUID we did NOT promote to
 //     board_climbs. A FK would block every non-canonical insert.
 //
-// last_seen_at is refreshed on every ingest via ON CONFLICT DO UPDATE
-// (`source` and `last_seen_at` are the only mutable columns); first_seen_at
-// is stamped on insert and never touched again.
+// last_seen_at is refreshed on every ingest via ON CONFLICT DO UPDATE.
+// Importers may also repair canonical_uuid when a later dedup pass identifies
+// the true survivor; first_seen_at is stamped on insert and never touched again.
 //
 // Resolving a UUID to its canonical: see resolveCanonicalClimbUuid() in
 // packages/db/src/queries/aliases.ts.

@@ -7,6 +7,7 @@ import {
 } from './moonboard-helpers.js';
 import { fingerprintFromHolds, methodDescription } from './moonboard-2024-helpers.js';
 import { moonBoardMethodToCharacteristic } from '@boardsesh/shared-schema/characteristics';
+import { sql } from 'drizzle-orm';
 
 // =============================================================================
 // MoonBoard catalog dataset
@@ -94,6 +95,69 @@ export type MappedCatalogClimb = {
   characteristics: string[] | null;
   description: string;
 };
+
+export type ExistingCatalogClimb = { uuid: string; name: string | null };
+
+type ExistingCatalogClimbRow = ExistingCatalogClimb & {
+  layoutId: number;
+  angle: number | null;
+  isListed: boolean | null;
+};
+
+function terminalCanonicalUuid(uuid: string, canonicalByAlias: ReadonlyMap<string, string>): string | undefined {
+  const visited = new Set<string>();
+  let currentUuid = uuid;
+  while (!visited.has(currentUuid)) {
+    visited.add(currentUuid);
+    const nextUuid = canonicalByAlias.get(currentUuid);
+    if (!nextUuid || nextUuid === currentUuid) return currentUuid;
+    currentUuid = nextUuid;
+  }
+  return undefined;
+}
+
+/** Build the merge index, resolving redirects to their terminal canonical UUID. */
+export function buildExistingCatalogMatchIndex(
+  climbRows: ExistingCatalogClimbRow[],
+  fingerprintByUuid: ReadonlyMap<string, string>,
+  canonicalByAlias: ReadonlyMap<string, string>,
+): Map<string, ExistingCatalogClimb[]> {
+  const index = new Map<string, ExistingCatalogClimb[]>();
+  // `null` is not affirmative catalog visibility, so it is treated as unlisted.
+  const listedUuids = new Set(climbRows.filter((row) => row.isListed === true).map((row) => row.uuid));
+  for (const row of climbRows) {
+    if (row.isListed !== true) continue;
+    const fingerprint = fingerprintByUuid.get(row.uuid);
+    if (!fingerprint) continue;
+    const canonicalUuid = terminalCanonicalUuid(row.uuid, canonicalByAlias);
+    if (!canonicalUuid || !listedUuids.has(canonicalUuid)) continue;
+    const key = `${row.layoutId}|${row.angle}|${fingerprint}`;
+    const candidate = { uuid: canonicalUuid, name: row.name };
+    const bucket = index.get(key);
+    if (bucket) bucket.push(candidate);
+    else index.set(key, [candidate]);
+  }
+  return index;
+}
+
+/** Update fields used when a catalog rerun repairs an existing alias target. */
+export function catalogAliasConflictUpdate() {
+  return { canonicalUuid: sql`excluded.canonical_uuid`, lastSeenAt: sql`now()` };
+}
+
+/** Resolve an incoming catalog climb to an existing merge candidate, if any. */
+export function resolveCatalogClimbUuid(
+  mapped: MappedCatalogClimb,
+  index: Map<string, ExistingCatalogClimb[]>,
+): { uuid: string; matched: boolean } {
+  const candidates = index.get(`${mapped.layoutId}|${mapped.angle}|${mapped.holdFingerprint}`);
+  if (!candidates || candidates.length === 0) return { uuid: mapped.uuid, matched: false };
+  const candidateUuids = new Set(candidates.map((candidate) => candidate.uuid));
+  if (candidateUuids.size === 1) return { uuid: candidates[0].uuid, matched: true };
+  const target = mapped.name.trim().toLowerCase();
+  const named = candidates.find((candidate) => (candidate.name ?? '').trim().toLowerCase() === target);
+  return named ? { uuid: named.uuid, matched: true } : { uuid: mapped.uuid, matched: false };
+}
 
 const STATE_TO_ROLE: Record<string, number> = {
   STARTING: HOLD_STATE_CODES.start,
