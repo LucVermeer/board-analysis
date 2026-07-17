@@ -84,6 +84,11 @@ export function focusFirstInvalid(formEl: HTMLElement | null | undefined): HTMLE
  * Call this from a submit handler's early-return branch, passing the FormShell's `id`.
  * The deferral matters: inside the handler the fields haven't re-rendered with
  * `aria-invalid="true"` yet, so a synchronous call would find nothing.
+ *
+ * Constraint: one rAF is enough only when the error-state update commits before the
+ * next paint (true for plain setState in a submit handler). If a caller ever sets the
+ * error state inside `startTransition`, the callback can fire before `aria-invalid`
+ * lands — don't wrap validation errors in a transition.
  */
 export function focusFirstInvalidAfterRender(formId: string): void {
   if (typeof window === 'undefined') return;
