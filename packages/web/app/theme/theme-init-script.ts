@@ -14,6 +14,11 @@ export const COLOR_MODE_MIRROR_KEY = 'boardsesh:colorMode';
 // storage exception in private mode) falls back to prefers-color-scheme, light
 // when the OS is light. The whole body is try/catch-wrapped so a failure here
 // can never block the page from rendering.
+//
+// CSP: this ships as an inline <script> (dangerouslySetInnerHTML). If a
+// Content-Security-Policy with a script-src is ever added, it needs
+// 'unsafe-inline' or a nonce on these tags, or the theme silently stops
+// resolving pre-paint.
 export const THEME_INIT_SCRIPT = `(function(){try{var t=null;try{t=localStorage.getItem(${JSON.stringify(
   COLOR_MODE_MIRROR_KEY,
 )});}catch(e){}if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;

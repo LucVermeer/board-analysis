@@ -78,7 +78,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             suppressHydrationWarning on <html> covers the attribute swap. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body suppressHydrationWarning>
+      <body>
         <VercelAnalytics />
         <Suspense fallback={null}>
           <AnalyticsClient />
