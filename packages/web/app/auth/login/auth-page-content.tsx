@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Typography from '@mui/material/Typography';
@@ -22,7 +22,7 @@ import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-lo
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
 import SocialLoginButtons from '@/app/components/auth/social-login-buttons';
-import { FormShell, FormSection, FormField, FormActions } from '@/app/components/form';
+import { FormShell, FormSection, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 import {
   initialLoginValues,
   initialRegisterValues,
@@ -48,6 +48,8 @@ export default function AuthPageContent() {
   const callbackUrl = searchParams.get('callbackUrl') || '/';
   const error = searchParams.get('error');
   const { showMessage } = useSnackbar();
+  const loginFormId = useId();
+  const registerFormId = useId();
 
   const [loginValues, setLoginValues] = useState(initialLoginValues);
   const [loginErrors, setLoginErrors] = useState<LoginErrors>({});
@@ -106,7 +108,10 @@ export default function AuthPageContent() {
     setLoginServerError(null);
     const errors = validateLoginFields(loginValues, t);
     setLoginErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidAfterRender(loginFormId);
+      return;
+    }
 
     try {
       setLoginLoading(true);
@@ -143,7 +148,10 @@ export default function AuthPageContent() {
     setRegisterServerError(null);
     const errors = validateRegisterFields(registerValues, t);
     setRegisterErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidAfterRender(registerFormId);
+      return;
+    }
 
     try {
       setRegisterLoading(true);
@@ -289,6 +297,7 @@ export default function AuthPageContent() {
 
             <TabPanel value={activeTab} index="login">
               <FormShell
+                id={loginFormId}
                 onSubmit={(e) => {
                   e.preventDefault();
                   void handleLogin();
@@ -370,6 +379,7 @@ export default function AuthPageContent() {
 
             <TabPanel value={activeTab} index="register">
               <FormShell
+                id={registerFormId}
                 onSubmit={(e) => {
                   e.preventDefault();
                   void handleRegister();

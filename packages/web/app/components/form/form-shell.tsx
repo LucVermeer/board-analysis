@@ -77,3 +77,15 @@ export function focusFirstInvalid(formEl: HTMLElement | null | undefined): HTMLE
   }
   return invalid;
 }
+
+/**
+ * Schedule `focusFirstInvalid` for after React commits the failed-validation render.
+ *
+ * Call this from a submit handler's early-return branch, passing the FormShell's `id`.
+ * The deferral matters: inside the handler the fields haven't re-rendered with
+ * `aria-invalid="true"` yet, so a synchronous call would find nothing.
+ */
+export function focusFirstInvalidAfterRender(formId: string): void {
+  if (typeof window === 'undefined') return;
+  requestAnimationFrame(() => focusFirstInvalid(document.getElementById(formId)));
+}

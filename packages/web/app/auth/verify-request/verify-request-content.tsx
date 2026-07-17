@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import MuiAlert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -21,7 +21,7 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { EMAIL_REGEX } from '@/app/components/auth/validate-fields';
 import { themeTokens } from '@/app/theme/theme-config';
-import { FormShell, FormField, FormActions } from '@/app/components/form';
+import { FormShell, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 
 const KNOWN_VERIFY_ERROR_CODES = new Set(['EmailNotVerified', 'InvalidToken', 'TokenExpired', 'TooManyAttempts']);
 
@@ -41,6 +41,7 @@ export default function VerifyRequestContent() {
   const { t } = useTranslation('auth');
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
+  const formId = useId();
   const [resendLoading, setResendLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState<EmailErrors>({});
@@ -58,7 +59,10 @@ export default function VerifyRequestContent() {
     setFormError(null);
     const validationErrors = validateEmail(email, t);
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (Object.keys(validationErrors).length > 0) {
+      focusFirstInvalidAfterRender(formId);
+      return;
+    }
 
     try {
       setResendLoading(true);
@@ -136,6 +140,7 @@ export default function VerifyRequestContent() {
               )}
 
               <FormShell
+                id={formId}
                 maxWidth={false}
                 error={formError}
                 onSubmit={(event) => {

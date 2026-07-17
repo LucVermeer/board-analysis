@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
@@ -17,7 +17,7 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from '@/app/components/auth/validate-fields';
 import { themeTokens } from '@/app/theme/theme-config';
-import { FormShell, FormField, FormActions } from '@/app/components/form';
+import { FormShell, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 
 export default function ResetPasswordContent() {
   const { t } = useTranslation('auth');
@@ -36,27 +36,33 @@ export default function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
 
   const isLinkInvalid = !token || !email;
+  const formId = useId();
 
   const handleSubmit = async () => {
     setFormError(null);
     if (!password) {
       setPasswordError(t('resetPassword.validation.passwordRequired'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
     if (password.length < PASSWORD_MIN_LENGTH) {
       setPasswordError(t('resetPassword.validation.passwordTooShort'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
     if (password.length > PASSWORD_MAX_LENGTH) {
       setPasswordError(t('resetPassword.validation.passwordTooLong'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
     if (!confirmPassword) {
       setConfirmPasswordError(t('resetPassword.validation.confirmPasswordRequired'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
     if (password !== confirmPassword) {
       setConfirmPasswordError(t('resetPassword.validation.passwordsMismatch'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
 
@@ -119,6 +125,7 @@ export default function ResetPasswordContent() {
               </Box>
             ) : (
               <FormShell
+                id={formId}
                 maxWidth={false}
                 error={formError}
                 onSubmit={(event) => {

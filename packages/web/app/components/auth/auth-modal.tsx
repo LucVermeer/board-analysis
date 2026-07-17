@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import Tabs from '@mui/material/Tabs';
@@ -20,7 +20,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { signIn } from 'next-auth/react';
 import { useTranslation } from 'react-i18next';
 import SocialLoginButtons from '@/app/components/auth/social-login-buttons';
-import { FormShell, FormSection, FormField, FormActions } from '@/app/components/form';
+import { FormShell, FormSection, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 import {
   initialLoginValues,
   initialRegisterValues,
@@ -58,12 +58,17 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { showMessage } = useSnackbar();
+  const loginFormId = useId();
+  const registerFormId = useId();
 
   const handleLogin = async () => {
     setLoginServerError(null);
     const errors = validateLoginFields(loginValues, t);
     setLoginErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidAfterRender(loginFormId);
+      return;
+    }
 
     try {
       setLoginLoading(true);
@@ -97,7 +102,10 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
     setRegisterServerError(null);
     const errors = validateRegisterFields(registerValues, t);
     setRegisterErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidAfterRender(registerFormId);
+      return;
+    }
 
     try {
       setRegisterLoading(true);
@@ -202,6 +210,7 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
 
           <TabPanel value={activeTab} index="login">
             <FormShell
+              id={loginFormId}
               onSubmit={(e) => {
                 e.preventDefault();
                 void handleLogin();
@@ -291,6 +300,7 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
 
           <TabPanel value={activeTab} index="register">
             <FormShell
+              id={registerFormId}
               onSubmit={(e) => {
                 e.preventDefault();
                 void handleRegister();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -15,7 +15,7 @@ import BackButton from '@/app/components/back-button';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import { themeTokens } from '@/app/theme/theme-config';
 import { EMAIL_REGEX } from '@/app/components/auth/validate-fields';
-import { FormShell, FormField, FormActions } from '@/app/components/form';
+import { FormShell, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 
 export default function ForgotPasswordContent() {
   const { t } = useTranslation('auth');
@@ -24,16 +24,19 @@ export default function ForgotPasswordContent() {
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const formId = useId();
 
   const handleSubmit = async () => {
     setFormError(null);
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
       setEmailError(t('forgotPassword.validation.emailRequired'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
     if (!EMAIL_REGEX.test(trimmedEmail)) {
       setEmailError(t('forgotPassword.validation.emailInvalid'));
+      focusFirstInvalidAfterRender(formId);
       return;
     }
 
@@ -96,6 +99,7 @@ export default function ForgotPasswordContent() {
               </Box>
             ) : (
               <FormShell
+                id={formId}
                 maxWidth={false}
                 error={formError}
                 onSubmit={(event) => {

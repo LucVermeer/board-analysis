@@ -1,4 +1,4 @@
-export { FormShell, focusFirstInvalid, type FormShellProps } from './form-shell';
+export { FormShell, focusFirstInvalid, focusFirstInvalidAfterRender, type FormShellProps } from './form-shell';
 export { FormSection, type FormSectionProps } from './form-section';
 export { FormField, useFormFieldIds, type FormFieldProps, type FormFieldRenderState } from './form-field';
 export { FormRow, type FormRowProps } from './form-row';

@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
 vi.mock('react-i18next', () => ({
@@ -86,6 +86,18 @@ describe('AuthPageContent — login server errors', () => {
     expect(alert.textContent).toMatch(/Authentication failed/i);
     // The form must stay interactive — no frozen state.
     expect((screen.getByRole('button', { name: 'Login' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('moves focus to the first invalid field after a failed-validation submit', async () => {
+    render(<AuthPageContent />);
+
+    // Submit with both fields empty — validation fails, no signIn call.
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText('Email'));
+    });
+    expect(mockSignIn).not.toHaveBeenCalled();
   });
 
   it('does not resurface a stale login error after a tab round-trip', async () => {
