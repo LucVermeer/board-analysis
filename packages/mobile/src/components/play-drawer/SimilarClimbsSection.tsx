@@ -1,5 +1,10 @@
 import { memo, useCallback, useMemo } from 'react';
-import { ScrollView, View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+// RNGH ScrollView (not react-native's): the play drawer's outer scroll is an RNGH
+// ScrollView, so this nested horizontal strip must join the same gesture tree or
+// Android's outer scroll swallows its horizontal pans and it never scrolls. Same
+// pattern as WorkoutTypeShelf / BetaVideosSection.
+import { ScrollView } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName, SimilarClimb } from '@boardsesh/shared-schema';
 import * as Haptics from 'expo-haptics';
@@ -59,7 +64,12 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
 
   if (isLoading) {
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroller}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scroller}
+      >
         {Array.from({ length: SKELETON_COUNT }, (_, index) => (
           <View key={index} style={[styles.card, styles.skeletonCard]} />
         ))}
@@ -95,7 +105,12 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   }
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroller}>
+    <ScrollView
+      horizontal
+      nestedScrollEnabled
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.scroller}
+    >
       {ranked.map(({ climb: similar, compatible }) => {
         // SimilarClimb carries no Boardsesh grade today, so `resolveGrade` falls
         // back to the legacy label + colour — lights up once the backend stamps them.
