@@ -33,6 +33,14 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3000',
 
+    /* Pin the emulated OS colour scheme to dark. The pre-paint theme-init
+     * script (app/theme/theme-init-script.ts) falls back to
+     * prefers-color-scheme when no saved preference exists — no spec seeds one —
+     * so without this the runner's default (light) would flip every screenshot.
+     * Dark keeps the pre-paint theme deterministic and matches the historical
+     * SSR default. */
+    colorScheme: 'dark',
+
     /* Trace every retry, not just the first. With `retries: 3`, the previous
      * `on-first-retry` setting meant retries 2 and 3 produced no trace —
      * exactly when a test is most stuck and the trace is most useful. */

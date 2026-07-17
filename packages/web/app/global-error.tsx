@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useEffect, useState } from 'react';
+import { THEME_INIT_SCRIPT } from './theme/theme-init-script';
 
 // This is a Next.js root error boundary that renders when the root layout
 // itself fails. It lives outside the normal provider tree, so we can't rely
@@ -20,6 +21,12 @@ const COPY = {
     subtitle: 'Recarga para volver a la pared',
     reload: 'Recargar',
   },
+  fr: {
+    htmlLang: 'fr',
+    title: 'Une erreur est survenue',
+    subtitle: 'Recharge pour retourner au mur',
+    reload: 'Recharger',
+  },
 } as const;
 
 type Locale = keyof typeof COPY;
@@ -28,6 +35,7 @@ function detectLocale(): Locale {
   if (typeof window === 'undefined') return 'en-US';
   const { pathname } = window.location;
   if (pathname === '/es' || pathname.startsWith('/es/')) return 'es';
+  if (pathname === '/fr' || pathname.startsWith('/fr/')) return 'fr';
   return 'en-US';
 }
 
@@ -50,6 +58,15 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
 
   return (
     <html lang={copy.htmlLang} data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Same pre-paint theme correction as the root layout — this boundary
+            renders its own document, outside the provider tree. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      {/* TODO(theme): this page hardcodes dark styles, so the init script above
+          corrects data-theme but nothing here reads it yet — light-mode users
+          still see a dark error page. Make these styles data-theme-aware to
+          finish the job. */}
       <body
         style={{
           margin: 0,
