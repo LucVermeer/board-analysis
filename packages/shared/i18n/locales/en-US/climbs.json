@@ -662,8 +662,6 @@
         "refine": "Refine",
         "advanced": "Advanced"
       },
-      "hideSent": "Hide climbs I've sent",
-      "hideSentDescription": "Only show climbs you haven't completed",
       "popularity": "Popularity",
       "established2plus": "Established 2+",
       "benchmark": "Benchmarks only",
@@ -699,10 +697,12 @@
         "tight": "Tight"
       },
       "progress": {
-        "hideAttempted": "Hide attempted",
-        "hideCompleted": "Hide completed",
-        "onlyAttempted": "Only attempted",
-        "onlyCompleted": "Only completed"
+        "label": "Your progress",
+        "all": "All",
+        "untried": "Not tried",
+        "projects": "Projects",
+        "sent": "Sent",
+        "unsent": "Unsent"
       },
       "signInForDrafts": "Sign in to filter your drafts",
       "setters": "Setters",
@@ -745,7 +745,6 @@
       "allClimbs": "All climbs",
       "clearRecentSearches": "Clear recent searches",
       "chips": {
-        "show": "Show",
         "filtersWithCount": "Filters · {{count}}",
         "tall": "Tall",
         "wide": "Wide",

@@ -13,10 +13,13 @@ import {
   countActiveFilters,
   hasActiveBoardFilters,
   describeGradeFilter,
+  flagsToProgress,
+  progressToFlags,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
   type GradeTapMeta,
+  type ProgressFilter,
 } from '@boardsesh/climb-filters';
 import { getTallWideScope } from '@boardsesh/board-constants';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
@@ -101,7 +104,7 @@ const PREWARM_BOARD_HOLDS_DELAY_MS = 1200;
 // excluded from the removable token row so an active filter is never worded
 // twice — the chip shows/changes it, the token row is the receipt for the
 // long-tail (sheet-only) filters that have no chip.
-const CHIP_BACKED_TOKEN_KEYS = new Set<string>(['grade', 'minAscents', 'minRating', 'hideCompleted', 'benchmark']);
+const CHIP_BACKED_TOKEN_KEYS = new Set<string>(['grade', 'minAscents', 'minRating', 'progress', 'benchmark']);
 
 type NativeSearchBarRef = {
   focus: () => void;
@@ -1042,8 +1045,10 @@ function ClimbListInner() {
     (bucket: number | undefined) => patchFilters(applyPopularityBucket(filters, bucket)),
     [patchFilters, filters],
   );
-  const handleToggleHideCompleted = useCallback(
-    (next: boolean) => patchFilters({ hideCompleted: next || undefined }),
+  // "Your progress" writes a full four-flag patch (progressToFlags clears stale
+  // flags), so switching between values never leaves a contradictory flag behind.
+  const handleChangeProgress = useCallback(
+    (value: ProgressFilter) => patchFilters(progressToFlags(value)),
     [patchFilters],
   );
   const handleToggleBenchmarks = useCallback(
@@ -1154,11 +1159,11 @@ function ClimbListInner() {
           onChangePopularity={handleChangePopularity}
           minRating={filters.minRating}
           onChangeRating={handleChangeRating}
-          hideCompleted={!!filters.hideCompleted}
-          onToggleHideCompleted={handleToggleHideCompleted}
+          progress={flagsToProgress(filters)}
+          onChangeProgress={handleChangeProgress}
+          canFilterProgress={isAuthenticated}
           onlyBenchmarks={!!boardFilters.onlyBenchmarks}
           onToggleBenchmarks={handleToggleBenchmarks}
-          canHideCompleted={isAuthenticated}
         />
         <FilterTokenRow tokens={sheetOnlyFilterTokens} />
       </>
@@ -1179,7 +1184,7 @@ function ClimbListInner() {
     dimensionChips,
     handleChangePopularity,
     handleChangeRating,
-    handleToggleHideCompleted,
+    handleChangeProgress,
     handleToggleBenchmarks,
     boardFilters.onlyBenchmarks,
     isAuthenticated,

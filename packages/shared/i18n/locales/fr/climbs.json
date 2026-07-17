@@ -662,8 +662,6 @@
         "refine": "Affiner",
         "advanced": "Avancé"
       },
-      "hideSent": "Masquer mes voies enchaînées",
-      "hideSentDescription": "N'afficher que les voies que vous n'avez pas enchaînées",
       "popularity": "Popularité",
       "established2plus": "Établies 2+",
       "benchmark": "Benchmarks uniquement",
@@ -699,10 +697,12 @@
         "tight": "Stricte"
       },
       "progress": {
-        "hideAttempted": "Masquer essayées",
-        "hideCompleted": "Masquer enchaînées",
-        "onlyAttempted": "Uniquement essayées",
-        "onlyCompleted": "Uniquement enchaînées"
+        "label": "Ta progression",
+        "all": "Toutes",
+        "untried": "Non essayées",
+        "projects": "Projets",
+        "sent": "Enchaînées",
+        "unsent": "Non enchaînées"
       },
       "signInForDrafts": "Connecte-toi pour filtrer tes brouillons",
       "setters": "Ouvreurs",
@@ -745,7 +745,6 @@
       "allClimbs": "Toutes les voies",
       "clearRecentSearches": "Effacer les recherches récentes",
       "chips": {
-        "show": "Afficher",
         "filtersWithCount": "Filtres · {{count}}",
         "tall": "Hautes",
         "wide": "Larges",

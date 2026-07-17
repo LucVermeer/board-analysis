@@ -127,6 +127,9 @@ vi.mock('@boardsesh/climb-filters', () => ({
   hasActiveBoardFilters: () => false,
   // Consumed by filter-chip-menus (imported via index.tsx for the chip row).
   SORT_OPTIONS: ['ascents', 'quality', 'difficulty', 'name', 'popular', 'creation'],
+  // "Your progress" selector wiring for the persistent chip row.
+  flagsToProgress: () => 'all',
+  progressToFlags: () => ({}),
 }));
 
 vi.mock('@boardsesh/board-react', () => ({

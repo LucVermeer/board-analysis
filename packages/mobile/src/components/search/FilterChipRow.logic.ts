@@ -11,7 +11,18 @@
 // `filter-chip-menus.ts` at the call sites so the chip and the sheet never diverge.
 
 import type { TFunction } from 'i18next';
-import { formatMinAscentsFilterCount } from '@boardsesh/climb-filters';
+import { formatMinAscentsFilterCount, PROGRESS_FILTER_VALUES, type ProgressFilter } from '@boardsesh/climb-filters';
+
+export { progressFilterLabel } from '../../lib/filter-labels';
+
+/**
+ * Narrows a raw native-picker tag to a {@link ProgressFilter}. The iOS Picker
+ * hands back its selection as an untyped tag string, so the menu guards it here
+ * before calling `onChangeProgress` — a stray value is ignored rather than cast.
+ */
+export function isProgressFilter(value: string): value is ProgressFilter {
+  return (PROGRESS_FILTER_VALUES as readonly string[]).includes(value);
+}
 
 /**
  * Label for a popularity (min-ascents) bucket: "Any ascents" for the undefined

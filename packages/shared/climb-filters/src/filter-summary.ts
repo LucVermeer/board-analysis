@@ -1,5 +1,6 @@
 import type { Grade } from '@boardsesh/shared-schema';
 import { getGradeName } from './grade-lookup';
+import { flagsToProgress, type ProgressFilter } from './progress-filter';
 
 export type FilterSummaryLabels = {
   gradeRange: (min: string, max: string) => string;
@@ -20,6 +21,10 @@ export type FilterSummaryLabels = {
   hideCompleted?: () => string;
   showOnlyAttempted?: () => string;
   showOnlyCompleted?: () => string;
+  // When supplied, the four tick flags collapse into a single "Your progress"
+  // part (e.g. "Projects") instead of one part per flag. Callers on the old
+  // four-switch model omit this and keep the per-flag parts above.
+  progress?: (value: Exclude<ProgressFilter, 'all'>) => string;
 };
 
 export type BaseFilters = {
@@ -112,20 +117,29 @@ export function getBaseFilterParts(
     parts.push(labels.status(filters.status));
   }
 
-  if (filters.hideAttempted && labels.hideAttempted) {
-    parts.push(labels.hideAttempted());
-  }
+  // Progress: a `progress` label collapses the four flags into one part; without
+  // it, fall back to one part per active flag (the old four-switch model).
+  if (labels.progress) {
+    const progress = flagsToProgress(filters);
+    if (progress !== 'all') {
+      parts.push(labels.progress(progress));
+    }
+  } else {
+    if (filters.hideAttempted && labels.hideAttempted) {
+      parts.push(labels.hideAttempted());
+    }
 
-  if (filters.hideCompleted && labels.hideCompleted) {
-    parts.push(labels.hideCompleted());
-  }
+    if (filters.hideCompleted && labels.hideCompleted) {
+      parts.push(labels.hideCompleted());
+    }
 
-  if (filters.showOnlyAttempted && labels.showOnlyAttempted) {
-    parts.push(labels.showOnlyAttempted());
-  }
+    if (filters.showOnlyAttempted && labels.showOnlyAttempted) {
+      parts.push(labels.showOnlyAttempted());
+    }
 
-  if (filters.showOnlyCompleted && labels.showOnlyCompleted) {
-    parts.push(labels.showOnlyCompleted());
+    if (filters.showOnlyCompleted && labels.showOnlyCompleted) {
+      parts.push(labels.showOnlyCompleted());
+    }
   }
 
   return parts;
