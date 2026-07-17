@@ -77,21 +77,7 @@ const warnCycleError = (error: unknown) => {
   }
 };
 
-/**
- * Tracks app backgrounding for the offline-sync engine's setBackgrounded()
- * guard (Sentry BOARDSESH-AN — see drainer.ts), independent of whether the
- * sync scheduler is currently running: ad-hoc drainMutationQueue() calls
- * (mutation hooks, the leftover-drain path OfflineSyncBridge runs when the
- * offline-downloads flag is off) need the same pause the scheduler's own
- * pull/drain loop gets. Call once, unconditionally, for the app's lifetime —
- * OfflineSyncBridge does this from a top-level effect that mounts regardless
- * of auth state, NOT from inside the auth/flag-gated scheduler effect.
- *
- * Mirrors app-visibility.ts's choice of transition: only 'background' flips
- * the guard, not the transient 'inactive' state (control center, an incoming
- * call) — pausing on every 'inactive' blip would stall sync for
- * interruptions that never actually suspend the process.
- */
+// Feeds the offline-sync engine's setBackgrounded() guard (Sentry BOARDSESH-AN); call once, unconditionally, for the app's lifetime — see OfflineSyncBridge.
 export function startBackgroundTracking(): () => void {
   const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
     if (nextState === 'background') setBackgrounded(true);

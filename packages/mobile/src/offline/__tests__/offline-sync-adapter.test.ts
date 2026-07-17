@@ -56,7 +56,13 @@ const trackMock = vi.fn();
 vi.mock('../../lib/analytics', () => ({ track: (...args: unknown[]) => trackMock(...args) }));
 
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { drainMutationQueue, startSyncScheduler, triggerSync, pullSync, startBackgroundTracking } from '../offline-sync-adapter';
+import {
+  drainMutationQueue,
+  startSyncScheduler,
+  triggerSync,
+  pullSync,
+  startBackgroundTracking,
+} from '../offline-sync-adapter';
 import type {
   OfflineDatabase,
   DrainOptions,

@@ -69,18 +69,7 @@ export function getWipeEpoch(): number {
   return _wipeEpoch;
 }
 
-// Backgrounding guard (Sentry BOARDSESH-AN: EXC_BAD_ACCESS in expo-sqlite's
-// native `columnName`). iOS can suspend the process mid-statement once the app
-// backgrounds; a query issued (or still resolving) right at that boundary can
-// have the native binding read column metadata off a `sqlite3_stmt*` that's
-// already been torn down, which crashes natively — a JS try/catch can't save
-// it. The mobile adapter flips this on AppState 'background' and off on
-// 'active' (packages/mobile/src/offline/offline-sync-adapter.ts); the drainer
-// and the pull client both check it between statements, same shape as the
-// sign-out guard above. This only narrows the window (it stops issuing NEW
-// queries once backgrounded — a statement already dispatched to native can't
-// be recalled), but every loop here awaits network or a single short
-// statement between checks, so the in-flight tail is small.
+// Backgrounding guard (Sentry BOARDSESH-AN): stops new SQLite calls once the app backgrounds, same shape as the sign-out guard above.
 let _isBackgrounded = false;
 
 export function setBackgrounded(value: boolean): void {
