@@ -12,6 +12,8 @@ A new version shipped to the Play Store.
 
 ### New
 
+- Filter for your projects — show only the climbs you've tried but haven't sent yet ([#3753](https://github.com/boardsesh/boardsesh/pull/3753))
+  Cleaner filters: pick where you're at on a climb (not tried, projects, sent) in one tap, with benchmarks on their own
 - Signing in is smoother: your password manager can finally autofill Boardsesh, and login errors show up right in the form instead of a vanishing popup. ([#3734](https://github.com/boardsesh/boardsesh/pull/3734))
 - Forms got a full redesign: clear labels that never clip, sensible widths on tablets, grouped sections, and character counters where they help. ([#3703](https://github.com/boardsesh/boardsesh/pull/3703))
   Logging an ascent now tells you when something goes wrong instead of failing silently.

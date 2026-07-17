@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-17T10:05:48.521Z",
+  "generatedAt": "2026-07-17T10:26:00.075Z",
   "entries": [
+    {
+      "prNumber": 3753,
+      "category": "new",
+      "title": "Filter for your projects — show only the climbs you've tried but haven't sent yet",
+      "mergedAt": "2026-07-17T10:25:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3753",
+      "body": "Cleaner filters: pick where you're at on a climb (not tried, projects, sent) in one tap, with benchmarks on their own"
+    },
     {
       "prNumber": 3751,
       "category": "fixed",
