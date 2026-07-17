@@ -137,4 +137,15 @@ describe('ResetPasswordContent', () => {
     expect(mockShowMessage).not.toHaveBeenCalled();
     expect(mockRouterReplace).not.toHaveBeenCalled();
   });
+
+  it('shows a form-level error when the request throws (network down)', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    renderWithParams('abc-token', 'user@example.com');
+    fireEvent.change(screen.getByLabelText(/^new password$/i), { target: { value: 'SecurePass1!' } });
+    fireEvent.change(screen.getByLabelText(/confirm new password/i), { target: { value: 'SecurePass1!' } });
+    submitForm();
+    expect(await screen.findByText('Failed to reset password')).toBeTruthy();
+    expect(mockShowMessage).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+  });
 });

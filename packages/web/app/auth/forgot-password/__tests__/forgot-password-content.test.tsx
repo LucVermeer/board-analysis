@@ -92,4 +92,13 @@ describe('ForgotPasswordContent', () => {
     expect(await screen.findByText('Too many requests')).toBeTruthy();
     expect(mockShowMessage).not.toHaveBeenCalled();
   });
+
+  it('shows a form-level error when the request throws (network down)', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    const { container } = render(<ForgotPasswordContent />);
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'test@example.com' } });
+    submitForm(container);
+    expect(await screen.findByText('Failed to request password reset')).toBeTruthy();
+    expect(mockShowMessage).not.toHaveBeenCalled();
+  });
 });
