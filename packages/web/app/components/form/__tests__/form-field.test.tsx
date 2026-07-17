@@ -60,6 +60,32 @@ describe('FormField', () => {
       expect(screen.getByText('80 / 100').getAttribute('data-emphasized')).toBe('true');
     });
 
+    it('announces a counter-only field via aria-describedby', () => {
+      render(
+        <FormField label="Bio" counter={{ value: 40, max: 100 }}>
+          {(field) => <TextField id={field.id} inputProps={{ 'aria-describedby': field.describedBy }} />}
+        </FormField>,
+      );
+      const input = screen.getByLabelText('Bio');
+      const describedBy = input.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(document.getElementById(describedBy as string)?.textContent).toBe('40 / 100');
+    });
+
+    it('lists both the helper id and the counter id in aria-describedby when both are present', () => {
+      render(
+        <FormField label="Bio" helper="Tell the crew about yourself" counter={{ value: 40, max: 100 }}>
+          {(field) => <TextField id={field.id} inputProps={{ 'aria-describedby': field.describedBy }} />}
+        </FormField>,
+      );
+      const input = screen.getByLabelText('Bio');
+      const describedByIds = (input.getAttribute('aria-describedby') ?? '').split(' ');
+      expect(describedByIds).toHaveLength(2);
+      const referencedText = describedByIds.map((referencedId) => document.getElementById(referencedId)?.textContent);
+      expect(referencedText).toContain('Tell the crew about yourself');
+      expect(referencedText).toContain('40 / 100');
+    });
+
     it('renders a required asterisk that is hidden from the accessibility tree', () => {
       const { container } = render(
         <FormField label="Name" required>

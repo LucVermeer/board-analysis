@@ -32,6 +32,32 @@ describe('FormRow', () => {
     expect(styleText).toMatch(/repeat\(2,\s*1fr\)/);
   });
 
+  it('ignores conditionally-omitted (null) children when sizing the grid', () => {
+    // A `{condition && <Field/>}` slot that resolves to null must not leave a
+    // ghost column — the remaining child should get the full row.
+    render(
+      <FormRow>
+        {null}
+        <div>Only child</div>
+      </FormRow>,
+    );
+    // Scope to this container's own emotion class — the shared jsdom style
+    // registry still holds rules from other tests in this file.
+    const gridClass = screen
+      .getByText('Only child')
+      .parentElement?.className.split(' ')
+      .find((cls) => cls.startsWith('css-'));
+    expect(gridClass).toBeTruthy();
+    const ruleText = Array.from(document.querySelectorAll('style'))
+      .map((styleEl) => styleEl.textContent ?? '')
+      .join('')
+      .split(`.${gridClass}`)
+      .slice(1)
+      .join(' ');
+    expect(ruleText).toMatch(/repeat\(1,\s*1fr\)/);
+    expect(ruleText).not.toMatch(/repeat\(2,\s*1fr\)/);
+  });
+
   it('puts the children in a grid container with an sx-generated class', () => {
     render(
       <FormRow>

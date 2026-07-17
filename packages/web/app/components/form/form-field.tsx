@@ -99,7 +99,11 @@ export function FormField({
   const hasError = Boolean(error);
   const helperContent = errorText ?? helper;
   const hasHelperRow = helperContent != null || counter != null;
-  const describedBy = helperContent != null ? describedById : undefined;
+  // The counter joins aria-describedby so screen readers announce the limit,
+  // not just sighted users.
+  const counterId = counter != null ? `${inputId}-counter` : undefined;
+  const describedBy =
+    [helperContent != null ? describedById : undefined, counterId].filter(Boolean).join(' ') || undefined;
 
   const nearMax = counter != null && counter.max > 0 && counter.value >= counter.max * COUNTER_EMPHASIS_RATIO;
 
@@ -161,6 +165,7 @@ export function FormField({
           ) : null}
           {counter != null ? (
             <Typography
+              id={counterId}
               variant="caption"
               component="span"
               data-emphasized={nearMax ? 'true' : 'false'}

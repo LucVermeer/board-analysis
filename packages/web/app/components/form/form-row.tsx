@@ -18,7 +18,9 @@ export type FormRowProps = {
  * breakpoints — keep rows sensible inside narrow surfaces like dialogs and drawers.
  */
 export function FormRow({ children, sx }: FormRowProps) {
-  const columnCount = React.Children.count(children);
+  // toArray (not Children.count) so conditionally-omitted children — null /
+  // undefined / false slots — don't leave a ghost column in the grid.
+  const columnCount = React.Children.toArray(children).length;
   return (
     <Box
       sx={[
