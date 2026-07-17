@@ -3,6 +3,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { createIndexedDBStore, migrateFromLocalStorage } from './idb-helper';
 import type { LogbookPreferences } from './logbook-preferences';
 import type { GradeDisplayFormat } from './grade-colors';
+import type { ColorMode } from '../hooks/use-color-mode';
 
 const STORE_NAME = 'preferences';
 
@@ -59,6 +60,8 @@ export type UserPreferenceKeyMap = {
   'homeGymCard:dismissed': boolean;
   esp32Connections: Esp32Connection[];
   lastUsedGrade: number;
+  /** Saved colour mode; mirrored to localStorage for the pre-paint theme script. */
+  colorMode: ColorMode;
 };
 
 // Map of IDB preference keys to their legacy localStorage keys for one-time migration
