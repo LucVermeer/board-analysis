@@ -48,6 +48,19 @@ describe('performOtaRecovery', () => {
     expect(onBeforeReload).toHaveBeenCalledWith('reloaded-rollback');
   });
 
+  it('both a newer update and a rollback directive: the newer bundle wins → reloaded-update', async () => {
+    const deps = makeDeps({
+      checkForUpdate: vi.fn().mockResolvedValue({ isAvailable: true, isRollBackToEmbedded: true }),
+    });
+    const onBeforeReload = vi.fn();
+    const { result } = await performOtaRecovery(deps, { onBeforeReload });
+
+    expect(result).toBe('reloaded-update');
+    expect(deps.fetchUpdate).toHaveBeenCalledOnce();
+    expect(deps.reload).toHaveBeenCalledOnce();
+    expect(onBeforeReload).toHaveBeenCalledWith('reloaded-update');
+  });
+
   it('nothing on the server but an update is pending: reloads WITHOUT fetching → reloaded-pending', async () => {
     const deps = makeDeps({
       checkForUpdate: vi.fn().mockResolvedValue({ isAvailable: false, isRollBackToEmbedded: false }),
@@ -109,14 +122,22 @@ describe('performOtaRecovery', () => {
   });
 
   it('fetch hangs past the timeout: resolves failed, never reloads', async () => {
-    const deps = makeDeps({
-      // Never resolves — stands in for a stalled download.
-      fetchUpdate: vi.fn().mockReturnValue(new Promise(() => {})),
-      timeoutMs: 10,
-    });
-    const { result } = await performOtaRecovery(deps);
+    vi.useFakeTimers();
+    try {
+      const deps = makeDeps({
+        // Never resolves — stands in for a stalled download.
+        fetchUpdate: vi.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const recovery = performOtaRecovery(deps, { timeoutMs: 10 });
+      // Advance past the timeout; advanceTimersByTimeAsync settles the pending
+      // microtask chain so the race rejection is caught before we assert.
+      await vi.advanceTimersByTimeAsync(20);
+      const { result } = await recovery;
 
-    expect(result).toBe('failed');
-    expect(deps.reload).not.toHaveBeenCalled();
+      expect(result).toBe('failed');
+      expect(deps.reload).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

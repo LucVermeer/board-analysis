@@ -38,6 +38,13 @@ export type OtaRecoveryDeps = {
   reload: () => Promise<void>;
   // Whether an update is already downloaded and staged to launch on the next reload.
   isUpdatePending: () => boolean;
+};
+
+// Options bag for a recovery attempt: progress callbacks plus the timeout tuning
+// constant (a plain number, kept out of OtaRecoveryDeps, which is platform I/O only).
+export type OtaRecoveryOptions = {
+  onPhase?: (phase: OtaRecoveryPhase) => void;
+  onBeforeReload?: (result: OtaRecoveryResult) => void;
   // Overall budget for the check+fetch network work before we give up (default 30s).
   timeoutMs?: number;
 };
@@ -98,9 +105,9 @@ async function resolveRecoveryPlan(
  * that. If there's nothing to apply, resolve `no-fix-available` WITHOUT reloading
  * (reloading would just relaunch the broken bundle).
  *
- * The check+fetch network work is bounded by `deps.timeoutMs` (default 30s) so a
- * hung request resolves to `failed` instead of leaving the caller stuck; `reload`
- * runs outside that budget. Any throw resolves `{ result: 'failed', error }`.
+ * The check+fetch network work is bounded by `options.timeoutMs` (default 30s) so
+ * a hung request resolves to `failed` instead of leaving the caller stuck;
+ * `reload` runs outside that budget. Any throw resolves `{ result: 'failed', error }`.
  * `onPhase` drives the button's live status ('checking' → 'downloading').
  *
  * `onBeforeReload` fires synchronously right before each reload with the outcome
@@ -110,18 +117,18 @@ async function resolveRecoveryPlan(
  */
 export async function performOtaRecovery(
   deps: OtaRecoveryDeps,
-  callbacks?: {
-    onPhase?: (phase: OtaRecoveryPhase) => void;
-    onBeforeReload?: (result: OtaRecoveryResult) => void;
-  },
+  options?: OtaRecoveryOptions,
 ): Promise<{ result: OtaRecoveryResult; error?: unknown }> {
   try {
-    const plan = await withTimeout(resolveRecoveryPlan(deps, callbacks?.onPhase), deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const plan = await withTimeout(
+      resolveRecoveryPlan(deps, options?.onPhase),
+      options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    );
     if (plan.shouldReload) {
       // Emit outcome telemetry BEFORE the reload — both the fetched and the pending
       // path funnel through here, so a post-return track() would race the restart
       // and typically be lost.
-      callbacks?.onBeforeReload?.(plan.result);
+      options?.onBeforeReload?.(plan.result);
       // Nothing meaningful can run after this: expo-updates resolves reloadAsync()
       // right before it posts the reload, so the app is on its way out here.
       await deps.reload();
