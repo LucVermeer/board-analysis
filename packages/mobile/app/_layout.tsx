@@ -22,6 +22,7 @@ import {
   DarkTheme,
   DefaultTheme,
 } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@expo/ui/community/bottom-sheet';
@@ -65,7 +66,9 @@ import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
 import { glassStackScreenOptions } from '../src/theme/navigation';
-import { reportError } from '../src/lib/error-reporting';
+import { reportError, reportHandledError } from '../src/lib/error-reporting';
+import { track, getAnalyticsClient } from '../src/lib/analytics';
+import { performOtaRecovery, type OtaRecoveryPhase } from '../src/lib/ota-recovery';
 import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { useImageCacheMemoryManagement } from '../src/hooks/use-image-cache-memory-management';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
@@ -162,8 +165,17 @@ const errorStyles = StyleSheet.create({
   pressedButton: {
     opacity: 0.72,
   },
+  disabledButton: {
+    opacity: 0.5,
+  },
   buttonLabel: {
     fontWeight: '700',
+  },
+  statusText: {
+    textAlign: 'center',
+    marginTop: spacing[4],
+    maxWidth: 280,
+    opacity: 0.7,
   },
 });
 
@@ -172,23 +184,96 @@ type ErrorBoundaryProps = {
   retry: () => void;
 };
 
+// Recovery-button UI state. `busy` carries the live phase so the button label
+// doubles as a status line; the two terminal non-reload results each surface a
+// short message under the buttons (the reload results restart the app, so they
+// never render a follow-up state here).
+type RecoveryState =
+  | { kind: 'idle' }
+  | { kind: 'busy'; phase: OtaRecoveryPhase }
+  | { kind: 'no-fix-available' }
+  | { kind: 'failed' };
+
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   // No useTranslation here: Expo Router renders this before any of our
   // providers mount, so i18next isn't initialized. Calling the hook would
   // return raw key strings exactly when the user most needs readable copy.
   // Hardcode English as the last-resort safe fallback.
   const reportedRef = useRef<Error | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryState>({ kind: 'idle' });
+
+  // useUpdates() subscribes to expo-updates' native emitter directly (no provider
+  // of ours), so it's safe in this pre-provider boundary. Called unconditionally —
+  // the recovery button is gated below, never the hook.
+  const { isUpdatePending } = Updates.useUpdates();
+  // Mirror into a ref so a long-running recovery attempt (up to 30s) reads the
+  // latest pending state, not the snapshot captured when the attempt started.
+  const isUpdatePendingRef = useRef(isUpdatePending);
+  isUpdatePendingRef.current = isUpdatePending;
+
+  // The check/fetch/reload calls throw ERR_UPDATES_DISABLED in dev, so only offer
+  // recovery on a real store/TestFlight binary that ships with updates enabled.
+  const showRecoveryButton = Updates.isEnabled && !__DEV__;
+  const isBusy = recovery.kind === 'busy';
 
   useEffect(() => {
     if (reportedRef.current !== error) {
       reportedRef.current = error;
       reportError(error);
+      // Module-level track() works without AnalyticsProvider (it drives the same
+      // lazily-built PostHog client), so the crash screen is observable. Tag the
+      // OTA cohort so a broken-bundle spike is sliceable by update id / channel.
+      track('Error Screen Shown', {
+        ota_update_id: Updates.updateId,
+        ota_is_embedded: Updates.isEmbeddedLaunch,
+        ota_channel: Updates.channel,
+      });
     }
   }, [error]);
 
   const handleGoHome = () => {
     router.replace('/(tabs)/home');
   };
+
+  const handleCheckForFix = useCallback(async () => {
+    setRecovery({ kind: 'busy', phase: 'checking' });
+    const { result, error: recoveryError } = await performOtaRecovery(
+      {
+        checkForUpdate: () => Updates.checkForUpdateAsync(),
+        fetchUpdate: () => Updates.fetchUpdateAsync(),
+        reload: () => Updates.reloadAsync(),
+        isUpdatePending: () => isUpdatePendingRef.current,
+      },
+      {
+        onPhase: (phase) => setRecovery({ kind: 'busy', phase }),
+        // Track the reloaded-* outcomes BEFORE the reload — a post-return track()
+        // would race the app restart and typically be lost. track() only enqueues,
+        // so flush best-effort (fire-and-forget; the reload follows immediately, we
+        // don't delay it — delivery is best-effort) to give it a window.
+        onBeforeReload: (result) => {
+          track('OTA Recovery Attempted', { result });
+          void getAnalyticsClient()?.flush();
+        },
+      },
+    );
+    // The reloaded-* outcomes are tracked in onBeforeReload above (before the
+    // restart). Only these non-reload terminal results reliably reach here, so
+    // guard the post-return track to avoid double-counting a reloaded-* result if
+    // JS happens to survive the reload.
+    if (result === 'failed' || result === 'no-fix-available') {
+      track('OTA Recovery Attempted', { result });
+    }
+    if (result === 'failed') {
+      reportHandledError(recoveryError, { tags: { source: 'ota-error-screen' } });
+      setRecovery({ kind: 'failed' });
+    } else if (result === 'no-fix-available') {
+      setRecovery({ kind: 'no-fix-available' });
+    }
+    // A reloaded-* result means the app is restarting — leave the busy state be.
+  }, []);
+
+  const recoveryLabel =
+    recovery.kind === 'busy' ? (recovery.phase === 'downloading' ? 'Downloading…' : 'Checking…') : 'Check for a fix';
 
   return (
     <View style={errorStyles.container}>
@@ -205,13 +290,43 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         The app hit an unexpected error. You can try again or head back home.
       </Text>
       <View style={errorStyles.buttonRow}>
+        {/* On a real binary, offer the one-tap OTA recovery first: check for a
+            newer bundle (or a published rollback directive), download it, and
+            reload onto it. It takes the primary slot; "Try again" demotes to the
+            secondary style. In dev / when the button is hidden, "Try again" keeps
+            the primary style. */}
+        {showRecoveryButton && (
+          <Pressable
+            onPress={() => void handleCheckForFix()}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Check for a fix"
+            accessibilityState={{ disabled: isBusy, busy: isBusy }}
+            style={({ pressed }) => [
+              errorStyles.primaryButton,
+              pressed && errorStyles.pressedButton,
+              isBusy && errorStyles.disabledButton,
+            ]}
+          >
+            <Text variant="body" color={brandColors.onPrimary} style={errorStyles.buttonLabel}>
+              {recoveryLabel}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           onPress={retry}
           accessibilityRole="button"
           accessibilityLabel="Try again"
-          style={({ pressed }) => [errorStyles.primaryButton, pressed && errorStyles.pressedButton]}
+          style={({ pressed }) => [
+            showRecoveryButton ? errorStyles.secondaryButton : errorStyles.primaryButton,
+            pressed && errorStyles.pressedButton,
+          ]}
         >
-          <Text variant="body" color={brandColors.onPrimary} style={errorStyles.buttonLabel}>
+          <Text
+            variant="body"
+            color={showRecoveryButton ? brandColors.primary : brandColors.onPrimary}
+            style={errorStyles.buttonLabel}
+          >
             Try again
           </Text>
         </Pressable>
@@ -226,6 +341,16 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
           </Text>
         </Pressable>
       </View>
+      {recovery.kind === 'no-fix-available' && (
+        <Text variant="footnote" style={errorStyles.statusText}>
+          No fix available yet — try again in a few minutes.
+        </Text>
+      )}
+      {recovery.kind === 'failed' && (
+        <Text variant="footnote" style={errorStyles.statusText}>
+          Couldn&apos;t reach the update server. Check your connection and try again.
+        </Text>
+      )}
     </View>
   );
 }
