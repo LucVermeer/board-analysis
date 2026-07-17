@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-17
 
+### App update
+
+A new version shipped to the Play Store.
+
 ### Improved
 
 - The Home feed scrolls smoother — flinging through your crew's sessions drops fewer frames, especially on Android. ([#3727](https://github.com/boardsesh/boardsesh/pull/3727))
@@ -13,6 +17,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Change your board angle mid-session and the queue keeps up: the climb you're on and everything coming up show grades, stars, and sends for the angle the wall is actually set to. ([#3741](https://github.com/boardsesh/boardsesh/pull/3741))
+  Climbs you've already sent stay pinned to the angle you climbed them at, with a "Sent at N°" tag when that differs from the wall's current angle.
 - Removing a vote or like on a session now works every time — it used to get silently rejected. ([#3744](https://github.com/boardsesh/boardsesh/pull/3744))
 - Fixed a crash on Android when opening the gym/board map — a build missing the Google Maps configuration now shows the gym list instead of closing the app. ([#3726](https://github.com/boardsesh/boardsesh/pull/3726))
 - Send a climb and the board takes an extra second to light up? The bulb keeps waiting instead of flashing a false miss — a slow-but-good confirm now shows as lit. ([#3731](https://github.com/boardsesh/boardsesh/pull/3731))

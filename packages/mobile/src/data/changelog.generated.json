@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-17T01:40:55.332Z",
+  "generatedAt": "2026-07-17T01:58:32.713Z",
   "entries": [
+    {
+      "prNumber": 3741,
+      "category": "fixed",
+      "title": "Change your board angle mid-session and the queue keeps up: the climb you're on and everything coming up show grades, stars, and sends for the angle the wall is actually set to.",
+      "mergedAt": "2026-07-17T01:57:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3741",
+      "body": "Climbs you've already sent stay pinned to the angle you climbed them at, with a \"Sent at N°\" tag when that differs from the wall's current angle."
+    },
     {
       "prNumber": 3744,
       "category": "fixed",
@@ -1663,6 +1671,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-17T11:12:07+10:00",
+      "sha": "2e19ac597b6ca5ad7d0ef5da451a15b5f299d39b",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "5721fdd105bc5fbe4dabeb40d936a95cfca6b824"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-09T17:35:09+10:00",
