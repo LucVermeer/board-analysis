@@ -150,6 +150,42 @@ describe('MUI theme wires the foreground/fill split correctly', () => {
   });
 });
 
+describe('Velvet typography ramp is pinned in px (the 16/14 coefficient does not inflate it)', () => {
+  // Unpinned, MUI's coefficient (fontSize 16 / htmlFontSize 14) inflates every heading —
+  // an unpinned h6 renders 22.86px. These assert the pinned px values survive theme build.
+  it('heading font sizes are pinned to the intended px in both schemes', () => {
+    for (const theme of [lightTheme, darkTheme]) {
+      expect(theme.typography.h3.fontSize).toBe(24);
+      expect(theme.typography.h4.fontSize).toBe(20);
+      expect(theme.typography.h5.fontSize).toBe(18);
+      expect(theme.typography.h6.fontSize).toBe(16);
+    }
+  });
+
+  it('heading font weights match the ramp', () => {
+    expect(lightTheme.typography.h3.fontWeight).toBe(700);
+    expect(lightTheme.typography.h4.fontWeight).toBe(600);
+    expect(lightTheme.typography.h5.fontWeight).toBe(600);
+    expect(lightTheme.typography.h6.fontWeight).toBe(600);
+  });
+
+  it('h3 carries the 32/24 line height', () => {
+    expect(lightTheme.typography.h3.lineHeight).toBe(32 / 24);
+  });
+
+  it('button is 16/500 and keeps its casing (textTransform: none)', () => {
+    expect(lightTheme.typography.button.fontSize).toBe(16);
+    expect(lightTheme.typography.button.fontWeight).toBe(500);
+    expect(lightTheme.typography.button.textTransform).toBe('none');
+  });
+
+  it('caption is 12/400 with a 16/12 line height', () => {
+    expect(lightTheme.typography.caption.fontSize).toBe(12);
+    expect(lightTheme.typography.caption.fontWeight).toBe(400);
+    expect(lightTheme.typography.caption.lineHeight).toBe(16 / 12);
+  });
+});
+
 describe('Velvet palette clears WCAG AA at its load-bearing pairings', () => {
   it('white text on the primary fill ≥ 4.5:1 (both schemes)', () => {
     expect(contrast('#ffffff', themeTokens.colors.primaryFill)).toBeGreaterThanOrEqual(4.5);

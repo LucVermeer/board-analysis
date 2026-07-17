@@ -183,6 +183,19 @@ function RootSeshSettingsDrawer() {
 /** Pages where the bottom tab bar is hidden unless there's an active queue */
 const HIDE_TAB_BAR_PAGES = ['/aurora-migration'];
 
+/**
+ * Routes where the persistent queue control bar is suppressed (user directive):
+ * gym landing/detail and admin surfaces are management contexts, not a place to
+ * drive the wall, so the always-on queue bar shouldn't leak onto them. The tab
+ * bar stays. Boundary-aware match so a distinct sibling like /gym-claim is not
+ * affected (`/gym` and `/gym/…` match, `/gym-claim` does not).
+ */
+const HIDE_QUEUE_BAR_PREFIXES = ['/gym', '/admin'];
+
+function isQueueBarHiddenPath(pathname: string): boolean {
+  return HIDE_QUEUE_BAR_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData }) {
   const { boardDetails, angle, hasActiveQueue } = useQueueBridgeBoardInfo();
   const pathname = usePathnameWithoutLocale();
@@ -193,6 +206,8 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
   const isDevelopmentRoute = pathname.startsWith('/development');
   const hideTabBar =
     isDevelopmentRoute || (HIDE_TAB_BAR_PAGES.some((prefix) => pathname.startsWith(prefix)) && !hasActiveQueue);
+  // Gym + admin surfaces never host the queue control bar, even mid-session.
+  const hideQueueBar = isQueueBarHiddenPath(pathname);
   const shouldShowQueueShell = !isDevelopmentRoute && isBoardRoutePath(pathname) && !hasActiveQueue && !boardDetails;
 
   // Measure the bottom bar's visual occlusion and publish it into the
@@ -259,7 +274,7 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
     >
       <FeedbackPromptBanner />
       <CapacitorUpdateBanner />
-      {!isDevelopmentRoute && hasActiveQueue && boardDetails && (
+      {!isDevelopmentRoute && !hideQueueBar && hasActiveQueue && boardDetails && (
         <ErrorBoundary>
           <BoardProvider boardName={boardDetails.board_name}>
             <ConnectionSettingsProvider>

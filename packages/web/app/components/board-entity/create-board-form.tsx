@@ -18,7 +18,7 @@ import { constructBoardSlugListUrl } from '@/app/lib/url-utils';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { BoardName } from '@/app/lib/types';
 import { ANGLES } from '@/app/lib/board-data';
-import BoardForm from './board-form';
+import BoardForm, { type BoardFormSubmitState } from './board-form';
 
 type BoardConfig = { boardType: string; layoutId: number; sizeId: number; setIds: string };
 
@@ -59,6 +59,10 @@ type CreateBoardFormProps = {
   defaultAngle: number;
   onSuccess?: (board: UserBoard) => void;
   onCancel?: () => void;
+  /** When hosted in a drawer, the id wired onto the form for a header-hosted submit. */
+  formId?: string;
+  /** When provided, the form reports its submit affordance here so the drawer header hosts the action. */
+  onSubmitStateChange?: (state: BoardFormSubmitState) => void;
 };
 
 export default function CreateBoardForm({
@@ -69,6 +73,8 @@ export default function CreateBoardForm({
   defaultAngle,
   onSuccess,
   onCancel,
+  formId,
+  onSubmitStateChange,
 }: CreateBoardFormProps) {
   const { t } = useTranslation('boards');
   const { showMessage } = useSnackbar();
@@ -174,6 +180,8 @@ export default function CreateBoardForm({
       availableAngles={availableAngles}
       onSubmit={handleSubmit}
       onCancel={onCancel}
+      formId={formId}
+      onSubmitStateChange={onSubmitStateChange}
     />
   );
 }

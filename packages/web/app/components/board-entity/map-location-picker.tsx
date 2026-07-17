@@ -18,6 +18,7 @@ import SearchOutlined from '@mui/icons-material/SearchOutlined';
 import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet';
 import type * as LeafletNamespace from 'leaflet';
 import { useGeolocation } from '@/app/hooks/use-geolocation';
+import { themeTokens } from '@/app/theme/theme-config';
 
 type NominatimResult = {
   lat: string;
@@ -57,7 +58,9 @@ export default function MapLocationPicker({ latitude, longitude, onChange }: Map
     } else {
       const icon = L.divIcon({
         className: '',
-        html: '<div style="width:16px;height:16px;background:#6d28d9;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
+        // The marker renders inside the document, so the CSS custom property
+        // resolves against the app theme instead of a hardcoded brand hex.
+        html: '<div style="width:16px;height:16px;background:var(--color-primary-fill);border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
         iconSize: [16, 16],
         iconAnchor: [8, 8],
       });
@@ -205,12 +208,23 @@ export default function MapLocationPicker({ latitude, longitude, onChange }: Map
       onChange={handleAccordionChange}
       variant="outlined"
       disableGutters
-      sx={{ '&:before': { display: 'none' }, borderRadius: 1 }}
+      // Card-level disclosure — one surface step above the form background, not
+      // an input field. Rounded to the `lg` card radius and clipped so the map
+      // corners follow it.
+      sx={{
+        '&:before': { display: 'none' },
+        borderRadius: `${themeTokens.borderRadius.lg}px`,
+        backgroundColor: 'var(--semantic-surface)',
+        overflow: 'hidden',
+      }}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 0 } }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <MapOutlined fontSize="small" color="action" />
-          <MuiTypography variant="body2">
+          <MuiTypography variant="body2" sx={{ fontWeight: themeTokens.typography.fontWeight.medium }}>
             {hasLocation
               ? t('mapLocationPicker.locationDisplay', {
                   lat: latitude.toFixed(4),

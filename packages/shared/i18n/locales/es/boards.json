@@ -331,7 +331,7 @@
       "name": "Nombre del plafón",
       "slug": "URL personalizada",
       "description": "Descripción",
-      "location": "Ubicación",
+      "location": "Nombre de la ubicación",
       "serialNumber": "Número de serie del controlador",
       "defaultAngle": "Ángulo por defecto",
       "angleAdjustable": "Ángulo ajustable",
@@ -345,7 +345,8 @@
     },
     "placeholders": {
       "description": "Descripción opcional",
-      "serialNumber": "p. ej. ABC-12345"
+      "serialNumber": "p. ej. ABC-12345",
+      "select": "Selecciona…"
     },
     "helperText": {
       "unlisted": "Oculto de los resultados de búsqueda pero accesible por enlace directo",
@@ -353,6 +354,12 @@
     },
     "alerts": {
       "configEditable": "Puedes cambiar la disposición, el tamaño y los conjuntos de presas. Los bloques ya registrados se mantienen igual."
+    },
+    "sections": {
+      "details": "Detalles del plafón",
+      "location": "Ubicación",
+      "setup": "Configuración",
+      "visibility": "Visibilidad"
     }
   },
   "editBoard": {

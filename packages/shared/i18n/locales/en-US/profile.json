@@ -129,7 +129,17 @@
       "cancel": "Cancel",
       "wallMoved": "Wall moved to {{wallClimb}}. Still logging {{loggingClimb}}?",
       "switchClimb": "Switch to {{climbName}}",
-      "switchDirtyConfirm": "You'll lose what you typed. Switch anyway?"
+      "switchDirtyConfirm": "You'll lose what you typed. Switch anyway?",
+      "logType": "Log type",
+      "saveFailed": "Couldn't save your tick. Try again.",
+      "sections": {
+        "details": "Details",
+        "howItFelt": "How it felt"
+      },
+      "validation": {
+        "flashOneAttempt": "Flash requires exactly 1 attempt",
+        "sendMoreAttempts": "Send requires more than 1 attempt"
+      }
     },
     "feed": {
       "deleteSwipeLabel": "Delete",

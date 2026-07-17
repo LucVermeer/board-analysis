@@ -129,7 +129,17 @@
       "cancel": "Annuler",
       "wallMoved": "Le mur est passé à {{wallClimb}}. Tu logges toujours {{loggingClimb}} ?",
       "switchClimb": "Passer à {{climbName}}",
-      "switchDirtyConfirm": "Tu vas perdre ce que tu as tapé. Changer quand même ?"
+      "switchDirtyConfirm": "Tu vas perdre ce que tu as tapé. Changer quand même ?",
+      "logType": "Type de log",
+      "saveFailed": "Impossible d'enregistrer ta croix. Réessaie.",
+      "sections": {
+        "details": "Détails",
+        "howItFelt": "Ton ressenti"
+      },
+      "validation": {
+        "flashOneAttempt": "Le flash demande exactement 1 essai",
+        "sendMoreAttempts": "L'enchaînement demande plus d'un essai"
+      }
     },
     "feed": {
       "deleteSwipeLabel": "Supprimer",

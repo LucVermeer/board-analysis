@@ -55,7 +55,7 @@ describe('BoardForm', () => {
 
     expect(screen.getByLabelText('Board Name *')).toBeDefined();
     expect(screen.getByLabelText('Description')).toBeDefined();
-    expect(screen.getByLabelText('Location')).toBeDefined();
+    expect(screen.getByLabelText('Location name')).toBeDefined();
     expect(screen.getByLabelText('Controller Serial Number')).toBeDefined();
     expect(screen.getByText('Edit Board')).toBeDefined();
     expect(screen.getByText('Save')).toBeDefined();

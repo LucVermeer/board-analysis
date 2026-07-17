@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Avatar from '@mui/material/Avatar';
@@ -47,11 +47,25 @@ import AddOutlined from '@mui/icons-material/AddOutlined';
 import FollowButton from '@/app/components/ui/follow-button';
 import BoardLeaderboard from './board-leaderboard';
 import EditBoardForm from './edit-board-form';
+import type { BoardFormSubmitState } from './board-form';
 import CommentSection from '@/app/components/social/comment-section';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import GymDetail from '@/app/components/gym-entity/gym-detail';
 import GymSelector from '@/app/components/gym-entity/gym-selector';
 import { boardTypeLabel } from '@boardsesh/board-constants';
+
+/**
+ * Reported up by BoardDetailContent while the board is being edited, so a
+ * titled host drawer can move the edit title + Save action into its header
+ * (the bottom-drawer ruling — the iOS keyboard buries a footer). `null` while
+ * not editing.
+ */
+export type BoardDetailEditHost = {
+  formId: string;
+  title: string;
+  submit: BoardFormSubmitState;
+  onCancel: () => void;
+};
 
 export type BoardDetailContentProps = {
   boardUuid: string;
@@ -60,6 +74,14 @@ export type BoardDetailContentProps = {
   onDeleted?: () => void;
   /** Called when follow state changes, so parent can update caches. */
   onFollowChange?: (boardUuid: string, isFollowing: boolean) => void;
+  /**
+   * When provided (a titled drawer host), the edit form's title and Save action
+   * are hosted by the drawer chrome instead of rendered inline. Called with the
+   * edit host descriptor while editing, `null` otherwise. Omit for hosts with
+   * no header (e.g. the search-result BoardDetail drawer), where the inline
+   * title + action bar are kept.
+   */
+  onEditHostChange?: (host: BoardDetailEditHost | null) => void;
 };
 
 export function BoardDetailContent({
@@ -67,12 +89,23 @@ export function BoardDetailContent({
   initialIsFollowing,
   onDeleted,
   onFollowChange,
+  onEditHostChange,
 }: BoardDetailContentProps) {
   const { t } = useTranslation('boards');
   const [board, setBoard] = useState<UserBoard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
+  // Edit-form action hosting: when the host asks for it (onEditHostChange), the
+  // drawer header carries the title + Save button and the form submits by id.
+  const hostsEditExternally = onEditHostChange != null;
+  const editFormId = useId();
+  const [editSubmitState, setEditSubmitState] = useState<BoardFormSubmitState>({
+    submitLabel: t('editBoard.submitLabel'),
+    submitting: false,
+    canSubmit: false,
+  });
+  const handleEditCancel = useCallback(() => setIsEditing(false), []);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showGymDetail, setShowGymDetail] = useState(false);
@@ -107,6 +140,22 @@ export function BoardDetailContent({
     setIsEditing(false);
     setActiveTab(0);
   }, [fetchBoard]);
+
+  // Report the edit-host descriptor to a titled drawer so it can title the
+  // surface + host the Save action. Kept in a ref so the unmount cleanup below
+  // can clear a stale header action bar without re-subscribing on identity
+  // change.
+  const onEditHostChangeRef = useRef(onEditHostChange);
+  onEditHostChangeRef.current = onEditHostChange;
+  const editTitle = t('editBoard.title');
+  useEffect(() => {
+    const report = onEditHostChangeRef.current;
+    if (!report) return;
+    report(
+      isEditing ? { formId: editFormId, title: editTitle, submit: editSubmitState, onCancel: handleEditCancel } : null,
+    );
+  }, [isEditing, editFormId, editTitle, editSubmitState, handleEditCancel]);
+  useEffect(() => () => onEditHostChangeRef.current?.(null), []);
 
   const isOwner = !!currentUserId && board?.ownerId === currentUserId;
 
@@ -183,7 +232,13 @@ export function BoardDetailContent({
   if (isEditing) {
     return (
       <Box sx={{ px: 2, pb: 2, overflow: 'auto', flex: 1 }}>
-        <EditBoardForm board={board} onSuccess={handleEditSuccess} onCancel={() => setIsEditing(false)} />
+        <EditBoardForm
+          board={board}
+          onSuccess={handleEditSuccess}
+          onCancel={handleEditCancel}
+          formId={hostsEditExternally ? editFormId : undefined}
+          onSubmitStateChange={hostsEditExternally ? setEditSubmitState : undefined}
+        />
       </Box>
     );
   }
