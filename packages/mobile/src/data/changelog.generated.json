@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-17T02:10:38.889Z",
+  "generatedAt": "2026-07-17T02:17:08.878Z",
   "entries": [
+    {
+      "prNumber": 3746,
+      "category": "fixed",
+      "title": "Beta videos and similar climbs now swipe sideways in the climb drawer on Android — flick through the whole strip, not just the first couple.",
+      "mergedAt": "2026-07-17T02:11:05Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3746"
+    },
     {
       "prNumber": 3742,
       "category": "fixed",
