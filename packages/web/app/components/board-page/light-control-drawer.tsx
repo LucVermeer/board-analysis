@@ -282,8 +282,20 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
       setPartyMode('off');
       return;
     }
-    const result = await clearBoard();
-    if (result === false) {
+    try {
+      const success = await clearBoard();
+      // Treat null/undefined as failure — only an explicit `true` means the
+      // wall was cleared. clearBoard() returns undefined when the adapter is
+      // momentarily gone (a drop the `isConnected` state hasn't caught up to
+      // yet), which `=== false` used to swallow silently.
+      if (!success) {
+        showMessage(t('lightControl.clearFailed'), 'error');
+      }
+    } catch (error) {
+      // clearBoard's underlying BLE write usually has its own try/catch and
+      // returns false on failure, but a disconnect mid-write can still surface
+      // here as a rejected promise instead of a `false` return.
+      console.error('Failed to clear board lights:', error);
       showMessage(t('lightControl.clearFailed'), 'error');
     }
   };
