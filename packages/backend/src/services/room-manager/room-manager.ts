@@ -562,6 +562,7 @@ class RoomManager {
     stateHash: string;
     stateHashOrdered: string;
     previousStateHash: string | null;
+    previousStateHashOrdered: string | null;
   }> {
     return updateQueueStateFn(this.deps(), sessionId, queue, currentClimbQueueItem, expectedVersion);
   }

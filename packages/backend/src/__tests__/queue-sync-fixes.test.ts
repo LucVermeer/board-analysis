@@ -9,6 +9,7 @@ import { roomManager, VersionConflictError } from '../services/room-manager';
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 import { queueMutations } from '../graphql/resolvers/queue/mutations';
 import { pubsub } from '../pubsub/index';
+import { logger } from '../utils/logger';
 import { createMockRedis, type MockRedis } from './helpers/mock-redis';
 
 const createTestClimb = (uuid?: string): ClimbQueueItem => ({
@@ -641,6 +642,70 @@ describe('order-sensitive dual-hash (stateHashOrdered)', () => {
         }),
       }),
     );
+  });
+});
+
+// Issue #2387 — the setQueue "redundant resync" warning must be order-aware.
+// A pure reorder (same members, different order) is a legitimate state change
+// that leaves the order-insensitive v1 hash unchanged; comparing v1 alone
+// misreported it as a no-op and blamed "hash-drift on the publisher". The check
+// now requires BOTH v1 and v2 to match, so a reorder passes silently while a
+// genuinely redundant setQueue (nothing changed at all) still warns.
+describe('setQueue - order-aware no-op resync warning (issue #2387)', () => {
+  let mockRedis: MockRedis;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  const NOOP_MESSAGE = 'Redundant full-queue resync';
+
+  beforeEach(async () => {
+    mockRedis = createMockRedis();
+    roomManager.reset();
+    await roomManager.initialize(mockRedis);
+    vi.spyOn(pubsub, 'publishQueueEvent').mockImplementation(() => {});
+    warnSpy = vi.spyOn(logger, 'warn').mockImplementation((() => logger) as unknown as typeof logger.warn);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const ctxFor = (sessionId: string) => ({
+    connectionId: 'client-1',
+    sessionId,
+    rateLimitTokens: 60,
+    rateLimitLastReset: Date.now(),
+  });
+
+  it('does NOT warn when a setQueue only reorders the queue (v1 equal, v2 moved)', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const climb1 = createTestClimb();
+    const climb2 = createTestClimb();
+
+    // Seed the queue (previous = empty, so this first call legitimately differs).
+    await queueMutations.setQueue({}, { queue: [climb1, climb2] }, ctxFor(sessionId));
+    warnSpy.mockClear();
+
+    // Same members, reversed order — a real reorder, not a no-op.
+    await queueMutations.setQueue({}, { queue: [climb2, climb1] }, ctxFor(sessionId));
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining(NOOP_MESSAGE));
+  });
+
+  it('warns when a setQueue re-pushes an identical queue (v1 and v2 both equal)', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const climb1 = createTestClimb();
+    const climb2 = createTestClimb();
+
+    await queueMutations.setQueue({}, { queue: [climb1, climb2] }, ctxFor(sessionId));
+    warnSpy.mockClear();
+
+    // Identical membership AND order AND current climb — a genuine no-op.
+    await queueMutations.setQueue({}, { queue: [climb1, climb2] }, ctxFor(sessionId));
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(NOOP_MESSAGE));
   });
 });
 
