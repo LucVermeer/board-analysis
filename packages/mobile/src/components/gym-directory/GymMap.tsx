@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import Constants from 'expo-constants';
 
 export type GymMapMarker = {
   id: string;
@@ -65,6 +66,45 @@ try {
   Maps = null;
 }
 
+// Reads app.config.ts's `extra.googleMapsApiKeyConfigured` flag (whether
+// GOOGLE_MAPS_API_KEY was baked into this build's AndroidManifest as the
+// com.google.android.geo.API_KEY meta-data). Pulled out as a pure function
+// (rather than inlined at the `Constants.expoConfig?.extra` call site) so it's
+// unit-testable without mocking expo-constants or expo-maps — see
+// __tests__/gym-map.test.tsx. Exported for that reason only.
+export function readGoogleMapsApiKeyConfigured(extra: unknown): boolean {
+  if (!extra || typeof extra !== 'object') return false;
+  return (extra as { googleMapsApiKeyConfigured?: unknown }).googleMapsApiKeyConfigured === true;
+}
+
+// Decides which native map view (if any) is safe to mount. Without the
+// AndroidManifest's Google Maps meta-data, mounting the native GoogleMaps.View
+// throws a FATAL native IllegalStateException ("API key not found") the
+// instant the view attaches to the window — issue #3187. That throw happens in
+// Android's View.dispatchAttachedToWindow, entirely outside React's
+// render/commit cycle, so MapErrorBoundary below (a JS componentDidCatch)
+// CANNOT catch it: the only safe fix is to never construct the native view
+// when the key is absent. `maps` is `null` when the expo-maps module itself
+// isn't linked (a build that predates it); `undefined` returned here is
+// treated identically to that case by the caller (degrades to list-only).
+// Pure + exported so the branch selection is unit-testable without rendering
+// through the real (native-only) expo-maps module — see
+// __tests__/gym-map.test.tsx.
+export function resolveMapView(
+  platformOS: string,
+  maps: typeof import('expo-maps') | null,
+  androidGoogleMapsKeyConfigured: boolean,
+) {
+  if (!maps) return undefined;
+  if (platformOS === 'ios') return maps.AppleMaps?.View;
+  return androidGoogleMapsKeyConfigured ? maps.GoogleMaps?.View : undefined;
+}
+
+// Read once at module scope — both the flag and Platform.OS are fixed for the
+// life of the binary (baked at build time / set by the OS), so there's nothing
+// to react to on re-render.
+const isAndroidGoogleMapsKeyConfigured = readGoogleMapsApiKeyConfigured(Constants.expoConfig?.extra);
+
 /**
  * Catches a render/mount throw from the native map (e.g. the expo-maps native
  * view isn't linked in this build) so it degrades to no-map instead of taking
@@ -113,11 +153,16 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
     nativeRef.current = (instance as NativeMapHandle | null) ?? null;
   }, []);
 
-  const MapView = Platform.OS === 'ios' ? Maps?.AppleMaps?.View : Maps?.GoogleMaps?.View;
+  // On Android, only resolve the native GoogleMaps view when the build has the
+  // API key baked in (see resolveMapView above) — an undefined MapView here
+  // falls through to the same "unavailable" branch as a missing expo-maps
+  // module, degrading to the list-only layout instead of crashing on mount.
+  const MapView = resolveMapView(Platform.OS, Maps, isAndroidGoogleMapsKeyConfigured);
 
   // Report a missing native map exactly once (the module or platform view is
-  // absent — e.g. a build without expo-maps). Read through a ref so the effect
-  // stays mount-only and isn't torn down by a changing callback identity.
+  // absent — e.g. a build without expo-maps, or Android without the Google Maps
+  // key). Read through a ref so the effect stays mount-only and isn't torn down
+  // by a changing callback identity.
   const onMapUnavailableRef = useRef(onMapUnavailable);
   onMapUnavailableRef.current = onMapUnavailable;
   useEffect(() => {
@@ -178,13 +223,15 @@ const NativeGymMap = forwardRef<GymMapHandle, GymMapProps>(function NativeGymMap
 
 /**
  * Renders nearby gyms as pins on the platform map (Apple Maps on iOS, Google
- * Maps on Android — the latter needs GOOGLE_MAPS_API_KEY + a native build, else
- * blank). Marker taps drive `onMarkerPress` (a map→list convenience); selection
- * itself lives in the gym list so the flow works identically whether or not the
- * map renders, and a missing/broken native map never crashes the screen (it
- * reports `onMapUnavailable` so the screen lays out list-only). Panning the map
- * fires `onRegionChange`; a place search drives the camera via the
- * {@link GymMapHandle} ref. Both no-op when the native map is unavailable.
+ * Maps on Android — the latter needs GOOGLE_MAPS_API_KEY baked in at build time,
+ * else the native view is never mounted rather than crashing, see
+ * isAndroidGoogleMapsKeyConfigured above / issue #3187). Marker taps drive
+ * `onMarkerPress` (a map→list convenience); selection itself lives in the gym
+ * list so the flow works identically whether or not the map renders, and a
+ * missing/broken native map never crashes the screen (it reports
+ * `onMapUnavailable` so the screen lays out list-only). Panning the map fires
+ * `onRegionChange`; a place search drives the camera via the {@link GymMapHandle}
+ * ref. Both no-op when the native map is unavailable.
  */
 export const GymMap = memo(
   forwardRef<GymMapHandle, GymMapProps>(function GymMap(

@@ -46,6 +46,14 @@ const OTA_PREVIEW = 'mobile-ota-preview.yml';
 // native builds too, or the assertion diverges from the value the shipped binary
 // actually embeds.
 const OTA_BACKPORT = 'mobile-ota-backport.yml';
+// The debug/dev-client APK (android-apk-dev-client.yml) loads JS from Metro at
+// runtime and never receives an OTA, so it's deliberately EXCLUDED from the
+// `workflows` fingerprint-parity array below — its env has no fingerprint to
+// keep in lockstep. But it still needs GOOGLE_MAPS_API_KEY set (job-level, not
+// workflow-level, hence the separate helper) or `expo prebuild` omits the
+// Android manifest's Google Maps meta-data and the native GoogleMaps view is a
+// fatal crash the instant it mounts (issue #3187) — checked on its own below.
+const DEV_CLIENT_ANDROID = 'android-apk-dev-client.yml';
 
 // Workflow-level env keys that feed the resolved config (fingerprint) and/or the
 // inlined JS bundle (runtime correctness). Every one must be declared identically
@@ -201,6 +209,19 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
     // merely names it is fine — match a YAML/shell key, not the bare word).
     expect(ios).not.toMatch(/^\s*GOOGLE_MAPS_API_KEY:/m);
     expect(android).toMatch(/^\s*GOOGLE_MAPS_API_KEY:\s*\$\{\{\s*secrets\.GOOGLE_MAPS_API_KEY\s*\}\}/m);
+  });
+
+  it('sets GOOGLE_MAPS_API_KEY on the debug/dev-client Android build too (issue #3187)', () => {
+    // Not a fingerprint-parity concern (this workflow is excluded from the
+    // `workflows` array above — see DEV_CLIENT_ANDROID) but the same repo-level
+    // secret as the production build must still reach `expo prebuild`, or every
+    // com.boardsesh.app.dev install crashes the instant a Google Map mounts
+    // (GymMap.tsx's runtime gate covers already-shipped binaries; this closes
+    // the gap for future dev-client builds). Any indentation matches — the job's
+    // `env:` block sits one level deeper than the workflow-level blocks the
+    // other assertions check.
+    const devClient = readWorkflow(DEV_CLIENT_ANDROID);
+    expect(devClient).toMatch(/^\s*GOOGLE_MAPS_API_KEY:\s*\$\{\{\s*secrets\.GOOGLE_MAPS_API_KEY\s*\}\}\s*$/m);
   });
 });
 
