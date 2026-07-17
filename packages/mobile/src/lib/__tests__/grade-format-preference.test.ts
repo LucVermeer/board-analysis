@@ -61,15 +61,21 @@ describe('grade-format-preference', () => {
     await expect(loadGradeDisplayFormat()).resolves.toBe('font');
   });
 
-  it('falls back to the default (and does not throw) when the storage read fails (#3610)', async () => {
-    // getPreference swallows a locked-storage read (returns null), so the load
-    // resolves to the default instead of floating an unhandled AsyncStorage rejection.
+  it('retries the read after a failed load and does not cache the failure (#3610)', async () => {
+    // A locked-storage read rejects; the load must reject too (not cache a default)
+    // so the next mount retries after unlock. The singleton's rejected promise is
+    // cleared and the effect call site `.catch`es it, so the rejection never floats.
     const asyncStorage = (await import('@react-native-async-storage/async-storage')).default as unknown as {
       getItem: { mockRejectedValueOnce: (error: Error) => void };
+      __setRaw: (key: string, value: string) => void;
     };
-    asyncStorage.getItem.mockRejectedValueOnce(new Error('Failed to get values for keys'));
+    asyncStorage.getItem.mockRejectedValueOnce(new Error('storage unavailable'));
 
     const { loadGradeDisplayFormat } = await import('../grade-format-preference');
-    await expect(loadGradeDisplayFormat()).resolves.toBe('v-grade');
+    await expect(loadGradeDisplayFormat()).rejects.toThrow('storage unavailable');
+
+    // The failed read left the store unloaded, so the next attempt reads again.
+    asyncStorage.__setRaw('gradeDisplayFormat', JSON.stringify('both'));
+    await expect(loadGradeDisplayFormat()).resolves.toBe('both');
   });
 });
