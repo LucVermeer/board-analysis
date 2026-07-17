@@ -29,6 +29,11 @@ name: Mobile OTA Preview (Per-PR Channel)
 #     other workflows.
 #   * `^pr-[0-9]+$` guards every channel mutation (defense-in-depth, not the control).
 #
+# Fork PRs are SKIPPED here (no secrets), so the companion workflow_run file
+# mobile-ota-preview-prompt.yml posts a "a maintainer can /ota-preview" nudge on the
+# PR. That file only COMMENTS (base-context write token, never checks out fork code),
+# so it doesn't widen this threat boundary — the publish path is unchanged.
+#
 # Hardening (optional, for hard same-repo enforcement): make EXPO_TOKEN an
 # `ota-preview` ENVIRONMENT secret (not a repo secret) so a same-repo PR can't drop
 # the environment to reach it; the sweep then needs a main-only environment and
@@ -112,6 +117,7 @@ jobs:
       action: ${{ steps.decide.outputs.action }}
       pr_number: ${{ steps.decide.outputs.pr_number }}
       channel: ${{ steps.decide.outputs.channel }}
+      fork_skip: ${{ steps.decide.outputs.fork_skip }}
     steps:
       - name: Decide action + resolve PR
         id: decide
@@ -121,6 +127,11 @@ jobs:
             const repoFull = `${context.repo.owner}/${context.repo.repo}`;
             let action = 'skip';
             let prNumber = '';
+            // Set for a fork PR we deliberately skip — its OWN copy of this job has a
+            // read-only token and can't comment, so the companion workflow_run file
+            // (mobile-ota-preview-prompt.yml) posts the "a maintainer can /ota-preview"
+            // nudge. We only signal it via an artifact; no secrets, no fork code run.
+            let forkSkip = false;
 
             if (context.eventName === 'pull_request') {
               const pr = context.payload.pull_request;
@@ -133,6 +144,7 @@ jobs:
                 // Fork PRs can't receive secrets via pull_request — use the
                 // /ota-preview comment or workflow_dispatch for those.
                 action = !isFork ? 'publish' : 'skip';
+                forkSkip = isFork;
               }
             } else if (context.eventName === 'issue_comment') {
               const assoc = context.payload.comment.author_association;
@@ -156,13 +168,32 @@ jobs:
             if (!/^[0-9]+$/.test(String(prNumber))) {
               action = 'skip';
               prNumber = '';
+              forkSkip = false;
             }
 
             const channel = prNumber ? `pr-${prNumber}` : '';
-            core.info(`event=${context.eventName} action=${action} channel=${channel || '(none)'}`);
+            core.info(`event=${context.eventName} action=${action} channel=${channel || '(none)'} fork_skip=${forkSkip}`);
             core.setOutput('action', action);
             core.setOutput('pr_number', String(prNumber));
             core.setOutput('channel', channel);
+            core.setOutput('fork_skip', String(forkSkip));
+
+      # Hand the fork PR number to the companion workflow_run file. This job's token
+      # is read-only on a fork PR (can't comment), and workflow_run.pull_requests is
+      # empty for forks — so an artifact is the only channel. No checkout, no secrets.
+      - name: Stage fork-preview prompt
+        if: steps.decide.outputs.fork_skip == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/fork-prompt"
+          printf '%s' "${{ steps.decide.outputs.pr_number }}" > "$RUNNER_TEMP/fork-prompt/pr_number"
+
+      - name: Upload fork-preview prompt
+        if: steps.decide.outputs.fork_skip == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ota-fork-prompt
+          path: ${{ runner.temp }}/fork-prompt/pr_number
+          retention-days: 1
 
   # ── Publish pr-<number> to the self-hosted server. Holds EXPO_TOKEN and runs
   # PR-author code → gated by `environment: ota-preview` (configure required

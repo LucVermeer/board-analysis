@@ -593,7 +593,13 @@ above — no per-tester build. Workflow: `.github/workflows/mobile-ota-preview.y
   - **Fork / on-demand previews** run only from a maintainer **`/ota-preview` comment**
     (`author_association` OWNER/MEMBER/COLLABORATOR) or `workflow_dispatch`. Those events run the
     **default-branch (main)** copy of the workflow, so their maintainer gate is not PR-editable; the
-    publish then waits on the `ota-preview` environment.
+    publish then waits on the `ota-preview` environment. To make that path discoverable, a fork PR now
+    gets an **auto-posted nudge**: the skipped fork run uploads a `mobile-ota-fork-prompt` artifact
+    with the PR number, and the companion `mobile-ota-preview-prompt.yml` (`workflow_run`, base-repo
+    context so it can comment on forks) posts a sticky "a maintainer can `/ota-preview`" comment. That
+    file only comments — it holds no OTA secret and never checks out fork code — so the boundary above
+    is unchanged; `/ota-preview` still does the actual publish. The nudge is removed once a real
+    preview is published.
   - **Same-repo collaborators are trusted.** For `pull_request`, GitHub runs the PR's **own** copy of
     the workflow with repo secrets. Any same-repo PR touching the relevant paths auto-publishes; the
     **`ota-preview` environment** reviewer gate (if required reviewers are configured) is the human
