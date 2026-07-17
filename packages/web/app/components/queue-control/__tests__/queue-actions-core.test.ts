@@ -21,7 +21,7 @@ const mockSearchParams: SearchRequestPagination = {
   sortBy: 'quality',
   sortOrder: 'desc',
   name: '',
-  onlyClassics: false,
+  onlyBenchmarks: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
   onlyWithBetaVideos: false,

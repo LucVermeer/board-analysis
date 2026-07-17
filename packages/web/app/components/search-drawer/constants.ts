@@ -10,7 +10,7 @@ export const defaultClimbSearchParameters: SearchRequestPagination = {
   sortBy: 'ascents',
   sortOrder: 'desc',
   minRating: 1.0,
-  onlyClassics: false,
+  onlyBenchmarks: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
   onlyWithBetaVideos: false,

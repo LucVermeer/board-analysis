@@ -102,7 +102,7 @@ export function getQualityPanelSummary(params: SearchRequestPagination, labels: 
   if (minRating) {
     parts.push(labels.rating(minRating));
   }
-  if (params.onlyClassics) {
+  if (params.onlyBenchmarks) {
     parts.push(labels.classics);
   }
 

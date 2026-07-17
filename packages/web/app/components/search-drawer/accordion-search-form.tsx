@@ -392,8 +392,8 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
                 <MuiSwitch
                   size="small"
                   color="primary"
-                  checked={uiSearchParams.onlyClassics}
-                  onChange={(_, checked) => updateFilters({ onlyClassics: checked })}
+                  checked={uiSearchParams.onlyBenchmarks}
+                  onChange={(_, checked) => updateFilters({ onlyBenchmarks: checked })}
                 />
               }
               label={

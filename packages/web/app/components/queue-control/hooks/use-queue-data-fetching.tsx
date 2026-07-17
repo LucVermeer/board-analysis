@@ -95,6 +95,7 @@ export const useQueueDataFetching = ({
       sortSeed: searchParams.sortSeed || undefined,
       name: searchParams.name || undefined,
       setter: searchParams.settername && searchParams.settername.length > 0 ? searchParams.settername : undefined,
+      onlyBenchmarks: searchParams.onlyBenchmarks || undefined,
       onlyTallClimbs: searchParams.onlyTallClimbs || undefined,
       onlyWideClimbs: searchParams.onlyWideClimbs || undefined,
       onlyWithBetaVideos: searchParams.onlyWithBetaVideos || undefined,
@@ -183,6 +184,7 @@ export const useQueueDataFetching = ({
         countSearchParams.settername && countSearchParams.settername.length > 0
           ? countSearchParams.settername
           : undefined,
+      onlyBenchmarks: countSearchParams.onlyBenchmarks || undefined,
       onlyTallClimbs: countSearchParams.onlyTallClimbs || undefined,
       onlyWideClimbs: countSearchParams.onlyWideClimbs || undefined,
       onlyWithBetaVideos: countSearchParams.onlyWithBetaVideos || undefined,

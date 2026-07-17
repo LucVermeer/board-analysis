@@ -45,7 +45,7 @@ export async function cachedGetHoldHeatmapData(
         sortOrder: searchParams.sortOrder,
         name: searchParams.name,
         settername: searchParams.settername,
-        onlyClassics: searchParams.onlyClassics,
+        onlyBenchmarks: searchParams.onlyBenchmarks,
         onlyTallClimbs: searchParams.onlyTallClimbs,
         onlyWideClimbs: searchParams.onlyWideClimbs,
         onlyWithBetaVideos: searchParams.onlyWithBetaVideos,

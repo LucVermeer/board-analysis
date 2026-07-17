@@ -47,7 +47,6 @@ export type ClimbSearchParams = {
   name?: string;
   settername?: string[];
   setternameSuggestion?: string;
-  onlyClassics?: boolean;
   onlyBenchmarks?: boolean;
   onlyTallClimbs?: boolean;
   onlyWideClimbs?: boolean;

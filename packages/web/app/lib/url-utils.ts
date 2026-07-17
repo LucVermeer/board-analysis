@@ -100,7 +100,7 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const sortOrder = safeInput.sortOrder ?? DEFAULT_SEARCH_PARAMS.sortOrder;
   const sortSeed = safeInput.sortSeed ?? DEFAULT_SEARCH_PARAMS.sortSeed;
   const name = safeInput.name ?? DEFAULT_SEARCH_PARAMS.name;
-  const onlyClassics = safeInput.onlyClassics ?? DEFAULT_SEARCH_PARAMS.onlyClassics;
+  const onlyBenchmarks = safeInput.onlyBenchmarks ?? DEFAULT_SEARCH_PARAMS.onlyBenchmarks;
   const onlyTallClimbs = safeInput.onlyTallClimbs ?? DEFAULT_SEARCH_PARAMS.onlyTallClimbs;
   const onlyWideClimbs = safeInput.onlyWideClimbs ?? DEFAULT_SEARCH_PARAMS.onlyWideClimbs;
   const onlyWithBetaVideos = safeInput.onlyWithBetaVideos ?? DEFAULT_SEARCH_PARAMS.onlyWithBetaVideos;
@@ -151,8 +151,8 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   if (name && name !== DEFAULT_SEARCH_PARAMS.name) {
     params.name = name;
   }
-  if (onlyClassics !== DEFAULT_SEARCH_PARAMS.onlyClassics) {
-    params.onlyClassics = onlyClassics.toString();
+  if (onlyBenchmarks !== DEFAULT_SEARCH_PARAMS.onlyBenchmarks) {
+    params.onlyBenchmarks = onlyBenchmarks.toString();
   }
   if (onlyTallClimbs !== DEFAULT_SEARCH_PARAMS.onlyTallClimbs) {
     params.onlyTallClimbs = onlyTallClimbs.toString();
@@ -241,7 +241,7 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   sortOrder: 'desc',
   sortSeed: '',
   name: '',
-  onlyClassics: false,
+  onlyBenchmarks: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
   onlyWithBetaVideos: false,
@@ -336,7 +336,7 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     // straight to the DB md5 salt, so drop anything a crafted URL puts here.
     sortSeed: normalizeSortSeed(urlParams.get('sortSeed')),
     name: urlParams.get('name') ?? DEFAULT_SEARCH_PARAMS.name,
-    onlyClassics: urlParams.get('onlyClassics') === 'true',
+    onlyBenchmarks: urlParams.get('onlyBenchmarks') === 'true',
     onlyTallClimbs: urlParams.get('onlyTallClimbs') === 'true',
     onlyWideClimbs: urlParams.get('onlyWideClimbs') === 'true',
     onlyWithBetaVideos: urlParams.get('onlyWithBetaVideos') === 'true',

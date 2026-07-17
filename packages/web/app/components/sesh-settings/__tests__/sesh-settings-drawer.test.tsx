@@ -302,11 +302,11 @@ describe('SeshSettingsDrawer', () => {
       // Mirrors what QueueContext does via history.replaceState when the user
       // edits filters — the Next.js router never sees this, but
       // window.location.search reflects it.
-      window.history.replaceState({}, '', '/kilter/1/10/1,2/40/list?minGrade=10&onlyClassics=true');
+      window.history.replaceState({}, '', '/kilter/1/10/1,2/40/list?minGrade=10&onlyBenchmarks=true');
       try {
         render(<SeshSettingsDrawer open onClose={vi.fn()} />);
         fireEvent.click(screen.getByTestId('change-angle-45'));
-        expect(mockPush).toHaveBeenCalledWith('/kilter/1/10/1,2/45/list?minGrade=10&onlyClassics=true');
+        expect(mockPush).toHaveBeenCalledWith('/kilter/1/10/1,2/45/list?minGrade=10&onlyBenchmarks=true');
       } finally {
         window.history.replaceState({}, '', '/');
       }

@@ -93,8 +93,8 @@ describe('hasActiveNonNameFilters', () => {
     expect(hasActiveNonNameFilters(makeParams({ holdsFilter: {} }))).toBe(false);
   });
 
-  it('returns true when onlyClassics is true', () => {
-    expect(hasActiveNonNameFilters(makeParams({ onlyClassics: true }))).toBe(true);
+  it('returns true when onlyBenchmarks is true', () => {
+    expect(hasActiveNonNameFilters(makeParams({ onlyBenchmarks: true }))).toBe(true);
   });
 
   it('returns true when minAscents differs from default', () => {
@@ -211,7 +211,7 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
 
   it('pill summary truncates at 2 items with +N more', () => {
     const pill = getSearchPillSummary(
-      makeParams({ minGrade: 16, minRating: 3, onlyClassics: true, onlyTallClimbs: true }),
+      makeParams({ minGrade: 16, minRating: 3, onlyBenchmarks: true, onlyTallClimbs: true }),
       summaryLabels,
     );
     const parts = pill.split(' · ');

@@ -34,7 +34,7 @@ export const UISearchParamsProvider: React.FC<{ children: React.ReactNode }> = (
     if (uiSearchParams.minGrade || uiSearchParams.maxGrade) activeFilters.push('gradeRange');
     if (uiSearchParams.minAscents) activeFilters.push('minAscents');
     if (uiSearchParams.minRating) activeFilters.push('minRating');
-    if (uiSearchParams.onlyClassics) activeFilters.push('classics');
+    if (uiSearchParams.onlyBenchmarks) activeFilters.push('classics');
     if (uiSearchParams.gradeAccuracy) activeFilters.push('gradeAccuracy');
     if (uiSearchParams.settername.length > 0) activeFilters.push('setter');
     if (uiSearchParams.holdsFilter && Object.entries(uiSearchParams.holdsFilter).length > 0)
@@ -63,7 +63,7 @@ export const UISearchParamsProvider: React.FC<{ children: React.ReactNode }> = (
         minAscents: uiSearchParams.minAscents,
         minRating: uiSearchParams.minRating,
         gradeAccuracy: uiSearchParams.gradeAccuracy,
-        onlyClassics: uiSearchParams.onlyClassics,
+        onlyBenchmarks: uiSearchParams.onlyBenchmarks,
         projectsOnly: uiSearchParams.projectsOnly,
         establishedOnly: uiSearchParams.minAscents >= 2 && !uiSearchParams.projectsOnly,
         onlyTallClimbs: uiSearchParams.onlyTallClimbs,
