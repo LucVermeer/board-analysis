@@ -109,21 +109,6 @@ export type NativeBleConnectDiagnostics = {
   discoveredServices: string[];
 };
 
-/**
- * Sub-reason a connect attempt failed (#3676), fetched via
- * `getLastConnectFailureReason` right after a rejected `connect`. On iOS a
- * `connect_failed` event otherwise carries no cause — the native error string
- * can't tell our 8 s watchdog firing apart from a CoreBluetooth
- * `didFailToConnect` or a reconnect-scan discovery timeout.
- */
-export type NativeBleConnectFailureReason = {
-  reason: 'watchdog_timeout' | 'did_fail_to_connect' | 'discovery_timeout';
-  /** CoreBluetooth CBError code — present only for `did_fail_to_connect`. */
-  cbErrorCode?: number;
-  /** CoreBluetooth error domain (e.g. `CBErrorDomain`) — `did_fail_to_connect` only. */
-  cbErrorDomain?: string;
-};
-
 export type NativeBleConfigureBoardOptions = {
   boardName: string;
   layoutId: number;
@@ -177,15 +162,6 @@ type BoardBleNativeModule = {
    * run against an older binary). See #3480.
    */
   getLastConnectDiagnostics?(): Promise<NativeBleConnectDiagnostics | null>;
-  /**
-   * Sub-reason for the most recent failed JS connect, for tagging
-   * `BluetoothConnectionFailed` so the iOS `connect_failed` cohort splits into
-   * watchdog / didFailToConnect / discovery-timeout buckets (a rejected promise
-   * can't carry it). Only present on newer binaries — gate on
-   * `typeof getLastConnectFailureReason === 'function'` (an OTA JS update can run
-   * against an older binary). See #3676.
-   */
-  getLastConnectFailureReason?(): Promise<NativeBleConnectFailureReason | null>;
   addListener(event: 'scanResult', listener: (payload: NativeBleScanEvent) => void): EventSubscription;
   addListener(event: 'disconnected', listener: (payload: NativeBleDisconnectEvent) => void): EventSubscription;
   addListener(event: 'connected', listener: (payload: NativeBleConnectedEvent) => void): EventSubscription;
