@@ -10,6 +10,7 @@ import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
 import {
   HOLDSETUP_TO_LAYOUT,
   buildExistingCatalogMatchIndex,
+  catalogAliasConflictUpdate,
   catalogAliasRows,
   catalogProblemToClimbs,
   isBetterCatalogClimb,
@@ -352,7 +353,7 @@ async function importMoonBoardCatalog() {
             .values(aliasRecords.slice(i, i + BATCH_SIZE))
             .onConflictDoUpdate({
               target: [boardClimbAliases.boardType, boardClimbAliases.aliasUuid],
-              set: { canonicalUuid: sql`excluded.canonical_uuid`, lastSeenAt: sql`now()` },
+              set: catalogAliasConflictUpdate(),
             });
         }
       });

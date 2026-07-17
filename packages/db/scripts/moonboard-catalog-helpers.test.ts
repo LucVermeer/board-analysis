@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { uuidv5, MOONBOARD_UUID_NAMESPACE } from './moonboard-helpers.js';
 import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
+import { sqlText } from '../src/test-utils/sql-text.js';
 import {
   HOLDSETUP_TO_LAYOUT,
   angleFromConfiguration,
   buildExistingCatalogMatchIndex,
+  catalogAliasConflictUpdate,
   roleLetterToHoldState,
   parseMovesString,
   resolveCatalogClimbUuid,
@@ -203,6 +205,31 @@ void test('catalog matching ignores cyclic aliases instead of writing another br
   );
 
   assert.deepEqual(resolveCatalogClimbUuid(mapped, index), { uuid: mapped.uuid, matched: false });
+});
+
+void test('catalog matching ignores a listed alias chain whose terminal climb is delisted', () => {
+  const mapped = mapCatalogConfig(PORRIDGE, PORRIDGE.configurations![1], { layoutId: 3, angle: 40 });
+  const listedUuid = 'moonboard-listed-alias';
+  const delistedUuid = 'moonboard-delisted-terminal';
+  const index = buildExistingCatalogMatchIndex(
+    [
+      { uuid: listedUuid, layoutId: 3, angle: 40, name: mapped.name, isListed: true },
+      { uuid: delistedUuid, layoutId: 3, angle: 40, name: mapped.name, isListed: false },
+    ],
+    new Map([[listedUuid, mapped.holdFingerprint]]),
+    new Map([
+      [listedUuid, delistedUuid],
+      [delistedUuid, delistedUuid],
+    ]),
+  );
+
+  assert.deepEqual(resolveCatalogClimbUuid(mapped, index), { uuid: mapped.uuid, matched: false });
+});
+
+void test('catalog alias conflicts repair the canonical target and refresh last seen', () => {
+  const update = catalogAliasConflictUpdate();
+  assert.equal(sqlText(update.canonicalUuid), 'excluded.canonical_uuid');
+  assert.equal(sqlText(update.lastSeenAt), 'now()');
 });
 
 void test('isImportableProblem rejects deleted / inactive / holdless / config-less problems', () => {

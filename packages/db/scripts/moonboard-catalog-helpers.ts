@@ -7,6 +7,7 @@ import {
 } from './moonboard-helpers.js';
 import { fingerprintFromHolds, methodDescription } from './moonboard-2024-helpers.js';
 import { moonBoardMethodToCharacteristic } from '@boardsesh/shared-schema/characteristics';
+import { sql } from 'drizzle-orm';
 
 // =============================================================================
 // MoonBoard catalog dataset
@@ -122,12 +123,14 @@ export function buildExistingCatalogMatchIndex(
   canonicalByAlias: ReadonlyMap<string, string>,
 ): Map<string, ExistingCatalogClimb[]> {
   const index = new Map<string, ExistingCatalogClimb[]>();
+  // `null` is not affirmative catalog visibility, so it is treated as unlisted.
+  const listedUuids = new Set(climbRows.filter((row) => row.isListed === true).map((row) => row.uuid));
   for (const row of climbRows) {
-    if (!row.isListed) continue;
+    if (row.isListed !== true) continue;
     const fingerprint = fingerprintByUuid.get(row.uuid);
     if (!fingerprint) continue;
     const canonicalUuid = terminalCanonicalUuid(row.uuid, canonicalByAlias);
-    if (!canonicalUuid) continue;
+    if (!canonicalUuid || !listedUuids.has(canonicalUuid)) continue;
     const key = `${row.layoutId}|${row.angle}|${fingerprint}`;
     const candidate = { uuid: canonicalUuid, name: row.name };
     const bucket = index.get(key);
@@ -135,6 +138,11 @@ export function buildExistingCatalogMatchIndex(
     else index.set(key, [candidate]);
   }
   return index;
+}
+
+/** Update fields used when a catalog rerun repairs an existing alias target. */
+export function catalogAliasConflictUpdate() {
+  return { canonicalUuid: sql`excluded.canonical_uuid`, lastSeenAt: sql`now()` };
 }
 
 /** Resolve an incoming catalog climb to an existing merge candidate, if any. */
