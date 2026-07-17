@@ -1,6 +1,55 @@
 {
-  "generatedAt": "2026-07-17T01:13:13.854Z",
+  "generatedAt": "2026-07-17T01:33:29.516Z",
   "entries": [
+    {
+      "prNumber": 3726,
+      "category": "fixed",
+      "title": "Fixed a crash on Android when opening the gym/board map — a build missing the Google Maps configuration now shows the gym list instead of closing the app.",
+      "mergedAt": "2026-07-17T01:32:26Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3726"
+    },
+    {
+      "prNumber": 3731,
+      "category": "fixed",
+      "title": "Send a climb and the board takes an extra second to light up? The bulb keeps waiting instead of flashing a false miss — a slow-but-good confirm now shows as lit.",
+      "mergedAt": "2026-07-17T01:32:23Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3731"
+    },
+    {
+      "prNumber": 3738,
+      "category": "fixed",
+      "title": "Defensive correctness guard for a path users can't currently reach (see decision note above). No user-visible behavior change to describe today. If we later make create track the live session angle, that becomes user-facing and warrants a real note.",
+      "mergedAt": "2026-07-17T01:32:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3738"
+    },
+    {
+      "prNumber": 3728,
+      "category": "fixed",
+      "title": "The climb list holds still while it loads — no more rows jumping around as thumbnails and grades settle in.",
+      "mergedAt": "2026-07-17T01:32:05Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3728"
+    },
+    {
+      "prNumber": 3736,
+      "category": "fixed",
+      "title": "\"Classics Only\" now actually filters your search to curator-flagged benchmark climbs, instead of doing nothing.",
+      "mergedAt": "2026-07-17T01:32:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3736"
+    },
+    {
+      "prNumber": 3737,
+      "category": "fixed",
+      "title": "Tapping \"Turn off all lights\" now tells you when the board dropped mid-clear instead of going quiet.",
+      "mergedAt": "2026-07-17T01:31:57Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3737"
+    },
+    {
+      "prNumber": 3739,
+      "category": "fixed",
+      "title": "Backend log-diagnostic correctness only; no user-facing behavior change.",
+      "mergedAt": "2026-07-17T01:31:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3739"
+    },
     {
       "prNumber": 3727,
       "category": "improved",

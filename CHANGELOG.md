@@ -13,6 +13,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed a crash on Android when opening the gym/board map — a build missing the Google Maps configuration now shows the gym list instead of closing the app. ([#3726](https://github.com/boardsesh/boardsesh/pull/3726))
+- Send a climb and the board takes an extra second to light up? The bulb keeps waiting instead of flashing a false miss — a slow-but-good confirm now shows as lit. ([#3731](https://github.com/boardsesh/boardsesh/pull/3731))
+- Defensive correctness guard for a path users can't currently reach (see decision note above). No user-visible behavior change to describe today. If we later make create track the live session angle, that becomes user-facing and warrants a real note. ([#3738](https://github.com/boardsesh/boardsesh/pull/3738))
+- The climb list holds still while it loads — no more rows jumping around as thumbnails and grades settle in. ([#3728](https://github.com/boardsesh/boardsesh/pull/3728))
+- "Classics Only" now actually filters your search to curator-flagged benchmark climbs, instead of doing nothing. ([#3736](https://github.com/boardsesh/boardsesh/pull/3736))
+- Tapping "Turn off all lights" now tells you when the board dropped mid-clear instead of going quiet. ([#3737](https://github.com/boardsesh/boardsesh/pull/3737))
+- Backend log-diagnostic correctness only; no user-facing behavior change. ([#3739](https://github.com/boardsesh/boardsesh/pull/3739))
 - Gym pages no longer hide their last few rows behind the queue or tab bar — the comments, links, and manage settings all clear the bottom. ([#3721](https://github.com/boardsesh/boardsesh/pull/3721))
 - The homepage gym card no longer flickers between states while it figures out whose gym is whose. ([#3714](https://github.com/boardsesh/boardsesh/pull/3714))
 
