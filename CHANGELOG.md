@@ -10,6 +10,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the Play Store.
 
+### New
+
+- Forms got a full redesign: clear labels that never clip, sensible widths on tablets, grouped sections, and character counters where they help. ([#3703](https://github.com/boardsesh/boardsesh/pull/3703))
+  Logging an ascent now tells you when something goes wrong instead of failing silently.
+
 ### Improved
 
 - The Home feed scrolls smoother — flinging through your crew's sessions drops fewer frames, especially on Android. ([#3727](https://github.com/boardsesh/boardsesh/pull/3727))

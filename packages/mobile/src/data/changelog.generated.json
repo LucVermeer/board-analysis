@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-17T02:30:27.010Z",
+  "generatedAt": "2026-07-17T02:41:15.972Z",
   "entries": [
+    {
+      "prNumber": 3703,
+      "category": "new",
+      "title": "Forms got a full redesign: clear labels that never clip, sensible widths on tablets, grouped sections, and character counters where they help.",
+      "mergedAt": "2026-07-17T02:40:14Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3703",
+      "body": "Logging an ascent now tells you when something goes wrong instead of failing silently."
+    },
     {
       "prNumber": 3733,
       "category": "fixed",
