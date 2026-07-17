@@ -13,7 +13,7 @@ vi.mock('@/app/components/board-renderer/util', () => ({
   getImageUrl: (...args: unknown[]) => getImageUrlMock(...args),
 }));
 
-import { buildPopularLcpImageUrl } from '../popular-lcp-preload';
+import { buildPopularLcpImageUrl, selectHomeLcpHints } from '../popular-lcp-preload';
 
 function makeConfig(overrides: Partial<PopularBoardConfig> = {}): PopularBoardConfig {
   return {
@@ -90,5 +90,59 @@ describe('buildPopularLcpImageUrl', () => {
       throw new Error('Unknown layout');
     });
     expect(buildPopularLcpImageUrl([makeConfig({ layoutId: 99999 })])).toBeNull();
+  });
+});
+
+describe('selectHomeLcpHints', () => {
+  it('preconnects to the backend and does NOT preload the board thumbnail when the beta rail renders', () => {
+    // The first beta thumbnail is the LCP element in this case; preloading the
+    // board thumbnail too would steal high-priority bandwidth from it.
+    const hints = selectHomeLcpHints({
+      recentBetaCount: 5,
+      popularConfigs: [makeConfig()],
+      backendOrigin: 'https://ws.boardsesh.com',
+    });
+
+    expect(hints).toEqual({ preconnectOrigin: 'https://ws.boardsesh.com', boardPreloadUrl: null });
+    // The board-thumbnail lookup must be skipped entirely — no wasted work and,
+    // more importantly, no second high-priority image hint.
+    expect(getBoardDetailsForBoardMock).not.toHaveBeenCalled();
+  });
+
+  it('passes a null backend origin through (no preconnect emitted)', () => {
+    const hints = selectHomeLcpHints({
+      recentBetaCount: 3,
+      popularConfigs: [makeConfig()],
+      backendOrigin: null,
+    });
+
+    expect(hints).toEqual({ preconnectOrigin: null, boardPreloadUrl: null });
+  });
+
+  it('preloads the board thumbnail (no preconnect) when the beta rail is empty', () => {
+    getBoardDetailsForBoardMock.mockReturnValue(stubBoardDetails);
+    getImageUrlMock.mockReturnValue('/images/kilter/thumbs/screen-1.webp');
+
+    const hints = selectHomeLcpHints({
+      recentBetaCount: 0,
+      popularConfigs: [makeConfig()],
+      backendOrigin: 'https://ws.boardsesh.com',
+    });
+
+    // Board thumbnail is now the LCP: preload it, and don't preconnect a host
+    // whose image won't render.
+    expect(hints).toEqual({ preconnectOrigin: null, boardPreloadUrl: '/images/kilter/thumbs/screen-1.webp' });
+    expect(getBoardDetailsForBoardMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('yields no image hint at all when the beta rail is empty and there are no popular configs', () => {
+    const hints = selectHomeLcpHints({
+      recentBetaCount: 0,
+      popularConfigs: [],
+      backendOrigin: 'https://ws.boardsesh.com',
+    });
+
+    expect(hints).toEqual({ preconnectOrigin: null, boardPreloadUrl: null });
+    expect(getBoardDetailsForBoardMock).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 
 describe('mapBetaLinksResponse — thumbnail absolutization', () => {
   const originalEnv = process.env;
+  const originalWindow = global.window;
 
   beforeEach(() => {
     vi.resetModules();
@@ -10,6 +11,7 @@ describe('mapBetaLinksResponse — thumbnail absolutization', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    Object.defineProperty(global, 'window', { configurable: true, value: originalWindow });
   });
 
   function commonRow(thumbnail: string | null) {
@@ -69,16 +71,32 @@ describe('mapBetaLinksResponse — thumbnail absolutization', () => {
   });
 
   it('does not produce double slashes if the backend URL ever ends with a slash', async () => {
-    // getBackendHttpUrl strips trailing slashes today, but absolutize is
+    // getPublicBackendHttpUrl strips trailing slashes today, but absolutize is
     // defensive against a future change to that contract — a doubled slash
     // would 404 against the static handler and silently break thumbnails.
     process.env.NEXT_PUBLIC_WS_URL = 'wss://ws.boardsesh.com/graphql';
     const backendUrl = await import('../backend-url');
-    vi.spyOn(backendUrl, 'getBackendHttpUrl').mockReturnValue('https://ws.boardsesh.com/');
+    vi.spyOn(backendUrl, 'getPublicBackendHttpUrl').mockReturnValue('https://ws.boardsesh.com/');
     const { mapBetaLinksResponse } = await import('../beta-video-url');
 
     const [link] = mapBetaLinksResponse([commonRow('/static/beta-link-thumbnails/instagram/ABC.jpg')]);
 
     expect(link.thumbnail).toBe('https://ws.boardsesh.com/static/beta-link-thumbnails/instagram/ABC.jpg?size=280');
+  });
+
+  it('server-side: resolves the browser-reachable public origin, not the Docker-internal one', async () => {
+    // The home page server-renders beta <img src> above the fold (the LCP
+    // element on mobile). Absolutization must use the PUBLIC origin so the
+    // SSR'd URL is browser-fetchable — otherwise the LCP image can't paint
+    // until hydration re-resolves it. Emulate SSR by removing `window`.
+    Object.defineProperty(global, 'window', { configurable: true, value: undefined });
+    process.env.BACKEND_INTERNAL_URL = 'ws://backend:8080/graphql';
+    process.env.NEXT_PUBLIC_WS_URL = 'wss://ws.boardsesh.com/graphql';
+    const { mapBetaLinksResponse } = await import('../beta-video-url');
+
+    const [link] = mapBetaLinksResponse([commonRow('/static/beta-link-thumbnails/instagram/ABC.jpg')]);
+
+    expect(link.thumbnail).toBe('https://ws.boardsesh.com/static/beta-link-thumbnails/instagram/ABC.jpg?size=280');
+    expect(link.thumbnail).not.toContain('backend:8080');
   });
 });

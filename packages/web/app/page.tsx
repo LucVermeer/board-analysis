@@ -6,7 +6,8 @@ import I18nProvider from '@/app/components/providers/i18n-provider';
 import { getAllBoardConfigs } from './lib/server-board-configs';
 import { getPopularBoardConfigs } from './lib/server-popular-configs';
 import { getRecentBetaLinks } from './lib/server-recent-beta-links';
-import { buildPopularLcpImageUrl } from './lib/popular-lcp-preload';
+import { selectHomeLcpHints } from './lib/popular-lcp-preload';
+import { getPublicBackendHttpUrl } from './lib/backend-url';
 import HomePageContent from './home-page-content';
 
 export async function generateMetadata() {
@@ -27,11 +28,24 @@ export default async function Home() {
     getRecentBetaLinks(),
     getLocale(),
   ]);
-  const lcpPreloadUrl = buildPopularLcpImageUrl(popularConfigs);
+  // Point the single high-priority image hint at whatever the browser will
+  // actually paint as the LCP element: the first (cross-origin) beta thumbnail
+  // when the recent-beta rail renders, otherwise the first board thumbnail.
+  // `getPublicBackendHttpUrl()` resolves to a browser-reachable origin on the
+  // server (unlike `getBackendHttpUrl`, which can return a Docker-internal one).
+  const { preconnectOrigin, boardPreloadUrl } = selectHomeLcpHints({
+    recentBetaCount: recentBeta.length,
+    popularConfigs,
+    backendOrigin: getPublicBackendHttpUrl(),
+  });
 
   return (
     <I18nProvider locale={locale} namespaces={['marketing', 'boards', 'climbs', 'profile', 'feed']}>
-      {lcpPreloadUrl && <link rel="preload" as="image" href={lcpPreloadUrl} fetchPriority="high" />}
+      {/* Warm the cross-origin backend host that serves the beta-rail LCP image.
+          No crossOrigin: the beta <img> is a credentialed no-cors request, so a
+          plain preconnect opens the connection it can reuse. */}
+      {preconnectOrigin && <link rel="preconnect" href={preconnectOrigin} />}
+      {boardPreloadUrl && <link rel="preload" as="image" href={boardPreloadUrl} fetchPriority="high" />}
       <HomePageContent
         boardConfigs={boardConfigs}
         initialPopularConfigs={popularConfigs}
