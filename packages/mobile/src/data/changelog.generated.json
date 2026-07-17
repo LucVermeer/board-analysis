@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-17T02:41:15.972Z",
+  "generatedAt": "2026-07-17T03:35:55.536Z",
   "entries": [
+    {
+      "prNumber": 3734,
+      "category": "new",
+      "title": "Signing in is smoother: your password manager can finally autofill Boardsesh, and login errors show up right in the form instead of a vanishing popup.",
+      "mergedAt": "2026-07-17T03:34:24Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3734"
+    },
+    {
+      "prNumber": 3735,
+      "category": "fixed",
+      "title": "If you use light mode, the app no longer flashes dark while it loads.",
+      "mergedAt": "2026-07-17T02:42:10Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3735",
+      "body": "New here? The app now matches your device's light/dark setting from the first screen."
+    },
     {
       "prNumber": 3703,
       "category": "new",

@@ -12,6 +12,7 @@ A new version shipped to the Play Store.
 
 ### New
 
+- Signing in is smoother: your password manager can finally autofill Boardsesh, and login errors show up right in the form instead of a vanishing popup. ([#3734](https://github.com/boardsesh/boardsesh/pull/3734))
 - Forms got a full redesign: clear labels that never clip, sensible widths on tablets, grouped sections, and character counters where they help. ([#3703](https://github.com/boardsesh/boardsesh/pull/3703))
   Logging an ascent now tells you when something goes wrong instead of failing silently.
 
@@ -22,6 +23,8 @@ A new version shipped to the Play Store.
 
 ### Fixed
 
+- If you use light mode, the app no longer flashes dark while it loads. ([#3735](https://github.com/boardsesh/boardsesh/pull/3735))
+  New here? The app now matches your device's light/dark setting from the first screen.
 - Internal telemetry hygiene. The one behavior change with user impact (a queued offline tick surviving a mid-drain timeout instead of being dead-lettered) sits behind the `offline-board-downloads` flag at 0% rollout, so nothing visible ships. ([#3733](https://github.com/boardsesh/boardsesh/pull/3733))
 - Beta videos and similar climbs now swipe sideways in the climb drawer on Android — flick through the whole strip, not just the first couple. ([#3746](https://github.com/boardsesh/boardsesh/pull/3746))
 - Queue climbs your crew adds now fill in their name, grade, and thumbnail on your phone instead of getting stuck on "Unknown Climb" — even when the climb wasn't already cached on your device. ([#3742](https://github.com/boardsesh/boardsesh/pull/3742))
