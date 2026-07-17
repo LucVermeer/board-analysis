@@ -279,9 +279,7 @@ function QueueItemRowComponent({
     [isDraggable, drag],
   );
 
-  // `||` (not `??`) so a partially-synced item with an empty-string name also
-  // falls back to the placeholder label instead of an empty accessibility string.
-  const climbName = item.climb?.name || t('mobile.queue.unknownClimb');
+  const climbName = item.climb?.name ?? t('mobile.queue.unknownClimb');
 
   const showTick = isHistoryItem && !isEditMode && !!onTickHistory;
   const showDragHandle = !!dragHandleGesture && !isEditMode;
