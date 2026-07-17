@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-17T02:17:08.878Z",
+  "generatedAt": "2026-07-17T02:30:27.010Z",
   "entries": [
+    {
+      "prNumber": 3733,
+      "category": "fixed",
+      "title": "Internal telemetry hygiene. The one behavior change with user impact (a queued offline tick surviving a mid-drain timeout instead of being dead-lettered) sits behind the `offline-board-downloads` flag at 0% rollout, so nothing visible ships.",
+      "mergedAt": "2026-07-17T02:29:31Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3733"
+    },
     {
       "prNumber": 3746,
       "category": "fixed",
@@ -1685,6 +1692,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-17T11:38:50+10:00",
+      "sha": "1b7e274149077f288d269a6519ee6e4b3cb4c124",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "9c009489dfebc5111682f1e2ccf0f3c1edf49981"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-17T11:12:07+10:00",

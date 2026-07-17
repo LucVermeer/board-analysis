@@ -17,6 +17,7 @@ A new version shipped to the Play Store.
 
 ### Fixed
 
+- Internal telemetry hygiene. The one behavior change with user impact (a queued offline tick surviving a mid-drain timeout instead of being dead-lettered) sits behind the `offline-board-downloads` flag at 0% rollout, so nothing visible ships. ([#3733](https://github.com/boardsesh/boardsesh/pull/3733))
 - Beta videos and similar climbs now swipe sideways in the climb drawer on Android — flick through the whole strip, not just the first couple. ([#3746](https://github.com/boardsesh/boardsesh/pull/3746))
 - Queue climbs your crew adds now fill in their name, grade, and thumbnail on your phone instead of getting stuck on "Unknown Climb" — even when the climb wasn't already cached on your device. ([#3742](https://github.com/boardsesh/boardsesh/pull/3742))
 - Change your board angle mid-session and the queue keeps up: the climb you're on and everything coming up show grades, stars, and sends for the angle the wall is actually set to. ([#3741](https://github.com/boardsesh/boardsesh/pull/3741))
