@@ -23,6 +23,7 @@ A new version shipped to the Play Store.
 
 ### Fixed
 
+- Your MoonBoard 2024 logbook now imports — sends on the 2024 board match up instead of getting dropped as unknown problems. ([#3749](https://github.com/boardsesh/boardsesh/pull/3749))
 - If you use light mode, the app no longer flashes dark while it loads. ([#3735](https://github.com/boardsesh/boardsesh/pull/3735))
   New here? The app now matches your device's light/dark setting from the first screen.
 - Internal telemetry hygiene. The one behavior change with user impact (a queued offline tick surviving a mid-drain timeout instead of being dead-lettered) sits behind the `offline-board-downloads` flag at 0% rollout, so nothing visible ships. ([#3733](https://github.com/boardsesh/boardsesh/pull/3733))

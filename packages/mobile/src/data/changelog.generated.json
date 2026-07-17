@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-17T03:35:55.536Z",
+  "generatedAt": "2026-07-17T05:45:38.250Z",
   "entries": [
+    {
+      "prNumber": 3749,
+      "category": "fixed",
+      "title": "Your MoonBoard 2024 logbook now imports — sends on the 2024 board match up instead of getting dropped as unknown problems.",
+      "mergedAt": "2026-07-17T05:05:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3749"
+    },
     {
       "prNumber": 3734,
       "category": "new",
