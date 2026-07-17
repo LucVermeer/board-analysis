@@ -401,6 +401,7 @@
       "logAscent": "Log ascent",
       "alreadyLogged": "Logged",
       "dragHandleAria": "Drag to reorder {{name}}",
+      "sentAtAngle": "Sent at {{angle}}°",
       "endSessionCommentPlaceholder": "Add a recap — how did it go?",
       "endSessionCommentAria": "Session recap",
       "endSessionCancel": "Keep climbing"

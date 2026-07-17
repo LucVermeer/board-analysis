@@ -635,4 +635,110 @@ describe('REGRADE_CLIMBS', () => {
 
     expect(result).toBe(state);
   });
+
+  it('re-grades the current climb and upcoming items but NOT history', () => {
+    // Queue laid out as [history, current, upcoming] with the current item
+    // sitting inside the queue (real usage — SET_CURRENT_CLIMB inserts it).
+    const history = makeClimbQueueItem({ uuid: 'h1', climb: { uuid: 'climb-h', angle: 40, difficulty: '7a/V6' } });
+    const current = makeClimbQueueItem({ uuid: 'c1', climb: { uuid: 'climb-c', angle: 40, difficulty: '6b/V4' } });
+    const upcoming = makeClimbQueueItem({ uuid: 'u1', climb: { uuid: 'climb-u', angle: 40, difficulty: '6a/V3' } });
+    const state = makeState({ queue: [history, current, upcoming], currentClimbQueueItem: current });
+
+    const gradeAt25 = (difficulty: string) => ({
+      angle: 25,
+      difficulty,
+      quality_average: '3.0',
+      ascensionist_count: 5,
+      benchmark_difficulty: null,
+    });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-h': gradeAt25('5+/V1'),
+          'climb-c': gradeAt25('6a/V3'),
+          'climb-u': gradeAt25('5c/V2'),
+        },
+      },
+    });
+
+    // History keeps the angle it was CLIMBED at — same reference, untouched.
+    expect(result.queue[0]).toBe(history);
+    expect(result.queue[0].climb.angle).toBe(40);
+    expect(result.queue[0].climb.difficulty).toBe('7a/V6');
+
+    // Current + upcoming follow the live angle.
+    expect(result.queue[1].climb.angle).toBe(25);
+    expect(result.queue[1].climb.difficulty).toBe('6a/V3');
+    expect(result.currentClimbQueueItem?.climb.angle).toBe(25);
+    expect(result.queue[2].climb.angle).toBe(25);
+    expect(result.queue[2].climb.difficulty).toBe('5c/V2');
+  });
+
+  it('does not re-grade a history occurrence that shares a climb uuid with an upcoming item', () => {
+    // The SAME climb sits in history (climbed at 40°) and upcoming (re-added).
+    // The grade is keyed by climb.uuid, but only the upcoming occurrence must
+    // follow the new angle; the history occurrence pins its climbed-at angle.
+    const historyDup = makeClimbQueueItem({ uuid: 'h1', climb: { uuid: 'dup', angle: 40, difficulty: '7a/V6' } });
+    const current = makeClimbQueueItem({ uuid: 'c1', climb: { uuid: 'climb-c', angle: 40, difficulty: '6b/V4' } });
+    const upcomingDup = makeClimbQueueItem({ uuid: 'u1', climb: { uuid: 'dup', angle: 40, difficulty: '7a/V6' } });
+    const state = makeState({ queue: [historyDup, current, upcomingDup], currentClimbQueueItem: current });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          dup: {
+            angle: 25,
+            difficulty: '5+/V1',
+            quality_average: '3.0',
+            ascensionist_count: 5,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
+    // History occurrence: pinned (same reference, original grade).
+    expect(result.queue[0]).toBe(historyDup);
+    expect(result.queue[0].climb.difficulty).toBe('7a/V6');
+    expect(result.queue[0].climb.angle).toBe(40);
+    // Upcoming occurrence: re-graded to the live angle.
+    expect(result.queue[2].climb.difficulty).toBe('5+/V1');
+    expect(result.queue[2].climb.angle).toBe(25);
+  });
+
+  it('re-grades the whole queue when there is no current item', () => {
+    // No current climb → the entire queue is "upcoming" (buildQueueListModel),
+    // so every item follows the live angle.
+    const first = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'climb-a', angle: 40, difficulty: '6a/V3' } });
+    const second = makeClimbQueueItem({ uuid: 'q2', climb: { uuid: 'climb-b', angle: 40, difficulty: '6b/V4' } });
+    const state = makeState({ queue: [first, second], currentClimbQueueItem: null });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 25,
+            difficulty: '5+/V1',
+            quality_average: '3.0',
+            ascensionist_count: 5,
+            benchmark_difficulty: null,
+          },
+          'climb-b': {
+            angle: 25,
+            difficulty: '5c/V2',
+            quality_average: '3.0',
+            ascensionist_count: 5,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
+    expect(result.queue[0].climb.angle).toBe(25);
+    expect(result.queue[1].climb.angle).toBe(25);
+  });
 });

@@ -374,12 +374,20 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
     }
 
     case 'REGRADE_CLIMBS': {
-      // Patch the per-angle grade fields onto climbs already in the queue /
-      // current item when the board angle changes. Keyed by climb.uuid (the
-      // SAME climb can appear multiple times — e.g. re-added after a tick — so
-      // every occurrence is patched). Local-only: the caller re-fetches each
+      // Patch the per-angle grade fields onto the CURRENT + UPCOMING climbs when
+      // the board angle changes. Keyed by climb.uuid (the SAME climb can appear
+      // multiple times — e.g. re-added after a tick — so every occurrence in the
+      // regraded range is patched). Local-only: the caller re-fetches each
       // climb's grade for the new angle and dispatches this; nothing is sent to
       // peers (each client follows the angle and re-grades its own queue).
+      //
+      // History items (everything before the current climb — the same split
+      // buildQueueListModel uses) are deliberately NOT re-graded: they keep the
+      // grade for the angle they were CLIMBED at. A V6 send at 40° must not turn
+      // into a V8 when the rest of the session moves to 35°. Because current +
+      // upcoming continuously track the live angle, a climb's angle is already
+      // the live angle at the moment it advances into history, so freezing it
+      // there pins the climbed-at angle for free — no separate `sentAtAngle`.
       const { grades } = action.payload;
       let changed = false;
       const regrade = (item: ClimbQueueItem): ClimbQueueItem => {
@@ -391,7 +399,16 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
         return { ...item, climb: { ...item.climb, ...patch } };
       };
 
-      const newQueue = state.queue.map(regrade);
+      // Index of the current climb in the flat queue. When there's no current
+      // item (-1) the whole queue is "upcoming" per buildQueueListModel, so the
+      // `index < currentIndex` guard is never true and everything is re-graded.
+      const currentIndex = state.currentClimbQueueItem
+        ? state.queue.findIndex(({ uuid }) => uuid === state.currentClimbQueueItem?.uuid)
+        : -1;
+
+      // History items (index < currentIndex) are returned by reference, so the
+      // reference-equality / no-churn guarantees hold for them too.
+      const newQueue = state.queue.map((item, index) => (index < currentIndex ? item : regrade(item)));
       const newCurrent = state.currentClimbQueueItem ? regrade(state.currentClimbQueueItem) : null;
 
       // Preserve the original state reference when nothing matched, so the

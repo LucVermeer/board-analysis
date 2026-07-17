@@ -401,6 +401,7 @@
       "logAscent": "Enregistrer l'ascension",
       "alreadyLogged": "Enregistré",
       "dragHandleAria": "Glisser pour réorganiser {{name}}",
+      "sentAtAngle": "Enchaîné à {{angle}}°",
       "endSessionCommentPlaceholder": "Ajoute un récap — ça a donné quoi ?",
       "endSessionCommentAria": "Récap de la session",
       "endSessionCancel": "Continue à grimper"
