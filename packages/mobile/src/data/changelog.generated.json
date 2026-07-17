@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-17T10:26:00.075Z",
+  "generatedAt": "2026-07-17T11:39:04.842Z",
   "entries": [
+    {
+      "prNumber": 3759,
+      "category": "new",
+      "title": "Stuck on the error screen? A new \"Check for a fix\" button grabs the latest update and reloads the app on the spot",
+      "mergedAt": "2026-07-17T11:37:59Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3759"
+    },
     {
       "prNumber": 3753,
       "category": "new",
