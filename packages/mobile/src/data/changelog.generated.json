@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-17T05:45:38.250Z",
+  "generatedAt": "2026-07-17T10:05:48.521Z",
   "entries": [
+    {
+      "prNumber": 3751,
+      "category": "fixed",
+      "title": "Your MoonBoard 2024 logbook imports now stay attached to the listed climb, even when older duplicate rows exist.",
+      "mergedAt": "2026-07-17T07:24:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3751"
+    },
     {
       "prNumber": 3749,
       "category": "fixed",
