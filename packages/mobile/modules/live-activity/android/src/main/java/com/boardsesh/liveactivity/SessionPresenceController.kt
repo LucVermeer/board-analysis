@@ -32,29 +32,13 @@ internal class SessionForegroundServiceStartException(cause: Throwable) :
  * SessionPresenceModule is the thin adapter that constructs this from appContext
  * and routes the async-function calls here.
  *
- * Two delivery seams, both injectable so a test can drive the
- * ForegroundServiceStartNotAllowedException / BackgroundServiceStartNotAllowedException
- * paths without a live service:
- *  - `startForegroundService` — the initial START promotion and the ACTION_STOP
- *    teardown. These genuinely (re)arm the service's foreground state.
- *  - `startService` — every subsequent UPDATE. The service is already promoted by
- *    startSession(), so a plain startService delivers the new state WITHOUT arming
- *    a fresh startForeground() deadline. Each startForegroundService() call sets
- *    fgRequired/fgWaiting on the ServiceRecord and schedules the foreground-start
- *    timeout — even when the service is already foreground — so routing the
- *    high-frequency update path through startForegroundService made every
- *    climb/queue change race a congested or backgrounding main thread and could
- *    trip ForegroundServiceDidNotStartInTimeException (#3188). startService never
- *    schedules that timeout, so it can't. A running FGS keeps the process
- *    foreground-exempt, so startService is also allowed from the background.
+ * `startForegroundService` is injectable so a test can drive the
+ * ForegroundServiceStartNotAllowedException path without a live service.
  */
 internal class SessionPresenceController(
     private val context: Context,
     private val startForegroundService: (Context, Intent) -> Unit = { ctx, intent ->
         ContextCompat.startForegroundService(ctx, intent)
-    },
-    private val startService: (Context, Intent) -> Unit = { ctx, intent ->
-        ctx.startService(intent)
     },
 ) {
     // Whether a session is logically active (startSession called, endSession not
@@ -91,15 +75,14 @@ internal class SessionPresenceController(
             options?.holderDisplayName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
         }
         // Startup path: a failed initial promotion means the service never
-        // started, so clear sessionActive to stop futile update retries and
-        // reject startSession so JS resets its active ref and can retry later.
-        launchForegroundService(intent)
+        // started, so clear sessionActive to stop futile update retries.
+        launchService(intent, clearSessionOnFailure = true)
     }
 
     fun updateActivity(options: SessionUpdateOptions) {
-        // Only update inside an active session window. startSession() owns the
-        // foreground promotion; a stray update on a never-started service would
-        // deliver to nothing.
+        // Only update inside an active session window. startSession() owns
+        // promotion; a stray update would issue startForegroundService() just to
+        // refresh, risking ForegroundServiceDidNotStartInTimeException.
         if (!sessionActive) return
         val subtitle = buildString {
             append(options.climbDifficulty)
@@ -128,20 +111,12 @@ internal class SessionPresenceController(
                 )
             }
         }
-        // Update path: the service is already promoted, so deliver via
-        // startService — NOT startForegroundService, which would re-arm a
-        // startForeground() deadline on every climb/queue change (see the class
-        // doc). A failed re-delivery (BackgroundServiceStartNotAllowedException —
-        // service already gone and the process no longer foreground-exempt) is
-        // non-fatal: keep sessionActive so the next update, once foregrounded,
+        // Update path: the service is already running. A failed re-delivery while
+        // the app briefly backgrounds (ForegroundServiceStartNotAllowedException)
+        // is non-fatal — keep sessionActive so the next update, once foregrounded,
         // refreshes the notification. Clearing it here would permanently freeze
         // the notification mid-session.
-        try {
-            startService(context, intent)
-        } catch (error: Exception) {
-            val errorName = error.javaClass.simpleName.ifBlank { error.javaClass.name }
-            Log.w(TAG, "updateActivity startService failed ($errorName): ${error.message}")
-        }
+        launchService(intent, clearSessionOnFailure = false)
     }
 
     fun endSession() {
@@ -175,18 +150,20 @@ internal class SessionPresenceController(
         }
     }
 
-    // The initial START promotion. startForegroundService() throws
-    // ForegroundServiceStartNotAllowedException on API 31+ when the app is
-    // backgrounded; a failure here is terminal (the service never started), so
-    // clear the flag and reject startSession so JS resets its active ref.
-    private fun launchForegroundService(intent: Intent) {
+    // startForegroundService() throws ForegroundServiceStartNotAllowedException on
+    // API 31+ when the app is backgrounded. clearSessionOnFailure distinguishes the
+    // startup path (failure is terminal — clear the flag) from the update path
+    // (failure is transient — the service is already running, keep the flag).
+    private fun launchService(intent: Intent, clearSessionOnFailure: Boolean) {
         try {
             startForegroundService(context, intent)
         } catch (error: Exception) {
             val errorName = error.javaClass.simpleName.ifBlank { error.javaClass.name }
             Log.w(TAG, "startForegroundService failed ($errorName): ${error.message}", error)
-            sessionActive = false
-            throw SessionForegroundServiceStartException(error)
+            if (clearSessionOnFailure) {
+                sessionActive = false
+                throw SessionForegroundServiceStartException(error)
+            }
         }
     }
 

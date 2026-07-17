@@ -99,18 +99,6 @@ export type BleConnectDiagnostics = {
   discoveredServices: string[];
 };
 
-// Sub-reason a connect failed (#3676), for splitting the iOS `connect_failed`
-// cohort. Populated only by native iOS; a rejected connect promise can't carry
-// it, so the adapter stashes it and the hook reads it right after the failure.
-export type BleConnectFailureReason = {
-  // watchdog_timeout: our 8 s connect watchdog fired. did_fail_to_connect: a
-  // CoreBluetooth didFailToConnect (cbErrorCode/cbErrorDomain carry the CBError).
-  // discovery_timeout: the reconnect-by-last-known scan never saw the board.
-  reason: 'watchdog_timeout' | 'did_fail_to_connect' | 'discovery_timeout';
-  cbErrorCode?: number;
-  cbErrorDomain?: string;
-};
-
 export type BluetoothAdapter = {
   isAvailable(): Promise<boolean>;
   requestAndConnect(targetSerial?: string): Promise<BleConnection>;
@@ -124,7 +112,4 @@ export type BluetoothAdapter = {
   // Diagnostics of the adapter's most recent failed connect, for tagging a
   // service_missing report. Optional: only native iOS reports it.
   getLastConnectDiagnostics?(): Promise<BleConnectDiagnostics | null>;
-  // Sub-reason of the adapter's most recent failed connect, for splitting the
-  // connect_failed cohort on BluetoothConnectionFailed. Optional: only native iOS.
-  getLastConnectFailureReason?(): Promise<BleConnectFailureReason | null>;
 };
