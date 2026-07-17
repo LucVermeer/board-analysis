@@ -1,23 +1,22 @@
-// oxlint-disable-next-line no-restricted-imports -- raw postgres-js sql usage; migrate to drizzle
-import { rowsFromResult, sql } from '@/app/lib/db/db';
 import { NextResponse } from 'next/server';
+import { isAuroraBoardName, AURORA_BOARD_NAMES } from '@/app/lib/board-constants';
+import { ANGLES } from '@/app/lib/board-data';
 
 export async function GET(req: Request, props: { params: Promise<{ board_name: string; layout_id: string }> }) {
   const params = await props.params;
-  const { /*board_name,*/ layout_id } = params;
+  const { board_name } = params;
 
-  try {
-    const angles = rowsFromResult<{ angle: number }>(
-      await sql`
-      SELECT angle
-      FROM kilter_products_angles
-      JOIN layouts ON layouts.product_id = products_angles.product_id
-      WHERE layouts.id = ${layout_id}
-      ORDER BY angle ASC
-    `,
+  if (!isAuroraBoardName(board_name)) {
+    return NextResponse.json(
+      { error: `Invalid board name: ${board_name}. Expected one of: ${AURORA_BOARD_NAMES.join(', ')}` },
+      { status: 400 },
     );
-    return NextResponse.json(angles);
-  } catch {
-    return NextResponse.json({ error: 'Failed to fetch angles' }, { status: 500 });
   }
+
+  // Aurora doesn't sync a per-layout angle table (deliberately excluded —
+  // see packages/aurora-sync/src/sync/shared-sync.ts). Every layout for a
+  // given board type supports the same fixed angle range, hardcoded in
+  // ANGLES. Mirrors packages/backend/src/graphql/resolvers/board/queries.ts.
+  const angles = ANGLES[board_name].map((angle) => ({ angle }));
+  return NextResponse.json(angles);
 }
