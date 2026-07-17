@@ -31,6 +31,7 @@ import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
+import { buildVoteSummaryMap, voteSummaryKey, type VoteSummary } from '../../../src/lib/feed/vote-summary-map';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
 import { openValidatedUrl } from '../../../src/lib/open-external-link';
 import { hapticLight } from '../../../src/lib/haptics';
@@ -50,10 +51,9 @@ type CommentTarget = {
   entityType: SocialEntityType;
 };
 
-type VoteSummary = {
-  upvotes: number;
-  userVote: number | null;
-};
+// Hoisted so the FlashList `keyExtractor` prop keeps a stable identity across
+// renders (perf playbook rule 3) instead of a fresh inline arrow each pass.
+const keyExtractor = (item: SessionFeedItem) => item.sessionId;
 
 function detectPlatform(url: string): { name: 'instagram' | 'tiktok'; icon: IconName } | null {
   if (isInstagramUrl(url)) return { name: 'instagram', icon: 'instagram' };
@@ -134,16 +134,34 @@ export default function HomeTab() {
     isAuthenticated && sessionEntityIds.length > 0,
   );
   const tickVoteSummaries = useBulkVoteSummaries('tick', tickEntityIds, isAuthenticated && tickEntityIds.length > 0);
-  const summaryMap = useMemo(() => {
-    const map = new Map<string, VoteSummary>();
-    for (const summary of sessionVoteSummaries.data ?? []) {
-      map.set(`session:${summary.entityId}`, { upvotes: summary.upvotes, userVote: summary.userVote });
-    }
-    for (const summary of tickVoteSummaries.data ?? []) {
-      map.set(`tick:${summary.entityId}`, { upvotes: summary.upvotes, userVote: summary.userVote });
-    }
-    return map;
-  }, [sessionVoteSummaries.data, tickVoteSummaries.data]);
+  // Rebuild the vote map on each summary change, but reuse the prior value object
+  // for any unchanged entity (see buildVoteSummaryMap). The `Map` reference still
+  // changes each rebuild — that's what drives FlashList `extraData` — while the
+  // stable inner objects let each `React.memo`'d card bail unless its vote moved.
+  // `summaryMapRef` holds the last committed map so the rebuild can diff against
+  // it; `renderItem` also reads it so it never has to depend on `summaryMap`.
+  const summaryMapRef = useRef<Map<string, VoteSummary>>(new Map());
+  const summaryMap = useMemo(
+    () =>
+      buildVoteSummaryMap(summaryMapRef.current, [
+        ...(sessionVoteSummaries.data ?? []).map((summary) => ({
+          entityType: 'session' as const,
+          entityId: summary.entityId,
+          upvotes: summary.upvotes,
+          userVote: summary.userVote,
+        })),
+        ...(tickVoteSummaries.data ?? []).map((summary) => ({
+          entityType: 'tick' as const,
+          entityId: summary.entityId,
+          upvotes: summary.upvotes,
+          userVote: summary.userVote,
+        })),
+      ]),
+    [sessionVoteSummaries.data, tickVoteSummaries.data],
+  );
+  // Point the ref at the freshly-built map before `renderItem` reads it below, so
+  // the stable `renderItem` always closes over the current vote data.
+  summaryMapRef.current = summaryMap;
 
   const handleOpenComments = useCallback((entityId: string, entityType: SocialEntityType) => {
     setCommentTarget({ entityId, entityType });
@@ -201,17 +219,21 @@ export default function HomeTab() {
     setMode('gym');
   }, []);
 
+  // Read the map through `summaryMapRef` (not `summaryMap`) so this stays
+  // referentially stable across vote/page updates — `extraData={summaryMap}` is
+  // the single signal that re-invokes it. A churning `renderItem` would force
+  // FlashList to re-render regardless of `extraData` (perf playbook rule 3).
   const renderItem = useCallback(
     ({ item }: { item: SessionFeedItem }) => (
       <SessionFeedCard
         session={item}
-        voteSummary={summaryMap.get(`${item.socialEntityType}:${item.socialEntityId}`)}
+        voteSummary={summaryMapRef.current.get(voteSummaryKey(item.socialEntityType, item.socialEntityId))}
         onOpenComments={handleOpenComments}
         onPress={handleSessionPress}
         onOpenClimb={handleOpenClimb}
       />
     ),
-    [handleOpenComments, handleSessionPress, handleOpenClimb, summaryMap],
+    [handleOpenComments, handleSessionPress, handleOpenClimb],
   );
 
   // The scope menu: "My crew" (default), the home gym/board, any other owned
@@ -353,7 +375,7 @@ export default function HomeTab() {
         data={sessions}
         extraData={summaryMap}
         renderItem={renderItem}
-        keyExtractor={(item) => item.sessionId}
+        keyExtractor={keyExtractor}
         // The floating glass header owns the top inset on every platform (the
         // iOS-only `automatic` behaviour left an Android gap), so pad manually.
         contentInsetAdjustmentBehavior="never"
