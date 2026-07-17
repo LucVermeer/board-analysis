@@ -17,11 +17,11 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
+import LocaleLink from '@/app/components/i18n/locale-link';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { EMAIL_REGEX } from '@/app/components/auth/validate-fields';
 import { themeTokens } from '@/app/theme/theme-config';
 import { FormShell, FormField, FormActions } from '@/app/components/form';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const KNOWN_VERIFY_ERROR_CODES = new Set(['EmailNotVerified', 'InvalidToken', 'TokenExpired', 'TooManyAttempts']);
 
@@ -174,7 +174,7 @@ export default function VerifyRequestContent() {
                 <FormActions submitLabel={t('verifyRequest.resend')} submitting={resendLoading} layout="stacked" />
               </FormShell>
 
-              <Button variant="text" href="/auth/login">
+              <Button component={LocaleLink} variant="text" href="/auth/login">
                 {t('verifyRequest.back')}
               </Button>
             </Stack>

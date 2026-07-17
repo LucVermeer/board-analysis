@@ -130,7 +130,10 @@ export default function AuthPageContent() {
         router.push(callbackUrl);
       }
     } catch (error) {
+      // A thrown signIn (network down, server unreachable) must not leave the
+      // form frozen with no feedback — surface it like the auth-error path.
       console.error('Login error:', error);
+      setLoginServerError(t('login.toasts.authFailed'));
     } finally {
       setLoginLoading(false);
     }

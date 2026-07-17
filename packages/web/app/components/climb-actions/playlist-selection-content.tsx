@@ -217,7 +217,11 @@ export default function PlaylistSelectionContent({
                         role="button"
                         tabIndex={0}
                         aria-pressed={isInPlaylist}
-                        aria-label={`${isInPlaylist ? 'Remove from' : 'Add to'} playlist ${playlist.name}`}
+                        aria-label={
+                          isInPlaylist
+                            ? t('actions.playlist.row.removeAria', { name: playlist.name })
+                            : t('actions.playlist.row.addAria', { name: playlist.name })
+                        }
                         sx={{
                           padding: `${themeTokens.spacing[2]}px ${themeTokens.spacing[2]}px`,
                           cursor: 'pointer',
@@ -241,7 +245,7 @@ export default function PlaylistSelectionContent({
                               color="text.secondary"
                               sx={{ fontSize: themeTokens.typography.fontSize.sm }}
                             >
-                              {playlist.climbCount} {playlist.climbCount === 1 ? 'climb' : 'climbs'}
+                              {t('actions.playlist.row.climbCount', { count: playlist.climbCount })}
                             </MuiTypography>
                           </Stack>
                           {isInPlaylist && <CheckOutlined sx={{ color: 'var(--color-success)', fontSize: 18 }} />}
