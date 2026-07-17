@@ -38,11 +38,13 @@ const drainMutationQueueCore = vi.fn(async (..._args: unknown[]) => {});
 const startSyncSchedulerCore = vi.fn((..._args: unknown[]) => vi.fn());
 const triggerSyncCore = vi.fn();
 const pullSyncCore = vi.fn(async (..._args: unknown[]) => {});
+const setBackgroundedCore = vi.fn();
 vi.mock('@boardsesh/offline-sync', () => ({
   drainMutationQueue: (...args: unknown[]) => drainMutationQueueCore(...args),
   startSyncScheduler: (...args: unknown[]) => startSyncSchedulerCore(...args),
   triggerSync: (...args: unknown[]) => triggerSyncCore(...args),
   pullSync: (...args: unknown[]) => pullSyncCore(...args),
+  setBackgrounded: (...args: unknown[]) => setBackgroundedCore(...args),
 }));
 
 const reportHandledError = vi.fn();
@@ -54,7 +56,7 @@ const trackMock = vi.fn();
 vi.mock('../../lib/analytics', () => ({ track: (...args: unknown[]) => trackMock(...args) }));
 
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { drainMutationQueue, startSyncScheduler, triggerSync, pullSync } from '../offline-sync-adapter';
+import { drainMutationQueue, startSyncScheduler, triggerSync, pullSync, startBackgroundTracking } from '../offline-sync-adapter';
 import type {
   OfflineDatabase,
   DrainOptions,
@@ -95,6 +97,26 @@ describe('drainMutationQueue binding', () => {
     expect(customProbe).toHaveBeenCalled();
     expect(onlineManagerIsOnline).not.toHaveBeenCalled();
     expect(options.maxCycleAttempts).toBe(2);
+  });
+});
+
+describe('startBackgroundTracking', () => {
+  it('flips the engine guard on background/active transitions, ignoring the transient inactive state', () => {
+    const unsubscribe = startBackgroundTracking();
+
+    appStateListener?.('background');
+    expect(setBackgroundedCore).toHaveBeenCalledTimes(1);
+    expect(setBackgroundedCore).toHaveBeenLastCalledWith(true);
+
+    appStateListener?.('inactive');
+    expect(setBackgroundedCore).toHaveBeenCalledTimes(1);
+
+    appStateListener?.('active');
+    expect(setBackgroundedCore).toHaveBeenCalledTimes(2);
+    expect(setBackgroundedCore).toHaveBeenLastCalledWith(false);
+
+    unsubscribe();
+    expect(appStateRemove).toHaveBeenCalledTimes(1);
   });
 });
 
