@@ -12,15 +12,16 @@ A new version shipped to the Play Store.
 
 ### New
 
+- Admin-only internal tooling — not climber-facing. ([#3724](https://github.com/boardsesh/boardsesh/pull/3724))
 - Stuck on the error screen? A new "Check for a fix" button grabs the latest update and reloads the app on the spot ([#3759](https://github.com/boardsesh/boardsesh/pull/3759))
-- Filter for your projects — show only the climbs you've tried but haven't sent yet ([#3753](https://github.com/boardsesh/boardsesh/pull/3753))
-  Cleaner filters: pick where you're at on a climb (not tried, projects, sent) in one tap, with benchmarks on their own
 - Signing in is smoother: your password manager can finally autofill Boardsesh, and login errors show up right in the form instead of a vanishing popup. ([#3734](https://github.com/boardsesh/boardsesh/pull/3734))
 - Forms got a full redesign: clear labels that never clip, sensible widths on tablets, grouped sections, and character counters where they help. ([#3703](https://github.com/boardsesh/boardsesh/pull/3703))
   Logging an ascent now tells you when something goes wrong instead of failing silently.
 
 ### Improved
 
+- Filter for your projects — show only the climbs you've tried but haven't sent yet ([#3753](https://github.com/boardsesh/boardsesh/pull/3753))
+  Cleaner filters: pick where you're at on a climb (not tried, projects, sent) in one tap, with benchmarks on their own
 - The Home feed scrolls smoother — flinging through your crew's sessions drops fewer frames, especially on Android. ([#3727](https://github.com/boardsesh/boardsesh/pull/3727))
 - The home screen's community beta clips and boards show up faster on phones and patchy signal — the first thumbnail loads right away instead of waiting on the rest of the page to wake up. ([#3730](https://github.com/boardsesh/boardsesh/pull/3730))
 
