@@ -188,6 +188,15 @@ public class BoardBleModule: Module {
             return ["discoveredServices": discoveredServices]
         }
 
+        // Sub-reason for the most recent failed JS connect (#3676): watchdog_timeout
+        // | did_fail_to_connect (+CBError code/domain) | discovery_timeout. Read
+        // right after a `connect` rejection so `BluetoothConnectionFailed` can carry
+        // it. Clear-on-read (the manager clears its stash), mirroring
+        // getLastConnectDiagnostics.
+        AsyncFunction("getLastConnectFailureReason") { () -> [String: Any]? in
+            BoardBleManager.shared.takeConnectFailureReasonAnalytics()
+        }
+
         AsyncFunction("cancelWrites") { () -> Void in
             BoardBleManager.shared.cancelWrites()
         }

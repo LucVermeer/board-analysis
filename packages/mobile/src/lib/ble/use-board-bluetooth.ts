@@ -33,6 +33,7 @@ import {
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 import { manufacturerCompanyId } from './advertisement';
 import type {
+  BleConnectFailureReason,
   BleDisconnectInfo,
   BleWriteDiagnostics,
   BluetoothAdapter,
@@ -926,6 +927,16 @@ export function useBoardBluetooth({
         // faults (unavailable / service_missing / unknown) stay at error level.
         const failureCategory = classifyBleFailure(error);
         const reportLevel = bleConnectReportLevel(failureCategory);
+        // For connect_failed, pull the native sub-reason (our 8 s watchdog vs a
+        // CoreBluetooth didFailToConnect vs a discovery timeout) so the iOS
+        // connect_failed cohort — BOARDSESH-80, 32 users — finally splits by cause
+        // (#3676). Fetched once up front so both the Sentry report and the
+        // BluetoothConnectionFailed event carry it. Null on Android / web / older
+        // binaries (the accessor is native-iOS-only and feature-gated).
+        let connectFailureReason: BleConnectFailureReason | null = null;
+        if (failureCategory === 'connect_failed') {
+          connectFailureReason = (await connectAdapter?.getLastConnectFailureReason?.().catch(() => null)) ?? null;
+        }
         if (reportLevel === null) {
           console.warn('Bluetooth device selection cancelled by user');
         } else {
@@ -948,6 +959,12 @@ export function useBoardBluetooth({
               source: 'ble-connect',
               failure_category: failureCategory,
               ...(discoveredServicesTag ? { ble_discovered_services: discoveredServicesTag } : {}),
+              // Sub-reason for the connect_failed cohort (#3676). cbErrorCode is
+              // present only for the didFailToConnect bucket.
+              ...(connectFailureReason ? { ble_connect_failure_reason: connectFailureReason.reason } : {}),
+              ...(connectFailureReason?.cbErrorCode !== undefined
+                ? { ble_cb_error_code: connectFailureReason.cbErrorCode }
+                : {}),
             },
           });
         }
@@ -994,6 +1011,13 @@ export function useBoardBluetooth({
           layoutId,
           sizeId,
           failureReason: failureCategory === 'unknown' ? classifyBleFailureReason(error) : failureCategory,
+          // Native iOS connect_failed sub-reason (#3676): watchdog_timeout |
+          // did_fail_to_connect | discovery_timeout, with the CBError code/domain
+          // on the didFailToConnect bucket. Undefined on Android / web / older
+          // binaries, so the props drop out cleanly.
+          bleConnectFailureReason: connectFailureReason?.reason,
+          bleCbErrorCode: connectFailureReason?.cbErrorCode,
+          bleCbErrorDomain: connectFailureReason?.cbErrorDomain,
           // Raw ble-plx codes (Android) so the real connect-failure cause and the
           // low-level GATT status are visible for re-measurement (#3608). Empty on
           // web / native iOS.

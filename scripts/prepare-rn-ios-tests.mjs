@@ -25,6 +25,10 @@ const TEST_SOURCE_FILES = [
     projectPath: 'BoardseshTests/BoardBleServiceDiscoveryTests.swift',
   },
   {
+    sourcePath: '../ios-tests/BoardBleConnectFailureReasonTests.swift',
+    projectPath: 'BoardseshTests/BoardBleConnectFailureReasonTests.swift',
+  },
+  {
     sourcePath: '../modules/live-activity/ios/BoardBleManager.swift',
     projectPath: 'BoardseshTests/LiveActivitySources/BoardBleManager.swift',
   },
