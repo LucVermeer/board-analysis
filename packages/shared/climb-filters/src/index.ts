@@ -3,6 +3,7 @@ export * from './grade-range';
 export * from './filter-normalization';
 export * from './filter-summary';
 export * from './filter-state';
+export * from './progress-filter';
 export * from './board-filter-state';
 export * from './active-filter-count';
 export * from './climb-zone-math';

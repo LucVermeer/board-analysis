@@ -6,7 +6,7 @@
 //
 // The always-visible facet chips follow the filter sheet's data-driven PRIMARY
 // importance order (the sheet's own comment: "the levers the analytics say carry
-// the product"): Grade → hide-sent/benchmarks → popularity → min-rating. Sort
+// the product"): Grade → progress/benchmarks → popularity → min-rating. Sort
 // lives in the sheet's ADVANCED ("sub-2% long tail") and is intentionally NOT a
 // chip — it surfaces as a removable token when non-default.
 //
@@ -14,7 +14,8 @@
 //   Filters · N → opens the long-tail sheet (Button, no menu)
 //   Recent ▾    → native Menu of saved filters + Clear (hidden when none)
 //   Grade       → opens the GradeRangeRail overlay (Button, no menu)   [PRIMARY #1]
-//   Show ▾      → native Menu of Toggles (hide-sent, benchmarks) — stays open [#2/#3]
+//   Your progress ▾ → native Menu + Picker (single-select, auth-gated) [PRIMARY #2]
+//   Benchmarks  → toggle chip (Button, tap flips it)                   [PRIMARY #3]
 //   Popularity ▾→ native Menu + Picker (min-ascents buckets)           [PRIMARY #4]
 //   Min rating ▾→ native Menu + Picker (star buckets)                  [PRIMARY #5]
 //
@@ -25,8 +26,9 @@
 import { memo, useCallback } from 'react';
 import { StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Host, HStack, ScrollView, Menu, Picker, Toggle, Button, Text, Divider } from '@expo/ui/swift-ui';
-import { buttonStyle, controlSize, tint, tag, padding, menuActionDismissBehavior } from '@expo/ui/swift-ui/modifiers';
+import { Host, HStack, ScrollView, Menu, Picker, Button, Text, Divider } from '@expo/ui/swift-ui';
+import { buttonStyle, controlSize, tint, tag, padding } from '@expo/ui/swift-ui/modifiers';
+import { PROGRESS_FILTER_VALUES } from '@boardsesh/climb-filters';
 import { getFilterKey } from '../../lib/recent-filter-store';
 import {
   POPULARITY_BUCKETS,
@@ -38,7 +40,7 @@ import {
 } from '../../lib/filter-chip-menus';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
-import { popularityChipLabel, ratingChipLabel } from './FilterChipRow.logic';
+import { popularityChipLabel, ratingChipLabel, progressFilterLabel, isProgressFilter } from './FilterChipRow.logic';
 import type { FilterChipRowProps } from './FilterChipRow.types';
 
 function FilterChipRowComponent({
@@ -59,11 +61,11 @@ function FilterChipRowComponent({
   onChangePopularity,
   minRating,
   onChangeRating,
-  hideCompleted,
-  onToggleHideCompleted,
+  progress,
+  onChangeProgress,
+  canFilterProgress,
   onlyBenchmarks,
   onToggleBenchmarks,
-  canHideCompleted,
 }: FilterChipRowProps) {
   const { t } = useTranslation('climbs');
   const { brandColors } = useTheme();
@@ -136,17 +138,39 @@ function FilterChipRowComponent({
             modifiers={chipModifiers(gradeActive)}
           />
 
-          {/* Show ▾ — hide-sent + benchmarks; menuActionDismissBehavior keeps it
-              open. [PRIMARY #2 + #3] — kept directly after Grade. */}
-          <Menu
-            label={t('mobile.search.chips.show')}
-            modifiers={[...chipModifiers(hideCompleted || onlyBenchmarks), menuActionDismissBehavior('disabled')]}
-          >
-            {canHideCompleted ? (
-              <Toggle label={t('mobile.filter.hideSent')} isOn={hideCompleted} onIsOnChange={onToggleHideCompleted} />
-            ) : null}
-            <Toggle label={t('mobile.filter.benchmark')} isOn={onlyBenchmarks} onIsOnChange={onToggleBenchmarks} />
-          </Menu>
+          {/* Your progress ▾ — single-select over the four tick flags (auth-gated,
+              the chip hides when signed out). [PRIMARY #2] — kept directly after
+              Grade. Resting label is the dimension name; active shows the pick. */}
+          {canFilterProgress ? (
+            <Menu
+              label={progress === 'all' ? t('mobile.filter.progress.label') : progressFilterLabel(progress, t)}
+              modifiers={chipModifiers(progress !== 'all')}
+            >
+              <Picker
+                selection={progress}
+                onSelectionChange={(value) => {
+                  // The Picker hands back its selection as an untyped tag string;
+                  // guard it to a real ProgressFilter before committing.
+                  if (typeof value !== 'string' || !isProgressFilter(value)) return;
+                  onChangeProgress(value);
+                }}
+              >
+                {PROGRESS_FILTER_VALUES.map((value) => (
+                  <Text key={value} modifiers={[tag(value)]}>
+                    {progressFilterLabel(value, t)}
+                  </Text>
+                ))}
+              </Picker>
+            </Menu>
+          ) : null}
+
+          {/* Benchmarks — its own toggle chip (a tap flips it), no longer folded in
+              with progress. [PRIMARY #3] */}
+          <Button
+            label={t('mobile.filter.benchmark')}
+            onPress={() => onToggleBenchmarks(!onlyBenchmarks)}
+            modifiers={chipModifiers(onlyBenchmarks)}
+          />
 
           {/* Tall / Wide — board-shape chips, present only on the Kilter homewall
               sizes where they apply (Wide on 10x10, Tall on 8x12, both on 10x12).

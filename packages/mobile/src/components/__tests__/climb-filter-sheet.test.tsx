@@ -218,6 +218,21 @@ vi.mock('@boardsesh/climb-filters', () => ({
   mergeBoardFilters: (input: unknown) => input,
   formatMinAscentsFilterCount: (count: number) => String(count),
   countFilteredHolds: (holdsFilter?: Record<string, unknown>) => Object.keys(holdsFilter ?? {}).length,
+  // "Your progress" selector (PRIMARY card single-select).
+  PROGRESS_FILTER_VALUES: ['all', 'untried', 'projects', 'sent', 'unsent'],
+  flagsToProgress: (flags?: Record<string, unknown>) => {
+    if (flags?.showOnlyCompleted) return 'sent';
+    if (flags?.showOnlyAttempted) return 'projects';
+    if (flags?.hideAttempted && flags?.hideCompleted) return 'untried';
+    if (flags?.hideCompleted) return 'unsent';
+    return 'all';
+  },
+  progressToFlags: () => ({
+    hideAttempted: undefined,
+    hideCompleted: undefined,
+    showOnlyAttempted: undefined,
+    showOnlyCompleted: undefined,
+  }),
 }));
 
 vi.mock('../../lib/graphql/hooks', () => ({

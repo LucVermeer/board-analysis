@@ -29,8 +29,12 @@ import {
   type ClimbBoardFilterState,
   SORT_OPTIONS,
   GRADE_ACCURACY_VALUES,
+  PROGRESS_FILTER_VALUES,
+  flagsToProgress,
+  progressToFlags,
   newSortSeed,
   type BoardSearchConfig,
+  type ProgressFilter,
 } from '@boardsesh/climb-filters';
 import { Text } from './Text';
 import { Button } from './Button';
@@ -46,7 +50,7 @@ import { androidSafeSnapPoints } from './sheet-snap-points';
 import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
-import { buildFilterLabels, formatSettersLabel } from '../lib/filter-labels';
+import { buildFilterLabels, formatSettersLabel, progressFilterLabel } from '../lib/filter-labels';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../lib/create-board-holds';
 import { subscribeToHoldsFilterSelection } from '../lib/hold-filter-handoff';
 import { subscribeToZoneFilterSelection, type ZoneFilterSelection } from '../lib/zone-filter-handoff';
@@ -277,6 +281,18 @@ export function ClimbFilterSheet({
       established: t('mobile.filter.status.established'),
       projects: t('mobile.filter.status.projects'),
     }),
+    [t],
+  );
+
+  const progressLabels = useMemo<Record<ProgressFilter, string>>(
+    () =>
+      PROGRESS_FILTER_VALUES.reduce(
+        (labels, value) => {
+          labels[value] = progressFilterLabel(value, t);
+          return labels;
+        },
+        {} as Record<ProgressFilter, string>,
+      ),
     [t],
   );
 
@@ -644,12 +660,11 @@ export function ClimbFilterSheet({
     return parts.join(' · ') || null;
   }, [localFilters, accuracyLabels, holdFilterCount, zoneActive, formatSetterSelection, t]);
 
+  // Progress moved to the always-visible PRIMARY section, so it no longer feeds
+  // the Advanced collapsed summary — only Status, beta videos, and sort remain.
   const advancedSummary = useMemo(() => {
     const parts: string[] = [];
     if (localFilters.status !== 'any') parts.push(statusLabels[localFilters.status]);
-    if (localFilters.hideAttempted) parts.push(t('mobile.filter.progress.hideAttempted'));
-    if (localFilters.showOnlyAttempted) parts.push(t('mobile.filter.progress.onlyAttempted'));
-    if (localFilters.showOnlyCompleted) parts.push(t('mobile.filter.progress.onlyCompleted'));
     if (localFilters.onlyWithBetaVideos) parts.push(t('mobile.filter.betaVideosShort'));
     if (localFilters.sortBy !== DEFAULT_FILTERS.sortBy || localFilters.sortOrder !== DEFAULT_FILTERS.sortOrder) {
       parts.push(sortLabels[localFilters.sortBy]);
@@ -657,9 +672,6 @@ export function ClimbFilterSheet({
     return parts.join(' · ') || null;
   }, [
     localFilters.status,
-    localFilters.hideAttempted,
-    localFilters.showOnlyAttempted,
-    localFilters.showOnlyCompleted,
     localFilters.onlyWithBetaVideos,
     localFilters.sortBy,
     localFilters.sortOrder,
@@ -725,20 +737,32 @@ export function ClimbFilterSheet({
               style={styles.inlineGradeRail}
             />
 
-            {/* Quality toggles, grouped as one iOS inset card. */}
+            {/* Your progress — a single-select over the four per-user tick flags
+              (auth-gated, exactly like the old hide-sent switch). "Projects" =
+              attempted-but-not-sent; "Unsent" = the old "hide climbs I've sent". */}
+            {isAuthenticated ? (
+              <>
+                <View style={styles.subsectionGap} />
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.progress.label')}
+                </Text>
+                <View style={styles.chipRow}>
+                  {PROGRESS_FILTER_VALUES.map((value) => (
+                    <Chip
+                      key={value}
+                      label={progressLabels[value]}
+                      selected={flagsToProgress(localFilters) === value}
+                      onPress={() => setFiltersPatch(progressToFlags(value))}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {/* Benchmarks — its own inset card; a top-tier lever, not part of
+              progress. */}
             <View style={styles.subsectionGap} />
             <View style={styles.groupedCard}>
-              {isAuthenticated ? (
-                <>
-                  <SwitchRow
-                    label={t('mobile.filter.hideSent')}
-                    description={t('mobile.filter.hideSentDescription')}
-                    value={!!localFilters.hideCompleted}
-                    onValueChange={(value) => setFiltersPatch({ hideCompleted: value || undefined })}
-                  />
-                  <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} />
-                </>
-              ) : null}
               <SwitchRow
                 label={t('mobile.filter.benchmark')}
                 description={t('mobile.filter.benchmarkDescription')}
@@ -917,27 +941,6 @@ export function ClimbFilterSheet({
                 </Text>
               ) : null}
 
-              {isAuthenticated ? (
-                <>
-                  <View style={styles.subsectionGap} />
-                  <SwitchRow
-                    label={t('mobile.filter.progress.hideAttempted')}
-                    value={!!localFilters.hideAttempted}
-                    onValueChange={(value) => setFiltersPatch({ hideAttempted: value || undefined })}
-                  />
-                  <SwitchRow
-                    label={t('mobile.filter.progress.onlyAttempted')}
-                    value={!!localFilters.showOnlyAttempted}
-                    onValueChange={(value) => setFiltersPatch({ showOnlyAttempted: value || undefined })}
-                  />
-                  <SwitchRow
-                    label={t('mobile.filter.progress.onlyCompleted')}
-                    value={!!localFilters.showOnlyCompleted}
-                    onValueChange={(value) => setFiltersPatch({ showOnlyCompleted: value || undefined })}
-                  />
-                </>
-              ) : null}
-
               <View style={styles.subsectionGap} />
               <SwitchRow
                 label={t('mobile.filter.betaVideos')}
@@ -1063,10 +1066,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     backgroundColor: `${iosSystemColors.systemGray}14`,
     overflow: 'hidden',
-  },
-  groupDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: spacing[4],
   },
   ratingRow: {
     flexDirection: 'row',

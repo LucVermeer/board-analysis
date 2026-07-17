@@ -5,6 +5,7 @@
 // jetpack-compose) — whose components resolve native views at module load — off the
 // other platform's bundle path.
 
+import type { ProgressFilter } from '@boardsesh/climb-filters';
 import type { RecentFilter } from '../../lib/recent-filter-store';
 import type { ClimbFilters } from '../ClimbFilterSheet';
 
@@ -52,10 +53,11 @@ export type FilterChipRowProps = {
   minRating: number | undefined;
   onChangeRating: (minRating: number | undefined) => void;
 
-  hideCompleted: boolean;
-  onToggleHideCompleted: (next: boolean) => void;
+  /** The current "Your progress" selection, read from the four tick flags. */
+  progress: ProgressFilter;
+  onChangeProgress: (value: ProgressFilter) => void;
+  /** The progress selector is auth-gated (its chip hides), matching the sheet. */
+  canFilterProgress: boolean;
   onlyBenchmarks: boolean;
   onToggleBenchmarks: (next: boolean) => void;
-  /** Hide-sent is auth-gated, matching the filter sheet. */
-  canHideCompleted: boolean;
 };

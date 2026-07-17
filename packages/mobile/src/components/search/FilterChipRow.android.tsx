@@ -9,9 +9,9 @@
 //   • DropdownMenu is CONTROLLED — each menu-bearing chip is its own small stateful
 //     sub-component owning `expanded` (cf. MoreForm.android.tsx's SelectRow). The
 //     chip's onClick opens it; an explicit close() in an item dismisses it.
-//   • The "Show" menu stays open while toggling simply by NOT closing the controlled
-//     menu on a toggle item's click — Compose has no menuActionDismissBehavior and
-//     doesn't auto-dismiss on click, so this is the natural equivalent.
+//   • Single-select menus (Your progress, Popularity, Rating) close on pick by
+//     calling the renderItems `close()`; a keep-open menu would simply not call it
+//     (Compose has no menuActionDismissBehavior and doesn't auto-dismiss on click).
 //   • Dimension chips DIVERGE from iOS here (tap-toggle + long-press-lock). iOS uses a
 //     Menu+onPrimaryAction so a tap toggles and a long-press opens lock/unlock. On
 //     Compose that's unreachable: the FilterChip always wires its own internal onClick,
@@ -42,6 +42,7 @@ import {
   HorizontalDivider,
 } from '@expo/ui/jetpack-compose';
 import { fillMaxWidth, horizontalScroll, padding } from '@expo/ui/jetpack-compose/modifiers';
+import { PROGRESS_FILTER_VALUES } from '@boardsesh/climb-filters';
 import { getFilterKey } from '../../lib/recent-filter-store';
 import { POPULARITY_BUCKETS, RATING_BUCKETS } from '../../lib/filter-chip-menus';
 import { useTheme } from '../../providers/theme-provider';
@@ -49,7 +50,7 @@ import { spacing } from '../../theme/tokens';
 import { filterChipBrandColors } from '../../theme/expo-ui-modifiers';
 import { useMaterialAngleControl } from '../chrome/use-material-angle-control';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
-import { popularityChipLabel, ratingChipLabel } from './FilterChipRow.logic';
+import { popularityChipLabel, ratingChipLabel, progressFilterLabel } from './FilterChipRow.logic';
 import type { DimensionChip, FilterChipRowProps } from './FilterChipRow.types';
 
 // Semantic icon → Material XML vector drawable. White-filled (#FFFFFFFF) so the
@@ -244,11 +245,11 @@ function FilterChipRowComponent({
   onChangePopularity,
   minRating,
   onChangeRating,
-  hideCompleted,
-  onToggleHideCompleted,
+  progress,
+  onChangeProgress,
+  canFilterProgress,
   onlyBenchmarks,
   onToggleBenchmarks,
-  canHideCompleted,
 }: FilterChipRowProps) {
   const { t } = useTranslation('climbs');
   const { brandColors, colorScheme } = useTheme();
@@ -346,28 +347,38 @@ function FilterChipRowComponent({
             onPress={gradeRailOpen ? onCloseGrade : onOpenGrade}
           />
 
-          {/* Show ▾ — hide-sent (auth-gated) + benchmarks. The controlled menu stays
-            OPEN while toggling (these items don't call close()). */}
-          <MenuChip
-            label={t('mobile.search.chips.show')}
-            selected={hideCompleted || onlyBenchmarks}
+          {/* Your progress ▾ — single-select over the four tick flags (auth-gated,
+            the chip hides when signed out). Each item commits its value and closes. */}
+          {canFilterProgress ? (
+            <MenuChip
+              label={progress === 'all' ? t('mobile.filter.progress.label') : progressFilterLabel(progress, t)}
+              selected={progress !== 'all'}
+              colors={chipColors}
+              renderItems={(close) => (
+                <>
+                  {PROGRESS_FILTER_VALUES.map((value) => (
+                    <MenuItem
+                      key={value}
+                      label={progressFilterLabel(value, t)}
+                      checked={value === progress}
+                      onClick={() => {
+                        onChangeProgress(value);
+                        close();
+                      }}
+                    />
+                  ))}
+                </>
+              )}
+            />
+          ) : null}
+
+          {/* Benchmarks — its own toggle chip (a tap flips it), no longer folded in
+            with progress. */}
+          <ActionChip
+            label={t('mobile.filter.benchmark')}
+            selected={onlyBenchmarks}
             colors={chipColors}
-            renderItems={() => (
-              <>
-                {canHideCompleted ? (
-                  <MenuItem
-                    label={t('mobile.filter.hideSent')}
-                    checked={hideCompleted}
-                    onClick={() => onToggleHideCompleted(!hideCompleted)}
-                  />
-                ) : null}
-                <MenuItem
-                  label={t('mobile.filter.benchmark')}
-                  checked={onlyBenchmarks}
-                  onClick={() => onToggleBenchmarks(!onlyBenchmarks)}
-                />
-              </>
-            )}
+            onPress={() => onToggleBenchmarks(!onlyBenchmarks)}
           />
 
           {/* Tall / Wide — board-shape chips for the current Kilter homewall size

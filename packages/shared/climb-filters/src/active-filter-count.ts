@@ -1,4 +1,5 @@
 import { DEFAULT_CLIMB_FILTER_STATE, type ClimbFilterState } from './filter-state';
+import { isProgressFilterActive } from './progress-filter';
 import type { ClimbBoardFilterState } from './board-filter-state';
 
 /**
@@ -17,10 +18,9 @@ export function countActiveFiltersBeyondGrade(filters: ClimbFilterState, boardFi
   if (filters.onlyTallClimbs) count += 1;
   if (filters.onlyWideClimbs) count += 1;
   if (filters.onlyWithBetaVideos) count += 1;
-  if (filters.hideAttempted) count += 1;
-  if (filters.hideCompleted) count += 1;
-  if (filters.showOnlyAttempted) count += 1;
-  if (filters.showOnlyCompleted) count += 1;
+  // The four tick flags are one conceptual axis (the "Your progress" selector),
+  // so they contribute at most one — "Not tried" sets two flags but is one choice.
+  if (isProgressFilterActive(filters)) count += 1;
   // Climb-type defaults to boulders-only; "active" = routes on or boulders off.
   if ((filters.boulders ?? true) !== true || (filters.routes ?? false) !== false) count += 1;
   if (

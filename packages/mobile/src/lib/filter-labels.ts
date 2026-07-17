@@ -3,14 +3,46 @@
 // the active-filter token chips never word a filter differently.
 
 import type { TFunction } from 'i18next';
-import { gradeAccuracyBucket, type FilterSummaryLabels, type SortOption } from '@boardsesh/climb-filters';
+import {
+  gradeAccuracyBucket,
+  type FilterSummaryLabels,
+  type ProgressFilter,
+  type SortOption,
+} from '@boardsesh/climb-filters';
 
-// `FilterSummaryLabels` marks several fields optional for shared callers that
-// emit a partial summary, but this builder always populates every one — so the
-// return type is `Required` here. That lets the token builder index the labels
-// without `&& labels.x` guards that would silently drop a token if a field were
-// ever forgotten (a real bug) rather than absent by design.
-export function buildFilterLabels(t: TFunction<'climbs'>): Required<FilterSummaryLabels> {
+// The four per-user tick flags collapse into one "Your progress" value, so the
+// summary/token labels expose a single `progress` label instead of one label per
+// flag. This builder always populates every field except those four, so the
+// return type omits them from the otherwise-`Required` shape — the token builder
+// can then index the labels without `&& labels.x` guards that would silently
+// drop a token if a field were ever forgotten (a real bug) rather than absent by
+// design.
+type ClimbFilterLabels = Omit<
+  Required<FilterSummaryLabels>,
+  'hideAttempted' | 'hideCompleted' | 'showOnlyAttempted' | 'showOnlyCompleted'
+>;
+
+/**
+ * Label for a "Your progress" value. Literal `t` keys (the i18n linter forbids
+ * `t(variable)`), sourced once here so the sheet chips, the persistent chip row,
+ * and the filter summary / tokens never word the selector differently.
+ */
+export function progressFilterLabel(value: ProgressFilter, t: TFunction<'climbs'>): string {
+  switch (value) {
+    case 'all':
+      return t('mobile.filter.progress.all');
+    case 'untried':
+      return t('mobile.filter.progress.untried');
+    case 'projects':
+      return t('mobile.filter.progress.projects');
+    case 'sent':
+      return t('mobile.filter.progress.sent');
+    case 'unsent':
+      return t('mobile.filter.progress.unsent');
+  }
+}
+
+export function buildFilterLabels(t: TFunction<'climbs'>): ClimbFilterLabels {
   return {
     gradeRange: (min, max) => t('mobile.search.gradeRange', { min, max }),
     gradeMin: (grade) => t('mobile.search.gradeMin', { grade }),
@@ -29,10 +61,9 @@ export function buildFilterLabels(t: TFunction<'climbs'>): Required<FilterSummar
     betaOnly: () => t('mobile.filter.betaVideosShort'),
     // i18n-keep mobile.filter.status.drafts mobile.filter.status.established mobile.filter.status.projects
     status: (kind) => t(`mobile.filter.status.${kind}`),
-    hideAttempted: () => t('mobile.filter.progress.hideAttempted'),
-    hideCompleted: () => t('mobile.filter.progress.hideCompleted'),
-    showOnlyAttempted: () => t('mobile.filter.progress.onlyAttempted'),
-    showOnlyCompleted: () => t('mobile.filter.progress.onlyCompleted'),
+    // A single part for the collapsed progress selector (getBaseFilterParts reads
+    // the current value via flagsToProgress); 'all' is never passed here.
+    progress: (value) => progressFilterLabel(value, t),
   };
 }
 

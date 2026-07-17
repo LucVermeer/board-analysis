@@ -16,6 +16,8 @@ import {
   getGradeName,
   applyStatusChange,
   countFilteredHolds,
+  flagsToProgress,
+  progressToFlags,
   DEFAULT_CLIMB_FILTER_STATE,
   type ClimbFilterState,
   type ClimbBoardFilterState,
@@ -162,35 +164,15 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.hideAttempted) {
+  // The four per-user tick flags collapse into one "Your progress" token, so a
+  // single Projects selection (showOnlyAttempted + hideCompleted) never reads as
+  // two tokens. Clearing resets every progress flag to its default.
+  const progress = flagsToProgress(filters);
+  if (progress !== 'all') {
     tokens.push({
-      key: 'hideAttempted',
-      label: labels.hideAttempted(),
-      clear: () => patchFilters({ hideAttempted: undefined }),
-    });
-  }
-
-  if (filters.hideCompleted) {
-    tokens.push({
-      key: 'hideCompleted',
-      label: labels.hideCompleted(),
-      clear: () => patchFilters({ hideCompleted: undefined }),
-    });
-  }
-
-  if (filters.showOnlyAttempted) {
-    tokens.push({
-      key: 'showOnlyAttempted',
-      label: labels.showOnlyAttempted(),
-      clear: () => patchFilters({ showOnlyAttempted: undefined }),
-    });
-  }
-
-  if (filters.showOnlyCompleted) {
-    tokens.push({
-      key: 'showOnlyCompleted',
-      label: labels.showOnlyCompleted(),
-      clear: () => patchFilters({ showOnlyCompleted: undefined }),
+      key: 'progress',
+      label: labels.progress(progress),
+      clear: () => patchFilters(progressToFlags('all')),
     });
   }
 

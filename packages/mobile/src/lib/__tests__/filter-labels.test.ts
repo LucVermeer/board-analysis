@@ -94,24 +94,16 @@ describe('buildFilterLabels', () => {
     expect(labels.status('projects')).toBe('mobile.filter.status.projects');
   });
 
-  it('hideAttempted uses mobile.filter.progress.hideAttempted', () => {
-    expect(labels.hideAttempted()).toBe('mobile.filter.progress.hideAttempted');
-  });
-
-  it('hideCompleted uses mobile.filter.progress.hideCompleted', () => {
-    expect(labels.hideCompleted()).toBe('mobile.filter.progress.hideCompleted');
-  });
-
-  it('showOnlyAttempted uses mobile.filter.progress.onlyAttempted', () => {
-    expect(labels.showOnlyAttempted()).toBe('mobile.filter.progress.onlyAttempted');
-  });
-
-  it('showOnlyCompleted uses mobile.filter.progress.onlyCompleted', () => {
-    expect(labels.showOnlyCompleted()).toBe('mobile.filter.progress.onlyCompleted');
+  it('progress collapses the four tick flags into one value label', () => {
+    expect(labels.progress('untried')).toBe('mobile.filter.progress.untried');
+    expect(labels.progress('projects')).toBe('mobile.filter.progress.projects');
+    expect(labels.progress('sent')).toBe('mobile.filter.progress.sent');
+    expect(labels.progress('unsent')).toBe('mobile.filter.progress.unsent');
   });
 
   it('returns all required keys (no missing fields)', () => {
-    // Ensures Required<FilterSummaryLabels> is fully populated.
+    // Ensures every label the token/summary builders index is populated (the four
+    // per-flag progress labels collapsed into one `progress` label).
     const keys: Array<keyof ReturnType<typeof buildFilterLabels>> = [
       'gradeRange',
       'gradeMin',
@@ -125,10 +117,7 @@ describe('buildFilterLabels', () => {
       'wideOnly',
       'betaOnly',
       'status',
-      'hideAttempted',
-      'hideCompleted',
-      'showOnlyAttempted',
-      'showOnlyCompleted',
+      'progress',
     ];
     for (const key of keys) {
       expect(typeof labels[key]).toBe('function');

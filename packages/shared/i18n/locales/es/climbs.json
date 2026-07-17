@@ -662,8 +662,6 @@
         "refine": "Afinar",
         "advanced": "Avanzado"
       },
-      "hideSent": "Ocultar lo que ya encadené",
-      "hideSentDescription": "Mostrar solo vías que no has completado",
       "popularity": "Popularidad",
       "established2plus": "Establecido 2+",
       "benchmark": "Solo benchmarks",
@@ -699,10 +697,12 @@
         "tight": "Estricta"
       },
       "progress": {
-        "hideAttempted": "Ocultar intentadas",
-        "hideCompleted": "Ocultar completadas",
-        "onlyAttempted": "Solo intentadas",
-        "onlyCompleted": "Solo completadas"
+        "label": "Tu progreso",
+        "all": "Todos",
+        "untried": "Sin intentar",
+        "projects": "Proyectos",
+        "sent": "Encadenados",
+        "unsent": "Sin encadenar"
       },
       "signInForDrafts": "Inicia sesión para filtrar tus borradores",
       "setters": "Equipadores",
@@ -745,7 +745,6 @@
       "allClimbs": "Todas las vías",
       "clearRecentSearches": "Borrar búsquedas recientes",
       "chips": {
-        "show": "Mostrar",
         "filtersWithCount": "Filtros · {{count}}",
         "tall": "Altas",
         "wide": "Anchas",
