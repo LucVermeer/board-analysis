@@ -47,13 +47,13 @@ vi.mock('@/app/lib/analytics', () => ({
 
 const { default: AuthPageContent } = await import('../auth-page-content');
 
-async function submitLogin() {
+function submitLogin() {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'climber@example.com' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'hunter22' } });
   fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 }
 
-async function submitRegister() {
+function submitRegister() {
   fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Crusher' } });
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'climber@example.com' } });
@@ -81,7 +81,7 @@ describe('AuthPageContent — login server errors', () => {
     mockSignIn.mockResolvedValueOnce({ error: 'CredentialsSignin', ok: false });
     render(<AuthPageContent />);
 
-    await submitLogin();
+    submitLogin();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Invalid email or password/i);
@@ -91,7 +91,7 @@ describe('AuthPageContent — login server errors', () => {
     mockSignIn.mockRejectedValueOnce(new Error('fetch failed'));
     render(<AuthPageContent />);
 
-    await submitLogin();
+    submitLogin();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Authentication failed/i);
@@ -106,7 +106,7 @@ describe('AuthPageContent — login server errors', () => {
     );
     render(<AuthPageContent />);
 
-    await submitRegister();
+    submitRegister();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Email already registered/i);
@@ -116,7 +116,7 @@ describe('AuthPageContent — login server errors', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')));
     render(<AuthPageContent />);
 
-    await submitRegister();
+    submitRegister();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Registration failed\. Please try again/i);
@@ -126,7 +126,7 @@ describe('AuthPageContent — login server errors', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')));
     render(<AuthPageContent />);
 
-    await submitRegister();
+    submitRegister();
     await screen.findByRole('alert');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Login' }));
@@ -150,7 +150,7 @@ describe('AuthPageContent — login server errors', () => {
     mockSignIn.mockRejectedValueOnce(new Error('fetch failed'));
     render(<AuthPageContent />);
 
-    await submitLogin();
+    submitLogin();
     await screen.findByRole('alert');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));

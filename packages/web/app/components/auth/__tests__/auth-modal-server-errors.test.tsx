@@ -32,13 +32,13 @@ vi.mock('../../providers/snackbar-provider', () => ({
 
 const { default: AuthModal } = await import('../auth-modal');
 
-async function submitLogin() {
+function submitLogin() {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'climber@example.com' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'hunter22' } });
   fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 }
 
-async function submitRegister() {
+function submitRegister() {
   fireEvent.click(screen.getByRole('tab', { name: 'Create Account' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Crusher' } });
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'climber@example.com' } });
@@ -67,7 +67,7 @@ describe('AuthModal — login server errors', () => {
     const onClose = vi.fn();
     render(<AuthModal open onClose={onClose} />);
 
-    await submitLogin();
+    submitLogin();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Invalid email or password/i);
@@ -79,7 +79,7 @@ describe('AuthModal — login server errors', () => {
     const onClose = vi.fn();
     render(<AuthModal open onClose={onClose} />);
 
-    await submitLogin();
+    submitLogin();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Authentication failed/i);
@@ -97,7 +97,7 @@ describe('AuthModal — login server errors', () => {
     );
     render(<AuthModal open onClose={vi.fn()} />);
 
-    await submitRegister();
+    submitRegister();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Email already registered/i);
@@ -107,7 +107,7 @@ describe('AuthModal — login server errors', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')));
     render(<AuthModal open onClose={vi.fn()} />);
 
-    await submitRegister();
+    submitRegister();
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/Registration failed\. Please try again/i);
@@ -117,7 +117,7 @@ describe('AuthModal — login server errors', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')));
     render(<AuthModal open onClose={vi.fn()} />);
 
-    await submitRegister();
+    submitRegister();
     await screen.findByRole('alert');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Login' }));
@@ -130,7 +130,7 @@ describe('AuthModal — login server errors', () => {
     const onClose = vi.fn();
     render(<AuthModal open onClose={onClose} />);
 
-    await submitLogin();
+    submitLogin();
     await screen.findByRole('alert');
 
     fireEvent.click(screen.getByRole('button', { name: 'Login' }));

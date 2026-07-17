@@ -311,7 +311,7 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
               maxWidth={false}
             >
               <FormSection>
-                <FormField label={t('login.fields.name')} error={registerErrors.name}>
+                <FormField label={t('login.fields.name')} htmlFor="register_name" error={registerErrors.name}>
                   {(field) => (
                     <TextField
                       id={field.id}
@@ -339,7 +339,7 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
                   )}
                 </FormField>
 
-                <FormField label={t('login.fields.email')} error={registerErrors.email}>
+                <FormField label={t('login.fields.email')} htmlFor="register_email" error={registerErrors.email}>
                   {(field) => (
                     <TextField
                       id={field.id}
@@ -368,7 +368,7 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
                   )}
                 </FormField>
 
-                <FormField label={t('login.fields.password')} error={registerErrors.password}>
+                <FormField label={t('login.fields.password')} htmlFor="register_password" error={registerErrors.password}>
                   {(field) => (
                     <TextField
                       id={field.id}
@@ -413,7 +413,7 @@ export default function AuthModal({ open, onClose, onSuccess, title, description
                   )}
                 </FormField>
 
-                <FormField label={t('login.fields.confirmPassword')} error={registerErrors.confirmPassword}>
+                <FormField label={t('login.fields.confirmPassword')} htmlFor="register_confirm_password" error={registerErrors.confirmPassword}>
                   {(field) => (
                     <TextField
                       id={field.id}
