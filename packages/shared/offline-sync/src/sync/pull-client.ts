@@ -624,7 +624,8 @@ async function runBootstrapPhase(
       } catch (error) {
         // A wipe mid-import rolls the transaction back and bails the phase — no
         // attempt (the pull is being torn down, not failing).
-        if (error instanceof SnapshotWipedError || isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) break;
+        if (error instanceof SnapshotWipedError || isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded())
+          break;
         if (error instanceof SnapshotSchemaStaleError) {
           // The artifact predates this client's schema — importing it would
           // NULL-fill newer columns and stamp the cursor past them forever.

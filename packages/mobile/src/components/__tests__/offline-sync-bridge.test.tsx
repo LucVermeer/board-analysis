@@ -14,11 +14,14 @@ vi.mock('../../sync', () => ({
 }));
 
 const drainMutationQueueMock = vi.fn(async (..._args: unknown[]) => {});
+const startBackgroundTrackingStop = vi.fn();
+const startBackgroundTrackingMock = vi.fn(() => startBackgroundTrackingStop);
 // The scheduler + drain bindings live in the adapter (which statically imports
 // react-native — mock it so Rolldown's scan never parses the RN Flow entry).
 vi.mock('../../offline/offline-sync-adapter', () => ({
   startSyncScheduler: (...args: unknown[]) => startSyncSchedulerMock(...(args as [])),
   drainMutationQueue: (...args: unknown[]) => drainMutationQueueMock(...args),
+  startBackgroundTracking: () => startBackgroundTrackingMock(),
 }));
 
 // A stable sentinel so tests can assert the bridge passes THIS reference
