@@ -1,15 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
-import CircularProgress from '@mui/material/CircularProgress';
+import MuiLink from '@mui/material/Link';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import MuiDivider from '@mui/material/Divider';
@@ -23,6 +22,7 @@ import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-lo
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
 import SocialLoginButtons from '@/app/components/auth/social-login-buttons';
+import { FormShell, FormSection, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 import {
   initialLoginValues,
   initialRegisterValues,
@@ -48,24 +48,30 @@ export default function AuthPageContent() {
   const callbackUrl = searchParams.get('callbackUrl') || '/';
   const error = searchParams.get('error');
   const { showMessage } = useSnackbar();
+  const loginFormId = useId();
+  const registerFormId = useId();
 
   const [loginValues, setLoginValues] = useState(initialLoginValues);
   const [loginErrors, setLoginErrors] = useState<LoginErrors>({});
+  const [loginServerError, setLoginServerError] = useState<string | null>(null);
   const [registerValues, setRegisterValues] = useState(initialRegisterValues);
   const [registerErrors, setRegisterErrors] = useState<RegisterErrors>({});
+  const [registerServerError, setRegisterServerError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('login');
 
   const verified = searchParams.get('verified');
 
-  // Show error message from NextAuth
+  // Surface NextAuth redirect errors (failed OAuth round-trip or credentials
+  // redirect) as the login form's inline alert rather than a transient toast —
+  // the form is on screen, so the error belongs with it.
   useEffect(() => {
     if (error) {
       if (error === 'CredentialsSignin') {
-        showMessage(t('login.toasts.invalidCredentials'), 'error');
+        setLoginServerError(t('login.toasts.invalidCredentials'));
       } else {
-        showMessage(t('login.toasts.authFailed'), 'error');
+        setLoginServerError(t('login.toasts.authFailed'));
       }
       // NextAuth redirects back to /auth/login?error=... after either a failed
       // OAuth round-trip or — under some flows — a credentials redirect path.
@@ -82,7 +88,7 @@ export default function AuthPageContent() {
       const queryString = cleanParams.toString();
       router.replace(queryString ? `${pathnameWithoutLocale}?${queryString}` : pathnameWithoutLocale);
     }
-  }, [error, showMessage, t, router, pathnameWithoutLocale, searchParams]);
+  }, [error, t, router, pathnameWithoutLocale, searchParams]);
 
   // Show success message when email is verified
   useEffect(() => {
@@ -99,9 +105,13 @@ export default function AuthPageContent() {
   }, [status, router, callbackUrl]);
 
   const handleLogin = async () => {
+    setLoginServerError(null);
     const errors = validateLoginFields(loginValues, t);
     setLoginErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidAfterRender(loginFormId);
+      return;
+    }
 
     try {
       setLoginLoading(true);
@@ -114,7 +124,7 @@ export default function AuthPageContent() {
       });
 
       if (result?.error) {
-        showMessage(t('login.toasts.invalidCredentials'), 'error');
+        setLoginServerError(t('login.toasts.invalidCredentials'));
         track('Login Failed', {
           auth_method: 'credentials',
           failure_reason: safeAuthError(result.error),
@@ -125,16 +135,23 @@ export default function AuthPageContent() {
         router.push(callbackUrl);
       }
     } catch (error) {
+      // A thrown signIn (network down, server unreachable) must not leave the
+      // form frozen with no feedback — surface it like the auth-error path.
       console.error('Login error:', error);
+      setLoginServerError(t('login.toasts.authFailed'));
     } finally {
       setLoginLoading(false);
     }
   };
 
   const handleRegister = async () => {
+    setRegisterServerError(null);
     const errors = validateRegisterFields(registerValues, t);
     setRegisterErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidAfterRender(registerFormId);
+      return;
+    }
 
     try {
       setRegisterLoading(true);
@@ -155,7 +172,7 @@ export default function AuthPageContent() {
       const data = await response.json();
 
       if (!response.ok) {
-        showMessage(data.error || t('login.toasts.registrationFailed'), 'error');
+        setRegisterServerError(data.error || t('login.toasts.registrationFailed'));
         return;
       }
 
@@ -209,7 +226,7 @@ export default function AuthPageContent() {
       }
     } catch (error) {
       console.error('Registration error:', error);
-      showMessage(t('login.toasts.registrationFailedRetry'), 'error');
+      setRegisterServerError(t('login.toasts.registrationFailedRetry'));
     } finally {
       setRegisterLoading(false);
     }
@@ -263,205 +280,235 @@ export default function AuthPageContent() {
               </Typography>
             </Stack>
 
-            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} centered>
+            <Tabs
+              value={activeTab}
+              onChange={(_, selectedTab) => {
+                setActiveTab(selectedTab);
+                // Errors belong to the submit that produced them — don't
+                // resurface stale ones after a tab round-trip.
+                setLoginServerError(null);
+                setRegisterServerError(null);
+                setLoginErrors({});
+                setRegisterErrors({});
+              }}
+              centered
+            >
               <Tab label={t('login.tabs.signIn')} value="login" />
               <Tab label={t('login.tabs.signUp')} value="register" />
             </Tabs>
 
             <TabPanel value={activeTab} index="login">
-              <Box
-                component="form"
-                onSubmit={(e: React.FormEvent) => {
+              <FormShell
+                id={loginFormId}
+                onSubmit={(e) => {
                   e.preventDefault();
                   void handleLogin();
                 }}
-                sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+                error={loginServerError}
+                maxWidth={false}
               >
-                <TextField
-                  label={t('login.fields.email')}
-                  placeholder={t('login.placeholders.email')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={loginValues.email}
-                  onChange={(e) => {
-                    setLoginValues((prev) => ({ ...prev, email: e.target.value }));
-                    if (loginErrors.email) setLoginErrors((prev) => ({ ...prev, email: undefined }));
-                  }}
-                  error={!!loginErrors.email}
-                  helperText={loginErrors.email}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <MailOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                <FormSection>
+                  <FormField label={t('login.fields.email')} error={loginErrors.email}>
+                    {(field) => (
+                      <TextField
+                        id={field.id}
+                        type="email"
+                        autoComplete="username"
+                        placeholder={t('login.placeholders.email')}
+                        fullWidth
+                        value={loginValues.email}
+                        onChange={(e) => {
+                          setLoginValues((prev) => ({ ...prev, email: e.target.value }));
+                          if (loginErrors.email) setLoginErrors((prev) => ({ ...prev, email: undefined }));
+                          if (loginServerError) setLoginServerError(null);
+                        }}
+                        error={Boolean(field.error)}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <MailOutlined />
+                              </InputAdornment>
+                            ),
+                          },
+                          htmlInput: { autoCapitalize: 'none', 'aria-describedby': field.describedBy },
+                        }}
+                      />
+                    )}
+                  </FormField>
 
-                <TextField
-                  label={t('login.fields.password')}
-                  type="password"
-                  placeholder={t('login.placeholders.password')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={loginValues.password}
-                  onChange={(e) => {
-                    setLoginValues((prev) => ({ ...prev, password: e.target.value }));
-                    if (loginErrors.password) setLoginErrors((prev) => ({ ...prev, password: undefined }));
-                  }}
-                  error={!!loginErrors.password}
-                  helperText={loginErrors.password}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <LockOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                  <FormField
+                    label={t('login.fields.password')}
+                    error={loginErrors.password}
+                    labelAccessory={
+                      <MuiLink component={LocaleLink} href="/auth/forgot-password" variant="body2">
+                        {t('login.links.forgotPassword')}
+                      </MuiLink>
+                    }
+                  >
+                    {(field) => (
+                      <TextField
+                        id={field.id}
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder={t('login.placeholders.password')}
+                        fullWidth
+                        value={loginValues.password}
+                        onChange={(e) => {
+                          setLoginValues((prev) => ({ ...prev, password: e.target.value }));
+                          if (loginErrors.password) setLoginErrors((prev) => ({ ...prev, password: undefined }));
+                          if (loginServerError) setLoginServerError(null);
+                        }}
+                        error={Boolean(field.error)}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <LockOutlined />
+                              </InputAdornment>
+                            ),
+                          },
+                          htmlInput: { 'aria-describedby': field.describedBy },
+                        }}
+                      />
+                    )}
+                  </FormField>
+                </FormSection>
 
-                <Button
-                  variant="contained"
-                  type="submit"
-                  disabled={loginLoading}
-                  startIcon={loginLoading ? <CircularProgress size={16} /> : undefined}
-                  fullWidth
-                  size="large"
-                >
-                  {t('login.submit.signIn')}
-                </Button>
-
-                <Button component={LocaleLink} variant="text" href="/auth/forgot-password">
-                  {t('login.links.forgotPassword')}
-                </Button>
-              </Box>
+                <FormActions submitLabel={t('login.submit.signIn')} submitting={loginLoading} layout="stacked" />
+              </FormShell>
             </TabPanel>
 
             <TabPanel value={activeTab} index="register">
-              <Box
-                component="form"
-                onSubmit={(e: React.FormEvent) => {
+              <FormShell
+                id={registerFormId}
+                onSubmit={(e) => {
                   e.preventDefault();
                   void handleRegister();
                 }}
-                sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+                error={registerServerError}
+                maxWidth={false}
               >
-                <TextField
-                  label={t('login.fields.name')}
-                  placeholder={t('login.placeholders.name')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={registerValues.name}
-                  onChange={(e) => {
-                    setRegisterValues((prev) => ({ ...prev, name: e.target.value }));
-                    if (registerErrors.name) setRegisterErrors((prev) => ({ ...prev, name: undefined }));
-                  }}
-                  error={!!registerErrors.name}
-                  helperText={registerErrors.name}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <PersonOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                <FormSection>
+                  <FormField label={t('login.fields.name')} error={registerErrors.name}>
+                    {(field) => (
+                      <TextField
+                        id={field.id}
+                        autoComplete="name"
+                        placeholder={t('login.placeholders.name')}
+                        fullWidth
+                        value={registerValues.name}
+                        onChange={(e) => {
+                          setRegisterValues((prev) => ({ ...prev, name: e.target.value }));
+                          if (registerErrors.name) setRegisterErrors((prev) => ({ ...prev, name: undefined }));
+                          if (registerServerError) setRegisterServerError(null);
+                        }}
+                        error={Boolean(field.error)}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <PersonOutlined />
+                              </InputAdornment>
+                            ),
+                          },
+                          htmlInput: { 'aria-describedby': field.describedBy },
+                        }}
+                      />
+                    )}
+                  </FormField>
 
-                <TextField
-                  label={t('login.fields.email')}
-                  placeholder={t('login.placeholders.email')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={registerValues.email}
-                  onChange={(e) => {
-                    setRegisterValues((prev) => ({ ...prev, email: e.target.value }));
-                    if (registerErrors.email) setRegisterErrors((prev) => ({ ...prev, email: undefined }));
-                  }}
-                  error={!!registerErrors.email}
-                  helperText={registerErrors.email}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <MailOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                  <FormField label={t('login.fields.email')} error={registerErrors.email}>
+                    {(field) => (
+                      <TextField
+                        id={field.id}
+                        type="email"
+                        autoComplete="email"
+                        placeholder={t('login.placeholders.email')}
+                        fullWidth
+                        value={registerValues.email}
+                        onChange={(e) => {
+                          setRegisterValues((prev) => ({ ...prev, email: e.target.value }));
+                          if (registerErrors.email) setRegisterErrors((prev) => ({ ...prev, email: undefined }));
+                          if (registerServerError) setRegisterServerError(null);
+                        }}
+                        error={Boolean(field.error)}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <MailOutlined />
+                              </InputAdornment>
+                            ),
+                          },
+                          htmlInput: { autoCapitalize: 'none', 'aria-describedby': field.describedBy },
+                        }}
+                      />
+                    )}
+                  </FormField>
 
-                <TextField
-                  label={t('login.fields.password')}
-                  type="password"
-                  placeholder={t('login.placeholders.passwordWithMin')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={registerValues.password}
-                  onChange={(e) => {
-                    setRegisterValues((prev) => ({ ...prev, password: e.target.value }));
-                    if (registerErrors.password) setRegisterErrors((prev) => ({ ...prev, password: undefined }));
-                  }}
-                  error={!!registerErrors.password}
-                  helperText={registerErrors.password}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <LockOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                  <FormField label={t('login.fields.password')} error={registerErrors.password}>
+                    {(field) => (
+                      <TextField
+                        id={field.id}
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={t('login.placeholders.passwordWithMin')}
+                        fullWidth
+                        value={registerValues.password}
+                        onChange={(e) => {
+                          setRegisterValues((prev) => ({ ...prev, password: e.target.value }));
+                          if (registerErrors.password) setRegisterErrors((prev) => ({ ...prev, password: undefined }));
+                          if (registerServerError) setRegisterServerError(null);
+                        }}
+                        error={Boolean(field.error)}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <LockOutlined />
+                              </InputAdornment>
+                            ),
+                          },
+                          htmlInput: { 'aria-describedby': field.describedBy },
+                        }}
+                      />
+                    )}
+                  </FormField>
 
-                <TextField
-                  label={t('login.fields.confirmPassword')}
-                  type="password"
-                  placeholder={t('login.placeholders.confirmPassword')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={registerValues.confirmPassword}
-                  onChange={(e) => {
-                    setRegisterValues((prev) => ({ ...prev, confirmPassword: e.target.value }));
-                    if (registerErrors.confirmPassword)
-                      setRegisterErrors((prev) => ({ ...prev, confirmPassword: undefined }));
-                  }}
-                  error={!!registerErrors.confirmPassword}
-                  helperText={registerErrors.confirmPassword}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <LockOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                  <FormField label={t('login.fields.confirmPassword')} error={registerErrors.confirmPassword}>
+                    {(field) => (
+                      <TextField
+                        id={field.id}
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={t('login.placeholders.confirmPassword')}
+                        fullWidth
+                        value={registerValues.confirmPassword}
+                        onChange={(e) => {
+                          setRegisterValues((prev) => ({ ...prev, confirmPassword: e.target.value }));
+                          if (registerErrors.confirmPassword)
+                            setRegisterErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                          if (registerServerError) setRegisterServerError(null);
+                        }}
+                        error={Boolean(field.error)}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <LockOutlined />
+                              </InputAdornment>
+                            ),
+                          },
+                          htmlInput: { 'aria-describedby': field.describedBy },
+                        }}
+                      />
+                    )}
+                  </FormField>
+                </FormSection>
 
-                <Button
-                  variant="contained"
-                  type="submit"
-                  disabled={registerLoading}
-                  startIcon={registerLoading ? <CircularProgress size={16} /> : undefined}
-                  fullWidth
-                  size="large"
-                >
-                  {t('login.submit.signUp')}
-                </Button>
-              </Box>
+                <FormActions submitLabel={t('login.submit.signUp')} submitting={registerLoading} layout="stacked" />
+              </FormShell>
             </TabPanel>
 
             <MuiDivider>

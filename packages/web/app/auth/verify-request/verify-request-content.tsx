@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState, useId } from 'react';
 import MuiAlert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -8,7 +8,6 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
-import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import MailOutlined from '@mui/icons-material/MailOutlined';
@@ -18,10 +17,11 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
+import LocaleLink from '@/app/components/i18n/locale-link';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { EMAIL_REGEX } from '@/app/components/auth/validate-fields';
 import { themeTokens } from '@/app/theme/theme-config';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { FormShell, FormField, FormActions, focusFirstInvalidAfterRender } from '@/app/components/form';
 
 const KNOWN_VERIFY_ERROR_CODES = new Set(['EmailNotVerified', 'InvalidToken', 'TokenExpired', 'TooManyAttempts']);
 
@@ -41,9 +41,11 @@ export default function VerifyRequestContent() {
   const { t } = useTranslation('auth');
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
+  const formId = useId();
   const [resendLoading, setResendLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState<EmailErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const { showMessage } = useSnackbar();
 
   const getErrorMessage = () => {
@@ -54,9 +56,13 @@ export default function VerifyRequestContent() {
   };
 
   const handleResend = async () => {
+    setFormError(null);
     const validationErrors = validateEmail(email, t);
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (Object.keys(validationErrors).length > 0) {
+      focusFirstInvalidAfterRender(formId);
+      return;
+    }
 
     try {
       setResendLoading(true);
@@ -72,10 +78,11 @@ export default function VerifyRequestContent() {
       if (response.ok) {
         showMessage(t('verifyRequest.toasts.sent'), 'success');
       } else {
-        showMessage(data.error || t('verifyRequest.toasts.failed'), 'error');
+        setFormError(data.error || t('verifyRequest.toasts.failed'));
       }
     } catch (err) {
       console.error('Resend error:', err);
+      setFormError(t('verifyRequest.toasts.failed'));
     } finally {
       setResendLoading(false);
     }
@@ -132,50 +139,47 @@ export default function VerifyRequestContent() {
                 </>
               )}
 
-              <Box
-                component="form"
-                onSubmit={(e: React.FormEvent) => {
-                  e.preventDefault();
+              <FormShell
+                id={formId}
+                maxWidth={false}
+                error={formError}
+                onSubmit={(event) => {
+                  event.preventDefault();
                   void handleResend();
                 }}
-                sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
               >
-                <TextField
-                  placeholder={t('verifyRequest.resendPlaceholder')}
-                  variant="outlined"
-                  size="medium"
-                  fullWidth
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errors.email) setErrors({});
-                  }}
-                  error={!!errors.email}
-                  helperText={errors.email}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <MailOutlined />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                <FormField label={t('verifyRequest.fields.email')} error={errors.email}>
+                  {(field) => (
+                    <TextField
+                      id={field.id}
+                      type="email"
+                      autoComplete="email"
+                      placeholder={t('verifyRequest.resendPlaceholder')}
+                      fullWidth
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (errors.email) setErrors({});
+                      }}
+                      error={Boolean(field.error)}
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <MailOutlined />
+                            </InputAdornment>
+                          ),
+                        },
+                        htmlInput: { autoCapitalize: 'none', 'aria-describedby': field.describedBy },
+                      }}
+                    />
+                  )}
+                </FormField>
 
-                <Button
-                  variant="contained"
-                  type="submit"
-                  disabled={resendLoading}
-                  startIcon={resendLoading ? <CircularProgress size={16} /> : undefined}
-                  fullWidth
-                  size="large"
-                >
-                  {t('verifyRequest.resend')}
-                </Button>
-              </Box>
+                <FormActions submitLabel={t('verifyRequest.resend')} submitting={resendLoading} layout="stacked" />
+              </FormShell>
 
-              <Button variant="text" href="/auth/login">
+              <Button component={LocaleLink} variant="text" href="/auth/login">
                 {t('verifyRequest.back')}
               </Button>
             </Stack>

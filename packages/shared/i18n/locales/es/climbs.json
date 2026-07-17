@@ -258,6 +258,12 @@
         "descriptionPlaceholder": "Descripción opcional...",
         "colorLabel": "Color (opcional)",
         "submit": "Crear"
+      },
+      "row": {
+        "removeAria": "Quitar de la playlist {{name}}",
+        "addAria": "Añadir a la playlist {{name}}",
+        "climbCount_one": "{{count}} bloque",
+        "climbCount_other": "{{count}} bloques"
       }
     },
     "tick": {
