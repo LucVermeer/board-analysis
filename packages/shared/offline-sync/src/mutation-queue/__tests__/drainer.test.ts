@@ -283,12 +283,18 @@ describe('drainMutationQueue', () => {
     });
 
     const queryClient = createMockQueryClient();
-    await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
+    try {
+      await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
 
-    // Mutation #2 must never have been sent — issuing it risks a SQLite call
-    // (markCompleted) landing right as the process suspends.
-    expect(mockProcessMutation).toHaveBeenCalledTimes(1);
-    expect(mockPeekPending).toHaveBeenCalledTimes(1);
+      // Mutation #2 must never have been sent — issuing it risks a SQLite call
+      // (markCompleted) landing right as the process suspends.
+      expect(mockProcessMutation).toHaveBeenCalledTimes(1);
+      expect(mockPeekPending).toHaveBeenCalledTimes(1);
+    } finally {
+      // Explicit reset (not just relying on the next test's beforeEach) —
+      // mirrors the early-return test above.
+      setBackgrounded(false);
+    }
   });
 
   it('invalidates correct query keys for boardsesh_ticks', async () => {

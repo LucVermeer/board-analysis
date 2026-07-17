@@ -655,6 +655,11 @@ export async function pullSync(
   graphqlFetch: <T>(query: string, variables?: Record<string, unknown>) => Promise<T>,
   options?: SyncOptions,
 ): Promise<void> {
+  // Mirrors drainMutationQueue's entry guard: don't even start the snapshot
+  // bootstrap phase below (which runs before the first cycleAborted() check)
+  // when the app is already backgrounded.
+  if (isBackgrounded()) return;
+
   const enabledBoards = options?.enabledBoards ?? [];
   const onProgress = options?.onProgress;
   let totalDocuments = 0;
