@@ -1,5 +1,11 @@
 import { memo, useCallback } from 'react';
-import { ScrollView, View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+// The play drawer's outer scroll is a react-native-gesture-handler ScrollView, so
+// a nested horizontal shelf must also be RNGH's ScrollView — otherwise on Android
+// the outer scroll's native gesture handler swallows the horizontal pans and this
+// strip never scrolls (a plain RN ScrollView isn't in RNGH's gesture tree). Same
+// pattern as WorkoutTypeShelf inside PreSessionView's RNGH scroll.
+import { ScrollView } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
 import { betaLinkIdentity } from '@boardsesh/shared-schema';
@@ -88,6 +94,7 @@ export const BetaVideosSection = memo(function BetaVideosSection({ climbUuid, bo
       ) : (
         <ScrollView
           horizontal
+          nestedScrollEnabled
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           snapToInterval={BETA_CARD_WIDTH + CARD_GAP}
