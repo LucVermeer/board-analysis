@@ -94,13 +94,10 @@ vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4 } }));
 vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant: cfg.variant }) }));
 // The floating bar renders only where the native bottom accessory doesn't
 // (Material variant / iOS < 26 / Android) — force that path so the capsule/tick
-// assertions hold. use-bottom-chrome-metrics now derives the accessory the same
-// way the real useNativeAccessoryActive does — useNativeTabBar() &&
-// isBottomAccessoryAvailable() — so model availability off the same `nativeAccessoryActive`
-// flag (its two callers also set nativeTabBar=true), keeping the composite result
-// identical while exercising the real one-call arbitration.
+// assertions hold. `useNativeAccessoryActive` is what use-bottom-chrome-metrics
+// reads now (variant-aware); the capability function stays for other callers.
 vi.mock('../../../hooks/use-bottom-accessory', () => ({
-  isBottomAccessoryAvailable: () => cfg.nativeAccessoryActive,
+  isBottomAccessoryAvailable: () => false,
   // Drive each hook from its own flag: the native tab bar and the native accessory
   // can diverge (e.g. a capable device with no current climb mounts the bar but not
   // the accessory), so the tests keep them independent.
@@ -140,17 +137,6 @@ vi.mock('../LogAscentToolbarButton', () => ({
 }));
 
 import { PersistentQueueBar } from '../persistent-queue-bar';
-import { BottomChromeMetricsProvider } from '../../../hooks/use-bottom-chrome-metrics';
-
-// The bar reads useBottomChromeMetrics(), which now requires the provider (the
-// geometry is computed once at the tab root). All the leaf inputs the provider
-// gathers are mocked above, so wrapping here exercises the real arbitration.
-const renderBar = () =>
-  render(
-    <BottomChromeMetricsProvider>
-      <PersistentQueueBar />
-    </BottomChromeMetricsProvider>,
-  );
 
 describe('PersistentQueueBar', () => {
   beforeEach(() => {
@@ -169,12 +155,12 @@ describe('PersistentQueueBar', () => {
 
   it('renders nothing when no climb is current', () => {
     cfg.currentClimbQueueItem = null;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
   });
 
   it('shows the capsule and standalone tick on a top-level tab page', () => {
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
   });
@@ -184,7 +170,7 @@ describe('PersistentQueueBar', () => {
     // tab page, so the climb bar is hidden there even with a current climb.
     cfg.onTopLevelTab = false;
     cfg.onAccessorySurface = false;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -194,7 +180,7 @@ describe('PersistentQueueBar', () => {
     // is suppressed there even with a current climb.
     cfg.onTopLevelTab = false;
     cfg.onAccessorySurface = false;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -204,7 +190,7 @@ describe('PersistentQueueBar', () => {
     // not float a tick bar over the login screen.
     cfg.onTopLevelTab = false;
     cfg.onAccessorySurface = false;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -216,7 +202,7 @@ describe('PersistentQueueBar', () => {
     // that let this fall through and cover the create-board CTA (#3298).
     cfg.onTopLevelTab = false;
     cfg.onAccessorySurface = false;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -227,7 +213,7 @@ describe('PersistentQueueBar', () => {
     // true — but it's not a top-level tab, so the JS bar is gated off by route.
     cfg.onTopLevelTab = false;
     cfg.onAccessorySurface = true;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -237,7 +223,7 @@ describe('PersistentQueueBar', () => {
     cfg.nativeTabBar = true;
     cfg.insideTabs = true;
 
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
 
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
@@ -252,7 +238,7 @@ describe('PersistentQueueBar', () => {
     cfg.onTopLevelTab = false;
     cfg.onAccessorySurface = false;
 
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
 
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
@@ -262,14 +248,14 @@ describe('PersistentQueueBar', () => {
     // Even off the Climbs tab (e.g. the Profile tab index) the fallback keeps the
     // tick so an ascent can be logged, matching the iOS 26 bottom accessory.
     cfg.onClimbsTab = false;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
   });
 
   it('uses a docked full-width inline-action bar on Material', () => {
     cfg.variant = 'material';
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     const capsule = container.querySelector('[data-capsule]');
     expect(capsule).not.toBeNull();
     expect(capsule?.getAttribute('data-fill-width')).toBe('true');
@@ -290,7 +276,7 @@ describe('PersistentQueueBar', () => {
     // The bar shows the user's own queue head only; a climb lit on the wall (e.g. a
     // teammate's) is surfaced by the top "On the wall" strip, never this bottom bar.
     cfg.currentClimbQueueItem = null;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -299,7 +285,7 @@ describe('PersistentQueueBar', () => {
     // Measured tab bar = 80px tall → the docked bar sits at 80 - TABBAR_SEAM_OVERLAP(1).
     cfg.variant = 'material';
     cfg.measuredTabBarHeight = 80;
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-animated]')?.parentElement?.getAttribute('data-style')).toContain(
       '"bottom":79',
     );
@@ -309,7 +295,7 @@ describe('PersistentQueueBar', () => {
     cfg.widthClass = 'regular';
     cfg.windowWidth = 744;
 
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
 
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
@@ -319,7 +305,7 @@ describe('PersistentQueueBar', () => {
     cfg.widthClass = 'regular';
     cfg.windowWidth = 1024;
 
-    const { container } = renderBar();
+    const { container } = render(<PersistentQueueBar />);
 
     expect(container.querySelector('[data-capsule]')).toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
