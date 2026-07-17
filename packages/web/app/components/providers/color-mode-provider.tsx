@@ -40,7 +40,9 @@ export default function ColorModeProvider({ children }: { children: React.ReactN
 
     // IndexedDB is the source of truth. When it has a saved mode, apply it and
     // refresh the mirror — this seeds existing users whose saved preference
-    // predates the mirror.
+    // predates the mirror. Until that first seed lands, a saved-light user on
+    // an OS-dark device gets one last dark flash (nothing pre-paint can read
+    // IndexedDB); every load after it is flash-free.
     void getPreference<ColorMode>(PREFERENCE_KEY).then((saved) => {
       if (saved === 'light' || saved === 'dark') {
         setMode(saved);

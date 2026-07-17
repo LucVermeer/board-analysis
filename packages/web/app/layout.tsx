@@ -78,7 +78,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             suppressHydrationWarning on <html> covers the attribute swap. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body>
+      {/* suppressHydrationWarning: browser extensions (Grammarly, 1Password)
+          inject attributes onto <body> at runtime — unrelated to the theme swap
+          on <html>. */}
+      <body suppressHydrationWarning>
         <VercelAnalytics />
         <Suspense fallback={null}>
           <AnalyticsClient />
