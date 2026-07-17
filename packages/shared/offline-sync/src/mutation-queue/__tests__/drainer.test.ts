@@ -290,10 +290,39 @@ describe('drainMutationQueue', () => {
       // (markCompleted) landing right as the process suspends.
       expect(mockProcessMutation).toHaveBeenCalledTimes(1);
       expect(mockPeekPending).toHaveBeenCalledTimes(1);
+      // Sentry BOARDSESH-AN: mutation #1's send already succeeded, but
+      // backgrounding was detected right after that network await — the
+      // markCompleted SQLite write must be skipped too (row stays pending;
+      // idempotency_key makes a resend on the next drain safe).
+      expect(mockMarkCompleted).not.toHaveBeenCalled();
     } finally {
       // Explicit reset (not just relying on the next test's beforeEach —
       // __resetDrainerStateForTests already covers it, but a leaked `true`
       // would otherwise silently skip every subsequent test until then).
+      setBackgrounded(false);
+    }
+  });
+
+  it('Sentry BOARDSESH-AN: skips the failure-bookkeeping write when the app backgrounds right after a retryable error', async () => {
+    const mutation = makeMutation({ id: 1 });
+    mockPeekPending.mockResolvedValue([mutation]);
+
+    const retryableError = new Error('Server unavailable');
+    mockProcessMutation.mockImplementationOnce(async () => {
+      setBackgrounded(true);
+      throw retryableError;
+    });
+    mockIsRetryable.mockReturnValue(true);
+
+    const queryClient = createMockQueryClient();
+    try {
+      await drainMutationQueue(mockDb, queryClient, mockGraphqlFetch, { ...ONLINE });
+
+      // recordFailure would normally bump retry_count here — backgrounding must
+      // pre-empt that SQLite write too, leaving the mutation pending as-is.
+      expect(mockRecordFailure).not.toHaveBeenCalled();
+      expect(mockMarkDeadLetter).not.toHaveBeenCalled();
+    } finally {
       setBackgrounded(false);
     }
   });

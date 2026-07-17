@@ -540,6 +540,9 @@ async function runBootstrapPhase(
       onProgress?.({ phase: 'bootstrap', currentTable: scope.scopeKey, documentsProcessed: 0 });
 
       const resolution = await resolveManifestOnce(source, manifestCache);
+      // Re-check after the manifest network await: every branch below either
+      // writes to SQLite (recordBootstrapAttempt) or leads to one further down.
+      if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) break;
       if (resolution.status === 'absent') continue; // permanent miss, no attempt
       if (resolution.status === 'error') {
         const attempt = await recordBootstrapAttempt(db, scope.scopeKey);
@@ -575,6 +578,9 @@ async function runBootstrapPhase(
         downloadByLayout.set(layoutKey, cachedDownload);
         if (cachedDownload.file) downloadedPaths.add(cachedDownload.file.filePath);
       }
+      // Re-check after the (potentially multi-MB) artifact download await, same
+      // reason as the manifest check above.
+      if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) break;
       const download = cachedDownload.file;
       if (!download) {
         if (cachedDownload.permanentMiss) {
