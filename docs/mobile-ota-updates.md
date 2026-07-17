@@ -385,6 +385,24 @@ vp run mobile:ota-rollback -- --mode republish   # re-point to a previous update
 Both need `EXPO_UPDATES_URL` + `EXPO_TOKEN` (same as the publish). After rolling back, land the real
 fix (a revert or a corrected commit) on `main` so the next publish moves the fleet forward again.
 
+### Crash-screen recovery button ("Check for a fix")
+
+When a bad OTA crashes the app hard enough to reach the root `ErrorBoundary`
+(`packages/mobile/app/_layout.tsx`), the built-in "Try again" only re-renders the same broken
+in-memory bundle. The **"Check for a fix"** button next to it runs `checkForUpdateAsync →
+fetchUpdateAsync → reloadAsync` in one tap, so it applies **both** a newer fixed bundle **and** a
+published rollback-to-embedded directive (and any update already downloaded in the background). That
+means either recovery lever above unbricks a stuck user without the old two-blind-cold-start dance:
+run `vp run mobile:ota-rollback` (or land the fixed bundle on `main`) and every crashed install gets
+back to a working app the next time someone taps the button. It only appears on a real
+store/TestFlight binary (`Updates.isEnabled && !__DEV__` — the calls throw `ERR_UPDATES_DISABLED` in
+dev), and when there's nothing to apply it says so rather than reloading the broken bundle again. The
+screen also fires an `Error Screen Shown` event (tagged with the OTA update id / channel) and an
+`OTA Recovery Attempted` event carrying the outcome, so the crash-and-recovery path is visible in
+PostHog. The reloaded-\* success outcomes are tracked (and the client flushed) **just before** the
+reload — `reloadAsync()` restarts the app immediately, so a post-reload capture would be lost;
+delivery is still best-effort since the restart can pre-empt the flush.
+
 ## PR-time OTA-compatibility signal
 
 The native gate above answers "should `main` rebuild?". `mobile-ota-check.yml` answers the same
