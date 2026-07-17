@@ -9,9 +9,11 @@ import { blendedQualityAverageSql } from '../src/queries/climb-stats/quality-ble
 import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
 import {
   HOLDSETUP_TO_LAYOUT,
+  buildExistingCatalogMatchIndex,
   catalogAliasRows,
   catalogProblemToClimbs,
   isBetterCatalogClimb,
+  resolveCatalogClimbUuid,
   type MoonBoardCatalogFile,
   type MappedCatalogClimb,
 } from './moonboard-catalog-helpers.js';
@@ -48,8 +50,6 @@ const DEFAULT_DIR = path.join(__dirname, '../data/moonboard/app-catalog');
 // (widest is board_climbs at ~24 cols) while cutting round-trips ~4× vs 500.
 const BATCH_SIZE = 2000;
 
-type ExistingClimb = { uuid: string; name: string | null };
-
 /**
  * Build the in-memory match index for the non-destructive merge:
  * `${layoutId}|${angle}|${fingerprint}` → existing climbs with those holds.
@@ -60,7 +60,7 @@ type ExistingClimb = { uuid: string; name: string | null };
 async function buildExistingIndex(
   client: postgres.Sql,
   db: ReturnType<typeof drizzle>,
-): Promise<Map<string, ExistingClimb[]>> {
+): Promise<ReturnType<typeof buildExistingCatalogMatchIndex>> {
   console.info('   Building match index from existing MoonBoard climbs...');
   const fingerprintByUuid = new Map<string, string>();
   let currentUuid: string | null = null;
@@ -92,42 +92,20 @@ async function buildExistingIndex(
       layoutId: boardClimbs.layoutId,
       angle: boardClimbs.angle,
       name: boardClimbs.name,
+      isListed: boardClimbs.isListed,
     })
     .from(boardClimbs)
     .where(eq(boardClimbs.boardType, 'moonboard'));
 
-  const index = new Map<string, ExistingClimb[]>();
-  for (const row of climbRows) {
-    const fingerprint = fingerprintByUuid.get(row.uuid);
-    if (!fingerprint) continue;
-    const key = `${row.layoutId}|${row.angle}|${fingerprint}`;
-    const bucket = index.get(key);
-    if (bucket) bucket.push({ uuid: row.uuid, name: row.name });
-    else index.set(key, [{ uuid: row.uuid, name: row.name }]);
-  }
+  const aliasRows = await db
+    .select({ aliasUuid: boardClimbAliases.aliasUuid, canonicalUuid: boardClimbAliases.canonicalUuid })
+    .from(boardClimbAliases)
+    .where(eq(boardClimbAliases.boardType, 'moonboard'));
+  const canonicalByAlias = new Map(aliasRows.map((row) => [row.aliasUuid, row.canonicalUuid]));
+  const index = buildExistingCatalogMatchIndex(climbRows, fingerprintByUuid, canonicalByAlias);
   fingerprintByUuid.clear();
   console.info(`   Indexed ${climbRows.length} existing climbs (${index.size} hold groups)`);
   return index;
-}
-
-/**
- * Resolve the UUID an incoming climb should use: an existing match (update in
- * place) or its own minted id-based UUID (insert). Tie-break a fingerprint that
- * maps to several climbs by case-insensitive name; if none matches, mint new
- * rather than risk overwriting the wrong climb. `matched` reports whether an
- * existing row was found — note a re-import matches its own id-based rows, whose
- * UUID equals the minted one, so we can't infer `matched` from UUID equality.
- */
-function resolveUuid(
-  mapped: MappedCatalogClimb,
-  index: Map<string, ExistingClimb[]>,
-): { uuid: string; matched: boolean } {
-  const candidates = index.get(`${mapped.layoutId}|${mapped.angle}|${mapped.holdFingerprint}`);
-  if (!candidates || candidates.length === 0) return { uuid: mapped.uuid, matched: false };
-  if (candidates.length === 1) return { uuid: candidates[0].uuid, matched: true };
-  const target = mapped.name.trim().toLowerCase();
-  const named = candidates.find((candidate) => (candidate.name ?? '').trim().toLowerCase() === target);
-  return named ? { uuid: named.uuid, matched: true } : { uuid: mapped.uuid, matched: false };
 }
 
 function parseFlag(name: string): string | undefined {
@@ -202,7 +180,7 @@ async function importMoonBoardCatalog() {
           continue;
         }
         for (const mapped of climbs) {
-          const { uuid, matched: matchedExisting } = resolveUuid(mapped, existingIndex);
+          const { uuid, matched: matchedExisting } = resolveCatalogClimbUuid(mapped, existingIndex);
 
           // Record the aliases before the dedupe below: when two problems collapse
           // onto one climb (same holds+angle) we drop the weaker climb row, but we
@@ -374,7 +352,7 @@ async function importMoonBoardCatalog() {
             .values(aliasRecords.slice(i, i + BATCH_SIZE))
             .onConflictDoUpdate({
               target: [boardClimbAliases.boardType, boardClimbAliases.aliasUuid],
-              set: { lastSeenAt: sql`now()` },
+              set: { canonicalUuid: sql`excluded.canonical_uuid`, lastSeenAt: sql`now()` },
             });
         }
       });

@@ -5,8 +5,10 @@ import { fingerprintFromHolds } from './moonboard-2024-helpers.js';
 import {
   HOLDSETUP_TO_LAYOUT,
   angleFromConfiguration,
+  buildExistingCatalogMatchIndex,
   roleLetterToHoldState,
   parseMovesString,
+  resolveCatalogClimbUuid,
   holdsToFrames,
   catalogClimbUuid,
   catalogAliasRows,
@@ -123,6 +125,84 @@ void test('catalogAliasRows aliases the problem-id UUID onto a reused legacy UUI
     { aliasUuid: legacy, canonicalUuid: legacy },
     { aliasUuid: idBased, canonicalUuid: legacy },
   ]);
+});
+
+void test('catalog matching excludes delisted rows even when they have stale self-aliases', () => {
+  const mapped = mapCatalogConfig(PORRIDGE, PORRIDGE.configurations![1], { layoutId: 3, angle: 40 });
+  const delistedUuid = 'moonboard-delisted-duplicate';
+  const canonicalUuid = 'moonboard-listed-canonical';
+  const index = buildExistingCatalogMatchIndex(
+    [
+      {
+        uuid: delistedUuid,
+        layoutId: mapped.layoutId,
+        angle: mapped.angle,
+        name: mapped.name,
+        isListed: false,
+      },
+      {
+        uuid: canonicalUuid,
+        layoutId: mapped.layoutId,
+        angle: mapped.angle,
+        name: mapped.name,
+        isListed: true,
+      },
+    ],
+    new Map([
+      [delistedUuid, mapped.holdFingerprint],
+      [canonicalUuid, mapped.holdFingerprint],
+    ]),
+    new Map([
+      [delistedUuid, delistedUuid],
+      [canonicalUuid, canonicalUuid],
+    ]),
+  );
+
+  assert.deepEqual(resolveCatalogClimbUuid(mapped, index), { uuid: canonicalUuid, matched: true });
+  assert.deepEqual(catalogAliasRows(mapped.uuid, canonicalUuid), [
+    { aliasUuid: canonicalUuid, canonicalUuid },
+    { aliasUuid: mapped.uuid, canonicalUuid },
+  ]);
+});
+
+void test('catalog matching follows alias chains and collapses candidates at the same canonical UUID', () => {
+  const mapped = mapCatalogConfig(PORRIDGE, PORRIDGE.configurations![1], { layoutId: 3, angle: 40 });
+  const firstUuid = 'moonboard-first-listed-alias';
+  const secondUuid = 'moonboard-intermediate-alias';
+  const canonicalUuid = 'moonboard-terminal-canonical';
+  const index = buildExistingCatalogMatchIndex(
+    [
+      { uuid: firstUuid, layoutId: 3, angle: 40, name: 'old name', isListed: true },
+      { uuid: canonicalUuid, layoutId: 3, angle: 40, name: 'canonical name', isListed: true },
+    ],
+    new Map([
+      [firstUuid, mapped.holdFingerprint],
+      [canonicalUuid, mapped.holdFingerprint],
+    ]),
+    new Map([
+      [firstUuid, secondUuid],
+      [secondUuid, canonicalUuid],
+      [canonicalUuid, canonicalUuid],
+    ]),
+  );
+
+  assert.deepEqual(resolveCatalogClimbUuid(mapped, index), { uuid: canonicalUuid, matched: true });
+});
+
+void test('catalog matching ignores cyclic aliases instead of writing another broken redirect', () => {
+  const mapped = mapCatalogConfig(PORRIDGE, PORRIDGE.configurations![1], { layoutId: 3, angle: 40 });
+  const firstUuid = 'moonboard-cycle-a';
+  const secondUuid = 'moonboard-cycle-b';
+  const index = buildExistingCatalogMatchIndex(
+    [{ uuid: firstUuid, layoutId: 3, angle: 40, name: mapped.name, isListed: true }],
+    new Map([[firstUuid, mapped.holdFingerprint]]),
+    new Map([
+      [firstUuid, secondUuid],
+      [secondUuid, firstUuid],
+    ]),
+  );
+
+  assert.deepEqual(resolveCatalogClimbUuid(mapped, index), { uuid: mapped.uuid, matched: false });
 });
 
 void test('isImportableProblem rejects deleted / inactive / holdless / config-less problems', () => {
