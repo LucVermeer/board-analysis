@@ -41,6 +41,44 @@ describe('useOptimisticVote', () => {
     expect(mutate.mock.calls[0][0]).toEqual({ entityType: 'session', entityId: 's1', value: 1 });
   });
 
+  it('sends value: 1 — never 0 — when un-voting (regression for #3189)', () => {
+    // Already upvoted server-side. Tapping again removes the vote: the backend
+    // only accepts +1/-1 (no 0/null "clear vote"), and toggles off when the
+    // SAME value is resent — so the un-vote tap must also send `value: 1`.
+    const { result } = renderHook(() => useOptimisticVote('s1', 5, 1));
+    expect(result.current.voted).toBe(true);
+
+    act(() => result.current.toggle());
+
+    expect(result.current.voted).toBe(false);
+    expect(result.current.count).toBe(4);
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0][0]).toEqual({ entityType: 'session', entityId: 's1', value: 1 });
+  });
+
+  it('pins every wire value across a full none -> voted -> none -> voted transition sequence', () => {
+    const { result } = renderHook(() => useOptimisticVote('s1', 5, null));
+
+    // none -> voted
+    act(() => result.current.toggle());
+    expect(result.current.voted).toBe(true);
+    act(() => (mutate.mock.calls[0][1] as VoteOpts).onSuccess({ upvotes: 6, userVote: 1 }));
+
+    // voted -> none (the un-vote path this bug broke)
+    act(() => result.current.toggle());
+    expect(result.current.voted).toBe(false);
+    act(() => (mutate.mock.calls[1][1] as VoteOpts).onSuccess({ upvotes: 5, userVote: 0 }));
+
+    // none -> voted again
+    act(() => result.current.toggle());
+    expect(result.current.voted).toBe(true);
+
+    expect(mutate).toHaveBeenCalledTimes(3);
+    for (const call of mutate.mock.calls) {
+      expect(call[0]).toEqual({ entityType: 'session', entityId: 's1', value: 1 });
+    }
+  });
+
   it('reconciles to the server summary on success', () => {
     const { result } = renderHook(() => useOptimisticVote('s1', 5, null));
     act(() => result.current.toggle());

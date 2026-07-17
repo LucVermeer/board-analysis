@@ -46,8 +46,13 @@ export function useOptimisticVote(
     if (voteIsPending) return; // guard double-tap
     const nextVoted = !voted;
     setOptimistic({ count: count + (nextVoted ? 1 : -1), voted: nextVoted });
+    // The backend's vote mutation only accepts +1/-1 (no 0/null "clear vote"
+    // value) — un-voting is done by resending the SAME value already on
+    // record, which the resolver detects and deletes. Mobile only ever
+    // represents an upvote, so the wire value is always 1; `nextVoted` still
+    // drives the local optimistic voted/count flip above.
     voteMutate(
-      { entityType, entityId, value: nextVoted ? 1 : 0 },
+      { entityType, entityId, value: 1 },
       {
         onSuccess: (summary) => setOptimistic({ count: summary.upvotes, voted: summary.userVote === 1 }),
         onError: () => setOptimistic(null),
