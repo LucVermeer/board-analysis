@@ -24,7 +24,7 @@ import {
 } from './snapshot-bootstrap';
 import { parseSnapshotManifest, type SnapshotManifest } from './snapshot-manifest';
 import { findSnapshotEntry, isSnapshotEntryUsable } from './snapshot-estimate';
-import { isSigningOut, getWipeEpoch } from '../mutation-queue/drainer';
+import { isSigningOut, getWipeEpoch, isBackgrounded } from '../mutation-queue/drainer';
 import { parseOfflineBoardKey, type OfflineBoardScope } from '../offline-board-key';
 
 /**
@@ -289,7 +289,7 @@ async function syncTable(
   while (hasMore) {
     // Sign-out is wiping local data: stop before this page writes the old
     // user's rows back (mirrors the drainer's guard).
-    if (isSigningOut() || getWipeEpoch() !== cycleEpoch) return { reachedTail: false };
+    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return { reachedTail: false };
     const variables: Record<string, unknown> = { cursor, limit: PAGE_LIMIT };
     if (config.isPerBoard && boardScope) {
       variables.boardType = boardScope.boardType;
@@ -302,7 +302,7 @@ async function syncTable(
 
     // Re-check after the await: the wipe may have started (or fully completed)
     // while this page was on the wire.
-    if (isSigningOut() || getWipeEpoch() !== cycleEpoch) return { reachedTail: false };
+    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return { reachedTail: false };
 
     // An empty page would not advance the cursor; if the backend ever returns
     // documents:[] with hasMore:true we'd spin forever. Stop here (I2).
@@ -357,14 +357,14 @@ async function processDeletions(
   while (hasMore) {
     // Sign-out is wiping local data: stop before this page writes the old
     // user's rows back (mirrors the drainer's guard).
-    if (isSigningOut() || getWipeEpoch() !== cycleEpoch) return;
+    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return;
     const response = await graphqlFetch<{ syncDeletions: SyncDeletionsResult }>(SYNC_DELETIONS_QUERY, {
       cursor,
       limit: PAGE_LIMIT,
     });
     const result = response.syncDeletions;
 
-    if (isSigningOut() || getWipeEpoch() !== cycleEpoch) return;
+    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return;
 
     // Empty page can't advance the cursor; break to avoid an infinite loop if
     // the backend returns deletions:[] with hasMore:true (I2).
@@ -525,7 +525,7 @@ async function runBootstrapPhase(
 
   try {
     for (const scope of scopes) {
-      if (isSigningOut() || getWipeEpoch() !== cycleEpoch) break;
+      if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) break;
 
       // Duration telemetry starts here — before the eligibility check — so a
       // snapshot scope's durationMs covers its manifest/download/import work.
@@ -624,7 +624,7 @@ async function runBootstrapPhase(
       } catch (error) {
         // A wipe mid-import rolls the transaction back and bails the phase — no
         // attempt (the pull is being torn down, not failing).
-        if (error instanceof SnapshotWipedError || isSigningOut() || getWipeEpoch() !== cycleEpoch) break;
+        if (error instanceof SnapshotWipedError || isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) break;
         if (error instanceof SnapshotSchemaStaleError) {
           // The artifact predates this client's schema — importing it would
           // NULL-fill newer columns and stamp the cursor past them forever.
@@ -672,7 +672,7 @@ export async function pullSync(
   // Sign-out never hit this because `isSigningOut()` is a persistent flag that stays
   // true for every subsequent table; the epoch alone is not a substitute for it.
   const cycleEpoch = getWipeEpoch();
-  const cycleAborted = (): boolean => isSigningOut() || getWipeEpoch() !== cycleEpoch;
+  const cycleAborted = (): boolean => isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded();
 
   // Parse the enabled scope keys once; malformed keys are dropped (a stray value
   // can't crash the pull) so both the bootstrap phase and the paged board loop

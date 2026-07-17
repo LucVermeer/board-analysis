@@ -69,6 +69,28 @@ export function getWipeEpoch(): number {
   return _wipeEpoch;
 }
 
+// Backgrounding guard (Sentry BOARDSESH-AN: EXC_BAD_ACCESS in expo-sqlite's
+// native `columnName`). iOS can suspend the process mid-statement once the app
+// backgrounds; a query issued (or still resolving) right at that boundary can
+// have the native binding read column metadata off a `sqlite3_stmt*` that's
+// already been torn down, which crashes natively — a JS try/catch can't save
+// it. The mobile adapter flips this on AppState 'background' and off on
+// 'active' (packages/mobile/src/offline/offline-sync-adapter.ts); the drainer
+// and the pull client both check it between statements, same shape as the
+// sign-out guard above. This only narrows the window (it stops issuing NEW
+// queries once backgrounded — a statement already dispatched to native can't
+// be recalled), but every loop here awaits network or a single short
+// statement between checks, so the in-flight tail is small.
+let _isBackgrounded = false;
+
+export function setBackgrounded(value: boolean): void {
+  _isBackgrounded = value;
+}
+
+export function isBackgrounded(): boolean {
+  return _isBackgrounded;
+}
+
 // Bounded exponential backoff between drain attempts within a single cycle
 // (I7). A transient failure (network blip, 5xx) recovers on its own instead of
 // stalling until the next external trigger. Capped so we never busy-loop or
@@ -159,6 +181,7 @@ export async function drainMutationQueue(
 ): Promise<void> {
   // Don't start (or re-enter) a drain while sign-out is wiping local data.
   if (_isSigningOut) return;
+  if (_isBackgrounded) return;
   if (_isDraining) return;
   // Offline: nothing can be pushed, and attempting would only churn retry counts
   // and burn backoff sleeps. Skip; the reconnect/foreground trigger drains later.
@@ -182,7 +205,7 @@ export async function drainMutationQueue(
 
   try {
     while (true) {
-      if (_isSigningOut || _wipeEpoch !== startEpoch) break;
+      if (_isSigningOut || _wipeEpoch !== startEpoch || _isBackgrounded) break;
       const batch = await peekPending(db, 10);
       if (batch.length === 0) break;
 
@@ -190,7 +213,7 @@ export async function drainMutationQueue(
       let networkStop = false;
 
       for (const mutation of batch) {
-        if (_isSigningOut || _wipeEpoch !== startEpoch) {
+        if (_isSigningOut || _wipeEpoch !== startEpoch || _isBackgrounded) {
           networkStop = true; // reuse the "end cycle now" path
           break;
         }
@@ -257,6 +280,7 @@ export function isDraining(): boolean {
 export function __resetDrainerStateForTests(): void {
   _isDraining = false;
   _isSigningOut = false;
+  _isBackgrounded = false;
   // Epoch checks are relative (capture-then-compare), so a residual value is
   // technically harmless — reset anyway so no test inherits another's wipes.
   _wipeEpoch = 0;
