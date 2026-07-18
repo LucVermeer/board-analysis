@@ -4,6 +4,13 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-18
+
+### New
+
+- Reorganized the climbs filter panel into clear sections you can scan at a glance — no more digging through "Refine" and "Advanced" ([#3769](https://github.com/boardsesh/boardsesh/pull/3769))
+  Filter for your projects, sends, or untried climbs right at the top under Progress
+
 ## 2026-07-17
 
 ### App update

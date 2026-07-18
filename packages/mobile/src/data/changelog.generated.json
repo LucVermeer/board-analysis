@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-17T20:55:55.913Z",
+  "generatedAt": "2026-07-18T10:06:08.005Z",
   "entries": [
+    {
+      "prNumber": 3769,
+      "category": "new",
+      "title": "Reorganized the climbs filter panel into clear sections you can scan at a glance — no more digging through \"Refine\" and \"Advanced\"",
+      "mergedAt": "2026-07-18T10:05:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3769",
+      "body": "Filter for your projects, sends, or untried climbs right at the top under Progress"
+    },
     {
       "prNumber": 3724,
       "category": "new",
