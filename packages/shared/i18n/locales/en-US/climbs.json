@@ -651,20 +651,19 @@
       "grade": "Grade",
       "gradeRange": "Grade range",
       "anyAscents": "Any",
-      "refineHint": "Climb type, setters, grade accuracy",
-      "advancedHint": "Status, progress, beta, sorting",
       "minRating": "Min rating",
       "anyRating": "Any",
       "apply": "Apply filters",
       "reset": "Reset",
       "section": {
-        "status": "Status",
-        "refine": "Refine",
-        "advanced": "Advanced"
+        "difficulty": "Difficulty",
+        "quality": "Quality",
+        "theClimb": "The climb",
+        "sort": "Sort"
       },
       "popularity": "Popularity",
       "established2plus": "Established 2+",
-      "benchmark": "Benchmarks only",
+      "benchmark": "Benchmarks",
       "benchmarkDescription": "Setter-flagged benchmark climbs",
       "showCount_one": "Show {{count}} climb",
       "showCount_other": "Show {{count}} climbs",
@@ -684,27 +683,25 @@
         "desc": "Descending"
       },
       "status": {
-        "any": "Any",
         "drafts": "Drafts",
-        "established": "Established",
-        "projects": "Projects"
+        "established": "Established"
       },
       "accuracy": {
         "label": "Grade accuracy",
+        "description": "How closely the community agrees with the grade",
         "off": "Off",
         "loose": "Loose",
         "moderate": "Moderate",
         "tight": "Tight"
       },
       "progress": {
-        "label": "Your progress",
+        "label": "Progress",
         "all": "All",
         "untried": "Not tried",
         "projects": "Projects",
         "sent": "Sent",
         "unsent": "Unsent"
       },
-      "signInForDrafts": "Sign in to filter your drafts",
       "setters": "Setters",
       "none": "None",
       "tall": "Tall climbs only",
@@ -718,7 +715,9 @@
       "betaVideosDescription": "Only climbs with a beta video",
       "searchSetters": "Search setters",
       "noSetters": "No setters yet",
-      "clearAll": "Clear all"
+      "clearAll": "Clear all",
+      "drafts": "My drafts",
+      "popularityUnrepeated": "Unrepeated"
     },
     "search": {
       "recentFilters": "Recent",

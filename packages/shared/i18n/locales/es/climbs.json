@@ -651,20 +651,19 @@
       "grade": "Grado",
       "gradeRange": "Rango de grado",
       "anyAscents": "Todos",
-      "refineHint": "Tipo, equipadores, precisión de grado",
-      "advancedHint": "Estado, progreso, beta, orden",
       "minRating": "Mín valoración",
       "anyRating": "Todos",
       "apply": "Aplicar filtros",
       "reset": "Restablecer",
       "section": {
-        "status": "Estado",
-        "refine": "Afinar",
-        "advanced": "Avanzado"
+        "difficulty": "Dificultad",
+        "quality": "Calidad",
+        "theClimb": "El bloque",
+        "sort": "Orden"
       },
       "popularity": "Popularidad",
       "established2plus": "Establecido 2+",
-      "benchmark": "Solo benchmarks",
+      "benchmark": "Benchmarks",
       "benchmarkDescription": "Vías marcadas como benchmark por el equipador",
       "showCount_one": "Ver {{count}} vía",
       "showCount_other": "Ver {{count}} vías",
@@ -684,27 +683,25 @@
         "desc": "Descendente"
       },
       "status": {
-        "any": "Cualquiera",
         "drafts": "Borradores",
-        "established": "Publicadas",
-        "projects": "Proyectos"
+        "established": "Publicadas"
       },
       "accuracy": {
         "label": "Precisión del grado",
+        "description": "Cuánto coincide la comunidad con el grado",
         "off": "Desactivado",
         "loose": "Flexible",
         "moderate": "Moderada",
         "tight": "Estricta"
       },
       "progress": {
-        "label": "Tu progreso",
+        "label": "Progreso",
         "all": "Todos",
         "untried": "Sin intentar",
         "projects": "Proyectos",
         "sent": "Encadenados",
         "unsent": "Sin encadenar"
       },
-      "signInForDrafts": "Inicia sesión para filtrar tus borradores",
       "setters": "Equipadores",
       "none": "Ninguno",
       "tall": "Solo vías altas",
@@ -718,7 +715,9 @@
       "betaVideosDescription": "Solo vías con un vídeo de beta",
       "searchSetters": "Buscar equipadores",
       "noSetters": "Sin equipadores",
-      "clearAll": "Borrar todo"
+      "clearAll": "Borrar todo",
+      "drafts": "Mis borradores",
+      "popularityUnrepeated": "Sin repetir"
     },
     "search": {
       "recentFilters": "Recientes",
