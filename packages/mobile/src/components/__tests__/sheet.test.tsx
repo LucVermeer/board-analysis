@@ -15,9 +15,18 @@ const captures = vi.hoisted(() => ({
   bottomSheetViewUsed: false,
   scrollStyle: undefined as unknown,
   scrollContentStyle: undefined as unknown,
+  viewStyle: undefined as unknown,
   kavBehavior: undefined as string | undefined,
 }));
 const platform = vi.hoisted(() => ({ os: 'ios' }));
+
+// Faithful recursive flatten (nested arrays merge left-to-right) so the tests read
+// the effective style the way React Native would, not just a one-level Object.assign.
+function flattenStyle(style: unknown): Record<string, unknown> {
+  if (Array.isArray(style)) return Object.assign({}, ...style.map(flattenStyle));
+  if (style && typeof style === 'object') return style as Record<string, unknown>;
+  return {};
+}
 
 type SheetMockProps = {
   children?: ReactNode;
@@ -58,7 +67,10 @@ vi.mock('react-native', () => ({
     Version: '26.1',
     select: (options: { ios?: unknown; android?: unknown }) => options.ios,
   },
-  View: ({ children }: ViewMockProps) => createElement('div', null, children),
+  View: ({ children, style }: ViewMockProps & { style?: unknown }) => {
+    captures.viewStyle = style;
+    return createElement('div', null, children);
+  },
   KeyboardAvoidingView: ({ children, behavior }: ViewMockProps & { behavior?: string }) => {
     captures.kavBehavior = behavior;
     return createElement('div', { 'data-kav': 'true' }, children);
@@ -134,6 +146,7 @@ beforeEach(() => {
   captures.bottomSheetViewUsed = false;
   captures.scrollStyle = undefined;
   captures.scrollContentStyle = undefined;
+  captures.viewStyle = undefined;
   captures.kavBehavior = undefined;
   platform.os = 'ios';
   hapticMedium.mockClear();
@@ -239,7 +252,7 @@ describe('Sheet', () => {
     expect(captures.scrollStyle).toEqual({ height: 390 });
   });
 
-  it('pads a footerless body for the bottom safe-area inset (Android nav bar clearance)', () => {
+  it('pads a footerless scrollable body for the bottom safe-area inset (Android nav bar clearance)', () => {
     // No footer means the body sits against the bottom edge, so it must clear the
     // system nav bar itself — the native sheet does not pad content for it. Inset
     // is 34 in this file's safe-area mock.
@@ -248,13 +261,19 @@ describe('Sheet', () => {
         <div>body</div>
       </Sheet>,
     );
-    const flat = (
-      Array.isArray(captures.scrollContentStyle)
-        ? Object.assign({}, ...(captures.scrollContentStyle as unknown[]).filter(Boolean))
-        : (captures.scrollContentStyle ?? {})
-    ) as { paddingBottom?: number };
     // Consumer's 8 is preserved and the 34 inset is added on top.
-    expect(flat.paddingBottom).toBe(42);
+    expect(flattenStyle(captures.scrollContentStyle).paddingBottom).toBe(42);
+  });
+
+  it('pads a footerless non-scrollable body for the bottom safe-area inset', () => {
+    // The non-scrollable branch renders the body in a plain View that also gets the
+    // composed contentContainerStyle, so it must clear the nav bar the same way.
+    render(
+      <Sheet contentContainerStyle={{ paddingBottom: 8 }}>
+        <div>body</div>
+      </Sheet>,
+    );
+    expect(flattenStyle(captures.viewStyle).paddingBottom).toBe(42);
   });
 
   it('fires a haptic and onChange only when the sheet opens (index >= 0)', () => {

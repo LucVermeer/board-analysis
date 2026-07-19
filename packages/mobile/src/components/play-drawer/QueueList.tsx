@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { getPlaylistSuggestedClimbs, createPlaylistSuggestionSource, getQueueBoardKey } from '@boardsesh/queue';
 import { buildQueueListModel, type QueueFlatRow } from '@boardsesh/play-view';
+import { withSheetBottomInset } from '../sheet-content-inset';
 import { QueueItemRow, type QueueItemRowBoard, POSITION_SLOT_WIDTH, SEPARATOR_INSET } from '../QueueItemRow';
 import { ClimbListItemContent } from '../ClimbListItemContent';
 import { Text } from '../Text';
@@ -88,10 +89,12 @@ function QueueListComponent({
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<QueueListRow> | null>(null);
 
-  // Clear the queue toolbar (spacing[10]) AND the Android edge-to-edge navigation
-  // bar, so the last row never sits under the 3-button nav bar when fully scrolled.
+  // Clear the queue toolbar (styles.listContent's spacing[10]) AND the Android
+  // edge-to-edge navigation bar, so the last row never sits under the 3-button nav
+  // bar when fully scrolled. withSheetBottomInset adds insets.bottom on top of the
+  // toolbar padding (and returns the base unchanged when there's no inset).
   const listContentContainerStyle = useMemo(
-    () => [styles.listContent, { paddingBottom: spacing[10] + insets.bottom }],
+    () => withSheetBottomInset(styles.listContent, insets.bottom),
     [insets.bottom],
   );
 
