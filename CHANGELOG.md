@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-19
+
+### New
+
+- Boardsesh now runs in your browser: the same app you use on your phone — queue, play view, board LEDs over Web Bluetooth, offline thumbnails — at boardsesh.com/app, rolling out gradually. If anything feels off, add `?classic=1` to any link to hop back to the classic site. ([#3775](https://github.com/boardsesh/boardsesh/pull/3775))
+
 ## 2026-07-18
 
 ### New

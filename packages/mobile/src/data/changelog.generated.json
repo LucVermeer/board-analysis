@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-18T10:06:08.005Z",
+  "generatedAt": "2026-07-19T23:27:42.461Z",
   "entries": [
+    {
+      "prNumber": 3775,
+      "category": "new",
+      "title": "Boardsesh now runs in your browser: the same app you use on your phone — queue, play view, board LEDs over Web Bluetooth, offline thumbnails — at boardsesh.com/app, rolling out gradually. If anything feels off, add `?classic=1` to any link to hop back to the classic site.",
+      "mergedAt": "2026-07-19T23:26:37Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3775"
+    },
     {
       "prNumber": 3769,
       "category": "new",
