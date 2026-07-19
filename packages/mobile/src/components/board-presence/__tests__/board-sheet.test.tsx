@@ -53,6 +53,9 @@ const managedSheet = vi.hoisted(() => ({
 }));
 const climbRows = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
 const thumbnails = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
+// Mutable safe-area inset so a test can simulate an Android 3-button nav bar
+// (a non-zero bottom inset) and assert it reaches the switch-board footer.
+const safeArea = vi.hoisted(() => ({ bottom: 0 }));
 
 type ViewMockProps = { children?: ReactNode; style?: unknown };
 type ClimbListRowMockProps = {
@@ -84,8 +87,19 @@ vi.mock('react-native', () => ({
     children,
     onPress,
     accessibilityLabel,
-  }: ViewMockProps & { onPress?: () => void; accessibilityLabel?: string }) =>
-    createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
+    style,
+  }: ViewMockProps & { onPress?: () => void; accessibilityLabel?: string }) => {
+    // Surface the flattened paddingBottom so tests can assert the safe-area inset
+    // reaches bottom-anchored controls (the switch-board footer).
+    const flat = Array.isArray(style)
+      ? Object.assign({}, ...style.filter(Boolean))
+      : ((style as Record<string, unknown>) ?? {});
+    return createElement(
+      'button',
+      { onClick: onPress, 'aria-label': accessibilityLabel, 'data-padding-bottom': flat.paddingBottom },
+      children,
+    );
+  },
   // Surface onRefresh as a clickable element so the pull-to-refresh wiring is testable.
   RefreshControl: ({ onRefresh }: { onRefresh?: () => void }) =>
     createElement('button', { onClick: onRefresh, 'aria-label': 'refresh' }),
@@ -166,7 +180,7 @@ vi.mock('../../../providers/sheet-presentation-provider', () => ({
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 0, bottom: safeArea.bottom, left: 0, right: 0 }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -378,6 +392,7 @@ describe('BoardSheet', () => {
     managedSheet.lastOnFullyDismissed = null;
     climbRows.props = [];
     thumbnails.props = [];
+    safeArea.bottom = 0;
   });
 
   it('presents and dismisses via the imperative ref', () => {
@@ -1222,6 +1237,29 @@ describe('BoardSheet', () => {
     expect(container.textContent).toContain('mobile.boardPresence.switchBoard');
     fireEvent.click(getByLabelText('mobile.boardPresence.switchBoardAria'));
     expect(onSwitchBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('pads the switch-board footer for the bottom safe-area inset (Android 3-button nav bar)', () => {
+    // Simulate a device whose system nav bar reserves a bottom inset — the native
+    // sheet does not pad content for it, so the footer must add it itself or the
+    // switch-board button sits under the nav bar (the reported bug).
+    safeArea.bottom = 34;
+    const ref = createRef<BoardSheetHandle>();
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        ref,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+    act(() => ref.current?.present());
+
+    // insets.bottom (34) + spacing[3] (12) — the inset is included, not dropped.
+    const footer = getByLabelText('mobile.boardPresence.switchBoardAria');
+    expect(footer.getAttribute('data-padding-bottom')).toBe(String(34 + 12));
   });
 
   it('fires onClose from the header chevron', () => {

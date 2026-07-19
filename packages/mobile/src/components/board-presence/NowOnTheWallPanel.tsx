@@ -700,11 +700,14 @@ function NowOnTheWallPanelComponent(
 
   const listContentContainerStyle = useMemo(() => ({ paddingBottom: spacing[4] }), []);
 
-  // Sheet mode sits inside the native sheet chrome (which owns the bottom safe
-  // area), so the footer only needs its own spacing. The inline column and the
-  // full-screen tab render with no chrome, so they own both safe-area insets.
+  // In sheet mode the native drag handle supplies the top spacing, so the header
+  // needs none; the inline column and full-screen tab render with no chrome and
+  // own the top inset themselves. The footer, however, always adds the bottom
+  // safe-area inset on both platforms — the native sheet does NOT pad content for
+  // the Android edge-to-edge navigation bar, so without it the switch-board button
+  // sits under the 3-button nav bar. Matches the shared Sheet/ModalSheet footers.
   const headerTopPadding = variant === 'sheet' ? 0 : insets.top + spacing[2];
-  const footerBottomPadding = variant === 'sheet' ? spacing[3] : insets.bottom + spacing[3];
+  const footerBottomPadding = insets.bottom + spacing[3];
 
   const refreshControl = (
     <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={systemColors.secondaryLabel} />

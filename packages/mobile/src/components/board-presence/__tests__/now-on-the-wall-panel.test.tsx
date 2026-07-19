@@ -317,11 +317,15 @@ describe('NowOnTheWallPanel', () => {
     presence.refresh.mockClear();
   });
 
-  it('does not double-count the bottom safe area when rendered inside the sheet', () => {
+  it('adds the bottom safe-area inset to the switch-board footer in both sheet and inline variants', () => {
+    // The native sheet does not pad its content for the Android edge-to-edge
+    // navigation bar, so the footer adds insets.bottom (34) + spacing[3] (12)
+    // itself in every variant — otherwise the switch-board button sits under the
+    // 3-button nav bar (the reported bug).
     safeArea.insets = { top: 0, bottom: 34, left: 0, right: 0 };
     const { getByLabelText, rerender } = render(panelElement({ variant: 'sheet' }));
 
-    expect(getByLabelText('mobile.boardPresence.switchBoardAria').getAttribute('data-padding-bottom')).toBe('12');
+    expect(getByLabelText('mobile.boardPresence.switchBoardAria').getAttribute('data-padding-bottom')).toBe('46');
 
     rerender(panelElement({ variant: 'column' }));
 
