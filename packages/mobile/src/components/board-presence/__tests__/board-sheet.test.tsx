@@ -90,10 +90,15 @@ vi.mock('react-native', () => ({
     style,
   }: ViewMockProps & { onPress?: () => void; accessibilityLabel?: string }) => {
     // Surface the flattened paddingBottom so tests can assert the safe-area inset
-    // reaches bottom-anchored controls (the switch-board footer).
-    const flat = Array.isArray(style)
-      ? Object.assign({}, ...style.filter(Boolean))
-      : ((style as Record<string, unknown>) ?? {});
+    // reaches bottom-anchored controls (the switch-board footer). Recursive so a
+    // nested style array (e.g. withSheetBottomInset output) flattens correctly.
+    const flattenStyle = (input: unknown): Record<string, unknown> =>
+      Array.isArray(input)
+        ? Object.assign({}, ...input.map(flattenStyle))
+        : input && typeof input === 'object'
+          ? (input as Record<string, unknown>)
+          : {};
+    const flat = flattenStyle(style);
     return createElement(
       'button',
       { onClick: onPress, 'aria-label': accessibilityLabel, 'data-padding-bottom': flat.paddingBottom },

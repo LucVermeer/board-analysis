@@ -2,14 +2,23 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 /**
  * Compose a sheet body's `contentContainerStyle` so it clears the bottom
- * safe-area inset — the Android edge-to-edge navigation bar (a ~48dp 3-button bar
- * or the gesture pill) — ON TOP of whatever bottom padding the consumer already
- * asked for, rather than replacing it.
+ * safe-area inset ON TOP of whatever bottom padding the consumer already asked
+ * for, rather than replacing it.
  *
- * Used by the footerless branch of the shared `Sheet` / `ModalSheet` wrappers: the
- * native `@expo/ui` sheet does not pad its content for the system nav bar, so a
- * control at the bottom of a footerless sheet would otherwise sit under it. With a
- * pinned footer the body scrolls above a footer that already carries the inset, so
+ * The native `@expo/ui` sheet does NOT clear the bottom safe area on EITHER
+ * platform — neither the Android edge-to-edge navigation bar (~48dp 3-button bar /
+ * gesture pill) nor the iOS home indicator (~34pt) — so a control at the bottom of
+ * a footerless sheet sits under it unless the content adds `insets.bottom` itself.
+ * Applying it on both platforms is correct and does NOT double-inset: `insets.bottom`
+ * is 0 when there's nothing to clear, and this matches the app's established sheet
+ * convention — the shared `Sheet`/`ModalSheet` footers and bespoke sheets like
+ * `EndSessionSheet` / `InviteSheet` already add `insets.bottom` unconditionally
+ * (see the "~34pt on gesture-nav phones" note in `EndSessionSheet`). A
+ * `Platform.OS === 'android'` guard would reintroduce the home-indicator overlap on
+ * iOS gesture-nav phones.
+ *
+ * Used by the footerless branch of the shared `Sheet` / `ModalSheet` wrappers. With
+ * a pinned footer the body scrolls above a footer that already carries the inset, so
  * this is not applied there.
  */
 export function withSheetBottomInset(
