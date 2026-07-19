@@ -20,6 +20,7 @@ describe('CORS Handler', () => {
     });
     delete process.env.TAILSCALE_HOSTNAME;
     delete process.env.DEV_ALLOWED_ORIGINS;
+    delete process.env.APP_ORIGIN;
 
     // Reset to a known state before each test.
     // initCors invokes execFileSync (for Tailscale discovery), so clear the
@@ -55,6 +56,20 @@ describe('CORS Handler', () => {
       expect(getAllowedOrigins()).toContain('not-a-valid-url');
     });
 
+    it('adds the standalone app origin (app.boardsesh.com) by default', () => {
+      initCors('https://boardsesh.com');
+      expect(getAllowedOrigins()).toContain('https://app.boardsesh.com');
+    });
+
+    it('uses APP_ORIGIN over the default when set', () => {
+      process.env.APP_ORIGIN = 'https://app.staging.boardsesh.com';
+      initCors('https://boardsesh.com');
+      const origins = getAllowedOrigins();
+      expect(origins).toContain('https://app.staging.boardsesh.com');
+      expect(origins).not.toContain('https://app.boardsesh.com');
+      delete process.env.APP_ORIGIN;
+    });
+
     it('adds localhost origins in non-production env', () => {
       // vitest env is 'test', not 'production'
       initCors('https://boardsesh.com');
@@ -63,6 +78,8 @@ describe('CORS Handler', () => {
       expect(origins).toContain('http://127.0.0.1:3000');
       expect(origins).toContain('http://localhost:3001');
       expect(origins).toContain('http://127.0.0.1:3001');
+      expect(origins).toContain('http://localhost:3002');
+      expect(origins).toContain('http://127.0.0.1:3009');
     });
 
     it('parses DEV_ALLOWED_ORIGINS env var (comma-separated, trimmed)', () => {
@@ -81,6 +98,40 @@ describe('CORS Handler', () => {
       expect(origins).toContain('http://192.168.0.1:3000');
       // Should not contain empty strings
       expect(origins.every((o) => o.length > 0)).toBe(true);
+      delete process.env.DEV_ALLOWED_ORIGINS;
+    });
+
+    it('drops malformed and non-http(s) DEV_ALLOWED_ORIGINS entries, keeping valid ones', () => {
+      process.env.DEV_ALLOWED_ORIGINS =
+        'http://192.168.0.1:3000, not a url, ftp://192.168.0.2:3000, javascript:alert(1), https://192.168.0.3:3000';
+      initCors('https://boardsesh.com');
+      const origins = getAllowedOrigins();
+      expect(origins).toContain('http://192.168.0.1:3000');
+      expect(origins).toContain('https://192.168.0.3:3000');
+      expect(origins).not.toContain('not a url');
+      expect(origins.some((o) => o.startsWith('ftp:'))).toBe(false);
+      expect(origins.some((o) => o.startsWith('javascript:'))).toBe(false);
+      delete process.env.DEV_ALLOWED_ORIGINS;
+    });
+
+    it('rejects a bare vercel.app suffix and falls back to the default', () => {
+      process.env.VERCEL_PREVIEW_ORIGIN_SUFFIX = 'vercel.app';
+      initCors('https://boardsesh.com');
+      try {
+        // A bare suffix would allow every deployment on Vercel — must be ignored.
+        expect(isOriginAllowed('https://boardsesh-abc-vercel.app')).toBe(false);
+        // The default project suffix keeps working.
+        expect(isOriginAllowed('https://boardsesh-abc123-marcodejonghs-projects.vercel.app')).toBe(true);
+      } finally {
+        delete process.env.VERCEL_PREVIEW_ORIGIN_SUFFIX;
+        initCors('https://boardsesh.com');
+      }
+    });
+
+    it('normalizes a DEV_ALLOWED_ORIGINS entry to its bare origin', () => {
+      process.env.DEV_ALLOWED_ORIGINS = 'http://192.168.0.4:3000/some/path';
+      initCors('https://boardsesh.com');
+      expect(getAllowedOrigins()).toContain('http://192.168.0.4:3000');
       delete process.env.DEV_ALLOWED_ORIGINS;
     });
 
@@ -127,6 +178,19 @@ describe('CORS Handler', () => {
       expect(isOriginAllowed('https://boardsesh-abc123-marcodejonghs-projects.vercel.app')).toBe(true);
     });
 
+    it('honors a configurable VERCEL_PREVIEW_ORIGIN_SUFFIX', () => {
+      process.env.VERCEL_PREVIEW_ORIGIN_SUFFIX = 'acme-team.vercel.app';
+      initCors('https://boardsesh.com');
+      try {
+        expect(isOriginAllowed('https://boardsesh-xyz789-acme-team.vercel.app')).toBe(true);
+        // The default account's suffix no longer matches once overridden.
+        expect(isOriginAllowed('https://boardsesh-abc123-marcodejonghs-projects.vercel.app')).toBe(false);
+      } finally {
+        delete process.env.VERCEL_PREVIEW_ORIGIN_SUFFIX;
+        initCors('https://boardsesh.com');
+      }
+    });
+
     it('returns true for homelab preview deployments matching regex', () => {
       expect(isOriginAllowed('https://42.preview.boardsesh.com')).toBe(true);
       expect(isOriginAllowed('https://123.preview.boardsesh.com')).toBe(true);
@@ -135,6 +199,21 @@ describe('CORS Handler', () => {
     it('returns false for non-numeric preview subdomains', () => {
       expect(isOriginAllowed('https://abc.preview.boardsesh.com')).toBe(false);
       expect(isOriginAllowed('https://pr-5.preview.boardsesh.com')).toBe(false);
+    });
+
+    it('returns true for the standalone Expo-web app origin', () => {
+      expect(isOriginAllowed('https://app.boardsesh.com')).toBe(true);
+    });
+
+    it('returns true for numbered app preview deployments matching regex', () => {
+      expect(isOriginAllowed('https://42.app.boardsesh.com')).toBe(true);
+      expect(isOriginAllowed('https://123.app.boardsesh.com')).toBe(true);
+    });
+
+    it('returns false for non-numeric or look-alike app subdomains', () => {
+      expect(isOriginAllowed('https://pr-5.app.boardsesh.com')).toBe(false);
+      expect(isOriginAllowed('http://app.boardsesh.com')).toBe(false); // http not https
+      expect(isOriginAllowed('https://app.boardsesh.com.evil.com')).toBe(false);
     });
 
     it('returns false for preview origins with http (not https)', () => {

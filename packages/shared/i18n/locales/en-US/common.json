@@ -176,7 +176,9 @@
         "pendingMessage_one": "You have 1 change that hasn't synced yet. Signing out discards it.",
         "pendingMessage_other": "You have {{count}} changes that haven't synced yet. Signing out discards them.",
         "confirm": "Sign out",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "failureTitle": "Sign-out wasn't confirmed",
+        "failure": "Boardsesh couldn't confirm sign-out. Reconnect and sign out again before leaving this device."
       }
     },
     "about": {
@@ -394,7 +396,8 @@
     "notifications": "Notifications",
     "searchClimbsByName": "Search climbs by name",
     "userMenu": "User menu",
-    "toggleDarkMode": "Toggle dark mode"
+    "toggleDarkMode": "Toggle dark mode",
+    "startClimbing": "Start climbing in the app"
   },
   "boardSelector": {
     "title": "Pick a board"
@@ -407,7 +410,8 @@
     "createdClimbs": "Created Climbs",
     "auroraMigration": "Aurora Migration",
     "searchPlaceholder": "What do you want to climb?",
-    "searchClimbsPlaceholder": "Search climbs..."
+    "searchClimbsPlaceholder": "Search climbs...",
+    "startClimbing": "Start climbing"
   },
   "share": {
     "profileTitle": "{{name}}'s climbing profile",
@@ -460,7 +464,8 @@
     "rateBoardsesh": "Rate Boardsesh",
     "reportBug": "Report a bug",
     "joinDiscord": "Join Discord",
-    "logout": "Log out"
+    "logout": "Log out",
+    "logoutError": "We couldn't log you out. Check your connection and try again."
   },
   "loading": {
     "messages": [

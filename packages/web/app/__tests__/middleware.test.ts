@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, it, expect } from 'vite-plus/test';
 import { NextRequest } from 'next/server';
 import { CLIMB_SESSION_COOKIE } from '@/app/lib/climb-session-cookie';
+import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALE_HEADER } from '@/app/lib/i18n/config';
+import { EXPO_WEB_CLASSIC_COOKIE, EXPO_WEB_ENABLED_COOKIE } from '@/app/lib/expo-web-rollout';
 
 const { getListPageCacheTTL, hasUserSpecificFilters } = await import('@/app/lib/list-page-cache');
 const { middleware } = await import('@/middleware');
@@ -12,6 +14,8 @@ function sp(params: Record<string, string> = {}): URLSearchParams {
 const TTL_24H = 86400;
 const LEGACY_LIST = '/kilter/original/12x12-square/screw_bolt/40/list';
 const SLUG_LIST = '/b/kilter-original-12x12/40/list';
+const originalExpoWebFlag = process.env.BOARDSESH_WEB;
+const originalExpoWebOrigin = process.env.BOARDSESH_EXPO_WEB_ORIGIN;
 
 describe('getListPageCacheTTL', () => {
   describe('route matching', () => {
@@ -265,6 +269,127 @@ describe('middleware session redirect', () => {
   });
 });
 
+describe('middleware Expo web carve-out', () => {
+  const originalNextAuthUrl = process.env.NEXTAUTH_URL;
+
+  beforeEach(() => {
+    process.env.BOARDSESH_WEB = '1';
+    delete process.env.NEXTAUTH_URL;
+  });
+
+  afterEach(() => {
+    if (originalExpoWebFlag === undefined) delete process.env.BOARDSESH_WEB;
+    else process.env.BOARDSESH_WEB = originalExpoWebFlag;
+    if (originalNextAuthUrl === undefined) delete process.env.NEXTAUTH_URL;
+    else process.env.NEXTAUTH_URL = originalNextAuthUrl;
+  });
+
+  it.each(['/app', '/app/(tabs)/climbs', '/APP/play'])('keeps %s on the unprefixed path', (path) => {
+    const request = makeRequest(path);
+    request.cookies.set(LOCALE_COOKIE, 'es');
+
+    const response = middleware(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has('location')).toBe(false);
+    expect(response.headers.has('x-middleware-rewrite')).toBe(false);
+    expect(response.headers.has('set-cookie')).toBe(false);
+    expect(response.headers.get('x-robots-tag')).toBe('noindex, follow');
+    expect(response.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+    // Insecure (local http) context: no HSTS.
+    expect(response.headers.has('strict-transport-security')).toBe(false);
+  });
+
+  it('sets HSTS on /app in a secure (HTTPS) context', () => {
+    process.env.NEXTAUTH_URL = 'https://www.boardsesh.com';
+
+    const response = middleware(makeRequest('/app'));
+
+    expect(response.headers.get('strict-transport-security')).toBe('max-age=31536000; includeSubDomains');
+  });
+
+  it('leaves /app to normal routing when Expo web is not enabled', () => {
+    delete process.env.BOARDSESH_WEB;
+
+    const response = middleware(makeRequest('/app'));
+
+    // No Expo carve-out: the utility headers are not applied.
+    expect(response.headers.has('x-robots-tag')).toBe(false);
+  });
+
+  it('does not consume legacy session query parameters under /app', () => {
+    const response = middleware(makeRequest('/app/play?session=party-123'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has('location')).toBe(false);
+    expect(response.headers.has('set-cookie')).toBe(false);
+  });
+});
+
+describe('middleware Expo web support namespace carve-out', () => {
+  beforeEach(() => {
+    process.env.BOARDSESH_WEB = '1';
+    process.env.BOARDSESH_EXPO_WEB_ORIGIN = 'http://localhost:8082';
+  });
+
+  afterEach(() => {
+    if (originalExpoWebFlag === undefined) delete process.env.BOARDSESH_WEB;
+    else process.env.BOARDSESH_WEB = originalExpoWebFlag;
+
+    if (originalExpoWebOrigin === undefined) delete process.env.BOARDSESH_EXPO_WEB_ORIGIN;
+    else process.env.BOARDSESH_EXPO_WEB_ORIGIN = originalExpoWebOrigin;
+  });
+
+  it.each([
+    ['/assets', 'es'],
+    ['/assets?unstable_path=node_modules%2Fvector-icons&session=party-123', 'fr'],
+    ['/assets/vector-icons?session=party-123', 'es'],
+    ['/packages/mobile', 'fr'],
+    ['/packages/mobile?platform=web&session=party-123', 'es'],
+    ['/packages/mobile/node_modules/expo-router/entry?platform=web&session=party-123', 'fr'],
+  ])('passes %s through without locale or session handling', (path, locale) => {
+    const request = makeRequest(path);
+    request.cookies.set(LOCALE_COOKIE, locale);
+
+    const response = middleware(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has('location')).toBe(false);
+    expect(response.headers.has('x-middleware-rewrite')).toBe(false);
+    expect(response.headers.has('set-cookie')).toBe(false);
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe(DEFAULT_LOCALE);
+  });
+
+  it.each([
+    ['missing web flag', undefined, 'http://localhost:8082'],
+    ['missing proxy origin', '1', undefined],
+  ])('preserves locale handling with %s', (_scenario, webFlag, proxyOrigin) => {
+    if (webFlag === undefined) delete process.env.BOARDSESH_WEB;
+    else process.env.BOARDSESH_WEB = webFlag;
+
+    if (proxyOrigin === undefined) delete process.env.BOARDSESH_EXPO_WEB_ORIGIN;
+    else process.env.BOARDSESH_EXPO_WEB_ORIGIN = proxyOrigin;
+
+    const request = makeRequest('/assets');
+    request.cookies.set(LOCALE_COOKIE, 'es');
+
+    const response = middleware(request);
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3000/es/assets');
+  });
+
+  it('does not weaken session handling on unrelated routes', () => {
+    const response = middleware(makeRequest('/some/page?session=party-123'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3000/some/page');
+    expect(response.headers.get('set-cookie')).toContain(CLIMB_SESSION_COOKIE);
+  });
+});
+
 describe('middleware cache headers on list pages', () => {
   it('does not rewrite cacheable list pages', () => {
     const response = middleware(makeRequest(LEGACY_LIST));
@@ -294,5 +419,243 @@ describe('middleware cache headers on list pages', () => {
     const response = middleware(makeRequest('/some/page'));
     expect(response.headers.has('Vercel-CDN-Cache-Control')).toBe(false);
     expect(response.headers.has('CDN-Cache-Control')).toBe(false);
+  });
+});
+
+describe('middleware Expo web rollout redirect', () => {
+  const AUTH_COOKIE = 'next-auth.session-token';
+
+  beforeEach(() => {
+    process.env.BOARDSESH_WEB = '1';
+  });
+
+  afterEach(() => {
+    if (originalExpoWebFlag === undefined) delete process.env.BOARDSESH_WEB;
+    else process.env.BOARDSESH_WEB = originalExpoWebFlag;
+  });
+
+  function redirectedToAppPath(response: ReturnType<typeof middleware>): string | null {
+    const location = response.headers.get('location');
+    if (response.status !== 307 || location === null) return null;
+    const { pathname } = new URL(location);
+    return pathname.startsWith('/app') ? location : null;
+  }
+
+  function loggedInFlaggedRequest(url: string): NextRequest {
+    const request = makeRequest(url);
+    request.cookies.set(AUTH_COOKIE, 'token-123');
+    request.cookies.set(EXPO_WEB_ENABLED_COOKIE, '1');
+    return request;
+  }
+
+  it('redirects a logged-in flagged visitor from a legacy board-list URL to /app/climbs with no query', () => {
+    const response = middleware(loggedInFlaggedRequest(LEGACY_LIST));
+    const location = redirectedToAppPath(response);
+    expect(location).not.toBeNull();
+    const url = new URL(location!);
+    expect(url.pathname).toBe('/app/climbs');
+    // The Climbs tab reads no board-context search params — don't imply otherwise.
+    expect(url.search).toBe('');
+  });
+
+  it('redirects a logged-in flagged visitor from a slug board-list URL to /app/climbs', () => {
+    const response = middleware(loggedInFlaggedRequest(SLUG_LIST));
+    const location = redirectedToAppPath(response);
+    expect(location).not.toBeNull();
+    expect(new URL(location!).pathname).toBe('/app/climbs');
+  });
+
+  it('redirects a numeric climb-view URL to the /app climb deep-link with the ClimbDetail param contract', () => {
+    const response = middleware(loggedInFlaggedRequest('/kilter/1/10/1,20/40/view/climb-uuid'));
+    const location = redirectedToAppPath(response);
+    expect(location).not.toBeNull();
+    const url = new URL(location!);
+    expect(url.pathname).toBe('/app/climbs/climb-uuid');
+    expect(url.searchParams.get('boardName')).toBe('kilter');
+    expect(url.searchParams.get('layoutId')).toBe('1');
+    expect(url.searchParams.get('sizeId')).toBe('10');
+    expect(url.searchParams.get('setIds')).toBe('1,20');
+    expect(url.searchParams.get('angle')).toBe('40');
+  });
+
+  it('keeps a slug climb-view URL classic (the SPA has no boardSlug resolution)', () => {
+    const response = middleware(loggedInFlaggedRequest('/b/kilter-original-12x12/40/view/climb-uuid'));
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('keeps a named-segment climb-view URL classic (ClimbDetail would get layoutId=NaN)', () => {
+    const response = middleware(loggedInFlaggedRequest('/kilter/original/12x12-square/screw_bolt/40/view/climb-uuid'));
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('keeps a list URL with filter query params classic (the SPA cannot consume them)', () => {
+    const response = middleware(loggedInFlaggedRequest(`${LEGACY_LIST}?minGrade=10&sortBy=difficulty`));
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('redirects when the session rides the __Secure-next-auth.session-token cookie (https contexts)', () => {
+    const request = makeRequest('/kilter/1/10/1,20/40/view/climb-uuid');
+    request.cookies.set('__Secure-next-auth.session-token', 'token-123');
+    request.cookies.set(EXPO_WEB_ENABLED_COOKIE, '1');
+    const response = middleware(request);
+    const location = redirectedToAppPath(response);
+    expect(location).not.toBeNull();
+    expect(new URL(location!).pathname).toBe('/app/climbs/climb-uuid');
+  });
+
+  it('does not redirect when the flag cookie is absent (flag off / unresolved)', () => {
+    const request = makeRequest(LEGACY_LIST);
+    request.cookies.set(AUTH_COOKIE, 'token-123');
+    const response = middleware(request);
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('does not redirect a logged-out visitor even with the flag cookie (public page stays canonical)', () => {
+    const request = makeRequest(LEGACY_LIST);
+    request.cookies.set(EXPO_WEB_ENABLED_COOKIE, '1');
+    const response = middleware(request);
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('does not redirect on a public/SEO route (playlists) even when flagged + logged in', () => {
+    const response = middleware(loggedInFlaggedRequest('/playlists'));
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('does not redirect when BOARDSESH_WEB is not set (master env gate off)', () => {
+    delete process.env.BOARDSESH_WEB;
+    const response = middleware(loggedInFlaggedRequest(LEGACY_LIST));
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('?classic=1 sets the bs_classic cookie and lands on the classic URL, not /app', () => {
+    const response = middleware(loggedInFlaggedRequest(`${SLUG_LIST}?classic=1`));
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location')!);
+    expect(location.pathname).toBe(SLUG_LIST);
+    expect(location.pathname.startsWith('/app')).toBe(false);
+    expect(location.searchParams.has('classic')).toBe(false);
+    expect(response.headers.get('set-cookie')).toContain(EXPO_WEB_CLASSIC_COOKIE);
+  });
+
+  it('honours the bs_classic opt-out cookie: no /app redirect while flagged + logged in', () => {
+    const request = loggedInFlaggedRequest(LEGACY_LIST);
+    request.cookies.set(EXPO_WEB_CLASSIC_COOKIE, '1');
+    const response = middleware(request);
+    expect(redirectedToAppPath(response)).toBeNull();
+  });
+
+  it('leaves a ?classic=1 API request alone (no 307, no cookie): the param belongs to the endpoint', () => {
+    const response = middleware(loggedInFlaggedRequest('/api/v1/kilter/proxy/login?classic=1'));
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('set-cookie') ?? '').not.toContain(EXPO_WEB_CLASSIC_COOKIE);
+  });
+
+  it('marks the bs_classic cookie Secure in an https context (mirrors the auth session cookie)', () => {
+    const originalNextAuthUrl = process.env.NEXTAUTH_URL;
+    process.env.NEXTAUTH_URL = 'https://www.boardsesh.com';
+    try {
+      const response = middleware(loggedInFlaggedRequest(`${SLUG_LIST}?classic=1`));
+      expect(response.status).toBe(307);
+      const setCookie = response.headers.get('set-cookie')!;
+      expect(setCookie).toContain(EXPO_WEB_CLASSIC_COOKIE);
+      expect(setCookie).toMatch(/secure/i);
+    } finally {
+      if (originalNextAuthUrl === undefined) delete process.env.NEXTAUTH_URL;
+      else process.env.NEXTAUTH_URL = originalNextAuthUrl;
+    }
+  });
+});
+
+// --- Cross-subdomain auth CORS for the standalone Expo-web app ---
+
+function makeCorsRequest(url: string, options: { origin?: string; method?: string } = {}): NextRequest {
+  const headers = new Headers();
+  if (options.origin) headers.set('origin', options.origin);
+  return new NextRequest(new URL(url, 'http://localhost:3000'), { method: options.method ?? 'GET', headers });
+}
+
+describe('middleware cross-subdomain auth CORS', () => {
+  // NEXT_PUBLIC_APP_URL is unset in tests, so APP_URL resolves to its prod default.
+  const APP_ORIGIN = 'https://app.boardsesh.com';
+
+  it('echoes the app origin with credentials on the session read', () => {
+    const response = middleware(makeCorsRequest('/api/auth/session', { origin: APP_ORIGIN }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(APP_ORIGIN);
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(response.headers.get('Vary')).toContain('Origin');
+  });
+
+  it('echoes the app origin on the ws-auth bridge', () => {
+    const response = middleware(makeCorsRequest('/api/internal/ws-auth', { origin: APP_ORIGIN }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(APP_ORIGIN);
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+  });
+
+  it('answers the OPTIONS preflight with 204 and the credentialed CORS headers', () => {
+    const response = middleware(
+      makeCorsRequest('/api/auth/callback/credentials', { origin: APP_ORIGIN, method: 'OPTIONS' }),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(APP_ORIGIN);
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
+    expect(response.headers.get('Access-Control-Allow-Headers')).toContain('content-type');
+    // Cached so the sequential credentialed sign-in calls don't each re-preflight.
+    expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
+  });
+
+  it('allows a numbered app preview origin (https://{N}.app.boardsesh.com)', () => {
+    const preview = 'https://3.app.boardsesh.com';
+    const response = middleware(makeCorsRequest('/api/auth/csrf', { origin: preview }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(preview);
+  });
+
+  it.each(['/api/auth/register', '/api/auth/forgot-password', '/api/auth/reset-password'])(
+    'echoes the app origin on the credentials flow endpoint %s',
+    (path) => {
+      const response = middleware(makeCorsRequest(path, { origin: APP_ORIGIN }));
+
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(APP_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    },
+  );
+
+  it('rejects a look-alike suffix origin (no ACAO)', () => {
+    const response = middleware(makeCorsRequest('/api/auth/session', { origin: 'https://app.boardsesh.com.evil.com' }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+  });
+
+  it('rejects a look-alike prefix subdomain (no ACAO)', () => {
+    const response = middleware(makeCorsRequest('/api/auth/session', { origin: 'https://evil-app.boardsesh.com' }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('rejects an unrelated origin (no ACAO)', () => {
+    const response = middleware(makeCorsRequest('/api/auth/session', { origin: 'https://evil.com' }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('does not add CORS to an auth path outside the allow-list, even from the app origin', () => {
+    // /api/auth/providers-config isn't one of the endpoints the app calls
+    // cross-origin, so it must not grow an ambient-credential CORS surface.
+    const response = middleware(makeCorsRequest('/api/auth/providers-config', { origin: APP_ORIGIN }));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('adds no CORS to a same-origin request that carries no Origin header', () => {
+    const response = middleware(makeCorsRequest('/api/auth/session'));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 });

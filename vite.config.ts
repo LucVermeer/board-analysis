@@ -310,6 +310,21 @@ export default defineConfig({
       'build:web': {
         command: 'bun run --filter=@boardsesh/web build',
         dependsOn: ['build:shared', 'build:crypto', 'build:db', 'build:constants'],
+        // Forwarded into the task (vp runs tasks with a filtered environment)
+        // and part of the cache key: BOARDSESH_WEB=1 bakes the /app static
+        // serving rewrites into the standalone build (see next.config.mjs).
+        env: ['BOARDSESH_WEB'],
+      },
+      'build:expo-web': {
+        // Static Expo web export into packages/web/public/app — the same
+        // artifact Dockerfile.web bakes into the production image. Run this
+        // before a BOARDSESH_WEB=1 `vp run build:web` to verify /app serving
+        // locally; pass `-- <output-dir>` for a different target (the script
+        // strips vp's forwarded `--`). The output is gitignored
+        // (packages/web/public/app).
+        command: 'bash scripts/build-expo-web-export.sh',
+        dependsOn: ['mobile:web-runtime:install'],
+        cache: false,
       },
       'verify:graphql-treeshake': {
         command: 'bun packages/web/scripts/verify-graphql-treeshake.ts',
@@ -498,7 +513,7 @@ export default defineConfig({
       },
       'typecheck:mobile': {
         command: 'bun run --filter=@boardsesh/mobile typecheck',
-        dependsOn: ['build:shared', 'build:constants'],
+        dependsOn: ['build:shared', 'build:constants', 'mobile:web-runtime:install'],
       },
       'typecheck:kilter': {
         command: 'bun run --filter=@boardsesh/kilter-sync typecheck',
@@ -576,6 +591,10 @@ export default defineConfig({
       },
 
       // --- Mobile validation ---
+      'mobile:web-runtime:install': {
+        command: 'bun install --cwd packages/mobile/web-runtime --frozen-lockfile',
+        cache: false,
+      },
       'check:mobile-native-deps': {
         command: 'tsx scripts/mobile-native-deps-check.ts',
         cache: false,
@@ -624,6 +643,11 @@ export default defineConfig({
       },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
+        cache: false,
+      },
+      'check:mobile-web-bundle': {
+        command: 'bash scripts/mobile-web-bundle-check.sh',
+        dependsOn: ['mobile:web-runtime:install'],
         cache: false,
       },
       'check:mobile-simulator': {
@@ -708,6 +732,20 @@ export default defineConfig({
         command: 'tsx scripts/mobile-dev-start.ts',
         cache: false,
       },
+      'dev:mobile:web': {
+        command: 'tsx scripts/dev-orchestrator.ts --expo-web',
+        dependsOn: ['db:up', 'mobile:web-runtime:install'],
+        cache: false,
+      },
+      // Static-export variant of dev:mobile:web: bakes the export with the
+      // Tailscale origin inlined and serves it at /app — robust on loaded
+      // machines (no Metro cold-bundle race) and prod-parity, at the cost of
+      // fast refresh for mobile code (re-run to pick up mobile changes).
+      'dev:mobile:web-static': {
+        command: 'bash scripts/dev-expo-web-static.sh',
+        dependsOn: ['db:up'],
+        cache: false,
+      },
       'dev:backend': {
         command: 'bun run --filter=boardsesh-backend dev',
         dependsOn: ['db:up'],
@@ -733,6 +771,14 @@ export default defineConfig({
       'test:e2e:setup': {
         command: 'true',
         dependsOn: ['db:up'],
+        cache: false,
+      },
+      // Expo-web smoke: boots the full expo-web stack (backend + Next proxy +
+      // Metro web) via the dev orchestrator and runs the `expo-web-smoke`
+      // Playwright project against it. See scripts/expo-web-e2e.ts.
+      'test:e2e:expo-web': {
+        command: 'tsx scripts/expo-web-e2e.ts',
+        dependsOn: ['db:up', 'mobile:web-runtime:install'],
         cache: false,
       },
     },

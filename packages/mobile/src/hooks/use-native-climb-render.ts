@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Directory, Paths } from 'expo-file-system';
 import type { BoardName } from '@boardsesh/shared-schema';
+import { listOverlayCacheEntries, onOverlayCacheHydrated } from './overlay-cache-warmup';
+import { RENDERER_VERSION } from './renderer-version';
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import { getBoardRenderData } from '../lib/board-details';
 import {
@@ -21,19 +22,8 @@ import {
   type HoldShapeOverrides,
 } from '../lib/hold-color-overrides';
 
-/**
- * Bump when the native overlay output/cache contract changes. v2 marks
- * the switch from composited PNGs (backgrounds baked in) to overlay-only
- * PNGs (transparent background, holds only). v3 marks marker shape,
- * brush, and size override support, and drops any wrong custom-marker
- * PNGs written by overlay-only dev binaries during rollout.
- */
-const RENDERER_VERSION = 3;
 const MARKER_RENDERER_UNAVAILABLE_MESSAGE =
   'Marker shape, size, and brush overrides require a rebuilt BoardRenderer native binary';
-
-/** Subset of expo-file-system's `File`: its synchronous `delete()`. */
-type DeletableFsEntry = { delete?: () => void };
 
 /**
  * Inputs to the native climb renderer. Just the climb identity — no
@@ -42,12 +32,13 @@ type DeletableFsEntry = { delete?: () => void };
  * <Image> scales it down via contentFit="contain" for small surfaces
  * like the list thumbnail.
  *
- * Note: no `mirrored` here. Callers (ClimbListThumbnail, BoardImageNative)
- * flip with a CSS scaleX(-1) so a single cached PNG serves both
- * orientations. If we ever need true Rust-side mirroring (e.g. for an
- * export pipeline that doesn't go through <Image>), thread it back in
- * AND propagate to configBase.mirrored — don't just re-add the cache
- * key suffix, that desyncs the cache from what gets rendered.
+ * Note: no `mirrored` input here. Callers (ClimbListThumbnail,
+ * BoardImageNative) flip with a CSS scaleX(-1) so a single cached PNG serves
+ * both orientations; the renderer config is always pinned to `mirrored: false`.
+ * If we ever need true Rust-side mirroring (e.g. for an export pipeline that
+ * doesn't go through <Image>), thread it back in, change configBase.mirrored,
+ * and restore the cache-key suffix together — don't desync the cache from
+ * what gets rendered.
  */
 type NativeClimbRenderParams = {
   frames: string;
@@ -155,26 +146,26 @@ function warmupRenderedOverlaysOnce(): void {
   if (warmupRun) return;
   warmupRun = true;
   try {
-    const cacheDir = new Directory(Paths.cache, CACHE_DIR_NAME);
-    if (!cacheDir.exists) return;
+    const entries = listOverlayCacheEntries(CACHE_DIR_NAME);
+    if (!entries) return;
     // Only PNGs from the current RENDERER_VERSION can be reused. Older
     // version prefixes (e.g. v1_*) describe a different render format and
     // would never be matched by cacheKey lookups, so loading them into
     // the map just wastes memory. Opportunistically delete those stale
     // files to reclaim disk while we're already walking the directory.
     const currentVersionPrefix = `v${RENDERER_VERSION}_`;
-    for (const entry of cacheDir.list()) {
-      if (!('uri' in entry) || typeof entry.uri !== 'string') continue;
+    for (const entry of entries) {
+      if (typeof entry.uri !== 'string') continue;
       // Files only — skip subdirectories. expo-file-system returns
       // File and Directory instances; File has a .name like "<key>.png".
-      const name = (entry as { name?: string }).name;
+      const name = entry.name;
       if (!name || !name.endsWith('.png')) continue;
       if (!name.startsWith(currentVersionPrefix)) {
         // Stale leftover from a prior RENDERER_VERSION. Best-effort delete;
         // any failure (permissions, race with another writer) is non-fatal
         // — the file simply lingers until the OS reclaims cache space.
         try {
-          (entry as DeletableFsEntry).delete?.();
+          entry.delete?.();
         } catch {
           // Swallow — never let a delete failure crash the warmup.
         }
@@ -188,6 +179,18 @@ function warmupRenderedOverlaysOnce(): void {
     // render path will repopulate the map as climbs are viewed.
   }
 }
+
+// On web the persisted overlays live in the async Cache API, so the first
+// synchronous warm-up can run before hydration finishes and see an empty
+// snapshot. Re-run the warm-up once hydration resolves so prior-session
+// overlays land in the map for first paint. Native hydration is synchronous
+// (disk list) and this fires immediately as a no-op re-run. The re-run is
+// purely additive — the store already evicted stale-version entries during
+// hydration, so the snapshot only carries current-version overlays.
+onOverlayCacheHydrated(() => {
+  warmupRun = false;
+  warmupRenderedOverlaysOnce();
+});
 
 /** Test-only handle for re-running the warm-up against a fresh mock list. */
 export function _resetWarmupForTests(): void {
@@ -395,6 +398,12 @@ function getBoardConfig(
     board_width: renderData.boardWidth,
     board_height: renderData.boardHeight,
     output_width: outputWidth,
+    // The view layer mirrors the complete background + overlay stack, so the
+    // renderer stays unmirrored and both orientations reuse one cached image.
+    // Pinned explicitly (a no-op on native, whose serde default is already
+    // false) for older committed WASM artifacts on web that predate the field's
+    // serde default and would otherwise render mirrored.
+    mirrored: false,
     thumbnail: filledStyle,
     stroke_width_multiplier: brushThickness,
     shape_size_multiplier: shapeSize,

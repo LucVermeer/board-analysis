@@ -1,4 +1,5 @@
 import type { NextAuthOptions } from 'next-auth';
+import { randomUUID } from 'node:crypto';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import GoogleProvider from 'next-auth/providers/google';
 import AppleProvider from 'next-auth/providers/apple';
@@ -9,7 +10,8 @@ import * as schema from '@/app/lib/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { compare } from 'bcryptjs';
 import { verifyNativeOAuthTransferToken } from '@/app/lib/auth/native-oauth-transfer';
-import { isSecureCookieContext } from '@/app/lib/auth/secure-cookies';
+import { isSecureCookieContext, sessionCookieDomain } from '@/app/lib/auth/secure-cookies';
+import { isAllowedAppOrigin } from '@/app/lib/auth/app-origin-allowlist';
 
 // Build providers array conditionally based on available env vars
 const providers: NextAuthOptions['providers'] = [];
@@ -140,7 +142,30 @@ providers.push(
 // Apple Sign-In posts its callback cross-origin (response_mode=form_post),
 // so verification cookies need SameSite=None (which requires Secure).
 // We override callbackUrl, state, nonce, and pkceCodeVerifier cookies for this reason.
+//
+// INTENTIONAL, REVIEWED: these four short-lived OAuth-flow cookies carry
+// SameSite=None on the shared `.boardsesh.com` scope. They are NOT the login —
+// they hold only in-flight CSRF/PKCE/nonce state consumed within a single OAuth
+// round-trip, and each requires Secure. The session token itself stays
+// SameSite=Lax (see the sessionToken block below); None is confined to these
+// transient flow cookies so the actual login is never sent cross-site.
 const useSecureCookies = isSecureCookieContext();
+
+// Shared parent domain so the session (and the OAuth-flow cookies) are readable
+// on every *.boardsesh.com subdomain — www.boardsesh.com sets the login, and the
+// standalone Expo-web app at app.boardsesh.com reads it cross-origin. The domain
+// is derived from the actual serving host (sessionCookieDomain): only the
+// production www/apex host gets `.boardsesh.com`; localhost, Vercel previews
+// (*.vercel.app would reject the Domain outright), and homelab preview hosts
+// all stay host-only. Override with AUTH_COOKIE_DOMAIN if the parent domain
+// ever differs from the prod default.
+//
+// SECURITY: with a `.boardsesh.com` Domain the session cookie is sent to *every*
+// subdomain (kiosk, embed previews, `{N}.app.boardsesh.com`, any future
+// subdomain), not just www + app. Any subdomain we serve can therefore read the
+// logged-in user's HttpOnly session — keep untrusted/third-party content off
+// *.boardsesh.com hosts.
+const cookieDomain = sessionCookieDomain();
 
 export const authOptions: NextAuthOptions = {
   adapter: DrizzleAdapter(getDb(), {
@@ -151,6 +176,22 @@ export const authOptions: NextAuthOptions = {
   }),
   providers,
   cookies: {
+    // The session token is the login itself. SameSite=Lax (NOT None) is correct
+    // here: app.boardsesh.com and www.boardsesh.com are the same SITE
+    // (registrable domain boardsesh.com), so Lax cookies ARE sent on
+    // cross-subdomain requests — no need for the weaker SameSite=None. `secure`
+    // stays true in secure contexts and the `__Secure-` prefix (which permits a
+    // Domain attribute) is kept so the name still matches what getToken reads.
+    sessionToken: {
+      name: `${useSecureCookies ? '__Secure-' : ''}next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: useSecureCookies,
+        domain: cookieDomain,
+      },
+    },
     callbackUrl: {
       name: `${useSecureCookies ? '__Secure-' : ''}next-auth.callback-url`,
       options: {
@@ -158,6 +199,7 @@ export const authOptions: NextAuthOptions = {
         sameSite: useSecureCookies ? 'none' : 'lax',
         path: '/',
         secure: useSecureCookies,
+        domain: cookieDomain,
       },
     },
     state: {
@@ -167,6 +209,7 @@ export const authOptions: NextAuthOptions = {
         sameSite: useSecureCookies ? 'none' : 'lax',
         path: '/',
         secure: useSecureCookies,
+        domain: cookieDomain,
       },
     },
     nonce: {
@@ -176,6 +219,7 @@ export const authOptions: NextAuthOptions = {
         sameSite: useSecureCookies ? 'none' : 'lax',
         path: '/',
         secure: useSecureCookies,
+        domain: cookieDomain,
       },
     },
     pkceCodeVerifier: {
@@ -185,6 +229,7 @@ export const authOptions: NextAuthOptions = {
         sameSite: useSecureCookies ? 'none' : 'lax',
         path: '/',
         secure: useSecureCookies,
+        domain: cookieDomain,
       },
     },
   },
@@ -195,8 +240,38 @@ export const authOptions: NextAuthOptions = {
     signIn: '/auth/login',
     verifyRequest: '/auth/verify-request',
     error: '/auth/error',
+    // Replace NextAuth's built-in GET /api/auth/signout confirmation page. Its
+    // form POSTs only a CSRF token, which the identity-guarded signout route now
+    // rejects with 400. This page drives the guarded sign-out sequence instead.
+    signOut: '/auth/signout',
   },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // Mirror NextAuth's default resolution (relative → baseUrl-prefixed;
+      // same-origin → as-is; anything else → baseUrl) and ADDITIONALLY allow the
+      // standalone Expo-web app's own origin. Without this, a sign-in/sign-out
+      // started on app.boardsesh.com passes a cross-origin `callbackUrl`, which
+      // the default callback would coerce to the www base origin — and the app's
+      // sign-out confirmation (which compares the returned URL's origin+path to
+      // its own app-origin callback) would then mismatch and throw. Restricted
+      // to the same anchored app allow-list the CORS layer uses, so every other
+      // cross-origin URL still collapses to baseUrl (open-redirect guard).
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      try {
+        // Compare origins, not the raw baseUrl string. baseUrl mirrors
+        // NEXTAUTH_URL verbatim and may carry a trailing slash or path, so a
+        // literal `targetOrigin === baseUrl` check misses a genuine same-origin
+        // redirect and strips it to the base. `new URL(baseUrl).origin` is
+        // scheme+host only, matching what `new URL(url).origin` returns.
+        const baseOrigin = new URL(baseUrl).origin;
+        const targetOrigin = new URL(url).origin;
+        if (targetOrigin === baseOrigin) return url;
+        if (isAllowedAppOrigin(targetOrigin)) return url;
+      } catch {
+        // Unparseable URL falls through to the safe baseUrl default.
+      }
+      return baseUrl;
+    },
     async signIn({ user, account }) {
       // OAuth providers - allow sign in (emails are pre-verified by provider)
       // Skip native-oauth (transfer token flow) — email is already verified
@@ -240,6 +315,9 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async session({ session, token }) {
+      if (typeof token.authSessionId === 'string' && token.authSessionId) {
+        session.authSessionId = token.authSessionId;
+      }
       // Include user ID in session from JWT
       if (session?.user && token?.sub) {
         session.user.id = token.sub;
@@ -263,6 +341,12 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async jwt({ token, user }) {
+      // Stable for one NextAuth login across cookie rotations and tabs, but new
+      // for a later login even when it belongs to the same user. Existing JWTs
+      // can reuse their standard jti so rollout does not force a sign-out.
+      if (!token.authSessionId) {
+        token.authSessionId = typeof token.jti === 'string' && token.jti ? token.jti : randomUUID();
+      }
       // Persist the OAuth access_token and user id to the token right after signin
       if (user) {
         token.id = user.id;

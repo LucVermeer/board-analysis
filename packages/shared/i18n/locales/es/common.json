@@ -31,7 +31,8 @@
     "notifications": "Notificaciones",
     "searchClimbsByName": "Buscar bloques por nombre",
     "userMenu": "Menú de usuario",
-    "toggleDarkMode": "Cambiar modo oscuro"
+    "toggleDarkMode": "Cambiar modo oscuro",
+    "startClimbing": "Empieza a escalar en la app"
   },
   "boardSelector": {
     "title": "Elige un plafón"
@@ -44,7 +45,8 @@
     "createdClimbs": "Bloques creados",
     "auroraMigration": "Migración de Aurora",
     "searchPlaceholder": "¿Qué quieres escalar?",
-    "searchClimbsPlaceholder": "Busca bloques..."
+    "searchClimbsPlaceholder": "Busca bloques...",
+    "startClimbing": "Empieza a escalar"
   },
   "share": {
     "profileTitle": "Perfil de escalada de {{name}}",
@@ -94,6 +96,7 @@
     "reportBug": "Reportar un bug",
     "joinDiscord": "Únete a Discord",
     "logout": "Cerrar sesión",
+    "logoutError": "No hemos podido cerrar tu sesión. Comprueba la conexión e inténtalo de nuevo.",
     "devBuild": "Build de dev",
     "branch": "Rama",
     "qaNotes": "Notas de QA",
@@ -390,7 +393,9 @@
         "pendingMessage_one": "Tienes 1 cambio sin sincronizar. Al cerrar sesión se descartará.",
         "pendingMessage_other": "Tienes {{count}} cambios sin sincronizar. Al cerrar sesión se descartarán.",
         "confirm": "Cerrar sesión",
-        "cancel": "Cancelar"
+        "cancel": "Cancelar",
+        "failureTitle": "No se confirmó el cierre de sesión",
+        "failure": "Boardsesh no pudo confirmar el cierre de sesión. Vuelve a conectarte y cierra sesión de nuevo antes de dejar este dispositivo."
       }
     },
     "about": {
