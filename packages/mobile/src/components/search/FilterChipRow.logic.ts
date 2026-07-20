@@ -11,9 +11,92 @@
 // `filter-chip-menus.ts` at the call sites so the chip and the sheet never diverge.
 
 import type { TFunction } from 'i18next';
-import { formatMinAscentsFilterCount, PROGRESS_FILTER_VALUES, type ProgressFilter } from '@boardsesh/climb-filters';
+import {
+  formatMinAscentsFilterCount,
+  gradeAccuracyBucket,
+  GRADE_ACCURACY_VALUES,
+  PROGRESS_FILTER_VALUES,
+  SORT_OPTIONS,
+  type ProgressFilter,
+  type SortOption,
+  type GradeAccuracyValue,
+} from '@boardsesh/climb-filters';
+import type { CollectionFilter, ClimbTypeFilter } from '../../lib/collection-filter';
 
 export { progressFilterLabel } from '../../lib/filter-labels';
+export { isCollectionFilter } from '../../lib/collection-filter';
+export type { ClimbTypeFilter } from '../../lib/collection-filter';
+
+// Sort labels come straight from the shared `buildSortLabel` — the chip row
+// builds that record once per render and reuses it, so there's no per-item helper
+// here (an earlier `sortChipLabel` rebuilt the whole record on every menu item).
+
+/** Narrows a raw native-picker tag to a {@link SortOption}. */
+export function isSortOption(value: string): value is SortOption {
+  return (SORT_OPTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * Label for a grade-accuracy bucket. Accepts the raw value ('0'…'0.05') and the
+ * 'off' tag the chip/segmented use for the neutral bucket. The value→bucket
+ * boundaries live once in the shared `gradeAccuracyBucket`; this only maps the
+ * bucket to its i18n string (literal keys, so the i18n linter stays happy).
+ */
+export function accuracyChipLabel(value: GradeAccuracyValue | 'off', t: TFunction<'climbs'>): string {
+  switch (gradeAccuracyBucket(value === 'off' ? '0' : value)) {
+    case 'off':
+      return t('mobile.filter.accuracy.off');
+    case 'loose':
+      return t('mobile.filter.accuracy.loose');
+    case 'moderate':
+      return t('mobile.filter.accuracy.moderate');
+    case 'tight':
+      return t('mobile.filter.accuracy.tight');
+  }
+}
+
+// The chip's picker tags: 'off' for the neutral bucket ('0'), plus every other
+// accuracy value. Derived from GRADE_ACCURACY_VALUES so a new bucket can't render
+// as a selectable-but-un-committable option.
+const ACCURACY_TAGS: readonly string[] = ['off', ...GRADE_ACCURACY_VALUES.filter((value) => value !== '0')];
+
+/** Narrows a raw native-picker tag to the accuracy value the chip commits. */
+export function isAccuracyTag(value: string): value is GradeAccuracyValue | 'off' {
+  return ACCURACY_TAGS.includes(value);
+}
+
+/** Label for the climb-type single-select ("Boulders" / "Routes" / "Both"). */
+export function climbTypeChipLabel(value: ClimbTypeFilter, t: TFunction<'climbs'>): string {
+  switch (value) {
+    case 'boulders':
+      return t('mobile.filter.boulders');
+    case 'routes':
+      return t('mobile.filter.routes');
+    case 'both':
+      return t('mobile.filter.both');
+  }
+}
+
+/** Narrows a raw native-picker tag to a {@link ClimbTypeFilter}. */
+export function isClimbType(value: string): value is ClimbTypeFilter {
+  return value === 'boulders' || value === 'routes' || value === 'both';
+}
+
+/**
+ * Label for the "Collection" single-select: the chip shows "Benchmarks" / "My
+ * drafts" when active, and "Any" for the neutral value (the resting chip uses the
+ * group name "Collection" instead — see the call site).
+ */
+export function collectionChipLabel(value: CollectionFilter, t: TFunction<'climbs'>): string {
+  switch (value) {
+    case 'benchmarks':
+      return t('mobile.filter.benchmark');
+    case 'drafts':
+      return t('mobile.filter.drafts');
+    case 'any':
+      return t('mobile.filter.collection.any');
+  }
+}
 
 /**
  * Narrows a raw native-picker tag to a {@link ProgressFilter}. The iOS Picker

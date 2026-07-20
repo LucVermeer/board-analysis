@@ -42,12 +42,15 @@ import { SegmentedControl } from './SegmentedControl';
 import { StarRating } from './StarRating';
 import { SwitchRow } from './SwitchRow';
 import { Icon } from './Icon';
+import { PinToggle } from './search/PinToggle';
+import { getCollectionFilter, getClimbTypeFilter, type CollectionFilter } from '../lib/collection-filter';
 import { useTheme } from '../providers/theme-provider';
 import { useManagedSheet } from '../providers/sheet-presentation-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
 import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
+import { getTallWideScope } from '@boardsesh/board-constants';
 import { buildFilterLabels, formatSettersLabel, progressFilterLabel } from '../lib/filter-labels';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../lib/create-board-holds';
 import { subscribeToHoldsFilterSelection } from '../lib/hold-filter-handoff';
@@ -61,7 +64,7 @@ import { springs } from '../theme/animations';
 // with white text that must stay legible in both schemes.
 import { brandColors as staticBrandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
-import { spacing, borderRadius } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import { GradeRangeRail } from './grade';
 import type { ClimbFilters } from '../lib/climb-filter-types';
 import { DEFAULT_FILTERS, statusForAuth } from '../lib/climb-filter-types';
@@ -225,7 +228,13 @@ export function ClimbFilterSheet({
   // (#3330). The shared hook pins the column to this single detent's height;
   // Android bounds the column natively, so it keeps flex:1.
   const sheetColumnStyle = useSheetColumnStyle(detentSnapPoints);
-  const isKilter = boardName === 'kilter';
+  // Tall/Wide apply on any board whose active size has a shorter/narrower sibling
+  // in its family (getTallWideScope — the shared source of truth the chip row and
+  // server filter use), not just Kilter. Each toggle renders only where it applies,
+  // so the sheet control stays reachable even when the Shape chip is unpinned.
+  const { hasShorter: showTallControl, hasNarrower: showWideControl } = boardConfig
+    ? getTallWideScope(boardConfig.boardName as BoardName, boardConfig.layoutId, boardConfig.sizeId)
+    : { hasShorter: false, hasNarrower: false };
 
   // Live "Show N" preview for the in-progress edits (matches what Apply yields).
   // Debounced so rapid chip/toggle taps don't each fire a count request.
@@ -349,6 +358,27 @@ export function ClimbFilterSheet({
     },
     [updateLocalFilters],
   );
+  // Collection — a single-select over Benchmarks (board filter) + My drafts
+  // (status), which are mutually exclusive. Selecting one clears the other; only a
+  // lingering *drafts* status is cleared (never 'projects'/Unrepeated, which lives
+  // in the Popularity group and can coexist with Benchmarks).
+  const handleCollectionChange = useCallback(
+    (value: CollectionFilter) => {
+      updateLocalBoardFilters((previous) => ({ ...previous, onlyBenchmarks: value === 'benchmarks' || undefined }));
+      if (value === 'drafts') handleStatusChange('drafts');
+      else if (localFilters.status === 'drafts') handleStatusChange('any');
+    },
+    [updateLocalBoardFilters, handleStatusChange, localFilters.status],
+  );
+  const collectionOptions = useMemo(
+    () => [
+      { key: 'any' as const, label: t('mobile.filter.collection.any') },
+      { key: 'benchmarks' as const, label: t('mobile.filter.benchmark') },
+      // My drafts is auth-only, matching the old drafts toggle's gating.
+      ...(isAuthenticated ? [{ key: 'drafts' as const, label: t('mobile.filter.drafts') }] : []),
+    ],
+    [t, isAuthenticated],
+  );
   const handlePopularity = useCallback(
     (bucket: number | undefined) => {
       // minAscents is mutually exclusive with projects/drafts at the DB layer
@@ -381,13 +411,8 @@ export function ClimbFilterSheet({
   // Climb-type toggle (main's #2496 control). A 3-way control means there's no
   // UI path to "neither", so the never-both-off invariant is structural (see
   // toClimbSearchInput). "Both" = show everything; boulders-only is the default.
-  const climbTypeKey = useMemo<'boulders' | 'routes' | 'both'>(() => {
-    const bouldersOn = localFilters.boulders ?? true;
-    const routesOn = localFilters.routes ?? false;
-    if (bouldersOn && !routesOn) return 'boulders';
-    if (!bouldersOn && routesOn) return 'routes';
-    return 'both';
-  }, [localFilters.boulders, localFilters.routes]);
+  // Same derivation as the chip row (getClimbTypeFilter) so they never disagree.
+  const climbTypeKey = getClimbTypeFilter(localFilters);
   const handleClimbTypeChange = useCallback(
     (key: string) => {
       if (key === 'routes') setFiltersPatch({ boulders: false, routes: true });
@@ -653,21 +678,30 @@ export function ClimbFilterSheet({
                 {t('mobile.filter.section.difficulty')}
               </Text>
               {/* Grade — inline and sheet-local, so dismissing the filter sheet does
-                not commit grade edits until Apply. */}
+                not commit grade edits until Apply. The rail's own title is replaced
+                by a pinnable label row. */}
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.gradeRange')}
+                </Text>
+                <PinToggle kind="grade" />
+              </View>
               <GradeRangeRail
                 grades={grades ?? []}
                 bound={{ minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade }}
                 lastUsedGradeId={lastUsedGradeId}
                 onChange={handleGradeChange}
                 dismissible={false}
-                showTitle
                 style={styles.inlineGradeRail}
               />
 
               <View style={styles.subsectionGap} />
-              <Text variant="footnote" style={styles.subsectionLabel}>
-                {t('mobile.filter.accuracy.label')}
-              </Text>
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.accuracy.label')}
+                </Text>
+                <PinToggle kind="accuracy" />
+              </View>
               <Text variant="footnote" style={styles.subsectionDescription}>
                 {t('mobile.filter.accuracy.description')}
               </Text>
@@ -684,9 +718,12 @@ export function ClimbFilterSheet({
                 the "My drafts" toggle (old Status 'drafts', with its side-effects). */}
             {isAuthenticated ? (
               <View style={styles.section}>
-                <Text variant="headline" style={styles.sectionHeader}>
-                  {t('mobile.filter.progress.label')}
-                </Text>
+                <View style={styles.pinnableLabelRow}>
+                  <Text variant="headline" style={styles.sectionHeader}>
+                    {t('mobile.filter.progress.label')}
+                  </Text>
+                  <PinToggle kind="progress" />
+                </View>
                 {/* A single-select over the four per-user tick flags. "Projects" =
                   attempted-but-not-sent; "Unsent" = the old "hide climbs I've sent". */}
                 <View style={styles.chipRow}>
@@ -707,35 +744,30 @@ export function ClimbFilterSheet({
               <Text variant="headline" style={styles.sectionHeader}>
                 {t('mobile.filter.section.quality')}
               </Text>
-              {/* Benchmarks + (signed-in) My drafts — grouped in one inset card. */}
-              <View style={styles.groupedCard}>
-                <SwitchRow
-                  label={t('mobile.filter.benchmark')}
-                  description={t('mobile.filter.benchmarkDescription')}
-                  value={!!localBoardFilters.onlyBenchmarks}
-                  onValueChange={(value) =>
-                    updateLocalBoardFilters((previous) => ({ ...previous, onlyBenchmarks: value || undefined }))
-                  }
-                />
-                {/* My drafts — the old Status 'drafts' radio option, now a toggle.
-                  Routes through handleStatusChange so applyStatusChange's side effects
-                  (drafts → sort=creation desc, clear minAscents) still fire. Auth-only. */}
-                {isAuthenticated ? (
-                  <>
-                    <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} />
-                    <SwitchRow
-                      label={t('mobile.filter.drafts')}
-                      value={localFilters.status === 'drafts'}
-                      onValueChange={(on) => handleStatusChange(on ? 'drafts' : 'any')}
-                    />
-                  </>
-                ) : null}
+              {/* Collection — Benchmarks (board filter) + My drafts (status) folded
+                  into one single-select; they're mutually exclusive. My drafts is
+                  offered only when signed in (auth-gated like the old drafts toggle). */}
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.collection.label')}
+                </Text>
+                <PinToggle kind="collection" />
               </View>
+              <View style={styles.controlGap} />
+              <SegmentedControl
+                options={collectionOptions}
+                selectedKey={getCollectionFilter(localFilters, localBoardFilters)}
+                onSelect={handleCollectionChange}
+                accessibilityLabel={t('mobile.filter.collection.label')}
+              />
 
               <View style={styles.subsectionGap} />
-              <Text variant="footnote" style={styles.subsectionLabel}>
-                {t('mobile.filter.minRating')}
-              </Text>
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.minRating')}
+                </Text>
+                <PinToggle kind="rating" />
+              </View>
               <View style={styles.ratingRow}>
                 <Chip
                   label={t('mobile.filter.anyRating')}
@@ -750,9 +782,12 @@ export function ClimbFilterSheet({
               </View>
 
               <View style={styles.subsectionGap} />
-              <Text variant="footnote" style={styles.subsectionLabel}>
-                {t('mobile.filter.popularity')}
-              </Text>
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.popularity')}
+                </Text>
+                <PinToggle kind="popularity" />
+              </View>
               {/* "Unrepeated" (status='projects') leads the group, then Any + the
                 numeric min-ascents buckets. The whole row reads as single-select:
                 picking any bucket clears projects (see handlePopularity), and the
@@ -779,9 +814,12 @@ export function ClimbFilterSheet({
               <Text variant="headline" style={styles.sectionHeader}>
                 {t('mobile.filter.section.theClimb')}
               </Text>
-              <Text variant="footnote" style={styles.subsectionLabel}>
-                {t('mobile.filter.climbType')}
-              </Text>
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.climbType')}
+                </Text>
+                <PinToggle kind="climbType" />
+              </View>
               <View style={styles.controlGap} />
               <SegmentedControl
                 options={climbTypeOptions}
@@ -791,22 +829,35 @@ export function ClimbFilterSheet({
                 trackColor={trackColor}
               />
 
-              {/* Shape — Kilter homewall only. */}
-              {isKilter ? (
+              {/* Shape — shown wherever a shorter/narrower sibling size exists (Kilter
+                  homewall, Tension Board 2, Decoy, Grasshopper); each toggle only where
+                  it applies. Matches the chip row so Tall/Wide stays reachable here even
+                  when the Shape chip is unpinned. */}
+              {showTallControl || showWideControl ? (
                 <>
                   <View style={styles.subsectionGap} />
-                  <SwitchRow
-                    label={t('mobile.filter.tall')}
-                    description={t('mobile.filter.tallDescription')}
-                    value={!!localFilters.onlyTallClimbs}
-                    onValueChange={(value) => setFiltersPatch({ onlyTallClimbs: value || undefined })}
-                  />
-                  <SwitchRow
-                    label={t('mobile.filter.wide')}
-                    description={t('mobile.filter.wideDescription')}
-                    value={!!localFilters.onlyWideClimbs}
-                    onValueChange={(value) => setFiltersPatch({ onlyWideClimbs: value || undefined })}
-                  />
+                  <View style={styles.pinnableLabelRow}>
+                    <Text variant="footnote" style={styles.subsectionLabel}>
+                      {t('mobile.filter.shape')}
+                    </Text>
+                    <PinToggle kind="shape" />
+                  </View>
+                  {showTallControl ? (
+                    <SwitchRow
+                      label={t('mobile.filter.tall')}
+                      description={t('mobile.filter.tallDescription')}
+                      value={!!localFilters.onlyTallClimbs}
+                      onValueChange={(value) => setFiltersPatch({ onlyTallClimbs: value || undefined })}
+                    />
+                  ) : null}
+                  {showWideControl ? (
+                    <SwitchRow
+                      label={t('mobile.filter.wide')}
+                      description={t('mobile.filter.wideDescription')}
+                      value={!!localFilters.onlyWideClimbs}
+                      onValueChange={(value) => setFiltersPatch({ onlyWideClimbs: value || undefined })}
+                    />
+                  ) : null}
                 </>
               ) : null}
 
@@ -880,11 +931,18 @@ export function ClimbFilterSheet({
                 </View>
               </Pressable>
 
-              {/* Beta videos — a content property of the climb, not a quality signal. */}
+              {/* Beta videos — a content property of the climb, not a quality signal.
+                  A group header carries the pin; the switch uses the descriptive line
+                  as its label so "Beta videos" isn't worded twice. */}
               <View style={styles.subsectionGap} />
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.betaVideos')}
+                </Text>
+                <PinToggle kind="beta" />
+              </View>
               <SwitchRow
-                label={t('mobile.filter.betaVideos')}
-                description={t('mobile.filter.betaVideosDescription')}
+                label={t('mobile.filter.betaVideosDescription')}
                 value={!!localFilters.onlyWithBetaVideos}
                 onValueChange={(value) => setFiltersPatch({ onlyWithBetaVideos: value || undefined })}
               />
@@ -895,9 +953,12 @@ export function ClimbFilterSheet({
               <Text variant="headline" style={styles.sectionHeader}>
                 {t('mobile.filter.section.sort')}
               </Text>
-              <Text variant="footnote" style={styles.subsectionLabel}>
-                {t('mobile.filter.sortBy')}
-              </Text>
+              <View style={styles.pinnableLabelRow}>
+                <Text variant="footnote" style={styles.subsectionLabel}>
+                  {t('mobile.filter.sortBy')}
+                </Text>
+                <PinToggle kind="sort" />
+              </View>
               {/* Flex-wrap (matching the popularity/rating chip rows above), not a
                   horizontal ScrollView: a gesture-handler ScrollView nested in the
                   native bottom sheet collapsed the chip row's height on iOS and
@@ -1007,15 +1068,16 @@ const styles = StyleSheet.create({
   subsectionGap: {
     height: spacing[4],
   },
+  // A control's label line with a trailing pin toggle (pin the control to the chip row).
+  pinnableLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   // Breathing room between a footnote sub-label and a flush native SegmentedControl
   // (which, unlike the chip rows, has no intrinsic top padding).
   controlGap: {
     height: spacing[2],
-  },
-  // Inset hairline between rows grouped in one card (iOS list style).
-  groupDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: spacing[4],
   },
   chipRow: {
     flexDirection: 'row',
@@ -1024,11 +1086,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontWeight: '500',
-  },
-  groupedCard: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: `${iosSystemColors.systemGray}14`,
-    overflow: 'hidden',
   },
   ratingRow: {
     flexDirection: 'row',

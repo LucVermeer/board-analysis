@@ -15,11 +15,15 @@ import {
   describeGradeFilter,
   flagsToProgress,
   progressToFlags,
+  applyStatusChange,
+  newSortSeed,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
   type GradeTapMeta,
   type ProgressFilter,
+  type SortOption,
+  type GradeAccuracyValue,
 } from '@boardsesh/climb-filters';
 import { getTallWideScope } from '@boardsesh/board-constants';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
@@ -32,11 +36,17 @@ import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
 import { FilterChipRow } from '../../../src/components/search/FilterChipRow';
 import type { DimensionChip } from '../../../src/components/search/FilterChipRow.types';
+import { chipKindToTokenKeys } from '../../../src/lib/pinnable-chips';
+import { usePinnedChips } from '../../../src/lib/pinned-chips-store';
+import {
+  getCollectionFilter,
+  getClimbTypeFilter,
+  type CollectionFilter,
+  type ClimbTypeFilter,
+} from '../../../src/lib/collection-filter';
 import { FilterTokenRow } from '../../../src/components/search/FilterTokenRow';
 import { GradeRangeRail } from '../../../src/components/grade';
 import { applyPopularityBucket } from '../../../src/lib/filter-chip-menus';
-import { useDimensionLocks, useDimensionRepin } from '../../../src/lib/dimension-lock-store';
-import { hapticMedium } from '../../../src/lib/haptics';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { selectByVariant } from '../../../src/theme/variants';
@@ -104,7 +114,6 @@ const PREWARM_BOARD_HOLDS_DELAY_MS = 1200;
 // excluded from the removable token row so an active filter is never worded
 // twice — the chip shows/changes it, the token row is the receipt for the
 // long-tail (sheet-only) filters that have no chip.
-const CHIP_BACKED_TOKEN_KEYS = new Set<string>(['grade', 'minAscents', 'minRating', 'progress', 'benchmark']);
 
 type NativeSearchBarRef = {
   focus: () => void;
@@ -187,6 +196,10 @@ function ClimbListInner() {
     patchFilters,
     patchBoardFilters,
   } = useClimbSearch();
+  // The user's pinned chips: which filter controls appear in the persistent chip
+  // row (defaults reproduce today's set). Drives both the chip row and the token
+  // "receipt" dedup below.
+  const { pinned: pinnedChips } = usePinnedChips();
   const { lastUsedGrade, rememberGrade } = useLastUsedGrade();
   const { getLogbook } = useBoardActions();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
@@ -1051,17 +1064,56 @@ function ClimbListInner() {
     (value: ProgressFilter) => patchFilters(progressToFlags(value)),
     [patchFilters],
   );
-  const handleToggleBenchmarks = useCallback(
-    (next: boolean) => patchBoardFilters({ onlyBenchmarks: next || undefined }),
-    [patchBoardFilters],
+  // Collection — Benchmarks (board filter) + My drafts (status), mutually
+  // exclusive. Sets one, clears the other; only a lingering 'drafts' status is
+  // cleared (projects/Unrepeated lives in Popularity and can coexist).
+  const handleChangeCollection = useCallback(
+    (value: CollectionFilter) => {
+      patchBoardFilters({ onlyBenchmarks: value === 'benchmarks' || undefined });
+      if (value === 'drafts') patchFilters(applyStatusChange(filters, 'drafts'));
+      else if (filters.status === 'drafts') patchFilters(applyStatusChange(filters, 'any'));
+    },
+    [patchBoardFilters, patchFilters, filters],
   );
+  // --- Tier-2 (opt-in) chip handlers — mirror the filter sheet's own controls so
+  // a chip and the sheet never diverge. ---
+  // Sort: picking Random reseeds a fresh shuffle (matches the sheet); every other
+  // key clears the seed. Direction (asc/desc) stays a sheet-only refinement.
+  const handleChangeSort = useCallback(
+    (value: SortOption) =>
+      patchFilters(
+        value === 'random' ? { sortBy: value, sortSeed: newSortSeed() } : { sortBy: value, sortSeed: undefined },
+      ),
+    [patchFilters],
+  );
+  const handleChangeAccuracy = useCallback(
+    (value: GradeAccuracyValue | 'off') => patchFilters({ gradeAccuracy: value === 'off' ? undefined : value }),
+    [patchFilters],
+  );
+  // Climb type — same three-way mapping as the sheet's handleClimbTypeChange.
+  const handleChangeClimbType = useCallback(
+    (value: ClimbTypeFilter) => {
+      if (value === 'routes') patchFilters({ boulders: false, routes: true });
+      else if (value === 'both') patchFilters({ boulders: true, routes: true });
+      else patchFilters({ boulders: true, routes: false });
+    },
+    [patchFilters],
+  );
+  const handleToggleBeta = useCallback(
+    () => patchFilters({ onlyWithBetaVideos: filters.onlyWithBetaVideos ? undefined : true }),
+    [patchFilters, filters.onlyWithBetaVideos],
+  );
+  // Climb-type single-select derived from the boulders/routes flags — one shared
+  // helper with the sheet, so the chip and sheet never show a different pick.
+  const climbType = getClimbTypeFilter(filters);
+  // Sort is "active" whenever the key OR direction differs from the default — the
+  // same condition the sort token uses, so the chip lights up in lockstep with it.
+  const sortActive =
+    filters.sortBy !== DEFAULT_CLIMB_FILTER_STATE.sortBy || filters.sortOrder !== DEFAULT_CLIMB_FILTER_STATE.sortOrder;
   // Tall/Wide chips appear on any board whose active size has a shorter/narrower
   // size in its product family — Kilter Homewall & Original, Tension Board 2,
   // Decoy, Grasshopper (getTallWideScope is the shared source of truth, matching
-  // the server filter). Tap toggles the filter; long-press locks it (persisted)
-  // so it survives clears — the re-pin effects below re-apply a locked filter
-  // whenever it's cleared.
-  const { locks: dimensionLocks, setLock: setDimensionLock } = useDimensionLocks();
+  // the server filter). Tap toggles the filter.
   const { hasShorter: showTallChip, hasNarrower: showWideChip } = getTallWideScope(
     boardName as BoardName,
     layoutId,
@@ -1070,78 +1122,51 @@ function ClimbListInner() {
   const dimensionChips = useMemo<DimensionChip[]>(() => {
     const chips: DimensionChip[] = [];
     if (showTallChip) {
-      const locked = dimensionLocks.tall;
       chips.push({
         key: 'tall',
-        active: locked || !!filters.onlyTallClimbs,
-        locked,
-        // A locked chip ignores tap — only a long-press unlock frees it.
-        onToggle: () => {
-          if (locked) return;
-          patchFilters({ onlyTallClimbs: filters.onlyTallClimbs ? undefined : true });
-        },
-        onToggleLock: () => {
-          hapticMedium();
-          const next = !locked;
-          setDimensionLock('tall', next);
-          if (next) patchFilters({ onlyTallClimbs: true });
-        },
+        active: !!filters.onlyTallClimbs,
+        onToggle: () => patchFilters({ onlyTallClimbs: filters.onlyTallClimbs ? undefined : true }),
       });
     }
     if (showWideChip) {
-      const locked = dimensionLocks.wide;
       chips.push({
         key: 'wide',
-        active: locked || !!filters.onlyWideClimbs,
-        locked,
-        onToggle: () => {
-          if (locked) return;
-          patchFilters({ onlyWideClimbs: filters.onlyWideClimbs ? undefined : true });
-        },
-        onToggleLock: () => {
-          hapticMedium();
-          const next = !locked;
-          setDimensionLock('wide', next);
-          if (next) patchFilters({ onlyWideClimbs: true });
-        },
+        active: !!filters.onlyWideClimbs,
+        onToggle: () => patchFilters({ onlyWideClimbs: filters.onlyWideClimbs ? undefined : true }),
       });
     }
     return chips;
-  }, [
-    showTallChip,
-    showWideChip,
-    dimensionLocks.tall,
-    dimensionLocks.wide,
-    filters.onlyTallClimbs,
-    filters.onlyWideClimbs,
-    patchFilters,
-    setDimensionLock,
-  ]);
-  // A locked dimension stays active through any clear (sheet Reset, FAB clear,
-  // recent re-apply): re-pin its filter whenever it's been cleared while locked.
-  const pinTall = useCallback(() => patchFilters({ onlyTallClimbs: true }), [patchFilters]);
-  const pinWide = useCallback(() => patchFilters({ onlyWideClimbs: true }), [patchFilters]);
-  useDimensionRepin(showTallChip, dimensionLocks.tall, !!filters.onlyTallClimbs, pinTall);
-  useDimensionRepin(showWideChip, dimensionLocks.wide, !!filters.onlyWideClimbs, pinWide);
-  // Token row = the receipt for the long tail only; the chip-backed facets show
-  // and clear themselves, so they're excluded to avoid wording a filter twice.
-  // Tall/Wide are chip-backed only on the homewall sizes where their chip shows;
-  // elsewhere they stay a removable token.
+  }, [showTallChip, showWideChip, filters.onlyTallClimbs, filters.onlyWideClimbs, patchFilters]);
+  // Token row = the receipt for the long tail only; a filter backed by a *pinned*
+  // chip shows and clears itself there, so it's excluded to avoid wording it
+  // twice. Derived from the user's pinned set so unpinning a chip re-surfaces its
+  // filter as a removable token (and re-pinning removes the token). Tall/Wide are
+  // chip-backed only when Shape is pinned AND the homewall size shows their chip.
+  const chipBackedTokenKeys = useMemo(
+    () => new Set<string>(pinnedChips.flatMap((kind) => chipKindToTokenKeys(kind))),
+    [pinnedChips],
+  );
   const sheetOnlyFilterTokens = useMemo(
     () =>
       filterTokens.filter((token) => {
-        if (CHIP_BACKED_TOKEN_KEYS.has(token.key)) return false;
-        if (token.key === 'tall' && showTallChip) return false;
-        if (token.key === 'wide' && showWideChip) return false;
-        return true;
+        if (token.key === 'tall') return !(chipBackedTokenKeys.has('tall') && showTallChip);
+        if (token.key === 'wide') return !(chipBackedTokenKeys.has('wide') && showWideChip);
+        // The Sort chip only switches the sort KEY, never the direction. So keep the
+        // sort token (its clear() resets both) whenever the direction is non-default —
+        // else an ascending sort set in the sheet would be unclearable from the row.
+        if (token.key === 'sort') {
+          return !(chipBackedTokenKeys.has('sort') && filters.sortOrder === DEFAULT_CLIMB_FILTER_STATE.sortOrder);
+        }
+        return !chipBackedTokenKeys.has(token.key);
       }),
-    [filterTokens, showTallChip, showWideChip],
+    [filterTokens, chipBackedTokenKeys, showTallChip, showWideChip, filters.sortOrder],
   );
   const filterChrome = useMemo(() => {
     if (!showFilterChips) return null;
     return (
       <>
         <FilterChipRow
+          pinnedChips={pinnedChips}
           activeFilterCount={activeFilterCount}
           onOpenFilters={handleOpenFilters}
           recentFilters={recentFilters}
@@ -1162,14 +1187,25 @@ function ClimbListInner() {
           progress={flagsToProgress(filters)}
           onChangeProgress={handleChangeProgress}
           canFilterProgress={isAuthenticated}
-          onlyBenchmarks={!!boardFilters.onlyBenchmarks}
-          onToggleBenchmarks={handleToggleBenchmarks}
+          collection={getCollectionFilter(filters, boardFilters)}
+          onChangeCollection={handleChangeCollection}
+          canFilterDrafts={isAuthenticated}
+          sortBy={filters.sortBy}
+          sortActive={sortActive}
+          onChangeSort={handleChangeSort}
+          accuracyValue={filters.gradeAccuracy ?? 'off'}
+          onChangeAccuracy={handleChangeAccuracy}
+          climbType={climbType}
+          onChangeClimbType={handleChangeClimbType}
+          betaActive={!!filters.onlyWithBetaVideos}
+          onToggleBeta={handleToggleBeta}
         />
         <FilterTokenRow tokens={sheetOnlyFilterTokens} />
       </>
     );
   }, [
     showFilterChips,
+    pinnedChips,
     activeFilterCount,
     handleOpenFilters,
     recentFilters,
@@ -1185,9 +1221,15 @@ function ClimbListInner() {
     handleChangePopularity,
     handleChangeRating,
     handleChangeProgress,
-    handleToggleBenchmarks,
+    handleChangeCollection,
     boardFilters.onlyBenchmarks,
     isAuthenticated,
+    sortActive,
+    handleChangeSort,
+    handleChangeAccuracy,
+    climbType,
+    handleChangeClimbType,
+    handleToggleBeta,
     sheetOnlyFilterTokens,
   ]);
 
