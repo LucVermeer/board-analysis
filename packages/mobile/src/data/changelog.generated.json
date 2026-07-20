@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-07-20T10:16:37.703Z",
+  "generatedAt": "2026-07-20T10:23:59.945Z",
   "entries": [
+    {
+      "prNumber": 3813,
+      "category": "improved",
+      "title": "The app shows the Boardsesh splash right away on the web instead of a blank white screen while it signs you in.",
+      "mergedAt": "2026-07-20T10:22:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3813"
+    },
+    {
+      "prNumber": 3815,
+      "category": "improved",
+      "title": "Signed-in pages load a little quicker — the app no longer re-checks your profile from the database on every request.",
+      "mergedAt": "2026-07-20T10:22:41Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3815"
+    },
+    {
+      "prNumber": 3810,
+      "category": "improved",
+      "title": "The home feed loads faster on a cold start — fewer requests before your crew's sends show up.",
+      "mergedAt": "2026-07-20T10:21:11Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3810"
+    },
     {
       "prNumber": 3812,
       "category": "new",

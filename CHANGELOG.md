@@ -13,6 +13,12 @@ manual changes). See docs/mobile-ota-updates.md.
   Now pinnable too: Sort, Grade accuracy, Climb type, and Beta videos.
   Collection is one clean picker — Any, Benchmarks, or My drafts — and Tall/Wide live together under a single Shape shortcut.
 
+### Improved
+
+- The app shows the Boardsesh splash right away on the web instead of a blank white screen while it signs you in. ([#3813](https://github.com/boardsesh/boardsesh/pull/3813))
+- Signed-in pages load a little quicker — the app no longer re-checks your profile from the database on every request. ([#3815](https://github.com/boardsesh/boardsesh/pull/3815))
+- The home feed loads faster on a cold start — fewer requests before your crew's sends show up. ([#3810](https://github.com/boardsesh/boardsesh/pull/3810))
+
 ### Fixed
 
 - Android: faster, more reliable Bluetooth — your board turns up quicker when you go to connect ([#3811](https://github.com/boardsesh/boardsesh/pull/3811))
