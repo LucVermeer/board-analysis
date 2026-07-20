@@ -14,6 +14,7 @@ import { bleManager } from './ble-manager';
 import { uint8ArrayToBase64, base64ToHex, serviceDataToHex } from './base64';
 import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
+import { HIGH_POWER_BOARD_SCAN_OPTIONS } from './scan-options';
 import { upsertDiscoveredDevice } from './scan-device-cache';
 import type {
   BluetoothAdapter,
@@ -134,7 +135,8 @@ export class RNBleAdapter implements BluetoothAdapter {
       // reads ble-plx's merged advertise+scan-response record, so it still
       // surfaces both Aurora-built (`Kilter Board#serial@N`) and Kilter-built
       // bare-name (`Kilter Board`) boxes while rejecting non-boards.
-      void bleManager.startDeviceScan(null, null, (scanError, scannedDevice) => {
+      // High-power scan options (LowLatency on Android) — see scan-options.ts.
+      void bleManager.startDeviceScan(null, HIGH_POWER_BOARD_SCAN_OPTIONS, (scanError, scannedDevice) => {
         if (scanError) {
           void bleManager.stopDeviceScan();
           // Surface the failure immediately so the user sees feedback instead

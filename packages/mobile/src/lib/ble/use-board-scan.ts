@@ -10,6 +10,7 @@ import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
+import { HIGH_POWER_BOARD_SCAN_OPTIONS } from './scan-options';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 
 const SCAN_TIMEOUT_MS = 15_000;
@@ -78,7 +79,8 @@ export function useBoardScan(): BoardScan {
     // (parseSerialNumber below). A hardware service-UUID ScanFilter drops boards
     // on Android when the UUID rides the scan-response PDU, leaving an empty
     // quickstart list — same root cause as the picker scan in adapter.ts.
-    void bleManager.startDeviceScan(null, null, (error, device) => {
+    // High-power scan options (LowLatency on Android) — see scan-options.ts.
+    void bleManager.startDeviceScan(null, HIGH_POWER_BOARD_SCAN_OPTIONS, (error, device) => {
       if (!isCurrentScanAttempt()) return;
       if (error) {
         stop();
