@@ -16,6 +16,7 @@ import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import Button from '@mui/material/Button';
 import MuiLink from '@mui/material/Link';
+import Skeleton from '@mui/material/Skeleton';
 import TvOutlined from '@mui/icons-material/TvOutlined';
 import PaletteOutlined from '@mui/icons-material/PaletteOutlined';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';
@@ -54,7 +55,7 @@ export default function OverviewTab({ gym }: { gym: Gym }) {
 
   // Kiosk count: the one summary number not already on the gym. Same query key
   // the welcome card uses, so the two share a single fetch.
-  const { data: kiosks } = useQuery({
+  const { data: kiosks, isError: kiosksError } = useQuery({
     queryKey: ['gymKiosks', gym.uuid, viewerUserId],
     queryFn: async () => {
       const client = createGraphQLHttpClient(token);
@@ -66,9 +67,17 @@ export default function OverviewTab({ gym }: { gym: Gym }) {
     enabled: !!token,
   });
   // The other three counts are server-passed and stable; the kiosk count is the
-  // one async value. Hold a placeholder until it resolves rather than flashing a
-  // hard 0 (a gym with kiosks would briefly read as having none).
-  const kioskCountDisplay: React.ReactNode = kiosks === undefined ? '—' : kiosks.length;
+  // one async value. Show the count once resolved; while the fetch is in flight a
+  // skeleton, and on failure an em-dash — never a misleading hard 0 and never a
+  // stuck spinner (a failed fetch would otherwise sit on the placeholder forever).
+  let kioskCountDisplay: React.ReactNode;
+  if (kiosks !== undefined) {
+    kioskCountDisplay = kiosks.length;
+  } else if (kiosksError) {
+    kioskCountDisplay = '—';
+  } else {
+    kioskCountDisplay = <Skeleton variant="text" width={14} sx={{ display: 'inline-block' }} />;
+  }
 
   const logoDisplayUrl = resolveGymLogoDisplayUrl(gym.logoUrl ?? null, getBackendHttpUrl());
 
@@ -184,10 +193,10 @@ export default function OverviewTab({ gym }: { gym: Gym }) {
                   gap: 1.5,
                   p: 2,
                   color: 'text.primary',
-                  '&:hover': { backgroundColor: 'var(--neutral-100)' },
+                  '&:hover': { bgcolor: 'action.hover' },
                 }}
               >
-                <Box sx={{ color: 'var(--color-primary)', display: 'flex' }}>{link.icon}</Box>
+                <Box sx={{ color: 'primary.main', display: 'flex' }}>{link.icon}</Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold }}>
                     {link.title}
@@ -196,7 +205,7 @@ export default function OverviewTab({ gym }: { gym: Gym }) {
                     {link.body}
                   </Typography>
                 </Box>
-                <ArrowForwardOutlined sx={{ fontSize: 18, color: 'var(--color-primary)' }} />
+                <ArrowForwardOutlined sx={{ fontSize: 18, color: 'primary.main' }} />
               </MuiLink>
             </Card>
           ))}

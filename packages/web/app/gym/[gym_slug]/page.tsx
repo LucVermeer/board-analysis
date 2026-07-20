@@ -245,17 +245,18 @@ export default async function GymPage(props: GymRouteProps) {
           {gym.canEdit && <GymPageManageButton gymSlug={gym_slug} />}
         </Box>
 
-        {gym.canEdit && (
-          <GymOwnerPrompts
-            gymSlug={gym_slug}
-            canEdit={gym.canEdit}
-            hasBoards={boards.length > 0}
-            hasKiosk={kiosk !== null}
-            hasBranding={Boolean(
-              gym.logoUrl || gym.brandPrimaryColor || gym.brandAccentColor || gym.brandBackgroundColor,
-            )}
-          />
-        )}
+        {/* Self-gating: GymOwnerPrompts renders nothing for a non-editor (or a
+            fully set-up gym), so the canEdit prop stays honest instead of being
+            shadowed by an always-true outer guard. */}
+        <GymOwnerPrompts
+          gymSlug={gym_slug}
+          canEdit={gym.canEdit}
+          hasBoards={boards.length > 0}
+          hasKiosk={kiosk !== null}
+          hasBranding={Boolean(
+            gym.logoUrl || gym.brandPrimaryColor || gym.brandAccentColor || gym.brandBackgroundColor,
+          )}
+        />
 
         {gym.canClaim && <GymClaimCta gymUuid={gym.uuid} gymName={gym.name} website={gym.website} />}
 

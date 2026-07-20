@@ -94,10 +94,10 @@ export default function GymOwnerPrompts({ gymSlug, canEdit, hasBoards, hasKiosk,
               gap: 1.5,
               p: 2,
               color: 'text.primary',
-              '&:hover': { backgroundColor: 'var(--neutral-100)' },
+              '&:hover': { bgcolor: 'action.hover' },
             }}
           >
-            <Box sx={{ color: 'var(--color-primary)', display: 'flex' }}>{promptIcon(key)}</Box>
+            <Box sx={{ color: 'primary.main', display: 'flex' }}>{promptIcon(key)}</Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold }}>
                 {promptTitle(t, key)}
@@ -106,7 +106,7 @@ export default function GymOwnerPrompts({ gymSlug, canEdit, hasBoards, hasKiosk,
                 {promptBody(t, key)}
               </Typography>
             </Box>
-            <ArrowForwardOutlined sx={{ fontSize: 18, color: 'var(--color-primary)' }} />
+            <ArrowForwardOutlined sx={{ fontSize: 18, color: 'primary.main' }} />
           </MuiLink>
         </Card>
       ))}

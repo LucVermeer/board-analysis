@@ -13,9 +13,12 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
 }));
 
-// The shell reads the active tab from the URL; pin it to Profile for these tests.
+// The shell reads the active tab from the URL. Most tests pin it to Profile; the
+// default-tab test clears it. A hoisted holder lets a test flip the value before
+// render.
+const searchState = vi.hoisted(() => ({ params: 'tab=profile' }));
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams('tab=profile'),
+  useSearchParams: () => new URLSearchParams(searchState.params),
 }));
 
 const pushSpy = vi.fn();
@@ -84,6 +87,18 @@ function makeGym(overrides: Partial<Gym> = {}): Gym {
 beforeEach(() => {
   pushSpy.mockReset();
   replaceSpy.mockReset();
+  searchState.params = 'tab=profile';
+});
+
+describe('ManageGymContent default tab', () => {
+  it('renders the Overview tab when no ?tab= param is present', () => {
+    searchState.params = '';
+    render(<ManageGymContent initialGym={makeGym()} />);
+
+    // Overview is the default landing surface; the Profile stub must not mount.
+    expect(screen.getByTestId('overview')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'make-dirty' })).toBeNull();
+  });
 });
 
 describe('ManageGymContent profile save routing', () => {

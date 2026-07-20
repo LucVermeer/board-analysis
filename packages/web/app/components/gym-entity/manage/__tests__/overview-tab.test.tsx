@@ -103,13 +103,22 @@ describe('OverviewTab', () => {
     expect(screen.getByText('kiosks')).toBeTruthy();
   });
 
-  it('shows a placeholder for the kiosk count until the query resolves, not a hard 0', () => {
+  it('shows a loading skeleton for the kiosk count while the query is in flight, not a hard 0', () => {
     mockRequest.mockReset();
     mockRequest.mockReturnValue(new Promise(() => {})); // never resolves
-    renderTab(makeGym());
-    // Em-dash placeholder while pending; the server-passed counts still render.
-    expect(screen.getByText('—')).toBeTruthy();
+    const { container } = renderTab(makeGym());
+    // Skeleton while pending; the server-passed counts still render; no hard 0.
+    expect(container.querySelector('.MuiSkeleton-root')).toBeTruthy();
     expect(screen.getByText('7')).toBeTruthy();
+  });
+
+  it('falls back to an em-dash for the kiosk count when the query fails', async () => {
+    mockRequest.mockReset();
+    mockRequest.mockRejectedValue(new Error('boom'));
+    const { container } = renderTab(makeGym());
+    // Settled error state: an em-dash, not an endless skeleton.
+    expect(await screen.findByText('—')).toBeTruthy();
+    expect(container.querySelector('.MuiSkeleton-root')).toBeNull();
   });
 
   it('mounts the relocated welcome checklist at the top of the surface', () => {

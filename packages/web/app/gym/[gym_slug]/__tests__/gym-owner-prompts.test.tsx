@@ -57,4 +57,11 @@ describe('GymOwnerPrompts', () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it('self-gates a non-editor to nothing (the public page renders it unconditionally)', () => {
+    const { container } = render(
+      <GymOwnerPrompts gymSlug="test-gym" canEdit={false} hasBoards={false} hasKiosk={false} hasBranding={false} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
 });
