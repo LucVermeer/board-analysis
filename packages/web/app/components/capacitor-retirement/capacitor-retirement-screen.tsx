@@ -45,7 +45,16 @@ export const CapacitorRetirementScreen: React.FC = () => {
         <Typography variant="body1" className={styles.description}>
           {t('capacitorRetirement.description')}
         </Typography>
-        <Button variant="contained" color="primary" size="large" onClick={openStoreApp} className={styles.cta}>
+        {/* autoFocus so a keyboard or screen-reader user lands on the only way
+            forward — the app they were in has just been unmounted. */}
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          onClick={openStoreApp}
+          className={styles.cta}
+          autoFocus
+        >
           {t('capacitorRetirement.cta')}
         </Button>
         <Button variant="text" size="small" onClick={openStorePage} className={styles.fallback}>

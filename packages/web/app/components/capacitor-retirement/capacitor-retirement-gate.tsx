@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { getPlatform, isCapacitorWebView, isNativeApp, waitForCapacitor } from '@/app/lib/ble/capacitor-utils';
+import { getPlatform, isNativeApp, waitForCapacitor } from '@/app/lib/ble/capacitor-utils';
 import { track } from '@/app/lib/analytics';
 
 // Only the retired app ever needs this, so keep it out of everyone else's
@@ -23,8 +23,8 @@ const CapacitorRetirementScreen = dynamic(() => import('./capacitor-retirement-s
  *
  * `window.Capacitor` exists only inside that WebView (the RN app never renders
  * the web UI and browsers never inject it), so this can't reach anyone else.
- * The UA heuristic below only ever buys time for the bridge to appear — the
- * takeover still waits for the real `window.Capacitor` before it shows.
+ * Nothing but that real bridge can trigger the takeover — no user-agent
+ * heuristic, which would also match Instagram and Facebook in-app WKWebViews.
  */
 export const CapacitorRetirementGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [retired, setRetired] = useState(false);
@@ -45,16 +45,17 @@ export const CapacitorRetirementGate: React.FC<{ children: React.ReactNode }> = 
 
     // The bridge injects window.Capacitor slightly after app JS runs, so a
     // straight isNativeApp() check races it and can wave a straggler through.
-    // Same wait home-page-content.tsx uses before classifying someone as web.
-    if (isCapacitorWebView()) {
-      void waitForCapacitor()
-        .then((appeared) => {
-          if (appeared && isNativeApp()) retire();
-        })
-        .catch(() => {
-          // Bridge never showed up — treat as a browser and leave the app alone.
-        });
-    }
+    // home-page-content.tsx gates this wait on isCapacitorWebView(); we don't,
+    // because a shell with an unexpected user agent would then be missed
+    // silently. Polling for 3s costs a browser twelve no-op ticks and keeps the
+    // only thing that can trigger the takeover the real bridge.
+    void waitForCapacitor()
+      .then((appeared) => {
+        if (appeared && isNativeApp()) retire();
+      })
+      .catch(() => {
+        // Bridge never showed up — treat as a browser and leave the app alone.
+      });
 
     return () => {
       cancelled = true;

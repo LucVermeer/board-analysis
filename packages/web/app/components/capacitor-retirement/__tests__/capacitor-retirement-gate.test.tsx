@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { CapacitorRetirementGate } from '../capacitor-retirement-gate';
+import { CAPACITOR_BRIDGE_TIMEOUT_MS } from '@/app/lib/ble/capacitor-utils';
 import { track } from '@/app/lib/analytics';
 
 /**
@@ -75,15 +76,19 @@ describe('CapacitorRetirementGate — must never fire outside the retired app', 
   });
 
   it('renders the app in an in-app browser whose UA looks like a WebView but has no bridge', async () => {
-    // Instagram/Facebook WKWebViews match isCapacitorWebView()'s UA heuristic.
-    // The gate may wait for a bridge, but it must never take over without one.
+    // Instagram/Facebook WKWebViews look like this. The gate waits for a bridge
+    // that never comes, and must still never take over.
     setUserAgent(IOS_WEBVIEW_UA);
     renderGate();
     expect(screen.getByText(APP_CONTENT)).toBeTruthy();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Wait out the whole CAPACITOR_BRIDGE_TIMEOUT_MS window plus a margin, so
+    // this asserts "gave up and left the app alone" rather than racing a
+    // still-pending poll — a short sleep here would be a coin flip on CI.
+    await new Promise((resolve) => setTimeout(resolve, CAPACITOR_BRIDGE_TIMEOUT_MS + 500));
     expect(screen.queryByText(SCREEN_CONTENT)).toBeNull();
+    expect(screen.getByText(APP_CONTENT)).toBeTruthy();
     expect(mockedTrack).not.toHaveBeenCalled();
-  });
+  }, 20000);
 
   it('renders the app on mobile Safari', () => {
     setUserAgent(IOS_SAFARI_UA);
@@ -106,8 +111,9 @@ describe('CapacitorRetirementGate — inside the retired app', () => {
 
   it('still takes over when the bridge is injected after the app mounts', async () => {
     // The real race: app JS runs before window.Capacitor appears. A one-shot
-    // isNativeApp() check would wave the straggler through here.
-    setUserAgent(IOS_WEBVIEW_UA);
+    // isNativeApp() check would wave the straggler through here. The user agent
+    // is deliberately left alone — the poll must not depend on a UA heuristic,
+    // or a shell with an unexpected UA is missed silently.
     renderGate();
     expect(screen.getByText(APP_CONTENT)).toBeTruthy();
 
