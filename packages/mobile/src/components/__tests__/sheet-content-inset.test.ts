@@ -49,4 +49,14 @@ describe('withSheetBottomInset', () => {
     const original = { paddingBottom: 12 };
     expect(withSheetBottomInset(original, 0)).toBe(original);
   });
+
+  it('leaves a non-numeric bottom padding untouched instead of replacing it with the bare inset', () => {
+    // A percentage bottom can't compose arithmetically; respect the consumer's
+    // explicit choice rather than silently swapping it for `insetBottom`.
+    const percentage = { paddingBottom: '5%' as unknown as number };
+    expect(withSheetBottomInset(percentage, 48)).toBe(percentage);
+    // Same for a non-numeric paddingVertical falling through the precedence chain.
+    const vertical = { paddingVertical: '5%' as unknown as number };
+    expect(withSheetBottomInset(vertical, 48)).toBe(vertical);
+  });
 });

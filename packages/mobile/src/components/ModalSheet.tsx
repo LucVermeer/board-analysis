@@ -23,7 +23,7 @@ import { hapticMedium } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
-import { withSheetBottomInset } from './sheet-content-inset';
+import { useSheetBodyContentStyle } from './sheet-content-inset';
 import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useManagedSheet, type PresenterGroup } from '../providers/sheet-presentation-provider';
 
@@ -122,10 +122,7 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
   // clear the Android edge-to-edge navigation bar itself — the native sheet does
   // not pad content for it. With a footer the body scrolls above the footer, which
   // already carries `insets.bottom`.
-  const bodyContentContainerStyle = useMemo(
-    () => (footer ? contentContainerStyle : withSheetBottomInset(contentContainerStyle, insets.bottom)),
-    [footer, contentContainerStyle, insets.bottom],
-  );
+  const bodyContentContainerStyle = useSheetBodyContentStyle(Boolean(footer), contentContainerStyle, insets.bottom);
   const body = scrollable ? (
     <BottomSheetScrollView
       style={bodyStyle}
