@@ -47,13 +47,17 @@ describe('resolveWebPlatforms', () => {
     });
   });
 
+  // A bare '/' must normalize to '', never pass through. Expo prepends the base
+  // to every asset path, so '/' yields '//assets/...', which browsers resolve as
+  // the HOST `assets` — every icon font and board background fails to load on
+  // app.boardsesh.com while root-absolute /_expo/* JS and CSS keep working.
   it('serves at the origin root when BOARDSESH_WEB_BASE_URL=/ (subdomain export)', () => {
     process.env.BOARDSESH_WEB_BASE_URL = '/';
 
     expect(resolveWebPlatforms('1')).toEqual({
       platforms: ['ios', 'android', 'web'],
       web: { output: 'single', bundler: 'metro' },
-      baseUrl: '/',
+      baseUrl: '',
     });
   });
 });
