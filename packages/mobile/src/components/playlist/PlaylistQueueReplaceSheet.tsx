@@ -1,5 +1,4 @@
 import { StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ModalSheet } from '../ModalSheet';
 import { Text } from '../Text';
@@ -30,11 +29,12 @@ export function PlaylistQueueReplaceSheet({
 }: PlaylistQueueReplaceSheetProps) {
   const { t } = useTranslation('playlists');
   const { systemColors } = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
     <ModalSheet visible={visible} enableDynamicSizing enablePanDownToClose={!isReplacing} onClose={onCancel}>
-      <View style={[styles.content, { paddingBottom: insets.bottom + spacing[3] }]}>
+      {/* The footerless ModalSheet wrapper composes insets.bottom onto the body
+          (withSheetBottomInset), so this content only adds its own spacing. */}
+      <View style={styles.content}>
         <Icon name="queue" size={40} color={systemColors.secondaryLabel} />
 
         <Text variant="title2" style={styles.title}>
@@ -71,6 +71,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing[6],
     paddingTop: spacing[4],
+    paddingBottom: spacing[3],
     gap: spacing[3],
   },
   title: {
