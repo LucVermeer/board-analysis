@@ -36,7 +36,24 @@ vi.mock('react-native', () => ({
   View: ({ children }: ViewMockProps) => createElement('div', null, children),
   KeyboardAvoidingView: ({ children }: ViewMockProps) => createElement('div', null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
-  StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
+  StyleSheet: {
+    create: (styles: Record<string, unknown>) => styles,
+    hairlineWidth: 1,
+    // Faithful flatten (arrays merge left-to-right, falsy entries skipped) — the
+    // footerless body composes its bottom inset through withSheetBottomInset.
+    flatten: function flatten(style: unknown): Record<string, unknown> | undefined {
+      if (style == null || style === false) return undefined;
+      if (Array.isArray(style)) {
+        const out: Record<string, unknown> = {};
+        for (const entry of style) {
+          const flat = flatten(entry);
+          if (flat) Object.assign(out, flat);
+        }
+        return out;
+      }
+      return style as Record<string, unknown>;
+    },
+  },
 }));
 
 vi.mock('react-native-safe-area-context', () => ({

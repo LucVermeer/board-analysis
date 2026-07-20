@@ -137,7 +137,7 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
       {children}
     </BottomSheetScrollView>
   ) : enableDynamicSizing && !footer && Platform.OS === 'web' ? (
-    <BottomSheetView style={[bodyStyle, contentContainerStyle]}>{children}</BottomSheetView>
+    <BottomSheetView style={[bodyStyle, bodyContentContainerStyle]}>{children}</BottomSheetView>
   ) : (
     <View style={[bodyStyle, bodyContentContainerStyle]}>{children}</View>
   );
