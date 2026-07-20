@@ -30,7 +30,6 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
@@ -113,10 +112,10 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
   if (!value) return null;
   return (
     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-      <Typography variant="caption" sx={{ fontWeight: 600, color: themeTokens.neutral[500], minWidth: 90 }}>
+      <Typography variant="caption" sx={{ fontWeight: 600, color: 'var(--neutral-500)', minWidth: 90 }}>
         {label}
       </Typography>
-      <Typography variant="caption" sx={{ color: themeTokens.neutral[700], wordBreak: 'break-word' }}>
+      <Typography variant="caption" sx={{ color: 'var(--neutral-700)', wordBreak: 'break-word' }}>
         {value}
       </Typography>
     </Box>
@@ -245,7 +244,7 @@ export default function FeedbackPanel() {
   return (
     <Box>
       {/* Type tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: themeTokens.neutral[200], mb: 2 }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'var(--neutral-200)', mb: 2 }}>
         <Tabs
           value={TYPE_ORDER.indexOf(type)}
           onChange={(_, value: number) => setType(TYPE_ORDER[value])}
@@ -340,10 +339,7 @@ export default function FeedbackPanel() {
                         sx={{ fontSize: 11 }}
                       />
                       {!isBug && report.rating != null && (
-                        <Typography
-                          variant="caption"
-                          sx={{ display: 'block', color: themeTokens.neutral[600], mt: 0.5 }}
-                        >
+                        <Typography variant="caption" sx={{ display: 'block', color: 'var(--neutral-600)', mt: 0.5 }}>
                           {t('feedback.rating.value', { rating: report.rating })}
                         </Typography>
                       )}
@@ -351,7 +347,7 @@ export default function FeedbackPanel() {
                     <TableCell>
                       <Typography variant="body2">{report.platform}</Typography>
                       {report.appVersion && (
-                        <Typography variant="caption" sx={{ color: themeTokens.neutral[500] }}>
+                        <Typography variant="caption" sx={{ color: 'var(--neutral-500)' }}>
                           {report.appVersion}
                         </Typography>
                       )}
@@ -361,7 +357,7 @@ export default function FeedbackPanel() {
                         <Typography
                           variant="body2"
                           sx={{
-                            color: themeTokens.neutral[700],
+                            color: 'var(--neutral-700)',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             display: '-webkit-box',
@@ -410,7 +406,7 @@ export default function FeedbackPanel() {
                           />
                         </Box>
                       ) : (
-                        <Typography variant="body2" sx={{ color: themeTokens.neutral[400] }}>
+                        <Typography variant="body2" sx={{ color: 'var(--neutral-400)' }}>
                           {t('feedback.reporter.anonymous')}
                         </Typography>
                       )}
@@ -441,7 +437,7 @@ export default function FeedbackPanel() {
                           <OpenInNewIcon sx={{ fontSize: 13 }} />
                         </MuiLink>
                       ) : (
-                        <Typography variant="caption" sx={{ color: themeTokens.neutral[400] }}>
+                        <Typography variant="caption" sx={{ color: 'var(--neutral-400)' }}>
                           —
                         </Typography>
                       )}
@@ -517,7 +513,7 @@ export default function FeedbackPanel() {
             {reports.length === 0 && !loading && errorOffset === null && (
               <TableRow>
                 <TableCell colSpan={COLUMN_COUNT} align="center">
-                  <Typography variant="body2" sx={{ color: themeTokens.neutral[400], py: 2 }}>
+                  <Typography variant="body2" sx={{ color: 'var(--neutral-400)', py: 2 }}>
                     {t('feedback.empty')}
                   </Typography>
                 </TableCell>
@@ -535,7 +531,7 @@ export default function FeedbackPanel() {
       </TableContainer>
 
       <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-        <Typography variant="caption" sx={{ color: themeTokens.neutral[500] }}>
+        <Typography variant="caption" sx={{ color: 'var(--neutral-500)' }}>
           {t('feedback.showing', { shown: reports.length, total: totalCount })}
         </Typography>
         {hasMore && (
