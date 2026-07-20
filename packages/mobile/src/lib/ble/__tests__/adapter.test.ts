@@ -49,6 +49,7 @@ vi.mock('@boardsesh/ble-protocol', () => ({
 // ── Import after mocks ─────────────────────────────────────────────────
 
 import { RNBleAdapter } from '../adapter';
+import { HIGH_POWER_BOARD_SCAN_OPTIONS } from '../scan-options';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 import { parseSerialNumber, splitMessages } from '@boardsesh/ble-protocol';
 import { State } from 'react-native-ble-plx';
@@ -683,7 +684,11 @@ describe('RNBleAdapter', () => {
       await adapter.requestAndConnect();
 
       // Unfiltered scan: UUID filter must be null (a service filter hides MoonBoards).
-      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
+      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(
+        null,
+        HIGH_POWER_BOARD_SCAN_OPTIONS,
+        expect.any(Function),
+      );
       expect(seenDevices.map((device) => device.deviceId)).toEqual(['moon-device']);
     });
 
@@ -726,7 +731,11 @@ describe('RNBleAdapter', () => {
       const adapter = new RNBleAdapter(devicePicker, 'aurora');
       await adapter.requestAndConnect();
 
-      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
+      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(
+        null,
+        HIGH_POWER_BOARD_SCAN_OPTIONS,
+        expect.any(Function),
+      );
       expect(seenDevices.map((device) => device.deviceId)).toEqual(['kilter-device']);
     });
 
@@ -774,7 +783,11 @@ describe('RNBleAdapter', () => {
       const adapter = new RNBleAdapter(devicePicker, 'aurora');
       await adapter.requestAndConnect();
 
-      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
+      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(
+        null,
+        HIGH_POWER_BOARD_SCAN_OPTIONS,
+        expect.any(Function),
+      );
       expect(seenDevices.map((device) => device.deviceId).sort()).toEqual(['kilter-bare', 'kilter-serial']);
     });
 

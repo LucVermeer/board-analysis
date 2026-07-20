@@ -45,6 +45,7 @@ vi.mock('@boardsesh/ble-protocol', () => ({
 }));
 
 import { useBoardScan } from '../use-board-scan';
+import { HIGH_POWER_BOARD_SCAN_OPTIONS } from '../scan-options';
 
 /** Grab the scan callback react-native-ble-plx was handed so tests can feed it devices. */
 function scanCallback() {
@@ -97,9 +98,14 @@ describe('useBoardScan', () => {
     });
 
     expect(result.current.status).toBe('scanning');
-    // Regression guard: scan UNFILTERED. A hardware service-UUID filter dropped
-    // Aurora boxes on Android when the UUID rode the scan-response PDU (#3806).
-    expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
+    // Regression guard: scan UNFILTERED (#3806) with high-power options — a
+    // service-UUID filter dropped scan-response boxes, and the default LowPower
+    // scan mode missed boards after the RN 0.86 upgrade.
+    expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(
+      null,
+      HIGH_POWER_BOARD_SCAN_OPTIONS,
+      expect.any(Function),
+    );
   });
 
   it('does not start scanning after reset during Bluetooth readiness wait', async () => {
