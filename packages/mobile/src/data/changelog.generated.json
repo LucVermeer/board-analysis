@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-19T23:27:42.461Z",
+  "generatedAt": "2026-07-20T05:31:10.292Z",
   "entries": [
+    {
+      "prNumber": 3790,
+      "category": "fixed",
+      "title": "`none` — internal CI/tooling fix, nothing user-facing.",
+      "mergedAt": "2026-07-20T00:43:14Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3790"
+    },
     {
       "prNumber": 3775,
       "category": "new",

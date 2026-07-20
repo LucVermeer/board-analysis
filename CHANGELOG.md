@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-20
+
+### Fixed
+
+- `none` — internal CI/tooling fix, nothing user-facing. ([#3790](https://github.com/boardsesh/boardsesh/pull/3790))
+
 ## 2026-07-19
 
 ### New
