@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-20T12:30:51.288Z",
+  "generatedAt": "2026-07-20T12:52:19.783Z",
   "entries": [
+    {
+      "prNumber": 3771,
+      "category": "fixed",
+      "title": "Buttons at the bottom of the board sheet and other panels no longer hide behind Android's on-screen navigation bar.",
+      "mergedAt": "2026-07-20T12:51:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3771"
+    },
     {
       "prNumber": 3722,
       "category": "new",
