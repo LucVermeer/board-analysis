@@ -35,8 +35,6 @@ vi.mock('react-native-ble-plx', () => ({
 vi.mock('../ble-manager', () => ({ bleManager: mockBleManager }));
 
 vi.mock('@boardsesh/ble-protocol', () => ({
-  AURORA_ADVERTISED_SERVICE_UUID: 'aurora-uuid',
-  UART_SERVICE_UUID: 'uart-uuid',
   // Treat the device name as the serial for test simplicity.
   parseSerialNumber: (name?: string) => name,
 }));
@@ -94,7 +92,9 @@ describe('useBoardScan', () => {
     });
 
     expect(result.current.status).toBe('scanning');
-    expect(mockBleManager.startDeviceScan).toHaveBeenCalled();
+    // Regression guard: scan UNFILTERED. A hardware service-UUID filter dropped
+    // Aurora boxes on Android when the UUID rode the scan-response PDU (#3806).
+    expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
   });
 
   it('does not start scanning after reset during Bluetooth readiness wait', async () => {
