@@ -614,10 +614,10 @@
     "speedCustom": "{{value}}×",
     "speedCustomLabel": "Vitesse personnalisée"
   },
-  "capacitorUpdateBanner": {
-    "title": "Il est temps de mettre à jour Boardsesh",
-    "description": "Tu utilises l’ancienne app. Installe la version reconstruite pour une session plus rapide et fluide.",
-    "cta": "Mettre à jour",
-    "dismiss": "Ignorer le rappel de mise à jour"
+  "capacitorRetirement": {
+    "title": "Boardsesh a une nouvelle app",
+    "description": "Cette version n’est plus en service. Installe la nouvelle Boardsesh : ton carnet, tes sessions et ta crew te suivent.",
+    "cta": "Installer la nouvelle app",
+    "fallbackCta": "Ouvrir la page du store"
   }
 }

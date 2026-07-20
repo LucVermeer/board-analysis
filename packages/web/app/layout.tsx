@@ -19,6 +19,7 @@ import { OnboardingTourProvider } from './components/onboarding/onboarding-tour-
 import OnboardingTourOverlay from './components/onboarding/onboarding-tour-overlay';
 import OnboardingDummySeshMount from './components/onboarding/onboarding-dummy-sesh-mount';
 import NativeDeepLinkListener from './components/providers/native-deep-link-listener';
+import CapacitorRetirementGate from './components/capacitor-retirement/capacitor-retirement-gate';
 import { getLocale } from './lib/i18n/get-locale';
 import { getServerTranslation } from './lib/i18n/server';
 import { LOCALE_HTML_LANG, LOCALE_OG } from './lib/i18n/config';
@@ -107,18 +108,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   ]}
                 >
                   <SnackbarProvider>
-                    <NativeDeepLinkListener />
-                    <AuthModalProvider>
-                      <FeatureFlagsProvider flags={EMPTY_FEATURE_FLAGS}>
-                        <PersistentSessionWrapper boardConfigs={boardConfigs}>
-                          <OnboardingTourProvider>
-                            <NotificationSubscriptionManager>{children}</NotificationSubscriptionManager>
-                            <OnboardingTourOverlay />
-                            <OnboardingDummySeshMount />
-                          </OnboardingTourProvider>
-                        </PersistentSessionWrapper>
-                      </FeatureFlagsProvider>
-                    </AuthModalProvider>
+                    {/* Everything below is torn down inside the retired
+                        Capacitor app, which gets a dead-end update screen. */}
+                    <CapacitorRetirementGate>
+                      <NativeDeepLinkListener />
+                      <AuthModalProvider>
+                        <FeatureFlagsProvider flags={EMPTY_FEATURE_FLAGS}>
+                          <PersistentSessionWrapper boardConfigs={boardConfigs}>
+                            <OnboardingTourProvider>
+                              <NotificationSubscriptionManager>{children}</NotificationSubscriptionManager>
+                              <OnboardingTourOverlay />
+                              <OnboardingDummySeshMount />
+                            </OnboardingTourProvider>
+                          </PersistentSessionWrapper>
+                        </FeatureFlagsProvider>
+                      </AuthModalProvider>
+                    </CapacitorRetirementGate>
                   </SnackbarProvider>
                 </I18nProvider>
               </ColorModeProvider>

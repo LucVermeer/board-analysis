@@ -1,0 +1,48 @@
+/* The gate unmounts the app before this mounts, so there is nothing left to
+   paint over it. The z-index is belt-and-braces: above MUI's modal layer (1300)
+   and the onboarding tour overlay (2000) in case a portal outlives the swap. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  background-color: var(--semantic-background);
+  padding: calc(var(--spacing-6) + var(--safe-area-inset-top)) calc(var(--spacing-5) + var(--safe-area-inset-right))
+    calc(var(--spacing-6) + var(--safe-area-inset-bottom)) calc(var(--spacing-5) + var(--safe-area-inset-left));
+}
+
+.panel {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-3);
+}
+
+.mark {
+  border-radius: var(--border-radius-lg);
+  display: block;
+}
+
+.title {
+  margin: var(--spacing-2) 0 0;
+}
+
+.description {
+  margin: 0;
+  color: var(--bs-text-brand-muted);
+}
+
+.cta {
+  width: 100%;
+  margin-top: var(--spacing-2);
+}
+
+.fallback {
+  color: var(--bs-text-brand-muted);
+}
