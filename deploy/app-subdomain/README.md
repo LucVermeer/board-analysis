@@ -6,8 +6,8 @@ project. They are **not** part of the export itself — the export recipe
 (`scripts/build-expo-web-export.sh --subdomain`) emits a `baseUrl /` static SPA;
 this directory adds the host-level SPA fallback and caching rules Pages needs.
 
-The deploy pipeline that consumes them is
-`.github/workflows/app-web-deploy.yml`.
+The deploy pipeline that consumes them is the `deploy-app-web` job in
+`.github/workflows/production-deploy.yml`.
 
 ## `_redirects` — SPA fallback
 
