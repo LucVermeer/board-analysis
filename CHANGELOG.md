@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Android: faster, more reliable Bluetooth — your board turns up quicker when you go to connect ([#3811](https://github.com/boardsesh/boardsesh/pull/3811))
 - Android: your board shows up in the Bluetooth list again when you reconnect — no more empty picker ([#3806](https://github.com/boardsesh/boardsesh/pull/3806))
 - `none` — internal CI/tooling fix, nothing user-facing. ([#3790](https://github.com/boardsesh/boardsesh/pull/3790))
 

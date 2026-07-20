@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-20T09:24:45.596Z",
+  "generatedAt": "2026-07-20T09:59:28.558Z",
   "entries": [
+    {
+      "prNumber": 3811,
+      "category": "fixed",
+      "title": "Android: faster, more reliable Bluetooth — your board turns up quicker when you go to connect",
+      "mergedAt": "2026-07-20T09:55:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3811"
+    },
     {
       "prNumber": 3806,
       "category": "fixed",
