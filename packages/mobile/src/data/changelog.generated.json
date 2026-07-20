@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-20T10:23:59.945Z",
+  "generatedAt": "2026-07-20T12:30:51.288Z",
   "entries": [
+    {
+      "prNumber": 3722,
+      "category": "new",
+      "title": "Your gym console now opens on an Overview — every setup step, your public page, and a paste-anywhere embed are one tap away.",
+      "mergedAt": "2026-07-20T12:29:49Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3722",
+      "body": "Edit your gym's profile (name, address, website, visibility) right in the console instead of hunting for the sheet.\nOn your public gym page, quick prompts point you straight to whatever's still missing — boards, a TV wall, or your branding."
+    },
     {
       "prNumber": 3813,
       "category": "improved",

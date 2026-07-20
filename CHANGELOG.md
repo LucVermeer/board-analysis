@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Your gym console now opens on an Overview — every setup step, your public page, and a paste-anywhere embed are one tap away. ([#3722](https://github.com/boardsesh/boardsesh/pull/3722))
+  Edit your gym's profile (name, address, website, visibility) right in the console instead of hunting for the sheet.
+  On your public gym page, quick prompts point you straight to whatever's still missing — boards, a TV wall, or your branding.
 - Light up your board straight from the browser — the Bluetooth control now works on app.boardsesh.com in Chrome and other Web Bluetooth browsers. ([#3812](https://github.com/boardsesh/boardsesh/pull/3812))
 - Make the filter row yours — pin the shortcuts you actually reach for and drop the ones you don't. ([#3802](https://github.com/boardsesh/boardsesh/pull/3802))
   Now pinnable too: Sort, Grade accuracy, Climb type, and Beta videos.
