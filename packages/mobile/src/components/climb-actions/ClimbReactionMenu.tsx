@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
   useWindowDimensions,
-  type ViewStyle,
 } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -184,14 +183,23 @@ export function ClimbReactionMenu({
   }, []);
 
   // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
-  // 400) so no new render is needed. Sized to the screen so it stays "blown up" but
-  // leaves room for the menu (~20% larger than the first pass); shrunk while the
-  // keyboard is up so the create form clears it.
-  const artMaxSize = Math.min(
+  // 400) so no new render is needed. The menu view shows a large hero preview; when a
+  // sub-action that stays inline (the playlist picker) opens, the art animates down to
+  // the compact "current" size so the picker + create form clear the keyboard.
+  //
+  // largeArtMaxSize: the hero size (menu view). The action list scrolls beneath it, so
+  // a big preview is safe — menuMaxHeight floors at 180 and the ScrollView caps at it.
+  const largeArtMaxSize = Math.min(Math.round(windowHeight * 0.44), Math.round(windowWidth * 0.85));
+  // compactArtMaxSize: the "current" size for the inline sub-action view — today's
+  // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
+  const compactArtMaxSize = Math.min(
     keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
     Math.round(windowHeight * 0.31),
     Math.round(windowWidth * 0.66),
   );
+  // In the menu view there is no text input, so keyboardHeight is 0 there; the keyboard
+  // only appears in the playlist create form, which is the compact path above.
+  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
   const boardRenderData = useMemo(() => {
     const setIdValues = boardConfig.setIds
       .split(',')
@@ -206,11 +214,22 @@ export function ClimbReactionMenu({
     });
   }, [boardConfig]);
 
-  const artStyle = useMemo<ViewStyle | null>(() => {
-    if (!boardRenderData) return null;
-    const fitted = fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, artMaxSize);
-    return { width: fitted.width, height: fitted.height, borderRadius: borderRadius.lg, overflow: 'hidden' };
-  }, [boardRenderData, artMaxSize]);
+  // Board aspect, read once for the worklet that derives the animating art dimensions.
+  const aspect = boardRenderData ? boardRenderData.boardWidth / boardRenderData.boardHeight : 1;
+  // The animating max-size (px). Springs between large (menu) and compact (sub-action)
+  // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
+  // opening "Add to playlist" glides the hero down to the current size (and back).
+  const artSizePx = useSharedValue(largeArtMaxSize);
+  useEffect(() => {
+    artSizePx.value = reduceMotion ? targetArtMax : withSpring(targetArtMax, springs.gentle);
+  }, [artSizePx, targetArtMax, reduceMotion]);
+
+  // Derive the fitted width/height on the UI thread, mirroring fitBoardArt's aspect math
+  // so the preview never distorts as it resizes.
+  const animatedArtStyle = useAnimatedStyle(() => {
+    const maxSize = artSizePx.value;
+    return aspect >= 1 ? { width: maxSize, height: maxSize / aspect } : { width: maxSize * aspect, height: maxSize };
+  });
 
   // Top offset for the floating content — anchors the preview at a fixed position
   // (see styles.content). Shared with the menu cap so the card can't run past the
@@ -223,7 +242,10 @@ export function ClimbReactionMenu({
   // reserving a fixed guess; fall back to an estimate until the first layout. The
   // card scrolls internally past this cap.
   const [previewHeight, setPreviewHeight] = useState(0);
-  const reservedForPreview = previewHeight > 0 ? previewHeight : artMaxSize + spacing[5] * 4;
+  const fallbackArtHeight = boardRenderData
+    ? fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, targetArtMax).height
+    : targetArtMax;
+  const reservedForPreview = previewHeight > 0 ? previewHeight : fallbackArtHeight + spacing[5] * 4;
   const bottomReserve = keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing[5];
   const menuMaxHeight = Math.max(
     180,
@@ -288,20 +310,22 @@ export function ClimbReactionMenu({
             onLayout={(event) => setPreviewHeight(event.nativeEvent.layout.height)}
             style={[styles.preview, previewStyle]}
           >
-            {boardRenderData && artStyle ? (
-              <BoardImageNative
-                frames={climb.frames}
-                boardName={boardConfig.boardName as BoardName}
-                layoutId={boardConfig.layoutId}
-                sizeId={boardConfig.sizeId}
-                setIds={boardConfig.setIds}
-                boardWidth={boardRenderData.boardWidth}
-                boardHeight={boardRenderData.boardHeight}
-                mirrored={climb.mirrored === true}
-                filledStyle
-                renderWidth={400}
-                style={artStyle}
-              />
+            {boardRenderData ? (
+              <Animated.View style={[styles.art, animatedArtStyle]}>
+                <BoardImageNative
+                  frames={climb.frames}
+                  boardName={boardConfig.boardName as BoardName}
+                  layoutId={boardConfig.layoutId}
+                  sizeId={boardConfig.sizeId}
+                  setIds={boardConfig.setIds}
+                  boardWidth={boardRenderData.boardWidth}
+                  boardHeight={boardRenderData.boardHeight}
+                  mirrored={climb.mirrored === true}
+                  filledStyle
+                  renderWidth={400}
+                  style={styles.artFill}
+                />
+              </Animated.View>
             ) : null}
             <View style={styles.previewText}>
               <View style={styles.nameRow}>
@@ -388,6 +412,18 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     width: '100%',
     maxWidth: 320,
+  },
+  // The animating art wrapper — carries the rounded clip; its width/height are driven
+  // by animatedArtStyle so the board render resizes between hero and compact sizes.
+  art: {
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+  },
+  // The board render fills the animating wrapper; explicit width+height override
+  // BoardImageNative's internal aspectRatio (the wrapper already preserves aspect).
+  artFill: {
+    width: '100%',
+    height: '100%',
   },
   previewText: {
     alignItems: 'center',
