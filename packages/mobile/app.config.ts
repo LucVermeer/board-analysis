@@ -18,7 +18,16 @@ export function resolveWebPlatforms(envValue: string | undefined): WebPlatformRe
   // export a host/CDN serves at the root of app.boardsesh.com. Read ONLY inside
   // this web branch so native builds (BOARDSESH_WEB unset) resolve a
   // byte-identical config and keep their OTA fingerprint.
-  const webBaseUrl = process.env.BOARDSESH_WEB_BASE_URL ?? '/app';
+  //
+  // Expo's experiments.baseUrl must be '' for root serving, never a bare '/'.
+  // Expo prepends the base to every asset path, so '/' produces
+  // '/' + '/assets/...' = '//assets/...', which a browser resolves as the HOST
+  // `assets` (https://assets/...). That breaks every icon font and board-art
+  // image on app.boardsesh.com while the root-absolute /_expo/* JS and CSS keep
+  // working, so the app boots but renders no icons or board backgrounds.
+  // Normalize a root base to '' so Expo emits root-absolute /assets/... URLs.
+  const rawWebBaseUrl = process.env.BOARDSESH_WEB_BASE_URL ?? '/app';
+  const webBaseUrl = rawWebBaseUrl === '/' ? '' : rawWebBaseUrl;
 
   return {
     platforms: ['ios', 'android', 'web'],

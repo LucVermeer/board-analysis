@@ -1,0 +1,8 @@
+# Cloudflare Pages redirects for the standalone Expo web export (app.boardsesh.com).
+#
+# SPA fallback: Expo Router is a single-page app, so any path that is not a real
+# file (deep links like /climbs or /auth/callback?transferToken=…) must serve the
+# exported shell with a 200, not a 404. The `200` status makes this a rewrite
+# (URL stays put), not a redirect. Real files (_expo/*, assets/*, wasm/*,
+# index.html) are matched by Pages before this catch-all, so they serve directly.
+/*    /index.html    200

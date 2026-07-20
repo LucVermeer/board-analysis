@@ -41,6 +41,7 @@ jobs:
     outputs:
       web_changed: ${{ steps.changes.outputs.web }}
       backend_changed: ${{ steps.changes.outputs.backend }}
+      app_changed: ${{ steps.changes.outputs.app }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -53,16 +54,18 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "web=true" >> "$GITHUB_OUTPUT"
             echo "backend=true" >> "$GITHUB_OUTPUT"
-            echo "Manual trigger: building web + backend"
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "Manual trigger: building web + backend + app"
             exit 0
           fi
 
           BEFORE="${{ github.event.before }}"
           # First push / missing parent / force-push to a new ref -> full build.
           if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-            echo "No usable before-sha ($BEFORE): building web + backend"
+            echo "No usable before-sha ($BEFORE): building web + backend + app"
             echo "web=true" >> "$GITHUB_OUTPUT"
             echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "app=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -74,6 +77,9 @@ jobs:
           BACKEND_CHANGED=false
           # Web deploys broadly: any change that isn't purely docs or mobile.
           WEB_CHANGED=false
+          # app.boardsesh.com (standalone Expo web export) — deploys on the mobile
+          # app, its shared deps, the export script, or the CF Pages host config.
+          APP_CHANGED=false
           for file in $CHANGED_FILES; do
             case "$file" in
               packages/*|Dockerfile.backend|scripts/create-service-docker-context.mjs|scripts/railway-deployment-status.mjs|railway.toml|bun.lock|package.json|.github/workflows/production-deploy.yml)
@@ -87,11 +93,17 @@ jobs:
                 WEB_CHANGED=true
                 ;;
             esac
+            case "$file" in
+              packages/mobile/*|packages/shared/*|packages/shared-schema/*|scripts/build-expo-web-export.sh|deploy/app-subdomain/*)
+                APP_CHANGED=true
+                ;;
+            esac
           done
 
           echo "backend=${BACKEND_CHANGED}" >> "$GITHUB_OUTPUT"
           echo "web=${WEB_CHANGED}" >> "$GITHUB_OUTPUT"
-          echo "Backend changed: ${BACKEND_CHANGED}; Web changed: ${WEB_CHANGED}"
+          echo "app=${APP_CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "Backend changed: ${BACKEND_CHANGED}; Web changed: ${WEB_CHANGED}; App changed: ${APP_CHANGED}"
 
   # Detects whether a Vercel Instant Rollback is pinning production. Outputs
   # active=true/false; the deploy jobs read it to decide promote vs. stage-only.
@@ -495,6 +507,152 @@ jobs:
           echo "Railway deployment did not reach SUCCESS in time"
           exit 1
 
+  # Deploys app.boardsesh.com — the STANDALONE Expo web export (baseUrl `/`)
+  # served at the root of its own subdomain via Cloudflare Pages (project
+  # `boardsesh-app`, direct upload). This is the `--subdomain` artifact, distinct
+  # from the `/app` export the web Docker image bakes. See
+  # docs/expo-web-deployment.md.
+  #
+  # Independent of the web/backend build+migrate gate: it's a self-contained
+  # static export + upload with no DB or image dependency, so it only needs
+  # detect-changes. No inline Playwright smoke gate — a per-deploy expo-web boot
+  # is too heavy here (this file has no such gate for web/backend either); the
+  # expo-web-smoke suite stays the dispatch-only gate in e2e-tests.yml.
+  deploy-app-web:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.app_changed == 'true'
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build standalone Expo web export (production env baked in)
+        # EXPO_PUBLIC_WEB_URL is the AUTH origin and is deliberately
+        # www.boardsesh.com, NOT app.boardsesh.com: the SPA does credentialed
+        # cross-origin auth against www. See docs/expo-web-deployment.md.
+        #
+        # BOARDSESH_EXPORT_EXPECT_URLS is inert until sibling PR #3797 lands the
+        # `--clear` + env-assertion support; once it does, it becomes the
+        # in-export stale-env detector. The independent grep step below covers us
+        # regardless of merge order.
+        run: |
+          EXPO_PUBLIC_BACKEND_URL=https://ws.boardsesh.com \
+          EXPO_PUBLIC_WS_URL=wss://ws.boardsesh.com/graphql \
+          EXPO_PUBLIC_WEB_URL=https://www.boardsesh.com \
+          BOARDSESH_EXPORT_EXPECT_URLS="https://ws.boardsesh.com https://www.boardsesh.com" \
+          bash scripts/build-expo-web-export.sh --subdomain "$RUNNER_TEMP/app-standalone"
+
+      - name: Verify production origins are baked into the bundles
+        # Belt-and-braces stale-env guard, independent of #3797's
+        # BOARDSESH_EXPORT_EXPECT_URLS. `expo export` reuses Metro's transform
+        # cache even when EXPO_PUBLIC_* change, so an old env can silently ship;
+        # grep the emitted JS bundles for both prod origins and fail otherwise.
+        run: |
+          set -euo pipefail
+          js_glob="$RUNNER_TEMP/app-standalone/_expo/static/js/web"
+          for origin in ws.boardsesh.com www.boardsesh.com; do
+            if ! grep -rql "$origin" "$js_glob"/*.js; then
+              echo "::error::Expected origin '$origin' not found in $js_glob/*.js — stale env baked into the export?" >&2
+              exit 1
+            fi
+            echo "ok: found '$origin' in the emitted bundles"
+          done
+
+      - name: Add Cloudflare Pages host config to the export
+        # _redirects (SPA fallback) + _headers (noindex/caching/no-CSP) are host
+        # config, not part of the export. Copy them into the publish dir.
+        run: |
+          set -euo pipefail
+          cp deploy/app-subdomain/_redirects "$RUNNER_TEMP/app-standalone/_redirects"
+          cp deploy/app-subdomain/_headers   "$RUNNER_TEMP/app-standalone/_headers"
+
+      - name: Publish to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          bunx wrangler@4 pages deploy "$RUNNER_TEMP/app-standalone" \
+            --project-name=boardsesh-app \
+            --branch=main
+
+      - name: Post-deploy smoke against app.boardsesh.com
+        # Cloudflare's edge can lag a few seconds behind a fresh deploy, so each
+        # check retries a short propagation loop. Verifies: root serves the HTML
+        # shell, a deep route SPA-falls back to the shell, a content-hashed asset
+        # is immutable-cached, index.html is NOT immutable, noindex is present,
+        # and the WASM binary serves with a wasm/octet content type.
+        run: |
+          set -uo pipefail
+          base=https://app.boardsesh.com
+
+          # Retry a curl assertion for up to ~60s of edge propagation.
+          retry() {
+            local desc="$1"; shift
+            for attempt in $(seq 1 12); do
+              if "$@"; then
+                echo "ok: $desc"
+                return 0
+              fi
+              echo "  ($desc) attempt $attempt failed; retrying in 5s..."
+              sleep 5
+            done
+            echo "::error::post-deploy smoke failed: $desc" >&2
+            return 1
+          }
+
+          check_root() {
+            local out; out=$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' "$base/")
+            echo "$out" | grep -q '^200 ' && echo "$out" | grep -qi 'text/html'
+          }
+
+          check_deep_route() {
+            # SPA fallback: a route with no real file must still 200 the shell.
+            local code; code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/climbs")
+            [ "$code" = "200" ]
+          }
+
+          check_noindex() {
+            curl -sSI "$base/" | grep -qi '^x-robots-tag:.*noindex'
+          }
+
+          check_wasm() {
+            local out; out=$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' \
+              "$base/wasm/board_renderer_wasm_bg.wasm")
+            echo "$out" | grep -q '^200 ' \
+              && echo "$out" | grep -qiE 'application/(wasm|octet-stream)'
+          }
+
+          check_index_not_immutable() {
+            # index.html must revalidate — no immutable cache directive.
+            local cc; cc=$(curl -sSI "$base/index.html" | tr -d '\r' \
+              | grep -i '^cache-control:' || true)
+            ! echo "$cc" | grep -qi 'immutable'
+          }
+
+          # A real content-hashed asset URL, parsed out of the served index.html,
+          # must come back immutable-cached.
+          check_hashed_asset_immutable() {
+            local asset_path
+            asset_path=$(curl -sS "$base/" \
+              | grep -oE '/_expo/static/[^"'"'"']+\.js' | head -n1)
+            [ -n "$asset_path" ] || { echo "  no /_expo asset found in index.html"; return 1; }
+            local cc; cc=$(curl -sSI "$base$asset_path" | tr -d '\r' \
+              | grep -i '^cache-control:' || true)
+            echo "$cc" | grep -qi 'immutable'
+          }
+
+          retry "root / → 200 text/html"                 check_root
+          retry "deep route /climbs → 200 (SPA shell)"    check_deep_route
+          retry "X-Robots-Tag: noindex on /"              check_noindex
+          retry "wasm binary → 200 wasm/octet-stream"     check_wasm
+          retry "index.html is NOT immutable-cached"      check_index_not_immutable
+          retry "hashed _expo asset is immutable-cached"  check_hashed_asset_immutable
+
   # Homelab staging-backend deploy is currently broken — re-enable once the
   # self-hosted runner is healthy. It deploys the same :staging image and is
   # intentionally independent of the web build / prod migrate gate (it targets
@@ -563,7 +721,17 @@ jobs:
   # detect-changes erroring, or a cancelled mid-deploy) still alerts. No-ops if
   # the DISCORD_DEPLOY_WEBHOOK secret is unset.
   notify-failure:
-    needs: [detect-changes, check-rollback, build-web, build-backend, migrate, deploy-web, deploy-production-backend]
+    needs:
+      [
+        detect-changes,
+        check-rollback,
+        build-web,
+        build-backend,
+        migrate,
+        deploy-web,
+        deploy-production-backend,
+        deploy-app-web,
+      ]
     if: >-
       always()
       && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
@@ -580,6 +748,7 @@ jobs:
           MIGRATE: ${{ needs.migrate.result }}
           DEPLOY_WEB: ${{ needs.deploy-web.result }}
           DEPLOY_BACKEND: ${{ needs.deploy-production-backend.result }}
+          DEPLOY_APP_WEB: ${{ needs.deploy-app-web.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
@@ -588,8 +757,8 @@ jobs:
             exit 0
           fi
           # URL wrapped in <…> so Discord suppresses the inline preview embed.
-          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• detect-changes: %s\n• check-rollback: %s\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n<%s>' \
-            "${COMMIT_SHA:0:7}" "$DETECT_CHANGES" "$CHECK_ROLLBACK" "$BUILD_WEB" "$BUILD_BACKEND" "$MIGRATE" "$DEPLOY_WEB" "$DEPLOY_BACKEND" "$RUN_URL")
+          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• detect-changes: %s\n• check-rollback: %s\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n• deploy-app-web: %s\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$DETECT_CHANGES" "$CHECK_ROLLBACK" "$BUILD_WEB" "$BUILD_BACKEND" "$MIGRATE" "$DEPLOY_WEB" "$DEPLOY_BACKEND" "$DEPLOY_APP_WEB" "$RUN_URL")
           # --fail-with-body surfaces Discord's status + error body (e.g. 429,
           # rotated webhook) in the log instead of failing silently. Don't let a
           # webhook hiccup fail the job — the alert is best-effort.
