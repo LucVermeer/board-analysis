@@ -93,6 +93,12 @@ env:
   # doesn't enter the resolved config, so it never moves the fingerprint. Kept in
   # lockstep with the other mobile fingerprint workflows. See docs/mobile-ota-updates.md.
   EXPO_PUBLIC_USE_RN_FETCH: '1'
+  # Preview-only tag: pr-<number> OTA bundles report `environment: preview` to Sentry
+  # so testers' crashes stay out of the production view (packages/mobile/src/lib/sentry.ts).
+  # DELIBERATELY diverges from production — do NOT add to SHARED_ENV_KEYS in
+  # scripts/mobile-ci-env-parity.test.ts. Bundle-only (EXPO_PUBLIC_*, JS-inlined), so it
+  # doesn't move the fingerprint; store/production builds leave it unset → 'production'.
+  EXPO_PUBLIC_SENTRY_ENVIRONMENT: preview
 
 jobs:
   # ── Decide what to do, with NO secrets (read-only). Resolves the PR number and

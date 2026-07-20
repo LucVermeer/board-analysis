@@ -42,30 +42,30 @@ import * as Sentry from '@sentry/node';
 // Leaf config module — pure env-detection helpers with no side effects and no
 // postgres/driver imports, so pulling it in here can't defeat the OTel patching
 // this file must run before.
-import { isLocalDevelopment, isTestEnvironment } from '@boardsesh/db/client/config';
+import { isProductionSentryEnvironment, resolveSentryEnvironment } from '@boardsesh/db/client/config';
 
-// Enable in any prod-like environment, not only NODE_ENV === 'production':
-// Railway leaves NODE_ENV unset, so the old `=== 'production'` gate meant the
-// backend never reported to Sentry in production (issue #3603 / #3183).
+// Report only from the *production* environment. Railway prod leaves NODE_ENV
+// unset, so we can't gate on `NODE_ENV === 'production'` (that regressed prod to
+// silence — issue #3603 / #3183); but "any non-dev, non-test runtime" was too
+// broad and let preview/staging backends (branch-deploy.yml runs them with
+// NODE_ENV=production) pollute the prod project, disguised as `environment:
+// production`. resolveSentryEnvironment() collapses both: prod resolves to
+// 'production' and stays on, while preview/staging declare SENTRY_ENVIRONMENT and
+// opt out. See @boardsesh/db/client/config.
 const dsn =
   process.env.SENTRY_DSN ??
   'https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400';
-const isProductionLike = !isLocalDevelopment() && !isTestEnvironment();
 
 Sentry.init({
   dsn,
-  enabled: isProductionLike && Boolean(dsn),
+  enabled: isProductionSentryEnvironment() && Boolean(dsn),
   enableLogs: true,
   // Matches the web service. Backend tags events with userId / clientIp from
   // ConnectionContext for incident triage; the data is already in our own
   // logs and is not exfiltrated beyond Sentry.
   sendDefaultPii: true,
-  // Read SENTRY_ENVIRONMENT (Sentry's standard env var) first. Otherwise fall
-  // back to 'production' when prod-like (NODE_ENV is unset on Railway), so
-  // real prod events aren't mislabelled 'development'. Platform-neutral — no
-  // RAILWAY_*-style branching.
-  environment:
-    process.env.SENTRY_ENVIRONMENT ?? (isProductionLike ? 'production' : (process.env.NODE_ENV ?? 'development')),
+  // Platform-neutral — no RAILWAY_*-style branching. See resolveSentryEnvironment.
+  environment: resolveSentryEnvironment(),
   serverName: 'boardsesh-backend',
 });
 

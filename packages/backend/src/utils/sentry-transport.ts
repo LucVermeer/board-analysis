@@ -1,19 +1,24 @@
 import TransportStream from 'winston-transport';
 import * as Sentry from '@sentry/node';
-import { isLocalDevelopment, isTestEnvironment } from '@boardsesh/db/client/config';
+import { isProductionSentryEnvironment } from '@boardsesh/db/client/config';
 
-// Mirrors the `Sentry.init({ enabled })` gate in instrument.ts: capture in any
-// prod-like environment (Railway leaves NODE_ENV unset), but never in local dev
-// or under the test runner.
+// Mirrors the `Sentry.init({ enabled })` gate in instrument.ts: forward error
+// logs only from the production environment. An explicit non-'production'
+// SENTRY_ENVIRONMENT (preview / staging deploys — branch-deploy.yml) opts out
+// even when NODE_ENV=production, so per-PR backends can't forward error logs to
+// the prod Sentry project. Local dev and the test runner are excluded too.
 //
 // The optional `nodeEnv` seam lets tests assert the gate without mutating
-// process.env; when supplied it fully determines the decision, so a test that
-// runs with VITEST=1 can still exercise the "production" branch.
+// process.env; when supplied it fully determines the prod-like decision, so a
+// test that runs with VITEST=1 can still exercise the "production" branch. The
+// SENTRY_ENVIRONMENT opt-out is checked first so the seam can't override it.
 function isSentryLoggingEnabled(nodeEnvOverride?: string): boolean {
+  const sentryEnvironment = process.env.SENTRY_ENVIRONMENT;
+  if (sentryEnvironment && sentryEnvironment !== 'production') return false;
   if (nodeEnvOverride !== undefined) {
     return nodeEnvOverride !== 'development' && nodeEnvOverride !== 'test';
   }
-  return !isLocalDevelopment() && !isTestEnvironment();
+  return isProductionSentryEnvironment();
 }
 
 const SPLAT = Symbol.for('splat');

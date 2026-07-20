@@ -119,6 +119,29 @@ describe('SentryWinstonTransport', () => {
     expect(captureExceptionMock).not.toHaveBeenCalled();
   });
 
+  it('no-ops when SENTRY_ENVIRONMENT is an explicit non-production value, even with NODE_ENV=production', async () => {
+    // Preview / staging backends run with NODE_ENV=production (branch-deploy.yml)
+    // but declare SENTRY_ENVIRONMENT=preview so they don't pollute the prod
+    // project. The opt-out must win over the nodeEnv seam.
+    const previous = process.env.SENTRY_ENVIRONMENT;
+    process.env.SENTRY_ENVIRONMENT = 'preview';
+    try {
+      const transport = makeTransport('production', captureExceptionMock);
+      expect(transport.enabled).toBe(false);
+
+      await runTransport(transport, {
+        level: 'error',
+        message: 'Preview error',
+        [ERROR_INSTANCE]: new Error('preview-only'),
+      });
+
+      expect(captureExceptionMock).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.SENTRY_ENVIRONMENT;
+      else process.env.SENTRY_ENVIRONMENT = previous;
+    }
+  });
+
   it('swallows errors thrown by capture without breaking the pipeline', async () => {
     captureExceptionMock.mockImplementationOnce(() => {
       throw new Error('sentry internal failure');
