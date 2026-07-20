@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet, type FlatList } from 'react-native';
 import { BottomSheetFlatList } from '@expo/ui/community/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { getPlaylistSuggestedClimbs, createPlaylistSuggestionSource, getQueueBoardKey } from '@boardsesh/queue';
 import { buildQueueListModel, type QueueFlatRow } from '@boardsesh/play-view';
+import { withSheetBottomInset } from '../sheet-content-inset';
 import { QueueItemRow, type QueueItemRowBoard, POSITION_SLOT_WIDTH, SEPARATOR_INSET } from '../QueueItemRow';
 import { ClimbListItemContent } from '../ClimbListItemContent';
 import { Text } from '../Text';
@@ -84,7 +86,17 @@ function QueueListComponent({
 }: QueueListProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
+  const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<QueueListRow> | null>(null);
+
+  // Clear the queue toolbar (styles.listContent's spacing[10]) AND the Android
+  // edge-to-edge navigation bar, so the last row never sits under the 3-button nav
+  // bar when fully scrolled. withSheetBottomInset adds insets.bottom on top of the
+  // toolbar padding (and returns the base unchanged when there's no inset).
+  const listContentContainerStyle = useMemo(
+    () => withSheetBottomInset(styles.listContent, insets.bottom),
+    [insets.bottom],
+  );
 
   const { flatRows, currentItemFlatIndex } = useMemo(
     () =>
@@ -360,7 +372,7 @@ function QueueListComponent({
       data={rows}
       keyExtractor={keyExtractor}
       renderItem={renderRow}
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={listContentContainerStyle}
       showsVerticalScrollIndicator={false}
       scrollEnabled={!isDragging}
       onScrollToIndexFailed={() => {

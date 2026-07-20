@@ -19,6 +19,7 @@ import { hapticMedium } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
+import { useSheetBodyContentStyle } from './sheet-content-inset';
 import { useSheetColumnStyle } from './use-sheet-column-style';
 import { useManagedSheet, type PresenterGroup } from '../providers/sheet-presentation-provider';
 
@@ -117,10 +118,15 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
   // sheet sizes to its content and anything past the detent is clipped and
   // unreachable instead of scrolling.
   const bodyStyle = footer ? styles.content : columnStyle;
+  // Without a pinned footer the body sits against the bottom edge, so it has to
+  // clear the Android edge-to-edge navigation bar itself — the native sheet does
+  // not pad content for it. With a footer the body scrolls above the footer, which
+  // already carries `insets.bottom`.
+  const bodyContentContainerStyle = useSheetBodyContentStyle(Boolean(footer), contentContainerStyle, insets.bottom);
   const body = scrollable ? (
     <BottomSheetScrollView
       style={bodyStyle}
-      contentContainerStyle={contentContainerStyle}
+      contentContainerStyle={bodyContentContainerStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -128,9 +134,9 @@ export const Sheet = forwardRef<BottomSheetMethods, SheetProps>(function Sheet(
       {children}
     </BottomSheetScrollView>
   ) : enableDynamicSizing && !footer && Platform.OS === 'web' ? (
-    <BottomSheetView style={[bodyStyle, contentContainerStyle]}>{children}</BottomSheetView>
+    <BottomSheetView style={[bodyStyle, bodyContentContainerStyle]}>{children}</BottomSheetView>
   ) : (
-    <View style={[bodyStyle, contentContainerStyle]}>{children}</View>
+    <View style={[bodyStyle, bodyContentContainerStyle]}>{children}</View>
   );
 
   const footerBar = footer ? (

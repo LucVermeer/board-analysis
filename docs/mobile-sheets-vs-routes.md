@@ -195,6 +195,17 @@ Is it a secondary surface OVER the current screen, or its own full surface?
    in the tree shows it. Pick `ModalSheet` for on-demand surfaces (the common case); `Sheet` when
    the sheet's lifetime is bound to parent state.
 
+5. **Sheet content must clear the bottom safe area itself — the native `@expo/ui` sheet does
+   not.** The sheet draws under the system bottom inset on **both** platforms — the Android
+   edge-to-edge nav bar (~48dp 3-button bar / gesture pill) _and_ the iOS home indicator (~34pt) —
+   so a control at the bottom of a sheet needs `insets.bottom` added to its padding, or it sits
+   under the bar (Kilter/Tension users on Android 3-button nav hit this on the board sheet). The
+   shared `Sheet`/`ModalSheet` wrappers add it to their pinned `footer` and, for a **footerless**
+   body, automatically via `withSheetBottomInset` (composed on top of your `contentContainerStyle`).
+   A sheet built on the raw native primitive (its own `BottomSheetModal` + `BottomSheetFlatList`,
+   e.g. the board sheet / queue list) owns this itself: add `insets.bottom + spacing[N]`. Apply on
+   both platforms — `insets.bottom` is 0 when there's nothing to clear, so there's no double-inset.
+
 ## A latency footgun (any route)
 
 A modal route's present animation can't START until React commits the route's first frame. If

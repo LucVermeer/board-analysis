@@ -121,11 +121,14 @@ describe('PlaylistQueueReplaceSheet', () => {
     expect(button(container, 'detail.queueReplace.confirm')).not.toBeNull();
   });
 
-  it('sizes to content and pads past the safe-area bottom inset', () => {
+  it('sizes to content and adds its own bottom spacing (the footerless ModalSheet wrapper composes the safe-area inset on top)', () => {
     const { container } = render(<PlaylistQueueReplaceSheet {...makeProps()} />);
     expect(container.querySelector('[data-sheet]')?.getAttribute('data-dynamic')).toBe('true');
-    // insets.bottom (34) + spacing[3] (12)
-    expect(container.querySelector('[data-pb="46"]')).not.toBeNull();
+    // The content only carries spacing[3] (12); the footerless ModalSheet wrapper
+    // adds insets.bottom via withSheetBottomInset, so the content must NOT re-add it
+    // (doing so double-padded the sheet — see withSheetBottomInset + modal-sheet tests).
+    expect(container.querySelector('[data-pb="12"]')).not.toBeNull();
+    expect(container.querySelector('[data-pb="46"]')).toBeNull();
   });
 
   it('fires cancel and confirm callbacks from the buttons', () => {
