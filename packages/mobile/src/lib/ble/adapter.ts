@@ -1,6 +1,5 @@
 import { type Device, type Characteristic, type BleError } from 'react-native-ble-plx';
 import {
-  AURORA_ADVERTISED_SERVICE_UUID,
   UART_SERVICE_UUID,
   UART_WRITE_CHARACTERISTIC_UUID,
   REDBEARLAB_SERVICE_UUID,
@@ -125,10 +124,17 @@ export class RNBleAdapter implements BluetoothAdapter {
     let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
-      // Aurora scans can stay service-filtered. MoonBoard scans stay unfiltered
-      // so name-prefix controllers without advertised UART still surface.
-      const scanServiceUuids = this.scanFamily === 'aurora' ? [AURORA_ADVERTISED_SERVICE_UUID] : null;
-      void bleManager.startDeviceScan(scanServiceUuids, null, (scanError, scannedDevice) => {
+      // Scan UNFILTERED and filter results in JS (isLikelyBoardDevice below).
+      // A hardware service-UUID ScanFilter never matches by name and, on Android,
+      // is unreliable for a 128-bit UUID a box carries only in its scan-response
+      // PDU — so it silently drops Aurora (Kilter/Tension) boxes whose UUID/name
+      // arrives that way, giving an empty device picker (regression 0710be7a8:
+      // Android 2.2.2 Kilter empty-picker rate ~23% vs ~6% on 2.1.0). MoonBoard
+      // already required an unfiltered scan; Aurora now matches it. The JS filter
+      // reads ble-plx's merged advertise+scan-response record, so it still
+      // surfaces both Aurora-built (`Kilter Board#serial@N`) and Kilter-built
+      // bare-name (`Kilter Board`) boxes while rejecting non-boards.
+      void bleManager.startDeviceScan(null, null, (scanError, scannedDevice) => {
         if (scanError) {
           void bleManager.stopDeviceScan();
           // Surface the failure immediately so the user sees feedback instead

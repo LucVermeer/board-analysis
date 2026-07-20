@@ -6,9 +6,10 @@
 // opened here; connecting happens later when the user enters play mode.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID, parseSerialNumber } from '@boardsesh/ble-protocol';
+import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
+import { isLikelyBoardDevice } from './board-device-filter';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 
 const SCAN_TIMEOUT_MS = 15_000;
@@ -73,7 +74,11 @@ export function useBoardScan(): BoardScan {
     setStatus('scanning');
     scanningRef.current = true;
 
-    bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (error, device) => {
+    // Scan UNFILTERED, then keep only devices whose name carries an Aurora serial
+    // (parseSerialNumber below). A hardware service-UUID ScanFilter drops boards
+    // on Android when the UUID rides the scan-response PDU, leaving an empty
+    // quickstart list — same root cause as the picker scan in adapter.ts.
+    void bleManager.startDeviceScan(null, null, (error, device) => {
       if (!isCurrentScanAttempt()) return;
       if (error) {
         stop();
@@ -81,7 +86,17 @@ export function useBoardScan(): BoardScan {
         return;
       }
       if (!device) return;
-      const serial = parseSerialNumber(device.localName ?? device.name ?? undefined);
+      const deviceName = device.localName ?? device.name ?? undefined;
+      // The unfiltered scan surfaces every nearby peripheral, so gate on the same
+      // Aurora board/service check the picker uses before treating a "#serial" as
+      // a board serial. Otherwise a stray "Printer #751737" or "AirPods #1" would
+      // parse a serial and fire a spurious boardsBySerialNumbers lookup (which
+      // could even resolve to a real, not-actually-present board).
+      const advertisedServiceUuids = [...(device.serviceUUIDs ?? []), ...(device.overflowServiceUUIDs ?? [])];
+      if (!isLikelyBoardDevice({ name: deviceName, serviceUuids: advertisedServiceUuids, scanFamily: 'aurora' })) {
+        return;
+      }
+      const serial = parseSerialNumber(deviceName);
       if (serial && !found.has(serial)) {
         found.add(serial);
         setSerials([...found]);

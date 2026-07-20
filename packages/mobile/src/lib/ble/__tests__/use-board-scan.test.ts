@@ -35,10 +35,13 @@ vi.mock('react-native-ble-plx', () => ({
 vi.mock('../ble-manager', () => ({ bleManager: mockBleManager }));
 
 vi.mock('@boardsesh/ble-protocol', () => ({
+  // board-device-filter (used by the real, unmocked filter below) reads these
+  // service-UUID constants at module load; parseSerialNumber pulls the serial
+  // from an Aurora "#serial@api" name, like the real helper.
   AURORA_ADVERTISED_SERVICE_UUID: 'aurora-uuid',
   UART_SERVICE_UUID: 'uart-uuid',
-  // Treat the device name as the serial for test simplicity.
-  parseSerialNumber: (name?: string) => name,
+  REDBEARLAB_SERVICE_UUID: 'redbearlab-uuid',
+  parseSerialNumber: (name?: string) => name?.match(/#([^@]+)/)?.[1],
 }));
 
 import { useBoardScan } from '../use-board-scan';
@@ -94,7 +97,9 @@ describe('useBoardScan', () => {
     });
 
     expect(result.current.status).toBe('scanning');
-    expect(mockBleManager.startDeviceScan).toHaveBeenCalled();
+    // Regression guard: scan UNFILTERED. A hardware service-UUID filter dropped
+    // Aurora boxes on Android when the UUID rode the scan-response PDU (#3806).
+    expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
   });
 
   it('does not start scanning after reset during Bluetooth readiness wait', async () => {
@@ -187,12 +192,30 @@ describe('useBoardScan', () => {
 
     act(() => {
       const cb = scanCallback();
-      cb(null, { localName: 'board-A' });
-      cb(null, { localName: 'board-B' });
-      cb(null, { localName: 'board-A' }); // duplicate
+      cb(null, { localName: 'Kilter Board#alpha@3' });
+      cb(null, { localName: 'Tension Board#beta@3' });
+      cb(null, { localName: 'Kilter Board#alpha@3' }); // duplicate
     });
 
-    expect(result.current.serials).toEqual(['board-A', 'board-B']);
+    expect(result.current.serials).toEqual(['alpha', 'beta']);
+  });
+
+  it('ignores non-board peripherals so no spurious serial lookup fires', async () => {
+    const { result } = renderHook(() => useBoardScan());
+    await act(async () => {
+      await result.current.start();
+    });
+
+    act(() => {
+      const cb = scanCallback();
+      // Both parse a "#serial" but are not Aurora boards — must be dropped before
+      // any boardsBySerialNumbers lookup (regression from unfiltering the scan).
+      cb(null, { localName: 'Printer #751737' });
+      cb(null, { localName: "Marco's AirPods #1" });
+      cb(null, { localName: 'Kilter Board#alpha@3' });
+    });
+
+    expect(result.current.serials).toEqual(['alpha']);
   });
 
   it('stops scanning and reports done after the timeout', async () => {
@@ -229,9 +252,9 @@ describe('useBoardScan', () => {
       await result.current.start();
     });
     act(() => {
-      scanCallback()(null, { localName: 'board-A' });
+      scanCallback()(null, { localName: 'Kilter Board#alpha@3' });
     });
-    expect(result.current.serials).toEqual(['board-A']);
+    expect(result.current.serials).toEqual(['alpha']);
 
     act(() => {
       result.current.reset();
