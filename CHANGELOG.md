@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Light up your board straight from the browser — the Bluetooth control now works on app.boardsesh.com in Chrome and other Web Bluetooth browsers. ([#3812](https://github.com/boardsesh/boardsesh/pull/3812))
 - Make the filter row yours — pin the shortcuts you actually reach for and drop the ones you don't. ([#3802](https://github.com/boardsesh/boardsesh/pull/3802))
   Now pinnable too: Sort, Grade accuracy, Climb type, and Beta videos.
   Collection is one clean picker — Any, Benchmarks, or My drafts — and Tall/Wide live together under a single Shape shortcut.

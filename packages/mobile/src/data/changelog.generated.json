@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-20T10:10:45.774Z",
+  "generatedAt": "2026-07-20T10:16:37.703Z",
   "entries": [
+    {
+      "prNumber": 3812,
+      "category": "new",
+      "title": "Light up your board straight from the browser — the Bluetooth control now works on app.boardsesh.com in Chrome and other Web Bluetooth browsers.",
+      "mergedAt": "2026-07-20T10:13:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3812"
+    },
     {
       "prNumber": 3802,
       "category": "new",
