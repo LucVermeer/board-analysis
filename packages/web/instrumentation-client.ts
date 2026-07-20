@@ -4,14 +4,24 @@
 
 import * as Sentry from '@sentry/nextjs';
 
-// Only enable Sentry on boardsesh.com to avoid polluting error tracking
-const isProductionDomain = typeof window !== 'undefined' && window.location.hostname.includes('boardsesh.com');
+// Only enable Sentry on the production boardsesh.com hosts. Exact-host match, NOT
+// a substring: preview deploys run at `<pr>.preview.boardsesh.com`
+// (branch-deploy.yml), which contains "boardsesh.com" and would pass an
+// `.includes()` check — so every PR-preview browser session (and any browser test
+// pointed at a preview host via PLAYWRIGHT_TEST_BASE_URL) leaked into the prod
+// project. Listing apex + www covers whichever the live host redirects to.
+const PRODUCTION_HOSTS = new Set(['boardsesh.com', 'www.boardsesh.com']);
+const isProductionDomain = typeof window !== 'undefined' && PRODUCTION_HOSTS.has(window.location.hostname);
 
 Sentry.init({
   dsn: 'https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400',
 
-  // Only send errors when running on boardsesh.com
+  // Only send errors when running on the production boardsesh.com hosts
   enabled: isProductionDomain,
+
+  // Sentry only initializes here on a production host (see the gate above), so
+  // tag events accordingly for the environment:production filter.
+  environment: 'production',
 
   // Enable logs to be sent to Sentry
   enableLogs: true,

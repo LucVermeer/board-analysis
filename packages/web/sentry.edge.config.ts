@@ -14,6 +14,10 @@ Sentry.init({
   // Only send errors when running on boardsesh.com
   enabled: isProductionDomain,
 
+  // Only initializes on VERCEL_ENV === 'production' (see the gate above), so tag
+  // events accordingly for the environment:production filter.
+  environment: 'production',
+
   // Enable logs to be sent to Sentry
   enableLogs: true,
 

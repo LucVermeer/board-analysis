@@ -165,6 +165,7 @@ jobs:
               -e BOARDSESH_URL=https://${PR_NUM}.preview.boardsesh.com \
               -e NEXTAUTH_SECRET=${NEXTAUTH_SECRET} \
               -e NODE_ENV=production \
+              -e SENTRY_ENVIRONMENT=preview \
               --label "traefik.enable=true" \
               --label "traefik.http.routers.backend-pr-${PR_NUM}.rule=Host(\`${PR_NUM}.ws.preview.boardsesh.com\`)" \
               --label "traefik.http.routers.backend-pr-${PR_NUM}.priority=100" \
@@ -196,6 +197,7 @@ jobs:
             -e BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL} \
             -e VERCEL_ENV=preview \
             -e NODE_ENV=production \
+            -e SENTRY_ENVIRONMENT=preview \
             --label "traefik.enable=true" \
             --label "traefik.http.routers.web-pr-${PR_NUM}.rule=Host(\`${PR_NUM}.preview.boardsesh.com\`)" \
             --label "traefik.http.services.web-pr-${PR_NUM}.loadbalancer.server.port=3000" \
