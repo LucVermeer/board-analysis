@@ -5,7 +5,8 @@ import { themeTokens } from '@/app/theme/theme-config';
 
 type GymStatChipProps = {
   icon: React.ReactNode;
-  value: number;
+  /** A count, or a placeholder (em-dash / skeleton) while it resolves. */
+  value: React.ReactNode;
   label: string;
 };
 

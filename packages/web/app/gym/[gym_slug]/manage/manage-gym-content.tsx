@@ -21,14 +21,15 @@ import GymBoardsTab from '@/app/components/gym-entity/manage/gym-boards-tab';
 import KiosksTab from '@/app/components/gym-entity/manage/kiosks-tab';
 import InsightsTab from '@/app/components/gym-entity/manage/insights-tab';
 import BrandingTab from '@/app/components/gym-entity/manage/branding-tab';
+import OverviewTab from '@/app/components/gym-entity/manage/overview-tab';
+import ProfileTab from '@/app/components/gym-entity/manage/profile-tab';
 import GymSlugGuard from '@/app/components/gym-entity/manage/gym-slug-guard';
-import GymWelcomeCard from '@/app/components/gym-entity/manage/gym-welcome-card';
 import ConfirmDialog from '@/app/components/gym-entity/manage/confirm-dialog';
 import { decideManageNavigation, type ManageNavigation } from '@/app/components/gym-entity/manage/manage-nav-guard';
 
-type ManageTab = 'kiosks' | 'insights' | 'branding' | 'boards' | 'members';
-const VALID_TABS: ManageTab[] = ['kiosks', 'insights', 'branding', 'boards', 'members'];
-const DEFAULT_TAB: ManageTab = 'kiosks';
+type ManageTab = 'overview' | 'kiosks' | 'insights' | 'branding' | 'profile' | 'boards' | 'members';
+const VALID_TABS: ManageTab[] = ['overview', 'kiosks', 'insights', 'branding', 'profile', 'boards', 'members'];
+const DEFAULT_TAB: ManageTab = 'overview';
 
 export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
   const { t } = useTranslation('kiosk');
@@ -91,6 +92,18 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
     router.replace(`/gym/${updatedGym.slug}/manage${query}`, { scroll: false });
   };
 
+  // The Profile tab's form can rename the slug. When it does, the shell's
+  // basePath still points at the old slug, so the next tab switch would push
+  // `${oldSlug}?tab=X` and 404 (a renamed slug resolves to nothing). Reuse the
+  // slug-guard's replace to move onto the new slug; otherwise just sync state.
+  const handleProfileSaved = (updatedGym: Gym) => {
+    if (updatedGym.slug && updatedGym.slug !== gym.slug) {
+      handleSlugSet(updatedGym);
+    } else {
+      setGym(updatedGym);
+    }
+  };
+
   return (
     <Container
       maxWidth="md"
@@ -128,8 +141,6 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
 
       {!gym.slug && <GymSlugGuard gym={gym} onSlugSet={handleSlugSet} />}
 
-      <GymWelcomeCard gym={gym} />
-
       <Tabs
         value={activeTab}
         onChange={handleTabChange}
@@ -137,16 +148,22 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
         scrollButtons="auto"
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
       >
+        <Tab value="overview" label={t('manage.tabs.overview')} sx={{ textTransform: 'none' }} />
         <Tab value="kiosks" label={t('manage.tabs.kiosks')} sx={{ textTransform: 'none' }} />
         <Tab value="insights" label={t('manage.tabs.insights')} sx={{ textTransform: 'none' }} />
         <Tab value="branding" label={t('manage.tabs.branding')} sx={{ textTransform: 'none' }} />
+        <Tab value="profile" label={t('manage.tabs.profile')} sx={{ textTransform: 'none' }} />
         <Tab value="boards" label={t('manage.tabs.boards')} sx={{ textTransform: 'none' }} />
         <Tab value="members" label={t('manage.tabs.members')} sx={{ textTransform: 'none' }} />
       </Tabs>
 
+      {activeTab === 'overview' && <OverviewTab gym={gym} />}
       {activeTab === 'kiosks' && <KiosksTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
       {activeTab === 'insights' && <InsightsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'branding' && <BrandingTab gym={gym} onGymChange={setGym} onDirtyChange={setIsActiveTabDirty} />}
+      {activeTab === 'profile' && (
+        <ProfileTab gym={gym} onGymChange={handleProfileSaved} onDirtyChange={setIsActiveTabDirty} />
+      )}
       {activeTab === 'boards' && <GymBoardsTab gym={gym} onGymChange={setGym} />}
       {activeTab === 'members' && (
         <GymMemberManagement

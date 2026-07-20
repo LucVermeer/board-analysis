@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
@@ -43,6 +43,8 @@ type GymFormProps = {
    * exist" dedup suggestions.
    */
   renderSuggestions?: (values: GymFormLocationValues) => React.ReactNode;
+  /** Reports whether any field diverges from its initial value. */
+  onDirtyChange?: (isDirty: boolean) => void;
 };
 
 export default function GymForm({
@@ -53,6 +55,7 @@ export default function GymForm({
   onSubmit,
   onCancel,
   renderSuggestions,
+  onDirtyChange,
 }: GymFormProps) {
   const { t } = useTranslation('boards');
   const [name, setName] = useState(initialValues.name);
@@ -66,6 +69,26 @@ export default function GymForm({
   const [latitude, setLatitude] = useState<number | null>(initialValues.latitude);
   const [longitude, setLongitude] = useState<number | null>(initialValues.longitude);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Report unsaved edits so a host (the manage console's Profile tab) can guard
+  // tab switches behind a discard confirmation. Report clean on unmount so a
+  // confirmed navigation doesn't leave a stale dirty flag.
+  const isDirty =
+    name !== initialValues.name ||
+    slug !== (initialValues.slug ?? '') ||
+    description !== initialValues.description ||
+    address !== initialValues.address ||
+    website !== initialValues.website ||
+    contactEmail !== initialValues.contactEmail ||
+    contactPhone !== initialValues.contactPhone ||
+    isPublic !== initialValues.isPublic ||
+    latitude !== initialValues.latitude ||
+    longitude !== initialValues.longitude;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => onDirtyChange?.(false);
+  }, [isDirty, onDirtyChange]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -261,7 +261,19 @@ export default function GymDetail({ gymUuid, open, onClose, onDeleted, anchor = 
                 onFollowChange={() => fetchGym()}
               />
             )}
-            {gym.canEdit && (
+            {gym.canEdit && kioskFlag && (
+              <MuiButton
+                component={LocaleLink}
+                href={`/gym/${gym.slug ?? gym.uuid}/manage?tab=profile`}
+                variant="outlined"
+                size="small"
+                startIcon={<EditOutlined />}
+                sx={{ textTransform: 'none' }}
+              >
+                {t('gymEntity.actions.edit')}
+              </MuiButton>
+            )}
+            {gym.canEdit && !kioskFlag && (
               <MuiButton
                 variant="outlined"
                 size="small"
