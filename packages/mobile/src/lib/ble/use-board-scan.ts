@@ -6,7 +6,7 @@
 // opened here; connecting happens later when the user enters play mode.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID, parseSerialNumber } from '@boardsesh/ble-protocol';
+import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
@@ -73,7 +73,11 @@ export function useBoardScan(): BoardScan {
     setStatus('scanning');
     scanningRef.current = true;
 
-    bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (error, device) => {
+    // Scan UNFILTERED, then keep only devices whose name carries an Aurora serial
+    // (parseSerialNumber below). A hardware service-UUID ScanFilter drops boards
+    // on Android when the UUID rides the scan-response PDU, leaving an empty
+    // quickstart list — same root cause as the picker scan in adapter.ts.
+    void bleManager.startDeviceScan(null, null, (error, device) => {
       if (!isCurrentScanAttempt()) return;
       if (error) {
         stop();

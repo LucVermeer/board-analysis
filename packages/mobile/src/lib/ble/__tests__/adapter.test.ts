@@ -71,8 +71,8 @@ function setupConnectableAdapter(
   mockBleManager.cancelDeviceConnection.mockResolvedValue(undefined);
   mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
 
-  // MoonBoards advertise no service UUID (unfiltered scan); Aurora boards carry
-  // the advertised service so they survive the UUID-filtered scan.
+  // The scan is unfiltered; isLikelyBoardDevice keeps board-like results. Aurora
+  // boards are given the advertised service UUID here; MoonBoards a name only.
   const scanName = family === 'aurora' ? 'Kilter Board#TEST@3' : 'MoonBoard A1';
   const serviceUUIDs = family === 'aurora' ? ['aurora-uuid'] : undefined;
   mockBleManager.startDeviceScan.mockImplementation(
@@ -687,7 +687,7 @@ describe('RNBleAdapter', () => {
       expect(seenDevices.map((device) => device.deviceId)).toEqual(['moon-device']);
     });
 
-    it('uses the Aurora service filter and rejects non-board peripherals on Aurora scans', async () => {
+    it('scans unfiltered and rejects non-board peripherals on Aurora scans', async () => {
       mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
@@ -726,8 +726,56 @@ describe('RNBleAdapter', () => {
       const adapter = new RNBleAdapter(devicePicker, 'aurora');
       await adapter.requestAndConnect();
 
-      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(['aurora-uuid'], null, expect.any(Function));
+      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
       expect(seenDevices.map((device) => device.deviceId)).toEqual(['kilter-device']);
+    });
+
+    it('surfaces Aurora boxes discovered by name when no service UUID is advertised', async () => {
+      // Regression guard (0710be7a8): a hardware service-UUID ScanFilter dropped
+      // Aurora boxes on Android when the 128-bit UUID rode the scan-response PDU,
+      // leaving an empty device picker. With the unfiltered scan the JS filter
+      // surfaces both the Aurora-built (`#serial@N`) and Kilter-built bare-name
+      // boxes by name alone — neither carries serviceUUIDs here.
+      mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+      mockBleManager.startDeviceScan.mockImplementation(
+        (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+          callback(null, {
+            id: 'kilter-serial',
+            localName: 'Kilter Board#751737@3',
+            name: 'Kilter Board#751737@3',
+            rssi: -50,
+          });
+          callback(null, { id: 'kilter-bare', localName: 'Kilter Board', name: 'Kilter Board', rssi: -55 });
+        },
+      );
+
+      const seenDevices: Array<{ deviceId: string }> = [];
+      const devicePicker: DevicePickerFn = (subscribe) => {
+        subscribe((devices) => {
+          seenDevices.splice(0, seenDevices.length, ...devices);
+        });
+        return Promise.resolve('kilter-serial');
+      };
+
+      const mockDeviceWithServices = {
+        id: 'kilter-serial',
+        characteristicsForService: vi
+          .fn()
+          .mockResolvedValue([{ uuid: 'uart-write-uuid', writeWithoutResponse: vi.fn() }]),
+        requestMTU: vi.fn().mockResolvedValue({ mtu: 247 }),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnThis(),
+      };
+      mockBleManager.connectToDevice.mockResolvedValue({
+        id: 'kilter-serial',
+        requestMTU: vi.fn().mockResolvedValue({ mtu: 247 }),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnValue(mockDeviceWithServices),
+      });
+
+      const adapter = new RNBleAdapter(devicePicker, 'aurora');
+      await adapter.requestAndConnect();
+
+      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
+      expect(seenDevices.map((device) => device.deviceId).sort()).toEqual(['kilter-bare', 'kilter-serial']);
     });
 
     it('deduplicates repeated board names even when the native device id changes', async () => {
