@@ -98,10 +98,11 @@ describe('ShareAction prewarm', () => {
 
     await act(async () => {
       result.current.menuItem.onClick?.();
-      await Promise.resolve();
+      // Both prewarm fetches are floating promises; wait for the exact count so
+      // a slow second fire can't flake the assertion below.
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     });
 
-    expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch).toHaveBeenNthCalledWith(1, expectedShareUrl);
     expect(fetch).toHaveBeenNthCalledWith(2, 'https://ws.boardsesh.com/og/climb?og', { mode: 'no-cors' });
     expect(shareWithFallback).toHaveBeenCalledTimes(1);
@@ -114,7 +115,7 @@ describe('ShareAction prewarm', () => {
 
     await act(async () => {
       result.current.menuItem.onClick?.();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     });
 
     expect(shareWithFallback).toHaveBeenCalledTimes(1);
@@ -129,7 +130,7 @@ describe('ShareAction prewarm', () => {
 
     await act(async () => {
       result.current.menuItem.onClick?.();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     });
 
     expect(fetch).toHaveBeenCalledTimes(1);

@@ -14,7 +14,8 @@ type ShareClimbArgs = {
   angle: number;
 };
 
-// Mirror of web's board-renderer/util `toFlatFrames`: collapse a possibly
+// Mirror of web's `packages/web/app/components/board-renderer/util.ts`
+// `toFlatFrames` (keep the two in sync): collapse a possibly
 // multi-frame Aurora frames string to its final lit snapshot — the exact frames
 // the shared climb page's og:image is rendered from, so the prewarm hits the
 // backend's cache key. Single-frame strings round-trip unchanged.

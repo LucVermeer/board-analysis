@@ -88,6 +88,8 @@ describe('useShareClimb', () => {
         await result.current();
       });
       expect(fetchMock).toHaveBeenCalledWith(expectedReadableShareUrl);
+      // Exactly one warm: the no-frames climb must not fire an og request.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(shareMock).toHaveBeenCalledTimes(1);
     });
 
