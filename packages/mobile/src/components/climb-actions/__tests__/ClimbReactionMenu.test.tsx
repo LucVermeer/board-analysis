@@ -10,6 +10,8 @@ const captured = vi.hoisted(() => ({
   actionArgs: null as Record<string, unknown> | null,
   pickerOnBack: undefined as undefined | (() => void),
   modalOnRequestClose: undefined as undefined | (() => void),
+  boardImageProps: null as Record<string, unknown> | null,
+  ran: undefined as undefined | string,
 }));
 
 vi.mock('react-native', () => ({
@@ -19,13 +21,21 @@ vi.mock('react-native', () => ({
     captured.modalOnRequestClose = onRequestClose;
     return createElement('div', { 'data-modal': 'true' }, children);
   },
-  Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
-    createElement('button', { onClick: onPress }, children),
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   TextInput: () => null,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (s: Record<string, unknown>) => s, absoluteFill: {}, hairlineWidth: 1 },
-  useWindowDimensions: () => ({ width: 400, height: 800 }),
+  PixelRatio: { get: () => 2 },
+  useWindowDimensions: () => ({ width: 400, height: 800, fontScale: 1 }),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -57,12 +67,17 @@ vi.mock('../../Text', () => ({
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ListRow', () => ({
   ListRow: ({ title, onPress }: { title: string; onPress?: () => void }) =>
-    createElement('button', { onClick: onPress, 'aria-label': title }, title),
+    createElement('button', { onClick: onPress, 'aria-label': title, 'data-listrow': 'true' }, title),
 }));
 vi.mock('../../GlassSurface', () => ({
   GlassSurface: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
-vi.mock('../../BoardImageNative', () => ({ BoardImageNative: () => null }));
+vi.mock('../../BoardImageNative', () => ({
+  BoardImageNative: (props: Record<string, unknown>) => {
+    captured.boardImageProps = props;
+    return null;
+  },
+}));
 vi.mock('../../ClimbAttributeIcons', () => ({ ClimbAttributeIcons: () => null }));
 vi.mock('../../playlist/InlinePlaylistPicker', () => ({
   InlinePlaylistPicker: ({ onBack }: { onBack?: () => void }) => {
@@ -70,10 +85,14 @@ vi.mock('../../playlist/InlinePlaylistPicker', () => ({
     return createElement('div', { 'data-picker': 'true' }, 'picker');
   },
 }));
-vi.mock('../../../lib/board-details', () => ({ getBoardRenderData: () => null }));
+vi.mock('../../../lib/board-details', () => ({
+  getBoardRenderData: () => ({ boardWidth: 120, boardHeight: 120 }),
+}));
 vi.mock('../../../lib/format-climb-stats', () => ({ formatSends: () => '', formatQuality: () => '' }));
 vi.mock('../../../hooks/use-grade-format', () => ({ useGradeFormat: () => ({ formatGrade: () => 'V4' }) }));
-vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ colorScheme: 'dark' }) }));
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({ colorScheme: 'dark', systemColors: { fill: '#222', label: '#fff' } }),
+}));
 vi.mock('../../../theme/animations', () => ({ springs: { gentle: {} }, timing: { fast: 150 } }));
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 1: 4, 2: 8, 3: 12, 5: 20, 6: 24 },
@@ -87,6 +106,7 @@ vi.mock('../use-climb-actions', () => ({
     captured.actionArgs = args;
     return [
       { id: 'preview', title: 'Preview', icon: 'visibility', color: '#00f', run: () => {} },
+      { id: 'tick', title: 'Log a tick', icon: 'tick', color: '#0f0', run: () => (captured.ran = 'tick') },
       {
         id: 'playlist',
         title: 'Add to Playlist',
@@ -94,6 +114,8 @@ vi.mock('../use-climb-actions', () => ({
         color: '#00f',
         run: () => (args.onSelectPlaylist as (() => void) | undefined)?.(),
       },
+      { id: 'favorite', title: 'Favorite', icon: 'favorite', color: '#f00', run: () => {} },
+      { id: 'share', title: 'Share', icon: 'share', color: '#00f', run: () => (captured.ran = 'share') },
     ];
   },
 }));
@@ -124,6 +146,47 @@ describe('ClimbReactionMenu view switching', () => {
     captured.actionArgs = null;
     captured.pickerOnBack = undefined;
     captured.modalOnRequestClose = undefined;
+    captured.boardImageProps = null;
+    captured.ran = undefined;
+  });
+
+  it('runs the action when a primary button is pressed', () => {
+    const { getByLabelText } = renderMenu();
+    act(() => fireEvent.click(getByLabelText('Log a tick')));
+    expect(captured.ran).toBe('tick');
+    act(() => fireEvent.click(getByLabelText('Share')));
+    expect(captured.ran).toBe('share');
+  });
+
+  it('renders the board at play-drawer quality (full background, DPR overlay, outlined holds)', () => {
+    renderMenu();
+    const props = captured.boardImageProps;
+    expect(props).not.toBeNull();
+    // Full-resolution board photo (not the 416px thumbnail).
+    expect(props?.backgroundVariant).toBe('full');
+    // Outlined holds like the play drawer, not the filled-dot thumbnail style.
+    expect(props?.filledStyle).toBeUndefined();
+    // Overlay rasterized at the displayed width × DPR (PixelRatio.get() → 2 here).
+    expect(typeof props?.renderWidth).toBe('number');
+    expect(props?.renderWidth as number).toBeGreaterThan(0);
+  });
+
+  it('pulls tick, playlist and share into the primary button row and leaves the rest in the list', () => {
+    const { getByLabelText, container } = renderMenu();
+
+    // All five actions render.
+    for (const label of ['Log a tick', 'Add to Playlist', 'Share', 'Preview', 'Favorite']) {
+      expect(getByLabelText(label)).not.toBeNull();
+    }
+
+    // The three primary actions are NOT list rows (they're the button row); the
+    // remainder are.
+    for (const label of ['Log a tick', 'Add to Playlist', 'Share']) {
+      expect(container.querySelector(`[data-listrow="true"][aria-label="${label}"]`)).toBeNull();
+    }
+    for (const label of ['Preview', 'Favorite']) {
+      expect(container.querySelector(`[data-listrow="true"][aria-label="${label}"]`)).not.toBeNull();
+    }
   });
 
   it('renders the action list first and swaps to the inline picker when the playlist action runs', () => {

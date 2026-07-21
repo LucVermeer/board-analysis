@@ -186,10 +186,9 @@ type ClimbListRowProps = {
   showPlaylistChips?: boolean;
   /**
    * Show a trailing ⋮ button that opens the reaction menu on tap — a visible,
-   * discoverable entry point beside the long-press. Opt-in; the climbs list passes
-   * the "Show quick-actions button" user setting (whose default is set by the
-   * climb-quick-actions-button experiment flag), other surfaces keep long-press only.
-   * No-op without `onOpenActions`.
+   * discoverable entry point beside the long-press. The climbs list passes the
+   * "Show quick-actions button" user setting (on by default), other surfaces keep
+   * long-press only. No-op without `onOpenActions`.
    */
   showMoreButton?: boolean;
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fitBoardArt, fitBoardMaxSize } from '../board-art-fit';
+import { fitBoardArt, fitBoardMaxSize, computeReactionBoardMaxSize } from '../board-art-fit';
 
 describe('fitBoardArt', () => {
   it('portrait: height is the max edge, width scales down by aspect', () => {
@@ -58,5 +58,67 @@ describe('fitBoardMaxSize', () => {
     expect(fitBoardMaxSize(0, 320, 460)).toBe(320);
     expect(fitBoardMaxSize(-1, 460, 320)).toBe(320);
     expect(fitBoardMaxSize(Number.NaN, 200, 500)).toBe(200);
+  });
+});
+
+describe('computeReactionBoardMaxSize', () => {
+  // Approximate the reaction menu's reserves at fontScale 1: a 3-button row (~110),
+  // a 56pt title reserve, and 46pt list rows. Screen-size + item count vary per case.
+  const ROW = 46;
+  function boardFor(
+    windowWidth: number,
+    windowHeight: number,
+    items: number,
+    { insetTop = 0, insetBottom = 0, aspect = 1 }: { insetTop?: number; insetBottom?: number; aspect?: number } = {},
+  ): number {
+    return computeReactionBoardMaxSize({
+      windowWidth,
+      windowHeight,
+      insetTop,
+      insetBottom,
+      contentTopOffset: Math.round(windowHeight * 0.02),
+      sectionGap: 20,
+      sideMargin: 24,
+      previewMaxWidth: 400,
+      aspect,
+      primaryRowHeight: 110,
+      listContentHeight: items * ROW + 4,
+      textReserve: 56,
+      rowHeight: ROW,
+    });
+  }
+
+  it('renders the climb smaller as the screen gets smaller (same list)', () => {
+    const proMax = boardFor(440, 956, 4, { insetTop: 59, insetBottom: 34 });
+    const pro = boardFor(393, 852, 4, { insetTop: 59, insetBottom: 34 });
+    const se = boardFor(375, 667, 4, { insetTop: 20 });
+    const smallest = boardFor(320, 568, 4, { insetTop: 20 });
+    expect(proMax).toBeGreaterThan(pro);
+    expect(pro).toBeGreaterThan(se);
+    expect(se).toBeGreaterThan(smallest);
+  });
+
+  it('stays within the width cap and the window-height fraction', () => {
+    const board = boardFor(393, 852, 6, { insetTop: 59, insetBottom: 34 });
+    expect(board).toBeLessThanOrEqual(852 * 0.55);
+    expect(board).toBeLessThanOrEqual(393 - 24 * 2); // square board bounded by width
+  });
+
+  it('shrinks the climb toward the floor when a small screen has a long list', () => {
+    // 11 actions on an SE-sized screen: the board yields so the list can scroll.
+    const board = boardFor(375, 667, 11, { insetTop: 20 });
+    expect(board).toBeLessThanOrEqual(145);
+    expect(board).toBeGreaterThan(0);
+  });
+
+  it('never goes negative, even on a cramped landscape viewport', () => {
+    const board = boardFor(852, 375, 10, { insetBottom: 21 });
+    expect(board).toBeGreaterThanOrEqual(0);
+  });
+
+  it('lets a portrait board grow taller than a square one on the same screen', () => {
+    const square = boardFor(393, 852, 4, { insetTop: 59, insetBottom: 34, aspect: 1 });
+    const portrait = boardFor(393, 852, 4, { insetTop: 59, insetBottom: 34, aspect: 0.6 });
+    expect(portrait).toBeGreaterThanOrEqual(square);
   });
 });

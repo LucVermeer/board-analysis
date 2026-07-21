@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Keyboard,
+  type LayoutChangeEvent,
   Modal,
+  type OpaqueColorValue,
+  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -32,8 +35,13 @@ import { useTheme } from '../../providers/theme-provider';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { springs, timing } from '../../theme/animations';
 import { spacing, borderRadius } from '../../theme/tokens';
-import { useClimbActions } from './use-climb-actions';
-import { fitBoardArt, fitBoardMaxSize } from './board-art-fit';
+import { useClimbActions, type ClimbActionId, type ClimbActionItem } from './use-climb-actions';
+import { fitBoardArt, computeReactionBoardMaxSize } from './board-art-fit';
+
+// Log a tick / Add to playlist / Share get pulled out of the scrollable list into a
+// fixed horizontal button row at the top of the card — the most-reached actions,
+// one tap away. The rest stay in the list below. Order here is the row order.
+const PRIMARY_ACTION_IDS: readonly ClimbActionId[] = ['tick', 'playlist', 'share'];
 
 type ClimbReactionMenuProps = {
   climb: Climb;
@@ -60,7 +68,9 @@ type ClimbReactionMenuProps = {
 
 // Frame width shared by the preview and the action card, and the ceiling the hero art
 // is clamped to so an explicit art width can't bleed past the (unclipped) preview frame.
-const PREVIEW_MAX_WIDTH = 320;
+// Wide enough that on a phone the board + card fill the screen width (bounded by the
+// content's horizontal padding); on tablets this caps how wide the floating card gets.
+const PREVIEW_MAX_WIDTH = 400;
 
 // Bottom-edge fade for the scrollable action list — transparent → the scheme's surface
 // base. Concrete rgba, never a systemColors PlatformColor: feeding a PlatformColor into
@@ -105,7 +115,7 @@ export function ClimbReactionMenu({
   reduceMotion,
   onClose,
 }: ClimbReactionMenuProps) {
-  const { colorScheme } = useTheme();
+  const { colorScheme, systemColors } = useTheme();
   const { t } = useTranslation('climbs');
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
@@ -157,6 +167,15 @@ export function ClimbReactionMenu({
     onAddBetaVideo,
     onTick,
   });
+
+  // Split the actions into the fixed top button row (tick / playlist / share, in that
+  // order) and the scrollable remainder. Both preserve `useClimbActions`' identity so
+  // they only rebuild when the action list itself changes.
+  const primaryActions = useMemo(() => {
+    const byId = new Map(actions.map((action) => [action.id, action]));
+    return PRIMARY_ACTION_IDS.map((id) => byId.get(id)).filter((action): action is ClimbActionItem => action != null);
+  }, [actions]);
+  const listActions = useMemo(() => actions.filter((action) => !PRIMARY_ACTION_IDS.includes(action.id)), [actions]);
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
@@ -213,45 +232,70 @@ export function ClimbReactionMenu({
   // Small breathing room below the top safe area — the preview sits just under the
   // status bar so the top isn't wasted and the action list gets more room below.
   const contentTopOffset = Math.round(windowHeight * 0.02);
-  // The action list never shrinks below this — at least ~2 rows peek under the hero so
-  // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
-  const menuMinHeight = 180;
+  // Row height for the action list (ListRow: minHeight 44 + 12pt vertical padding, text
+  // growing with fontScale). The whole list is shown without scrolling, so its full
+  // height is reserved up front and the board takes whatever space is left below it.
+  const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
+  const listContentHeight = listActions.length * actionRowHeight + spacing[1] * 2;
+  // Height of the fixed primary-action button row, reserved out of the card so the list
+  // cap is accurate. Measured via onLayout (fires only on layout change, not per frame)
+  // so a large Dynamic Type / RTL wrap can't over- or under-reserve; the fontScale-scaled
+  // estimate stands in for the first frame before the measurement lands. Zero when there
+  // are no primary actions.
+  const primaryRowHeightEstimate = primaryActions.length > 0 ? Math.round(84 + 26 * fontScale) : 0;
+  const [measuredPrimaryRowHeight, setMeasuredPrimaryRowHeight] = useState(0);
+  const primaryRowHeight = primaryActions.length === 0 ? 0 : measuredPrimaryRowHeight || primaryRowHeightEstimate;
+  const handlePrimaryRowLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = Math.round(event.nativeEvent.layout.height);
+    // Gate the setState on a real change so a re-render can't loop through onLayout.
+    setMeasuredPrimaryRowHeight((previous) => (previous === height ? previous : height));
+  }, []);
 
-  // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
-  // 400) so no new render is needed. The menu view shows a large hero; a sub-action that
-  // stays inline (the playlist picker) shrinks it to the compact "current" size.
+  // Enlarged board art. Rendered at play-drawer quality — full-res board photo and a
+  // holds overlay sized to the displayed width × DPR (see overlayRenderWidth below) —
+  // rather than piggybacking the tiny list-thumbnail cache, so the hero stays crisp.
+  // The menu view shows a large hero; a sub-action that stays inline (the playlist
+  // picker) shrinks it to the compact "current" size.
   //
   // name+byline reserve, an estimate (not an onLayout measurement) so resizing the art
   // never re-renders the menu (see reservedForPreview). Scaled by fontScale so a large
   // Dynamic Type setting reserves the taller text instead of overlapping the art.
   const previewTextReserve = Math.round(56 * fontScale);
-  // Height the hero may take once top chrome, text, gap, menu floor and bottom inset are
-  // reserved — capped at 48% so the reclaimed top space grows the action list, not the
-  // hero. Fitting to a box (width bounded by the preview frame, not a square) lets a
-  // portrait board grow tall while a near-square board stays in its frame.
-  const heroHeightBudget =
-    windowHeight -
-    insets.top -
-    contentTopOffset -
-    spacing[5] -
-    menuMinHeight -
-    (insets.bottom + spacing[5]) -
-    previewTextReserve;
-  const largeArtMaxSize = fitBoardMaxSize(
+  // Size the board the way the play drawer does — contain-fit into the space left after
+  // the title, button row and full list are reserved, so it renders SMALLER on smaller
+  // screens instead of crowding the actions off the bottom. Bounds/floor live in the pure
+  // computeReactionBoardMaxSize, which is unit-tested across device sizes.
+  const largeArtMaxSize = computeReactionBoardMaxSize({
+    windowWidth,
+    windowHeight,
+    insetTop: insets.top,
+    insetBottom: insets.bottom,
+    contentTopOffset,
+    sectionGap: spacing[5],
+    sideMargin: spacing[6],
+    previewMaxWidth: PREVIEW_MAX_WIDTH,
     aspect,
-    Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
-    Math.min(windowHeight * 0.48, heroHeightBudget),
-  );
-  // compactArtMaxSize: the "current" size for the inline sub-action view — today's
-  // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
-  const compactArtMaxSize = Math.min(
-    keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
-    Math.round(windowHeight * 0.31),
-    Math.round(windowWidth * 0.66),
-  );
-  // In the menu view there is no text input, so keyboardHeight is 0 there; the keyboard
-  // only appears in the playlist create form, which is the compact path above.
-  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
+    primaryRowHeight,
+    listContentHeight,
+    textReserve: previewTextReserve,
+    rowHeight: actionRowHeight,
+  });
+  // Rasterize the holds overlay at the large hero's displayed width × DPR — matching
+  // the play drawer (SwipeBoardCarousel) instead of the list-thumbnail's fixed 400px,
+  // so the enlarged art stays crisp. Derived from the large size (not the animating
+  // one) so the cache key is stable as the hero springs between large and compact;
+  // useNativeClimbRender clamps it to the board's native width and never upscales.
+  const largeArtWidth = boardRenderData
+    ? fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, largeArtMaxSize).width
+    : largeArtMaxSize;
+  const overlayRenderWidth = Math.round(largeArtWidth * PixelRatio.get());
+  // compactArtMaxSize: the shrunk size used only when the create-playlist keyboard is up,
+  // so the board + form + keyboard still fit. Otherwise the board keeps its full size.
+  const compactArtMaxSize = Math.min(Math.round(windowHeight * 0.18), Math.round(windowWidth * 0.66));
+  // The board stays the same size across the menu and the Add-to-playlist view — the
+  // difference wasn't worth the jump. It only shrinks when the create-playlist form's
+  // keyboard is up (playlist view + keyboardHeight > 0), to keep the form reachable.
+  const targetArtMax = view === 'playlist' && keyboardHeight > 0 ? compactArtMaxSize : largeArtMaxSize;
 
   // The animating max-size (px). Springs between large (menu) and compact (sub-action)
   // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
@@ -279,21 +323,16 @@ export function ClimbReactionMenu({
   const reservedForPreview = targetArtHeight + previewTextReserve;
   const bottomReserve = keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing[5];
   const menuMaxHeight = Math.max(
-    menuMinHeight,
+    actionRowHeight,
     windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
-  // When the action list can't all fit, hint that it scrolls: snap the scroll viewport
-  // to a half-row "peek" (last row clipped at its midpoint) and fade its bottom edge.
-  // Derived from actions.length + row height (ListRow: minHeight 44 + 12pt vertical
-  // padding, text growing with fontScale) — no per-frame scroll state. Applies to the
-  // action list only; the playlist view owns its own scroll.
-  const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
-  const menuContentHeight = actions.length * actionRowHeight + spacing[1] * 2;
-  const menuOverflows = menuContentHeight > menuMaxHeight;
-  const menuScrollHeight = menuOverflows
-    ? Math.max(menuMinHeight, (Math.floor(menuMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
-    : menuMaxHeight;
+  // The list (below the fixed primary-button row) gets the card height minus that row.
+  // Its full height was reserved when sizing the board, so it normally shows every row
+  // without scrolling; only a floored board on a small phone leaves it short, in which
+  // case it scrolls and the bottom fade cues more. The playlist view owns its own scroll.
+  const listMaxHeight = Math.max(actionRowHeight, menuMaxHeight - primaryRowHeight);
+  const menuScrollable = listContentHeight > listMaxHeight + 0.5;
   const menuFadeColors = colorScheme === 'dark' ? MENU_FADE_COLORS.dark : MENU_FADE_COLORS.light;
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
@@ -351,23 +390,8 @@ export function ClimbReactionMenu({
               cap is derived from the target art size (reservedForPreview), not measured
               here, so the shrink animation never re-renders the menu. */}
           <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
-            {boardRenderData ? (
-              <Animated.View style={[styles.art, animatedArtStyle]}>
-                <BoardImageNative
-                  frames={climb.frames}
-                  boardName={boardConfig.boardName as BoardName}
-                  layoutId={boardConfig.layoutId}
-                  sizeId={boardConfig.sizeId}
-                  setIds={boardConfig.setIds}
-                  boardWidth={boardRenderData.boardWidth}
-                  boardHeight={boardRenderData.boardHeight}
-                  mirrored={climb.mirrored === true}
-                  filledStyle
-                  renderWidth={400}
-                  style={styles.artFill}
-                />
-              </Animated.View>
-            ) : null}
+            {/* Name · grade · byline sit ABOVE the board (like the play drawer header),
+                so the board reads as the hero below its title. */}
             <View style={styles.previewText}>
               <View style={styles.nameRow}>
                 <Text variant="headline" numberOfLines={1} style={styles.name}>
@@ -389,6 +413,23 @@ export function ClimbReactionMenu({
                 </Text>
               ) : null}
             </View>
+            {boardRenderData ? (
+              <Animated.View style={[styles.art, animatedArtStyle]}>
+                <BoardImageNative
+                  frames={climb.frames}
+                  boardName={boardConfig.boardName as BoardName}
+                  layoutId={boardConfig.layoutId}
+                  sizeId={boardConfig.sizeId}
+                  setIds={boardConfig.setIds}
+                  boardWidth={boardRenderData.boardWidth}
+                  boardHeight={boardRenderData.boardHeight}
+                  mirrored={climb.mirrored === true}
+                  renderWidth={overlayRenderWidth}
+                  backgroundVariant="full"
+                  style={styles.artFill}
+                />
+              </Animated.View>
+            ) : null}
           </Animated.View>
 
           <Animated.View style={[styles.menuWrap, menuStyle]}>
@@ -407,27 +448,44 @@ export function ClimbReactionMenu({
                 />
               ) : (
                 <View>
+                  {/* Fixed quick-action row — the three most-reached actions as tappable
+                      buttons, above the scrollable remainder. */}
+                  {primaryActions.length > 0 ? (
+                    <View style={styles.primaryRow} onLayout={handlePrimaryRowLayout}>
+                      {primaryActions.map((action) => (
+                        <PrimaryActionButton
+                          key={action.id}
+                          action={action}
+                          fillColor={systemColors.fill}
+                          labelColor={systemColors.label}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
+                  {/* The full list is reserved when sizing the board, so this normally
+                      shows every row without scrolling; maxHeight only bites (and scrolls)
+                      if a floored board on a small phone can't leave room. */}
                   <ScrollView
-                    style={{ maxHeight: menuScrollHeight }}
+                    style={{ maxHeight: listMaxHeight }}
                     bounces={false}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     contentContainerStyle={styles.menuContent}
                   >
-                    {actions.map((action, index) => (
+                    {listActions.map((action, index) => (
                       <ListRow
                         key={action.id}
                         title={action.title}
                         leading={<Icon name={action.icon} size={22} color={action.color} />}
                         onPress={action.run}
-                        showSeparator={index < actions.length - 1}
+                        showSeparator={index < listActions.length - 1}
                         separatorInset={56}
                       />
                     ))}
                   </ScrollView>
-                  {/* Bottom-edge fade cueing "more below" — only when the list overflows.
+                  {/* Bottom-edge fade cueing "more below" — only when the list is clipped.
                       pointerEvents none so it never eats a tap on the peeking row. */}
-                  {menuOverflows ? (
+                  {menuScrollable ? (
                     <LinearGradient pointerEvents="none" colors={menuFadeColors} style={styles.menuScrollFade} />
                   ) : null}
                 </View>
@@ -437,6 +495,37 @@ export function ClimbReactionMenu({
         </View>
       </View>
     </OverlayPortal>
+  );
+}
+
+type PrimaryActionButtonProps = {
+  action: ClimbActionItem;
+  /** Translucent control fill for the button surface (systemColors.fill). */
+  fillColor: string | OpaqueColorValue;
+  /** Label foreground (systemColors.label); the icon keeps the action's own colour. */
+  labelColor: string | OpaqueColorValue;
+};
+
+// One quick-action button: the action's icon over its (up-to-2-line) label, on a
+// translucent fill. `alignItems: 'stretch'` on the row makes every button match the
+// tallest, so "Add to Playlist" wrapping to two lines keeps all three the same height.
+function PrimaryActionButton({ action, fillColor, labelColor }: PrimaryActionButtonProps) {
+  return (
+    <Pressable
+      onPress={action.run}
+      accessibilityRole="button"
+      accessibilityLabel={action.title}
+      style={({ pressed }) => [
+        styles.primaryButton,
+        { backgroundColor: fillColor },
+        pressed && styles.primaryButtonPressed,
+      ]}
+    >
+      <Icon name={action.icon} size={24} color={action.color} />
+      <Text variant="caption1" numberOfLines={2} style={[styles.primaryButtonLabel, { color: labelColor }]}>
+        {action.title}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -504,6 +593,32 @@ const styles = StyleSheet.create({
   menuCard: {
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
+  },
+  // Fixed quick-action row above the scrollable list. `stretch` keeps every button the
+  // height of the tallest (the two-line "Add to Playlist").
+  primaryRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[2],
+  },
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[1],
+    borderRadius: borderRadius.lg,
+  },
+  primaryButtonPressed: {
+    opacity: 0.6,
+  },
+  primaryButtonLabel: {
+    fontWeight: '600',
+    textAlign: 'center',
   },
   menuContent: {
     paddingVertical: spacing[1],
