@@ -52,6 +52,10 @@ export const SHARED_EVENTS = {
   QueueSyncGapResync: 'Queue Sync Gap Resync',
   QueueSyncHashDrift: 'Queue Sync Hash Drift',
   // Climb actions
+  // Fired when the climb reaction/actions menu is opened, with a `source` prop
+  // ('long_press' | 'more_button'). Powers the ⋮-button discoverability experiment:
+  // compare open rates + entry point between the flag's control/treatment cohorts.
+  ClimbActionsOpened: 'Climb Actions Opened',
   FavoriteToggle: 'Favorite Toggle',
   MirrorClimb: 'Mirror Climb',
   ClimbShared: 'Climb Shared',

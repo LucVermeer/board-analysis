@@ -76,6 +76,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     description:
       'Show the data-science "Boardsesh grade" section in the play drawer (cross-board grade, confidence tier, send counts). Off hides the section.',
   },
+  {
+    key: 'climb-quick-actions-button',
+    label: 'Climb ⋮ quick-actions button',
+    description:
+      'Experiment (2-cohort A/B): show a vertical ⋮ button on climbs-list rows that opens the quick-actions menu, vs long-press only. Off = control (long-press only).',
+  },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 // The literal key union (e.g. `'strava-integration'`), preserved via the
@@ -163,6 +169,15 @@ export function useSnapshotBootstrapEnabled(): boolean {
  */
 export function useBoardseshGradeEnabled(): boolean {
   return useFeatureFlag('boardsesh-grade') === true;
+}
+
+/**
+ * Treatment gate for the climbs-list ⋮ quick-actions button experiment. Missing/
+ * undefined (flags not loaded, or user in control) reads as OFF — long-press stays
+ * the only entry point, which is the pre-experiment behaviour.
+ */
+export function useQuickActionsButtonEnabled(): boolean {
+  return useFeatureFlag('climb-quick-actions-button') === true;
 }
 
 function featureFlagsEqual(leftFlags: FeatureFlags, rightFlags: FeatureFlags): boolean {

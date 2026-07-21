@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { View, StyleSheet, Platform, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
@@ -12,7 +12,9 @@ import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Icon } from './Icon';
+import { track } from '../lib/analytics';
 import { ClimbListItemContent } from './ClimbListItemContent';
 import { climbListRowStyles } from './climb-list-row-styles';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
@@ -183,9 +185,10 @@ type ClimbListRowProps = {
    */
   showPlaylistChips?: boolean;
   /**
-   * Show a trailing ⋯ button that opens the reaction menu on tap — a visible,
-   * discoverable entry point beside the long-press. Opt-in (the main climbs list
-   * passes it); other surfaces keep long-press only. No-op without `onOpenActions`.
+   * Show a trailing ⋮ button that opens the reaction menu on tap — a visible,
+   * discoverable entry point beside the long-press. Opt-in; the climbs list passes
+   * the `climb-quick-actions-button` experiment flag (treatment cohort only), other
+   * surfaces keep long-press only. No-op without `onOpenActions`.
    */
   showMoreButton?: boolean;
 };
@@ -252,6 +255,23 @@ const ClimbListRow = React.memo(function ClimbListRow({
   climbRef.current = climb;
   const unsupportedRef = useRef(unsupported);
   unsupportedRef.current = unsupported;
+  // Board metadata for analytics, read through a ref so the dep-free handlers below
+  // never capture a stale value when the list's board config changes.
+  const boardMetaRef = useRef({ boardName, layoutId });
+  boardMetaRef.current = { boardName, layoutId };
+
+  // One place that opens the reaction menu + records how it was reached, so the
+  // ⋮-button experiment can compare open rates + entry point between cohorts.
+  const openActions = useCallback((source: 'long_press' | 'more_button') => {
+    if (unsupportedRef.current) return;
+    track(SHARED_EVENTS.ClimbActionsOpened, {
+      source,
+      climbUuid: climbRef.current.uuid,
+      boardName: boardMetaRef.current.boardName,
+      layoutId: boardMetaRef.current.layoutId,
+    });
+    onOpenActionsRef.current?.(climbRef.current);
+  }, []);
 
   const handleRowPress = useCallback(() => {
     if (unsupportedRef.current) return;
@@ -262,18 +282,16 @@ const ClimbListRow = React.memo(function ClimbListRow({
   }, []);
 
   const handleLongPress = useCallback(() => {
-    if (unsupportedRef.current) return;
     hapticMedium();
-    onOpenActionsRef.current?.(climbRef.current);
-  }, []);
+    openActions('long_press');
+  }, [openActions]);
 
-  // The ⋯ button's tap — same destination as the long-press, on a plain tap. Reads
+  // The ⋮ button's tap — same destination as the long-press, on a plain tap. Reads
   // the same refs so it stays dep-free and the row's memo/renderItem is untouched.
   const handleOpenActions = useCallback(() => {
-    if (unsupportedRef.current) return;
     hapticMedium();
-    onOpenActionsRef.current?.(climbRef.current);
-  }, []);
+    openActions('more_button');
+  }, [openActions]);
 
   // Commit-on-release: fired from onSwipeableWillOpen the instant the user
   // releases past the threshold — no second tap. We deliberately do NOT close
@@ -462,7 +480,11 @@ const ClimbListRow = React.memo(function ClimbListRow({
                   accessibilityRole="button"
                   accessibilityLabel={t('mobile.climbRow.moreActions')}
                 >
-                  <Icon name="more" size={20} color={systemColors.secondaryLabel} />
+                  {/* iOS has no vertical-ellipsis SF Symbol, so rotate the horizontal one;
+                      Android's dots-vertical is already vertical (no rotation). */}
+                  <View style={Platform.OS === 'ios' ? styles.moreIconRotate : undefined}>
+                    <Icon name="more.vertical" size={20} color={systemColors.secondaryLabel} />
+                  </View>
                 </View>
               </GestureDetector>
             ) : null}
@@ -535,6 +557,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: -8,
+  },
+  moreIconRotate: {
+    transform: [{ rotate: '90deg' }],
   },
   swipeIcon: {
     width: 28,

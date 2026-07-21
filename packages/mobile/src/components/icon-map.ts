@@ -43,6 +43,9 @@ export const iconMap = {
   'comment.fill': { ios: 'bubble.left.fill', android: 'comment' },
   'more.actions': { ios: 'ellipsis.circle', android: 'dots-horizontal-circle-outline' },
   'more.actions.fill': { ios: 'ellipsis.circle.fill', android: 'dots-horizontal-circle' },
+  // Vertical kebab. Android has a native vertical glyph; SF Symbols has no vertical
+  // ellipsis, so iOS reuses the horizontal one and the call site rotates it 90°.
+  'more.vertical': { ios: 'ellipsis', android: 'dots-vertical' },
   copy: { ios: 'doc.on.doc', android: 'content-copy' },
   'doc.text': { ios: 'doc.text', android: 'file-document-outline' },
   mail: { ios: 'envelope', android: 'email-outline' },

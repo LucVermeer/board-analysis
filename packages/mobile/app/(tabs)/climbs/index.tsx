@@ -84,6 +84,7 @@ import {
 } from '../../../src/lib/onboarding/onboarding-storage';
 import { ONBOARDING_TIP_QUICKACTIONS_KEY } from '@boardsesh/key-value-storage';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
+import { useQuickActionsButtonEnabled } from '../../../src/providers/feature-flags-provider';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
 import {
@@ -189,6 +190,8 @@ function ClimbListInner() {
     setRevealTipVisible(false);
   }, [openBoardSheet]);
   const { systemColors, variant, brandColors, features } = useTheme();
+  // Experiment: only the treatment cohort gets the ⋮ quick-actions button on rows.
+  const quickActionsButtonEnabled = useQuickActionsButtonEnabled();
   const { addToQueue } = useQueueActions();
   const {
     filters,
@@ -1371,7 +1374,7 @@ function ClimbListInner() {
         onOpenPlaylist={openAddToPlaylist}
         onAddToQueue={handleAddToQueue}
         showPlaylistChips
-        showMoreButton
+        showMoreButton={quickActionsButtonEnabled}
       />
     ),
     [
@@ -1384,6 +1387,7 @@ function ClimbListInner() {
       openClimbActions,
       openAddToPlaylist,
       handleAddToQueue,
+      quickActionsButtonEnabled,
     ],
   );
 
