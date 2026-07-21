@@ -8,8 +8,9 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { Icon } from './Icon';
 import { ClimbListItemContent } from './ClimbListItemContent';
@@ -181,6 +182,12 @@ type ClimbListRowProps = {
    * fetched data. Ignored when `renderContent` supplies a custom layout.
    */
   showPlaylistChips?: boolean;
+  /**
+   * Show a trailing ⋯ button that opens the reaction menu on tap — a visible,
+   * discoverable entry point beside the long-press. Opt-in (the main climbs list
+   * passes it); other surfaces keep long-press only. No-op without `onOpenActions`.
+   */
+  showMoreButton?: boolean;
 };
 
 const ClimbListRow = React.memo(function ClimbListRow({
@@ -202,7 +209,9 @@ const ClimbListRow = React.memo(function ClimbListRow({
   separatorStyle,
   showSeparator = true,
   showPlaylistChips = false,
+  showMoreButton = false,
 }: ClimbListRowProps) {
+  const { t } = useTranslation('climbs');
   const { systemColors, brandColors: brand } = useTheme();
   // Active-row highlight colours, derived from the scheme-aware brand so the wash
   // + accent stay visible in dark (lifted #A78BFA) as well as light.
@@ -253,6 +262,14 @@ const ClimbListRow = React.memo(function ClimbListRow({
   }, []);
 
   const handleLongPress = useCallback(() => {
+    if (unsupportedRef.current) return;
+    hapticMedium();
+    onOpenActionsRef.current?.(climbRef.current);
+  }, []);
+
+  // The ⋯ button's tap — same destination as the long-press, on a plain tap. Reads
+  // the same refs so it stays dep-free and the row's memo/renderItem is untouched.
+  const handleOpenActions = useCallback(() => {
     if (unsupportedRef.current) return;
     hapticMedium();
     onOpenActionsRef.current?.(climbRef.current);
@@ -315,9 +332,16 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [handleAddToQueue, handleOpenPlaylist],
   );
 
+  // Refs so the ⋯ button's tap can `blocksExternalGesture` the row's own tap/long-press
+  // — a tap on the button opens the menu without also firing the row press. The relation
+  // lives only on the button gesture, so when the button isn't shown the row is untouched.
+  const singleTapRef = useRef<GestureType | undefined>(undefined);
+  const longPressRef = useRef<GestureType | undefined>(undefined);
+
   const singleTapGesture = useMemo(
     () =>
       Gesture.Tap()
+        .withRef(singleTapRef)
         .maxDuration(300)
         .maxDistance(15)
         .onStart(() => {
@@ -330,6 +354,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const longPressGesture = useMemo(
     () =>
       Gesture.LongPress()
+        .withRef(longPressRef)
         .minDuration(400)
         .onStart(() => {
           'worklet';
@@ -342,6 +367,22 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const tapGesture = useMemo(
     () => Gesture.Exclusive(longPressGesture, singleTapGesture),
     [longPressGesture, singleTapGesture],
+  );
+
+  // The ⋯ button's own tap. It blocks the row gestures so a tap on the button opens the
+  // menu without pressing the row; a tap anywhere else never starts this gesture, so the
+  // row behaves normally. Only mounted when `showMoreButton` is set.
+  const moreButtonGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDuration(300)
+        .maxDistance(15)
+        .blocksExternalGesture(singleTapRef, longPressRef)
+        .onStart(() => {
+          'worklet';
+          runOnJS(handleOpenActions)();
+        }),
+    [handleOpenActions],
   );
 
   // Left actions (revealed by a left-to-right swipe) = Queue; right actions
@@ -412,6 +453,19 @@ const ClimbListRow = React.memo(function ClimbListRow({
             ) : null}
 
             {rowContent}
+
+            {showMoreButton && onOpenActions ? (
+              <GestureDetector gesture={moreButtonGesture}>
+                <View
+                  style={styles.moreButton}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.climbRow.moreActions')}
+                >
+                  <Icon name="more" size={20} color={systemColors.secondaryLabel} />
+                </View>
+              </GestureDetector>
+            ) : null}
           </View>
         </GestureDetector>
       </ReanimatedSwipeable>
@@ -472,6 +526,15 @@ const styles = StyleSheet.create({
     backgroundColor: brandColors.primary,
     alignItems: 'flex-end',
     paddingRight: 22,
+  },
+  // Trailing ⋯ affordance. 44pt tap target (+8 hitSlop) per the design-system tap
+  // ladder; sits after the grade at the row's trailing edge.
+  moreButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -8,
   },
   swipeIcon: {
     width: 28,

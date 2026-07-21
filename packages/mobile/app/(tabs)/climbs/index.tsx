@@ -76,7 +76,13 @@ import {
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { OnboardingTipBanner } from '../../../src/components/onboarding/OnboardingTipBanner';
-import { clearBoardRevealTipPending, hasBoardRevealTipPending } from '../../../src/lib/onboarding/onboarding-storage';
+import {
+  clearBoardRevealTipPending,
+  hasBoardRevealTipPending,
+  hasSeenTip,
+  markTipSeen,
+} from '../../../src/lib/onboarding/onboarding-storage';
+import { ONBOARDING_TIP_QUICKACTIONS_KEY } from '@boardsesh/key-value-storage';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
@@ -359,6 +365,27 @@ function ClimbListInner() {
   );
   const dismissRevealTip = useCallback(() => setRevealTipVisible(false), []);
   const showRevealTip = revealTipVisible && !!activeBoard;
+
+  // One-shot tip teaching the quick-actions menu (long-press or the ⋯ button).
+  // Armed on focus if unseen; held back until the board-reveal banner is gone so
+  // the two never stack. Marked seen the moment it actually shows, so it fires once.
+  const [quickActionsTipArmed, setQuickActionsTipArmed] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void hasSeenTip(ONBOARDING_TIP_QUICKACTIONS_KEY).then((seen) => {
+        if (!cancelled && !seen) setQuickActionsTipArmed(true);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+  const dismissQuickActionsTip = useCallback(() => setQuickActionsTipArmed(false), []);
+  const showQuickActionsTip = quickActionsTipArmed && !showRevealTip;
+  useEffect(() => {
+    if (showQuickActionsTip) void markTipSeen(ONBOARDING_TIP_QUICKACTIONS_KEY);
+  }, [showQuickActionsTip]);
 
   // Screenshot mode: a second board-view shot renders myBoards[1] (the user's 2nd
   // followed board) via ?screenshotBoardIndex=1. Boards are sorted by follow date
@@ -1248,6 +1275,15 @@ function ClimbListInner() {
             style={styles.revealBanner}
           />
         ) : null}
+        {showQuickActionsTip ? (
+          <OnboardingTipBanner
+            text={tCommon('mobile.onboarding.quickActionsTip')}
+            icon="more.actions"
+            dismissLabel={tCommon('actions.close')}
+            onDismiss={dismissQuickActionsTip}
+            style={styles.revealBanner}
+          />
+        ) : null}
         {/* The filter summary now lives persistently in the floating chrome's
             centre (glass) / Appbar (Material), so the list itself opens straight
             into the recent-filter pills and climbs. */}
@@ -1266,6 +1302,8 @@ function ClimbListInner() {
       showRevealTip,
       handleOpenBoardDetail,
       dismissRevealTip,
+      showQuickActionsTip,
+      dismissQuickActionsTip,
       tCommon,
       showRecentPills,
       recentFilters,
@@ -1333,6 +1371,7 @@ function ClimbListInner() {
         onOpenPlaylist={openAddToPlaylist}
         onAddToQueue={handleAddToQueue}
         showPlaylistChips
+        showMoreButton
       />
     ),
     [

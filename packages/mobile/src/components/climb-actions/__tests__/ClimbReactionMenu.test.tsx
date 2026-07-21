@@ -38,6 +38,7 @@ vi.mock('react-native-reanimated', () => ({
 }));
 
 vi.mock('@react-native-community/blur', () => ({ BlurView: () => null }));
+vi.mock('expo-linear-gradient', () => ({ LinearGradient: () => null }));
 vi.mock('react-native-screens', () => ({
   FullWindowOverlay: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));

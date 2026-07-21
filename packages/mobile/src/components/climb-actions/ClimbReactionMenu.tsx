@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from '@react-native-community/blur';
 import { FullWindowOverlay } from 'react-native-screens';
@@ -272,6 +273,24 @@ export function ClimbReactionMenu({
     windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
+  // When the action list can't all fit, hint that it scrolls: snap the scroll viewport
+  // to a half-row "peek" (last row clipped at its midpoint) and fade its bottom edge.
+  // Derived from actions.length + row height (ListRow: minHeight 44 + 12pt vertical
+  // padding, text growing with fontScale) — no per-frame scroll state. Applies to the
+  // action list only; the playlist view owns its own scroll.
+  const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
+  const menuContentHeight = actions.length * actionRowHeight + spacing[1] * 2;
+  const menuOverflows = menuContentHeight > menuMaxHeight;
+  const menuScrollHeight = menuOverflows
+    ? Math.max(menuMinHeight, (Math.floor(menuMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
+    : menuMaxHeight;
+  // Concrete rgba (never systemColors PlatformColor — that bakes the wrong scheme into
+  // the gradient, the ProgressiveBlur dark-band bug). Fades to the scheme's surface base.
+  const menuFadeColors: readonly [string, string] =
+    colorScheme === 'dark'
+      ? ['rgba(20, 17, 31, 0)', 'rgba(20, 17, 31, 0.92)']
+      : ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.92)'];
+
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
   const previewStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -382,24 +401,31 @@ export function ClimbReactionMenu({
                   maxHeight={menuMaxHeight}
                 />
               ) : (
-                <ScrollView
-                  style={{ maxHeight: menuMaxHeight }}
-                  bounces={false}
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={styles.menuContent}
-                >
-                  {actions.map((action, index) => (
-                    <ListRow
-                      key={action.id}
-                      title={action.title}
-                      leading={<Icon name={action.icon} size={22} color={action.color} />}
-                      onPress={action.run}
-                      showSeparator={index < actions.length - 1}
-                      separatorInset={56}
-                    />
-                  ))}
-                </ScrollView>
+                <View>
+                  <ScrollView
+                    style={{ maxHeight: menuScrollHeight }}
+                    bounces={false}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.menuContent}
+                  >
+                    {actions.map((action, index) => (
+                      <ListRow
+                        key={action.id}
+                        title={action.title}
+                        leading={<Icon name={action.icon} size={22} color={action.color} />}
+                        onPress={action.run}
+                        showSeparator={index < actions.length - 1}
+                        separatorInset={56}
+                      />
+                    ))}
+                  </ScrollView>
+                  {/* Bottom-edge fade cueing "more below" — only when the list overflows.
+                      pointerEvents none so it never eats a tap on the peeking row. */}
+                  {menuOverflows ? (
+                    <LinearGradient pointerEvents="none" colors={menuFadeColors} style={styles.menuScrollFade} />
+                  ) : null}
+                </View>
               )}
             </GlassSurface>
           </Animated.View>
@@ -476,5 +502,12 @@ const styles = StyleSheet.create({
   },
   menuContent: {
     paddingVertical: spacing[1],
+  },
+  menuScrollFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 48,
   },
 });

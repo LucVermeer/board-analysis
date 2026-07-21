@@ -241,6 +241,7 @@
         "lookAround": "Look around first"
       },
       "boardRevealTip": "Tap to see what other Boardsesh users have sent to the wall.",
+      "quickActionsTip": "Long-press a climb, or tap ⋯, for quick actions like queue, tick and playlists.",
       "tips": {
         "workout": "Build a workout: Volume, Pyramid, Ladder or Grade Focus. Set a grade, preview the burns, send them one at a time.",
         "crew": "Climbing with people? Start a session and share one queue. Anyone sends the next burn, no passing the phone.",
