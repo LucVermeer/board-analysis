@@ -305,16 +305,16 @@ export function ClimbReactionMenu({
     ? fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, largeArtMaxSize).width
     : largeArtMaxSize;
   const overlayRenderWidth = Math.round(largeArtWidth * PixelRatio.get());
-  // compactArtMaxSize: the "current" size for the inline sub-action view — today's
-  // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
+  // compactArtMaxSize: the shrunk size used only when the create-playlist keyboard is up,
+  // so the board + form + keyboard still fit. Otherwise the board keeps its full size.
   const compactArtMaxSize = Math.min(
-    keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
-    Math.round(windowHeight * 0.31),
+    Math.round(windowHeight * 0.18),
     Math.round(windowWidth * 0.66),
   );
-  // The board is large in the menu; opening a sub-view (Add to playlist) springs it down
-  // to the compact size and back. That inline transition is the only board resize now.
-  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
+  // The board stays the same size across the menu and the Add-to-playlist view — the
+  // difference wasn't worth the jump. It only shrinks when the create-playlist form's
+  // keyboard is up (playlist view + keyboardHeight > 0), to keep the form reachable.
+  const targetArtMax = view === 'playlist' && keyboardHeight > 0 ? compactArtMaxSize : largeArtMaxSize;
 
   // The animating max-size (px). Springs between large (menu) and compact (sub-action)
   // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
