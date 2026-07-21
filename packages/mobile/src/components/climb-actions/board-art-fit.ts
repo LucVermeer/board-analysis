@@ -77,11 +77,16 @@ export function computeReactionBoardMaxSize(input: ReactionBoardLayoutInput): nu
   } = input;
   const topReserve = insetTop + contentTopOffset;
   const bottomReserve = insetBottom + sectionGap;
-  // Space the board fills once the title, buttons and the whole list are reserved.
+  // Space the board fills once the title, buttons and the whole list are reserved. Two
+  // section gaps are counted — the board→card gap (explicit) and the bottom padding gap
+  // (inside bottomReserve). The smaller title→board gap is deliberately NOT counted here:
+  // textReserve reserves more than the title actually needs, and that slack absorbs it.
   const heroHeightBudget =
     windowHeight - topReserve - sectionGap - primaryRowHeight - listContentHeight - bottomReserve - textReserve;
   // The most the board may take while still leaving the button row + ~2 list rows on
-  // screen; on a short screen the board yields to this instead of overflowing.
+  // screen; on a short screen the board yields to this instead of overflowing. This is a
+  // deliberately conservative cap (one extra section gap of headroom), so it can bind
+  // before heroHeightBudget on mid-range screens without ever letting the board overflow.
   const boardCeiling = Math.max(
     0,
     windowHeight - topReserve - textReserve - primaryRowHeight - 2 * rowHeight - bottomReserve - sectionGap * 2,
