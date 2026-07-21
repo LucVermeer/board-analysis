@@ -19,8 +19,15 @@ vi.mock('react-native', () => ({
     captured.modalOnRequestClose = onRequestClose;
     return createElement('div', { 'data-modal': 'true' }, children);
   },
-  Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
-    createElement('button', { onClick: onPress }, children),
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   TextInput: () => null,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -58,7 +65,7 @@ vi.mock('../../Text', () => ({
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../ListRow', () => ({
   ListRow: ({ title, onPress }: { title: string; onPress?: () => void }) =>
-    createElement('button', { onClick: onPress, 'aria-label': title }, title),
+    createElement('button', { onClick: onPress, 'aria-label': title, 'data-listrow': 'true' }, title),
 }));
 vi.mock('../../GlassSurface', () => ({
   GlassSurface: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -88,6 +95,7 @@ vi.mock('../use-climb-actions', () => ({
     captured.actionArgs = args;
     return [
       { id: 'preview', title: 'Preview', icon: 'visibility', color: '#00f', run: () => {} },
+      { id: 'tick', title: 'Log a tick', icon: 'tick', color: '#0f0', run: () => {} },
       {
         id: 'playlist',
         title: 'Add to Playlist',
@@ -95,6 +103,8 @@ vi.mock('../use-climb-actions', () => ({
         color: '#00f',
         run: () => (args.onSelectPlaylist as (() => void) | undefined)?.(),
       },
+      { id: 'favorite', title: 'Favorite', icon: 'favorite', color: '#f00', run: () => {} },
+      { id: 'share', title: 'Share', icon: 'share', color: '#00f', run: () => {} },
     ];
   },
 }));
@@ -125,6 +135,24 @@ describe('ClimbReactionMenu view switching', () => {
     captured.actionArgs = null;
     captured.pickerOnBack = undefined;
     captured.modalOnRequestClose = undefined;
+  });
+
+  it('pulls tick, playlist and share into the primary button row and leaves the rest in the list', () => {
+    const { getByLabelText, container } = renderMenu();
+
+    // All five actions render.
+    for (const label of ['Log a tick', 'Add to Playlist', 'Share', 'Preview', 'Favorite']) {
+      expect(getByLabelText(label)).not.toBeNull();
+    }
+
+    // The three primary actions are NOT list rows (they're the button row); the
+    // remainder are.
+    for (const label of ['Log a tick', 'Add to Playlist', 'Share']) {
+      expect(container.querySelector(`[data-listrow="true"][aria-label="${label}"]`)).toBeNull();
+    }
+    for (const label of ['Preview', 'Favorite']) {
+      expect(container.querySelector(`[data-listrow="true"][aria-label="${label}"]`)).not.toBeNull();
+    }
   });
 
   it('renders the action list first and swaps to the inline picker when the playlist action runs', () => {

@@ -4,6 +4,7 @@ import {
   Modal,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type OpaqueColorValue,
   PixelRatio,
   Platform,
   Pressable,
@@ -35,8 +36,13 @@ import { useTheme } from '../../providers/theme-provider';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { springs, timing } from '../../theme/animations';
 import { spacing, borderRadius } from '../../theme/tokens';
-import { useClimbActions } from './use-climb-actions';
+import { useClimbActions, type ClimbActionId, type ClimbActionItem } from './use-climb-actions';
 import { fitBoardArt, fitBoardMaxSize } from './board-art-fit';
+
+// Log a tick / Add to playlist / Share get pulled out of the scrollable list into a
+// fixed horizontal button row at the top of the card — the most-reached actions,
+// one tap away. The rest stay in the list below. Order here is the row order.
+const PRIMARY_ACTION_IDS: readonly ClimbActionId[] = ['tick', 'playlist', 'share'];
 
 type ClimbReactionMenuProps = {
   climb: Climb;
@@ -108,7 +114,7 @@ export function ClimbReactionMenu({
   reduceMotion,
   onClose,
 }: ClimbReactionMenuProps) {
-  const { colorScheme } = useTheme();
+  const { colorScheme, systemColors } = useTheme();
   const { t } = useTranslation('climbs');
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
@@ -183,6 +189,15 @@ export function ClimbReactionMenu({
     onTick,
   });
 
+  // Split the actions into the fixed top button row (tick / playlist / share, in that
+  // order) and the scrollable remainder. Both preserve `useClimbActions`' identity so
+  // they only rebuild when the action list itself changes.
+  const primaryActions = useMemo(() => {
+    const byId = new Map(actions.map((action) => [action.id, action]));
+    return PRIMARY_ACTION_IDS.map((id) => byId.get(id)).filter((action): action is ClimbActionItem => action != null);
+  }, [actions]);
+  const listActions = useMemo(() => actions.filter((action) => !PRIMARY_ACTION_IDS.includes(action.id)), [actions]);
+
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
 
@@ -241,6 +256,10 @@ export function ClimbReactionMenu({
   // The action list never shrinks below this — at least ~2 rows peek under the hero so
   // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
   const menuMinHeight = 180;
+  // Estimated height of the fixed primary-action button row (icon + up-to-2-line label +
+  // padding), reserved like previewTextReserve — an estimate, not an onLayout measure, so
+  // the list cap doesn't re-render every frame. Zero when there are no primary actions.
+  const primaryRowHeight = primaryActions.length > 0 ? Math.round(84 + 26 * fontScale) : 0;
 
   // Enlarged board art. Rendered at play-drawer quality — full-res board photo and a
   // holds overlay sized to the displayed width × DPR (see overlayRenderWidth below) —
@@ -262,6 +281,7 @@ export function ClimbReactionMenu({
     contentTopOffset -
     spacing[5] -
     menuMinHeight -
+    primaryRowHeight -
     (insets.bottom + spacing[5]) -
     previewTextReserve;
   const largeArtMaxSize = fitBoardMaxSize(
@@ -320,29 +340,31 @@ export function ClimbReactionMenu({
     windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
-  // When the action list can't all fit, hint that it scrolls: snap the scroll viewport
-  // to a half-row "peek" (last row clipped at its midpoint) and fade its bottom edge.
-  // Derived from actions.length + row height (ListRow: minHeight 44 + 12pt vertical
-  // padding, text growing with fontScale) — no per-frame scroll state. Applies to the
-  // action list only; the playlist view owns its own scroll.
+  // When the scrollable list (everything below the fixed primary-button row) can't all
+  // fit, hint that it scrolls: snap the viewport to a half-row "peek" (last row clipped
+  // at its midpoint) and fade its bottom edge. Derived from listActions.length + row
+  // height (ListRow: minHeight 44 + 12pt vertical padding, text growing with fontScale)
+  // — no per-frame scroll state. The list shares the card with the primary row, so it
+  // gets menuMaxHeight minus that row. The playlist view owns its own scroll.
   const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
-  const menuContentHeight = actions.length * actionRowHeight + spacing[1] * 2;
-  const menuOverflows = menuContentHeight > menuMaxHeight;
+  const listMaxHeight = Math.max(actionRowHeight, menuMaxHeight - primaryRowHeight);
+  const menuContentHeight = listActions.length * actionRowHeight + spacing[1] * 2;
+  const menuOverflows = menuContentHeight > listMaxHeight;
   let menuScrollHeight: number;
   if (!menuScrolled) {
     // At rest (large hero): snap an overflowing list to the half-row "peek" that
     // cues scrolling; a fitting list uses its full height.
     menuScrollHeight = menuOverflows
-      ? Math.max(menuMinHeight, (Math.floor(menuMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
-      : menuMaxHeight;
+      ? Math.max(actionRowHeight, (Math.floor(listMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
+      : listMaxHeight;
   } else {
-    // Scrolled: the hero has shrunk and menuMaxHeight has grown, so give the list
+    // Scrolled: the hero has shrunk and listMaxHeight has grown, so give the list
     // that room. But if the taller viewport would now fit the whole list, the
     // ScrollView would clamp the offset back to 0 — which reads as "scrolled to the
     // top" and would bounce the hero back to large. Keep the viewport one row short
     // of the content so a little scroll range always remains and the collapse only
     // happens when the climber actually drags to the top.
-    menuScrollHeight = Math.min(menuMaxHeight, menuContentHeight - actionRowHeight);
+    menuScrollHeight = Math.min(listMaxHeight, menuContentHeight - actionRowHeight);
   }
   // Show the bottom fade whenever the list is actually clipped — the at-rest peek or
   // the one-row-short scrolled viewport both hide content worth cueing.
@@ -460,6 +482,20 @@ export function ClimbReactionMenu({
                 />
               ) : (
                 <View>
+                  {/* Fixed quick-action row — the three most-reached actions as tappable
+                      buttons, above the scrollable remainder. */}
+                  {primaryActions.length > 0 ? (
+                    <View style={styles.primaryRow}>
+                      {primaryActions.map((action) => (
+                        <PrimaryActionButton
+                          key={action.id}
+                          action={action}
+                          fillColor={systemColors.fill}
+                          labelColor={systemColors.label}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
                   <ScrollView
                     style={{ maxHeight: menuScrollHeight }}
                     bounces={false}
@@ -469,13 +505,13 @@ export function ClimbReactionMenu({
                     scrollEventThrottle={16}
                     contentContainerStyle={styles.menuContent}
                   >
-                    {actions.map((action, index) => (
+                    {listActions.map((action, index) => (
                       <ListRow
                         key={action.id}
                         title={action.title}
                         leading={<Icon name={action.icon} size={22} color={action.color} />}
                         onPress={action.run}
-                        showSeparator={index < actions.length - 1}
+                        showSeparator={index < listActions.length - 1}
                         separatorInset={56}
                       />
                     ))}
@@ -492,6 +528,37 @@ export function ClimbReactionMenu({
         </View>
       </View>
     </OverlayPortal>
+  );
+}
+
+type PrimaryActionButtonProps = {
+  action: ClimbActionItem;
+  /** Translucent control fill for the button surface (systemColors.fill). */
+  fillColor: string | OpaqueColorValue;
+  /** Label foreground (systemColors.label); the icon keeps the action's own colour. */
+  labelColor: string | OpaqueColorValue;
+};
+
+// One quick-action button: the action's icon over its (up-to-2-line) label, on a
+// translucent fill. `alignItems: 'stretch'` on the row makes every button match the
+// tallest, so "Add to Playlist" wrapping to two lines keeps all three the same height.
+function PrimaryActionButton({ action, fillColor, labelColor }: PrimaryActionButtonProps) {
+  return (
+    <Pressable
+      onPress={action.run}
+      accessibilityRole="button"
+      accessibilityLabel={action.title}
+      style={({ pressed }) => [
+        styles.primaryButton,
+        { backgroundColor: fillColor },
+        pressed && styles.primaryButtonPressed,
+      ]}
+    >
+      <Icon name={action.icon} size={24} color={action.color} />
+      <Text variant="caption1" numberOfLines={2} style={[styles.primaryButtonLabel, { color: labelColor }]}>
+        {action.title}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -559,6 +626,32 @@ const styles = StyleSheet.create({
   menuCard: {
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
+  },
+  // Fixed quick-action row above the scrollable list. `stretch` keeps every button the
+  // height of the tallest (the two-line "Add to Playlist").
+  primaryRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[2],
+  },
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[1],
+    borderRadius: borderRadius.lg,
+  },
+  primaryButtonPressed: {
+    opacity: 0.6,
+  },
+  primaryButtonLabel: {
+    fontWeight: '600',
+    textAlign: 'center',
   },
   menuContent: {
     paddingVertical: spacing[1],
