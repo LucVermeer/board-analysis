@@ -35,7 +35,6 @@ import dynamic from 'next/dynamic';
 import { SESH_SETTINGS_DRAWER_EVENT } from '../sesh-settings/sesh-settings-drawer-event';
 import { BoardSwitchConfirmProvider } from '../board-lock/board-switch-confirm-provider';
 import { FeedbackPromptBanner } from '../feedback/feedback-prompt-banner';
-import { CapacitorUpdateBanner } from '../banners/capacitor-update-banner';
 import PlaylistsAdapterProvider from './playlists-adapter-provider';
 
 const SeshSettingsDrawer = dynamic(() => import('../sesh-settings/sesh-settings-drawer'), {
@@ -273,7 +272,6 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
       data-testid="bottom-bar-wrapper"
     >
       <FeedbackPromptBanner />
-      <CapacitorUpdateBanner />
       {!isDevelopmentRoute && !hideQueueBar && hasActiveQueue && boardDetails && (
         <ErrorBoundary>
           <BoardProvider boardName={boardDetails.board_name}>
