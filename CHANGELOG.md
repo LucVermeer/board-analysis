@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Still on the old Boardsesh app? It now points you straight at the rebuilt one — your logbook, sessions, and crew come with you. ([#3822](https://github.com/boardsesh/boardsesh/pull/3822))
 - Long-press a climb and the preview fills the screen up top — big enough to read the beta at a glance. ([#3827](https://github.com/boardsesh/boardsesh/pull/3827))
   New ⋯ button on every climb, plus a first-run tip, so quick actions (queue, tick, playlists, share) are easy to find — no more guessing you have to long-press.
   Tap "Add to playlist" and the preview glides down to make room, then back up when you're done.

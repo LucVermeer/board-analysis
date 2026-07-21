@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-21T07:48:47.974Z",
+  "generatedAt": "2026-07-21T07:55:58.635Z",
   "entries": [
+    {
+      "prNumber": 3822,
+      "category": "new",
+      "title": "Still on the old Boardsesh app? It now points you straight at the rebuilt one — your logbook, sessions, and crew come with you.",
+      "mergedAt": "2026-07-21T07:51:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3822"
+    },
     {
       "prNumber": 3827,
       "category": "new",
