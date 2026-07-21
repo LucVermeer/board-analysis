@@ -187,8 +187,9 @@ type ClimbListRowProps = {
   /**
    * Show a trailing ⋮ button that opens the reaction menu on tap — a visible,
    * discoverable entry point beside the long-press. Opt-in; the climbs list passes
-   * the `climb-quick-actions-button` experiment flag (treatment cohort only), other
-   * surfaces keep long-press only. No-op without `onOpenActions`.
+   * the "Show quick-actions button" user setting (whose default is set by the
+   * climb-quick-actions-button experiment flag), other surfaces keep long-press only.
+   * No-op without `onOpenActions`.
    */
   showMoreButton?: boolean;
 };
@@ -476,7 +477,6 @@ const ClimbListRow = React.memo(function ClimbListRow({
               <GestureDetector gesture={moreButtonGesture}>
                 <View
                   style={styles.moreButton}
-                  hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={t('mobile.climbRow.moreActions')}
                 >
@@ -549,14 +549,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingRight: 22,
   },
-  // Trailing ⋯ affordance. 44pt tap target (+8 hitSlop) per the design-system tap
-  // ladder; sits after the grade at the row's trailing edge.
+  // Trailing ⋮ affordance. A full 44pt tap target (no hitSlop, no negative margin —
+  // those stacked into ~16pt of overlap with the grade, risking accidental opens);
+  // the row's gap keeps it clear of the grade at the trailing edge.
   moreButton: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -8,
   },
   moreIconRotate: {
     transform: [{ rotate: '90deg' }],

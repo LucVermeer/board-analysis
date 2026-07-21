@@ -84,7 +84,7 @@ import {
 } from '../../../src/lib/onboarding/onboarding-storage';
 import { ONBOARDING_TIP_QUICKACTIONS_KEY } from '@boardsesh/key-value-storage';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
-import { useQuickActionsButtonEnabled } from '../../../src/providers/feature-flags-provider';
+import { useClimbQuickActionsButton } from '../../../src/lib/climb-quick-actions-button-preference';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
 import {
@@ -190,8 +190,9 @@ function ClimbListInner() {
     setRevealTipVisible(false);
   }, [openBoardSheet]);
   const { systemColors, variant, brandColors, features } = useTheme();
-  // Experiment: only the treatment cohort gets the ⋮ quick-actions button on rows.
-  const quickActionsButtonEnabled = useQuickActionsButtonEnabled();
+  // The ⋮ quick-actions button is a user setting whose default is set by the
+  // climb-quick-actions-button experiment flag (More → Display lets climbers override).
+  const { enabled: quickActionsButtonEnabled } = useClimbQuickActionsButton();
   const { addToQueue } = useQueueActions();
   const {
     filters,

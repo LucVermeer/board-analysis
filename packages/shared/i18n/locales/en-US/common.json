@@ -138,6 +138,8 @@
         "title": "Display",
         "playlistTags": "Show playlist tags",
         "playlistTagsDescription": "See which playlists each climb is in, right on the list.",
+        "quickActionsButton": "Show quick-actions button",
+        "quickActionsButtonDescription": "Add a ⋮ button to each climb that opens queue, tick, playlists and more. You can always long-press instead.",
         "boardseshGrades": "Show Boardsesh grades",
         "boardseshGradesDescription": "Grades built from real sends across boards. The setter's grade stays until enough sends come in."
       },

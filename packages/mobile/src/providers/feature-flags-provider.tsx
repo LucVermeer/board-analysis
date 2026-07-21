@@ -78,9 +78,9 @@ export const FEATURE_FLAG_DEFINITIONS = [
   },
   {
     key: 'climb-quick-actions-button',
-    label: 'Climb ⋮ quick-actions button',
+    label: 'Climb ⋮ quick-actions button (default)',
     description:
-      'Experiment (2-cohort A/B): show a vertical ⋮ button on climbs-list rows that opens the quick-actions menu, vs long-press only. Off = control (long-press only).',
+      'Experiment (2-cohort A/B): sets the DEFAULT of the "Show quick-actions button" setting. On = treatment (button on by default, climber can opt out); off = control (off by default, climber can opt in). The setting override always wins.',
   },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
@@ -169,15 +169,6 @@ export function useSnapshotBootstrapEnabled(): boolean {
  */
 export function useBoardseshGradeEnabled(): boolean {
   return useFeatureFlag('boardsesh-grade') === true;
-}
-
-/**
- * Treatment gate for the climbs-list ⋮ quick-actions button experiment. Missing/
- * undefined (flags not loaded, or user in control) reads as OFF — long-press stays
- * the only entry point, which is the pre-experiment behaviour.
- */
-export function useQuickActionsButtonEnabled(): boolean {
-  return useFeatureFlag('climb-quick-actions-button') === true;
 }
 
 function featureFlagsEqual(leftFlags: FeatureFlags, rightFlags: FeatureFlags): boolean {

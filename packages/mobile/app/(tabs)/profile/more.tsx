@@ -37,9 +37,11 @@ import { isPreviewBuild } from '../../../src/lib/preview-build';
 import { isDevLauncherAvailable } from '../../../src/lib/dev-launcher';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useSessionRecordingPreference } from '../../../src/lib/session-recording-preference';
-import { setSessionRecordingEnabled } from '../../../src/lib/analytics';
+import { setSessionRecordingEnabled, track } from '../../../src/lib/analytics';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useShowPlaylistTagsPreference } from '../../../src/lib/show-playlist-tags-preference';
 import { useBoardseshGradesPreference } from '../../../src/lib/boardsesh-grades-preference';
+import { useClimbQuickActionsButton } from '../../../src/lib/climb-quick-actions-button-preference';
 import { useToast } from '../../../src/providers/toast-provider';
 import {
   useFeatureFlag,
@@ -75,6 +77,7 @@ export default function MoreScreen() {
     useSessionRecordingPreference();
   const { enabled: showPlaylistTags, setEnabled: setShowPlaylistTags } = useShowPlaylistTagsPreference();
   const { enabled: showBoardseshGrades, setEnabled: setShowBoardseshGrades } = useBoardseshGradesPreference();
+  const { enabled: showQuickActionsButton, setEnabled: setShowQuickActionsButton } = useClimbQuickActionsButton();
   const boardseshGradeFlagEnabled = useBoardseshGradeEnabled();
   const { showToast } = useToast();
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
@@ -440,6 +443,18 @@ export default function MoreScreen() {
         onValueChange: (next) => {
           hapticSelection();
           setShowPlaylistTags(next);
+        },
+      },
+      {
+        kind: 'toggle',
+        key: 'quickActionsButton',
+        label: t('mobile.more.displayOptions.quickActionsButton'),
+        subtitle: t('mobile.more.displayOptions.quickActionsButtonDescription'),
+        value: showQuickActionsButton,
+        onValueChange: (next) => {
+          hapticSelection();
+          track(SHARED_EVENTS.ClimbQuickActionsSettingChanged, { enabled: next });
+          setShowQuickActionsButton(next);
         },
       },
       ...(boardseshGradeFlagEnabled
