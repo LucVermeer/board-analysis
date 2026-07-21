@@ -74,6 +74,19 @@ function fitBoardArt(boardWidth: number, boardHeight: number, maxSize: number) {
 }
 
 /**
+ * The `maxSize` to feed `fitBoardArt` so the render fills as much of a (maxW × maxH)
+ * box as its aspect allows. `fitBoardArt`'s `maxSize` is the LARGER rendered edge
+ * (width for landscape, height for portrait), so a single square cap under-uses the
+ * long edge — a portrait board capped by screen width stays short. This solves for
+ * the box directly: landscape is bounded by width and the derived height; portrait by
+ * height and the derived width.
+ */
+function fitBoardMaxSize(aspect: number, maxWidth: number, maxHeight: number) {
+  if (!Number.isFinite(aspect) || aspect <= 0) return Math.min(maxWidth, maxHeight);
+  return aspect >= 1 ? Math.min(maxWidth, maxHeight * aspect) : Math.min(maxHeight, maxWidth / aspect);
+}
+
+/**
  * iMessage-style long-press reaction overlay: the climb floats, scaled up, over a
  * blurred background, with the climb-action menu floating beside it. Built with
  * Reanimated + BlurView so we control the enlargement, the animation, and the layout
@@ -182,24 +195,6 @@ export function ClimbReactionMenu({
     };
   }, []);
 
-  // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
-  // 400) so no new render is needed. The menu view shows a large hero preview; when a
-  // sub-action that stays inline (the playlist picker) opens, the art animates down to
-  // the compact "current" size so the picker + create form clear the keyboard.
-  //
-  // largeArtMaxSize: the hero size (menu view). The action list scrolls beneath it, so
-  // a big preview is safe — menuMaxHeight floors at 180 and the ScrollView caps at it.
-  const largeArtMaxSize = Math.min(Math.round(windowHeight * 0.44), Math.round(windowWidth * 0.85));
-  // compactArtMaxSize: the "current" size for the inline sub-action view — today's
-  // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
-  const compactArtMaxSize = Math.min(
-    keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
-    Math.round(windowHeight * 0.31),
-    Math.round(windowWidth * 0.66),
-  );
-  // In the menu view there is no text input, so keyboardHeight is 0 there; the keyboard
-  // only appears in the playlist create form, which is the compact path above.
-  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
   const boardRenderData = useMemo(() => {
     const setIdValues = boardConfig.setIds
       .split(',')
@@ -214,8 +209,50 @@ export function ClimbReactionMenu({
     });
   }, [boardConfig]);
 
-  // Board aspect, read once for the worklet that derives the animating art dimensions.
+  // Board aspect (w/h), read once for the sizing math + the worklet below.
   const aspect = boardRenderData ? boardRenderData.boardWidth / boardRenderData.boardHeight : 1;
+
+  // Top offset for the floating content — anchors the preview at a fixed position (see
+  // styles.content). Shared with the menu cap and the hero budget below so nothing runs
+  // past the bottom safe area now that the content is top-aligned rather than centered.
+  const contentTopOffset = Math.round(windowHeight * 0.06);
+  // The action list never shrinks below this — at least ~2 rows peek under the hero so
+  // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
+  const menuMinHeight = 180;
+
+  // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
+  // 400) so no new render is needed. The menu view shows a large hero preview; when a
+  // sub-action that stays inline (the playlist picker) opens, the art animates down to
+  // the compact "current" size so the picker + create form clear the keyboard.
+  //
+  // largeArtMaxSize: the hero size (menu view). Filled to a box that's 94% of the width
+  // and as tall as fits once the top chrome, the name/byline, the gap, the menu floor
+  // and the bottom safe area are reserved — capped at 60% height. Solving for the box
+  // (not a square) lets a portrait board grow tall instead of being pinned by screen
+  // width, while the reservation guarantees the action list's 2-row peek + scroll.
+  // name + byline + their gaps under the art. A fixed estimate (not an onLayout
+  // measurement) so resizing the art never re-renders the menu — see reservedForPreview.
+  const previewTextReserve = 56;
+  const heroHeightBudget =
+    windowHeight -
+    insets.top -
+    contentTopOffset -
+    spacing[5] -
+    menuMinHeight -
+    (insets.bottom + spacing[5]) -
+    previewTextReserve;
+  const largeArtMaxSize = fitBoardMaxSize(aspect, windowWidth * 0.94, Math.min(windowHeight * 0.6, heroHeightBudget));
+  // compactArtMaxSize: the "current" size for the inline sub-action view — today's
+  // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
+  const compactArtMaxSize = Math.min(
+    keyboardHeight > 0 ? Math.round(windowHeight * 0.18) : 235,
+    Math.round(windowHeight * 0.31),
+    Math.round(windowWidth * 0.66),
+  );
+  // In the menu view there is no text input, so keyboardHeight is 0 there; the keyboard
+  // only appears in the playlist create form, which is the compact path above.
+  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
+
   // The animating max-size (px). Springs between large (menu) and compact (sub-action)
   // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
   // opening "Add to playlist" glides the hero down to the current size (and back).
@@ -231,24 +268,21 @@ export function ClimbReactionMenu({
     return aspect >= 1 ? { width: maxSize, height: maxSize / aspect } : { width: maxSize * aspect, height: maxSize };
   });
 
-  // Top offset for the floating content — anchors the preview at a fixed position
-  // (see styles.content). Shared with the menu cap so the card can't run past the
-  // bottom safe area now that the content is top-aligned rather than centered.
-  const contentTopOffset = Math.round(windowHeight * 0.06);
-
   // Cap the menu/picker so it fills down to the bottom safe area — no taller (it
-  // would clip past it), no shorter (wasting vertical space) — and no lower than
-  // the keyboard when one is up. Measure the preview's real height rather than
-  // reserving a fixed guess; fall back to an estimate until the first layout. The
-  // card scrolls internally past this cap.
-  const [previewHeight, setPreviewHeight] = useState(0);
-  const fallbackArtHeight = boardRenderData
+  // would clip past it), no shorter (wasting vertical space) — and no lower than the
+  // keyboard when one is up. Derived from the TARGET art size, not an onLayout
+  // measurement: the art wrapper animates its width/height, so measuring it would fire
+  // onLayout → setState every spring frame and re-render the whole menu + the
+  // FlatList/ScrollView mid-transition (jank on slower devices / long playlists). The
+  // target size changes only on a discrete view/keyboard change, so the cap settles in
+  // one render while the art glides to it on the UI thread. The card scrolls past the cap.
+  const targetArtHeight = boardRenderData
     ? fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, targetArtMax).height
     : targetArtMax;
-  const reservedForPreview = previewHeight > 0 ? previewHeight : fallbackArtHeight + spacing[5] * 4;
+  const reservedForPreview = targetArtHeight + previewTextReserve;
   const bottomReserve = keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing[5];
   const menuMaxHeight = Math.max(
-    180,
+    menuMinHeight,
     windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
@@ -303,13 +337,10 @@ export function ClimbReactionMenu({
           ]}
         >
           {/* The enlarged climb stays visible in both views — the playlist picker
-              replaces the action list below it, not the climb itself. onLayout
-              feeds the real preview height into the menu/picker cap. */}
-          <Animated.View
-            pointerEvents="box-none"
-            onLayout={(event) => setPreviewHeight(event.nativeEvent.layout.height)}
-            style={[styles.preview, previewStyle]}
-          >
+              replaces the action list below it, not the climb itself. The menu/picker
+              cap is derived from the target art size (reservedForPreview), not measured
+              here, so the shrink animation never re-renders the menu. */}
+          <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
             {boardRenderData ? (
               <Animated.View style={[styles.art, animatedArtStyle]}>
                 <BoardImageNative
