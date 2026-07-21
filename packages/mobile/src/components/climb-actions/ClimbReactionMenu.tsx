@@ -307,10 +307,7 @@ export function ClimbReactionMenu({
   const overlayRenderWidth = Math.round(largeArtWidth * PixelRatio.get());
   // compactArtMaxSize: the shrunk size used only when the create-playlist keyboard is up,
   // so the board + form + keyboard still fit. Otherwise the board keeps its full size.
-  const compactArtMaxSize = Math.min(
-    Math.round(windowHeight * 0.18),
-    Math.round(windowWidth * 0.66),
-  );
+  const compactArtMaxSize = Math.min(Math.round(windowHeight * 0.18), Math.round(windowWidth * 0.66));
   // The board stays the same size across the menu and the Add-to-playlist view — the
   // difference wasn't worth the jump. It only shrinks when the create-playlist form's
   // keyboard is up (playlist view + keyboardHeight > 0), to keep the form reachable.
