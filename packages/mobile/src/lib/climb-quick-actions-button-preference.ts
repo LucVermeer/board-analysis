@@ -1,20 +1,19 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { getPreference, setPreference } from './preference-store';
-import { useFeatureFlag } from '../providers/feature-flags-provider';
 
 // Whether the climbs list shows the ⋮ quick-actions button on each row. This is a
-// user setting (More → Display), but its DEFAULT is set by the
-// `climb-quick-actions-button` experiment flag: the treatment cohort defaults ON
-// (opted in, can turn it off), everyone else defaults OFF (opted out, can turn it
-// on). So the store is TRI-STATE — `choice` is `undefined` until the climber makes
-// an explicit choice, at which point their value wins over the flag default.
+// user setting (More → Display) that defaults ON. The store is TRI-STATE — `choice`
+// is `undefined` until the climber makes an explicit choice, at which point their
+// value wins over the default; so anyone who has already opted out stays opted out.
 //
 // Structure mirrors `boardsesh-grades-preference.ts`: a module-level store read via
 // `useSyncExternalStore` with a referentially-stable cached snapshot (rebuilt only
 // inside `notify()`), plus a promise-singleton one-time load so any number of
-// mounted consumers trigger the AsyncStorage read exactly once. The flag→default
-// resolution happens in the hook, not the store, since the flag is a React value.
+// mounted consumers trigger the AsyncStorage read exactly once.
 const STORAGE_KEY = 'showClimbQuickActionsButton';
+
+// Default when the climber hasn't made an explicit choice — the ⋮ button is on.
+const DEFAULT_ENABLED = true;
 
 type ChoiceSnapshot = { choice: boolean | undefined; loaded: boolean };
 
@@ -81,8 +80,8 @@ function getServerSnapshot(): ChoiceSnapshot {
 
 /**
  * The effective ⋮-button setting: the climber's explicit choice if they've made
- * one, otherwise the flag-driven default (treatment cohort ON, everyone else OFF).
- * Backs both the climbs-list gate and the Display settings toggle.
+ * one, otherwise the default (on). Backs both the climbs-list gate and the Display
+ * settings toggle.
  */
 export function useClimbQuickActionsButton(): {
   enabled: boolean;
@@ -90,7 +89,6 @@ export function useClimbQuickActionsButton(): {
   setEnabled: (enabled: boolean) => void;
 } {
   const { choice, loaded } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const flagDefault = useFeatureFlag('climb-quick-actions-button') === true;
 
   useEffect(() => {
     // Swallow read failures here — the load already clears its cached promise so a
@@ -102,5 +100,5 @@ export function useClimbQuickActionsButton(): {
     void setClimbQuickActionsButtonPreference(next);
   }, []);
 
-  return { enabled: choice ?? flagDefault, loaded, setEnabled };
+  return { enabled: choice ?? DEFAULT_ENABLED, loaded, setEnabled };
 }

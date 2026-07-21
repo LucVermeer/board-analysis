@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -116,6 +119,22 @@ export function ClimbReactionMenu({
   // playlist picker (no second sheet — that's the #3294 fix).
   const [view, setView] = useState<'menu' | 'playlist'>('menu');
 
+  // Scrolling the action list a little shrinks the hero to the compact size (the
+  // same transition "Add to playlist" runs), giving the list more room; scrolling
+  // back to the very top restores the large hero. Ref-gated so onScroll only
+  // setStates on the boolean flip, never per frame (RN perf rule).
+  const [menuScrolled, setMenuScrolled] = useState(false);
+  const menuScrolledRef = useRef(false);
+  const handleMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    // Hysteresis: expand once scrolled a little, collapse only back near the top.
+    const next = menuScrolledRef.current ? offsetY > 2 : offsetY > 20;
+    if (next !== menuScrolledRef.current) {
+      menuScrolledRef.current = next;
+      setMenuScrolled(next);
+    }
+  }, []);
+
   const finishClose = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
@@ -132,7 +151,13 @@ export function ClimbReactionMenu({
     });
   }, [progress, reduceMotion, finishClose]);
 
-  const backToMenu = useCallback(() => setView('menu'), []);
+  const backToMenu = useCallback(() => {
+    // The action list unmounts in the playlist view, so its native offset is 0 on
+    // return — reset our tracked state so the menu always reopens at the large hero.
+    menuScrolledRef.current = false;
+    setMenuScrolled(false);
+    setView('menu');
+  }, []);
   // Stable so useClimbActions' memo doesn't rebuild the action list every render.
   const openPlaylist = useCallback(() => setView('playlist'), []);
 
@@ -217,9 +242,11 @@ export function ClimbReactionMenu({
   // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
   const menuMinHeight = 180;
 
-  // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
-  // 400) so no new render is needed. The menu view shows a large hero; a sub-action that
-  // stays inline (the playlist picker) shrinks it to the compact "current" size.
+  // Enlarged board art. Rendered at play-drawer quality — full-res board photo and a
+  // holds overlay sized to the displayed width × DPR (see overlayRenderWidth below) —
+  // rather than piggybacking the tiny list-thumbnail cache, so the hero stays crisp.
+  // The menu view shows a large hero; a sub-action that stays inline (the playlist
+  // picker) shrinks it to the compact "current" size.
   //
   // name+byline reserve, an estimate (not an onLayout measurement) so resizing the art
   // never re-renders the menu (see reservedForPreview). Scaled by fontScale so a large
@@ -242,6 +269,15 @@ export function ClimbReactionMenu({
     Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
     Math.min(windowHeight * 0.48, heroHeightBudget),
   );
+  // Rasterize the holds overlay at the large hero's displayed width × DPR — matching
+  // the play drawer (SwipeBoardCarousel) instead of the list-thumbnail's fixed 400px,
+  // so the enlarged art stays crisp. Derived from the large size (not the animating
+  // one) so the cache key is stable as the hero springs between large and compact;
+  // useNativeClimbRender clamps it to the board's native width and never upscales.
+  const largeArtWidth = boardRenderData
+    ? fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, largeArtMaxSize).width
+    : largeArtMaxSize;
+  const overlayRenderWidth = Math.round(largeArtWidth * PixelRatio.get());
   // compactArtMaxSize: the "current" size for the inline sub-action view — today's
   // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
   const compactArtMaxSize = Math.min(
@@ -250,8 +286,9 @@ export function ClimbReactionMenu({
     Math.round(windowWidth * 0.66),
   );
   // In the menu view there is no text input, so keyboardHeight is 0 there; the keyboard
-  // only appears in the playlist create form, which is the compact path above.
-  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
+  // only appears in the playlist create form, which is the compact path above. The hero
+  // is compact whenever the playlist view is open OR the action list is scrolled.
+  const targetArtMax = view === 'menu' && !menuScrolled ? largeArtMaxSize : compactArtMaxSize;
 
   // The animating max-size (px). Springs between large (menu) and compact (sub-action)
   // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
@@ -291,9 +328,25 @@ export function ClimbReactionMenu({
   const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
   const menuContentHeight = actions.length * actionRowHeight + spacing[1] * 2;
   const menuOverflows = menuContentHeight > menuMaxHeight;
-  const menuScrollHeight = menuOverflows
-    ? Math.max(menuMinHeight, (Math.floor(menuMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
-    : menuMaxHeight;
+  let menuScrollHeight: number;
+  if (!menuScrolled) {
+    // At rest (large hero): snap an overflowing list to the half-row "peek" that
+    // cues scrolling; a fitting list uses its full height.
+    menuScrollHeight = menuOverflows
+      ? Math.max(menuMinHeight, (Math.floor(menuMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
+      : menuMaxHeight;
+  } else {
+    // Scrolled: the hero has shrunk and menuMaxHeight has grown, so give the list
+    // that room. But if the taller viewport would now fit the whole list, the
+    // ScrollView would clamp the offset back to 0 — which reads as "scrolled to the
+    // top" and would bounce the hero back to large. Keep the viewport one row short
+    // of the content so a little scroll range always remains and the collapse only
+    // happens when the climber actually drags to the top.
+    menuScrollHeight = Math.min(menuMaxHeight, menuContentHeight - actionRowHeight);
+  }
+  // Show the bottom fade whenever the list is actually clipped — the at-rest peek or
+  // the one-row-short scrolled viewport both hide content worth cueing.
+  const menuScrollable = menuContentHeight > menuScrollHeight + 0.5;
   const menuFadeColors = colorScheme === 'dark' ? MENU_FADE_COLORS.dark : MENU_FADE_COLORS.light;
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
@@ -362,8 +415,8 @@ export function ClimbReactionMenu({
                   boardWidth={boardRenderData.boardWidth}
                   boardHeight={boardRenderData.boardHeight}
                   mirrored={climb.mirrored === true}
-                  filledStyle
-                  renderWidth={400}
+                  renderWidth={overlayRenderWidth}
+                  backgroundVariant="full"
                   style={styles.artFill}
                 />
               </Animated.View>
@@ -412,6 +465,8 @@ export function ClimbReactionMenu({
                     bounces={false}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
+                    onScroll={handleMenuScroll}
+                    scrollEventThrottle={16}
                     contentContainerStyle={styles.menuContent}
                   >
                     {actions.map((action, index) => (
@@ -425,9 +480,9 @@ export function ClimbReactionMenu({
                       />
                     ))}
                   </ScrollView>
-                  {/* Bottom-edge fade cueing "more below" — only when the list overflows.
+                  {/* Bottom-edge fade cueing "more below" — only when the list is clipped.
                       pointerEvents none so it never eats a tap on the peeking row. */}
-                  {menuOverflows ? (
+                  {menuScrollable ? (
                     <LinearGradient pointerEvents="none" colors={menuFadeColors} style={styles.menuScrollFade} />
                   ) : null}
                 </View>

@@ -76,12 +76,6 @@ export const FEATURE_FLAG_DEFINITIONS = [
     description:
       'Show the data-science "Boardsesh grade" section in the play drawer (cross-board grade, confidence tier, send counts). Off hides the section.',
   },
-  {
-    key: 'climb-quick-actions-button',
-    label: 'Climb ⋮ quick-actions button (default)',
-    description:
-      'Experiment (2-cohort A/B): sets the DEFAULT of the "Show quick-actions button" setting. On = treatment (button on by default, climber can opt out); off = control (off by default, climber can opt in). The setting override always wins.',
-  },
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 // The literal key union (e.g. `'strava-integration'`), preserved via the

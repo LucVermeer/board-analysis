@@ -25,6 +25,7 @@ vi.mock('react-native', () => ({
   TextInput: () => null,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (s: Record<string, unknown>) => s, absoluteFill: {}, hairlineWidth: 1 },
+  PixelRatio: { get: () => 2 },
   useWindowDimensions: () => ({ width: 400, height: 800 }),
 }));
 

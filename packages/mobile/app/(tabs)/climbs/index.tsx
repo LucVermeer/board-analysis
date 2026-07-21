@@ -190,8 +190,8 @@ function ClimbListInner() {
     setRevealTipVisible(false);
   }, [openBoardSheet]);
   const { systemColors, variant, brandColors, features } = useTheme();
-  // The ⋮ quick-actions button is a user setting whose default is set by the
-  // climb-quick-actions-button experiment flag (More → Display lets climbers override).
+  // The ⋮ quick-actions button is a user setting that defaults on (More → Display
+  // lets climbers turn it off).
   const { enabled: quickActionsButtonEnabled } = useClimbQuickActionsButton();
   const { addToQueue } = useQueueActions();
   const {
