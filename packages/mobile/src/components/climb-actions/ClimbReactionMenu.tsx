@@ -264,11 +264,8 @@ export function ClimbReactionMenu({
   // The board is the hero, but the whole card (title + board + button row + the ENTIRE
   // action list) has to fit on screen without scrolling — so the board takes the space
   // left once the title, buttons and full list are reserved. A tall phone with a short
-  // list leaves the board width-bounded; a long list or short phone shrinks it, floored
-  // so it never vanishes (a rare overflow then scrolls the list instead). Fitting to a
-  // box (not a square) lets a portrait board grow tall while a near-square board stays
-  // in its frame.
-  const boardMinSize = 140;
+  // list leaves the board width-bounded; a long list shrinks it. Fitting to a box (not a
+  // square) lets a portrait board grow tall while a near-square board stays in its frame.
   const heroHeightBudget =
     windowHeight -
     insets.top -
@@ -278,10 +275,26 @@ export function ClimbReactionMenu({
     listContentHeight -
     (insets.bottom + spacing[5]) -
     previewTextReserve;
+  // Ceiling that always keeps the button row + ~2 list rows on screen: a short phone or
+  // landscape can't fit a big board AND all the actions, so the board yields rather than
+  // pushing the menu off the bottom. The floor keeps the board visible unless even that
+  // won't fit; below the ceiling a long list simply scrolls.
+  const boardCeiling = Math.max(
+    0,
+    windowHeight -
+      insets.top -
+      contentTopOffset -
+      previewTextReserve -
+      primaryRowHeight -
+      2 * actionRowHeight -
+      (insets.bottom + spacing[5]) -
+      spacing[5] * 2,
+  );
+  const boardMinSize = Math.min(140, boardCeiling);
   const largeArtMaxSize = fitBoardMaxSize(
     aspect,
     Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
-    Math.min(windowHeight * 0.55, Math.max(boardMinSize, heroHeightBudget)),
+    Math.min(windowHeight * 0.55, boardCeiling, Math.max(boardMinSize, heroHeightBudget)),
   );
   // Rasterize the holds overlay at the large hero's displayed width × DPR — matching
   // the play drawer (SwipeBoardCarousel) instead of the list-thumbnail's fixed 400px,

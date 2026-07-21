@@ -10,6 +10,7 @@ const captured = vi.hoisted(() => ({
   actionArgs: null as Record<string, unknown> | null,
   pickerOnBack: undefined as undefined | (() => void),
   modalOnRequestClose: undefined as undefined | (() => void),
+  boardImageProps: null as Record<string, unknown> | null,
 }));
 
 vi.mock('react-native', () => ({
@@ -33,7 +34,7 @@ vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (s: Record<string, unknown>) => s, absoluteFill: {}, hairlineWidth: 1 },
   PixelRatio: { get: () => 2 },
-  useWindowDimensions: () => ({ width: 400, height: 800 }),
+  useWindowDimensions: () => ({ width: 400, height: 800, fontScale: 1 }),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -70,7 +71,12 @@ vi.mock('../../ListRow', () => ({
 vi.mock('../../GlassSurface', () => ({
   GlassSurface: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
-vi.mock('../../BoardImageNative', () => ({ BoardImageNative: () => null }));
+vi.mock('../../BoardImageNative', () => ({
+  BoardImageNative: (props: Record<string, unknown>) => {
+    captured.boardImageProps = props;
+    return null;
+  },
+}));
 vi.mock('../../ClimbAttributeIcons', () => ({ ClimbAttributeIcons: () => null }));
 vi.mock('../../playlist/InlinePlaylistPicker', () => ({
   InlinePlaylistPicker: ({ onBack }: { onBack?: () => void }) => {
@@ -78,7 +84,9 @@ vi.mock('../../playlist/InlinePlaylistPicker', () => ({
     return createElement('div', { 'data-picker': 'true' }, 'picker');
   },
 }));
-vi.mock('../../../lib/board-details', () => ({ getBoardRenderData: () => null }));
+vi.mock('../../../lib/board-details', () => ({
+  getBoardRenderData: () => ({ boardWidth: 120, boardHeight: 120 }),
+}));
 vi.mock('../../../lib/format-climb-stats', () => ({ formatSends: () => '', formatQuality: () => '' }));
 vi.mock('../../../hooks/use-grade-format', () => ({ useGradeFormat: () => ({ formatGrade: () => 'V4' }) }));
 vi.mock('../../../providers/theme-provider', () => ({
@@ -137,6 +145,20 @@ describe('ClimbReactionMenu view switching', () => {
     captured.actionArgs = null;
     captured.pickerOnBack = undefined;
     captured.modalOnRequestClose = undefined;
+    captured.boardImageProps = null;
+  });
+
+  it('renders the board at play-drawer quality (full background, DPR overlay, outlined holds)', () => {
+    renderMenu();
+    const props = captured.boardImageProps;
+    expect(props).not.toBeNull();
+    // Full-resolution board photo (not the 416px thumbnail).
+    expect(props?.backgroundVariant).toBe('full');
+    // Outlined holds like the play drawer, not the filled-dot thumbnail style.
+    expect(props?.filledStyle).toBeUndefined();
+    // Overlay rasterized at the displayed width × DPR (PixelRatio.get() → 2 here).
+    expect(typeof props?.renderWidth).toBe('number');
+    expect(props?.renderWidth as number).toBeGreaterThan(0);
   });
 
   it('pulls tick, playlist and share into the primary button row and leaves the rest in the list', () => {
