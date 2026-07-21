@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Shared climb cards are easier to read in chat previews — hold rings are thicker at small sizes ([#3832](https://github.com/boardsesh/boardsesh/pull/3832))
+- Shared climb links now show their preview card instantly on Facebook, WhatsApp, Slack and friends ([#3830](https://github.com/boardsesh/boardsesh/pull/3830))
 - The long-press menu leads with Log a tick, Add to playlist, and Share as buttons — your go-to actions in one tap. ([#3828](https://github.com/boardsesh/boardsesh/pull/3828))
   The climb title now sits above the board, and every action fits on one screen — no scrolling.
   Long-press board art is crisp now, matching the play view.
