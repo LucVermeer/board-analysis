@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
+  type LayoutChangeEvent,
   Modal,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -43,6 +44,16 @@ import { fitBoardArt, fitBoardMaxSize } from './board-art-fit';
 // fixed horizontal button row at the top of the card — the most-reached actions,
 // one tap away. The rest stay in the list below. Order here is the row order.
 const PRIMARY_ACTION_IDS: readonly ClimbActionId[] = ['tick', 'playlist', 'share'];
+
+/**
+ * Scroll-to-expand hysteresis. Scrolling the action list a little compacts the hero
+ * (giving the list room); it stays compact until the list is dragged back near the
+ * very top. Two thresholds so a content-fits resize settling a few px off the top
+ * can't flip it back. Pure + exported so the thresholds are unit-testable.
+ */
+export function nextMenuScrolledState(current: boolean, offsetY: number): boolean {
+  return current ? offsetY > 2 : offsetY > 20;
+}
 
 type ClimbReactionMenuProps = {
   climb: Climb;
@@ -132,9 +143,7 @@ export function ClimbReactionMenu({
   const [menuScrolled, setMenuScrolled] = useState(false);
   const menuScrolledRef = useRef(false);
   const handleMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offsetY = event.nativeEvent.contentOffset.y;
-    // Hysteresis: expand once scrolled a little, collapse only back near the top.
-    const next = menuScrolledRef.current ? offsetY > 2 : offsetY > 20;
+    const next = nextMenuScrolledState(menuScrolledRef.current, event.nativeEvent.contentOffset.y);
     if (next !== menuScrolledRef.current) {
       menuScrolledRef.current = next;
       setMenuScrolled(next);
@@ -256,10 +265,19 @@ export function ClimbReactionMenu({
   // The action list never shrinks below this — at least ~2 rows peek under the hero so
   // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
   const menuMinHeight = 180;
-  // Estimated height of the fixed primary-action button row (icon + up-to-2-line label +
-  // padding), reserved like previewTextReserve — an estimate, not an onLayout measure, so
-  // the list cap doesn't re-render every frame. Zero when there are no primary actions.
-  const primaryRowHeight = primaryActions.length > 0 ? Math.round(84 + 26 * fontScale) : 0;
+  // Height of the fixed primary-action button row, reserved out of the card so the list
+  // cap is accurate. Measured via onLayout (fires only on layout change, not per frame)
+  // so a large Dynamic Type / RTL wrap can't over- or under-reserve; the fontScale-scaled
+  // estimate stands in for the first frame before the measurement lands. Zero when there
+  // are no primary actions.
+  const primaryRowHeightEstimate = primaryActions.length > 0 ? Math.round(84 + 26 * fontScale) : 0;
+  const [measuredPrimaryRowHeight, setMeasuredPrimaryRowHeight] = useState(0);
+  const primaryRowHeight = primaryActions.length === 0 ? 0 : measuredPrimaryRowHeight || primaryRowHeightEstimate;
+  const handlePrimaryRowLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = Math.round(event.nativeEvent.layout.height);
+    // Gate the setState on a real change so a re-render can't loop through onLayout.
+    setMeasuredPrimaryRowHeight((previous) => (previous === height ? previous : height));
+  }, []);
 
   // Enlarged board art. Rendered at play-drawer quality — full-res board photo and a
   // holds overlay sized to the displayed width × DPR (see overlayRenderWidth below) —
@@ -340,23 +358,20 @@ export function ClimbReactionMenu({
     windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
-  // When the scrollable list (everything below the fixed primary-button row) can't all
-  // fit, hint that it scrolls: snap the viewport to a half-row "peek" (last row clipped
-  // at its midpoint) and fade its bottom edge. Derived from listActions.length + row
-  // height (ListRow: minHeight 44 + 12pt vertical padding, text growing with fontScale)
-  // — no per-frame scroll state. The list shares the card with the primary row, so it
-  // gets menuMaxHeight minus that row. The playlist view owns its own scroll.
+  // The scrollable list (everything below the fixed primary-button row) shares the card
+  // with that row, so it gets menuMaxHeight minus the row. Row height (ListRow: minHeight
+  // 44 + 12pt vertical padding, text growing with fontScale) drives the scroll math with
+  // no per-frame scroll state. The playlist view owns its own scroll.
   const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
   const listMaxHeight = Math.max(actionRowHeight, menuMaxHeight - primaryRowHeight);
   const menuContentHeight = listActions.length * actionRowHeight + spacing[1] * 2;
-  const menuOverflows = menuContentHeight > listMaxHeight;
   let menuScrollHeight: number;
   if (!menuScrolled) {
-    // At rest (large hero): snap an overflowing list to the half-row "peek" that
-    // cues scrolling; a fitting list uses its full height.
-    menuScrollHeight = menuOverflows
-      ? Math.max(actionRowHeight, (Math.floor(listMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
-      : listMaxHeight;
+    // At rest (large hero): fill all the space under the hero. maxHeight caps an
+    // overflowing list at listMaxHeight — the last row clips there (with the bottom
+    // fade cueing more) — while a short list shrinks to its content. Filling the space
+    // instead of snapping to whole-rows-minus-a-half leaves no dead gap below the card.
+    menuScrollHeight = listMaxHeight;
   } else {
     // Scrolled: the hero has shrunk and listMaxHeight has grown, so give the list
     // that room. But if the taller viewport would now fit the whole list, the
@@ -485,7 +500,7 @@ export function ClimbReactionMenu({
                   {/* Fixed quick-action row — the three most-reached actions as tappable
                       buttons, above the scrollable remainder. */}
                   {primaryActions.length > 0 ? (
-                    <View style={styles.primaryRow}>
+                    <View style={styles.primaryRow} onLayout={handlePrimaryRowLayout}>
                       {primaryActions.map((action) => (
                         <PrimaryActionButton
                           key={action.id}
@@ -502,7 +517,10 @@ export function ClimbReactionMenu({
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     onScroll={handleMenuScroll}
-                    scrollEventThrottle={16}
+                    // The ref-gated handler only setStates on a boolean flip, and the
+                    // 2/20px hysteresis still catches the gesture at this cadence, so a
+                    // coarser throttle keeps the JS thread quiet during the scroll.
+                    scrollEventThrottle={64}
                     contentContainerStyle={styles.menuContent}
                   >
                     {listActions.map((action, index) => (

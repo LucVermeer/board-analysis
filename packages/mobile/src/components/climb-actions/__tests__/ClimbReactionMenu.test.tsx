@@ -81,7 +81,9 @@ vi.mock('../../playlist/InlinePlaylistPicker', () => ({
 vi.mock('../../../lib/board-details', () => ({ getBoardRenderData: () => null }));
 vi.mock('../../../lib/format-climb-stats', () => ({ formatSends: () => '', formatQuality: () => '' }));
 vi.mock('../../../hooks/use-grade-format', () => ({ useGradeFormat: () => ({ formatGrade: () => 'V4' }) }));
-vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ colorScheme: 'dark' }) }));
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({ colorScheme: 'dark', systemColors: { fill: '#222', label: '#fff' } }),
+}));
 vi.mock('../../../theme/animations', () => ({ springs: { gentle: {} }, timing: { fast: 150 } }));
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 1: 4, 2: 8, 3: 12, 5: 20, 6: 24 },
@@ -109,7 +111,7 @@ vi.mock('../use-climb-actions', () => ({
   },
 }));
 
-import { ClimbReactionMenu } from '../ClimbReactionMenu';
+import { ClimbReactionMenu, nextMenuScrolledState } from '../ClimbReactionMenu';
 
 const climb = { uuid: 'climb-1', name: 'Big Move', frames: '', difficulty: 'V4', quality_average: '0' } as Climb;
 const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
@@ -129,6 +131,30 @@ function renderMenu(onClose = vi.fn(), extraProps: Record<string, unknown> = {})
     ),
   };
 }
+
+describe('nextMenuScrolledState (scroll-to-expand hysteresis)', () => {
+  it('expands only after scrolling past the upper threshold', () => {
+    // From collapsed, small offsets keep it collapsed; >20px expands.
+    expect(nextMenuScrolledState(false, 0)).toBe(false);
+    expect(nextMenuScrolledState(false, 20)).toBe(false);
+    expect(nextMenuScrolledState(false, 21)).toBe(true);
+  });
+
+  it('collapses only when dragged back near the very top', () => {
+    // From expanded, it stays expanded until the offset returns to ~0.
+    expect(nextMenuScrolledState(true, 40)).toBe(true);
+    expect(nextMenuScrolledState(true, 3)).toBe(true);
+    expect(nextMenuScrolledState(true, 2)).toBe(false);
+    expect(nextMenuScrolledState(true, 0)).toBe(false);
+  });
+
+  it('holds state in the hysteresis band between the two thresholds', () => {
+    // A 2–20px offset never flips the current state either way — the guard that
+    // stops a content-fits resize from bouncing the hero.
+    expect(nextMenuScrolledState(false, 10)).toBe(false);
+    expect(nextMenuScrolledState(true, 10)).toBe(true);
+  });
+});
 
 describe('ClimbReactionMenu view switching', () => {
   beforeEach(() => {
