@@ -11,6 +11,7 @@ const captured = vi.hoisted(() => ({
   pickerOnBack: undefined as undefined | (() => void),
   modalOnRequestClose: undefined as undefined | (() => void),
   boardImageProps: null as Record<string, unknown> | null,
+  ran: undefined as undefined | string,
 }));
 
 vi.mock('react-native', () => ({
@@ -105,7 +106,7 @@ vi.mock('../use-climb-actions', () => ({
     captured.actionArgs = args;
     return [
       { id: 'preview', title: 'Preview', icon: 'visibility', color: '#00f', run: () => {} },
-      { id: 'tick', title: 'Log a tick', icon: 'tick', color: '#0f0', run: () => {} },
+      { id: 'tick', title: 'Log a tick', icon: 'tick', color: '#0f0', run: () => (captured.ran = 'tick') },
       {
         id: 'playlist',
         title: 'Add to Playlist',
@@ -114,7 +115,7 @@ vi.mock('../use-climb-actions', () => ({
         run: () => (args.onSelectPlaylist as (() => void) | undefined)?.(),
       },
       { id: 'favorite', title: 'Favorite', icon: 'favorite', color: '#f00', run: () => {} },
-      { id: 'share', title: 'Share', icon: 'share', color: '#00f', run: () => {} },
+      { id: 'share', title: 'Share', icon: 'share', color: '#00f', run: () => (captured.ran = 'share') },
     ];
   },
 }));
@@ -146,6 +147,15 @@ describe('ClimbReactionMenu view switching', () => {
     captured.pickerOnBack = undefined;
     captured.modalOnRequestClose = undefined;
     captured.boardImageProps = null;
+    captured.ran = undefined;
+  });
+
+  it('runs the action when a primary button is pressed', () => {
+    const { getByLabelText } = renderMenu();
+    act(() => fireEvent.click(getByLabelText('Log a tick')));
+    expect(captured.ran).toBe('tick');
+    act(() => fireEvent.click(getByLabelText('Share')));
+    expect(captured.ran).toBe('share');
   });
 
   it('renders the board at play-drawer quality (full background, DPR overlay, outlined holds)', () => {
