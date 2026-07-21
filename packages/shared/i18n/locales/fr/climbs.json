@@ -772,6 +772,7 @@
       "addToQueue": "Ajouter à la file",
       "toggleFavorite": "Basculer favori",
       "share": "Partager le bloc",
+      "moreActions": "Plus d'actions",
       "projectFallback": "Projet",
       "ascentStatus": {
         "flash": "Flashé",

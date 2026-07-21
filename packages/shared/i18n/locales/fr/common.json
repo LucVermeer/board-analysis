@@ -138,6 +138,8 @@
         "title": "Affichage",
         "playlistTags": "Afficher les étiquettes de playlist",
         "playlistTagsDescription": "Voyez dans quelles playlists se trouve chaque bloc, directement dans la liste.",
+        "quickActionsButton": "Afficher le bouton d'actions rapides",
+        "quickActionsButtonDescription": "Ajoute un bouton ⋮ à chaque bloc qui ouvre file, croix, listes et plus. Tu peux toujours appuyer longuement à la place.",
         "boardseshGrades": "Afficher les grades Boardsesh",
         "boardseshGradesDescription": "Des grades calculés à partir de vraies croix sur plusieurs boards. Le grade de l'ouvreur reste affiché tant qu'il n'y a pas assez de croix."
       },
@@ -241,6 +243,7 @@
         "lookAround": "Jeter un œil d'abord"
       },
       "boardRevealTip": "Touche pour voir ce que d'autres utilisateurs de Boardsesh ont allumé au mur.",
+      "quickActionsTip": "Appuie longuement sur un bloc pour des actions rapides : file, croix, listes.",
       "tips": {
         "workout": "Monte une séance : Volume, Pyramide, Échelle ou Cotation ciblée. Fixe une cotation, prévisualise les voies, enchaîne-les une par une.",
         "crew": "Tu grimpes à plusieurs ? Lance une séance et partagez une file. N'importe qui allume la voie suivante, sans passer le téléphone.",

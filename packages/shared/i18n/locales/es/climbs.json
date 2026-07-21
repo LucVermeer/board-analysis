@@ -772,6 +772,7 @@
       "addToQueue": "Añadir a la cola",
       "toggleFavorite": "Alternar favorito",
       "share": "Compartir bloque",
+      "moreActions": "Más acciones",
       "projectFallback": "Proyecto",
       "ascentStatus": {
         "flash": "Flasheado",

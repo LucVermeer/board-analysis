@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { View, StyleSheet, Platform, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
@@ -8,10 +8,13 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Icon } from './Icon';
+import { track } from '../lib/analytics';
 import { ClimbListItemContent } from './ClimbListItemContent';
 import { climbListRowStyles } from './climb-list-row-styles';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
@@ -181,6 +184,14 @@ type ClimbListRowProps = {
    * fetched data. Ignored when `renderContent` supplies a custom layout.
    */
   showPlaylistChips?: boolean;
+  /**
+   * Show a trailing ⋮ button that opens the reaction menu on tap — a visible,
+   * discoverable entry point beside the long-press. Opt-in; the climbs list passes
+   * the "Show quick-actions button" user setting (whose default is set by the
+   * climb-quick-actions-button experiment flag), other surfaces keep long-press only.
+   * No-op without `onOpenActions`.
+   */
+  showMoreButton?: boolean;
 };
 
 const ClimbListRow = React.memo(function ClimbListRow({
@@ -202,7 +213,9 @@ const ClimbListRow = React.memo(function ClimbListRow({
   separatorStyle,
   showSeparator = true,
   showPlaylistChips = false,
+  showMoreButton = false,
 }: ClimbListRowProps) {
+  const { t } = useTranslation('climbs');
   const { systemColors, brandColors: brand } = useTheme();
   // Active-row highlight colours, derived from the scheme-aware brand so the wash
   // + accent stay visible in dark (lifted #A78BFA) as well as light.
@@ -243,6 +256,23 @@ const ClimbListRow = React.memo(function ClimbListRow({
   climbRef.current = climb;
   const unsupportedRef = useRef(unsupported);
   unsupportedRef.current = unsupported;
+  // Board metadata for analytics, read through a ref so the dep-free handlers below
+  // never capture a stale value when the list's board config changes.
+  const boardMetaRef = useRef({ boardName, layoutId });
+  boardMetaRef.current = { boardName, layoutId };
+
+  // One place that opens the reaction menu + records how it was reached, so the
+  // ⋮-button experiment can compare open rates + entry point between cohorts.
+  const openActions = useCallback((source: 'long_press' | 'more_button') => {
+    if (unsupportedRef.current) return;
+    track(SHARED_EVENTS.ClimbActionsOpened, {
+      source,
+      climbUuid: climbRef.current.uuid,
+      boardName: boardMetaRef.current.boardName,
+      layoutId: boardMetaRef.current.layoutId,
+    });
+    onOpenActionsRef.current?.(climbRef.current);
+  }, []);
 
   const handleRowPress = useCallback(() => {
     if (unsupportedRef.current) return;
@@ -253,10 +283,16 @@ const ClimbListRow = React.memo(function ClimbListRow({
   }, []);
 
   const handleLongPress = useCallback(() => {
-    if (unsupportedRef.current) return;
     hapticMedium();
-    onOpenActionsRef.current?.(climbRef.current);
-  }, []);
+    openActions('long_press');
+  }, [openActions]);
+
+  // The ⋮ button's tap — same destination as the long-press, on a plain tap. Reads
+  // the same refs so it stays dep-free and the row's memo/renderItem is untouched.
+  const handleOpenActions = useCallback(() => {
+    hapticMedium();
+    openActions('more_button');
+  }, [openActions]);
 
   // Commit-on-release: fired from onSwipeableWillOpen the instant the user
   // releases past the threshold — no second tap. We deliberately do NOT close
@@ -315,9 +351,16 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [handleAddToQueue, handleOpenPlaylist],
   );
 
+  // Refs so the ⋯ button's tap can `blocksExternalGesture` the row's own tap/long-press
+  // — a tap on the button opens the menu without also firing the row press. The relation
+  // lives only on the button gesture, so when the button isn't shown the row is untouched.
+  const singleTapRef = useRef<GestureType | undefined>(undefined);
+  const longPressRef = useRef<GestureType | undefined>(undefined);
+
   const singleTapGesture = useMemo(
     () =>
       Gesture.Tap()
+        .withRef(singleTapRef)
         .maxDuration(300)
         .maxDistance(15)
         .onStart(() => {
@@ -330,6 +373,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const longPressGesture = useMemo(
     () =>
       Gesture.LongPress()
+        .withRef(longPressRef)
         .minDuration(400)
         .onStart(() => {
           'worklet';
@@ -342,6 +386,22 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const tapGesture = useMemo(
     () => Gesture.Exclusive(longPressGesture, singleTapGesture),
     [longPressGesture, singleTapGesture],
+  );
+
+  // The ⋯ button's own tap. It blocks the row gestures so a tap on the button opens the
+  // menu without pressing the row; a tap anywhere else never starts this gesture, so the
+  // row behaves normally. Only mounted when `showMoreButton` is set.
+  const moreButtonGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDuration(300)
+        .maxDistance(15)
+        .blocksExternalGesture(singleTapRef, longPressRef)
+        .onStart(() => {
+          'worklet';
+          runOnJS(handleOpenActions)();
+        }),
+    [handleOpenActions],
   );
 
   // Left actions (revealed by a left-to-right swipe) = Queue; right actions
@@ -412,6 +472,22 @@ const ClimbListRow = React.memo(function ClimbListRow({
             ) : null}
 
             {rowContent}
+
+            {showMoreButton && onOpenActions ? (
+              <GestureDetector gesture={moreButtonGesture}>
+                <View
+                  style={styles.moreButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.climbRow.moreActions')}
+                >
+                  {/* iOS has no vertical-ellipsis SF Symbol, so rotate the horizontal one;
+                      Android's dots-vertical is already vertical (no rotation). */}
+                  <View style={Platform.OS === 'ios' ? styles.moreIconRotate : undefined}>
+                    <Icon name="more.vertical" size={20} color={systemColors.secondaryLabel} />
+                  </View>
+                </View>
+              </GestureDetector>
+            ) : null}
           </View>
         </GestureDetector>
       </ReanimatedSwipeable>
@@ -472,6 +548,18 @@ const styles = StyleSheet.create({
     backgroundColor: brandColors.primary,
     alignItems: 'flex-end',
     paddingRight: 22,
+  },
+  // Trailing ⋮ affordance. A full 44pt tap target (no hitSlop, no negative margin —
+  // those stacked into ~16pt of overlap with the grade, risking accidental opens);
+  // the row's gap keeps it clear of the grade at the trailing edge.
+  moreButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreIconRotate: {
+    transform: [{ rotate: '90deg' }],
   },
   swipeIcon: {
     width: 28,
