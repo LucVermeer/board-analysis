@@ -32,6 +32,7 @@ import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { springs, timing } from '../../theme/animations';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useClimbActions } from './use-climb-actions';
+import { fitBoardArt, fitBoardMaxSize } from './board-art-fit';
 
 type ClimbReactionMenuProps = {
   climb: Climb;
@@ -56,6 +57,10 @@ type ClimbReactionMenuProps = {
   onClose: () => void;
 };
 
+// Frame width shared by the preview and the action card, and the ceiling the hero art
+// is clamped to so an explicit art width can't bleed past the (unclipped) preview frame.
+const PREVIEW_MAX_WIDTH = 320;
+
 // iOS portals above the persistent queue bar / tab bar via a native window overlay;
 // Android uses a transparent Modal (which also gives a hardware-back handler).
 function OverlayPortal({ children, onRequestClose }: { children: React.ReactNode; onRequestClose: () => void }) {
@@ -65,25 +70,6 @@ function OverlayPortal({ children, onRequestClose }: { children: React.ReactNode
       {children}
     </Modal>
   );
-}
-
-function fitBoardArt(boardWidth: number, boardHeight: number, maxSize: number) {
-  const aspect = boardWidth / boardHeight;
-  if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
-  return aspect >= 1 ? { width: maxSize, height: maxSize / aspect } : { width: maxSize * aspect, height: maxSize };
-}
-
-/**
- * The `maxSize` to feed `fitBoardArt` so the render fills as much of a (maxW × maxH)
- * box as its aspect allows. `fitBoardArt`'s `maxSize` is the LARGER rendered edge
- * (width for landscape, height for portrait), so a single square cap under-uses the
- * long edge — a portrait board capped by screen width stays short. This solves for
- * the box directly: landscape is bounded by width and the derived height; portrait by
- * height and the derived width.
- */
-function fitBoardMaxSize(aspect: number, maxWidth: number, maxHeight: number) {
-  if (!Number.isFinite(aspect) || aspect <= 0) return Math.min(maxWidth, maxHeight);
-  return aspect >= 1 ? Math.min(maxWidth, maxHeight * aspect) : Math.min(maxHeight, maxWidth / aspect);
 }
 
 /**
@@ -209,8 +195,10 @@ export function ClimbReactionMenu({
     });
   }, [boardConfig]);
 
-  // Board aspect (w/h), read once for the sizing math + the worklet below.
-  const aspect = boardRenderData ? boardRenderData.boardWidth / boardRenderData.boardHeight : 1;
+  // Board aspect (w/h), read once for the sizing math + the worklet below. Sanitised
+  // to 1 for degenerate dims so the worklet can't collapse the art to a zero edge.
+  const rawAspect = boardRenderData ? boardRenderData.boardWidth / boardRenderData.boardHeight : 1;
+  const aspect = Number.isFinite(rawAspect) && rawAspect > 0 ? rawAspect : 1;
 
   // Top offset for the floating content — anchors the preview at a fixed position (see
   // styles.content). Shared with the menu cap and the hero budget below so nothing runs
@@ -221,18 +209,15 @@ export function ClimbReactionMenu({
   const menuMinHeight = 180;
 
   // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
-  // 400) so no new render is needed. The menu view shows a large hero preview; when a
-  // sub-action that stays inline (the playlist picker) opens, the art animates down to
-  // the compact "current" size so the picker + create form clear the keyboard.
+  // 400) so no new render is needed. The menu view shows a large hero; a sub-action that
+  // stays inline (the playlist picker) shrinks it to the compact "current" size.
   //
-  // largeArtMaxSize: the hero size (menu view). Filled to a box that's 94% of the width
-  // and as tall as fits once the top chrome, the name/byline, the gap, the menu floor
-  // and the bottom safe area are reserved — capped at 60% height. Solving for the box
-  // (not a square) lets a portrait board grow tall instead of being pinned by screen
-  // width, while the reservation guarantees the action list's 2-row peek + scroll.
-  // name + byline + their gaps under the art. A fixed estimate (not an onLayout
-  // measurement) so resizing the art never re-renders the menu — see reservedForPreview.
+  // Fixed name+byline reserve — an estimate, not an onLayout measurement, so resizing
+  // the art never re-renders the menu (see reservedForPreview).
   const previewTextReserve = 56;
+  // Height the hero may take once top chrome, text, gap, menu floor and bottom inset are
+  // reserved — capped at 60%. Fitting to a box (width bounded by the preview frame, not a
+  // square) lets a portrait board grow tall while a near-square board stays in its frame.
   const heroHeightBudget =
     windowHeight -
     insets.top -
@@ -241,7 +226,11 @@ export function ClimbReactionMenu({
     menuMinHeight -
     (insets.bottom + spacing[5]) -
     previewTextReserve;
-  const largeArtMaxSize = fitBoardMaxSize(aspect, windowWidth * 0.94, Math.min(windowHeight * 0.6, heroHeightBudget));
+  const largeArtMaxSize = fitBoardMaxSize(
+    aspect,
+    Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
+    Math.min(windowHeight * 0.6, heroHeightBudget),
+  );
   // compactArtMaxSize: the "current" size for the inline sub-action view — today's
   // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
   const compactArtMaxSize = Math.min(
@@ -268,14 +257,10 @@ export function ClimbReactionMenu({
     return aspect >= 1 ? { width: maxSize, height: maxSize / aspect } : { width: maxSize * aspect, height: maxSize };
   });
 
-  // Cap the menu/picker so it fills down to the bottom safe area — no taller (it
-  // would clip past it), no shorter (wasting vertical space) — and no lower than the
-  // keyboard when one is up. Derived from the TARGET art size, not an onLayout
-  // measurement: the art wrapper animates its width/height, so measuring it would fire
-  // onLayout → setState every spring frame and re-render the whole menu + the
-  // FlatList/ScrollView mid-transition (jank on slower devices / long playlists). The
-  // target size changes only on a discrete view/keyboard change, so the cap settles in
-  // one render while the art glides to it on the UI thread. The card scrolls past the cap.
+  // Cap the menu/picker to the space under the hero. Derived from the TARGET art size,
+  // not an onLayout measurement of the animating art — measuring would setState every
+  // spring frame and re-render the menu + FlatList mid-shrink. The target changes only
+  // on a discrete view/keyboard change, so the cap settles in one render.
   const targetArtHeight = boardRenderData
     ? fitBoardArt(boardRenderData.boardWidth, boardRenderData.boardHeight, targetArtMax).height
     : targetArtMax;
@@ -442,7 +427,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[3],
     width: '100%',
-    maxWidth: 320,
+    maxWidth: PREVIEW_MAX_WIDTH,
   },
   // The animating art wrapper — carries the rounded clip; its width/height are driven
   // by animatedArtStyle so the board render resizes between hero and compact sizes.
@@ -481,7 +466,7 @@ const styles = StyleSheet.create({
   },
   menuWrap: {
     width: '100%',
-    maxWidth: 320,
+    maxWidth: PREVIEW_MAX_WIDTH,
     alignSelf: 'center',
   },
   menuCard: {
