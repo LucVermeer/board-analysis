@@ -80,7 +80,9 @@ type ClimbReactionMenuProps = {
 
 // Frame width shared by the preview and the action card, and the ceiling the hero art
 // is clamped to so an explicit art width can't bleed past the (unclipped) preview frame.
-const PREVIEW_MAX_WIDTH = 320;
+// Wide enough that on a phone the board + card fill the screen width (bounded by the
+// content's horizontal padding); on tablets this caps how wide the floating card gets.
+const PREVIEW_MAX_WIDTH = 400;
 
 // Bottom-edge fade for the scrollable action list — transparent → the scheme's surface
 // base. Concrete rgba, never a systemColors PlatformColor: feeding a PlatformColor into
@@ -378,8 +380,9 @@ export function ClimbReactionMenu({
     // ScrollView would clamp the offset back to 0 — which reads as "scrolled to the
     // top" and would bounce the hero back to large. Keep the viewport one row short
     // of the content so a little scroll range always remains and the collapse only
-    // happens when the climber actually drags to the top.
-    menuScrollHeight = Math.min(listMaxHeight, menuContentHeight - actionRowHeight);
+    // happens when the climber actually drags to the top. Floor at one row so a short
+    // list can never collapse the viewport to zero.
+    menuScrollHeight = Math.min(listMaxHeight, Math.max(actionRowHeight, menuContentHeight - actionRowHeight));
   }
   // Show the bottom fade whenever the list is actually clipped — the at-rest peek or
   // the one-row-short scrolled viewport both hide content worth cueing.
@@ -441,23 +444,8 @@ export function ClimbReactionMenu({
               cap is derived from the target art size (reservedForPreview), not measured
               here, so the shrink animation never re-renders the menu. */}
           <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
-            {boardRenderData ? (
-              <Animated.View style={[styles.art, animatedArtStyle]}>
-                <BoardImageNative
-                  frames={climb.frames}
-                  boardName={boardConfig.boardName as BoardName}
-                  layoutId={boardConfig.layoutId}
-                  sizeId={boardConfig.sizeId}
-                  setIds={boardConfig.setIds}
-                  boardWidth={boardRenderData.boardWidth}
-                  boardHeight={boardRenderData.boardHeight}
-                  mirrored={climb.mirrored === true}
-                  renderWidth={overlayRenderWidth}
-                  backgroundVariant="full"
-                  style={styles.artFill}
-                />
-              </Animated.View>
-            ) : null}
+            {/* Name · grade · byline sit ABOVE the board (like the play drawer header),
+                so the board reads as the hero below its title. */}
             <View style={styles.previewText}>
               <View style={styles.nameRow}>
                 <Text variant="headline" numberOfLines={1} style={styles.name}>
@@ -479,6 +467,23 @@ export function ClimbReactionMenu({
                 </Text>
               ) : null}
             </View>
+            {boardRenderData ? (
+              <Animated.View style={[styles.art, animatedArtStyle]}>
+                <BoardImageNative
+                  frames={climb.frames}
+                  boardName={boardConfig.boardName as BoardName}
+                  layoutId={boardConfig.layoutId}
+                  sizeId={boardConfig.sizeId}
+                  setIds={boardConfig.setIds}
+                  boardWidth={boardRenderData.boardWidth}
+                  boardHeight={boardRenderData.boardHeight}
+                  mirrored={climb.mirrored === true}
+                  renderWidth={overlayRenderWidth}
+                  backgroundVariant="full"
+                  style={styles.artFill}
+                />
+              </Animated.View>
+            ) : null}
           </Animated.View>
 
           <Animated.View style={[styles.menuWrap, menuStyle]}>

@@ -10,6 +10,7 @@ const captured = vi.hoisted(() => ({
   actionArgs: null as Record<string, unknown> | null,
   pickerOnBack: undefined as undefined | (() => void),
   modalOnRequestClose: undefined as undefined | (() => void),
+  actionScroll: undefined as undefined | ((event: { nativeEvent: { contentOffset: { y: number } } }) => void),
 }));
 
 vi.mock('react-native', () => ({
@@ -28,7 +29,16 @@ vi.mock('react-native', () => ({
     onPress?: () => void;
     accessibilityLabel?: string;
   }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
-  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  ScrollView: ({
+    children,
+    onScroll,
+  }: {
+    children?: ReactNode;
+    onScroll?: (event: { nativeEvent: { contentOffset: { y: number } } }) => void;
+  }) => {
+    captured.actionScroll = onScroll;
+    return createElement('div', null, children);
+  },
   TextInput: () => null,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (s: Record<string, unknown>) => s, absoluteFill: {}, hairlineWidth: 1 },
@@ -161,6 +171,17 @@ describe('ClimbReactionMenu view switching', () => {
     captured.actionArgs = null;
     captured.pickerOnBack = undefined;
     captured.modalOnRequestClose = undefined;
+    captured.actionScroll = undefined;
+  });
+
+  it('handles list scroll (expand past the threshold, then collapse at the top) without crashing', () => {
+    const { getByLabelText } = renderMenu();
+    // A >20px scroll drives handleMenuScroll → menuScrolled true → re-render.
+    act(() => captured.actionScroll?.({ nativeEvent: { contentOffset: { y: 40 } } }));
+    expect(getByLabelText('Preview')).not.toBeNull();
+    // Scrolling back to the top drives the collapse path.
+    act(() => captured.actionScroll?.({ nativeEvent: { contentOffset: { y: 0 } } }));
+    expect(getByLabelText('Preview')).not.toBeNull();
   });
 
   it('pulls tick, playlist and share into the primary button row and leaves the rest in the list', () => {
