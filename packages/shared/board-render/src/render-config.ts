@@ -66,7 +66,9 @@ export function buildRenderConfig({
     output_width: outputWidth,
     frames,
     mirrored: false,
-    thumbnail,
+    // OG cards get the thumbnail stroke treatment (thicker rings, larger
+    // markers) so holds stay readable at chat-preview sizes.
+    thumbnail: thumbnail || isOgVariant,
     holds: boardDetails.holdsData.map((hold) => ({
       id: hold.id,
       mirroredHoldId: hold.mirroredHoldId,
