@@ -25,7 +25,7 @@ function buildOgImageUrl(args: {
   layoutId: number;
   sizeId: number;
   setIds: string;
-  frames: string;
+  frames: string | null | undefined;
 }): string | null {
   const flatFrames = toFlatFrames(args.frames, args.boardName as BoardName);
   // The backend rejects an empty frames string (a blank board would cache as a

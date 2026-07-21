@@ -73,6 +73,11 @@ export const buildBoardRenderUrl = (
  * always run user-facing frames through this before crossing that
  * boundary. The empty string is preserved unchanged.
  */
+/**
+ * Flatten a possibly multi-frame frames string before it crosses the renderer
+ * or BLE boundary — raw multi-frame strings render only frame 0 or emit
+ * garbage. Delegates to the shared implementation in board-constants.
+ */
 export const toFlatFrames = (frames: string | null | undefined, boardName: BoardName): string =>
   toFlatFramesShared(frames, boardName);
 

@@ -41,6 +41,8 @@ export async function warmOverlays(options: WarmOverlaysOptions): Promise<void> 
 
       // Only the full climb-view pages warm the og card. A thumbnail list would
       // fan out one backend og render per row for images no crawler fetches.
+      // Both full-variant call sites pass a single climb, so this is one og
+      // request per view render (worst case maxImages og warms if that changes).
       // Skip the relative web-render fallback: only the absolute backend URL
       // primes the long-running renderer's base+byte caches.
       if (variant === 'full') {
