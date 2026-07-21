@@ -36,7 +36,7 @@ import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { springs, timing } from '../../theme/animations';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useClimbActions, type ClimbActionId, type ClimbActionItem } from './use-climb-actions';
-import { fitBoardArt, fitBoardMaxSize } from './board-art-fit';
+import { fitBoardArt, computeReactionBoardMaxSize } from './board-art-fit';
 
 // Log a tick / Add to playlist / Share get pulled out of the scrollable list into a
 // fixed horizontal button row at the top of the card — the most-reached actions,
@@ -261,41 +261,25 @@ export function ClimbReactionMenu({
   // never re-renders the menu (see reservedForPreview). Scaled by fontScale so a large
   // Dynamic Type setting reserves the taller text instead of overlapping the art.
   const previewTextReserve = Math.round(56 * fontScale);
-  // The board is the hero, but the whole card (title + board + button row + the ENTIRE
-  // action list) has to fit on screen without scrolling — so the board takes the space
-  // left once the title, buttons and full list are reserved. A tall phone with a short
-  // list leaves the board width-bounded; a long list shrinks it. Fitting to a box (not a
-  // square) lets a portrait board grow tall while a near-square board stays in its frame.
-  const heroHeightBudget =
-    windowHeight -
-    insets.top -
-    contentTopOffset -
-    spacing[5] -
-    primaryRowHeight -
-    listContentHeight -
-    (insets.bottom + spacing[5]) -
-    previewTextReserve;
-  // Ceiling that always keeps the button row + ~2 list rows on screen: a short phone or
-  // landscape can't fit a big board AND all the actions, so the board yields rather than
-  // pushing the menu off the bottom. The floor keeps the board visible unless even that
-  // won't fit; below the ceiling a long list simply scrolls.
-  const boardCeiling = Math.max(
-    0,
-    windowHeight -
-      insets.top -
-      contentTopOffset -
-      previewTextReserve -
-      primaryRowHeight -
-      2 * actionRowHeight -
-      (insets.bottom + spacing[5]) -
-      spacing[5] * 2,
-  );
-  const boardMinSize = Math.min(140, boardCeiling);
-  const largeArtMaxSize = fitBoardMaxSize(
+  // Size the board the way the play drawer does — contain-fit into the space left after
+  // the title, button row and full list are reserved, so it renders SMALLER on smaller
+  // screens instead of crowding the actions off the bottom. Bounds/floor live in the pure
+  // computeReactionBoardMaxSize, which is unit-tested across device sizes.
+  const largeArtMaxSize = computeReactionBoardMaxSize({
+    windowWidth,
+    windowHeight,
+    insetTop: insets.top,
+    insetBottom: insets.bottom,
+    contentTopOffset,
+    sectionGap: spacing[5],
+    sideMargin: spacing[6],
+    previewMaxWidth: PREVIEW_MAX_WIDTH,
     aspect,
-    Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
-    Math.min(windowHeight * 0.55, boardCeiling, Math.max(boardMinSize, heroHeightBudget)),
-  );
+    primaryRowHeight,
+    listContentHeight,
+    textReserve: previewTextReserve,
+    rowHeight: actionRowHeight,
+  });
   // Rasterize the holds overlay at the large hero's displayed width × DPR — matching
   // the play drawer (SwipeBoardCarousel) instead of the list-thumbnail's fixed 400px,
   // so the enlarged art stays crisp. Derived from the large size (not the animating
