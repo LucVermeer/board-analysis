@@ -7,6 +7,8 @@ import type { ClimbActionProps, ClimbActionResult } from '../types';
 import { getContextAwareClimbViewUrl } from '@/app/lib/url-utils';
 import { buildActionResult, computeActionDisplay } from '../action-view-renderer';
 import { shareWithFallback } from '@/app/lib/share-utils';
+import { prewarmShareCaches } from '@/app/lib/prewarm-share-cache';
+import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
 import { useTranslation } from 'react-i18next';
 
 export function ShareAction({
@@ -34,6 +36,13 @@ export function ShareAction({
 
       const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${viewUrl}` : viewUrl;
 
+      // Prime the CDN page cache + backend og caches the instant the user taps
+      // Share, before the crawler scrapes the freshly shared URL. Fire-and-forget
+      // (no await) so it never delays or breaks the share sheet. The relative og
+      // fallback (backend origin unresolvable) is not worth warming.
+      const ogImageUrl = buildOgBoardRenderUrl(boardDetails, climb.frames);
+      prewarmShareCaches(ogImageUrl.startsWith('http') ? [shareUrl, ogImageUrl] : [shareUrl]);
+
       const shared = await shareWithFallback({
         url: shareUrl,
         title: climb.name,
@@ -47,7 +56,7 @@ export function ShareAction({
         onComplete?.();
       }
     },
-    [climb, viewUrl, boardDetails.board_name, onComplete, showMessage, t],
+    [climb, viewUrl, boardDetails, onComplete, showMessage, t],
   );
 
   const icon = <IosShare sx={{ fontSize: iconSize }} />;
