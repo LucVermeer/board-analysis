@@ -28,6 +28,8 @@ export function ShareAction({
   const { iconSize } = computeActionDisplay(viewMode, size, showLabel);
 
   const viewUrl = getContextAwareClimbViewUrl(currentPathname ?? '', boardDetails, angle, climb.uuid, climb.name);
+  // Computed at render so the callback deps stay primitive strings.
+  const ogImageUrl = buildOgBoardRenderUrl(boardDetails, climb.frames);
 
   const handleClick = useCallback(
     async (e?: React.MouseEvent) => {
@@ -40,7 +42,6 @@ export function ShareAction({
       // Share, before the crawler scrapes the freshly shared URL. Fire-and-forget
       // (no await) so it never delays or breaks the share sheet. The relative og
       // fallback (backend origin unresolvable) is not worth warming.
-      const ogImageUrl = buildOgBoardRenderUrl(boardDetails, climb.frames);
       prewarmShareCaches(ogImageUrl.startsWith('http') ? [shareUrl, ogImageUrl] : [shareUrl]);
 
       const shared = await shareWithFallback({
@@ -56,7 +57,7 @@ export function ShareAction({
         onComplete?.();
       }
     },
-    [climb, viewUrl, boardDetails, onComplete, showMessage, t],
+    [climb, viewUrl, ogImageUrl, boardDetails.board_name, onComplete, showMessage, t],
   );
 
   const icon = <IosShare sx={{ fontSize: iconSize }} />;

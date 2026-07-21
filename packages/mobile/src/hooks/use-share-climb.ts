@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Platform, Share } from 'react-native';
 import { buildReadableClimbViewPath } from '@boardsesh/play-view/readable-url-utils';
-import { accumulateFramesToMaps, accumulatedMapsToFrameStrings } from '@boardsesh/board-constants/hold-states';
+import { toFlatFrames } from '@boardsesh/board-constants/hold-states';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { BACKEND_URL, WEB_BASE_URL } from '../lib/env';
 
@@ -13,18 +13,6 @@ type ShareClimbArgs = {
   setIds: string;
   angle: number;
 };
-
-// Mirror of web's `packages/web/app/components/board-renderer/util.ts`
-// `toFlatFrames` (keep the two in sync): collapse a possibly
-// multi-frame Aurora frames string to its final lit snapshot — the exact frames
-// the shared climb page's og:image is rendered from, so the prewarm hits the
-// backend's cache key. Single-frame strings round-trip unchanged.
-function toFlatFrames(frames: string, boardName: BoardName): string {
-  if (!frames) return '';
-  if (!frames.includes(',') && !frames.includes('x')) return frames;
-  const maps = accumulateFramesToMaps(frames, boardName);
-  return accumulatedMapsToFrameStrings(maps, boardName).at(-1) ?? '';
-}
 
 // Local builder for the backend og:image URL. Kept local rather than pulling in
 // @boardsesh/board-render, whose graph drags the WASM renderer + sharp into the
@@ -63,9 +51,8 @@ function buildOgImageUrl(args: {
 // warm-the-CDN-and-og-caches trick web does. Never blocks or breaks sharing:
 // each fetch is voided and every failure (async rejection or a synchronous
 // throw when fetch is unavailable) is swallowed.
-function prewarmShareCaches(pageUrl: string, ogImageUrl: string | null): void {
-  const targets = ogImageUrl ? [pageUrl, ogImageUrl] : [pageUrl];
-  for (const target of targets) {
+function prewarmShareCaches(urls: string[]): void {
+  for (const target of urls) {
     try {
       void fetch(target)
         .then((response) => response.body?.cancel())
@@ -89,7 +76,8 @@ export function useShareClimb({ climb, boardName, layoutId, sizeId, setIds, angl
       climbName: climb.name,
     })}`;
 
-    prewarmShareCaches(url, buildOgImageUrl({ boardName, layoutId, sizeId, setIds, frames: climb.frames }));
+    const ogImageUrl = buildOgImageUrl({ boardName, layoutId, sizeId, setIds, frames: climb.frames });
+    prewarmShareCaches(ogImageUrl ? [url, ogImageUrl] : [url]);
 
     await Share.share(Platform.OS === 'ios' ? { message: climb.name, url } : { message: `${climb.name}\n${url}` });
   }, [climb, boardName, layoutId, sizeId, setIds, angle]);
