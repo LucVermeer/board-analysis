@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Keyboard,
   type LayoutChangeEvent,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   type OpaqueColorValue,
   PixelRatio,
   Platform,
@@ -44,16 +42,6 @@ import { fitBoardArt, fitBoardMaxSize } from './board-art-fit';
 // fixed horizontal button row at the top of the card — the most-reached actions,
 // one tap away. The rest stay in the list below. Order here is the row order.
 const PRIMARY_ACTION_IDS: readonly ClimbActionId[] = ['tick', 'playlist', 'share'];
-
-/**
- * Scroll-to-expand hysteresis. Scrolling the action list a little compacts the hero
- * (giving the list room); it stays compact until the list is dragged back near the
- * very top. Two thresholds so a content-fits resize settling a few px off the top
- * can't flip it back. Pure + exported so the thresholds are unit-testable.
- */
-export function nextMenuScrolledState(current: boolean, offsetY: number): boolean {
-  return current ? offsetY > 2 : offsetY > 20;
-}
 
 type ClimbReactionMenuProps = {
   climb: Climb;
@@ -138,20 +126,6 @@ export function ClimbReactionMenu({
   // playlist picker (no second sheet — that's the #3294 fix).
   const [view, setView] = useState<'menu' | 'playlist'>('menu');
 
-  // Scrolling the action list a little shrinks the hero to the compact size (the
-  // same transition "Add to playlist" runs), giving the list more room; scrolling
-  // back to the very top restores the large hero. Ref-gated so onScroll only
-  // setStates on the boolean flip, never per frame (RN perf rule).
-  const [menuScrolled, setMenuScrolled] = useState(false);
-  const menuScrolledRef = useRef(false);
-  const handleMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = nextMenuScrolledState(menuScrolledRef.current, event.nativeEvent.contentOffset.y);
-    if (next !== menuScrolledRef.current) {
-      menuScrolledRef.current = next;
-      setMenuScrolled(next);
-    }
-  }, []);
-
   const finishClose = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
@@ -168,13 +142,7 @@ export function ClimbReactionMenu({
     });
   }, [progress, reduceMotion, finishClose]);
 
-  const backToMenu = useCallback(() => {
-    // The action list unmounts in the playlist view, so its native offset is 0 on
-    // return — reset our tracked state so the menu always reopens at the large hero.
-    menuScrolledRef.current = false;
-    setMenuScrolled(false);
-    setView('menu');
-  }, []);
+  const backToMenu = useCallback(() => setView('menu'), []);
   // Stable so useClimbActions' memo doesn't rebuild the action list every render.
   const openPlaylist = useCallback(() => setView('playlist'), []);
 
@@ -264,9 +232,11 @@ export function ClimbReactionMenu({
   // Small breathing room below the top safe area — the preview sits just under the
   // status bar so the top isn't wasted and the action list gets more room below.
   const contentTopOffset = Math.round(windowHeight * 0.02);
-  // The action list never shrinks below this — at least ~2 rows peek under the hero so
-  // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
-  const menuMinHeight = 180;
+  // Row height for the action list (ListRow: minHeight 44 + 12pt vertical padding, text
+  // growing with fontScale). The whole list is shown without scrolling, so its full
+  // height is reserved up front and the board takes whatever space is left below it.
+  const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
+  const listContentHeight = listActions.length * actionRowHeight + spacing[1] * 2;
   // Height of the fixed primary-action button row, reserved out of the card so the list
   // cap is accurate. Measured via onLayout (fires only on layout change, not per frame)
   // so a large Dynamic Type / RTL wrap can't over- or under-reserve; the fontScale-scaled
@@ -291,23 +261,27 @@ export function ClimbReactionMenu({
   // never re-renders the menu (see reservedForPreview). Scaled by fontScale so a large
   // Dynamic Type setting reserves the taller text instead of overlapping the art.
   const previewTextReserve = Math.round(56 * fontScale);
-  // Height the hero may take once top chrome, text, gap, menu floor and bottom inset are
-  // reserved — capped at 48% so the reclaimed top space grows the action list, not the
-  // hero. Fitting to a box (width bounded by the preview frame, not a square) lets a
-  // portrait board grow tall while a near-square board stays in its frame.
+  // The board is the hero, but the whole card (title + board + button row + the ENTIRE
+  // action list) has to fit on screen without scrolling — so the board takes the space
+  // left once the title, buttons and full list are reserved. A tall phone with a short
+  // list leaves the board width-bounded; a long list or short phone shrinks it, floored
+  // so it never vanishes (a rare overflow then scrolls the list instead). Fitting to a
+  // box (not a square) lets a portrait board grow tall while a near-square board stays
+  // in its frame.
+  const boardMinSize = 140;
   const heroHeightBudget =
     windowHeight -
     insets.top -
     contentTopOffset -
     spacing[5] -
-    menuMinHeight -
     primaryRowHeight -
+    listContentHeight -
     (insets.bottom + spacing[5]) -
     previewTextReserve;
   const largeArtMaxSize = fitBoardMaxSize(
     aspect,
     Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
-    Math.min(windowHeight * 0.48, heroHeightBudget),
+    Math.min(windowHeight * 0.55, Math.max(boardMinSize, heroHeightBudget)),
   );
   // Rasterize the holds overlay at the large hero's displayed width × DPR — matching
   // the play drawer (SwipeBoardCarousel) instead of the list-thumbnail's fixed 400px,
@@ -325,10 +299,9 @@ export function ClimbReactionMenu({
     Math.round(windowHeight * 0.31),
     Math.round(windowWidth * 0.66),
   );
-  // In the menu view there is no text input, so keyboardHeight is 0 there; the keyboard
-  // only appears in the playlist create form, which is the compact path above. The hero
-  // is compact whenever the playlist view is open OR the action list is scrolled.
-  const targetArtMax = view === 'menu' && !menuScrolled ? largeArtMaxSize : compactArtMaxSize;
+  // The board is large in the menu; opening a sub-view (Add to playlist) springs it down
+  // to the compact size and back. That inline transition is the only board resize now.
+  const targetArtMax = view === 'menu' ? largeArtMaxSize : compactArtMaxSize;
 
   // The animating max-size (px). Springs between large (menu) and compact (sub-action)
   // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
@@ -356,37 +329,16 @@ export function ClimbReactionMenu({
   const reservedForPreview = targetArtHeight + previewTextReserve;
   const bottomReserve = keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing[5];
   const menuMaxHeight = Math.max(
-    menuMinHeight,
+    actionRowHeight,
     windowHeight - insets.top - contentTopOffset - spacing[5] - reservedForPreview - bottomReserve,
   );
 
-  // The scrollable list (everything below the fixed primary-button row) shares the card
-  // with that row, so it gets menuMaxHeight minus the row. Row height (ListRow: minHeight
-  // 44 + 12pt vertical padding, text growing with fontScale) drives the scroll math with
-  // no per-frame scroll state. The playlist view owns its own scroll.
-  const actionRowHeight = Math.max(44, Math.round(24 + 22 * fontScale));
+  // The list (below the fixed primary-button row) gets the card height minus that row.
+  // Its full height was reserved when sizing the board, so it normally shows every row
+  // without scrolling; only a floored board on a small phone leaves it short, in which
+  // case it scrolls and the bottom fade cues more. The playlist view owns its own scroll.
   const listMaxHeight = Math.max(actionRowHeight, menuMaxHeight - primaryRowHeight);
-  const menuContentHeight = listActions.length * actionRowHeight + spacing[1] * 2;
-  let menuScrollHeight: number;
-  if (!menuScrolled) {
-    // At rest (large hero): fill all the space under the hero. maxHeight caps an
-    // overflowing list at listMaxHeight — the last row clips there (with the bottom
-    // fade cueing more) — while a short list shrinks to its content. Filling the space
-    // instead of snapping to whole-rows-minus-a-half leaves no dead gap below the card.
-    menuScrollHeight = listMaxHeight;
-  } else {
-    // Scrolled: the hero has shrunk and listMaxHeight has grown, so give the list
-    // that room. But if the taller viewport would now fit the whole list, the
-    // ScrollView would clamp the offset back to 0 — which reads as "scrolled to the
-    // top" and would bounce the hero back to large. Keep the viewport one row short
-    // of the content so a little scroll range always remains and the collapse only
-    // happens when the climber actually drags to the top. Floor at one row so a short
-    // list can never collapse the viewport to zero.
-    menuScrollHeight = Math.min(listMaxHeight, Math.max(actionRowHeight, menuContentHeight - actionRowHeight));
-  }
-  // Show the bottom fade whenever the list is actually clipped — the at-rest peek or
-  // the one-row-short scrolled viewport both hide content worth cueing.
-  const menuScrollable = menuContentHeight > menuScrollHeight + 0.5;
+  const menuScrollable = listContentHeight > listMaxHeight + 0.5;
   const menuFadeColors = colorScheme === 'dark' ? MENU_FADE_COLORS.dark : MENU_FADE_COLORS.light;
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
@@ -516,16 +468,14 @@ export function ClimbReactionMenu({
                       ))}
                     </View>
                   ) : null}
+                  {/* The full list is reserved when sizing the board, so this normally
+                      shows every row without scrolling; maxHeight only bites (and scrolls)
+                      if a floored board on a small phone can't leave room. */}
                   <ScrollView
-                    style={{ maxHeight: menuScrollHeight }}
+                    style={{ maxHeight: listMaxHeight }}
                     bounces={false}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    onScroll={handleMenuScroll}
-                    // The ref-gated handler only setStates on a boolean flip, and the
-                    // 2/20px hysteresis still catches the gesture at this cadence, so a
-                    // coarser throttle keeps the JS thread quiet during the scroll.
-                    scrollEventThrottle={64}
                     contentContainerStyle={styles.menuContent}
                   >
                     {listActions.map((action, index) => (

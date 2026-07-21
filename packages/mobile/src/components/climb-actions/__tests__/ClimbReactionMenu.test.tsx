@@ -10,7 +10,6 @@ const captured = vi.hoisted(() => ({
   actionArgs: null as Record<string, unknown> | null,
   pickerOnBack: undefined as undefined | (() => void),
   modalOnRequestClose: undefined as undefined | (() => void),
-  actionScroll: undefined as undefined | ((event: { nativeEvent: { contentOffset: { y: number } } }) => void),
 }));
 
 vi.mock('react-native', () => ({
@@ -29,16 +28,7 @@ vi.mock('react-native', () => ({
     onPress?: () => void;
     accessibilityLabel?: string;
   }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
-  ScrollView: ({
-    children,
-    onScroll,
-  }: {
-    children?: ReactNode;
-    onScroll?: (event: { nativeEvent: { contentOffset: { y: number } } }) => void;
-  }) => {
-    captured.actionScroll = onScroll;
-    return createElement('div', null, children);
-  },
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   TextInput: () => null,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (s: Record<string, unknown>) => s, absoluteFill: {}, hairlineWidth: 1 },
@@ -121,7 +111,7 @@ vi.mock('../use-climb-actions', () => ({
   },
 }));
 
-import { ClimbReactionMenu, nextMenuScrolledState } from '../ClimbReactionMenu';
+import { ClimbReactionMenu } from '../ClimbReactionMenu';
 
 const climb = { uuid: 'climb-1', name: 'Big Move', frames: '', difficulty: 'V4', quality_average: '0' } as Climb;
 const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
@@ -142,46 +132,11 @@ function renderMenu(onClose = vi.fn(), extraProps: Record<string, unknown> = {})
   };
 }
 
-describe('nextMenuScrolledState (scroll-to-expand hysteresis)', () => {
-  it('expands only after scrolling past the upper threshold', () => {
-    // From collapsed, small offsets keep it collapsed; >20px expands.
-    expect(nextMenuScrolledState(false, 0)).toBe(false);
-    expect(nextMenuScrolledState(false, 20)).toBe(false);
-    expect(nextMenuScrolledState(false, 21)).toBe(true);
-  });
-
-  it('collapses only when dragged back near the very top', () => {
-    // From expanded, it stays expanded until the offset returns to ~0.
-    expect(nextMenuScrolledState(true, 40)).toBe(true);
-    expect(nextMenuScrolledState(true, 3)).toBe(true);
-    expect(nextMenuScrolledState(true, 2)).toBe(false);
-    expect(nextMenuScrolledState(true, 0)).toBe(false);
-  });
-
-  it('holds state in the hysteresis band between the two thresholds', () => {
-    // A 2–20px offset never flips the current state either way — the guard that
-    // stops a content-fits resize from bouncing the hero.
-    expect(nextMenuScrolledState(false, 10)).toBe(false);
-    expect(nextMenuScrolledState(true, 10)).toBe(true);
-  });
-});
-
 describe('ClimbReactionMenu view switching', () => {
   beforeEach(() => {
     captured.actionArgs = null;
     captured.pickerOnBack = undefined;
     captured.modalOnRequestClose = undefined;
-    captured.actionScroll = undefined;
-  });
-
-  it('handles list scroll (expand past the threshold, then collapse at the top) without crashing', () => {
-    const { getByLabelText } = renderMenu();
-    // A >20px scroll drives handleMenuScroll → menuScrolled true → re-render.
-    act(() => captured.actionScroll?.({ nativeEvent: { contentOffset: { y: 40 } } }));
-    expect(getByLabelText('Preview')).not.toBeNull();
-    // Scrolling back to the top drives the collapse path.
-    act(() => captured.actionScroll?.({ nativeEvent: { contentOffset: { y: 0 } } }));
-    expect(getByLabelText('Preview')).not.toBeNull();
   });
 
   it('pulls tick, playlist and share into the primary button row and leaves the rest in the list', () => {
