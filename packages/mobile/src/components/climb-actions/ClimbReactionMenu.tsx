@@ -62,6 +62,15 @@ type ClimbReactionMenuProps = {
 // is clamped to so an explicit art width can't bleed past the (unclipped) preview frame.
 const PREVIEW_MAX_WIDTH = 320;
 
+// Bottom-edge fade for the scrollable action list — transparent → the scheme's surface
+// base. Concrete rgba, never a systemColors PlatformColor: feeding a PlatformColor into
+// the gradient bakes the wrong scheme (the ProgressiveBlur dark-band bug). The dark value
+// tracks GlassSurface's dark base (#14111F); keep them in sync if that surface changes.
+const MENU_FADE_COLORS = {
+  dark: ['rgba(20, 17, 31, 0)', 'rgba(20, 17, 31, 0.92)'],
+  light: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.92)'],
+} as const;
+
 // iOS portals above the persistent queue bar / tab bar via a native window overlay;
 // Android uses a transparent Modal (which also gives a hardware-back handler).
 function OverlayPortal({ children, onRequestClose }: { children: React.ReactNode; onRequestClose: () => void }) {
@@ -246,8 +255,9 @@ export function ClimbReactionMenu({
 
   // The animating max-size (px). Springs between large (menu) and compact (sub-action)
   // whenever the view — or the keyboard height feeding compactArtMaxSize — changes, so
-  // opening "Add to playlist" glides the hero down to the current size (and back).
-  const artSizePx = useSharedValue(largeArtMaxSize);
+  // opening "Add to playlist" glides the hero down to the current size (and back). Seeded
+  // with the current target so the first frame is right and the mount effect is a no-op.
+  const artSizePx = useSharedValue(targetArtMax);
   useEffect(() => {
     artSizePx.value = reduceMotion ? targetArtMax : withSpring(targetArtMax, springs.gentle);
   }, [artSizePx, targetArtMax, reduceMotion]);
@@ -284,12 +294,7 @@ export function ClimbReactionMenu({
   const menuScrollHeight = menuOverflows
     ? Math.max(menuMinHeight, (Math.floor(menuMaxHeight / actionRowHeight) - 0.5) * actionRowHeight)
     : menuMaxHeight;
-  // Concrete rgba (never systemColors PlatformColor — that bakes the wrong scheme into
-  // the gradient, the ProgressiveBlur dark-band bug). Fades to the scheme's surface base.
-  const menuFadeColors: readonly [string, string] =
-    colorScheme === 'dark'
-      ? ['rgba(20, 17, 31, 0)', 'rgba(20, 17, 31, 0.92)']
-      : ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.92)'];
+  const menuFadeColors = colorScheme === 'dark' ? MENU_FADE_COLORS.dark : MENU_FADE_COLORS.light;
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
   const previewStyle = useAnimatedStyle(() => ({
