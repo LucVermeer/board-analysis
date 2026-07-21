@@ -98,7 +98,7 @@ export function ClimbReactionMenu({
   const { colorScheme } = useTheme();
   const { t } = useTranslation('climbs');
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
   const { formatGrade } = useGradeFormat();
 
   const progress = useSharedValue(0);
@@ -200,10 +200,9 @@ export function ClimbReactionMenu({
   const rawAspect = boardRenderData ? boardRenderData.boardWidth / boardRenderData.boardHeight : 1;
   const aspect = Number.isFinite(rawAspect) && rawAspect > 0 ? rawAspect : 1;
 
-  // Top offset for the floating content — anchors the preview at a fixed position (see
-  // styles.content). Shared with the menu cap and the hero budget below so nothing runs
-  // past the bottom safe area now that the content is top-aligned rather than centered.
-  const contentTopOffset = Math.round(windowHeight * 0.06);
+  // Small breathing room below the top safe area — the preview sits just under the
+  // status bar so the top isn't wasted and the action list gets more room below.
+  const contentTopOffset = Math.round(windowHeight * 0.02);
   // The action list never shrinks below this — at least ~2 rows peek under the hero so
   // the scroll affordance stays visible. Reused by the hero budget and the menu cap.
   const menuMinHeight = 180;
@@ -212,12 +211,14 @@ export function ClimbReactionMenu({
   // 400) so no new render is needed. The menu view shows a large hero; a sub-action that
   // stays inline (the playlist picker) shrinks it to the compact "current" size.
   //
-  // Fixed name+byline reserve — an estimate, not an onLayout measurement, so resizing
-  // the art never re-renders the menu (see reservedForPreview).
-  const previewTextReserve = 56;
+  // name+byline reserve, an estimate (not an onLayout measurement) so resizing the art
+  // never re-renders the menu (see reservedForPreview). Scaled by fontScale so a large
+  // Dynamic Type setting reserves the taller text instead of overlapping the art.
+  const previewTextReserve = Math.round(56 * fontScale);
   // Height the hero may take once top chrome, text, gap, menu floor and bottom inset are
-  // reserved — capped at 60%. Fitting to a box (width bounded by the preview frame, not a
-  // square) lets a portrait board grow tall while a near-square board stays in its frame.
+  // reserved — capped at 48% so the reclaimed top space grows the action list, not the
+  // hero. Fitting to a box (width bounded by the preview frame, not a square) lets a
+  // portrait board grow tall while a near-square board stays in its frame.
   const heroHeightBudget =
     windowHeight -
     insets.top -
@@ -229,7 +230,7 @@ export function ClimbReactionMenu({
   const largeArtMaxSize = fitBoardMaxSize(
     aspect,
     Math.min(PREVIEW_MAX_WIDTH, windowWidth - spacing[6] * 2),
-    Math.min(windowHeight * 0.6, heroHeightBudget),
+    Math.min(windowHeight * 0.48, heroHeightBudget),
   );
   // compactArtMaxSize: the "current" size for the inline sub-action view — today's
   // sizing, keeping the keyboard-up shrink (the create form focuses a TextInput).
