@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-20T12:52:19.783Z",
+  "generatedAt": "2026-07-21T07:48:47.974Z",
   "entries": [
+    {
+      "prNumber": 3827,
+      "category": "new",
+      "title": "Long-press a climb and the preview fills the screen up top — big enough to read the beta at a glance.",
+      "mergedAt": "2026-07-21T07:47:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3827",
+      "body": "New ⋯ button on every climb, plus a first-run tip, so quick actions (queue, tick, playlists, share) are easy to find — no more guessing you have to long-press.\nTap \"Add to playlist\" and the preview glides down to make room, then back up when you're done.\nThe action list now shows it scrolls when there's more below."
+    },
     {
       "prNumber": 3771,
       "category": "fixed",

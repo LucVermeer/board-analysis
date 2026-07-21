@@ -4,6 +4,15 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-21
+
+### New
+
+- Long-press a climb and the preview fills the screen up top — big enough to read the beta at a glance. ([#3827](https://github.com/boardsesh/boardsesh/pull/3827))
+  New ⋯ button on every climb, plus a first-run tip, so quick actions (queue, tick, playlists, share) are easy to find — no more guessing you have to long-press.
+  Tap "Add to playlist" and the preview glides down to make room, then back up when you're done.
+  The action list now shows it scrolls when there's more below.
+
 ## 2026-07-20
 
 ### New
