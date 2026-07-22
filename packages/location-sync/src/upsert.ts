@@ -551,12 +551,16 @@ async function createOrUpdateSourceGym(
   // A frozen conflicting row is blocked by setWhere, so the upsert returns no
   // row. Look it up by its deterministic uuid so the alias still points at it
   // and the board resolves the right gym id, without touching its metadata.
+  // Restricted to a LIVE row: a frozen, soft-DELETED gym (one the owner removed
+  // via deleteGym, which unlinks its boards) must NOT be re-resolved here —
+  // returning its id would rewrite the source alias and relink boards to a
+  // deleted gym, undoing the delete. Skip it so the source stays unlinked.
   let gymId = upsertedGym?.id ?? null;
   if (gymId === null) {
     const [existingGym] = await db
       .select({ id: gyms.id })
       .from(gyms)
-      .where(eq(gyms.uuid, gymIdentifiers.uuid))
+      .where(and(eq(gyms.uuid, gymIdentifiers.uuid), isNull(gyms.deletedAt)))
       .limit(1);
     gymId = existingGym?.id ?? null;
   }

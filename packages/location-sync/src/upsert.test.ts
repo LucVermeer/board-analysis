@@ -159,13 +159,14 @@ function candidate(overrides: Partial<MatchCandidateRow>): MatchCandidateRow {
 }
 
 /**
- * Introspects a Drizzle WHERE / setWhere condition to recover the two facts the
- * freeze guards depend on, WITHOUT a real SQL dialect:
+ * Introspects a Drizzle WHERE / setWhere condition to recover the facts the
+ * freeze / live-row guards depend on, WITHOUT a real SQL dialect:
  *
- *  - `referencesSyncFrozenAt`: does the condition directly reference the
- *    `sync_frozen_at` column? This is what makes the fake a real guardrail — a
- *    refactor that drops `isNull(gyms.syncFrozenAt)` flips this to false, so the
- *    fake stops blocking the write and the freeze test fails in CI.
+ *  - `columns`: the column names the condition DIRECTLY references — e.g.
+ *    `sync_frozen_at` (the freeze guard) or `deleted_at` (the live-row filter).
+ *    This is what makes the fake a real guardrail: a refactor that drops
+ *    `isNull(gyms.syncFrozenAt)` (or `isNull(gyms.deletedAt)`) removes the column
+ *    here, so the fake stops blocking the write and the guard test fails in CI.
  *  - `intParams`: the bound numeric parameters (e.g. the `gyms.id` in
  *    `eq(gyms.id, gymId)`), so the fake can tell WHICH row an UPDATE targets.
  *
@@ -173,7 +174,7 @@ function candidate(overrides: Partial<MatchCandidateRow>): MatchCandidateRow {
  * and stops, so it never follows the column's `.table` back-reference (which
  * would otherwise surface every sibling column and defeat the check).
  */
-function inspectCondition(condition: unknown): { referencesSyncFrozenAt: boolean; intParams: number[] } {
+function inspectCondition(condition: unknown): { columns: Set<string>; intParams: number[] } {
   const columns = new Set<string>();
   const intParams: number[] = [];
   const visit = (node: unknown, depth: number): void => {
@@ -198,7 +199,7 @@ function inspectCondition(condition: unknown): { referencesSyncFrozenAt: boolean
     }
   };
   visit(condition, 0);
-  return { referencesSyncFrozenAt: columns.has('sync_frozen_at'), intParams };
+  return { columns, intParams };
 }
 
 class FakeInsertBuilder {
@@ -227,7 +228,7 @@ class FakeInsertBuilder {
   onConflictDoUpdate(config: unknown): this {
     const setWhere = (config as { setWhere?: unknown } | null | undefined)?.setWhere;
     this.conflictSetWhereGuardsFreeze =
-      setWhere !== undefined ? inspectCondition(setWhere).referencesSyncFrozenAt : false;
+      setWhere !== undefined ? inspectCondition(setWhere).columns.has('sync_frozen_at') : false;
     if (Object.is(this.table, locationSyncGymSources) && this.pendingRowValues) {
       this.fakeDb.sourceAliasWrites.push(this.pendingRowValues);
     }
@@ -293,13 +294,13 @@ class FakeUpdateBuilder {
 
   where(condition: unknown): Promise<void> {
     if (Object.is(this.table, gyms)) {
-      const { referencesSyncFrozenAt, intParams } = inspectCondition(condition);
+      const { columns, intParams } = inspectCondition(condition);
       const targetsFrozenGym = intParams.some((gymId) => this.fakeDb.frozenGymIds.has(gymId));
       // Model refreshSyncedGymMetadata's freeze guard: the real UPDATE's
       // `... AND sync_frozen_at IS NULL` matches 0 rows for a frozen gym, so no
       // metadata is written. If a refactor drops that guard the write lands
-      // (referencesSyncFrozenAt === false), which the freeze test then catches.
-      if (targetsFrozenGym && referencesSyncFrozenAt) {
+      // (columns no longer has sync_frozen_at), which the freeze test then catches.
+      if (targetsFrozenGym && columns.has('sync_frozen_at')) {
         return Promise.resolve();
       }
       this.fakeDb.gymMetadataWrites.push(this.updateValues ?? {});
@@ -310,6 +311,7 @@ class FakeUpdateBuilder {
 
 class FakeSelectBuilder {
   private usedInnerJoin = false;
+  private whereFiltersLiveRows = false;
 
   constructor(private readonly fakeDb: FakeLocationSyncDb) {}
 
@@ -322,7 +324,8 @@ class FakeSelectBuilder {
     return this;
   }
 
-  where(_condition: unknown): this {
+  where(condition: unknown): this {
+    this.whereFiltersLiveRows = inspectCondition(condition).columns.has('deleted_at');
     return this;
   }
 
@@ -331,6 +334,14 @@ class FakeSelectBuilder {
     // createOrUpdateSourceGym fallback selects gyms by uuid with no join.
     if (this.usedInnerJoin) {
       return this.fakeDb.aliasedGym === null ? [] : [this.fakeDb.aliasedGym];
+    }
+    // A soft-deleted fallback gym is excluded by the `isNull(gyms.deletedAt)`
+    // filter, so it must NOT be returned — that's what keeps boards from being
+    // relinked to a deleted gym. Guard-aware: if a refactor drops the deleted_at
+    // filter, `whereFiltersLiveRows` is false, the deleted row is returned, and
+    // the deleted-fallback test catches it.
+    if (this.fakeDb.fallbackGymDeleted && this.whereFiltersLiveRows) {
+      return [];
     }
     return this.fakeDb.fallbackGymId === null ? [] : [{ id: this.fakeDb.fallbackGymId }];
   }
@@ -357,6 +368,9 @@ class FakeLocationSyncDb {
   readonly frozenGymIds: Set<number>;
   // Board uuids whose ON CONFLICT SET is blocked by the board `setWhere` guard.
   readonly frozenBoardUuids: Set<string>;
+  // Whether the by-uuid fallback's target gym is soft-deleted. When true, the
+  // `isNull(gyms.deletedAt)` filter excludes it, so the fallback resolves nothing.
+  readonly fallbackGymDeleted: boolean;
 
   constructor(options: {
     aliasedGym?: AliasedGymRow | null;
@@ -367,6 +381,7 @@ class FakeLocationSyncDb {
     fallbackGymId?: number | null;
     frozenGymIds?: Iterable<number>;
     frozenBoardUuids?: Iterable<string>;
+    fallbackGymDeleted?: boolean;
   }) {
     this.aliasedGym = options.aliasedGym ?? null;
     this.physicalCandidates = options.physicalCandidates ?? [];
@@ -376,6 +391,7 @@ class FakeLocationSyncDb {
     this.fallbackGymId = options.fallbackGymId ?? null;
     this.frozenGymIds = new Set(options.frozenGymIds ?? []);
     this.frozenBoardUuids = new Set(options.frozenBoardUuids ?? []);
+    this.fallbackGymDeleted = options.fallbackGymDeleted ?? false;
   }
 
   insert(table: unknown): FakeInsertBuilder {
@@ -629,6 +645,33 @@ describe('public board location upsert gym resolution', () => {
     expect(summary.boardsUpserted).toBe(0);
     expect(summary.gymsUpserted).toBe(1);
     expect(fakeDb.gymMetadataWrites.length).toBe(1);
+  });
+
+  it('does NOT relink boards to a soft-DELETED frozen gym via the by-uuid fallback', async () => {
+    // A gym the owner deleted (deleteGym freezes it + unlinks its boards). On the
+    // next sync it isn't found by alias/physical match (both filter deleted rows),
+    // so createOrUpdateSourceGym's setWhere blocks the resurrect and falls back to
+    // the by-uuid SELECT — which is filtered to LIVE rows, so it resolves nothing.
+    // The source stays unlinked instead of relinking boards to the deleted gym.
+    const gymSourceKey = 'tension:gym-deleted-frozen';
+    const frozenGymUuid = gymUuidForSource(gymSourceKey);
+    const fakeDb = new FakeLocationSyncDb({
+      aliasedGym: null, // deleted gym isn't returned by the alias lookup
+      physicalCandidates: [], // nor by physical match
+      frozenGymUuids: [frozenGymUuid], // the conflicting row exists and is frozen
+      fallbackGymId: 999, // it WOULD resolve by uuid...
+      fallbackGymDeleted: true, // ...but it's soft-deleted, so the live filter drops it
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: 'tension:board-deleted-frozen', gymSourceKey }),
+    ]);
+
+    // No gym resolved, no alias rewritten to the deleted gym, and the board is
+    // NOT attached back to it.
+    expect(summary.gymsUpserted).toBe(0);
+    expect(fakeDb.sourceAliasWrites).toEqual([]);
+    expect(fakeDb.boardWrites[0]?.gymId ?? null).toBeNull();
   });
 });
 
