@@ -527,6 +527,31 @@ describe('myGyms includes owned + membership', () => {
     expect(result.gyms.filter((g) => g.uuid === gymUuid)).toHaveLength(1);
     expect(result.totalCount).toBe(1);
   });
+
+  it('paginates and counts a mixed owned + member result set correctly', async () => {
+    // PLAIN_USER owns two gyms and is a member of the shared gym → three total,
+    // spanning both the owner and the member branch of the OR.
+    const owned1 = await insertGym({ ownerId: PLAIN_USER, name: 'PU Owned 1' });
+    const owned2 = await insertGym({ ownerId: PLAIN_USER, name: 'PU Owned 2' });
+    await insertGymMember(gymId, PLAIN_USER, 'editor');
+    const expectedUuids = new Set([owned1.uuid, owned2.uuid, gymUuid]);
+
+    const page1 = await socialGymQueries.myGyms(null, { input: { limit: 2, offset: 0 } }, authCtx(PLAIN_USER));
+    expect(page1.totalCount).toBe(3);
+    expect(page1.gyms).toHaveLength(2);
+    expect(page1.hasMore).toBe(true);
+
+    const page2 = await socialGymQueries.myGyms(null, { input: { limit: 2, offset: 2 } }, authCtx(PLAIN_USER));
+    expect(page2.totalCount).toBe(3);
+    expect(page2.gyms).toHaveLength(1);
+    expect(page2.hasMore).toBe(false);
+
+    // The two pages together cover all three gyms exactly once — count and
+    // cursor stay consistent across the owned/member union.
+    const seen = [...page1.gyms, ...page2.gyms].map((g) => g.uuid);
+    expect(seen).toHaveLength(3);
+    expect(new Set(seen)).toEqual(expectedUuids);
+  });
 });
 
 describe('addGymMember role restriction', () => {

@@ -6,7 +6,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import { getUserCommunityRoles, rolesGrantAdminOrLeader } from './roles';
-import { createGymClaimApprovedNotification } from './gym-notifications';
+import { createGymManageAccessNotification } from './gym-notifications';
 import {
   CreateGymInputSchema,
   UpdateGymInputSchema,
@@ -502,15 +502,15 @@ export const socialGymQueries = {
     const offset = validatedInput.offset ?? 0;
     const includeFollowed = validatedInput.includeFollowed ?? false;
 
-    // Gyms the viewer holds a gym_members row on (admin/editor/member). Staff
-    // access shows up in My Gyms alongside owned gyms, so a climber granted
-    // editor/admin actually sees the gym they can manage — enrichGym then fills
-    // in myRole/canEdit so the drawer's role chips light up.
-    const memberGyms = await db
+    // Gyms the viewer holds a gym_members row on (admin/editor/member) as a
+    // correlated subquery — no extra round trip, no shipping an id array back to
+    // the app. Staff access shows up in My Gyms alongside owned gyms, so a climber
+    // granted editor/admin actually sees the gym they can manage; enrichGym then
+    // fills in myRole/canEdit so the drawer's role chips light up.
+    const memberGymIdsSubquery = db
       .select({ gymId: dbSchema.gymMembers.gymId })
       .from(dbSchema.gymMembers)
       .where(eq(dbSchema.gymMembers.userId, userId));
-    const memberGymIds = memberGyms.map((m) => m.gymId);
 
     // Get IDs of gyms the user follows (if requested)
     let followedGymIds: number[] = [];
@@ -522,17 +522,17 @@ export const socialGymQueries = {
       followedGymIds = followedGyms.map((f) => f.gymId);
     }
 
-    // Build WHERE: owned OR a member OR followed, and not deleted. All three are
-    // OR'd against the single `gyms` table, so a gym matching more than one (an
-    // owner who somehow also has a member row) still resolves to one row —
-    // dedupe is inherent, no DISTINCT needed.
+    // Build WHERE: owned OR a member OR followed, and not deleted. All are OR'd
+    // against the single `gyms` table, so a gym matching more than one (an owner
+    // who somehow also has a member row) still resolves to one row — dedupe is
+    // inherent, no DISTINCT needed. The member subquery is always included; when
+    // the viewer holds no member rows it simply matches nothing.
     const ownerCondition = eq(dbSchema.gyms.ownerId, userId);
-    const memberCondition = memberGymIds.length > 0 ? inArray(dbSchema.gyms.id, memberGymIds) : undefined;
+    const memberCondition = inArray(dbSchema.gyms.id, memberGymIdsSubquery);
     const followedCondition = followedGymIds.length > 0 ? inArray(dbSchema.gyms.id, followedGymIds) : undefined;
-    const matchConditions: SQL[] = [ownerCondition];
-    if (memberCondition) matchConditions.push(memberCondition);
+    const matchConditions: SQL[] = [ownerCondition, memberCondition];
     if (followedCondition) matchConditions.push(followedCondition);
-    const matchCondition = matchConditions.length > 1 ? or(...matchConditions)! : matchConditions[0];
+    const matchCondition = or(...matchConditions)!;
     const whereClause = and(matchCondition, isNull(dbSchema.gyms.deletedAt));
 
     const [countResult] = await db.select({ count: count() }).from(dbSchema.gyms).where(whereClause);
@@ -942,7 +942,7 @@ export const socialGymMutations = {
     // empty on an onConflictDoNothing no-op, so a re-add of an existing member
     // stays silent.
     if (validatedInput.role === 'admin' && inserted.length > 0) {
-      await createGymClaimApprovedNotification(validatedInput.userId, gym.uuid, gym.name);
+      await createGymManageAccessNotification(validatedInput.userId, gym.uuid, gym.name);
     }
 
     return true;
@@ -1019,7 +1019,7 @@ export const socialGymMutations = {
     // Tell the new editor they can manage the gym now (best-effort; the helper
     // swallows its own errors so a notification hiccup never fails the grant).
     if (granted.length > 0) {
-      await createGymClaimApprovedNotification(validatedInput.userId, gym.uuid, gym.name);
+      await createGymManageAccessNotification(validatedInput.userId, gym.uuid, gym.name);
     }
 
     return true;

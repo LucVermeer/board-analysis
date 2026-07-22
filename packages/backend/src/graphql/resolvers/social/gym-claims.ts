@@ -7,7 +7,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import { requireAdmin } from './roles';
 import { userCanEditGym } from './gyms';
-import { createGymClaimApprovedNotification } from './gym-notifications';
+import { createGymManageAccessNotification } from './gym-notifications';
 import {
   RequestGymClaimInputSchema,
   ReviewGymClaimInputSchema,
@@ -113,7 +113,7 @@ export async function applyGymClaim(
  * a heads-up.
  */
 async function notifyClaimApplied(result: ClaimApplied): Promise<void> {
-  await createGymClaimApprovedNotification(result.claimantUserId, result.gymUuid, result.gymName);
+  await createGymManageAccessNotification(result.claimantUserId, result.gymUuid, result.gymName);
   if (result.claimEmail) {
     void sendGymClaimApprovedEmail(result.claimEmail, result.gymName);
   }

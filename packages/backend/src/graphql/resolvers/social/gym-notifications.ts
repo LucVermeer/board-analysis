@@ -20,7 +20,7 @@ import { logger } from '../../../utils/logger';
  * person. The gym name rides the live payload and is re-derived from `entityId`
  * (the gym UUID) when the feed is fetched later.
  */
-export async function createGymClaimApprovedNotification(
+export async function createGymManageAccessNotification(
   recipientId: string,
   gymUuid: string,
   gymName: string,
