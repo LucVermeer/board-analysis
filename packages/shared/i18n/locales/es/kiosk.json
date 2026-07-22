@@ -364,8 +364,7 @@
     },
     "comments": {
       "intro": "Responde al hilo de comentarios de tu rocódromo sin salir de la consola.",
-      "heading": "Lo que dice tu equipo",
-      "empty": "Nadie ha comentado todavía."
+      "heading": "Lo que dice tu equipo"
     }
   },
   "branding": {

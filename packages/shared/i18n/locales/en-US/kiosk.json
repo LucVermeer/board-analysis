@@ -364,8 +364,7 @@
     },
     "comments": {
       "intro": "Reply to your gym's comment thread without leaving the console.",
-      "heading": "What your crew's saying",
-      "empty": "No one's chimed in yet."
+      "heading": "What your crew's saying"
     }
   },
   "branding": {

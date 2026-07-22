@@ -14,8 +14,9 @@ vi.mock('react-i18next', () => ({
 }));
 
 // The tab reuses the public gym page's CommentSection wholesale. Stub it so the
-// test proves the wiring (entity + title) without dragging in its GraphQL-WS
-// subscription; the real thing is covered by the social comment tests.
+// test proves the wiring (entity + heading) without dragging in its GraphQL-WS
+// subscription; the real thing — including the live count and empty state — is
+// covered by the social comment tests.
 vi.mock('@/app/components/social/comment-section', () => ({
   default: ({ entityType, entityId, title }: { entityType: string; entityId: string; title?: string }) => (
     <div data-testid="comment-section" data-entity-type={entityType} data-entity-id={entityId}>
@@ -41,43 +42,28 @@ function makeGym(overrides: Partial<Gym> = {}): Gym {
 
 describe('CommentsTab', () => {
   it('mounts the shared CommentSection against the gym entity by uuid', () => {
-    render(<CommentsTab gym={makeGym({ uuid: 'gym-abc', commentCount: 5 })} />);
+    render(<CommentsTab gym={makeGym({ uuid: 'gym-abc' })} />);
 
     const section = screen.getByTestId('comment-section');
     expect(section.getAttribute('data-entity-type')).toBe('gym');
     expect(section.getAttribute('data-entity-id')).toBe('gym-abc');
   });
 
-  it('heads the thread with a climber-voice title when the crew has been talking', () => {
-    render(<CommentsTab gym={makeGym({ commentCount: 5 })} />);
-    // The header stays count-free — the live tally is CommentSection's job, so a
-    // load-time snapshot can never show a stale number here.
-    expect(screen.getByText("What your crew's saying")).toBeTruthy();
-    expect(screen.queryByText("No one's chimed in yet.")).toBeNull();
-  });
+  it('gives the thread a stable climber-voice heading, not a snapshot count', () => {
+    // The header must not be derived from the load-time commentCount — the live
+    // count and empty state are CommentSection's job — so it reads the same
+    // whether the gym loaded with no comments or a full thread. This is the
+    // regression guard against a stale header after an in-tab post.
+    const { rerender } = render(<CommentsTab gym={makeGym({ commentCount: 0 })} />);
+    expect(screen.getByTestId('comment-section').textContent).toContain("What your crew's saying");
 
-  it('shows the climber-voice empty state when the thread is empty', () => {
-    render(<CommentsTab gym={makeGym({ commentCount: 0 })} />);
-    expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
-    expect(screen.queryByText("What your crew's saying")).toBeNull();
-  });
-
-  it('treats a missing commentCount as an empty thread', () => {
-    render(<CommentsTab gym={makeGym({ commentCount: undefined as unknown as number })} />);
-    expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
+    rerender(<CommentsTab gym={makeGym({ commentCount: 5 })} />);
+    expect(screen.getByTestId('comment-section').textContent).toContain("What your crew's saying");
   });
 
   it('explains that replies happen without leaving the console', () => {
     render(<CommentsTab gym={makeGym()} />);
+
     expect(screen.getByText(/without leaving the console/i)).toBeTruthy();
-  });
-
-  it('re-heads the thread when the comment count crosses zero', () => {
-    const { rerender } = render(<CommentsTab gym={makeGym({ commentCount: 0 })} />);
-    expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
-
-    rerender(<CommentsTab gym={makeGym({ commentCount: 1 })} />);
-    expect(screen.getByText("What your crew's saying")).toBeTruthy();
-    expect(screen.queryByText("No one's chimed in yet.")).toBeNull();
   });
 });

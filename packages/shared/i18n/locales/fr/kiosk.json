@@ -364,8 +364,7 @@
     },
     "comments": {
       "intro": "Réponds au fil de commentaires de ta salle sans quitter la console.",
-      "heading": "Ce que dit ton crew",
-      "empty": "Personne n'a encore commenté."
+      "heading": "Ce que dit ton crew"
     }
   },
   "branding": {
