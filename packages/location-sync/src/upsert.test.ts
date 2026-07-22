@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gyms, locationSyncGymSources, userBoards, users } from '@boardsesh/db/schema';
 import type { CanonicalGymCandidate } from '@boardsesh/db/queries';
 import type { PublicBoardLocationInput } from './types';
-import { gymUuidForSource, SYSTEM_USER_ID } from './ids';
+import { boardUuidForSource, gymUuidForSource, SYSTEM_USER_ID } from './ids';
 import type { LocationSyncLogger, LocationSyncLogFields } from './logger';
 import {
   buildBoardWriteIdentifiers,
@@ -158,8 +158,54 @@ function candidate(overrides: Partial<MatchCandidateRow>): MatchCandidateRow {
   };
 }
 
+/**
+ * Introspects a Drizzle WHERE / setWhere condition to recover the two facts the
+ * freeze guards depend on, WITHOUT a real SQL dialect:
+ *
+ *  - `referencesSyncFrozenAt`: does the condition directly reference the
+ *    `sync_frozen_at` column? This is what makes the fake a real guardrail — a
+ *    refactor that drops `isNull(gyms.syncFrozenAt)` flips this to false, so the
+ *    fake stops blocking the write and the freeze test fails in CI.
+ *  - `intParams`: the bound numeric parameters (e.g. the `gyms.id` in
+ *    `eq(gyms.id, gymId)`), so the fake can tell WHICH row an UPDATE targets.
+ *
+ * It walks only the SQL `queryChunks`; when it hits a Column it records the name
+ * and stops, so it never follows the column's `.table` back-reference (which
+ * would otherwise surface every sibling column and defeat the check).
+ */
+function inspectCondition(condition: unknown): { referencesSyncFrozenAt: boolean; intParams: number[] } {
+  const columns = new Set<string>();
+  const intParams: number[] = [];
+  const visit = (node: unknown, depth: number): void => {
+    if (node == null || depth > 12 || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    // A Drizzle Column: has a name + a column-type marker. Record and STOP.
+    if (typeof record.name === 'string' && (record.columnType !== undefined || record.dataType !== undefined)) {
+      columns.add(record.name);
+      return;
+    }
+    // A bound Param carries an `encoder`; raw SQL-string chunks do not.
+    if (record.encoder !== undefined && typeof record.value === 'number') {
+      intParams.push(record.value);
+    }
+    const chunks = record.queryChunks;
+    if (Array.isArray(chunks)) {
+      for (const chunk of chunks) visit(chunk, depth + 1);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const element of node) visit(element, depth + 1);
+    }
+  };
+  visit(condition, 0);
+  return { referencesSyncFrozenAt: columns.has('sync_frozen_at'), intParams };
+}
+
 class FakeInsertBuilder {
   private pendingRowValues: Record<string, unknown> | null = null;
+  // Whether the ON CONFLICT DO UPDATE's setWhere references sync_frozen_at, i.e.
+  // the freeze guard is present on this upsert. Captured in onConflictDoUpdate.
+  private conflictSetWhereGuardsFreeze = false;
 
   constructor(
     private readonly fakeDb: FakeLocationSyncDb,
@@ -178,7 +224,10 @@ class FakeInsertBuilder {
     return Promise.resolve();
   }
 
-  onConflictDoUpdate(_config: unknown): this {
+  onConflictDoUpdate(config: unknown): this {
+    const setWhere = (config as { setWhere?: unknown } | null | undefined)?.setWhere;
+    this.conflictSetWhereGuardsFreeze =
+      setWhere !== undefined ? inspectCondition(setWhere).referencesSyncFrozenAt : false;
     if (Object.is(this.table, locationSyncGymSources) && this.pendingRowValues) {
       this.fakeDb.sourceAliasWrites.push(this.pendingRowValues);
     }
@@ -195,7 +244,14 @@ class FakeInsertBuilder {
       const pendingUuid = this.pendingRowValues.uuid;
       // A frozen conflicting row is blocked by the `setWhere` guard, so the real
       // upsert returns no row — model that so the by-uuid fallback is exercised.
-      if (typeof pendingUuid === 'string' && this.fakeDb.frozenGymUuids.has(pendingUuid)) {
+      // Guard-aware: only when the setWhere actually references sync_frozen_at.
+      // A refactor dropping the guard would return the row here and overwrite the
+      // frozen gym, which the by-uuid-fallback test then catches.
+      if (
+        typeof pendingUuid === 'string' &&
+        this.fakeDb.frozenGymUuids.has(pendingUuid) &&
+        this.conflictSetWhereGuardsFreeze
+      ) {
         return [];
       }
       return [{ id: this.fakeDb.createdGymId }];
@@ -203,6 +259,18 @@ class FakeInsertBuilder {
 
     if (Object.is(this.table, userBoards)) {
       this.fakeDb.boardWrites.push(this.pendingRowValues);
+      const pendingUuid = this.pendingRowValues.uuid;
+      // A frozen catalog board's ON CONFLICT SET is blocked by the setWhere guard,
+      // so `returning()` yields nothing and it is NOT counted in boardsUpserted —
+      // the frozen row keeps its human edits. Guard-aware: a refactor dropping the
+      // board setWhere returns the row here (overwrite), failing the freeze test.
+      if (
+        typeof pendingUuid === 'string' &&
+        this.fakeDb.frozenBoardUuids.has(pendingUuid) &&
+        this.conflictSetWhereGuardsFreeze
+      ) {
+        return [];
+      }
       return [{ id: this.fakeDb.createdBoardId }];
     }
 
@@ -223,8 +291,17 @@ class FakeUpdateBuilder {
     return this;
   }
 
-  where(_condition: unknown): Promise<void> {
+  where(condition: unknown): Promise<void> {
     if (Object.is(this.table, gyms)) {
+      const { referencesSyncFrozenAt, intParams } = inspectCondition(condition);
+      const targetsFrozenGym = intParams.some((gymId) => this.fakeDb.frozenGymIds.has(gymId));
+      // Model refreshSyncedGymMetadata's freeze guard: the real UPDATE's
+      // `... AND sync_frozen_at IS NULL` matches 0 rows for a frozen gym, so no
+      // metadata is written. If a refactor drops that guard the write lands
+      // (referencesSyncFrozenAt === false), which the freeze test then catches.
+      if (targetsFrozenGym && referencesSyncFrozenAt) {
+        return Promise.resolve();
+      }
       this.fakeDb.gymMetadataWrites.push(this.updateValues ?? {});
     }
     return Promise.resolve();
@@ -275,6 +352,11 @@ class FakeLocationSyncDb {
   readonly frozenGymUuids: Set<string>;
   // Id returned by the by-uuid fallback SELECT for a blocked (frozen) gym.
   readonly fallbackGymId: number | null;
+  // Gym ids that are frozen: refreshSyncedGymMetadata's WHERE (which carries
+  // `sync_frozen_at IS NULL`) matches 0 rows for these, so no metadata is written.
+  readonly frozenGymIds: Set<number>;
+  // Board uuids whose ON CONFLICT SET is blocked by the board `setWhere` guard.
+  readonly frozenBoardUuids: Set<string>;
 
   constructor(options: {
     aliasedGym?: AliasedGymRow | null;
@@ -283,6 +365,8 @@ class FakeLocationSyncDb {
     createdBoardId?: number;
     frozenGymUuids?: Iterable<string>;
     fallbackGymId?: number | null;
+    frozenGymIds?: Iterable<number>;
+    frozenBoardUuids?: Iterable<string>;
   }) {
     this.aliasedGym = options.aliasedGym ?? null;
     this.physicalCandidates = options.physicalCandidates ?? [];
@@ -290,6 +374,8 @@ class FakeLocationSyncDb {
     this.createdBoardId = options.createdBoardId ?? 901;
     this.frozenGymUuids = new Set(options.frozenGymUuids ?? []);
     this.fallbackGymId = options.fallbackGymId ?? null;
+    this.frozenGymIds = new Set(options.frozenGymIds ?? []);
+    this.frozenBoardUuids = new Set(options.frozenBoardUuids ?? []);
   }
 
   insert(table: unknown): FakeInsertBuilder {
@@ -496,6 +582,53 @@ describe('public board location upsert gym resolution', () => {
     expect(summary.gymsUpserted).toBe(1);
     expect(fakeDb.sourceAliasWrites).toMatchObject([{ sourceKey: gymSourceKey, gymId: 555 }]);
     expect(fakeDb.boardWrites[0]?.gymId).toBe(555);
+  });
+
+  it('does NOT refresh metadata into a FROZEN SYSTEM-owned aliased gym (moderator-fix delta)', async () => {
+    // The core delta this PR exists for: a SYSTEM-owned catalog gym a moderator
+    // fixed (so it is NOT owner-curated — #3713's skip does not apply) is frozen.
+    // resolveGymIdForSource still calls refreshSyncedGymMetadata, but its WHERE
+    // carries `sync_frozen_at IS NULL`, so the UPDATE matches 0 rows. Drop that
+    // guard and the fake writes → this test goes red.
+    const fakeDb = new FakeLocationSyncDb({
+      aliasedGym: { id: 700, ownerId: SYSTEM_USER_ID, hasApprovedClaim: false },
+      frozenGymIds: [700],
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: 'tension:board-frozen-sys', gymSourceKey: 'tension:gym-frozen-sys' }),
+    ]);
+
+    // No metadata write landed on the frozen gym, yet the id still resolves so
+    // the board links and the sync reports the gym as seen.
+    expect(fakeDb.gymMetadataWrites).toEqual([]);
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.boardWrites[0]?.gymId).toBe(700);
+  });
+
+  it('does NOT overwrite a FROZEN catalog board and undercounts it in boardsUpserted', async () => {
+    // A human-curated (frozen) catalog board: its ON CONFLICT SET is blocked by
+    // `setWhere: isNull(userBoards.syncFrozenAt)`, so the upsert returns no row —
+    // the board keeps its edits and isn't counted. Drop the board setWhere and
+    // the fake returns a row (overwrite) → boardsUpserted becomes 1 → red.
+    const boardSourceKey = 'tension:board-frozen-only';
+    const frozenBoardUuid = boardUuidForSource(boardSourceKey);
+    const fakeDb = new FakeLocationSyncDb({
+      // A normal SYSTEM-owned, unfrozen gym so gym resolution succeeds and the
+      // board upsert is reached.
+      aliasedGym: { id: 800, ownerId: SYSTEM_USER_ID, hasApprovedClaim: false },
+      frozenBoardUuids: [frozenBoardUuid],
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: boardSourceKey, gymSourceKey: 'tension:gym-open' }),
+    ]);
+
+    // The frozen board's write was blocked (returned no row), so it isn't
+    // counted — while the (unfrozen) gym still resolved and refreshed normally.
+    expect(summary.boardsUpserted).toBe(0);
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.gymMetadataWrites.length).toBe(1);
   });
 });
 
