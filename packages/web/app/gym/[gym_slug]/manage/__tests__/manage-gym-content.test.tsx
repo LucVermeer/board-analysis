@@ -107,8 +107,9 @@ describe('ManageGymContent comments tab', () => {
     searchState.params = 'tab=comments';
     render(<ManageGymContent initialGym={makeGym()} />);
 
-    expect(screen.getByRole('tab', { name: 'Comments' })).toBeTruthy();
-    expect(screen.getByTestId('comments')).toBeTruthy();
+    // queryBy* returns null rather than throwing, so these assert presence for real.
+    expect(screen.queryByRole('tab', { name: 'Comments' })).not.toBeNull();
+    expect(screen.queryByTestId('comments')).not.toBeNull();
     // The profile stub must not mount while Comments is the active tab.
     expect(screen.queryByRole('button', { name: 'make-dirty' })).toBeNull();
   });
