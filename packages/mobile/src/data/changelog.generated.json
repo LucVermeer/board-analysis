@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-22T12:36:02.560Z",
+  "generatedAt": "2026-07-22T12:41:34.240Z",
   "entries": [
+    {
+      "prNumber": 3699,
+      "category": "new",
+      "title": "One gym, one page — we're merging duplicate gym listings, and your follows, boards, and kiosks ride along to the surviving page. If a merge shifts a kiosk's address, we flag it so the gym can reprint that wall's install QR.",
+      "mergedAt": "2026-07-22T12:38:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3699"
+    },
     {
       "prNumber": 3840,
       "category": "new",

@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- One gym, one page — we're merging duplicate gym listings, and your follows, boards, and kiosks ride along to the surviving page. If a merge shifts a kiosk's address, we flag it so the gym can reprint that wall's install QR. ([#3699](https://github.com/boardsesh/boardsesh/pull/3699))
 - The play screen now opens onto your own history with this climb — a quick line of sends and attempts, right where you can see it before you scroll. ([#3840](https://github.com/boardsesh/boardsesh/pull/3840))
   Working a project? It reads "12 attempts, no send yet" so you know exactly how many times you've thrown yourself at it. Tap it and the full logbook glides into view.
 
