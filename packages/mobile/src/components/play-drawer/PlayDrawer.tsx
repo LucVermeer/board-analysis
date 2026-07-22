@@ -476,11 +476,20 @@ export function PlayDrawer({
   // Android can throw on share cancellation; surface anything we didn't expect
   // rather than silently swallowing the rejection.
   const handleShare = useCallback(() => {
+    if (!displayedClimb) return;
+    // Tracks share intent (like the actions-menu site), not share completion.
+    track(SHARED_EVENTS.ClimbShared, {
+      method: 'share',
+      source: 'play_drawer',
+      climbUuid: displayedClimb.uuid,
+      boardName,
+      layoutId,
+    });
     shareClimb().catch((error) => {
       console.warn('[playDrawer] share failed:', error);
       showToast(t('playView.shareError'), 'error');
     });
-  }, [shareClimb, showToast, t]);
+  }, [shareClimb, displayedClimb, boardName, layoutId, showToast, t]);
 
   // Long-press the climb name to copy it — handy for pasting into a chat when
   // sharing beta. Delegates to the unit-tested copyClimbName helper; haptic for
