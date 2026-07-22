@@ -138,7 +138,8 @@
       "members": "Membres",
       "insights": "Statistiques",
       "overview": "Aperçu",
-      "profile": "Profil"
+      "profile": "Profil",
+      "comments": "Commentaires"
     },
     "insights": {
       "subtitle": "Comment tes boards ont tourné cette semaine par rapport à la dernière.",
@@ -360,6 +361,12 @@
     "profile": {
       "heading": "Profil de la salle",
       "description": "Le nom, l'adresse et ce que les grimpeurs voient sur la page publique."
+    },
+    "comments": {
+      "intro": "Vois ce que dit ton crew et réponds, sans quitter la console.",
+      "count_one": "{{count}} commentaire",
+      "count_other": "{{count}} commentaires",
+      "empty": "Personne n'a encore commenté."
     }
   },
   "branding": {

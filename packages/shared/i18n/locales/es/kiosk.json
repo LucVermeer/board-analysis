@@ -138,7 +138,8 @@
       "members": "Miembros",
       "insights": "Estadísticas",
       "overview": "Resumen",
-      "profile": "Perfil"
+      "profile": "Perfil",
+      "comments": "Comentarios"
     },
     "insights": {
       "subtitle": "Cómo fueron tus plafones esta semana frente a la anterior.",
@@ -360,6 +361,12 @@
     "profile": {
       "heading": "Perfil del rocódromo",
       "description": "El nombre, la dirección y lo que ven los escaladores en la página pública."
+    },
+    "comments": {
+      "intro": "Mira lo que dice tu equipo y responde, sin salir de la consola.",
+      "count_one": "{{count}} comentario",
+      "count_other": "{{count}} comentarios",
+      "empty": "Nadie ha comentado todavía."
     }
   },
   "branding": {
