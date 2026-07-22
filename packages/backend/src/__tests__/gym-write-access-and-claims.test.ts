@@ -442,6 +442,29 @@ describe('grant notifies the new staff member', () => {
     expect(await claimApprovedNotifications(GYM_ADMIN_MEMBER)).toEqual([]);
   });
 
+  it('does NOT re-notify when re-granting an existing editor (only the first grant pings)', async () => {
+    await socialGymMutations.grantGymWriteAccess(null, { input: { gymUuid, userId: EDITOR_TARGET } }, authCtx(OWNER));
+    // Second grant on the same editor is a no-op — the setWhere only promotes a
+    // plain member, so RETURNING is empty and no second notification fires.
+    await socialGymMutations.grantGymWriteAccess(null, { input: { gymUuid, userId: EDITOR_TARGET } }, authCtx(OWNER));
+
+    expect(await claimApprovedNotifications(EDITOR_TARGET)).toEqual([
+      { entity_type: 'gym', entity_id: gymUuid, actor_id: null },
+    ]);
+    // The editor row survived the no-op re-grant.
+    expect(await gymMemberRole(gymId, EDITOR_TARGET)).toBe('editor');
+  });
+
+  it('notifies when a plain member is promoted to editor', async () => {
+    await insertGymMember(gymId, PLAIN_USER, 'member');
+    await socialGymMutations.grantGymWriteAccess(null, { input: { gymUuid, userId: PLAIN_USER } }, authCtx(OWNER));
+
+    expect(await gymMemberRole(gymId, PLAIN_USER)).toBe('editor');
+    expect(await claimApprovedNotifications(PLAIN_USER)).toEqual([
+      { entity_type: 'gym', entity_id: gymUuid, actor_id: null },
+    ]);
+  });
+
   it('addGymMember notifies a fresh admin but not a plain member', async () => {
     await socialGymMutations.addGymMember(
       null,

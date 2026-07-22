@@ -995,11 +995,13 @@ export const socialGymMutations = {
       throw new Error('The gym owner already has full access');
     }
 
-    // Upsert an editor row. Never downgrade an existing admin — only promote a
-    // plain member (or a no-op re-grant of an editor) to editor. RETURNING gives
-    // us the rows the grant actually planted/updated: an existing admin fails the
-    // setWhere and returns nothing, so we don't ping someone who already manages
-    // the gym.
+    // Upsert an editor row. The setWhere promotes ONLY a plain member — it leaves
+    // an existing admin untouched (never downgraded) AND an existing editor
+    // untouched (already editor, nothing to change). That makes RETURNING an
+    // honest "a real grant happened" signal: it's non-empty exactly on a fresh
+    // insert or a member→editor promotion, and empty on a no-op re-grant of an
+    // existing editor/admin — so we don't re-ping someone who already manages the
+    // gym.
     const granted = await db
       .insert(dbSchema.gymMembers)
       .values({
@@ -1010,7 +1012,7 @@ export const socialGymMutations = {
       .onConflictDoUpdate({
         target: [dbSchema.gymMembers.gymId, dbSchema.gymMembers.userId],
         set: { role: 'editor' },
-        setWhere: sql`${dbSchema.gymMembers.role} <> 'admin'`,
+        setWhere: sql`${dbSchema.gymMembers.role} = 'member'`,
       })
       .returning({ userId: dbSchema.gymMembers.userId });
 
