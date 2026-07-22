@@ -70,4 +70,13 @@ describe('CommentsTab', () => {
     render(<CommentsTab gym={makeGym()} />);
     expect(screen.getByText(/reply, right from here/i)).toBeTruthy();
   });
+
+  it('re-labels the header when the comment count changes', () => {
+    const { rerender } = render(<CommentsTab gym={makeGym({ commentCount: 0 })} />);
+    expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
+
+    rerender(<CommentsTab gym={makeGym({ commentCount: 1 })} />);
+    expect(screen.getByText('1 comment')).toBeTruthy();
+    expect(screen.queryByText("No one's chimed in yet.")).toBeNull();
+  });
 });

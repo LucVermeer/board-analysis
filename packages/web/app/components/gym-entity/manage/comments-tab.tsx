@@ -7,21 +7,15 @@ import Typography from '@mui/material/Typography';
 import type { Gym } from '@boardsesh/shared-schema';
 import CommentSection from '@/app/components/social/comment-section';
 
-/**
- * Comments tab: surfaces the gym's public comment thread inside the manage
- * console so owners and editors can read and reply without opening the public
- * page (and turning up in search). It mounts the very same CommentSection the
- * public gym page uses — same gym entity, same thread, same live-update
- * subscription — so there's no second comment store to keep in step, and no new
- * query to maintain.
- */
+// Comments tab: mounts the same CommentSection the public gym page uses (same
+// gym entity, same thread, same subscription) so owners and editors can reply
+// from the console — no second comment store, no new query.
 export default function CommentsTab({ gym }: { gym: Gym }) {
   const { t } = useTranslation('kiosk');
   const hasComments = gym.commentCount > 0;
 
-  // The section header doubles as the count / empty line: the thread count when
-  // the crew's talking, a climber-voice nudge when it's quiet. The gym already
-  // ships its own commentCount, so labelling the tab costs no extra round-trip.
+  // commentCount rides in with the gym, so the count / empty label costs no
+  // extra round-trip (it's a load-time snapshot, not a live tally).
   const threadTitle = hasComments
     ? t('manage.comments.count', { count: gym.commentCount })
     : t('manage.comments.empty');
