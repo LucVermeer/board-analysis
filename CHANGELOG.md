@@ -20,6 +20,10 @@ manual changes). See docs/mobile-ota-updates.md.
   Tap "Add to playlist" and the preview glides down to make room, then back up when you're done.
   The action list now shows it scrolls when there's more below.
 
+### Improved
+
+- Shared climb links unfurl fast and reliably — old-format links now land on the climb, not the board list ([#3833](https://github.com/boardsesh/boardsesh/pull/3833))
+
 ## 2026-07-20
 
 ### New

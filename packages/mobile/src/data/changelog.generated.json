@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-21T21:19:20.922Z",
+  "generatedAt": "2026-07-22T03:56:47.082Z",
   "entries": [
+    {
+      "prNumber": 3833,
+      "category": "improved",
+      "title": "Shared climb links unfurl fast and reliably — old-format links now land on the climb, not the board list",
+      "mergedAt": "2026-07-21T21:49:38Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3833"
+    },
     {
       "prNumber": 3832,
       "category": "new",
