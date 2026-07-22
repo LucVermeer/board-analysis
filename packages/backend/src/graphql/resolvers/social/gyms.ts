@@ -6,6 +6,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import { getUserCommunityRoles, rolesGrantAdminOrLeader } from './roles';
+import { createGymClaimApprovedNotification } from './gym-notifications';
 import {
   CreateGymInputSchema,
   UpdateGymInputSchema,
@@ -501,6 +502,16 @@ export const socialGymQueries = {
     const offset = validatedInput.offset ?? 0;
     const includeFollowed = validatedInput.includeFollowed ?? false;
 
+    // Gyms the viewer holds a gym_members row on (admin/editor/member). Staff
+    // access shows up in My Gyms alongside owned gyms, so a climber granted
+    // editor/admin actually sees the gym they can manage — enrichGym then fills
+    // in myRole/canEdit so the drawer's role chips light up.
+    const memberGyms = await db
+      .select({ gymId: dbSchema.gymMembers.gymId })
+      .from(dbSchema.gymMembers)
+      .where(eq(dbSchema.gymMembers.userId, userId));
+    const memberGymIds = memberGyms.map((m) => m.gymId);
+
     // Get IDs of gyms the user follows (if requested)
     let followedGymIds: number[] = [];
     if (includeFollowed) {
@@ -511,10 +522,17 @@ export const socialGymQueries = {
       followedGymIds = followedGyms.map((f) => f.gymId);
     }
 
-    // Build WHERE: owned OR followed, and not deleted
+    // Build WHERE: owned OR a member OR followed, and not deleted. All three are
+    // OR'd against the single `gyms` table, so a gym matching more than one (an
+    // owner who somehow also has a member row) still resolves to one row —
+    // dedupe is inherent, no DISTINCT needed.
     const ownerCondition = eq(dbSchema.gyms.ownerId, userId);
+    const memberCondition = memberGymIds.length > 0 ? inArray(dbSchema.gyms.id, memberGymIds) : undefined;
     const followedCondition = followedGymIds.length > 0 ? inArray(dbSchema.gyms.id, followedGymIds) : undefined;
-    const matchCondition = followedCondition ? or(ownerCondition, followedCondition)! : ownerCondition;
+    const matchConditions: SQL[] = [ownerCondition];
+    if (memberCondition) matchConditions.push(memberCondition);
+    if (followedCondition) matchConditions.push(followedCondition);
+    const matchCondition = matchConditions.length > 1 ? or(...matchConditions)! : matchConditions[0];
     const whereClause = and(matchCondition, isNull(dbSchema.gyms.deletedAt));
 
     const [countResult] = await db.select({ count: count() }).from(dbSchema.gyms).where(whereClause);
@@ -908,14 +926,24 @@ export const socialGymMutations = {
       throw new Error('User not found');
     }
 
-    await db
+    const inserted = await db
       .insert(dbSchema.gymMembers)
       .values({
         gymId: gym.id,
         userId: validatedInput.userId,
         role: validatedInput.role,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ userId: dbSchema.gymMembers.userId });
+
+    // A fresh admin member gets the same "you now manage this gym" heads-up as a
+    // granted editor — admins manage staff, so they're being handed the keys too.
+    // Plain members (social-only, no edit access) are not notified. RETURNING is
+    // empty on an onConflictDoNothing no-op, so a re-add of an existing member
+    // stays silent.
+    if (validatedInput.role === 'admin' && inserted.length > 0) {
+      await createGymClaimApprovedNotification(validatedInput.userId, gym.uuid, gym.name);
+    }
 
     return true;
   },
@@ -968,8 +996,11 @@ export const socialGymMutations = {
     }
 
     // Upsert an editor row. Never downgrade an existing admin — only promote a
-    // plain member (or a no-op re-grant of an editor) to editor.
-    await db
+    // plain member (or a no-op re-grant of an editor) to editor. RETURNING gives
+    // us the rows the grant actually planted/updated: an existing admin fails the
+    // setWhere and returns nothing, so we don't ping someone who already manages
+    // the gym.
+    const granted = await db
       .insert(dbSchema.gymMembers)
       .values({
         gymId: gym.id,
@@ -980,7 +1011,14 @@ export const socialGymMutations = {
         target: [dbSchema.gymMembers.gymId, dbSchema.gymMembers.userId],
         set: { role: 'editor' },
         setWhere: sql`${dbSchema.gymMembers.role} <> 'admin'`,
-      });
+      })
+      .returning({ userId: dbSchema.gymMembers.userId });
+
+    // Tell the new editor they can manage the gym now (best-effort; the helper
+    // swallows its own errors so a notification hiccup never fails the grant).
+    if (granted.length > 0) {
+      await createGymClaimApprovedNotification(validatedInput.userId, gym.uuid, gym.name);
+    }
 
     return true;
   },

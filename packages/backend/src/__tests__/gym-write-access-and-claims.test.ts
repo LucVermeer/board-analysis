@@ -422,6 +422,90 @@ describe('enrichGym canGrantAccess and canClaim', () => {
   });
 });
 
+describe('grant notifies the new staff member', () => {
+  it('grantGymWriteAccess creates a "you now manage this gym" notification for the new editor', async () => {
+    await socialGymMutations.grantGymWriteAccess(null, { input: { gymUuid, userId: EDITOR_TARGET } }, authCtx(OWNER));
+
+    // Same shape as a claim approval: gym-typed, deep-links by gym UUID, no actor.
+    const notifications = await claimApprovedNotifications(EDITOR_TARGET);
+    expect(notifications).toEqual([{ entity_type: 'gym', entity_id: gymUuid, actor_id: null }]);
+  });
+
+  it('does NOT notify when the grant is a no-op re-grant of an existing gym admin', async () => {
+    // GYM_ADMIN_MEMBER is already admin — the setWhere skips the update, so no
+    // row is returned and no redundant "you now manage" ping fires.
+    await socialGymMutations.grantGymWriteAccess(
+      null,
+      { input: { gymUuid, userId: GYM_ADMIN_MEMBER } },
+      authCtx(OWNER),
+    );
+    expect(await claimApprovedNotifications(GYM_ADMIN_MEMBER)).toEqual([]);
+  });
+
+  it('addGymMember notifies a fresh admin but not a plain member', async () => {
+    await socialGymMutations.addGymMember(
+      null,
+      { input: { gymUuid, userId: EDITOR_TARGET, role: 'admin' } },
+      authCtx(OWNER),
+    );
+    expect(await claimApprovedNotifications(EDITOR_TARGET)).toEqual([
+      { entity_type: 'gym', entity_id: gymUuid, actor_id: null },
+    ]);
+
+    // A plain member is social-only (no manage access) — no notification.
+    await socialGymMutations.addGymMember(
+      null,
+      { input: { gymUuid, userId: SECOND_TARGET, role: 'member' } },
+      authCtx(OWNER),
+    );
+    expect(await claimApprovedNotifications(SECOND_TARGET)).toEqual([]);
+  });
+});
+
+describe('myGyms includes owned + membership', () => {
+  const myGymRoleFor = async (ctx: ConnectionContext, uuid: string): Promise<string | null | undefined> => {
+    const result = await socialGymQueries.myGyms(null, { input: {} }, ctx);
+    const match = result.gyms.find((g) => g.uuid === uuid);
+    return match ? match.myRole : null;
+  };
+
+  it('the owner sees their owned gym with myRole=admin', async () => {
+    expect(await myGymRoleFor(authCtx(OWNER), gymUuid)).toBe('admin');
+  });
+
+  it('a gym admin member sees the gym they administer with myRole=admin', async () => {
+    // GYM_ADMIN_MEMBER holds an admin row on the shared gym but does not own it.
+    const result = await socialGymQueries.myGyms(null, { input: {} }, authCtx(GYM_ADMIN_MEMBER));
+    expect(result.gyms.map((g) => g.uuid)).toContain(gymUuid);
+    expect(await myGymRoleFor(authCtx(GYM_ADMIN_MEMBER), gymUuid)).toBe('admin');
+  });
+
+  it('an editor sees the gym they were granted on with myRole=editor', async () => {
+    await socialGymMutations.grantGymWriteAccess(null, { input: { gymUuid, userId: EDITOR_TARGET } }, authCtx(OWNER));
+    expect(await myGymRoleFor(authCtx(EDITOR_TARGET), gymUuid)).toBe('editor');
+  });
+
+  it('a plain member sees the gym with myRole=member', async () => {
+    await insertGymMember(gymId, PLAIN_USER, 'member');
+    expect(await myGymRoleFor(authCtx(PLAIN_USER), gymUuid)).toBe('member');
+  });
+
+  it('a user with no owner/member relationship does not see the gym', async () => {
+    const result = await socialGymQueries.myGyms(null, { input: {} }, authCtx(EDITOR_TARGET));
+    expect(result.gyms.map((g) => g.uuid)).not.toContain(gymUuid);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('does not duplicate a gym when the viewer is both owner and (impossibly) a member row', async () => {
+    // Contrived: plant a member row for the owner on their own gym. The OR over a
+    // single gyms table still resolves to one row — no dupe, counted once.
+    await insertGymMember(gymId, OWNER, 'member');
+    const result = await socialGymQueries.myGyms(null, { input: {} }, authCtx(OWNER));
+    expect(result.gyms.filter((g) => g.uuid === gymUuid)).toHaveLength(1);
+    expect(result.totalCount).toBe(1);
+  });
+});
+
 describe('addGymMember role restriction', () => {
   it('rejects the editor role — write access must go through grantGymWriteAccess', async () => {
     // `editor` is not addable via member management; it's planted only by the
