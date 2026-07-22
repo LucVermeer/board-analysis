@@ -48,35 +48,36 @@ describe('CommentsTab', () => {
     expect(section.getAttribute('data-entity-id')).toBe('gym-abc');
   });
 
-  it('labels the thread with the live comment count when the crew has been talking', () => {
+  it('heads the thread with a climber-voice title when the crew has been talking', () => {
     render(<CommentsTab gym={makeGym({ commentCount: 5 })} />);
-    // The count doubles as the section header — plural form for >1.
-    expect(screen.getByText('5 comments')).toBeTruthy();
-  });
-
-  it('uses the singular count label for a single comment', () => {
-    render(<CommentsTab gym={makeGym({ commentCount: 1 })} />);
-    expect(screen.getByText('1 comment')).toBeTruthy();
+    // The header stays count-free — the live tally is CommentSection's job, so a
+    // load-time snapshot can never show a stale number here.
+    expect(screen.getByText("What your crew's saying")).toBeTruthy();
+    expect(screen.queryByText("No one's chimed in yet.")).toBeNull();
   });
 
   it('shows the climber-voice empty state when the thread is empty', () => {
     render(<CommentsTab gym={makeGym({ commentCount: 0 })} />);
     expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
-    // No count label when there's nothing to count.
-    expect(screen.queryByText(/\d+ comments?/)).toBeNull();
+    expect(screen.queryByText("What your crew's saying")).toBeNull();
   });
 
-  it('explains that this is the same thread as the public gym page', () => {
+  it('treats a missing commentCount as an empty thread', () => {
+    render(<CommentsTab gym={makeGym({ commentCount: undefined as unknown as number })} />);
+    expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
+  });
+
+  it('explains that replies happen without leaving the console', () => {
     render(<CommentsTab gym={makeGym()} />);
-    expect(screen.getByText(/reply, right from here/i)).toBeTruthy();
+    expect(screen.getByText(/without leaving the console/i)).toBeTruthy();
   });
 
-  it('re-labels the header when the comment count changes', () => {
+  it('re-heads the thread when the comment count crosses zero', () => {
     const { rerender } = render(<CommentsTab gym={makeGym({ commentCount: 0 })} />);
     expect(screen.getByText("No one's chimed in yet.")).toBeTruthy();
 
     rerender(<CommentsTab gym={makeGym({ commentCount: 1 })} />);
-    expect(screen.getByText('1 comment')).toBeTruthy();
+    expect(screen.getByText("What your crew's saying")).toBeTruthy();
     expect(screen.queryByText("No one's chimed in yet.")).toBeNull();
   });
 });

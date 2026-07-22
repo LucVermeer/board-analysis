@@ -363,9 +363,8 @@
       "description": "Le nom, l'adresse et ce que les grimpeurs voient sur la page publique."
     },
     "comments": {
-      "intro": "Vois ce que dit ton crew et réponds, sans quitter la console.",
-      "count_one": "{{count}} commentaire",
-      "count_other": "{{count}} commentaires",
+      "intro": "Réponds au fil de commentaires de ta salle sans quitter la console.",
+      "heading": "Ce que dit ton crew",
       "empty": "Personne n'a encore commenté."
     }
   },

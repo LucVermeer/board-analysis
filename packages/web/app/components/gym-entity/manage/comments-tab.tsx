@@ -12,13 +12,11 @@ import CommentSection from '@/app/components/social/comment-section';
 // from the console — no second comment store, no new query.
 export default function CommentsTab({ gym }: { gym: Gym }) {
   const { t } = useTranslation('kiosk');
-  const hasComments = gym.commentCount > 0;
-
-  // commentCount rides in with the gym, so the count / empty label costs no
-  // extra round-trip (it's a load-time snapshot, not a live tally).
-  const threadTitle = hasComments
-    ? t('manage.comments.count', { count: gym.commentCount })
-    : t('manage.comments.empty');
+  // Frame the header off the gym's load-time commentCount only to pick between a
+  // heading and the empty-state nudge — the accurate, live count is rendered by
+  // the CommentSection below, so a snapshot here never shows a stale number.
+  const hasComments = (gym.commentCount ?? 0) > 0;
+  const threadTitle = hasComments ? t('manage.comments.heading') : t('manage.comments.empty');
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

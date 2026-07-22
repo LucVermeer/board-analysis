@@ -363,9 +363,8 @@
       "description": "Your gym's name, address, and what climbers see on the public page."
     },
     "comments": {
-      "intro": "See what your crew's saying and reply, right from here.",
-      "count_one": "{{count}} comment",
-      "count_other": "{{count}} comments",
+      "intro": "Reply to your gym's comment thread without leaving the console.",
+      "heading": "What your crew's saying",
       "empty": "No one's chimed in yet."
     }
   },

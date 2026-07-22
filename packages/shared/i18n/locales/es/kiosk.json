@@ -363,9 +363,8 @@
       "description": "El nombre, la dirección y lo que ven los escaladores en la página pública."
     },
     "comments": {
-      "intro": "Mira lo que dice tu equipo y responde, sin salir de la consola.",
-      "count_one": "{{count}} comentario",
-      "count_other": "{{count}} comentarios",
+      "intro": "Responde al hilo de comentarios de tu rocódromo sin salir de la consola.",
+      "heading": "Lo que dice tu equipo",
       "empty": "Nadie ha comentado todavía."
     }
   },
