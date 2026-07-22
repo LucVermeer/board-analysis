@@ -64,6 +64,7 @@ describe('CommentsTab', () => {
   it('explains that replies happen without leaving the console', () => {
     render(<CommentsTab gym={makeGym()} />);
 
-    expect(screen.getByText(/without leaving the console/i)).toBeTruthy();
+    // queryByText returns null rather than throwing, so this is a real assertion.
+    expect(screen.queryByText(/without leaving the console/i)).not.toBeNull();
   });
 });
