@@ -4,6 +4,13 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-22
+
+### New
+
+- The play screen now opens onto your own history with this climb — a quick line of sends and attempts, right where you can see it before you scroll. ([#3840](https://github.com/boardsesh/boardsesh/pull/3840))
+  Working a project? It reads "12 attempts, no send yet" so you know exactly how many times you've thrown yourself at it. Tap it and the full logbook glides into view.
+
 ## 2026-07-21
 
 ### New
