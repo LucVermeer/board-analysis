@@ -6,6 +6,7 @@ import {
   requireSessionWithReconnectGrace,
   applyRateLimit,
   validateInput,
+  parseArrayTolerant,
   MAX_RETRIES,
   RATE_LIMIT_SESSION,
   RATE_LIMIT_SESSION_OP,
@@ -14,12 +15,7 @@ import {
   RATE_LIMIT_SET_QUEUE,
   RATE_LIMIT_SET_QUEUE_OP,
 } from '../shared/helpers';
-import {
-  ClimbQueueItemSchema,
-  QueueIndexSchema,
-  QueueItemIdSchema,
-  QueueArraySchema,
-} from '../../../validation/schemas';
+import { ClimbQueueItemSchema, QueueIndexSchema, QueueItemIdSchema } from '../../../validation/schemas';
 import { logMutationMetrics } from './mutation-metrics';
 import { logger } from '../../../utils/logger';
 
@@ -385,17 +381,53 @@ export const queueMutations = {
    */
   setQueue: async (
     _: unknown,
-    { queue, currentClimbQueueItem }: { queue: ClimbQueueItem[]; currentClimbQueueItem?: ClimbQueueItem },
+    {
+      queue: rawQueue,
+      currentClimbQueueItem: rawCurrentClimbQueueItem,
+    }: { queue: ClimbQueueItem[]; currentClimbQueueItem?: ClimbQueueItem },
     ctx: ConnectionContext,
   ) => {
     const startTime = performance.now();
     await applyRateLimit(ctx, RATE_LIMIT_SET_QUEUE, RATE_LIMIT_SET_QUEUE_OP);
     const sessionId = await requireSessionWithReconnectGrace(ctx);
 
-    // Validate queue size to prevent memory exhaustion
-    validateInput(QueueArraySchema, queue, 'queue');
-    if (currentClimbQueueItem) {
-      validateInput(ClimbQueueItemSchema, currentClimbQueueItem, 'currentClimbQueueItem');
+    // Validate queue size to prevent memory exhaustion, then validate each
+    // item independently — one malformed/legacy item DROPS OUT instead of
+    // rejecting the whole setQueue call. A single non-RFC-uuid queue item
+    // used to reject the entire array here and wedge sync for a user's whole
+    // queue indefinitely (issue #3857).
+    const { items, droppedCount } = parseArrayTolerant(ClimbQueueItemSchema, rawQueue, 'queue', 500);
+    // ClimbQueueItemSchema's `.nullish()` fields infer as `T | null | undefined`,
+    // one shade looser than the hand-written `ClimbQueueItem` type (`T | null`) —
+    // both mean "absent" downstream (JSON/Redis storage, reducer `===` checks),
+    // so the cast is safe. Same shape `validateInput` callers elsewhere in this
+    // file already return without capturing/typing the result at all.
+    const queue = items as ClimbQueueItem[];
+    if (droppedCount > 0) {
+      // parseArrayTolerant already threw above if rawQueue weren't array-shaped,
+      // so by this point .length is always meaningful.
+      logger.warn(
+        `[setQueue] Dropped ${droppedCount}/${rawQueue.length} invalid queue item(s) for session ${sessionId} instead of rejecting the whole queue.`,
+      );
+    }
+
+    let currentClimbQueueItem: ClimbQueueItem | null = null;
+    if (rawCurrentClimbQueueItem) {
+      currentClimbQueueItem = validateInput(
+        ClimbQueueItemSchema,
+        rawCurrentClimbQueueItem,
+        'currentClimbQueueItem',
+      ) as ClimbQueueItem;
+      // A current-climb pointer whose slot didn't survive tolerant parsing
+      // (or was never in `queue` at all) would dangle — clients index into
+      // `queue` by this uuid. Fall back to no current climb rather than ship
+      // a reference to a slot that isn't there.
+      if (!queue.some((item) => item.uuid === currentClimbQueueItem?.uuid)) {
+        logger.warn(
+          `[setQueue] currentClimbQueueItem uuid not present in the (post-filter) queue for session ${sessionId} — clearing current climb instead of leaving a dangling pointer.`,
+        );
+        currentClimbQueueItem = null;
+      }
     }
 
     // updateQueueState returns the prior state hashes from the same Redis
@@ -416,7 +448,7 @@ export const queueMutations = {
     // on both hashes lets a real reorder through silently while still catching
     // a true no-op.
     const { sequence, stateHash, stateHashOrdered, previousStateHash, previousStateHashOrdered } =
-      await roomManager.updateQueueState(sessionId, queue, currentClimbQueueItem || null);
+      await roomManager.updateQueueState(sessionId, queue, currentClimbQueueItem);
 
     if (
       previousStateHash !== null &&
@@ -434,7 +466,7 @@ export const queueMutations = {
       stateHash,
       stateHashOrdered,
       queue,
-      currentClimbQueueItem: currentClimbQueueItem || null,
+      currentClimbQueueItem,
     };
 
     pubsub.publishQueueEvent(sessionId, {
@@ -445,6 +477,7 @@ export const queueMutations = {
 
     logMutationMetrics('setQueue', performance.now() - startTime, sessionId, {
       queueSize: queue.length,
+      droppedCount,
     });
     return state;
   },

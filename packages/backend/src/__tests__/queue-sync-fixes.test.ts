@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { roomManager, VersionConflictError } from '../services/room-manager';
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 import { queueMutations } from '../graphql/resolvers/queue/mutations';
+import { sessionMutations } from '../graphql/resolvers/sessions/mutations';
 import { pubsub } from '../pubsub/index';
 import { logger } from '../utils/logger';
 import { createMockRedis, type MockRedis } from './helpers/mock-redis';
@@ -808,5 +809,182 @@ describe('setCurrentClimb - combined queue/current state publishing', () => {
     expect(state.currentClimbQueueItem?.climb.layoutId).toBe(8);
     expect(state.queue[0]?.climb.boardType).toBe('tension');
     expect(state.queue[0]?.climb.layoutId).toBe(8);
+  });
+});
+
+// Issue #3857 — a single malformed/legacy queue item (historically: a
+// non-RFC-4122 wrapper `uuid`) used to fail Zod's `z.array(...).safeParse`
+// for the ENTIRE queue, rejecting the whole `setQueue`/`joinSession` call and
+// wedging sync indefinitely. `parseArrayTolerant` (validation/schemas/
+// primitives.ts) validates each item independently and drops only the bad
+// one, so the rest of a user's queue keeps syncing.
+describe('setQueue - tolerant per-item validation (issue #3857)', () => {
+  let mockRedis: MockRedis;
+  let publishSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    mockRedis = createMockRedis();
+    roomManager.reset();
+    await roomManager.initialize(mockRedis);
+    publishSpy = vi.spyOn(pubsub, 'publishQueueEvent').mockImplementation(() => {});
+    warnSpy = vi.spyOn(logger, 'warn').mockImplementation((() => logger) as unknown as typeof logger.warn);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const ctxFor = (sessionId: string) => ({
+    connectionId: 'client-1',
+    sessionId,
+    rateLimitTokens: 60,
+    rateLimitLastReset: Date.now(),
+  });
+
+  // A queue item whose wrapper `uuid` fails ExternalUUIDSchema's min(1) bound
+  // — same class of malformed item as issue #3857's historical/peer-synced
+  // ids, just past the lenient schema's own boundary. Still a valid TS shape:
+  // the whole point of the server-side Zod check is catching what TS can't
+  // (the payload arrives over the wire as untyped JSON).
+  const createEmptyUuidQueueItem = (): ClimbQueueItem => ({ ...createTestClimb(), uuid: '' });
+
+  // A queue item with a VALID uuid but a structurally invalid `climb` payload
+  // (angle must be a number) — fails ClimbQueueItemSchema as a whole despite
+  // the uuid itself being fine. Models "this exact slot's data is corrupt",
+  // as opposed to "this slot's id is malformed".
+  const createStructurallyInvalidQueueItem = (uuid: string): ClimbQueueItem => ({
+    ...createTestClimb(uuid),
+    climb: { ...createTestClimb().climb, angle: 'not-a-number' as unknown as number },
+  });
+
+  it('drops a malformed item and keeps syncing the rest of the queue instead of rejecting the whole setQueue call', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const validItem1 = createTestClimb();
+    const validItem2 = createTestClimb();
+    const malformedItem = createEmptyUuidQueueItem();
+
+    const state = await queueMutations.setQueue(
+      {},
+      { queue: [validItem1, malformedItem, validItem2], currentClimbQueueItem: validItem1 },
+      ctxFor(sessionId),
+    );
+
+    expect(state.queue).toHaveLength(2);
+    expect(state.queue.map((item: ClimbQueueItem) => item.uuid).sort()).toEqual(
+      [validItem1.uuid, validItem2.uuid].sort(),
+    );
+    // Current wasn't the dropped item, so it survives untouched.
+    expect(state.currentClimbQueueItem?.uuid).toBe(validItem1.uuid);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Dropped 1/3 invalid queue item'));
+    expect(publishSpy).toHaveBeenCalledWith(
+      sessionId,
+      expect.objectContaining({
+        __typename: 'FullSync',
+        state: expect.objectContaining({
+          queue: expect.arrayContaining([expect.objectContaining({ uuid: validItem1.uuid })]),
+        }),
+      }),
+    );
+  });
+
+  it('clears currentClimbQueueItem to null when its own queue slot is the dropped item, instead of leaving a dangling pointer', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const currentUuid = uuidv4();
+    // The array's copy of "current" is corrupt and gets dropped by tolerant
+    // parsing...
+    const danglingQueueEntry = createStructurallyInvalidQueueItem(currentUuid);
+    const validItem = createTestClimb();
+    // ...but the caller ALSO independently sends a structurally valid
+    // currentClimbQueueItem pointing at that same uuid — a slot that no
+    // longer exists in `queue` once the array is filtered.
+    const currentClimbQueueItem = createTestClimb(currentUuid);
+
+    const state = await queueMutations.setQueue(
+      {},
+      { queue: [danglingQueueEntry, validItem], currentClimbQueueItem },
+      ctxFor(sessionId),
+    );
+
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0]?.uuid).toBe(validItem.uuid);
+    expect(state.currentClimbQueueItem).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('currentClimbQueueItem uuid not present'));
+  });
+
+  it('still rejects the whole setQueue call when the queue array itself exceeds the 500-item size cap', async () => {
+    const sessionId = uuidv4();
+    await registerAndJoinSession('client-1', sessionId, '/kilter/1/2/3/40', 'User1');
+
+    const oversizedQueue = Array.from({ length: 501 }, () => createTestClimb());
+
+    await expect(queueMutations.setQueue({}, { queue: oversizedQueue }, ctxFor(sessionId))).rejects.toThrow(
+      /Invalid queue/,
+    );
+  });
+
+  it('joinSession drops a malformed initialQueue item and still seeds the rest, instead of rejecting the whole join', async () => {
+    const sessionId = uuidv4();
+    const connectionId = 'client-join-3857';
+    await roomManager.registerClient(connectionId);
+
+    const validItem1 = createTestClimb();
+    const malformedItem = createEmptyUuidQueueItem();
+    const joinCtx = { connectionId, rateLimitTokens: 60, rateLimitLastReset: Date.now() };
+
+    const result = await sessionMutations.joinSession(
+      {},
+      {
+        sessionId,
+        boardPath: '/kilter/1/2/3/40',
+        username: 'User1',
+        initialQueue: [validItem1, malformedItem],
+      },
+      joinCtx,
+    );
+
+    expect(result.queueState).not.toBeNull();
+    expect(result.queueState?.queue).toHaveLength(1);
+    expect(result.queueState?.queue[0]?.uuid).toBe(validItem1.uuid);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Dropped 1/2 invalid initialQueue item'));
+  });
+
+  it('joinSession clears initialCurrentClimb to null when its own initialQueue slot is the dropped item', async () => {
+    const sessionId = uuidv4();
+    const connectionId = 'client-join-3857-dangling';
+    await roomManager.registerClient(connectionId);
+
+    const currentUuid = uuidv4();
+    // The initialQueue's copy of "current" is corrupt and gets dropped by
+    // tolerant parsing...
+    const danglingQueueEntry = createStructurallyInvalidQueueItem(currentUuid);
+    const validItem = createTestClimb();
+    // ...but the caller ALSO independently sends a structurally valid
+    // initialCurrentClimb pointing at that same uuid — a slot that no longer
+    // exists in the seeded queue once the array is filtered.
+    const initialCurrentClimb = createTestClimb(currentUuid);
+    const joinCtx = { connectionId, rateLimitTokens: 60, rateLimitLastReset: Date.now() };
+
+    const result = await sessionMutations.joinSession(
+      {},
+      {
+        sessionId,
+        boardPath: '/kilter/1/2/3/40',
+        username: 'User1',
+        initialQueue: [danglingQueueEntry, validItem],
+        initialCurrentClimb,
+      },
+      joinCtx,
+    );
+
+    expect(result.queueState).not.toBeNull();
+    expect(result.queueState?.queue).toHaveLength(1);
+    expect(result.queueState?.queue[0]?.uuid).toBe(validItem.uuid);
+    expect(result.queueState?.currentClimbQueueItem).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('initialCurrentClimb uuid not present'));
   });
 });
