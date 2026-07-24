@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- The recurring MoonBoard location sync isn't live in prod (see #3863), so this change is user-invisible today. ([#3864](https://github.com/boardsesh/boardsesh/pull/3864))
 - Bug reports in the admin panel are now readable in dark mode ([#3826](https://github.com/boardsesh/boardsesh/pull/3826))
 - Fixed a blank fine-tuning panel when building a session on iPhone — the workout builder's Tuning controls show up again ([#3855](https://github.com/boardsesh/boardsesh/pull/3855))
 - The board now relights every climb as you swipe or tap through your queue on the web app — not just the first one. ([#3853](https://github.com/boardsesh/boardsesh/pull/3853))

@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-24T13:08:40.779Z",
+  "generatedAt": "2026-07-24T13:15:34.581Z",
   "entries": [
+    {
+      "prNumber": 3864,
+      "category": "fixed",
+      "title": "The recurring MoonBoard location sync isn't live in prod (see #3863), so this change is user-invisible today.",
+      "mergedAt": "2026-07-24T13:09:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3864"
+    },
     {
       "prNumber": 3826,
       "category": "fixed",
