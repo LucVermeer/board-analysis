@@ -6,8 +6,20 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-24
 
+### New
+
+- Staff you add to your gym now see it in My Gyms, and get a heads-up the moment they're handed the keys. ([#3844](https://github.com/boardsesh/boardsesh/pull/3844))
+  Assigning roles is clearer: a quick note on what admins, editors, and members can each do.
+
+### Improved
+
+- Shared climbs unfurl instantly in chats — the preview is ready before your link lands ([#3834](https://github.com/boardsesh/boardsesh/pull/3834))
+
 ### Fixed
 
+- Queue climbs your crew adds now fill in their name, grade, and thumbnail on your phone instead of getting stuck on "Unknown Climb" — even when the climb wasn't already cached on your device. ([#3763](https://github.com/boardsesh/boardsesh/pull/3763))
+- Climb search no longer randomly comes up empty on busy filters. ([#3865](https://github.com/boardsesh/boardsesh/pull/3865))
+- Fixed a rare crash when the app was sent to the background mid-sync. ([#3755](https://github.com/boardsesh/boardsesh/pull/3755))
 - The recurring MoonBoard location sync isn't live in prod (see #3863), so this change is user-invisible today. ([#3864](https://github.com/boardsesh/boardsesh/pull/3864))
 - Bug reports in the admin panel are now readable in dark mode ([#3826](https://github.com/boardsesh/boardsesh/pull/3826))
 - Fixed a blank fine-tuning panel when building a session on iPhone — the workout builder's Tuning controls show up again ([#3855](https://github.com/boardsesh/boardsesh/pull/3855))

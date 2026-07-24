@@ -1,6 +1,42 @@
 {
-  "generatedAt": "2026-07-24T13:15:34.581Z",
+  "generatedAt": "2026-07-24T21:55:21.597Z",
   "entries": [
+    {
+      "prNumber": 3834,
+      "category": "improved",
+      "title": "Shared climbs unfurl instantly in chats — the preview is ready before your link lands",
+      "mergedAt": "2026-07-24T21:52:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3834"
+    },
+    {
+      "prNumber": 3844,
+      "category": "new",
+      "title": "Staff you add to your gym now see it in My Gyms, and get a heads-up the moment they're handed the keys.",
+      "mergedAt": "2026-07-24T21:51:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3844",
+      "body": "Assigning roles is clearer: a quick note on what admins, editors, and members can each do."
+    },
+    {
+      "prNumber": 3763,
+      "category": "fixed",
+      "title": "Queue climbs your crew adds now fill in their name, grade, and thumbnail on your phone instead of getting stuck on \"Unknown Climb\" — even when the climb wasn't already cached on your device.",
+      "mergedAt": "2026-07-24T21:50:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3763"
+    },
+    {
+      "prNumber": 3865,
+      "category": "fixed",
+      "title": "Climb search no longer randomly comes up empty on busy filters.",
+      "mergedAt": "2026-07-24T21:49:39Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3865"
+    },
+    {
+      "prNumber": 3755,
+      "category": "fixed",
+      "title": "Fixed a rare crash when the app was sent to the background mid-sync.",
+      "mergedAt": "2026-07-24T21:48:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3755"
+    },
     {
       "prNumber": 3864,
       "category": "fixed",
