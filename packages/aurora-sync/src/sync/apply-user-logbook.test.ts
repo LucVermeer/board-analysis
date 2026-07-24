@@ -494,6 +494,7 @@ describe('applyAuroraBids — malformed-row isolation (#3520)', () => {
       expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
       expect(insertValues[0]).toHaveLength(1);
       expect(insertValues[0][0]).toMatchObject({ auroraId: 'bid-good' });
+      expect(recomputeMock).toHaveBeenCalledTimes(1);
     } finally {
       warnSpy.mockRestore();
     }
@@ -514,6 +515,7 @@ describe('applyAuroraAscents — malformed-row isolation (#3520)', () => {
       expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
       expect(insertValues[0]).toHaveLength(1);
       expect(insertValues[0][0]).toMatchObject({ auroraId: 'aur-good' });
+      expect(recomputeMock).toHaveBeenCalledTimes(1);
     } finally {
       warnSpy.mockRestore();
     }
