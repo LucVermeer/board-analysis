@@ -404,8 +404,10 @@ export const queueMutations = {
     // file already return without capturing/typing the result at all.
     const queue = items as ClimbQueueItem[];
     if (droppedCount > 0) {
+      // parseArrayTolerant already threw above if rawQueue weren't array-shaped,
+      // so by this point .length is always meaningful.
       logger.warn(
-        `[setQueue] Dropped ${droppedCount}/${Array.isArray(rawQueue) ? rawQueue.length : 0} invalid queue item(s) for session ${sessionId} instead of rejecting the whole queue.`,
+        `[setQueue] Dropped ${droppedCount}/${rawQueue.length} invalid queue item(s) for session ${sessionId} instead of rejecting the whole queue.`,
       );
     }
 

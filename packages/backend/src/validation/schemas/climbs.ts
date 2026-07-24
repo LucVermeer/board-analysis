@@ -126,11 +126,6 @@ export const ClimbQueueItemSchema = z.object({
 });
 
 /**
- * Queue array validation schema (with size limit)
- */
-export const QueueArraySchema = z.array(ClimbQueueItemSchema).max(500, 'Queue too large');
-
-/**
  * Climb search input validation schema
  */
 export const ClimbSearchInputSchema = z.object({
