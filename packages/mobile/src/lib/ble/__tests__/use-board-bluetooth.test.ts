@@ -96,7 +96,9 @@ vi.mock('../adapter', () => ({
 // mock it so the hook's persist/hydrate wiring can be asserted without a native
 // module, and so its behaviour is observable via these spies (#3609).
 const mockLastConnectedBoardStore = vi.hoisted(() => ({
-  getStoredLastConnectedBoard: vi.fn(async (): Promise<{ serial: string; configKey: string } | null> => null),
+  getStoredLastConnectedBoard: vi.fn(
+    async (): Promise<{ configKey: string; serial?: string; deviceId?: string } | null> => null,
+  ),
   setStoredLastConnectedBoard: vi.fn(async () => {}),
   clearStoredLastConnectedBoard: vi.fn(async () => {}),
 }));
@@ -944,6 +946,232 @@ describe('useBoardBluetooth', () => {
     expect(failureCall).toBeUndefined();
     expect(result.current.isConnected).toBe(false);
   });
+
+  it('drops a MoonBoard only after consecutive dead-link writes so the lightbulb goes out', async () => {
+    // A 2016 MoonBoard supervision-timeout drop surfaces as a generic
+    // `write_failed` (the native "No board is connected" slips past
+    // isDisconnectionError). But a one-off transient write error looks identical,
+    // and force-dropping a live MoonBoard is costly — some controllers need a
+    // power cycle before a new connection — so a single failure must NOT drop the
+    // link; only a genuine drop, which fails every subsequent send, does.
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'moon-1', deviceName: 'MoonBoard' }),
+      write: vi.fn().mockRejectedValue(new Error('Write failed')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x09]),
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+      totalPlacements: 1,
+      isClear: false,
+    });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.isConnected).toBe(true);
+
+    // First dead-link write: reported, but the link is kept (could be transient).
+    await act(async () => {
+      await result.current.sendFramesToBoard('p100r12');
+    });
+    expect(result.current.isConnected).toBe(true);
+    expect(fakeAdapter.disconnect).not.toHaveBeenCalled();
+
+    // Second consecutive failure: now treat it as dead and drop so the bulb goes out.
+    await act(async () => {
+      await result.current.sendFramesToBoard('p101r12');
+    });
+    expect(result.current.isConnected).toBe(false);
+    expect(fakeAdapter.disconnect).toHaveBeenCalled();
+
+    const failures = mockTrack.mock.calls.filter(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failures).toHaveLength(2);
+    expect(failures[0][1]).toMatchObject({ failureReason: 'write_failed' });
+    // A link timeout isn't a steal — don't fire the tug-of-war event.
+    expect(mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Stolen')).toBeUndefined();
+  });
+
+  it('reports the first ambiguous MoonBoard write_failed as an error, only downgrading once the streak confirms a dead link', async () => {
+    // The first `write_failed` could be a genuine write bug unrelated to a dead
+    // link — it must still surface at 'error' level so it isn't drowned out.
+    // Only the second (streak-confirmed) failure, which drops the connection,
+    // downgrades to 'warning' — mirroring the routine-disconnect treatment.
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'moon-1', deviceName: 'MoonBoard' }),
+      write: vi.fn().mockRejectedValue(new Error('Write failed')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x09]),
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+      totalPlacements: 1,
+      isClear: false,
+    });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    await act(async () => {
+      await result.current.sendFramesToBoard('p100r12');
+    });
+    const sendFailureCalls = vi
+      .mocked(reportHandledError)
+      .mock.calls.filter(([, options]) => options?.tags?.source === 'ble-send');
+    expect(sendFailureCalls).toHaveLength(1);
+    expect(sendFailureCalls[0][1]).toMatchObject({ level: 'error' });
+
+    await act(async () => {
+      await result.current.sendFramesToBoard('p101r12');
+    });
+    const sendFailureCallsAfterDrop = vi
+      .mocked(reportHandledError)
+      .mock.calls.filter(([, options]) => options?.tags?.source === 'ble-send');
+    expect(sendFailureCallsAfterDrop).toHaveLength(2);
+    expect(sendFailureCallsAfterDrop[1][1]).toMatchObject({ level: 'warning' });
+  });
+
+  it('resets the MoonBoard dead-link streak after a successful write (no drop on isolated glitches)', async () => {
+    // Two write failures with a success between them must not drop the link: the
+    // success proves the board is alive, so the streak resets and the second
+    // failure is treated as a fresh glitch, not a dead link.
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Write failed'))
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('Write failed'));
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'moon-1', deviceName: 'MoonBoard' }),
+      write,
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x09]),
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+      totalPlacements: 1,
+      isClear: false,
+    });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    await act(async () => {
+      await result.current.sendFramesToBoard('a'); // fail → streak 1
+    });
+    await act(async () => {
+      await result.current.sendFramesToBoard('b'); // success → streak reset to 0
+    });
+    await act(async () => {
+      await result.current.sendFramesToBoard('c'); // fail → streak 1 (not 2)
+    });
+
+    expect(result.current.isConnected).toBe(true);
+    expect(fakeAdapter.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('keeps a MoonBoard connected when a write stalls (write_timeout self-recovers)', async () => {
+    // write_timeout is the native layer's own self-recovery path (#3181); it must
+    // NOT be torn down here even on a MoonBoard.
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'moon-1', deviceName: 'MoonBoard' }),
+      write: vi.fn().mockRejectedValue(new Error('BLE write timed out waiting for the board to accept data')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x09]),
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+      totalPlacements: 1,
+      isClear: false,
+    });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      await result.current.sendFramesToBoard('p100r12');
+    });
+
+    const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failureCall?.[1]).toMatchObject({ failureReason: 'write_timeout' });
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('does not drop a Kilter connection on a generic write_failed (MoonBoard-scoped)', async () => {
+    // The dead-link-on-write_failed teardown is scoped to MoonBoard; an Aurora
+    // board keeps the existing behaviour (only explicit disconnect signatures
+    // tear it down), so a one-off Kilter write hiccup doesn't drop the link.
+    const fakeAdapter = makeFakeAdapter({
+      write: vi.fn().mockRejectedValue(new Error('Write failed')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetLedPlacements.mockReturnValue({ 100: 7 });
+    mockGetAuroraBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x09]),
+      skippedPositionCount: 0,
+      skippedRoleCount: 0,
+      totalPlacements: 1,
+    });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      await result.current.sendFramesToBoard('p100r12');
+    });
+
+    const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failureCall?.[1]).toMatchObject({ failureReason: 'write_failed' });
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('remembers a MoonBoard by device id and reconnects to it without the picker', async () => {
+    // MoonBoards carry no parseable serial, so we remember the BLE peripheral id
+    // and pass it back as the reconnect target; the adapter then silently
+    // auto-selects that device instead of opening the picker.
+    const requestAndConnect = vi.fn().mockResolvedValue({ deviceId: 'moon-abc', deviceName: 'MoonBoard' });
+    const fakeAdapter = makeFakeAdapter({ requestAndConnect });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(mockLastConnectedBoardStore.setStoredLastConnectedBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceId: 'moon-abc' }),
+    );
+    expect(result.current.reconnectDeviceIdForCurrentBoard).toBe('moon-abc');
+    expect(result.current.reconnectSerialForCurrentBoard).toBeNull();
+
+    await act(async () => {
+      await result.current.connect(undefined, undefined, undefined, 'moon-abc');
+    });
+    // The reconnect forwards the device id as the second requestAndConnect arg.
+    expect(requestAndConnect.mock.calls.at(-1)).toEqual([undefined, 'moon-abc']);
+  });
 });
 
 // ── Native connection adoption (iOS) ───────────────────────────────────────
@@ -995,6 +1223,26 @@ describe('useBoardBluetooth native connection adoption', () => {
 
     expect(adapter.adoptConnection).toHaveBeenCalledWith('native-dev');
     expect(result.current.isConnected).toBe(true);
+  });
+
+  it('remembers an adopted MoonBoard by its device id (no serial)', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'moon-native-dev', deviceName: 'MoonBoard A1' });
+    });
+
+    expect(adapter.adoptConnection).toHaveBeenCalledWith('moon-native-dev');
+    expect(result.current.isConnected).toBe(true);
+    // A MoonBoard has no serial, so an adopted native connection is remembered by
+    // device id — so a later drop can reconnect to the same board on one tap.
+    expect(mockLastConnectedBoardStore.setStoredLastConnectedBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceId: 'moon-native-dev' }),
+    );
+    expect(result.current.reconnectDeviceIdForCurrentBoard).toBe('moon-native-dev');
   });
 
   it('reconfigures adopted native boards when role colour overrides change', async () => {

@@ -46,6 +46,7 @@ const bt = vi.hoisted(() => ({
   armUndoWallChangeToast: vi.fn(),
   reassertWall: vi.fn(),
   reconnectSerialForCurrentBoard: 'serial-123' as string | null,
+  reconnectDeviceIdForCurrentBoard: null as string | null,
 }));
 
 const boardState = vi.hoisted(() => ({
@@ -259,6 +260,7 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
     bt.armUndoWallChangeToast.mockClear();
     bt.reassertWall.mockClear();
     bt.reconnectSerialForCurrentBoard = 'serial-123';
+    bt.reconnectDeviceIdForCurrentBoard = null;
     analytics.track.mockClear();
     climbRender.overlayUri = null;
     climbRender.backgroundPaths = [];
@@ -300,7 +302,7 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
 
     expect(bt.armUndoWallChangeToast).toHaveBeenCalledTimes(1);
     expect(bt.connect).toHaveBeenCalledTimes(1);
-    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, 'serial-123');
+    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, 'serial-123', undefined);
     expect(bt.reassertWall).not.toHaveBeenCalled();
     // The lock-screen reconnect is measured like the in-app bulb.
     expect(analytics.track).toHaveBeenCalledWith(
@@ -331,7 +333,19 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
       widget.boardControlListener?.({ action: 'reconnect', correlationId: 'bulb-2' });
     });
 
-    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, undefined);
+    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, undefined, undefined);
+  });
+
+  it('reconnect: forwards a remembered MoonBoard device id (no serial)', () => {
+    bt.reconnectSerialForCurrentBoard = null;
+    bt.reconnectDeviceIdForCurrentBoard = 'moon-abc';
+    renderBridge();
+
+    act(() => {
+      widget.boardControlListener?.({ action: 'reconnect', correlationId: 'bulb-3' });
+    });
+
+    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, undefined, 'moon-abc');
   });
 
   it('reassert: re-pushes the current climb without reconnecting (no undo toast — nothing changed)', () => {
