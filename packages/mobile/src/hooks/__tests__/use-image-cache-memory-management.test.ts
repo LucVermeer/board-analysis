@@ -157,4 +157,16 @@ describe('useIpadTabSwitchImageCacheSweep', () => {
     rerender();
     expect(clearMemoryCache).toHaveBeenCalledTimes(2);
   });
+
+  it('seeds a null active tab on a root-modal cold start, then sweeps on the first tab nav', () => {
+    // Cold-start straight into a root modal / player (segment 0 is not `(tabs)`),
+    // so tabsActiveSegment is null. The seed must record that null without sweeping,
+    // and the first real tab navigation must then sweep once.
+    segments.value = ['play'];
+    const { rerender } = renderHook(() => useIpadTabSwitchImageCacheSweep());
+    expect(clearMemoryCache).not.toHaveBeenCalled();
+    segments.value = ['(tabs)', 'home'];
+    rerender();
+    expect(clearMemoryCache).toHaveBeenCalledTimes(1);
+  });
 });
