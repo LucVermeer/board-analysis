@@ -255,8 +255,11 @@ void describe('statsDrivenSearch — DSM parallelism guard (#3856)', () => {
       sortOrder: 'desc',
     });
 
-    assert.deepEqual(callOrder, ['execute', 'select']);
+    assert.deepEqual(callOrder, ['execute', 'select'], 'SET LOCAL must run before the stats-driven SELECT');
     const renderedGuards = executedStatements.map((statement) => dialect.sqlToQuery(statement).sql);
-    assert.ok(renderedGuards.some((statement) => GUARD_PATTERN.test(statement)));
+    assert.ok(
+      renderedGuards.some((statement) => GUARD_PATTERN.test(statement)),
+      `expected a SET LOCAL max_parallel_workers_per_gather = 0 guard; saw: ${renderedGuards.join(', ')}`,
+    );
   });
 });
