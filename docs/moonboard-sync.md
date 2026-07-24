@@ -15,6 +15,22 @@ MoonBoard locations intentionally cover every configured layout, not just the 20
 
 Rows are upserted by deterministic UUID. The sync does not delete rows that disappear upstream.
 
+## Gym identity (source keys)
+
+MoonBoard's `GetMapMarkers` payload has **no upstream id** — only a name and coordinates. A gym's stable identity is therefore derived from its name plus a coarse location cell:
+
+```
+moonboard:<normalized name>:<lat cell>:<lng cell>
+```
+
+`<lat cell>`/`<lng cell>` are integer hundredths of a degree (`Math.round(coord * 100)`), a ~1.1 km north-south grid. The name is normalized (lowercase, single-spaced) so casing/whitespace jitter can't split one gym into two identities; the human-readable name is stored separately for display.
+
+Why not full-precision coordinates: they made the key change on every pin nudge, so any move beyond the 20 m physical-match tier minted a permanent duplicate gym — a 20-150 m move tripped the same-provider guard, a larger move missed the match radius entirely (issue #3715). Why not the name alone: genuinely distinct gyms share names (the prod collisions — e.g. "MoonBoard" vs "Moonboard" — sit thousands of km apart), and a name-only key would merge them into one flip-flopping gym.
+
+The coarse cell keeps the key stable across the whole realistic pin-correction range while keeping far-apart same-named gyms distinct. The rare correction that crosses a cell boundary **and** lands in the 20-150 m band mints one twin that surfaces in `/admin/gym-duplicates` for a human merge — the fallback is a manual merge, never a silently wrong one.
+
+When the sync first runs against a database whose MoonBoard gyms were seeded without source aliases (as in prod today), each marker resolves its existing gym through the name + location physical match and adopts it (aliases the stable key onto it), so no separate backfill migration is needed.
+
 ## CLI
 
 ```bash

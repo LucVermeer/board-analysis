@@ -459,12 +459,13 @@ function classifyGymMatch(
   const unclaimedUserOwnedSkips: CandidateReference[] = [];
   const eligibleCandidates: GymMatchCandidate[] = [];
   for (const candidate of guardedCandidates) {
-    // NOTE: moonboard embeds the pin's coordinates in its source key
-    // (`moonboard:<name>:<lat>:<lng>`), so a pin that moves > 20 m mints a new
-    // source key. The same-provider guard then sees that key as a different
-    // moonboard source on the old gym and refuses to re-merge — the moved pin
-    // warns here, then mints a permanent twin. Tracked for a key-scheme redesign
-    // (follow-up issue); see docs and the same-provider log below.
+    // A same-provider alias already on this candidate means it's a genuinely
+    // distinct wall 20-150 m away (two provider sources for one physical gym is
+    // what aliasing is for; two 150 m apart are more likely two gyms), so we
+    // refuse to auto-merge here and log below. (Every provider now uses a stable,
+    // coordinate-free identity — MoonBoard's name + coarse-cell key, issue #3715,
+    // was the last coordinate-embedding source key that made a moved pin look
+    // like a new same-provider source and trip this guard.)
     const conflictingSourceKeys = candidate.aliasSourceKeys.filter(
       (aliasSourceKey) => aliasSourceKey !== sourceKey && providerPrefixOf(aliasSourceKey) === providerPrefix,
     );
