@@ -197,11 +197,8 @@ function CollapsibleSectionInternal({
         </Animated.View>
       </Pressable>
 
-      {/* Body renders in a plain View, not a Reanimated entering/exiting
-          Animated.View: inside a FlashList ListHeaderComponent (the session
-          generator's Tuning section) the iOS FadeIn settled at ~0 height and
-          got clipped by the container's overflow:'hidden', painting blank.
-          Matches the keepExpanded branch above. */}
+      {/* Plain View, not a FadeIn/FadeOut Animated.View: inside a FlashList header
+          the iOS entering animation settles at ~0 height and paints the body blank. */}
       {expanded && <View style={styles.content}>{children}</View>}
     </View>
   );
