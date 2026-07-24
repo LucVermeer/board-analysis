@@ -208,9 +208,12 @@ describe('OfflineSyncBridge — flag OFF', () => {
     await waitFor(() => expect(setupNotificationHandlersMock).toHaveBeenCalledTimes(1));
   });
 
-  it('still starts background tracking (not flag-gated — covers the leftover drain too)', async () => {
-    render(<Harness flags={FLAG_OFF} queryClient={makeQueryClient()} />);
+  it('still starts background tracking (not flag-gated — covers the leftover drain too) and tears it down on unmount', async () => {
+    const { unmount } = render(<Harness flags={FLAG_OFF} queryClient={makeQueryClient()} />);
     await waitFor(() => expect(startBackgroundTrackingMock).toHaveBeenCalledTimes(1));
+    expect(startBackgroundTrackingStop).not.toHaveBeenCalled();
+    unmount();
+    expect(startBackgroundTrackingStop).toHaveBeenCalledTimes(1);
   });
 });
 
