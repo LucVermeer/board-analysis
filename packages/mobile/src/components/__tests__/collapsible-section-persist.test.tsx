@@ -37,8 +37,6 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('react-native-reanimated', () => ({
   default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
-  FadeIn: { duration: () => ({}) },
-  FadeOut: { duration: () => ({}) },
   useSharedValue: (value: number) => ({ value }),
   useAnimatedStyle: (factory: () => Record<string, unknown>) => factory(),
   withTiming: (value: number) => value,
