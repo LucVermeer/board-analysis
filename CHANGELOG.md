@@ -4,6 +4,14 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-24
+
+### Fixed
+
+- Bug reports in the admin panel are now readable in dark mode ([#3826](https://github.com/boardsesh/boardsesh/pull/3826))
+- Fixed a blank fine-tuning panel when building a session on iPhone — the workout builder's Tuning controls show up again ([#3855](https://github.com/boardsesh/boardsesh/pull/3855))
+- The board now relights every climb as you swipe or tap through your queue on the web app — not just the first one. ([#3853](https://github.com/boardsesh/boardsesh/pull/3853))
+
 ## 2026-07-22
 
 ### New
