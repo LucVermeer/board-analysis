@@ -262,6 +262,70 @@ describe('mobile SUBSCRIPTION_CLIMB_FIELDS is a superset of the shared queue-ses
   });
 });
 
+// Regression test for issue #3358: QUEUE_UPDATES_SUBSCRIPTION shipped with NO
+// `... on PlaybackStateChanged` fragment at all. Per GraphQL union selection
+// semantics that meant the server returned a `__typename`-only payload for
+// every PlaybackStateChanged event — `event.climbUuid` was always `undefined`,
+// so `use-mobile-playback.ts`'s `event.climbUuid !== climbUuid` guard always
+// short-circuited and inbound peer route-playback sync silently did nothing on
+// mobile. TypeScript never caught it because `use-session-realtime.ts` reads
+// the raw wire payload through an `as unknown as SubscriptionQueueEvent` cast
+// (tracked separately as TODO(#2507)) — this parser-driven check is the
+// backstop until that cast is removed.
+describe('mobile QUEUE_UPDATES_SUBSCRIPTION selects the same PlaybackStateChanged fields as the shared queue-session subscription', () => {
+  // Collect the field names selected inside every inline fragment for a given
+  // type condition (e.g. `... on PlaybackStateChanged { ... }`), anywhere in
+  // the document. Mirrors climbFieldNames' parser-driven approach above so
+  // this compares field sets, not raw strings.
+  function inlineFragmentFieldNames(operationSource: string, typeName: string): Set<string> {
+    const fields = new Set<string>();
+    visit(parse(operationSource), {
+      InlineFragment(node) {
+        if (node.typeCondition?.name.value !== typeName || !node.selectionSet) return;
+        for (const selection of node.selectionSet.selections) {
+          if (selection.kind === 'Field') fields.add(selection.name.value);
+        }
+      },
+    });
+    return fields;
+  }
+
+  const mobileOperationsSource = readMobileOperationsSource();
+  const subscriptionClimbFields = extractTemplateConst(mobileOperationsSource, 'SUBSCRIPTION_CLIMB_FIELDS');
+  // Same placeholder-substitution technique as the "mobile plain-string
+  // subscription documents" describe block above — QUEUE_UPDATES_SUBSCRIPTION
+  // interpolates `${SUBSCRIPTION_CLIMB_FIELDS}` at build time, so replicate
+  // that before parsing raw extracted source text as GraphQL.
+  const mobileQueueUpdates = extractTemplateConst(mobileOperationsSource, 'QUEUE_UPDATES_SUBSCRIPTION').replaceAll(
+    '${SUBSCRIPTION_CLIMB_FIELDS}',
+    subscriptionClimbFields,
+  );
+
+  const sharedPlaybackFields = inlineFragmentFieldNames(queueSessionOperations.QUEUE_UPDATES, 'PlaybackStateChanged');
+  const mobilePlaybackFields = inlineFragmentFieldNames(mobileQueueUpdates, 'PlaybackStateChanged');
+
+  it('both subscriptions select a non-empty PlaybackStateChanged field set', () => {
+    expect(sharedPlaybackFields.size).toBeGreaterThan(0);
+    expect(mobilePlaybackFields.size).toBeGreaterThan(0);
+  });
+
+  it('every shared PlaybackStateChanged field is present in the mobile subscription', () => {
+    const missing = [...sharedPlaybackFields].filter((field) => !mobilePlaybackFields.has(field));
+    if (missing.length > 0) {
+      throw new Error(
+        `mobile QUEUE_UPDATES_SUBSCRIPTION is missing PlaybackStateChanged fields the shared subscription selects: ${missing.join(', ')}.\n` +
+          'Without them, inbound peer route-playback sync is dead on mobile (issue #3358) — add the missing fields to the ' +
+          '`... on PlaybackStateChanged` fragment in packages/mobile/src/lib/graphql/operations.ts.',
+      );
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('carries climbUuid specifically, since that field gates whether use-mobile-playback applies the event at all', () => {
+    expect(mobilePlaybackFields.has('climbUuid')).toBe(true);
+  });
+});
+
 // Workstream B7 (reduced variant, 2026-07) removed ONLY the takeControl/releaseControl
 // mutations. Session.driverParticipantId, the DriverChanged type, and its SessionEvent
 // union membership are DEFERRED: telemetry found a real tail of stale mobile JS bundles

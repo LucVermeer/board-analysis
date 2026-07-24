@@ -280,6 +280,24 @@ function wireQueueItemAdded(sequence: number, stateHash: string, item: ReturnTyp
   };
 }
 
+// Wire-shaped PlaybackStateChanged matching QUEUE_UPDATES_SUBSCRIPTION's `...
+// on PlaybackStateChanged` fragment (issue #3358) — no top-level `stateHash`,
+// since this event doesn't mutate queue state.
+function wirePlaybackStateChanged(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    __typename: 'PlaybackStateChanged',
+    sequence: 1,
+    climbUuid: 'c1',
+    frameIndex: 3,
+    isPlaying: true,
+    speed: 1.5,
+    paceMs: 250,
+    anchorTimestamp: '1700000000000',
+    clientId: 'peer-client',
+    ...overrides,
+  };
+}
+
 function queueStateResponse(
   items: ClimbQueueItem[],
   current: ClimbQueueItem | null = null,
@@ -717,19 +735,33 @@ describe('QueueProvider queue sync gate', () => {
       queueUpdatesSink.next({ data: { queueUpdates: wireFullSync(1, 'hash-1') } });
     });
 
-    // The real wire payload for PlaybackStateChanged carries only
-    // `__typename` — QUEUE_UPDATES_SUBSCRIPTION has no `... on
-    // PlaybackStateChanged` fragment, so no sequence/stateHash is selected.
+    // Defensive case: a `__typename`-only payload (e.g. a stale client bundle
+    // still missing the `... on PlaybackStateChanged` fragment, or a future
+    // union member this listener doesn't recognise) must still be forwarded
+    // and must not throw or otherwise disrupt the gate.
     act(() => {
       queueUpdatesSink.next({ data: { queueUpdates: { __typename: 'PlaybackStateChanged' } } });
     });
 
-    await waitFor(() => {
-      expect(received.map((event) => event.__typename)).toContain('PlaybackStateChanged');
+    // Realistic case (issue #3358): QUEUE_UPDATES_SUBSCRIPTION now selects the
+    // full `... on PlaybackStateChanged` fragment, so the real wire payload
+    // carries all 8 fields — assert they reach the listener unchanged, since
+    // `use-mobile-playback.ts` reads `climbUuid`/`frameIndex`/etc directly off
+    // the forwarded event.
+    act(() => {
+      queueUpdatesSink.next({ data: { queueUpdates: wirePlaybackStateChanged() } });
     });
+
+    await waitFor(() => {
+      expect(received.filter((event) => event.__typename === 'PlaybackStateChanged')).toHaveLength(2);
+    });
+    const [minimalEvent, fullEvent] = received.filter((event) => event.__typename === 'PlaybackStateChanged');
+    expect(minimalEvent).toEqual({ __typename: 'PlaybackStateChanged' });
+    expect(fullEvent).toEqual(wirePlaybackStateChanged());
+
     // It must not have touched the reducer or the gate's tracking: the very
     // next real delta at sequence 2 (contiguous with the FullSync's 1) still
-    // applies cleanly — proving PlaybackStateChanged never occupied a
+    // applies cleanly — proving neither PlaybackStateChanged event occupied a
     // sequence slot or otherwise got gated.
     act(() => {
       queueUpdatesSink.next({ data: { queueUpdates: wireQueueItemAdded(2, 'hash-2', wireItem('q1', 'c1')) } });
