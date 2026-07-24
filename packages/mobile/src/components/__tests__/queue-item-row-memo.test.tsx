@@ -4,6 +4,7 @@ import { render } from '@testing-library/react';
 import { createElement, useRef, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { QueueItemRowBoard } from '../QueueItemRow';
+import type { QueueDragControls } from '../play-drawer/use-queue-drag';
 
 // Count how many times the inner component body actually renders. The body
 // renders `ClimbListItemContent` once per render, so a render counter there is a
@@ -11,19 +12,30 @@ import type { QueueItemRowBoard } from '../QueueItemRow';
 // identical-props re-render must NOT bump this counter.
 const renderCounter = vi.hoisted(() => ({ count: 0 }));
 
-// Capture the latest `onPress` handed to the row's main pressable, trailing
-// tick button, and delete button so a test can assert identity across re-renders.
+// Capture the latest callback handed to the row's tap gesture, long-press gesture,
+// trailing tick button, and delete button so a test can assert identity across
+// re-renders. `rowPress`/`longPress` come from `Gesture.Tap()`/`Gesture.LongPress()`'s
+// `.onStart(...)` (the row moved off RN core Pressable's onPress/onLongPress onto RNGH
+// gestures — see QueueItemRow.tsx). `tapRef`/`longPressRef` capture the `.withRef(...)`
+// arguments so a test can confirm the drag handle's Pan blocks exactly those refs.
 const captured = vi.hoisted(() => ({
   rowPress: null as null | (() => void),
+  longPress: null as null | (() => void),
   tickPress: null as null | (() => void),
   deletePress: null as null | (() => void),
+  tapRef: null as unknown,
+  longPressRef: null as unknown,
 }));
 
-// Per-instance call logs for the RNGH gestures created below, one array pushed per
-// `Gesture.Pan()` call in creation order. Lets a test inspect exactly what was
-// chained onto a specific gesture — e.g. the swipe Pan's `failOffsetY` thresholds.
+// Per-instance call logs for gestures created via the RNGH mock below, keyed by
+// factory. One array is pushed per `Gesture.Pan()`/`Gesture.Tap()`/`Gesture.LongPress()`
+// call, in creation order — lets a test inspect exactly what was chained onto a
+// specific gesture (e.g. "the swipe Pan never gets an exclusivity relationship wired
+// onto it by a future edit").
 const gestureCalls = vi.hoisted(() => ({
   panLogs: [] as { method: string; args: unknown[] }[][],
+  tapLogs: [] as { method: string; args: unknown[] }[][],
+  longPressLogs: [] as { method: string; args: unknown[] }[][],
 }));
 
 vi.mock('react-native', () => {
@@ -51,15 +63,8 @@ vi.mock('react-native', () => {
 
 vi.mock('react-native-reanimated', () => {
   const passthrough = ({ children }: { children?: ReactNode }) => createElement('div', null, children);
-  // The row's `AnimatedPressable` is the only animated component, so capturing
-  // its onPress gives us `handlePress`.
-  const animatedPressable = ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => {
-    if (onPress) captured.rowPress = onPress;
-    return createElement('div', null, children);
-  };
   return {
-    default: { View: passthrough, createAnimatedComponent: () => animatedPressable },
-    createAnimatedComponent: () => animatedPressable,
+    default: { View: passthrough },
     useAnimatedStyle: (fn: () => unknown) => fn(),
     // Real reanimated returns a stable ref across renders; mirror that so the
     // callback-stability test reflects production behaviour (a fresh object each
@@ -78,21 +83,28 @@ vi.mock('react-native-reanimated', () => {
 });
 
 vi.mock('react-native-gesture-handler', () => {
-  // A chainable gesture builder that logs every method call into `log`, so a test
-  // can assert exactly how a gesture was configured (e.g. `.failOffsetY([-14, 14])`
-  // on the swipe Pan). Every method returns the same proxy so chains resolve.
-  const makeBuilder = (log: { method: string; args: unknown[] }[]) => {
+  // A chainable gesture builder: every method call is logged into `log` (so a test
+  // can inspect exactly what was configured) and, when given, `onCapture` also gets
+  // a chance to stash a specific call's argument (e.g. the `.onStart` callback or a
+  // `.withRef` ref) into the shared `captured` bag. Every method returns the same
+  // proxy so chains like `.minDuration(400).onStart(fn)` resolve.
+  const makeBuilder = (
+    log: { method: string; args: unknown[] }[],
+    onCapture?: (method: string, arg: unknown) => void,
+  ) => {
     const builder: Record<string, (...args: unknown[]) => unknown> = {};
     const proxy: typeof builder = new Proxy(builder, {
       get:
         (_target, prop: string) =>
         (...args: unknown[]) => {
           log.push({ method: prop, args });
+          onCapture?.(prop, args[0]);
           return proxy;
         },
     });
     return proxy;
   };
+
   return {
     GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
     Gesture: {
@@ -101,6 +113,25 @@ vi.mock('react-native-gesture-handler', () => {
         gestureCalls.panLogs.push(log);
         return makeBuilder(log);
       },
+      Tap: () => {
+        const log: { method: string; args: unknown[] }[] = [];
+        gestureCalls.tapLogs.push(log);
+        return makeBuilder(log, (method, arg) => {
+          if (method === 'onStart' && typeof arg === 'function') captured.rowPress = arg as () => void;
+          if (method === 'withRef') captured.tapRef = arg;
+        });
+      },
+      LongPress: () => {
+        const log: { method: string; args: unknown[] }[] = [];
+        gestureCalls.longPressLogs.push(log);
+        return makeBuilder(log, (method, arg) => {
+          if (method === 'onStart' && typeof arg === 'function') captured.longPress = arg as () => void;
+          if (method === 'withRef') captured.longPressRef = arg;
+        });
+      },
+      // The composed tap/long-press gesture — nothing is chained onto it directly,
+      // it's just handed to <GestureDetector>, so no call-logging needed here.
+      Exclusive: () => ({}),
     },
   };
 });
@@ -170,9 +201,14 @@ describe('QueueItemRow React.memo', () => {
   beforeEach(() => {
     renderCounter.count = 0;
     captured.rowPress = null;
+    captured.longPress = null;
     captured.tickPress = null;
     captured.deletePress = null;
+    captured.tapRef = null;
+    captured.longPressRef = null;
     gestureCalls.panLogs = [];
+    gestureCalls.tapLogs = [];
+    gestureCalls.longPressLogs = [];
     vi.clearAllMocks();
   });
 
@@ -255,7 +291,8 @@ describe('QueueItemRow React.memo', () => {
     // A fresh item object with the same uuid + data — exactly what the queue
     // reducer produces when it rebuilds the array on an unrelated update. The
     // callbacks must keep their identity (they read the live item via a ref and
-    // dep only on `item.uuid`), or the row's pressables churn and defeat memo.
+    // dep only on `item.uuid`), or the row's gestures/pressables churn and defeat
+    // memo.
     const second = makeItem('a', 'Crimp Master');
     expect(second).not.toBe(first);
     rerender(<QueueItemRow item={second} {...rowProps} />);
@@ -286,6 +323,107 @@ describe('QueueItemRow React.memo', () => {
     rerender(<QueueItemRow item={second} {...rowProps} />);
 
     expect(captured.deletePress).toBe(deletePress);
+  });
+
+  // Regression guard for #3683: the drag handle used to sit inside a plain RN
+  // Pressable that grew an onLongPress, and on iOS the Pressable's long-press could
+  // win the race against the nested handle's Pan, opening the reaction menu instead
+  // of letting the drag start. The fix makes the row's tap/long-press RNGH gestures
+  // and has the drag handle's Pan `blocksExternalGesture` them, so a touch that
+  // starts on the handle is claimed by the drag and never reaches the row gestures.
+  it('wires the drag handle to block the row tap/long-press gestures', () => {
+    const handleGestureCalls: { method: string; args: unknown[] }[] = [];
+    const handleGesture: Record<string, (...args: unknown[]) => unknown> = {};
+    const handleGestureProxy = new Proxy(handleGesture, {
+      get:
+        (_target, prop: string) =>
+        (...args: unknown[]) => {
+          handleGestureCalls.push({ method: prop, args });
+          return handleGestureProxy;
+        },
+    });
+
+    const dragShared: QueueDragControls['shared'] = {
+      activeUuid: { value: null },
+      dragTranslateY: { value: 0 },
+      activeRowIndex: { value: -1 },
+      targetRowIndex: { value: -1 },
+      rowHeight: { value: 120 },
+    } as unknown as QueueDragControls['shared'];
+
+    const makeHandleGesture = vi.fn(
+      () => handleGestureProxy as unknown as ReturnType<QueueDragControls['makeHandleGesture']>,
+    );
+    const drag: QueueDragControls = {
+      shared: dragShared,
+      onRowHeight: vi.fn(),
+      makeHandleGesture,
+    };
+
+    const item = makeItem('a', 'Crimp Master');
+    render(
+      <QueueItemRow
+        item={item}
+        position={1}
+        board={board}
+        isCurrentClimb={false}
+        onPress={onPress}
+        onRemove={onRemove}
+        onToggleSelect={onToggleSelect}
+        drag={drag}
+        isDraggable
+        rowIndex={0}
+        queueIndex={0}
+      />,
+    );
+
+    expect(makeHandleGesture).toHaveBeenCalledWith(0, 'a', 0);
+    expect(captured.tapRef).not.toBeNull();
+    expect(captured.longPressRef).not.toBeNull();
+
+    const blocksCall = handleGestureCalls.find((call) => call.method === 'blocksExternalGesture');
+    expect(blocksCall).toBeDefined();
+    expect(blocksCall?.args).toEqual([captured.tapRef, captured.longPressRef]);
+  });
+
+  // Regression guard for the swipe-to-delete side of #3683: this fix moved the row's
+  // press/long-press off RN core Pressable onto RNGH gestures living in the same
+  // arena as the pre-existing swipe Pan. The swipe Pan must stay a plain,
+  // movement-gated gesture — no exclusivity/blocking relationship wired onto it —
+  // so a future edit doesn't accidentally couple it to the new tap/long-press
+  // gestures and break either swipe-to-delete or tap-to-navigate. (The real
+  // cross-gesture arbitration only exists in the native runtime and isn't something
+  // this jsdom-level mock can exercise — see the iOS QA matrix in the PR body.)
+  it('keeps the swipe-to-delete Pan gesture free of any exclusivity/blocking wiring', () => {
+    const item = makeItem('a', 'Crimp Master');
+    render(
+      <QueueItemRow
+        item={item}
+        position={1}
+        board={board}
+        isCurrentClimb={false}
+        onPress={onPress}
+        onRemove={onRemove}
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+
+    // No `drag` prop, so the only Gesture.Pan() created is the row's swipe gesture.
+    expect(gestureCalls.panLogs).toHaveLength(1);
+    const swipeCalls = gestureCalls.panLogs[0].map((call) => call.method);
+    expect(swipeCalls).toEqual(
+      expect.arrayContaining(['enabled', 'activeOffsetX', 'failOffsetY', 'onUpdate', 'onEnd']),
+    );
+    expect(swipeCalls).not.toContain('blocksExternalGesture');
+    expect(swipeCalls).not.toContain('requireExternalGestureToFail');
+    expect(swipeCalls).not.toContain('simultaneousWithExternalGesture');
+
+    // The row's tap/long-press gestures themselves also stay free of any wiring
+    // toward the swipe Pan — only the drag handle blocks them (see the test above).
+    expect(gestureCalls.tapLogs).toHaveLength(1);
+    expect(gestureCalls.tapLogs[0].map((call) => call.method)).not.toContain('blocksExternalGesture');
+    expect(gestureCalls.longPressLogs).toHaveLength(1);
+    expect(gestureCalls.longPressLogs[0].map((call) => call.method)).not.toContain('blocksExternalGesture');
   });
 
   // Regression guard for #3295: the swipe-to-remove Pan bailed on a ±5px vertical
