@@ -146,14 +146,17 @@ export const sessionMutations = {
         logger.warn(
           `[joinSession] Dropped ${droppedCount}/${initialQueue.length} invalid initialQueue item(s) for session ${sessionId} instead of rejecting the whole join.`,
         );
-        // Mirror setQueue's structured metrics so a dropped-item rate is
-        // queryable the same way for both seed paths, not just visible in
-        // free-text logs.
-        logMutationMetrics('joinSession', performance.now() - seedValidationStartTime, sessionId, {
-          droppedCount,
-          initialQueueLength: initialQueue.length,
-        });
       }
+      // Always emitted (not just on a drop) so droppedCount/initialQueueLength
+      // is queryable as a rate across every seeded join, mirroring setQueue's
+      // structured metrics. Note the duration here covers only this
+      // validation window, not the full joinSession call — this resolver
+      // doesn't track overall timing elsewhere (unlike queue/mutations.ts),
+      // and adding that is a larger, separate change than this drop-metric.
+      logMutationMetrics('joinSession', performance.now() - seedValidationStartTime, sessionId, {
+        droppedCount,
+        initialQueueLength: initialQueue.length,
+      });
     }
     let seedCurrentClimb: ClimbQueueItem | null = null;
     if (initialCurrentClimb) {
