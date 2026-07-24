@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useIsAppBackgrounded } from '../lib/app-visibility';
+import { useBoardArtVisible } from './board-art-visibility-context';
 
 type LayeredClimbImageProps = {
   overlayUri: string | null;
@@ -76,17 +77,23 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   // screen".
   const [overlayPainted, setOverlayPainted] = useState(false);
 
-  // While backgrounded, drop the decoded board-art bitmaps: render an empty
-  // stack so expo-image releases their GPU textures + native-heap bitmaps (the
-  // views stay mounted across a background, so without this they pin ~100 MB+
-  // that raises the OS kill risk). Re-decodes from disk on foreground (#3479).
+  // Drop the decoded board-art bitmaps whenever this surface is hidden: render an
+  // empty stack so expo-image releases their GPU textures + native-heap bitmaps
+  // (the views stay mounted, so without this they pin ~100 MB+ that raises the OS
+  // kill risk). Two hidden cases, both re-decoding from disk in tens of ms when
+  // shown again: the app is backgrounded (#3479), or — on iPad — this tab is not
+  // the focused one but stays mounted (`detachInactiveScreens={false}`), so its
+  // off-screen bitmaps would otherwise linger for the whole session (#3803, see
+  // BoardArtVisibilityProvider).
   const isBackgrounded = useIsAppBackgrounded();
-  // Reset the overlay-painted anchor on background so the screenshot/e2e anchor
-  // re-gates on the next real onLoad after foreground, not before the lit board.
+  const boardArtVisible = useBoardArtVisible();
+  const hidden = isBackgrounded || !boardArtVisible;
+  // Reset the overlay-painted anchor while hidden so the screenshot/e2e anchor
+  // re-gates on the next real onLoad after it shows again, not before the lit board.
   useEffect(() => {
-    if (isBackgrounded) setOverlayPainted(false);
-  }, [isBackgrounded]);
-  if (isBackgrounded) {
+    if (hidden) setOverlayPainted(false);
+  }, [hidden]);
+  if (hidden) {
     return <View style={[styles.stack, mirrored && styles.mirrored]} />;
   }
 

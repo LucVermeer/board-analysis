@@ -37,7 +37,14 @@ vi.mock('../../lib/app-visibility', () => ({
   useIsAppBackgrounded: () => isBackgrounded.value,
 }));
 
-import { useImageCacheMemoryManagement } from '../use-image-cache-memory-management';
+// Drive the focused route segments and the launch-fixed iPad flag directly so the
+// tab-switch sweep can be asserted without a navigation container.
+const segments = vi.hoisted(() => ({ value: ['(tabs)', 'home'] as readonly string[] }));
+vi.mock('expo-router', () => ({ useSegments: () => segments.value }));
+const deviceLayout = vi.hoisted(() => ({ isPad: true }));
+vi.mock('../use-device-layout', () => ({ useDeviceLayout: () => ({ isPad: deviceLayout.isPad }) }));
+
+import { useImageCacheMemoryManagement, useIpadTabSwitchImageCacheSweep } from '../use-image-cache-memory-management';
 
 describe('useImageCacheMemoryManagement', () => {
   beforeEach(() => {
@@ -94,5 +101,60 @@ describe('useImageCacheMemoryManagement', () => {
     expect(clearMemoryCache).toHaveBeenCalledTimes(1);
     unmount();
     expect(appState.removers.memoryWarning).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useIpadTabSwitchImageCacheSweep', () => {
+  beforeEach(() => {
+    clearMemoryCache.mockClear();
+    deviceLayout.isPad = true;
+    segments.value = ['(tabs)', 'home'];
+  });
+
+  it('does not sweep on mount — it seeds the current tab', () => {
+    renderHook(() => useIpadTabSwitchImageCacheSweep());
+    expect(clearMemoryCache).not.toHaveBeenCalled();
+  });
+
+  it('sweeps the memory cache on an iPad top-level tab change', () => {
+    const { rerender } = renderHook(() => useIpadTabSwitchImageCacheSweep());
+    expect(clearMemoryCache).not.toHaveBeenCalled();
+    segments.value = ['(tabs)', 'climbs'];
+    rerender();
+    expect(clearMemoryCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not sweep for a sub-route within the same tab', () => {
+    segments.value = ['(tabs)', 'climbs'];
+    const { rerender } = renderHook(() => useIpadTabSwitchImageCacheSweep());
+    // Pushing climbs/[climbUuid] keeps the active tab 'climbs' (segment 1), so
+    // navigating within a tab must not sweep.
+    segments.value = ['(tabs)', 'climbs', 'abc-uuid'];
+    rerender();
+    expect(clearMemoryCache).not.toHaveBeenCalled();
+  });
+
+  it('does not sweep on a non-iPad device', () => {
+    deviceLayout.isPad = false;
+    const { rerender } = renderHook(() => useIpadTabSwitchImageCacheSweep());
+    segments.value = ['(tabs)', 'climbs'];
+    rerender();
+    expect(clearMemoryCache).not.toHaveBeenCalled();
+  });
+
+  it('dedupes repeated identical tab emissions', () => {
+    const { rerender } = renderHook(() => useIpadTabSwitchImageCacheSweep());
+    segments.value = ['(tabs)', 'home'];
+    rerender();
+    expect(clearMemoryCache).not.toHaveBeenCalled();
+  });
+
+  it('sweeps again on each distinct tab change', () => {
+    const { rerender } = renderHook(() => useIpadTabSwitchImageCacheSweep());
+    segments.value = ['(tabs)', 'climbs'];
+    rerender();
+    segments.value = ['(tabs)', 'profile'];
+    rerender();
+    expect(clearMemoryCache).toHaveBeenCalledTimes(2);
   });
 });

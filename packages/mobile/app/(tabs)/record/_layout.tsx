@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-options';
+import { BoardArtVisibilityProvider } from '../../../src/providers/board-art-visibility-provider';
 
 /**
  * The Record tab renders the session screen inline (its `index` route). The
@@ -12,15 +13,17 @@ export default function RecordLayout() {
   const screenOptions = useStackScreenOptions();
 
   return (
-    <Stack screenOptions={screenOptions}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="summary"
-        options={{
-          title: t('summary.dialogTitle'),
-          presentation: 'modal',
-        }}
-      />
-    </Stack>
+    <BoardArtVisibilityProvider tab="record">
+      <Stack screenOptions={screenOptions}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="summary"
+          options={{
+            title: t('summary.dialogTitle'),
+            presentation: 'modal',
+          }}
+        />
+      </Stack>
+    </BoardArtVisibilityProvider>
   );
 }
