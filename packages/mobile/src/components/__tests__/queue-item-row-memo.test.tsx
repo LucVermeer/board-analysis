@@ -269,6 +269,7 @@ describe('QueueItemRow React.memo', () => {
 
   it('keeps press callbacks stable when item identity changes but its data is equal', () => {
     const onTickHistory = vi.fn();
+    const onOpenActions = vi.fn();
     const rowProps = {
       position: 1,
       board,
@@ -278,26 +279,33 @@ describe('QueueItemRow React.memo', () => {
       onRemove,
       onToggleSelect,
       onTickHistory,
+      onOpenActions,
     };
 
     const first = makeItem('a', 'Crimp Master');
     const { rerender } = render(<QueueItemRow item={first} {...rowProps} />);
 
     const rowPress = captured.rowPress;
+    const longPress = captured.longPress;
     const tickPress = captured.tickPress;
     expect(rowPress).toBeTypeOf('function');
+    expect(longPress).toBeTypeOf('function');
     expect(tickPress).toBeTypeOf('function');
 
     // A fresh item object with the same uuid + data — exactly what the queue
     // reducer produces when it rebuilds the array on an unrelated update. The
     // callbacks must keep their identity (they read the live item via a ref and
     // dep only on `item.uuid`), or the row's gestures/pressables churn and defeat
-    // memo.
+    // memo. `longPress` sits in the same dep chain as `tapGesture`
+    // (handleLongPress → longPressGesture → tapGesture), so an unstable
+    // `longPressGesture` would churn the row's gesture composition just as surely
+    // as an unstable tap.
     const second = makeItem('a', 'Crimp Master');
     expect(second).not.toBe(first);
     rerender(<QueueItemRow item={second} {...rowProps} />);
 
     expect(captured.rowPress).toBe(rowPress);
+    expect(captured.longPress).toBe(longPress);
     expect(captured.tickPress).toBe(tickPress);
   });
 
