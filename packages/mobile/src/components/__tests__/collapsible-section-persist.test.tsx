@@ -37,8 +37,6 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('react-native-reanimated', () => ({
   default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
-  FadeIn: { duration: () => ({}) },
-  FadeOut: { duration: () => ({}) },
   useSharedValue: (value: number) => ({ value }),
   useAnimatedStyle: (factory: () => Record<string, unknown>) => factory(),
   withTiming: (value: number) => value,
@@ -124,5 +122,36 @@ describe('CollapsibleSection persistence', () => {
     expect(onToggle).toHaveBeenLastCalledWith(true);
     fireEvent.click(getByRole('button'));
     expect(onToggle).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('CollapsibleSection body rendering', () => {
+  beforeEach(async () => {
+    resetSectionExpandStoreForTests();
+    (await getMockStorage()).__reset();
+  });
+
+  // Guards the mount/unmount contract of the expanded body. NOTE: Vitest mocks
+  // react-native-reanimated (the `entering` prop is ignored) and .ios.tsx files
+  // resolve to stubs, so this cannot reproduce the native iOS FadeIn-blank bug
+  // this change fixes — that is verified on-device. It does pin that the body
+  // renders when expanded and unmounts when collapsed.
+  it('renders the body only while expanded, toggling on header tap', () => {
+    const { getByRole, queryByText } = render(
+      createElement(CollapsibleSection, {
+        title: 'Logbook',
+        defaultExpanded: false,
+        children: createElement('span', null, BODY),
+      }),
+    );
+
+    // Collapsed by default → body absent.
+    expect(queryByText(BODY)).toBeNull();
+    // Tap to expand → body present (plain View, no FadeIn gate).
+    fireEvent.click(getByRole('button'));
+    expect(queryByText(BODY)).toBeTruthy();
+    // Tap again to collapse → body removed.
+    fireEvent.click(getByRole('button'));
+    expect(queryByText(BODY)).toBeNull();
   });
 });
