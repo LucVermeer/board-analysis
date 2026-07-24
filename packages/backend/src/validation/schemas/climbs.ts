@@ -107,7 +107,17 @@ export const QueueItemUserSchema = z.object({
  * ClimbQueueItem validation schema
  */
 export const ClimbQueueItemSchema = z.object({
-  uuid: z.string().uuid('Invalid UUID format'),
+  // Opaque client-minted queue-slot id — NOT an Aurora climb uuid (that's
+  // climb.uuid below). Only needs to be unique and bounded, so it uses the
+  // same lenient ExternalUUIDSchema as climb.uuid rather than strict RFC-4122
+  // parsing. Historical/peer-synced queue items (and the transient
+  // `playlist-peek:<uuid>` id minted client-side, see @boardsesh/queue's
+  // playlist-suggestions.ts) are not always dash-formatted v4 uuids — strict
+  // parsing here rejected the WHOLE queue on `setQueue` for one such item
+  // (issue #3857), the same class of bug PR #419 already fixed for
+  // `climb.uuid` above. RFC-strictness bought no safety: the reducer and this
+  // schema only ever compare the field with `===`, never parse it.
+  uuid: ExternalUUIDSchema,
   climb: ClimbInputSchema,
   addedBy: z.string().max(100).nullish(),
   addedByUser: QueueItemUserSchema.nullish(),

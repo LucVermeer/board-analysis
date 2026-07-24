@@ -160,3 +160,40 @@ export function validateInput<T>(schema: z.ZodSchema<T>, data: unknown, fieldNam
   }
   return result.data;
 }
+
+/**
+ * Parse an array input leniently: enforce the length cap on the raw payload
+ * (memory-exhaustion guard), then validate each element independently and
+ * DROP any element that fails `itemSchema` instead of rejecting the whole
+ * array. `z.array(itemSchema).safeParse` fails the ENTIRE array on one bad
+ * element, which is the wrong failure mode for a client-authoritative batch
+ * sync — one legacy/malformed queue item used to wedge `setQueue` for a
+ * user's whole queue indefinitely (issue #3857). Use this wherever losing the
+ * whole batch is worse than silently dropping one bad element (the drop is
+ * observable via the returned count) — e.g. `setQueue`'s `queue` and
+ * `joinSession`'s `initialQueue`. Single-item mutations should keep using
+ * `validateInput` and hard-reject; that's a normal, expected failure there.
+ */
+export function parseArrayTolerant<T>(
+  itemSchema: z.ZodSchema<T>,
+  data: unknown,
+  fieldName: string,
+  maxLength: number,
+): { items: T[]; droppedCount: number } {
+  const arrayResult = z.array(z.unknown()).max(maxLength, `${fieldName} too large`).safeParse(data);
+  if (!arrayResult.success) {
+    const errors = arrayResult.error.issues.map((issue) => issue.message).join(', ');
+    throw new Error(`Invalid ${fieldName}: ${errors}`);
+  }
+  const items: T[] = [];
+  let droppedCount = 0;
+  for (const rawItem of arrayResult.data) {
+    const itemResult = itemSchema.safeParse(rawItem);
+    if (itemResult.success) {
+      items.push(itemResult.data);
+    } else {
+      droppedCount++;
+    }
+  }
+  return { items, droppedCount };
+}

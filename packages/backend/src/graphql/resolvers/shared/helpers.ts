@@ -9,8 +9,8 @@ import { esp32Controllers, boardSessionParticipants } from '@boardsesh/db/schema
 import { and, eq } from 'drizzle-orm';
 import { logger } from '../../../utils/logger';
 
-// Re-export validateInput from validation schemas
-export { validateInput } from '../../../validation/schemas';
+// Re-export validateInput / parseArrayTolerant from validation schemas
+export { validateInput, parseArrayTolerant } from '../../../validation/schemas';
 // Re-export MAX_RETRIES from types
 export { MAX_RETRIES } from './types';
 export { isNoMatchClimb, isNoMatch } from '@boardsesh/shared-schema';

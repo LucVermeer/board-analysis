@@ -10,6 +10,7 @@ import {
   requireSessionMember,
   applyRateLimit,
   validateInput,
+  parseArrayTolerant,
   RATE_LIMIT_SESSION,
   RATE_LIMIT_SESSION_OP,
   RATE_LIMIT_JOIN_SESSION,
@@ -33,7 +34,6 @@ import {
   ClimbQueueItemSchema,
   ClimbUuidSchema,
   BoardSerialSchema,
-  QueueArraySchema,
 } from '../../../validation/schemas';
 import { logger } from '../../../utils/logger';
 import { markErrorReported } from '../../../utils/sentry-dedupe';
@@ -128,8 +128,42 @@ export const sessionMutations = {
     if (avatarUrl) validateInput(AvatarUrlSchema, avatarUrl, 'avatarUrl');
     if (participantId) validateInput(ParticipantIdSchema, participantId, 'participantId');
     if (sessionName) validateInput(SessionNameSchema, sessionName, 'sessionName');
-    if (initialQueue) validateInput(QueueArraySchema, initialQueue, 'initialQueue');
-    if (initialCurrentClimb) validateInput(ClimbQueueItemSchema, initialCurrentClimb, 'initialCurrentClimb');
+
+    // Validate the seed queue tolerantly — one malformed/legacy item must not
+    // sink the whole join. Same class of bug as setQueue (issue #3857): a
+    // single non-RFC-uuid queue item used to reject the entire initialQueue
+    // and wedge party-session seeding on join.
+    let seedQueue: ClimbQueueItem[] | undefined;
+    if (initialQueue) {
+      const { items, droppedCount } = parseArrayTolerant(ClimbQueueItemSchema, initialQueue, 'initialQueue', 500);
+      // ClimbQueueItemSchema's `.nullish()` fields infer as `T | null | undefined`,
+      // one shade looser than the hand-written `ClimbQueueItem` type (`T | null`)
+      // — both mean "absent" downstream, so the cast is safe (see setQueue).
+      seedQueue = items as ClimbQueueItem[];
+      if (droppedCount > 0) {
+        logger.warn(
+          `[joinSession] Dropped ${droppedCount}/${initialQueue.length} invalid initialQueue item(s) for session ${sessionId} instead of rejecting the whole join.`,
+        );
+      }
+    }
+    let seedCurrentClimb: ClimbQueueItem | null = null;
+    if (initialCurrentClimb) {
+      seedCurrentClimb = validateInput(
+        ClimbQueueItemSchema,
+        initialCurrentClimb,
+        'initialCurrentClimb',
+      ) as ClimbQueueItem;
+      // A current-climb pointer whose slot didn't survive tolerant parsing
+      // would dangle — only check membership when we actually filtered a
+      // seed queue; a caller seeding just a current climb (no queue) is an
+      // existing, independently-valid combination.
+      if (seedQueue && !seedQueue.some((item) => item.uuid === seedCurrentClimb?.uuid)) {
+        logger.warn(
+          `[joinSession] initialCurrentClimb uuid not present in the (post-filter) initialQueue for session ${sessionId} — clearing seed current climb instead of leaving a dangling pointer.`,
+        );
+        seedCurrentClimb = null;
+      }
+    }
 
     const result = await roomManager.joinSession(
       ctx.connectionId,
@@ -137,8 +171,8 @@ export const sessionMutations = {
       boardPath,
       username || undefined,
       avatarUrl || undefined,
-      initialQueue,
-      initialCurrentClimb || null,
+      seedQueue,
+      seedCurrentClimb,
       sessionName || undefined,
       participantId || undefined,
     );
