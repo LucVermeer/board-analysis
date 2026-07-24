@@ -54,6 +54,14 @@ repeats, ~700ms worst-case first render of a never-seen board config.
 | `OG_BYTE_CACHE_MB`      | `32`                  | Byte budget for the final-image LRU.                                                                                                                                               |
 | `OG_BASE_CACHE_ENTRIES` | `24`                  | Entry budget for the per-board-config base LRU (~3MB raw RGBA each).                                                                                                               |
 
+## Cache prewarming (why the endpoint sees browser-initiated hits)
+
+Crawlers scrape seconds after a share, so clients prime the caches ahead of
+them: climb view SSR fire-and-forgets one og render per page view (via
+`scheduleOverlayWarming`), and the Share button on web and mobile fetches both
+the share page URL and the og image URL before opening the share sheet. All
+best-effort — failures are swallowed and never delay sharing.
+
 ## Operational notes
 
 - Winston logs one line per render: `[OGClimb] served` with

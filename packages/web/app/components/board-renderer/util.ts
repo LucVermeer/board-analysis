@@ -1,4 +1,4 @@
-import { accumulateFramesToMaps, accumulatedMapsToFrameStrings } from '@boardsesh/board-constants/hold-states';
+import { toFlatFrames as toFlatFramesShared } from '@boardsesh/board-constants/hold-states';
 import type { BoardDetails, BoardName } from '@/app/lib/types';
 import { getPublicBackendHttpUrl } from '@/app/lib/backend-url';
 import { BOARD_IMAGE_DIMENSIONS } from '../../lib/board-data';
@@ -73,12 +73,13 @@ export const buildBoardRenderUrl = (
  * always run user-facing frames through this before crossing that
  * boundary. The empty string is preserved unchanged.
  */
-export const toFlatFrames = (frames: string | null | undefined, boardName: BoardName): string => {
-  if (!frames) return '';
-  if (!frames.includes(',') && !frames.includes('x')) return frames;
-  const maps = accumulateFramesToMaps(frames, boardName);
-  return accumulatedMapsToFrameStrings(maps, boardName).at(-1) ?? '';
-};
+/**
+ * Flatten a possibly multi-frame frames string before it crosses the renderer
+ * or BLE boundary — raw multi-frame strings render only frame 0 or emit
+ * garbage. Delegates to the shared implementation in board-constants.
+ */
+export const toFlatFrames = (frames: string | null | undefined, boardName: BoardName): string =>
+  toFlatFramesShared(frames, boardName);
 
 export const buildOverlayUrl = (boardDetails: BoardDetails, frames: string, thumbnail?: boolean) =>
   buildBoardRenderUrl(boardDetails, toFlatFrames(frames, boardDetails.board_name), {

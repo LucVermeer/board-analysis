@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 const ctrl = vi.hoisted(() => ({ os: 'ios' as string }));
@@ -11,6 +11,9 @@ type SharePayload = IOSPayload | AndroidPayload;
 const shareMock = vi.fn<(payload: SharePayload) => Promise<{ action: string }>>(async () => ({
   action: 'sharedAction',
 }));
+
+// Fire-and-forget prewarm fetches hit this mock; never a real network.
+const fetchMock = vi.fn<(input: string) => Promise<{ ok: boolean }>>(async () => ({ ok: true }));
 
 vi.mock('react-native', () => ({
   Platform: {
@@ -25,6 +28,7 @@ vi.mock('react-native', () => ({
 
 vi.mock('../../lib/env', () => ({
   WEB_BASE_URL: 'https://www.boardsesh.com',
+  BACKEND_URL: 'https://ws.boardsesh.com',
 }));
 
 import { useShareClimb } from '../use-share-climb';
@@ -45,10 +49,27 @@ const baseArgs = {
 const expectedReadableShareUrl =
   'https://www.boardsesh.com/kilter/original/12x14-commerical/screw_bolt/40/view/test-climb-climb-uuid-123';
 
+const climbWithFrames = {
+  uuid: 'climb-uuid-123',
+  name: 'Test Climb',
+  frames: 'p1145r15p1146r12',
+} as unknown as Parameters<typeof useShareClimb>[0]['climb'];
+
+// The backend canonicalises set_ids server-side; the client sorts them too so
+// the raw URL is stable regardless of input order.
+const expectedOgImageUrl =
+  'https://ws.boardsesh.com/og/climb?board_name=kilter&layout_id=1&size_id=7&set_ids=1%2C20&frames=p1145r15p1146r12&format=jpeg';
+
 describe('useShareClimb', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ctrl.os = 'ios';
+    fetchMock.mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('returns a no-op when climb is null and does not call Share', async () => {
@@ -57,6 +78,46 @@ describe('useShareClimb', () => {
       await result.current();
     });
     expect(shareMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe('share-time cache prewarm', () => {
+    it('warms the share page url before opening the share sheet', async () => {
+      const { result } = renderHook(() => useShareClimb({ climb, ...baseArgs }));
+      await act(async () => {
+        await result.current();
+      });
+      expect(fetchMock).toHaveBeenCalledWith(expectedReadableShareUrl);
+      // Exactly one warm: the no-frames climb must not fire an og request.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(shareMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('warms the backend og image url too when the climb has frames', async () => {
+      const { result } = renderHook(() => useShareClimb({ climb: climbWithFrames, ...baseArgs }));
+      await act(async () => {
+        await result.current();
+      });
+      expect(fetchMock).toHaveBeenNthCalledWith(1, expectedReadableShareUrl);
+      expect(fetchMock).toHaveBeenNthCalledWith(2, expectedOgImageUrl);
+    });
+
+    it('sorts unsorted set_ids in the warmed og url', async () => {
+      const { result } = renderHook(() => useShareClimb({ climb: climbWithFrames, ...baseArgs, setIds: '20,1' }));
+      await act(async () => {
+        await result.current();
+      });
+      expect(fetchMock).toHaveBeenNthCalledWith(2, expectedOgImageUrl);
+    });
+
+    it('still opens the share sheet when a prewarm fetch rejects', async () => {
+      fetchMock.mockRejectedValue(new Error('network down'));
+      const { result } = renderHook(() => useShareClimb({ climb: climbWithFrames, ...baseArgs }));
+      await act(async () => {
+        await result.current();
+      });
+      expect(shareMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('iOS', () => {

@@ -279,3 +279,11 @@ export function convertLitUpHoldsStringToMap(litUpHolds: string, board: BoardNam
       {} as Record<number, LitUpHoldsMap>,
     );
 }
+
+/** Collapse a possibly multi-frame frames string to its final lit snapshot. */
+export function toFlatFrames(frames: string | null | undefined, board: BoardName): string {
+  if (!frames) return '';
+  if (!frames.includes(',') && !frames.includes('x')) return frames;
+  const maps = accumulateFramesToMaps(frames, board);
+  return accumulatedMapsToFrameStrings(maps, board).at(-1) ?? '';
+}
