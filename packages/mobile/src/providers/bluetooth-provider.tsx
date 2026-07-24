@@ -16,6 +16,7 @@ import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth, boardConfigKey, type SendFramesToBoard } from '../lib/ble/use-board-bluetooth';
+import { hasRenderableFrames } from '../lib/ble/renderable-frames';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
 import { classifyBleDisconnect } from '../lib/ble/disconnect-category';
 import {
@@ -178,6 +179,7 @@ function BluetoothAutoSender({
   colorSignature,
   activeConfig,
   onSkipSpillClimb,
+  onUnresolvedCurrentClimb,
 }: {
   sendFramesToBoard: SendFramesToBoard;
   /**
@@ -206,6 +208,12 @@ function BluetoothAutoSender({
   // skip count, so it can re-point the queue + toast without the AutoSender
   // owning queue actions or i18n.
   onSkipSpillClimb: (args: { skipped: ClimbQueueItem; next: ClimbQueueItem | null; skippedCount: number }) => void;
+  // Called when the current climb reached the auto-sender with no renderable
+  // frames (a partially-synced peer broadcast, or a FullSync / snapshot restore
+  // that landed before the climb hydrated). Lets the provider record the
+  // unresolved-current-climb window without the AutoSender owning analytics/board
+  // context. Fired once per queue-item uuid.
+  onUnresolvedCurrentClimb: (item: ClimbQueueItem) => void;
 }) {
   type AutoSendRequest = {
     item: ClimbQueueItem;
@@ -230,6 +238,10 @@ function BluetoothAutoSender({
   useEffect(() => {
     onSkipSpillClimbRef.current = onSkipSpillClimb;
   }, [onSkipSpillClimb]);
+  const onUnresolvedCurrentClimbRef = useRef(onUnresolvedCurrentClimb);
+  useEffect(() => {
+    onUnresolvedCurrentClimbRef.current = onUnresolvedCurrentClimb;
+  }, [onUnresolvedCurrentClimb]);
   const queueRef = useRef(state.queue);
   queueRef.current = state.queue;
   // Dedup spill reports: the async drain can re-enter for the same incompatible
@@ -238,6 +250,12 @@ function BluetoothAutoSender({
   // compatible/unknown climb is processed — so deliberately navigating BACK to a
   // skipped spill re-advances and re-toasts instead of silently sticking.
   const lastSkipReportedUuidRef = useRef<string | null>(null);
+  // Dedup unresolved-current-climb reports the same way lastSkipReportedUuidRef
+  // dedups spills: the async drain can re-enter for the same unresolved current
+  // (a colour/reassert re-render races the resolution patch). Report a given uuid
+  // once, then clear it the moment a renderable climb is processed — so a later
+  // relapse to unresolved (a FullSync re-staled the item) re-reports.
+  const lastUnresolvedReportedUuidRef = useRef<string | null>(null);
 
   const isWritingRef = useRef(false);
   const pendingSendRef = useRef<AutoSendRequest | null>(null);
@@ -327,6 +345,26 @@ function BluetoothAutoSender({
           // Reaching here means the item is compatible/unknown and will be sent —
           // clear the spill dedup so a later return to a skipped spill re-reports.
           lastSkipReportedUuidRef.current = null;
+
+          // Resolution guard: a partially-synced climb (a party peer broadcast,
+          // or a server FullSync / snapshot restore that landed before the climb
+          // hydrated) can become the current climb with empty frames. Empty
+          // frames is the board's "clear all LEDs" command, so auto-sending it
+          // would dark-fire the wall and silently buzz success (the exact #3850
+          // report: pick a climb → wall goes dark). Hold the write until the
+          // frames arrive — the board keeps the previous climb lit, and this
+          // effect re-runs on the resolved item (new identity, real frames) to
+          // light it. Report once per uuid so the window is visible in analytics.
+          if (!hasRenderableFrames(item.climb)) {
+            if (lastUnresolvedReportedUuidRef.current !== item.uuid) {
+              lastUnresolvedReportedUuidRef.current = item.uuid;
+              onUnresolvedCurrentClimbRef.current(item);
+            }
+            toSend = pendingSendRef.current;
+            pendingSendRef.current = null;
+            continue;
+          }
+          lastUnresolvedReportedUuidRef.current = null;
 
           // connect() may have just written these exact frames as its
           // initialFrames (connect-and-light flows like the play drawer).
@@ -1147,6 +1185,11 @@ export function BluetoothProvider({
       next: ClimbQueueItem | null;
       skippedCount: number;
     }) => {
+      // The wall is cleared (rather than advanced to a compatible climb) in a
+      // party session — never hijack shared state — or when nothing compatible
+      // remains. First-class so the silent clear is filterable in analytics; the
+      // clear write itself stays untagged (not a user Clear Lights action).
+      const clearedBoard = sessionIdRef.current != null || next === null;
       track(SHARED_EVENTS.BleQueueClimbSkipped, {
         boardName: boardNameRef.current,
         layoutId: layoutIdRef.current,
@@ -1156,6 +1199,7 @@ export function BluetoothProvider({
         skippedClimbLayoutId: skipped.climb.layoutId ?? undefined,
         skippedCount,
         advancedToClimbUuid: next?.climb.uuid ?? null,
+        clearedBoard,
         inSession: sessionIdRef.current != null,
       });
 
@@ -1178,6 +1222,26 @@ export function BluetoothProvider({
     },
     [setCurrentClimb, showToast, sendFramesToBoard, t],
   );
+
+  // The auto-sender reached the current climb but it has no frames yet — a
+  // partially-synced peer broadcast, or a FullSync / snapshot restore that
+  // landed before the climb hydrated. It held the write (so the wall isn't
+  // dark-fired); record the window so this class of "picked a climb, wall went
+  // dark" is diagnosable fleet-wide. Once resolution patches the frames in, the
+  // auto-sender's effect re-runs on the new item identity and lights it.
+  const handleUnresolvedCurrentClimb = useCallback((item: ClimbQueueItem) => {
+    track(SHARED_EVENTS.ClimbSentToBoardSkipped, {
+      skipReason: 'unresolved_climb',
+      boardName: boardNameRef.current,
+      layoutId: layoutIdRef.current,
+      sizeId: sizeIdRef.current,
+      climbUuid: item.climb.uuid,
+      hasName: !!item.climb.name,
+      hasBoardType: !!item.climb.boardType,
+      hasLayout: item.climb.layoutId != null,
+      inSession: sessionIdRef.current != null,
+    });
+  }, []);
 
   // Bumped by `reassertWall()` to force the auto-sender to re-push the current
   // climb once, bypassing the byte-identical dedup.
@@ -1342,6 +1406,7 @@ export function BluetoothProvider({
           colorSignature={holdColorSignature}
           activeConfig={currentBoardConfig}
           onSkipSpillClimb={handleSkipSpillClimb}
+          onUnresolvedCurrentClimb={handleUnresolvedCurrentClimb}
         />
       )}
       <BlePickerHostContext.Provider value={pickerHostValue}>{children}</BlePickerHostContext.Provider>

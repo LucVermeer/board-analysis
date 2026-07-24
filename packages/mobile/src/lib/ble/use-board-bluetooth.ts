@@ -542,7 +542,23 @@ export function useBoardBluetooth({
 
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal, sendContext?: BleSendContext) => {
-      if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
+      if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) {
+        // The auto-sender only mounts while connected, so a send arriving here
+        // means a connected-but-not-ready window: the adapter was torn down, or
+        // the active board props haven't propagated yet. Record it — otherwise
+        // the send vanishes with no trace and reads as a dead tap. Not a Failure
+        // (no write was attempted). boardName/layoutId/sizeId may be undefined
+        // (that's why we bailed); undefined props are simply dropped from the event.
+        track(SHARED_EVENTS.ClimbSentToBoardSkipped, {
+          skipReason: !adapterRef.current ? 'no_adapter' : 'no_board_config',
+          boardName,
+          layoutId,
+          sizeId,
+          climbUuid: sendContext?.climbUuid,
+          sendSource: sendContext?.sendSource,
+        });
+        return;
+      }
       // Resolved here (where layoutId is narrowed to a number) so the nested
       // performSend closure can use it. Mini LED strips are 12 rows, standard 18.
       const moonNumRows = getMoonBoardGeometryByLayoutId(layoutId).numRows;
@@ -583,8 +599,18 @@ export function useBoardBluetooth({
         try {
           // The send may have queued behind another write; by the time it runs
           // the connection generation may be gone (reconnect/disconnect) — bail
-          // before touching the (possibly new) adapter.
-          if (combinedSignal.aborted || !adapterRef.current) return;
+          // before touching the (possibly new) adapter. An aborted send is the
+          // routine cancel path (unmount / generation swap) and stays silent; an
+          // adapter that vanished WITHOUT an abort is the surprising "dropped
+          // mid-queue" variant worth recording so it isn't a silent dead tap.
+          if (combinedSignal.aborted) return;
+          if (!adapterRef.current) {
+            track(SHARED_EVENTS.ClimbSentToBoardSkipped, {
+              ...boardAnalyticsProperties,
+              skipReason: 'adapter_lost',
+            });
+            return;
+          }
           sendAdapter = adapterRef.current;
 
           if (boardName === 'moonboard') {

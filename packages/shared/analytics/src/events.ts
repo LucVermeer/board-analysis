@@ -137,6 +137,25 @@ export const SHARED_EVENTS = {
   BleAdvertisementRecon: 'BLE Advertisement Recon',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
+  // A climb reached the BLE send path but NO packet was written to the wall.
+  // Distinct from Failure (a write was attempted and errored): here nothing is
+  // sent, so the wall is never dark-fired. `skipReason`:
+  //  - 'unresolved_climb' — the current climb has no frames yet (a partially-
+  //    synced peer broadcast, or a FullSync / snapshot restore that landed before
+  //    the climb hydrated). Empty frames is the board's "clear all LEDs" command,
+  //    so the auto-sender holds the write until resolution patches the frames in.
+  //    Fired once per queue-item uuid. Extra props: hasName, hasBoardType,
+  //    hasLayout, inSession.
+  //  - 'no_adapter' / 'no_board_config' — sendFramesToBoard was called while the
+  //    adapter or active board config was missing (a connected-but-not-ready
+  //    window); the send bailed before touching the transport.
+  //  - 'adapter_lost' — the queued send reached the transport after the adapter
+  //    was torn down (reconnect/disconnect) WITHOUT the abort signal firing.
+  //    Routine aborted sends stay silent; this is the surprising "dropped mid-
+  //    queue" variant.
+  // Props: board config (boardName/layoutId/sizeId when known), climbUuid,
+  // sendSource (when known), skipReason.
+  ClimbSentToBoardSkipped: 'Climb Sent to Board Skipped',
   // Fired on a successful USER-INITIATED clear-all write (sendSource 'clear';
   // both Aurora and MoonBoard, the latter via its `l##` empty frame — #3420).
   // Internal clears (spill skip, auto-sent empty frames) are untagged and do
@@ -147,7 +166,9 @@ export const SHARED_EVENTS = {
   // A queued climb set for a DIFFERENT board/layout than the connected board was
   // skipped instead of dark-firing the wall. Props: skippedClimbUuid,
   // skippedCount, advancedToClimbUuid (null when no compatible climb remained),
-  // active board config, and the skipped climb's board config.
+  // clearedBoard (true when the wall was cleared rather than advanced — a party
+  // session, or no compatible climb left), active board config, and the skipped
+  // climb's board config.
   BleQueueClimbSkipped: 'BLE Queue Climb Skipped',
   // The "this controller belongs to another board setup" dialog was shown when a
   // scanned serial resolved to a different board config than the active one, and
