@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ClimbQueueItem, Climb } from '@boardsesh/queue';
+import { hasRenderableFrames } from '../../lib/ble/renderable-frames';
 
 // ── Factory helpers ────────────────────────────────────────────────────
 
@@ -39,6 +40,10 @@ type DrainContext = {
   sendCallCount: () => number;
   /** UUIDs passed to sendFramesToBoard, in call order */
   sentUuids: () => string[];
+  /** Queue-item uuids reported as an unresolved current climb (no frames yet). */
+  unresolvedReports: () => string[];
+  /** Queue-item uuids reported as a spill (incompatible board). */
+  spillReports: () => string[];
   /** Resolve the currently in-flight write (simulates BLE latency) */
   resolveCurrentWrite: () => void;
   /** Flush all microtasks so drain loop iterations settle */
@@ -52,20 +57,35 @@ type DrainContext = {
   reassert: () => void;
 };
 
+type DrainLoopOptions = {
+  /** Queue-item uuids the spill classifier treats as incompatible (wrong board). */
+  spillUuids?: Set<string>;
+};
+
 // Mirror of the component's dedup key: uuid + rendered frames + mirror state.
 function signatureOf(item: ClimbQueueItem): string {
   return `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
 }
 
-function createDrainLoop(sendDuration: 'instant' | 'deferred' = 'deferred'): DrainContext {
+function createDrainLoop(
+  sendDuration: 'instant' | 'deferred' = 'deferred',
+  options: DrainLoopOptions = {},
+): DrainContext {
+  const spillUuids = options.spillUuids ?? new Set<string>();
   let isWriting = false;
   let pendingClimb: ClimbQueueItem | null = null;
   let lastSentSignature: string | null = null;
   let lastEnqueuedItem: ClimbQueueItem | null = null;
   let reassertPending = false;
+  // Mirror of lastSkipReportedUuidRef / lastUnresolvedReportedUuidRef: report a
+  // given spill / unresolved uuid once, clear it when a sendable climb is seen.
+  let lastSpillReported: string | null = null;
+  let lastUnresolvedReported: string | null = null;
 
   const abortController = new AbortController();
   const sentUuidsList: string[] = [];
+  const unresolvedReportsList: string[] = [];
+  const spillReportsList: string[] = [];
   let totalSendCalls = 0;
 
   // When sendDuration is 'deferred', writes hang until resolveCurrentWrite()
@@ -92,6 +112,34 @@ function createDrainLoop(sendDuration: 'instant' | 'deferred' = 'deferred'): Dra
       while (toSend) {
         if (signal.aborted) return;
         const item = toSend;
+
+        // Spill guard (mirrors the component): an incompatible climb is skipped
+        // BEFORE the resolution/frames logic, so a spill never reaches — and is
+        // never masked by — the unresolved-frames guard below. Dedup per uuid.
+        if (spillUuids.has(item.uuid)) {
+          if (lastSpillReported !== item.uuid) {
+            lastSpillReported = item.uuid;
+            spillReportsList.push(item.uuid);
+          }
+          toSend = pendingClimb;
+          pendingClimb = null;
+          continue;
+        }
+        lastSpillReported = null;
+
+        // Resolution guard (mirrors the component): hold the write for an
+        // unresolved (empty-frames) climb rather than dark-firing the wall.
+        // Report once per uuid; clear the marker once a sendable climb is seen.
+        if (!hasRenderableFrames(item.climb)) {
+          if (lastUnresolvedReported !== item.uuid) {
+            lastUnresolvedReported = item.uuid;
+            unresolvedReportsList.push(item.uuid);
+          }
+          toSend = pendingClimb;
+          pendingClimb = null;
+          continue;
+        }
+        lastUnresolvedReported = null;
 
         // Honour a pending reassert when the climb is picked up (survives an
         // in-flight write that re-set the signature on completion).
@@ -143,6 +191,10 @@ function createDrainLoop(sendDuration: 'instant' | 'deferred' = 'deferred'): Dra
     sendCallCount: () => totalSendCalls,
 
     sentUuids: () => [...sentUuidsList],
+
+    unresolvedReports: () => [...unresolvedReportsList],
+
+    spillReports: () => [...spillReportsList],
 
     resolveCurrentWrite() {
       currentWriteResolve?.();
@@ -585,6 +637,95 @@ describe('BluetoothAutoSender drain loop', () => {
       await loop.flush();
 
       expect(loop.sentUuids()).toEqual(['climb-A', 'climb-B', 'climb-C']);
+    });
+  });
+
+  describe('unresolved-climb guard (#3850 — no dark-fire on empty frames)', () => {
+    it('does NOT write empty frames for an unresolved current climb', async () => {
+      const loop = createDrainLoop('instant');
+
+      // A partially-synced climb: name/grade present, frames not yet hydrated.
+      loop.enqueue(makeQueueItem('soul-siphon', ''));
+      await loop.flush();
+
+      // The wall is never dark-fired: no send at all.
+      expect(loop.sendCallCount()).toBe(0);
+      expect(loop.sentUuids()).toEqual([]);
+      // The window is recorded exactly once.
+      expect(loop.unresolvedReports()).toEqual(['soul-siphon']);
+    });
+
+    it('lights the climb once its frames resolve (navigate-away-and-back / FullSync)', async () => {
+      const loop = createDrainLoop('instant');
+
+      // First selection: unresolved → held, not dark-fired.
+      loop.enqueue(makeQueueItem('soul-siphon', ''));
+      await loop.flush();
+      expect(loop.sendCallCount()).toBe(0);
+
+      // Resolution patches the frames in (new item identity, same uuid).
+      loop.enqueue(makeQueueItem('soul-siphon', 'p1234r15'));
+      await loop.flush();
+
+      // Now it writes the real frames exactly once.
+      expect(loop.sendCallCount()).toBe(1);
+      expect(loop.sentUuids()).toEqual(['soul-siphon']);
+      expect(loop.unresolvedReports()).toEqual(['soul-siphon']);
+    });
+
+    it('reports an unresolved climb only once per uuid across re-renders', async () => {
+      const loop = createDrainLoop('instant');
+
+      // The same unresolved item re-arrives (a colour/reassert re-render).
+      loop.enqueue(makeQueueItem('soul-siphon', ''));
+      await loop.flush();
+      loop.enqueue(makeQueueItem('soul-siphon', ''));
+      await loop.flush();
+      loop.enqueue(makeQueueItem('soul-siphon', ''));
+      await loop.flush();
+
+      expect(loop.sendCallCount()).toBe(0);
+      expect(loop.unresolvedReports()).toEqual(['soul-siphon']);
+    });
+
+    it('re-reports if the current climb relapses to unresolved after being sent', async () => {
+      const loop = createDrainLoop('instant');
+
+      // Resolved → sent.
+      loop.enqueue(makeQueueItem('climb-A', 'p1r15'));
+      await loop.flush();
+      // A FullSync re-staled it to an unresolved placeholder.
+      loop.enqueue(makeQueueItem('climb-A', ''));
+      await loop.flush();
+
+      expect(loop.sentUuids()).toEqual(['climb-A']);
+      expect(loop.unresolvedReports()).toEqual(['climb-A']);
+    });
+
+    it('does NOT interfere with the spill path — an incompatible climb with real frames still skips as a spill', async () => {
+      // 'spill-climb' has renderable frames but belongs to another board.
+      const loop = createDrainLoop('instant', { spillUuids: new Set(['spill-climb']) });
+
+      loop.enqueue(makeQueueItem('spill-climb', 'p1r15'));
+      await loop.flush();
+
+      // Handled by the spill branch (no write, no unresolved report).
+      expect(loop.sendCallCount()).toBe(0);
+      expect(loop.spillReports()).toEqual(['spill-climb']);
+      expect(loop.unresolvedReports()).toEqual([]);
+    });
+
+    it('classifies a spill BEFORE the resolution guard even when it also lacks frames', async () => {
+      // A spill that is ALSO unresolved must take the spill path (checked first),
+      // never the unresolved path — mirrors the component's branch order.
+      const loop = createDrainLoop('instant', { spillUuids: new Set(['spill-climb']) });
+
+      loop.enqueue(makeQueueItem('spill-climb', ''));
+      await loop.flush();
+
+      expect(loop.spillReports()).toEqual(['spill-climb']);
+      expect(loop.unresolvedReports()).toEqual([]);
+      expect(loop.sendCallCount()).toBe(0);
     });
   });
 });
