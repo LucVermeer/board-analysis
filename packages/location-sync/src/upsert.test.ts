@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isNull } from 'drizzle-orm';
 import { gyms, locationSyncGymSources, userBoards, users } from '@boardsesh/db/schema';
 import type { CanonicalGymCandidate } from '@boardsesh/db/queries';
 import type { PublicBoardLocationInput } from './types';
@@ -416,6 +417,23 @@ class FakeLocationSyncDb {
     return Promise.resolve(callback(this));
   }
 }
+
+describe('inspectCondition sanity check', () => {
+  // inspectCondition walks Drizzle's internal queryChunks/Column shape, which is
+  // undocumented and could change on a Drizzle version bump. If that happens, every
+  // freeze/live-row guard test above would silently stop blocking writes instead of
+  // failing loudly (the fake would just never detect the guard column). Assert the
+  // introspection still resolves a real column name on real Drizzle conditions, so a
+  // Drizzle bump that changes the internal shape fails HERE with a clear message
+  // instead of surfacing as a confusing downstream guard-test failure.
+  it('recovers the column name from isNull(gyms.syncFrozenAt)', () => {
+    expect(inspectCondition(isNull(gyms.syncFrozenAt)).columns.has('sync_frozen_at')).toBe(true);
+  });
+
+  it('recovers the column name from isNull(gyms.deletedAt)', () => {
+    expect(inspectCondition(isNull(gyms.deletedAt)).columns.has('deleted_at')).toBe(true);
+  });
+});
 
 describe('location upsert planning', () => {
   it('filters records with invalid coordinates before writing', () => {
