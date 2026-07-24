@@ -215,6 +215,62 @@ if (!EXPLAIN_DB_URL) {
       );
     });
 
+    void it(
+      'stats-driven narrow-filter page>0 search (#3856 repro) runs SET LOCAL before the SELECT and ' +
+        'avoids a parallel Gather',
+      async () => {
+        // Mirrors the exact production repro from Sentry BOARDSESH-AK: narrow
+        // grade band (minGrade=maxGrade), onlyTallClimbs + boulders, pageSize 100,
+        // page 1 (OFFSET 100). This is the shape that tipped the planner into a
+        // parallel plan and exhausted /dev/shm before #3856's fix — statsDrivenSearch
+        // was the one hot search path with no SET LOCAL guard.
+        const repro: ClimbSearchParams = {
+          page: 1,
+          pageSize: 100,
+          sortBy: 'ascents',
+          sortOrder: 'desc',
+          minGrade: 15,
+          maxGrade: 15,
+          onlyTallClimbs: true,
+          boulders: true,
+        };
+
+        const statements = await runSearch(repro);
+        const setLocalIdx = statements.findIndex((s) =>
+          /SET LOCAL max_parallel_workers_per_gather\s*=\s*0/i.test(s.query),
+        );
+        const selectIdx = statements.findIndex((s) => /select/i.test(s.query) && /board_climb/i.test(s.query));
+        assert.ok(setLocalIdx >= 0, 'stats-driven path must issue SET LOCAL max_parallel_workers_per_gather = 0');
+        assert.ok(setLocalIdx < selectIdx, 'SET LOCAL must run before the SELECT');
+
+        const selects = tableSelects(statements);
+        assert.ok(selects.length >= 1, 'expected a stats-driven SELECT');
+
+        // Control: when parallelism is available the planner CAN pick a Gather for
+        // this exact query shape, so the guarded assertion below is a real gate,
+        // not a vacuous pass (same control pattern as the broad-count regression
+        // test below).
+        const unguarded = await explainNodes(selects[0].query, selects[0].params, FORCE_PARALLEL);
+        assert.equal(
+          hasGatherNode(unguarded),
+          true,
+          `control: the #3856 repro shape must go parallel when unguarded; saw: ${unguarded.map((n) => n.type).join(', ')}`,
+        );
+
+        // statsDrivenSearch now runs this exact shape inside a transaction with
+        // SET LOCAL max_parallel_workers_per_gather = 0 (mirroring standardSearch) —
+        // no Gather, no per-worker DSM allocation.
+        const guarded = await explainNodes(selects[0].query, selects[0].params, GUARD);
+        assert.equal(
+          hasGatherNode(guarded),
+          false,
+          'the statsDrivenSearch SET LOCAL guard must eliminate the parallel Gather that exhausted /dev/shm in #3856',
+        );
+
+        if (RUN_ANALYZE) await logTiming('stats-driven #3856 repro (guarded)', selects[0]);
+      },
+    );
+
     void it('random sort is deterministic per seed, reshuffles across seeds, and paginates without overlap', async () => {
       const uuidsFor = async (sortSeed: string, page = 0) =>
         (await searchClimbs(db, PARAMS, { page, pageSize: 15, sortBy: 'random', sortSeed })).climbs.map((c) => c.uuid);
