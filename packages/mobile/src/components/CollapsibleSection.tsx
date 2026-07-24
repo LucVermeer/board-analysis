@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
-import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { hapticSelection } from '../lib/haptics';
@@ -197,11 +197,12 @@ function CollapsibleSectionInternal({
         </Animated.View>
       </Pressable>
 
-      {expanded && (
-        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.content}>
-          {children}
-        </Animated.View>
-      )}
+      {/* Body renders in a plain View, not a Reanimated entering/exiting
+          Animated.View: inside a FlashList ListHeaderComponent (the session
+          generator's Tuning section) the iOS FadeIn settled at ~0 height and
+          got clipped by the container's overflow:'hidden', painting blank.
+          Matches the keepExpanded branch above. */}
+      {expanded && <View style={styles.content}>{children}</View>}
     </View>
   );
 }
