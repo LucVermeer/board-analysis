@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-24T22:02:01.633Z",
+  "generatedAt": "2026-07-24T22:09:43.939Z",
   "entries": [
+    {
+      "prNumber": 3456,
+      "category": "fixed",
+      "title": "Fixed a case where getting back on your climb after a mate queued one for a different wall left the board dark until you re-tapped the lightbulb",
+      "mergedAt": "2026-07-24T22:09:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3456"
+    },
+    {
+      "prNumber": 3745,
+      "category": "fixed",
+      "title": "Grasshopper board climbs are easier to see — hold markers, especially the",
+      "mergedAt": "2026-07-24T22:08:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3745",
+      "body": "blue ones, now render brighter and with a bolder outline against the board's\ndarker photo. Tension, Decoy, Touchstone, So-iLL, and MoonBoard hold colors\nget the same brightness correction as a side effect; Kilter is unchanged."
+    },
     {
       "prNumber": 3879,
       "category": "fixed",

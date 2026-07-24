@@ -18,6 +18,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed a case where getting back on your climb after a mate queued one for a different wall left the board dark until you re-tapped the lightbulb ([#3456](https://github.com/boardsesh/boardsesh/pull/3456))
+- Grasshopper board climbs are easier to see — hold markers, especially the ([#3745](https://github.com/boardsesh/boardsesh/pull/3745))
+  blue ones, now render brighter and with a bolder outline against the board's
+  darker photo. Tension, Decoy, Touchstone, So-iLL, and MoonBoard hold colors
+  get the same brightness correction as a side effect; Kilter is unchanged.
 - Party queues no longer vanish when one climb in the list has an old-style id — the rest of your queue keeps syncing instead of the whole thing getting stuck. ([#3879](https://github.com/boardsesh/boardsesh/pull/3879))
 - Picking a climb no longer switches the wall off while the climb is still syncing — the holds light up as soon as it's ready, no more jumping to another climb and back. ([#3870](https://github.com/boardsesh/boardsesh/pull/3870))
 - MoonBoard on iPhone: when the board drops mid-session, the bulb now goes dark right away — one tap reconnects you to the same board, no more digging through the device list. ([#3807](https://github.com/boardsesh/boardsesh/pull/3807))
