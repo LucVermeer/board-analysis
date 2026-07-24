@@ -1254,6 +1254,16 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
         mirroredUuid: uuid
         mirrored
       }
+      ... on PlaybackStateChanged {
+        sequence
+        climbUuid
+        frameIndex
+        isPlaying
+        speed
+        paceMs
+        anchorTimestamp
+        clientId
+      }
     }
   }
 `;
