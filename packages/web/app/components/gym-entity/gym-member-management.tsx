@@ -25,6 +25,7 @@ import RemoveCircleOutlined from '@mui/icons-material/RemoveCircleOutline';
 import PersonAddOutlined from '@mui/icons-material/PersonAddOutlined';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { themeTokens } from '@/app/theme/theme-config';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
   GET_GYM_MEMBERS,
@@ -251,6 +252,26 @@ export default function GymMemberManagement({
           </MuiButton>
         </Box>
       )}
+
+      {/* Plain-language legend so whoever assigns roles knows what each one can
+          actually do before they hand out access. */}
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+        <MuiTypography
+          variant="caption"
+          sx={{ display: 'block', mb: 0.5, fontWeight: themeTokens.typography.fontWeight.semibold }}
+        >
+          {t('gymMemberManagement.roleHelp.title')}
+        </MuiTypography>
+        <MuiTypography variant="caption" color="text.secondary" component="p" sx={{ mb: 0.25 }}>
+          {t('gymMemberManagement.roleHelp.admin')}
+        </MuiTypography>
+        <MuiTypography variant="caption" color="text.secondary" component="p" sx={{ mb: 0.25 }}>
+          {t('gymMemberManagement.roleHelp.editor')}
+        </MuiTypography>
+        <MuiTypography variant="caption" color="text.secondary" component="p">
+          {t('gymMemberManagement.roleHelp.member')}
+        </MuiTypography>
+      </Paper>
 
       {loading && members.length === 0 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

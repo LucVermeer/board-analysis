@@ -7,13 +7,16 @@ import { useSession } from 'next-auth/react';
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import MuiLink from '@mui/material/Link';
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
+import type { TFunction } from 'i18next';
 import type { Gym } from '@boardsesh/shared-schema';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
+import { resolveGymRole, type GymRoleKind } from '@/app/lib/gym-role';
 import { themeTokens } from '@/app/theme/theme-config';
 import GymMemberManagement from '@/app/components/gym-entity/gym-member-management';
 import { canManageGymBoards } from '@/app/components/gym-entity/manage/gym-board-permissions';
@@ -30,6 +33,22 @@ import { decideManageNavigation, type ManageNavigation } from '@/app/components/
 type ManageTab = 'overview' | 'kiosks' | 'insights' | 'branding' | 'profile' | 'boards' | 'members';
 const VALID_TABS: ManageTab[] = ['overview', 'kiosks', 'insights', 'branding', 'profile', 'boards', 'members'];
 const DEFAULT_TAB: ManageTab = 'overview';
+
+// Reuses the My Gyms role labels (common:myGyms.*) so the console header and the
+// drawer name the viewer's standing the same way. Static-literal keys — the i18n
+// linter forbids t(variable).
+function roleChipLabel(t: TFunction, role: GymRoleKind): string {
+  switch (role) {
+    case 'owner':
+      return t('common:myGyms.roleOwner');
+    case 'admin':
+      return t('common:myGyms.roleAdmin');
+    case 'editor':
+      return t('common:myGyms.roleEditor');
+    case 'member':
+      return t('common:myGyms.roleMember');
+  }
+}
 
 export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
   const { t } = useTranslation('kiosk');
@@ -48,6 +67,10 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
 
   const currentUserId = session?.user?.id ?? null;
   const isOwnerOrAdmin = canManageGymBoards(gym, currentUserId);
+  // The viewer's standing at this gym (owner/admin/editor), shown as a chip in
+  // the header. Null for a community moderator who can edit via a community role
+  // but holds no gym_members row — no gym-level standing to badge.
+  const viewerRole = resolveGymRole(gym, currentUserId);
 
   const tabParam = searchParams.get('tab');
   const activeTab: ManageTab = VALID_TABS.includes(tabParam as ManageTab) ? (tabParam as ManageTab) : DEFAULT_TAB;
@@ -135,9 +158,12 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
         </Box>
       )}
 
-      <Typography variant="h4" component="h1" sx={{ fontWeight: themeTokens.typography.fontWeight.bold, mb: 3 }}>
-        {t('manage.title', { gymName: gym.name })}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 3 }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: themeTokens.typography.fontWeight.bold }}>
+          {t('manage.title', { gymName: gym.name })}
+        </Typography>
+        {viewerRole && <Chip size="small" color="primary" label={roleChipLabel(t, viewerRole)} />}
+      </Box>
 
       {!gym.slug && <GymSlugGuard gym={gym} onSlugSet={handleSlugSet} />}
 

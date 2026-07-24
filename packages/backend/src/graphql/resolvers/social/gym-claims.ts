@@ -7,6 +7,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import { requireAdmin } from './roles';
 import { userCanEditGym } from './gyms';
+import { createGymManageAccessNotification } from './gym-notifications';
 import {
   RequestGymClaimInputSchema,
   ReviewGymClaimInputSchema,
@@ -19,7 +20,6 @@ import {
   sendGymClaimApprovedEmail,
   sendGymClaimOwnershipLostEmail,
 } from '../../../email/email-service';
-import { pubsub } from '../../../pubsub/index';
 import { logger } from '../../../utils/logger';
 
 const CLAIM_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -38,45 +38,6 @@ type ClaimApplied = {
   claimEmail: string | null;
   priorOwnerId: string | null;
 };
-
-/**
- * Create the in-app "you now manage this gym" notification for the claimant and
- * push it live (best-effort). System notification — no actor, so the feed shows
- * a gym icon rather than a person. The gym name is carried on the live payload
- * and re-derived from `entityId` (the gym UUID) when the feed is fetched later.
- */
-export async function createGymClaimApprovedNotification(
-  recipientId: string,
-  gymUuid: string,
-  gymName: string,
-): Promise<void> {
-  try {
-    const uuid = randomUUID();
-    await db.insert(dbSchema.notifications).values({
-      uuid,
-      recipientId,
-      actorId: null,
-      type: 'gym_claim_approved',
-      entityType: 'gym',
-      entityId: gymUuid,
-    });
-
-    pubsub.publishNotificationEvent(recipientId, {
-      notification: {
-        uuid,
-        type: 'gym_claim_approved',
-        actorId: null,
-        entityType: 'gym',
-        entityId: gymUuid,
-        gymName,
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    logger.error('[GymClaim] Failed to create approval notification:', error);
-  }
-}
 
 /**
  * Apply a claim: transfer gym ownership to the claimant. The pending row is
@@ -152,7 +113,7 @@ export async function applyGymClaim(
  * a heads-up.
  */
 async function notifyClaimApplied(result: ClaimApplied): Promise<void> {
-  await createGymClaimApprovedNotification(result.claimantUserId, result.gymUuid, result.gymName);
+  await createGymManageAccessNotification(result.claimantUserId, result.gymUuid, result.gymName);
   if (result.claimEmail) {
     void sendGymClaimApprovedEmail(result.claimEmail, result.gymName);
   }

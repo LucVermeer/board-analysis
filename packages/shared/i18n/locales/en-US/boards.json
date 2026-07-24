@@ -459,6 +459,12 @@
       "editor": "Editor",
       "member": "Member"
     },
+    "roleHelp": {
+      "title": "What each role can do",
+      "admin": "Admins manage everything, including boards, kiosks, branding, and who's on staff.",
+      "editor": "Editors can change the gym, boards, and kiosks, but not delete it or manage staff.",
+      "member": "Members are part of the crew and can't edit anything."
+    },
     "grant": {
       "button": "Grant write access",
       "revoke": "Revoke write access",

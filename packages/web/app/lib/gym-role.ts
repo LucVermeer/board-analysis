@@ -9,11 +9,11 @@ export type GymRoleKind = 'owner' | 'admin' | 'editor' | 'member';
 
 /**
  * Resolve the viewer's standing at a gym. Returns null for a gym the viewer
- * only follows. Shared by the My Gyms drawer and the homepage gym card so both
- * surface the same role.
+ * only follows. Shared by the My Gyms drawer, the homepage gym card, and the
+ * manage console header so they all surface the same role.
  *
- * Admin/editor rows only become reachable once `myGyms` includes gym_members
- * (staff-roles PR); until then every listed gym resolves to `owner`.
+ * `myGyms` unions owned + gym_members, so admin/editor/member rows arrive with
+ * their `myRole` populated and resolve to the matching standing here.
  */
 export function resolveGymRole(gym: Gym, currentUserId: string | null): GymRoleKind | null {
   if (currentUserId && gym.ownerId === currentUserId) return 'owner';

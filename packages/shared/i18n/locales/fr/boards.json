@@ -459,6 +459,12 @@
       "editor": "Éditeur",
       "member": "Membre"
     },
+    "roleHelp": {
+      "title": "Ce que chaque rôle peut faire",
+      "admin": "Les admins gèrent tout : les boards, les bornes, l’identité visuelle et l’équipe.",
+      "editor": "Les éditeurs peuvent modifier la salle, les boards et les bornes, mais pas la supprimer ni gérer l’équipe.",
+      "member": "Les membres font partie de l’équipe et ne peuvent rien modifier."
+    },
     "grant": {
       "button": "Donner l’accès en écriture",
       "revoke": "Révoquer l’accès en écriture",

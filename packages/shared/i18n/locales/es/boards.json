@@ -459,6 +459,12 @@
       "editor": "Editor",
       "member": "Miembro"
     },
+    "roleHelp": {
+      "title": "Qué puede hacer cada rol",
+      "admin": "Los administradores gestionan todo, incluidos los plafones, los kioscos, la marca y el personal.",
+      "editor": "Los editores pueden cambiar el gimnasio, los plafones y los kioscos, pero no eliminarlo ni gestionar al personal.",
+      "member": "Los miembros forman parte del equipo y no pueden editar nada."
+    },
     "grant": {
       "button": "Dar acceso de edición",
       "revoke": "Revocar acceso de edición",

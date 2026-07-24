@@ -9,11 +9,10 @@ import { GET_MY_GYMS, type GetMyGymsQueryResponse, type GetMyGymsQueryVariables 
 import type { Gym, GymConnection } from '@boardsesh/shared-schema';
 
 /**
- * Fetches the gyms the current user owns via GraphQL. Membership-based listing
- * (admin/editor) arrives with the staff-roles PR — today the `myGyms` resolver
- * only returns gyms where `ownerId = userId` (no gym_members join). The role-chip
- * logic already handles admin/editor rows; they become reachable once `myGyms`
- * includes gym_members.
+ * Fetches the gyms the current user owns OR holds a gym_members row on
+ * (admin/editor/member) via GraphQL — the `myGyms` resolver unions owned +
+ * membership, so a climber granted editor/admin sees the gym here and the
+ * role-chip logic lights up from each gym's `myRole`.
  * Gyms are fetched when `enabled` becomes true and the user is authenticated.
  *
  * Built on `useInfiniteQuery` so the homepage card and the My Gyms drawer share a
