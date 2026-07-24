@@ -952,4 +952,39 @@ describe('setQueue - tolerant per-item validation (issue #3857)', () => {
     expect(result.queueState?.queue[0]?.uuid).toBe(validItem1.uuid);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Dropped 1/2 invalid initialQueue item'));
   });
+
+  it('joinSession clears initialCurrentClimb to null when its own initialQueue slot is the dropped item', async () => {
+    const sessionId = uuidv4();
+    const connectionId = 'client-join-3857-dangling';
+    await roomManager.registerClient(connectionId);
+
+    const currentUuid = uuidv4();
+    // The initialQueue's copy of "current" is corrupt and gets dropped by
+    // tolerant parsing...
+    const danglingQueueEntry = createStructurallyInvalidQueueItem(currentUuid);
+    const validItem = createTestClimb();
+    // ...but the caller ALSO independently sends a structurally valid
+    // initialCurrentClimb pointing at that same uuid — a slot that no longer
+    // exists in the seeded queue once the array is filtered.
+    const initialCurrentClimb = createTestClimb(currentUuid);
+    const joinCtx = { connectionId, rateLimitTokens: 60, rateLimitLastReset: Date.now() };
+
+    const result = await sessionMutations.joinSession(
+      {},
+      {
+        sessionId,
+        boardPath: '/kilter/1/2/3/40',
+        username: 'User1',
+        initialQueue: [danglingQueueEntry, validItem],
+        initialCurrentClimb,
+      },
+      joinCtx,
+    );
+
+    expect(result.queueState).not.toBeNull();
+    expect(result.queueState?.queue).toHaveLength(1);
+    expect(result.queueState?.queue[0]?.uuid).toBe(validItem.uuid);
+    expect(result.queueState?.currentClimbQueueItem).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('initialCurrentClimb uuid not present'));
+  });
 });

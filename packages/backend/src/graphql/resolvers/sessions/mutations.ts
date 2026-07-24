@@ -47,6 +47,7 @@ import { autoSyncSessionToIntegrations } from '../../../integrations/export-serv
 import { normalizeIanaTimezone } from '../../../utils/timezone';
 import { endLiveActivity } from '../../../services/apns';
 import { buildSessionPayload } from './helpers';
+import { logMutationMetrics } from '../queue/mutation-metrics';
 
 /**
  * `isLeader` audit (always-live sessions):
@@ -135,6 +136,7 @@ export const sessionMutations = {
     // and wedge party-session seeding on join.
     let seedQueue: ClimbQueueItem[] | undefined;
     if (initialQueue) {
+      const seedValidationStartTime = performance.now();
       const { items, droppedCount } = parseArrayTolerant(ClimbQueueItemSchema, initialQueue, 'initialQueue', 500);
       // ClimbQueueItemSchema's `.nullish()` fields infer as `T | null | undefined`,
       // one shade looser than the hand-written `ClimbQueueItem` type (`T | null`)
@@ -144,6 +146,13 @@ export const sessionMutations = {
         logger.warn(
           `[joinSession] Dropped ${droppedCount}/${initialQueue.length} invalid initialQueue item(s) for session ${sessionId} instead of rejecting the whole join.`,
         );
+        // Mirror setQueue's structured metrics so a dropped-item rate is
+        // queryable the same way for both seed paths, not just visible in
+        // free-text logs.
+        logMutationMetrics('joinSession', performance.now() - seedValidationStartTime, sessionId, {
+          droppedCount,
+          initialQueueLength: initialQueue.length,
+        });
       }
     }
     let seedCurrentClimb: ClimbQueueItem | null = null;

@@ -180,7 +180,10 @@ export function parseArrayTolerant<T>(
   fieldName: string,
   maxLength: number,
 ): { items: T[]; droppedCount: number } {
-  const arrayResult = z.array(z.unknown()).max(maxLength, `${fieldName} too large`).safeParse(data);
+  // Don't repeat fieldName in the inner message — the outer `throw` below
+  // already prefixes it (`Invalid ${fieldName}: ...`), so a per-issue
+  // "${fieldName} too large" would read as "Invalid queue: queue too large".
+  const arrayResult = z.array(z.unknown()).max(maxLength, 'too large').safeParse(data);
   if (!arrayResult.success) {
     const errors = arrayResult.error.issues.map((issue) => issue.message).join(', ');
     throw new Error(`Invalid ${fieldName}: ${errors}`);
