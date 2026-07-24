@@ -128,7 +128,7 @@ function getExecute(db: SearchDb): SearchDbExecute | null {
  *
  * @param db Top-level Drizzle database instance. Transaction-scoped callers
  * would need an explicit signature change and must preserve standardSearch's
- * transaction-scoped SET LOCAL guard.
+ * and statsDrivenSearch's transaction-scoped SET LOCAL guards.
  * @param params Board route parameters
  * @param searchParams Search/filter parameters
  * @param userId Optional user ID for personal progress filters
@@ -252,8 +252,13 @@ export function chooseSearchPath(input: {
 
 /**
  * Stats-driven search: FROM board_climb_stats INNER JOIN board_climbs.
- * PostgreSQL reads the relevant stats covering index in sort order and stops
- * after pageSize+1 qualifying rows.
+ * PostgreSQL usually reads the relevant stats covering index in sort order and
+ * stops after pageSize+1 qualifying rows — but with a narrow grade band + size
+ * predicates + a larger pageSize + a page>0 OFFSET, the planner can still pick a
+ * parallel plan, and each worker's DSM allocation can exhaust a small /dev/shm
+ * (#3856). Disable per-gather parallelism inside a transaction (SET LOCAL needs
+ * one; the pool runs prepare:false behind PgBouncer transaction pooling),
+ * mirroring the standardSearch / countClimbs / getHoldHeatmapData guards.
  *
  * The INNER JOIN excludes climbs without a stats row at this angle. The caller
  * (`searchClimbs`) compensates only on page 0 without stats filters, where
@@ -264,6 +269,34 @@ export function chooseSearchPath(input: {
  * the WHERE clause — not the JOIN ON — so they apply correctly to the result set.
  */
 async function statsDrivenSearch(
+  db: SearchDb,
+  params: BoardRouteParams,
+  filters: ReturnType<typeof createClimbFilters>,
+  sortBy: StatsDrivenSort,
+  page: number,
+  pageSize: number,
+): Promise<ClimbSearchResult> {
+  const transaction = getTransaction(db);
+  if (transaction) {
+    return transaction(async (transactionDb) => {
+      await transactionDb.execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);
+      return runStatsDrivenSearch(transactionDb, params, filters, sortBy, page, pageSize);
+    });
+  }
+
+  // Reached only by execute-only query test doubles. Production call sites pass
+  // top-level DbInstance values so the transaction branch scopes SET LOCAL
+  // correctly; do not broaden searchClimbs to TransactionDb without revisiting
+  // that planner guard.
+  const execute = getExecute(db);
+  if (execute) {
+    await execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);
+  }
+
+  return runStatsDrivenSearch(db, params, filters, sortBy, page, pageSize);
+}
+
+async function runStatsDrivenSearch(
   db: SearchDb,
   params: BoardRouteParams,
   filters: ReturnType<typeof createClimbFilters>,

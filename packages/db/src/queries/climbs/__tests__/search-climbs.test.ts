@@ -1,7 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseSearchPath, getStatsDrivenSort, clampSearchPage, MAX_SEARCH_PAGE } from '../search-climbs';
-import { mapSearchInputToParams, normalizeSearchSortBy } from '../types';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import { chooseSearchPath, getStatsDrivenSort, clampSearchPage, MAX_SEARCH_PAGE, searchClimbs } from '../search-climbs';
+import { mapSearchInputToParams, normalizeSearchSortBy, type BoardRouteParams } from '../types';
+import type { DbInstance } from '../../../client/postgres';
 
 const baseInput = {
   statsDrivenSort: 'ascents' as const,
@@ -161,5 +164,102 @@ void describe('normalizeSearchSortBy', () => {
     // Empty / absent seed collapses to undefined so the query falls back to the constant salt.
     assert.equal(mapSearchInputToParams({ sortBy: 'random', sortSeed: '' }).sortSeed, undefined);
     assert.equal(mapSearchInputToParams({ sortBy: 'random' }).sortSeed, undefined);
+  });
+});
+
+// Fake SearchDb: a minimal stand-in for a top-level Drizzle instance. Every
+// select chain method returns the same builder object, and awaiting it (via a
+// real `.then`) records that the query ran — so a test can assert the query
+// executed AFTER the SET LOCAL guard, not before or instead of it. Mirrors the
+// mock in packages/web/app/lib/db/queries/climbs/__tests__/holds-heatmap.test.ts,
+// adapted to node:test (no module mocking needed — searchClimbs takes `db` as
+// a plain parameter).
+function createFakeSearchDb() {
+  const callOrder: string[] = [];
+  const executedStatements: SQL[] = [];
+
+  const makeSelectBuilder = () => {
+    const builder: Record<string, unknown> = {};
+    for (const method of ['from', 'innerJoin', 'leftJoin', 'where', 'orderBy', 'limit', 'offset']) {
+      builder[method] = () => builder;
+    }
+    // A real, spec-compliant thenable so drizzle's internal `await` can't
+    // swallow a rejection and so this reliably resolves like a genuine query.
+    builder.then = (
+      onFulfilled?: ((value: unknown) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null,
+    ) => {
+      callOrder.push('select');
+      return Promise.resolve([]).then(onFulfilled, onRejected);
+    };
+    return builder;
+  };
+
+  const tx = {
+    execute: (statement: SQL) => {
+      callOrder.push('execute');
+      executedStatements.push(statement);
+      return Promise.resolve([]);
+    },
+    select: () => makeSelectBuilder(),
+  };
+
+  const fakeDb = {
+    transaction: (callback: (transactionDb: typeof tx) => unknown) => callback(tx),
+  };
+
+  return { fakeDb, callOrder, executedStatements };
+}
+
+const dialect = new PgDialect();
+const GUARD_PATTERN = /SET LOCAL max_parallel_workers_per_gather\s*=\s*0/i;
+
+const SEARCH_PARAMS: BoardRouteParams = {
+  board_name: 'kilter',
+  layout_id: 1,
+  size_id: 10,
+  set_ids: [1, 20],
+  angle: 40,
+};
+
+void describe('statsDrivenSearch — DSM parallelism guard (#3856)', () => {
+  void it('runs the stats-driven query inside a transaction that disables per-gather parallelism first', async () => {
+    const { fakeDb, callOrder, executedStatements } = createFakeSearchDb();
+
+    // page:1 forces chooseSearchPath to 'stats-driven-only' (no standardSearch
+    // fallback), isolating this assertion to statsDrivenSearch's own guard —
+    // the same page shape as the production repro (Sentry BOARDSESH-AK: page 1,
+    // narrow grade band, pageSize 100).
+    await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 1,
+      pageSize: 100,
+      sortBy: 'ascents',
+      sortOrder: 'desc',
+    });
+
+    assert.deepEqual(callOrder, ['execute', 'select'], 'SET LOCAL must run before the stats-driven SELECT');
+    const renderedGuards = executedStatements.map((statement) => dialect.sqlToQuery(statement).sql);
+    assert.ok(
+      renderedGuards.some((statement) => GUARD_PATTERN.test(statement)),
+      `expected a SET LOCAL max_parallel_workers_per_gather = 0 guard; saw: ${renderedGuards.join(', ')}`,
+    );
+  });
+
+  void it('also guards the quality-sort stats-driven path', async () => {
+    const { fakeDb, callOrder, executedStatements } = createFakeSearchDb();
+
+    await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 1,
+      pageSize: 20,
+      sortBy: 'quality',
+      sortOrder: 'desc',
+    });
+
+    assert.deepEqual(callOrder, ['execute', 'select'], 'SET LOCAL must run before the stats-driven SELECT');
+    const renderedGuards = executedStatements.map((statement) => dialect.sqlToQuery(statement).sql);
+    assert.ok(
+      renderedGuards.some((statement) => GUARD_PATTERN.test(statement)),
+      `expected a SET LOCAL max_parallel_workers_per_gather = 0 guard; saw: ${renderedGuards.join(', ')}`,
+    );
   });
 });
