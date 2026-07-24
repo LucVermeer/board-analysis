@@ -98,6 +98,20 @@ function ascent(overrides: Row = {}): Row {
   };
 }
 
+function bid(overrides: Row = {}): Row {
+  return {
+    uuid: 'bid-1',
+    climb_uuid: 'climb-2',
+    angle: 25,
+    is_mirror: false,
+    bid_count: 2,
+    comment: '',
+    climbed_at: '2026-05-01 09:00:00',
+    created_at: '2026-05-01 09:05:00',
+    ...overrides,
+  };
+}
+
 beforeEach(() => recomputeMock.mockClear());
 
 describe('applyAuroraAscents — timezone + insert', () => {
@@ -415,5 +429,93 @@ describe('applyAuroraBids', () => {
       climbedAt: '2026-05-01T09:00:00.000Z',
       attemptCount: 2,
     });
+  });
+});
+
+// #3520: the reported crash site (an unguarded `new Date(item.created_at)`
+// directly in the bids upsert case of user-sync.ts) was already removed by
+// the 71937db6a timezone-correctness refactor, which routed both ascents and
+// bids through the shared normalize functions below with an identical
+// created_at → climbed_at fallback. This block is a regression test for that
+// fallback on the bids side specifically (previously only asserted for
+// ascents), plus coverage for the same-family gaps that refactor left open:
+// climbedAt has no fallback at all, and the created_at ternary only guards
+// falsy values, not malformed-but-truthy ones.
+describe('applyAuroraBids — created_at guard', () => {
+  it('falls back to climbed_at when created_at is missing (mirrors the ascents guard)', async () => {
+    const { tx, insertValues } = createTx({ selectResults: [[], []] });
+    await applyAuroraBids(tx as unknown as Db, 'kilter', 'user-1', [bid({ created_at: undefined })]);
+
+    expect(insertValues[0][0]).toMatchObject({
+      climbedAt: '2026-05-01T09:00:00.000Z',
+      createdAt: '2026-05-01T09:00:00.000Z',
+    });
+  });
+});
+
+// The actual remaining bug behind #3520 staying open: applyAuroraBids and
+// applyAuroraAscents run inside syncUserData's single cross-table
+// transaction, so an uncaught throw while normalizing ONE row rolls back
+// every other table already synced this attempt and blocks the checkpoint
+// from advancing — the next attempt just re-fetches and re-crashes on the
+// same poison row forever. These tests assert a malformed row is logged and
+// skipped instead of thrown, and every other row in the same payload still
+// lands.
+describe('applyAuroraBids — malformed-row isolation (#3520)', () => {
+  it('skips a bid with an unparseable created_at, warns, and still inserts the rest of the batch', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { tx, insertValues, calls } = createTx({ selectResults: [[], []] });
+      await applyAuroraBids(tx as unknown as Db, 'kilter', 'user-1', [
+        bid({ uuid: 'bid-bad', created_at: 'not-a-date' }),
+        bid({ uuid: 'bid-good' }),
+      ]);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('bid-bad'));
+      expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+      expect(insertValues[0]).toHaveLength(1);
+      expect(insertValues[0][0]).toMatchObject({ auroraId: 'bid-good' });
+      expect(recomputeMock).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('skips a bid with a missing climbed_at, warns, and still inserts the rest of the batch', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { tx, insertValues, calls } = createTx({ selectResults: [[], []] });
+      await applyAuroraBids(tx as unknown as Db, 'kilter', 'user-1', [
+        bid({ uuid: 'bid-bad', climbed_at: undefined }),
+        bid({ uuid: 'bid-good' }),
+      ]);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('bid-bad'));
+      expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+      expect(insertValues[0]).toHaveLength(1);
+      expect(insertValues[0][0]).toMatchObject({ auroraId: 'bid-good' });
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
+
+describe('applyAuroraAscents — malformed-row isolation (#3520)', () => {
+  it('skips an ascent with a missing climbed_at, warns, and still inserts the rest of the batch', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { tx, insertValues, calls } = createTx({ selectResults: [[], []] });
+      await applyAuroraAscents(tx as unknown as Db, 'kilter', 'user-1', [
+        ascent({ uuid: 'aur-bad', climbed_at: undefined }),
+        ascent({ uuid: 'aur-good' }),
+      ]);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('aur-bad'));
+      expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+      expect(insertValues[0]).toHaveLength(1);
+      expect(insertValues[0][0]).toMatchObject({ auroraId: 'aur-good' });
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

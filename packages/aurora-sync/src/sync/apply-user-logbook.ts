@@ -544,7 +544,23 @@ export async function applyAuroraAscents(
     if (isAuroraListedFalse(item.is_listed)) {
       tombstoneIds.push(String(item.uuid));
     } else {
-      live.push(normalizeAscent(item));
+      // A single row with an unparseable timestamp (missing/garbage
+      // climbed_at, or a created_at so malformed the climbed_at fallback
+      // above doesn't save it) must not abort the whole payload: this runs
+      // inside syncUserData's one cross-table transaction, so an uncaught
+      // throw here rolls back every OTHER table that already synced this
+      // attempt AND blocks the checkpoint from advancing — the next attempt
+      // just re-fetches and re-crashes on the same poison row forever (#3520).
+      // Skip-and-log the one row; every other row in the payload still lands.
+      try {
+        live.push(normalizeAscent(item));
+      } catch (error) {
+        console.warn(
+          `[aurora-sync] skipping malformed ascent row (uuid=${String(item.uuid)}, user=${userId}, board=${boardName}): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
   }
 
@@ -568,7 +584,21 @@ export async function applyAuroraBids(
   const now = new Date().toISOString();
   const touchedKeys: ClimbStatsKey[] = [];
 
-  const live = data.map(normalizeBid);
+  // Same skip-and-log rationale as applyAuroraAscents above: one malformed
+  // bid must not throw out of the eager normalize pass and abort every other
+  // table in the caller's transaction (#3520).
+  const live: NormalizedLogbookRow[] = [];
+  for (const item of data) {
+    try {
+      live.push(normalizeBid(item));
+    } catch (error) {
+      console.warn(
+        `[aurora-sync] skipping malformed bid row (uuid=${String(item.uuid)}, user=${userId}, board=${boardName}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
   for (const batch of chunk(live, WRITE_CHUNK_SIZE)) {
     touchedKeys.push(...(await applyLogbookChunk(db, boardName, userId, batch, now, 'bids', ['attempt'])));
   }
