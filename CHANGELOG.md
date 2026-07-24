@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- See two listings of your gym? Report a duplicate right from the gym page and we'll get them merged. ([#3847](https://github.com/boardsesh/boardsesh/pull/3847))
 - Staff you add to your gym now see it in My Gyms, and get a heads-up the moment they're handed the keys. ([#3844](https://github.com/boardsesh/boardsesh/pull/3844))
   Assigning roles is clearer: a quick note on what admins, editors, and members can each do.
 
@@ -17,6 +18,12 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Party queues no longer vanish when one climb in the list has an old-style id — the rest of your queue keeps syncing instead of the whole thing getting stuck. ([#3879](https://github.com/boardsesh/boardsesh/pull/3879))
+- Picking a climb no longer switches the wall off while the climb is still syncing — the holds light up as soon as it's ready, no more jumping to another climb and back. ([#3870](https://github.com/boardsesh/boardsesh/pull/3870))
+- MoonBoard on iPhone: when the board drops mid-session, the bulb now goes dark right away — one tap reconnects you to the same board, no more digging through the device list. ([#3807](https://github.com/boardsesh/boardsesh/pull/3807))
+- In a party session your phone now follows the crew's route playback live — play, pause, and speed changes from other phones show up instead of freezing. ([#3873](https://github.com/boardsesh/boardsesh/pull/3873))
+- Logbook sync no longer gets stuck for good when one old attempt has a broken date — Boardsesh skips that one attempt and keeps syncing the rest of your sends. ([#3872](https://github.com/boardsesh/boardsesh/pull/3872))
+  Fixes #3520
 - Queue climbs your crew adds now fill in their name, grade, and thumbnail on your phone instead of getting stuck on "Unknown Climb" — even when the climb wasn't already cached on your device. ([#3763](https://github.com/boardsesh/boardsesh/pull/3763))
 - Climb search no longer randomly comes up empty on busy filters. ([#3865](https://github.com/boardsesh/boardsesh/pull/3865))
 - Fixed a rare crash when the app was sent to the background mid-sync. ([#3755](https://github.com/boardsesh/boardsesh/pull/3755))

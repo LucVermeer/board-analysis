@@ -1,6 +1,49 @@
 {
-  "generatedAt": "2026-07-24T21:55:21.597Z",
+  "generatedAt": "2026-07-24T22:02:01.633Z",
   "entries": [
+    {
+      "prNumber": 3879,
+      "category": "fixed",
+      "title": "Party queues no longer vanish when one climb in the list has an old-style id — the rest of your queue keeps syncing instead of the whole thing getting stuck.",
+      "mergedAt": "2026-07-24T21:59:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3879"
+    },
+    {
+      "prNumber": 3847,
+      "category": "new",
+      "title": "See two listings of your gym? Report a duplicate right from the gym page and we'll get them merged.",
+      "mergedAt": "2026-07-24T21:58:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3847"
+    },
+    {
+      "prNumber": 3870,
+      "category": "fixed",
+      "title": "Picking a climb no longer switches the wall off while the climb is still syncing — the holds light up as soon as it's ready, no more jumping to another climb and back.",
+      "mergedAt": "2026-07-24T21:57:54Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3870"
+    },
+    {
+      "prNumber": 3807,
+      "category": "fixed",
+      "title": "MoonBoard on iPhone: when the board drops mid-session, the bulb now goes dark right away — one tap reconnects you to the same board, no more digging through the device list.",
+      "mergedAt": "2026-07-24T21:57:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3807"
+    },
+    {
+      "prNumber": 3873,
+      "category": "fixed",
+      "title": "In a party session your phone now follows the crew's route playback live — play, pause, and speed changes from other phones show up instead of freezing.",
+      "mergedAt": "2026-07-24T21:57:06Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3873"
+    },
+    {
+      "prNumber": 3872,
+      "category": "fixed",
+      "title": "Logbook sync no longer gets stuck for good when one old attempt has a broken date — Boardsesh skips that one attempt and keeps syncing the rest of your sends.",
+      "mergedAt": "2026-07-24T21:56:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3872",
+      "body": "Fixes #3520"
+    },
     {
       "prNumber": 3834,
       "category": "improved",
