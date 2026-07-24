@@ -43,6 +43,8 @@ export {
   isSigningOut,
   getWipeEpoch,
   beginLocalPurge,
+  setBackgrounded,
+  isBackgrounded,
 } from './mutation-queue/drainer';
 export type { DrainOptions } from './mutation-queue/drainer';
 export { ensureMutationQueueTable, MUTATION_QUEUE_SCHEMA } from './mutation-queue/schema';

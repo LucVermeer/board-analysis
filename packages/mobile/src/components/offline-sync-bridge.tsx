@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { setSyncProgress } from '../sync';
 import { getPendingCount, type GraphQLFetch } from '@boardsesh/offline-sync';
-import { startSyncScheduler, drainMutationQueue } from '../offline/offline-sync-adapter';
+import { startSyncScheduler, drainMutationQueue, startBackgroundTracking } from '../offline/offline-sync-adapter';
 import { getSetting } from '../settings';
 import { setupNotificationHandlers } from '../notifications';
 import { getHttpClient } from '../lib/graphql/client';
@@ -56,6 +56,12 @@ export function OfflineSyncBridge() {
   // getHttpClient() already carries auth + endpoint; binding .request keeps the
   // GraphQLFetch shape the scheduler and drainer expect.
   const graphqlFetch = useMemo<GraphQLFetch>(() => (query, variables) => getHttpClient().request(query, variables), []);
+
+  // Unconditional (unlike the scheduler effect below): the offline-sync
+  // engine's backgrounding guard must cover ad-hoc drainMutationQueue() calls
+  // from mutation hooks too, not just the scheduler's own pull/drain loop —
+  // see startBackgroundTracking's doc.
+  useEffect(() => startBackgroundTracking(), []);
 
   // On the flag flipping OFF mid-session, caches populated from local SQLite
   // must refetch from the network. `undefined` initial value skips the mount

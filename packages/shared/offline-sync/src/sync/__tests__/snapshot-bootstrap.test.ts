@@ -24,7 +24,7 @@ import {
 import { getCheckpoint, setCheckpoint, DELETIONS_CHECKPOINT_KEY } from '../checkpoints';
 import { runMigrations, LATEST_SCHEMA_VERSION } from '../../db/migrations';
 import { ensureMutationQueueTable } from '../../mutation-queue/schema';
-import { setSigningOut, __resetDrainerStateForTests } from '../../mutation-queue/drainer';
+import { setSigningOut, setBackgrounded, __resetDrainerStateForTests } from '../../mutation-queue/drainer';
 import { createTestDatabase, type TestSqliteDb } from '../../testing/sqlite-test-db';
 import { SCHEMA_STATEMENTS } from '../../db/schema';
 import type { OfflineBoardScope } from '../../offline-board-key';
@@ -996,6 +996,59 @@ describe('pullSync snapshot bootstrap', () => {
     expect(run3.capturedClimbCursors[0]).toBeUndefined();
     // downloadArtifact was NOT called on run 3 (bootstrap skipped entirely).
     expect(source.downloadArtifact).toHaveBeenCalledTimes(2);
+  });
+
+  it('Sentry BOARDSESH-AN: stops before the attempt-bookkeeping write when the app backgrounds during the manifest fetch', async () => {
+    const source: SnapshotSource = {
+      fetchManifest: async () => {
+        setBackgrounded(true);
+        throw new Error('network down');
+      },
+      downloadArtifact: vi.fn(),
+      deleteArtifact: vi.fn(async () => {}),
+    };
+    const { fetch } = makeGraphqlFetch();
+
+    try {
+      await pullSync(db, noopQueryClient(), fetch, { enabledBoards: ['kilter:1:5'], snapshotSource: source });
+
+      // A manifest fetch failure normally counts a bootstrap attempt; backgrounding
+      // mid-await must pre-empt that SQLite write, same as a sign-out/wipe caught
+      // mid-flight — and abort the whole cycle before deletions/table pulls run.
+      expect(
+        await db.getFirstAsync('SELECT value FROM sync_meta WHERE key = ?', ['bootstrap-attempts:kilter:1:5']),
+      ).toBeNull();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      setBackgrounded(false);
+    }
+  });
+
+  it('Sentry BOARDSESH-AN: stops before importing when the app backgrounds during the artifact download', async () => {
+    const source: SnapshotSource = {
+      fetchManifest: async () => makeManifest([makeEntry()]),
+      downloadArtifact: async () => {
+        setBackgrounded(true);
+        return { filePath: join(workDir, 'unused.db') };
+      },
+      deleteArtifact: vi.fn(async () => {}),
+    };
+    const { fetch } = makeGraphqlFetch();
+
+    try {
+      await pullSync(db, noopQueryClient(), fetch, { enabledBoards: ['kilter:1:5'], snapshotSource: source });
+
+      // The artifact "downloaded" successfully, but backgrounding was detected
+      // right after that await — the import transaction (SQLite work) must never
+      // run, and no attempt should be recorded either.
+      expect(await countRows('board_climbs')).toBe(0);
+      expect(
+        await db.getFirstAsync('SELECT value FROM sync_meta WHERE key = ?', ['bootstrap-attempts:kilter:1:5']),
+      ).toBeNull();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      setBackgrounded(false);
+    }
   });
 });
 

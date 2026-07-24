@@ -22,6 +22,7 @@ import {
   startSyncScheduler as startSyncSchedulerCore,
   triggerSync as triggerSyncCore,
   pullSync as pullSyncCore,
+  setBackgrounded,
   type DrainOptions,
   type DrainQueue,
   type GraphQLFetch,
@@ -75,6 +76,15 @@ const warnCycleError = (error: unknown) => {
     console.warn('[Sync] Sync cycle failed:', error instanceof Error ? error.message : 'unknown');
   }
 };
+
+// Feeds setBackgrounded() (Sentry BOARDSESH-AN); call once for the app's lifetime — see OfflineSyncBridge.
+export function startBackgroundTracking(): () => void {
+  const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+    if (nextState === 'background') setBackgrounded(true);
+    if (nextState === 'active') setBackgrounded(false);
+  });
+  return () => subscription.remove();
+}
 
 const schedulerTriggers: SchedulerTriggers = {
   subscribeForeground(callback) {

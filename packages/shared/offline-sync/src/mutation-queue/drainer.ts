@@ -69,6 +69,17 @@ export function getWipeEpoch(): number {
   return _wipeEpoch;
 }
 
+// Backgrounding guard (Sentry BOARDSESH-AN), same shape as the sign-out guard above.
+let _isBackgrounded = false;
+
+export function setBackgrounded(value: boolean): void {
+  _isBackgrounded = value;
+}
+
+export function isBackgrounded(): boolean {
+  return _isBackgrounded;
+}
+
 // Bounded exponential backoff between drain attempts within a single cycle
 // (I7). A transient failure (network blip, 5xx) recovers on its own instead of
 // stalling until the next external trigger. Capped so we never busy-loop or
@@ -159,6 +170,7 @@ export async function drainMutationQueue(
 ): Promise<void> {
   // Don't start (or re-enter) a drain while sign-out is wiping local data.
   if (_isSigningOut) return;
+  if (_isBackgrounded) return;
   if (_isDraining) return;
   // Offline: nothing can be pushed, and attempting would only churn retry counts
   // and burn backoff sleeps. Skip; the reconnect/foreground trigger drains later.
@@ -182,7 +194,7 @@ export async function drainMutationQueue(
 
   try {
     while (true) {
-      if (_isSigningOut || _wipeEpoch !== startEpoch) break;
+      if (_isSigningOut || _wipeEpoch !== startEpoch || _isBackgrounded) break;
       const batch = await peekPending(db, 10);
       if (batch.length === 0) break;
 
@@ -190,12 +202,21 @@ export async function drainMutationQueue(
       let networkStop = false;
 
       for (const mutation of batch) {
-        if (_isSigningOut || _wipeEpoch !== startEpoch) {
+        if (_isSigningOut || _wipeEpoch !== startEpoch || _isBackgrounded) {
           networkStop = true; // reuse the "end cycle now" path
           break;
         }
         try {
           await processMutation(mutation, graphqlFetch);
+          // Re-check after the network await: backgrounding (or a sign-out wipe)
+          // may have started while the send was in flight. The send already
+          // reached the server, but the local bookkeeping write must not — leave
+          // the row pending (idempotency_key makes a resend on the next drain
+          // safe) rather than dispatch a SQLite call right as iOS suspends.
+          if (_isSigningOut || _wipeEpoch !== startEpoch || _isBackgrounded) {
+            networkStop = true; // reuse the "end cycle now" path
+            break;
+          }
           await markCompleted(db, mutation.id);
           invalidateForTable(queryClient, mutation.table_name);
         } catch (error: unknown) {
@@ -206,6 +227,13 @@ export async function drainMutationQueue(
             // advancing retry_count — an offline write must never dead-letter for
             // lack of a connection; it drains when connectivity returns. Stop the
             // cycle rather than backing off against a network that's gone.
+            networkStop = true;
+            break;
+          }
+
+          // Same re-check as the success path above, before the retry/dead-letter
+          // bookkeeping writes below.
+          if (_isSigningOut || _wipeEpoch !== startEpoch || _isBackgrounded) {
             networkStop = true;
             break;
           }
@@ -257,6 +285,7 @@ export function isDraining(): boolean {
 export function __resetDrainerStateForTests(): void {
   _isDraining = false;
   _isSigningOut = false;
+  _isBackgrounded = false;
   // Epoch checks are relative (capture-then-compare), so a residual value is
   // technically harmless — reset anyway so no test inherits another's wipes.
   _wipeEpoch = 0;
