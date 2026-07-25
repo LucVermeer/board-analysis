@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-options';
+import { BoardArtVisibilityProvider } from '../../../src/providers/board-art-visibility-provider';
 
 /**
  * The "On the Wall" tab. iPad-only — it's registered as an `href: null` tab screen
@@ -11,8 +12,10 @@ export default function WallLayout() {
   const screenOptions = useStackScreenOptions();
 
   return (
-    <Stack screenOptions={screenOptions}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-    </Stack>
+    <BoardArtVisibilityProvider tab="wall">
+      <Stack screenOptions={screenOptions}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+      </Stack>
+    </BoardArtVisibilityProvider>
   );
 }

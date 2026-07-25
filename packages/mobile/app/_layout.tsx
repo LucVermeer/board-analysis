@@ -74,6 +74,7 @@ import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { useImageCacheMemoryManagement } from '../src/hooks/use-image-cache-memory-management';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
+import { ImageCacheTabSweeper } from '../src/components/ImageCacheTabSweeper';
 import { AnalyticsPersonProperties } from '../src/components/analytics/AnalyticsPersonProperties';
 import { OtaUpdateTracker } from '../src/components/analytics/OtaUpdateTracker';
 import { InstallReferrerTracker } from '../src/components/analytics/InstallReferrerTracker';
@@ -667,6 +668,7 @@ function RootLayout() {
                                                                 </UserDrawerProvider>
                                                               </TabBarHeightProvider>
                                                               <AnalyticsScreenTracker />
+                                                              <ImageCacheTabSweeper />
                                                               <OtaUpdateTracker />
                                                               <InstallReferrerTracker />
                                                             </ShareTargetProvider>
