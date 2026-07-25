@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Remix or edit a climb straight from the player without ending up with two stacked drawers — it closes the player and drops you into the create screen, pre-filled, with no leftover black panel over your search. ([#3337](https://github.com/boardsesh/boardsesh/pull/3337))
+  A climb you just set now carries its board with it, so the rest of your crew sees it on the right wall.
 - Switching boulders in a session no longer throws you back to the previous climb. If you and your crew are flicking through problems fast enough for the server to ask you to slow down, you now get a quiet "Too many changes too fast. Give it a sec." instead of the alarming "Queue was out of sync. Refreshed from your crew." — and your climb stays put. ([#2791](https://github.com/boardsesh/boardsesh/pull/2791))
 - Start a generated session and your board stays lit on the climb you're working. The session queues up behind it, and anything you'd already lined up stays in the queue — nothing gets wiped. ([#3224](https://github.com/boardsesh/boardsesh/pull/3224))
 - Tapping the ✓ on a past climb in the queue now just logs the ascent — it no longer also jumps you into that climb and closes the queue. ([#3915](https://github.com/boardsesh/boardsesh/pull/3915))

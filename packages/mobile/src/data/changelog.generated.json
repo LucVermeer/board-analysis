@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-25T22:25:07.837Z",
+  "generatedAt": "2026-07-25T22:37:08.329Z",
   "entries": [
+    {
+      "prNumber": 3337,
+      "category": "fixed",
+      "title": "Remix or edit a climb straight from the player without ending up with two stacked drawers — it closes the player and drops you into the create screen, pre-filled, with no leftover black panel over your search.",
+      "mergedAt": "2026-07-25T22:33:36Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3337",
+      "body": "A climb you just set now carries its board with it, so the rest of your crew sees it on the right wall."
+    },
     {
       "prNumber": 2791,
       "category": "fixed",
