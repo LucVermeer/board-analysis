@@ -8,6 +8,12 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Party mode: when someone lands on a climb a crewmate just added, everyone's wall and queue now catch up to it on their own — no more staying stuck on the last boulder until you swipe again. ([#3894](https://github.com/boardsesh/boardsesh/pull/3894))
+- Your crew list stays honest — who's in the session, who's leading, always current. If a network blip drops an update mid-session, your view now re-syncs itself instead of showing a stale or ghost climber until you rejoin. ([#3907](https://github.com/boardsesh/boardsesh/pull/3907))
+- iPad: steadier marathon sessions — board art no longer piles up in memory as you hop between tabs, so a long day of browsing won't end in a crash. ([#3867](https://github.com/boardsesh/boardsesh/pull/3867))
+- [x] none (internal analytics hygiene, no user-facing change) ([#3895](https://github.com/boardsesh/boardsesh/pull/3895))
+- Swiping a queued climb left to remove it now works even when your thumb wanders a little — no more accidentally opening the climb instead. ([#3900](https://github.com/boardsesh/boardsesh/pull/3900))
+- The climb list now refreshes right away after saving, editing, or publishing a climb, deleting a draft, or favoriting a climb ([#3901](https://github.com/boardsesh/boardsesh/pull/3901))
 - Your 8am flash no longer shows up as an afternoon send — logbook times in the per-climb history now match your phone's clock. ([#3904](https://github.com/boardsesh/boardsesh/pull/3904))
 - Your setter tab isn't shy anymore — your own climbs show on your profile now. ([#3903](https://github.com/boardsesh/boardsesh/pull/3903))
 

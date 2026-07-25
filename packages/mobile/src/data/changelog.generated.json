@@ -1,6 +1,48 @@
 {
-  "generatedAt": "2026-07-25T06:51:26.143Z",
+  "generatedAt": "2026-07-25T06:56:31.512Z",
   "entries": [
+    {
+      "prNumber": 3894,
+      "category": "fixed",
+      "title": "Party mode: when someone lands on a climb a crewmate just added, everyone's wall and queue now catch up to it on their own — no more staying stuck on the last boulder until you swipe again.",
+      "mergedAt": "2026-07-25T06:56:04Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3894"
+    },
+    {
+      "prNumber": 3907,
+      "category": "fixed",
+      "title": "Your crew list stays honest — who's in the session, who's leading, always current. If a network blip drops an update mid-session, your view now re-syncs itself instead of showing a stale or ghost climber until you rejoin.",
+      "mergedAt": "2026-07-25T06:55:00Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3907"
+    },
+    {
+      "prNumber": 3867,
+      "category": "fixed",
+      "title": "iPad: steadier marathon sessions — board art no longer piles up in memory as you hop between tabs, so a long day of browsing won't end in a crash.",
+      "mergedAt": "2026-07-25T06:54:41Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3867"
+    },
+    {
+      "prNumber": 3895,
+      "category": "fixed",
+      "title": "[x] none (internal analytics hygiene, no user-facing change)",
+      "mergedAt": "2026-07-25T06:52:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3895"
+    },
+    {
+      "prNumber": 3900,
+      "category": "fixed",
+      "title": "Swiping a queued climb left to remove it now works even when your thumb wanders a little — no more accidentally opening the climb instead.",
+      "mergedAt": "2026-07-25T06:51:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3900"
+    },
+    {
+      "prNumber": 3901,
+      "category": "fixed",
+      "title": "The climb list now refreshes right away after saving, editing, or publishing a climb, deleting a draft, or favoriting a climb",
+      "mergedAt": "2026-07-25T06:51:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3901"
+    },
     {
       "prNumber": 3904,
       "category": "fixed",
