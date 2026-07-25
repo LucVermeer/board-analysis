@@ -2054,6 +2054,7 @@ describe('QueueProvider mutation-failure resync', () => {
       expect(snapshots.at(-1)?.sessionId).toBeNull();
     });
     toast.showToast.mockClear();
+    queueMutations.addQueueItem.mockClear();
 
     const snapshot = snapshots.at(-1);
     if (!snapshot) throw new Error('queue snapshot was not captured');
@@ -2068,6 +2069,9 @@ describe('QueueProvider mutation-failure resync', () => {
     });
     expect(queueStateCalls).toBe(0);
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+    // Solo has no server to fall behind — the local queue is authoritative, so
+    // there is no lost slot to re-send even though this activation queued one.
+    expect(queueMutations.addQueueItem).not.toHaveBeenCalled();
   });
 
   it('still shows the generic failure when a solo setCurrentClimb fails for any other reason', async () => {
