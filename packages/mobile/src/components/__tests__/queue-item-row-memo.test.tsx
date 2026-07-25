@@ -309,6 +309,42 @@ describe('QueueItemRow React.memo', () => {
     expect(captured.tickPress).toBe(tickPress);
   });
 
+  // Beyond identity stability, confirm the captured gesture callbacks route to the
+  // right handler: the long-press opens the reaction menu, a plain tap selects the
+  // row. The jsdom mock can't exercise the native gesture arena (see the iOS QA
+  // matrix in the PR body), but it can catch the JS plumbing being wired to the
+  // wrong handler — e.g. tap and long-press swapped, or the long-press dropped.
+  it('routes long-press to onOpenActions and tap to onPress', () => {
+    const onOpenActions = vi.fn();
+    const localOnPress = vi.fn();
+    const item = makeItem('a', 'Crimp Master');
+    render(
+      <QueueItemRow
+        item={item}
+        position={1}
+        board={board}
+        isCurrentClimb={false}
+        onPress={localOnPress}
+        onRemove={onRemove}
+        onToggleSelect={onToggleSelect}
+        onOpenActions={onOpenActions}
+      />,
+    );
+
+    expect(captured.longPress).toBeTypeOf('function');
+    expect(captured.rowPress).toBeTypeOf('function');
+
+    captured.longPress?.();
+    expect(onOpenActions).toHaveBeenCalledTimes(1);
+    expect(onOpenActions).toHaveBeenCalledWith(item);
+    expect(localOnPress).not.toHaveBeenCalled();
+
+    captured.rowPress?.();
+    expect(localOnPress).toHaveBeenCalledTimes(1);
+    expect(localOnPress).toHaveBeenCalledWith(item);
+    expect(onOpenActions).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps handleDeletePress stable when item identity changes but its data is equal', () => {
     const rowProps = {
       position: 1,
