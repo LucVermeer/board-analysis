@@ -1,6 +1,28 @@
 {
-  "generatedAt": "2026-07-25T07:36:14.393Z",
+  "generatedAt": "2026-07-25T07:41:36.678Z",
   "entries": [
+    {
+      "prNumber": 3911,
+      "category": "fixed",
+      "title": "In signed-in party sessions, who's leading and your own presence now heal correctly after a dropped update — no more stale leader badge or ghosted-self until someone reshuffles the crew.",
+      "mergedAt": "2026-07-25T07:39:51Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3911"
+    },
+    {
+      "prNumber": 3898,
+      "category": "fixed",
+      "title": "Your downloaded boards now open with no signal — even from a cold start, and even when the wifi's lying to you. Grab every climb for your board at home, then walk into a dead-zone gym (airplane mode, or that captive-portal wifi that connects but never loads) and go straight to your list. (For testers on the offline-downloads flag.)",
+      "mergedAt": "2026-07-25T07:37:29Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3898"
+    },
+    {
+      "prNumber": 3893,
+      "category": "fixed",
+      "title": "Logged a send at the wrong angle? Edit the send and set the angle — it now sticks, and your stats move with it.",
+      "mergedAt": "2026-07-25T07:36:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3893",
+      "body": "If you attached a beta video to that send, it now follows the angle fix too, so it opens at the angle you actually climbed."
+    },
     {
       "prNumber": 3908,
       "category": "fixed",

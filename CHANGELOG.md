@@ -8,6 +8,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- In signed-in party sessions, who's leading and your own presence now heal correctly after a dropped update — no more stale leader badge or ghosted-self until someone reshuffles the crew. ([#3911](https://github.com/boardsesh/boardsesh/pull/3911))
+- Your downloaded boards now open with no signal — even from a cold start, and even when the wifi's lying to you. Grab every climb for your board at home, then walk into a dead-zone gym (airplane mode, or that captive-portal wifi that connects but never loads) and go straight to your list. (For testers on the offline-downloads flag.) ([#3898](https://github.com/boardsesh/boardsesh/pull/3898))
+- Logged a send at the wrong angle? Edit the send and set the angle — it now sticks, and your stats move with it. ([#3893](https://github.com/boardsesh/boardsesh/pull/3893))
+  If you attached a beta video to that send, it now follows the angle fix too, so it opens at the angle you actually climbed.
 - Scrolling the queue no longer snags when your thumb drifts right — only a deliberate left swipe reveals Delete. ([#3908](https://github.com/boardsesh/boardsesh/pull/3908))
 - Reordering the queue works again — grab the handle and drag; long-press anywhere else on a climb still opens reactions. ([#3890](https://github.com/boardsesh/boardsesh/pull/3890))
 - Party mode: when someone lands on a climb a crewmate just added, everyone's wall and queue now catch up to it on their own — no more staying stuck on the last boulder until you swipe again. ([#3894](https://github.com/boardsesh/boardsesh/pull/3894))
