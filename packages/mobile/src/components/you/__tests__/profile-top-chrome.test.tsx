@@ -206,7 +206,13 @@ describe('ProfileTopChrome', () => {
     it('passes the profile tab options and selectedKey to the segmented control', () => {
       render(<ProfileTopChrome {...makeProps({ activeTab: 'sessions' })} />);
       const segment = segments.entries.at(-1)!;
-      expect(segment.options.map((option) => option.key)).toEqual(['progress', 'sessions', 'logbook', 'social']);
+      expect(segment.options.map((option) => option.key)).toEqual([
+        'progress',
+        'sessions',
+        'logbook',
+        'climbs',
+        'social',
+      ]);
       expect(segment.selectedKey).toBe('sessions');
     });
 
@@ -279,7 +285,7 @@ describe('ProfileTopChrome', () => {
     it('passes the profile tab options and selectedKey to MaterialTabs', () => {
       render(<ProfileTopChrome {...makeProps({ activeTab: 'sessions' })} />);
       const tabs = materialTabs.entries.at(-1)!;
-      expect(tabs.options.map((option) => option.key)).toEqual(['progress', 'sessions', 'logbook', 'social']);
+      expect(tabs.options.map((option) => option.key)).toEqual(['progress', 'sessions', 'logbook', 'climbs', 'social']);
       expect(tabs.selectedKey).toBe('sessions');
     });
 
