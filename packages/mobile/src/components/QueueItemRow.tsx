@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, run
 import {
   Gesture,
   GestureDetector,
+  type GestureType,
   type GestureUpdateEvent,
   type PanGestureHandlerEventPayload,
 } from 'react-native-gesture-handler';
@@ -63,8 +64,6 @@ type QueueItemRowProps = {
   /** Whether this row may be dragged (future rows, not in edit mode). */
   isDraggable?: boolean;
 };
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function PositionIndicator({
   isEditMode,
@@ -127,10 +126,17 @@ function QueueItemRowComponent({
   // The queue reducer rebuilds the array (and each item object) on every update,
   // so `item` arrives with a fresh reference even when this row's data hasn't
   // changed. Read the live item through a ref and key the press callbacks on the
-  // stable `item.uuid` — otherwise every queue update hands `AnimatedPressable` a
+  // stable `item.uuid` — otherwise every queue update hands the row's gestures a
   // new `onPress`/`onTickHistory` and forces a re-render despite the memo.
   const itemRef = useRef(item);
   itemRef.current = item;
+
+  // Refs so the drag handle's Pan gesture can `blocksExternalGesture` the row's own
+  // tap/long-press (see dragHandleGesture below) — a touch that starts on the handle
+  // is claimed exclusively by the drag and never also opens the reaction menu. Mirrors
+  // the identical ⋯-button-vs-row relationship in ClimbListRow.
+  const singleTapRef = useRef<GestureType | undefined>(undefined);
+  const longPressRef = useRef<GestureType | undefined>(undefined);
 
   // Disable swipe-to-delete for edit mode and history items.
   const swipeEnabled = !isEditMode && !isHistoryItem;
@@ -185,13 +191,6 @@ function QueueItemRowComponent({
         }),
     [swipeEnabled, translateX, isSwipeOpen],
   );
-
-  // Long-press drag handle gesture (future rows only). Memoized on the row's
-  // identity so it doesn't churn while the list re-renders.
-  const dragHandleGesture = useMemo(() => {
-    if (!isDraggable || !drag || rowIndex == null || queueIndex == null) return null;
-    return drag.makeHandleGesture(rowIndex, item.uuid, queueIndex);
-  }, [isDraggable, drag, rowIndex, queueIndex, item.uuid]);
 
   const rowAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -278,6 +277,56 @@ function QueueItemRowComponent({
     onOpenActions(itemRef.current);
   }, [isEditMode, onOpenActions]);
 
+  // Row press/long-press run as RNGH gestures — not RN core Pressable's onPress/
+  // onLongPress — so they can be arbitrated against the nested drag-handle's Pan
+  // gesture in the same gesture arena (see dragHandleGesture below). Before this,
+  // onLongPress lived on a plain Pressable wrapping the handle's GestureDetector:
+  // two independent touch systems (RN's legacy responder + RNGH's native arena)
+  // raced for the same hold, and on iOS the row's long-press could win, opening the
+  // reaction menu instead of letting the handle's Pan activate. Mirrors ClimbListRow's
+  // singleTapGesture/longPressGesture/tapGesture composition.
+  const singleTapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .withRef(singleTapRef)
+        .maxDuration(300)
+        .maxDistance(15)
+        .onStart(() => {
+          'worklet';
+          runOnJS(handlePress)();
+        }),
+    [handlePress],
+  );
+
+  const longPressGesture = useMemo(
+    () =>
+      Gesture.LongPress()
+        .withRef(longPressRef)
+        .minDuration(400)
+        .onStart(() => {
+          'worklet';
+          runOnJS(handleLongPress)();
+        }),
+    [handleLongPress],
+  );
+
+  // Long-press wins over tap; a quick tap fires once the long-press fails.
+  const tapGesture = useMemo(
+    () => Gesture.Exclusive(longPressGesture, singleTapGesture),
+    [longPressGesture, singleTapGesture],
+  );
+
+  // Long-press drag handle gesture (future rows only). Memoized on the row's
+  // identity so it doesn't churn while the list re-renders. `blocksExternalGesture`
+  // makes the row's own tap/long-press wait for this gesture to fail before they can
+  // activate — a touch that starts on the handle is claimed by the drag (or falls
+  // through to a plain row tap if released before the long-press-to-arm threshold),
+  // and never also opens the reaction menu.
+  const dragHandleGesture = useMemo(() => {
+    if (!isDraggable || !drag || rowIndex == null || queueIndex == null) return null;
+    return drag.makeHandleGesture(rowIndex, item.uuid, queueIndex).blocksExternalGesture(singleTapRef, longPressRef);
+  }, [isDraggable, drag, rowIndex, queueIndex, item.uuid]);
+
   // Take the layout event directly so the same stable function can be passed to
   // `onLayout` — an inline `(event) => ...` wrapper would be a fresh arrow each
   // render, defeating the row's memoization on the wrapping `Animated.View`.
@@ -304,76 +353,77 @@ function QueueItemRowComponent({
     isHistoryItem && !isEditMode && typeof climbedAtAngle === 'number' && climbedAtAngle !== board.angle;
 
   const rowContent = (
-    <AnimatedPressable
-      onPress={handlePress}
-      onLongPress={handleLongPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${climbName}, ${t('mobile.queue.positionLabel', { position })}`}
-      accessibilityState={{ selected: isEditMode ? isSelected : isCurrentClimb }}
-      style={[
-        styles.row,
-        { backgroundColor: systemColors.secondaryBackground },
-        isCurrentClimb && !isHistoryItem && { backgroundColor: `${brandColors.primary}14` },
-        isHistoryItem && styles.historyRow,
-        rowAnimatedStyle,
-      ]}
-    >
-      {/* Position number / play indicator / edit checkbox */}
-      <View style={styles.positionContainer}>
-        <PositionIndicator
-          isEditMode={isEditMode}
-          isSelected={isSelected}
-          isCurrentClimb={isCurrentClimb}
-          position={position}
+    <GestureDetector gesture={tapGesture}>
+      <Animated.View
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`${climbName}, ${t('mobile.queue.positionLabel', { position })}`}
+        accessibilityState={{ selected: isEditMode ? isSelected : isCurrentClimb }}
+        style={[
+          styles.row,
+          { backgroundColor: systemColors.secondaryBackground },
+          isCurrentClimb && !isHistoryItem && { backgroundColor: `${brandColors.primary}14` },
+          isHistoryItem && styles.historyRow,
+          rowAnimatedStyle,
+        ]}
+      >
+        {/* Position number / play indicator / edit checkbox */}
+        <View style={styles.positionContainer}>
+          <PositionIndicator
+            isEditMode={isEditMode}
+            isSelected={isSelected}
+            isCurrentClimb={isCurrentClimb}
+            position={position}
+          />
+        </View>
+
+        {/* Shared climb visual: thumbnail + name/subtitle + grade */}
+        <ClimbListItemContent
+          climb={item.climb}
+          boardName={board.boardName}
+          layoutId={board.layoutId}
+          sizeId={board.sizeId}
+          setIds={board.setIds}
+          angle={board.angle}
         />
-      </View>
 
-      {/* Shared climb visual: thumbnail + name/subtitle + grade */}
-      <ClimbListItemContent
-        climb={item.climb}
-        boardName={board.boardName}
-        layoutId={board.layoutId}
-        sizeId={board.sizeId}
-        setIds={board.setIds}
-        angle={board.angle}
-      />
-
-      {/* Sent-at-angle chip: history climbed at an angle other than the wall's */}
-      {showSentAtAngle && (
-        <Text
-          variant="caption1"
-          color={iosSystemColors.systemGray}
-          style={styles.sentAtAngle}
-          accessibilityLabel={t('mobile.queue.sentAtAngle', { angle: climbedAtAngle })}
-        >
-          {t('mobile.queue.sentAtAngle', { angle: climbedAtAngle })}
-        </Text>
-      )}
-
-      {/* Trailing action: tick (history) or drag handle (upcoming) */}
-      {showTick ? (
-        <Pressable
-          testID="tick-button"
-          onPress={handleTickPress}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.queue.logAscent')}
-          style={styles.trailingButton}
-        >
-          <Icon name="tick" size={26} color={brandColors.success} />
-        </Pressable>
-      ) : showDragHandle && dragHandleGesture ? (
-        <GestureDetector gesture={dragHandleGesture}>
-          <View
-            style={styles.trailingButton}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.dragHandleAria', { name: climbName })}
+        {/* Sent-at-angle chip: history climbed at an angle other than the wall's */}
+        {showSentAtAngle && (
+          <Text
+            variant="caption1"
+            color={iosSystemColors.systemGray}
+            style={styles.sentAtAngle}
+            accessibilityLabel={t('mobile.queue.sentAtAngle', { angle: climbedAtAngle })}
           >
-            <Icon name="drag.handle" size={22} color={iosSystemColors.systemGray} />
-          </View>
-        </GestureDetector>
-      ) : null}
-    </AnimatedPressable>
+            {t('mobile.queue.sentAtAngle', { angle: climbedAtAngle })}
+          </Text>
+        )}
+
+        {/* Trailing action: tick (history) or drag handle (upcoming) */}
+        {showTick ? (
+          <Pressable
+            testID="tick-button"
+            onPress={handleTickPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.queue.logAscent')}
+            style={styles.trailingButton}
+          >
+            <Icon name="tick" size={26} color={brandColors.success} />
+          </Pressable>
+        ) : showDragHandle && dragHandleGesture ? (
+          <GestureDetector gesture={dragHandleGesture}>
+            <View
+              style={styles.trailingButton}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.queue.dragHandleAria', { name: climbName })}
+            >
+              <Icon name="drag.handle" size={22} color={iosSystemColors.systemGray} />
+            </View>
+          </GestureDetector>
+        ) : null}
+      </Animated.View>
+    </GestureDetector>
   );
 
   return (
