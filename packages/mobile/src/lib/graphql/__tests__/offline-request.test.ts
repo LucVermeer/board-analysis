@@ -461,16 +461,39 @@ describe('offlineAwareRequest — network-failure recovery (connected-but-unreac
     expect(searchClimbsLocal).toHaveBeenCalledWith(fakeDb, searchInput);
   });
 
-  it('serves a downloaded board from local SQLite when an online request throws (flag on, detail miss-retry)', async () => {
+  it('serves a downloaded climb from local SQLite when the flag-on miss-retry hits a dead network', async () => {
     // Flag on + online: search serves local before the network, so the only
-    // network-reaching path for a downloaded board is the detail miss-retry. On a
-    // dead network it recovers to the local (null) result instead of the throw.
+    // network-reaching path for a downloaded board is the detail miss-retry —
+    // local read misses (row not synced), retries the network, the network
+    // throws, and the catch recovers to the local (null) result. Set the flag
+    // explicitly so this path is deterministic, and assert the local-first read
+    // + network retry actually happened, not just the final shape (which the
+    // flag-off catch-only path below produces too).
+    setOfflineEngineEnabled(true);
     setOnline(true);
     isBoardDownloadedLocally.mockResolvedValue(true);
     getClimbLocal.mockResolvedValue(null); // local miss → retry over network
     request.mockRejectedValue(new Error('Network request failed'));
     const result = await offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, climbVars);
     expect(result).toEqual({ climb: null });
+    // Local-first read for the miss, then the catch-block recovery read.
+    expect(getClimbLocal).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledWith(GET_CLIMB, climbVars);
+  });
+
+  it('serves a downloaded climb from local SQLite when a flag-off online request throws (cold-start race, detail op)', async () => {
+    // Flag off + stale-online: no local-first probe, so the request goes straight
+    // to the network, throws, and the catch block is the ONLY thing that reads
+    // local — one read, returning the real detail. Distinct from test 1 (which
+    // covers the same recovery for SEARCH_CLIMBS) and from the flag-on path above
+    // (which reads local twice).
+    setOfflineEngineEnabled(false);
+    setOnline(true);
+    isBoardDownloadedLocally.mockResolvedValue(true);
+    request.mockRejectedValue(new Error('Network request failed'));
+    const result = await offlineAwareRequest<GetClimbQueryResponse>(GET_CLIMB, climbVars);
+    expect(result).toEqual({ climb: { uuid: 'local-detail' } });
+    expect(getClimbLocal).toHaveBeenCalledTimes(1);
   });
 
   it('rethrows the network error when nothing is downloaded (not swallowed into an empty fallback)', async () => {
