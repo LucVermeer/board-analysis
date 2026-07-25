@@ -95,7 +95,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const bottomChrome = useBottomChromeMetrics();
   const { data: activeBoard } = useActiveBoard();
   const { isAuthenticated } = useAuth();
-  const { startSession, setQueue } = useQueueActions();
+  const { startSession, appendGeneratedSession } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const { showToast } = useToast();
 
@@ -222,10 +222,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
       }
 
       if (selection.type === 'on') {
-        // Replace the queue with the reviewed preview (set the first climb
-        // current so the session opens on climb #1). setQueue dispatches
-        // UPDATE_QUEUE locally + best-effort party sync.
-        setQueue(generatedItems, generatedItems[0]);
+        // Queue the reviewed preview behind whatever's already going, leaving
+        // the current climb alone so the wall doesn't repaint and hand-queued
+        // climbs survive. Opens on climb #1 only when nothing is current.
+        appendGeneratedSession(generatedItems);
         track(SHARED_EVENTS.SessionQueueGenerated, {
           workoutType: selection.options.type,
           boardName: activeBoard.boardType,
@@ -248,7 +248,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     refreshingUuids,
     plannedCount,
     startSession,
-    setQueue,
+    appendGeneratedSession,
     showToast,
     t,
   ]);

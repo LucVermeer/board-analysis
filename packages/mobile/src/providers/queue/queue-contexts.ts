@@ -48,6 +48,8 @@ type QueueContextValue = {
    * queue change.
    */
   getQueueSnapshot: () => { queue: ClimbQueueItem[]; currentClimbQueueItem: ClimbQueueItem | null };
+  /** Append a generated session behind the live queue, leaving the current climb where it is. */
+  appendGeneratedSession: (items: ClimbQueueItem[]) => void;
   setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
   previousClimb: () => void;

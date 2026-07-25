@@ -848,6 +848,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Queue a generated session behind whatever the climber already has going,
+  // instead of replacing it. Leaving the current pointer alone is what keeps the
+  // BLE auto-sender (it writes state.currentClimbQueueItem) from repainting the
+  // wall out from under someone mid-project, and appending rather than replacing
+  // keeps their hand-queued climbs. Only when nothing is current do we open on
+  // the session's first climb. Mirrors web's start-sesh-drawer.
+  const appendGeneratedSession = useCallback(
+    (items: ClimbQueueItem[]) => {
+      const { queue, currentClimbQueueItem } = stateRef.current;
+      setQueue([...queue, ...items], currentClimbQueueItem ?? items[0] ?? null);
+    },
+    [setQueue],
+  );
+
   // Optimistic local dispatch + correlated SET_CURRENT_CLIMB mutation. The
   // reducer stores `correlationId` in pendingCurrentClimbUpdates so the echoed
   // CurrentClimbChanged event (same id in `serverCorrelationId`) is suppressed
@@ -1056,6 +1070,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       clearQueue,
       setQueue,
       getQueueSnapshot,
+      appendGeneratedSession,
       setCurrentClimb,
       nextClimb,
       previousClimb,
@@ -1080,6 +1095,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       clearQueue,
       setQueue,
       getQueueSnapshot,
+      appendGeneratedSession,
       setCurrentClimb,
       nextClimb,
       previousClimb,
