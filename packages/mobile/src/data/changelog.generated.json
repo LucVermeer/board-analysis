@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-25T06:56:31.512Z",
+  "generatedAt": "2026-07-25T07:36:14.393Z",
   "entries": [
+    {
+      "prNumber": 3908,
+      "category": "fixed",
+      "title": "Scrolling the queue no longer snags when your thumb drifts right — only a deliberate left swipe reveals Delete.",
+      "mergedAt": "2026-07-25T07:35:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3908"
+    },
+    {
+      "prNumber": 3890,
+      "category": "fixed",
+      "title": "Reordering the queue works again — grab the handle and drag; long-press anywhere else on a climb still opens reactions.",
+      "mergedAt": "2026-07-25T07:35:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3890"
+    },
     {
       "prNumber": 3894,
       "category": "fixed",
