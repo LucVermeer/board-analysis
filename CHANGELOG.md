@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Switching boulders in a session no longer throws you back to the previous climb. If you and your crew are flicking through problems fast enough for the server to ask you to slow down, you now get a quiet "Too many changes too fast. Give it a sec." instead of the alarming "Queue was out of sync. Refreshed from your crew." — and your climb stays put. ([#2791](https://github.com/boardsesh/boardsesh/pull/2791))
 - Start a generated session and your board stays lit on the climb you're working. The session queues up behind it, and anything you'd already lined up stays in the queue — nothing gets wiped. ([#3224](https://github.com/boardsesh/boardsesh/pull/3224))
 - Tapping the ✓ on a past climb in the queue now just logs the ascent — it no longer also jumps you into that climb and closes the queue. ([#3915](https://github.com/boardsesh/boardsesh/pull/3915))
 - Pick an angle mid-session and it sticks — reconnecting no longer snaps the wall back to the old angle while your change is still syncing to the crew. ([#3917](https://github.com/boardsesh/boardsesh/pull/3917))

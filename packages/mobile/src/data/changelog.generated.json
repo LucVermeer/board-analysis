@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-25T21:00:13.819Z",
+  "generatedAt": "2026-07-25T22:25:07.837Z",
   "entries": [
+    {
+      "prNumber": 2791,
+      "category": "fixed",
+      "title": "Switching boulders in a session no longer throws you back to the previous climb. If you and your crew are flicking through problems fast enough for the server to ask you to slow down, you now get a quiet \"Too many changes too fast. Give it a sec.\" instead of the alarming \"Queue was out of sync. Refreshed from your crew.\" — and your climb stays put.",
+      "mergedAt": "2026-07-25T22:24:03Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/2791"
+    },
     {
       "prNumber": 3224,
       "category": "fixed",
