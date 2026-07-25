@@ -859,7 +859,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // Nothing generated: don't broadcast a SET_QUEUE that changes nothing.
       if (items.length === 0) return;
       const { queue, currentClimbQueueItem } = stateRef.current;
-      setQueue([...queue, ...items], currentClimbQueueItem ?? items[0] ?? null);
+      setQueue([...queue, ...items], currentClimbQueueItem ?? items[0]);
     },
     [setQueue],
   );
