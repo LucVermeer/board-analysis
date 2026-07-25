@@ -213,6 +213,17 @@ import { clearStoredSessionId } from '../../lib/session-store';
 import { track } from '../../lib/analytics';
 import { bumpAuthTransportRevision } from '../../lib/auth-transport-revision';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { GraphQLOperationError } from '@boardsesh/graphql-client';
+
+/** The error `execute()` rejects with when the backend's rate-limit gate fires. */
+function makeRateLimitedError(retryAfterSeconds = 4): GraphQLOperationError {
+  return new GraphQLOperationError([
+    {
+      message: `Rate limit exceeded. Try again in ${retryAfterSeconds} seconds.`,
+      extensions: { code: 'RATE_LIMITED', retryAfterSeconds },
+    },
+  ]);
+}
 
 type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
@@ -223,6 +234,7 @@ type Snapshot = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   addToQueue: ReturnType<typeof useQueue>['addToQueue'];
   removeFromQueue: ReturnType<typeof useQueue>['removeFromQueue'];
+  reorderQueue: ReturnType<typeof useQueue>['reorderQueue'];
   setQueue: ReturnType<typeof useQueue>['setQueue'];
   setCurrentClimb: ReturnType<typeof useQueue>['setCurrentClimb'];
   nextClimb: ReturnType<typeof useQueue>['nextClimb'];
@@ -319,6 +331,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
       playlistSuggestionSource,
       addToQueue: queue.addToQueue,
       removeFromQueue: queue.removeFromQueue,
+      reorderQueue: queue.reorderQueue,
       setQueue: queue.setQueue,
       setCurrentClimb: queue.setCurrentClimb,
       nextClimb: queue.nextClimb,
@@ -339,6 +352,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     playlistSuggestionSource,
     queue.addToQueue,
     queue.removeFromQueue,
+    queue.reorderQueue,
     queue.setQueue,
     queue.setCurrentClimb,
     queue.nextClimb,
@@ -1748,6 +1762,151 @@ describe('QueueProvider mutation-failure resync', () => {
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
     // Solo's "Action failed" toast must NOT fire in a party session.
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('toasts "slow down" and keeps the local climb when setCurrentClimb is rate-limited in a session', async () => {
+    const snapshots: Snapshot[] = [];
+    const serverCurrent = makeQueueItem('server-current', 'climb-server-current');
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([serverCurrent], serverCurrent), {
+      onQueueStateCall: () => (queueStateCalls += 1),
+    });
+    queueMutations.setCurrentClimb.mockRejectedValueOnce(makeRateLimitedError());
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.setCurrentClimb(makeQueueItem('local-current', 'climb-local-current'));
+    });
+
+    await waitFor(() => {
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
+    });
+    // The rate-limit gate throws before the resolver runs, so there is nothing
+    // to reconcile — the local pointer stays put and no refetch is fired into
+    // the limiter that just throttled us.
+    expect(queueStateCalls).toBe(0);
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('local-current');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('toasts "slow down" rather than the generic failure when reorderQueue is rate-limited', async () => {
+    const snapshots: Snapshot[] = [];
+    const first = makeQueueItem('item-1', 'climb-1');
+    const second = makeQueueItem('item-2', 'climb-2');
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([first, second], first), {
+      onQueueStateCall: () => (queueStateCalls += 1),
+    });
+    queueMutations.reorderQueueItem.mockRejectedValueOnce(makeRateLimitedError());
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    // Seed a two-item queue locally so there is something to reorder.
+    act(() => {
+      snapshots.at(-1)?.setQueue([first, second], first);
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue).toHaveLength(2);
+    });
+    toast.showToast.mockClear();
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.reorderQueue('item-1', 0, 1);
+    });
+
+    await waitFor(() => {
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
+    });
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+    // reorderQueue rolls back locally and never reaches
+    // resyncQueueAfterMutationFailure — assert the refetch stays at zero so
+    // that stays true if the handler is ever rewritten.
+    expect(queueStateCalls).toBe(0);
+  });
+
+  it('toasts "slow down" when a solo setCurrentClimb is rate-limited', async () => {
+    const snapshots: Snapshot[] = [];
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([]), { onQueueStateCall: () => (queueStateCalls += 1) });
+    queueMutations.setCurrentClimb.mockRejectedValueOnce(makeRateLimitedError());
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    // End the session so the next activation runs with no active session.
+    await act(async () => {
+      await snapshots.at(-1)?.endSession();
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBeNull();
+    });
+    toast.showToast.mockClear();
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.setCurrentClimb(makeQueueItem('solo-current', 'climb-solo-current'));
+    });
+
+    // Solo used to get a blanket "Action failed" here; a throttled solo call is
+    // still a rate limit, so it gets the same gentle wording as a party one.
+    await waitFor(() => {
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
+    });
+    expect(queueStateCalls).toBe(0);
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('still shows the generic failure when a solo setCurrentClimb fails for any other reason', async () => {
+    const snapshots: Snapshot[] = [];
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([]), { onQueueStateCall: () => (queueStateCalls += 1) });
+    queueMutations.setCurrentClimb.mockRejectedValueOnce(new Error('set current failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    await act(async () => {
+      await snapshots.at(-1)?.endSession();
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBeNull();
+    });
+    toast.showToast.mockClear();
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.setCurrentClimb(makeQueueItem('solo-current', 'climb-solo-current'));
+    });
+
+    // Routing solo through showQueueMutationErrorToast must not change what a
+    // plain failure looks like — only the rate-limited case gets new wording.
+    await waitFor(() => {
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+    });
+    expect(queueStateCalls).toBe(0);
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
   });
 
   it('resyncs when setQueue fails in a session', async () => {
