@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { isNull } from 'drizzle-orm';
 import { gyms, locationSyncGymSources, userBoards, users } from '@boardsesh/db/schema';
 import type { CanonicalGymCandidate } from '@boardsesh/db/queries';
 import type { PublicBoardLocationInput } from './types';
-import { SYSTEM_USER_ID } from './ids';
+import { boardUuidForSource, gymUuidForSource, SYSTEM_USER_ID } from './ids';
 import type { LocationSyncLogger, LocationSyncLogFields } from './logger';
 import {
   buildBoardWriteIdentifiers,
@@ -158,8 +159,55 @@ function candidate(overrides: Partial<MatchCandidateRow>): MatchCandidateRow {
   };
 }
 
+/**
+ * Introspects a Drizzle WHERE / setWhere condition to recover the facts the
+ * freeze / live-row guards depend on, WITHOUT a real SQL dialect:
+ *
+ *  - `columns`: the column names the condition DIRECTLY references — e.g.
+ *    `sync_frozen_at` (the freeze guard) or `deleted_at` (the live-row filter).
+ *    This is what makes the fake a real guardrail: a refactor that drops
+ *    `isNull(gyms.syncFrozenAt)` (or `isNull(gyms.deletedAt)`) removes the column
+ *    here, so the fake stops blocking the write and the guard test fails in CI.
+ *  - `intParams`: the bound numeric parameters (e.g. the `gyms.id` in
+ *    `eq(gyms.id, gymId)`), so the fake can tell WHICH row an UPDATE targets.
+ *
+ * It walks only the SQL `queryChunks`; when it hits a Column it records the name
+ * and stops, so it never follows the column's `.table` back-reference (which
+ * would otherwise surface every sibling column and defeat the check).
+ */
+function inspectCondition(condition: unknown): { columns: Set<string>; intParams: number[] } {
+  const columns = new Set<string>();
+  const intParams: number[] = [];
+  const visit = (node: unknown, depth: number): void => {
+    if (node == null || depth > 12 || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    // A Drizzle Column: has a name + a column-type marker. Record and STOP.
+    if (typeof record.name === 'string' && (record.columnType !== undefined || record.dataType !== undefined)) {
+      columns.add(record.name);
+      return;
+    }
+    // A bound Param carries an `encoder`; raw SQL-string chunks do not.
+    if (record.encoder !== undefined && typeof record.value === 'number') {
+      intParams.push(record.value);
+    }
+    const chunks = record.queryChunks;
+    if (Array.isArray(chunks)) {
+      for (const chunk of chunks) visit(chunk, depth + 1);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const element of node) visit(element, depth + 1);
+    }
+  };
+  visit(condition, 0);
+  return { columns, intParams };
+}
+
 class FakeInsertBuilder {
   private pendingRowValues: Record<string, unknown> | null = null;
+  // Whether the ON CONFLICT DO UPDATE's setWhere references sync_frozen_at, i.e.
+  // the freeze guard is present on this upsert. Captured in onConflictDoUpdate.
+  private conflictSetWhereGuardsFreeze = false;
 
   constructor(
     private readonly fakeDb: FakeLocationSyncDb,
@@ -178,7 +226,10 @@ class FakeInsertBuilder {
     return Promise.resolve();
   }
 
-  onConflictDoUpdate(_config: unknown): this {
+  onConflictDoUpdate(config: unknown): this {
+    const setWhere = (config as { setWhere?: unknown } | null | undefined)?.setWhere;
+    this.conflictSetWhereGuardsFreeze =
+      setWhere !== undefined ? inspectCondition(setWhere).columns.has('sync_frozen_at') : false;
     if (Object.is(this.table, locationSyncGymSources) && this.pendingRowValues) {
       this.fakeDb.sourceAliasWrites.push(this.pendingRowValues);
     }
@@ -192,11 +243,36 @@ class FakeInsertBuilder {
 
     if (Object.is(this.table, gyms)) {
       this.fakeDb.createdGymWrites.push(this.pendingRowValues);
+      const pendingUuid = this.pendingRowValues.uuid;
+      // A frozen conflicting row is blocked by the `setWhere` guard, so the real
+      // upsert returns no row — model that so the by-uuid fallback is exercised.
+      // Guard-aware: only when the setWhere actually references sync_frozen_at.
+      // A refactor dropping the guard would return the row here and overwrite the
+      // frozen gym, which the by-uuid-fallback test then catches.
+      if (
+        typeof pendingUuid === 'string' &&
+        this.fakeDb.frozenGymUuids.has(pendingUuid) &&
+        this.conflictSetWhereGuardsFreeze
+      ) {
+        return [];
+      }
       return [{ id: this.fakeDb.createdGymId }];
     }
 
     if (Object.is(this.table, userBoards)) {
       this.fakeDb.boardWrites.push(this.pendingRowValues);
+      const pendingUuid = this.pendingRowValues.uuid;
+      // A frozen catalog board's ON CONFLICT SET is blocked by the setWhere guard,
+      // so `returning()` yields nothing and it is NOT counted in boardsUpserted —
+      // the frozen row keeps its human edits. Guard-aware: a refactor dropping the
+      // board setWhere returns the row here (overwrite), failing the freeze test.
+      if (
+        typeof pendingUuid === 'string' &&
+        this.fakeDb.frozenBoardUuids.has(pendingUuid) &&
+        this.conflictSetWhereGuardsFreeze
+      ) {
+        return [];
+      }
       return [{ id: this.fakeDb.createdBoardId }];
     }
 
@@ -217,8 +293,17 @@ class FakeUpdateBuilder {
     return this;
   }
 
-  where(_condition: unknown): Promise<void> {
+  where(condition: unknown): Promise<void> {
     if (Object.is(this.table, gyms)) {
+      const { columns, intParams } = inspectCondition(condition);
+      const targetsFrozenGym = intParams.some((gymId) => this.fakeDb.frozenGymIds.has(gymId));
+      // Model refreshSyncedGymMetadata's freeze guard: the real UPDATE's
+      // `... AND sync_frozen_at IS NULL` matches 0 rows for a frozen gym, so no
+      // metadata is written. If a refactor drops that guard the write lands
+      // (columns no longer has sync_frozen_at), which the freeze test then catches.
+      if (targetsFrozenGym && columns.has('sync_frozen_at')) {
+        return Promise.resolve();
+      }
       this.fakeDb.gymMetadataWrites.push(this.updateValues ?? {});
     }
     return Promise.resolve();
@@ -226,6 +311,9 @@ class FakeUpdateBuilder {
 }
 
 class FakeSelectBuilder {
+  private usedInnerJoin = false;
+  private whereFiltersLiveRows = false;
+
   constructor(private readonly fakeDb: FakeLocationSyncDb) {}
 
   from(_table: unknown): this {
@@ -233,15 +321,30 @@ class FakeSelectBuilder {
   }
 
   innerJoin(_table: unknown, _condition: unknown): this {
+    this.usedInnerJoin = true;
     return this;
   }
 
-  where(_condition: unknown): this {
+  where(condition: unknown): this {
+    this.whereFiltersLiveRows = inspectCondition(condition).columns.has('deleted_at');
     return this;
   }
 
-  limit(_limit: number): AliasedGymRow[] {
-    return this.fakeDb.aliasedGym === null ? [] : [this.fakeDb.aliasedGym];
+  limit(_limit: number): AliasedGymRow[] | Array<{ id: number }> {
+    // The alias lookup (findAliasedGym) joins the alias table to gyms; the
+    // createOrUpdateSourceGym fallback selects gyms by uuid with no join.
+    if (this.usedInnerJoin) {
+      return this.fakeDb.aliasedGym === null ? [] : [this.fakeDb.aliasedGym];
+    }
+    // A soft-deleted fallback gym is excluded by the `isNull(gyms.deletedAt)`
+    // filter, so it must NOT be returned — that's what keeps boards from being
+    // relinked to a deleted gym. Guard-aware: if a refactor drops the deleted_at
+    // filter, `whereFiltersLiveRows` is false, the deleted row is returned, and
+    // the deleted-fallback test catches it.
+    if (this.fakeDb.fallbackGymDeleted && this.whereFiltersLiveRows) {
+      return [];
+    }
+    return this.fakeDb.fallbackGymId === null ? [] : [{ id: this.fakeDb.fallbackGymId }];
   }
 }
 
@@ -257,17 +360,39 @@ class FakeLocationSyncDb {
   readonly physicalCandidates: MatchCandidateRow[];
   readonly createdGymId: number;
   readonly createdBoardId: number;
+  // Gym uuids whose upsert is blocked by the frozen `setWhere` guard.
+  readonly frozenGymUuids: Set<string>;
+  // Id returned by the by-uuid fallback SELECT for a blocked (frozen) gym.
+  readonly fallbackGymId: number | null;
+  // Gym ids that are frozen: refreshSyncedGymMetadata's WHERE (which carries
+  // `sync_frozen_at IS NULL`) matches 0 rows for these, so no metadata is written.
+  readonly frozenGymIds: Set<number>;
+  // Board uuids whose ON CONFLICT SET is blocked by the board `setWhere` guard.
+  readonly frozenBoardUuids: Set<string>;
+  // Whether the by-uuid fallback's target gym is soft-deleted. When true, the
+  // `isNull(gyms.deletedAt)` filter excludes it, so the fallback resolves nothing.
+  readonly fallbackGymDeleted: boolean;
 
   constructor(options: {
     aliasedGym?: AliasedGymRow | null;
     physicalCandidates?: MatchCandidateRow[];
     createdGymId?: number;
     createdBoardId?: number;
+    frozenGymUuids?: Iterable<string>;
+    fallbackGymId?: number | null;
+    frozenGymIds?: Iterable<number>;
+    frozenBoardUuids?: Iterable<string>;
+    fallbackGymDeleted?: boolean;
   }) {
     this.aliasedGym = options.aliasedGym ?? null;
     this.physicalCandidates = options.physicalCandidates ?? [];
     this.createdGymId = options.createdGymId ?? 900;
     this.createdBoardId = options.createdBoardId ?? 901;
+    this.frozenGymUuids = new Set(options.frozenGymUuids ?? []);
+    this.fallbackGymId = options.fallbackGymId ?? null;
+    this.frozenGymIds = new Set(options.frozenGymIds ?? []);
+    this.frozenBoardUuids = new Set(options.frozenBoardUuids ?? []);
+    this.fallbackGymDeleted = options.fallbackGymDeleted ?? false;
   }
 
   insert(table: unknown): FakeInsertBuilder {
@@ -292,6 +417,23 @@ class FakeLocationSyncDb {
     return Promise.resolve(callback(this));
   }
 }
+
+describe('inspectCondition sanity check', () => {
+  // inspectCondition walks Drizzle's internal queryChunks/Column shape, which is
+  // undocumented and could change on a Drizzle version bump. If that happens, every
+  // freeze/live-row guard test above would silently stop blocking writes instead of
+  // failing loudly (the fake would just never detect the guard column). Assert the
+  // introspection still resolves a real column name on real Drizzle conditions, so a
+  // Drizzle bump that changes the internal shape fails HERE with a clear message
+  // instead of surfacing as a confusing downstream guard-test failure.
+  it('recovers the column name from isNull(gyms.syncFrozenAt)', () => {
+    expect(inspectCondition(isNull(gyms.syncFrozenAt)).columns.has('sync_frozen_at')).toBe(true);
+  });
+
+  it('recovers the column name from isNull(gyms.deletedAt)', () => {
+    expect(inspectCondition(isNull(gyms.deletedAt)).columns.has('deleted_at')).toBe(true);
+  });
+});
 
 describe('location upsert planning', () => {
   it('filters records with invalid coordinates before writing', () => {
@@ -452,6 +594,102 @@ describe('public board location upsert gym resolution', () => {
     expect(fakeDb.sourceAliasWrites).toMatchObject([{ sourceKey: 'tension:gym-new', gymId: 123 }]);
     expect(fakeDb.gymMetadataWrites).toEqual([]);
     expect(fakeDb.boardWrites[0]?.gymId).toBe(123);
+  });
+
+  it('links a frozen source gym via the by-uuid fallback without overwriting it', async () => {
+    const gymSourceKey = 'tension:gym-frozen';
+    const frozenGymUuid = gymUuidForSource(gymSourceKey);
+    const fakeDb = new FakeLocationSyncDb({
+      aliasedGym: null, // no alias yet
+      physicalCandidates: [], // no physical match
+      frozenGymUuids: [frozenGymUuid], // the source gym already exists and is frozen
+      fallbackGymId: 555, // the by-uuid fallback resolves its id
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: 'tension:board-frozen', gymSourceKey }),
+    ]);
+
+    // The conflicting frozen gym returned no upserted row, so its metadata was
+    // never overwritten — but the fallback still resolved its id, so the alias
+    // and the board both link to the existing gym.
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.sourceAliasWrites).toMatchObject([{ sourceKey: gymSourceKey, gymId: 555 }]);
+    expect(fakeDb.boardWrites[0]?.gymId).toBe(555);
+  });
+
+  it('does NOT refresh metadata into a FROZEN SYSTEM-owned aliased gym (moderator-fix delta)', async () => {
+    // The core delta this PR exists for: a SYSTEM-owned catalog gym a moderator
+    // fixed (so it is NOT owner-curated — #3713's skip does not apply) is frozen.
+    // resolveGymIdForSource still calls refreshSyncedGymMetadata, but its WHERE
+    // carries `sync_frozen_at IS NULL`, so the UPDATE matches 0 rows. Drop that
+    // guard and the fake writes → this test goes red.
+    const fakeDb = new FakeLocationSyncDb({
+      aliasedGym: { id: 700, ownerId: SYSTEM_USER_ID, hasApprovedClaim: false },
+      frozenGymIds: [700],
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: 'tension:board-frozen-sys', gymSourceKey: 'tension:gym-frozen-sys' }),
+    ]);
+
+    // No metadata write landed on the frozen gym, yet the id still resolves so
+    // the board links and the sync reports the gym as seen.
+    expect(fakeDb.gymMetadataWrites).toEqual([]);
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.boardWrites[0]?.gymId).toBe(700);
+  });
+
+  it('does NOT overwrite a FROZEN catalog board and undercounts it in boardsUpserted', async () => {
+    // A human-curated (frozen) catalog board: its ON CONFLICT SET is blocked by
+    // `setWhere: isNull(userBoards.syncFrozenAt)`, so the upsert returns no row —
+    // the board keeps its edits and isn't counted. Drop the board setWhere and
+    // the fake returns a row (overwrite) → boardsUpserted becomes 1 → red.
+    const boardSourceKey = 'tension:board-frozen-only';
+    const frozenBoardUuid = boardUuidForSource(boardSourceKey);
+    const fakeDb = new FakeLocationSyncDb({
+      // A normal SYSTEM-owned, unfrozen gym so gym resolution succeeds and the
+      // board upsert is reached.
+      aliasedGym: { id: 800, ownerId: SYSTEM_USER_ID, hasApprovedClaim: false },
+      frozenBoardUuids: [frozenBoardUuid],
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: boardSourceKey, gymSourceKey: 'tension:gym-open' }),
+    ]);
+
+    // The frozen board's write was blocked (returned no row), so it isn't
+    // counted — while the (unfrozen) gym still resolved and refreshed normally.
+    expect(summary.boardsUpserted).toBe(0);
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.gymMetadataWrites.length).toBe(1);
+  });
+
+  it('does NOT relink boards to a soft-DELETED frozen gym via the by-uuid fallback', async () => {
+    // A gym the owner deleted (deleteGym freezes it + unlinks its boards). On the
+    // next sync it isn't found by alias/physical match (both filter deleted rows),
+    // so createOrUpdateSourceGym's setWhere blocks the resurrect and falls back to
+    // the by-uuid SELECT — which is filtered to LIVE rows, so it resolves nothing.
+    // The source stays unlinked instead of relinking boards to the deleted gym.
+    const gymSourceKey = 'tension:gym-deleted-frozen';
+    const frozenGymUuid = gymUuidForSource(gymSourceKey);
+    const fakeDb = new FakeLocationSyncDb({
+      aliasedGym: null, // deleted gym isn't returned by the alias lookup
+      physicalCandidates: [], // nor by physical match
+      frozenGymUuids: [frozenGymUuid], // the conflicting row exists and is frozen
+      fallbackGymId: 999, // it WOULD resolve by uuid...
+      fallbackGymDeleted: true, // ...but it's soft-deleted, so the live filter drops it
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: 'tension:board-deleted-frozen', gymSourceKey }),
+    ]);
+
+    // No gym resolved, no alias rewritten to the deleted gym, and the board is
+    // NOT attached back to it.
+    expect(summary.gymsUpserted).toBe(0);
+    expect(fakeDb.sourceAliasWrites).toEqual([]);
+    expect(fakeDb.boardWrites[0]?.gymId ?? null).toBeNull();
   });
 });
 
