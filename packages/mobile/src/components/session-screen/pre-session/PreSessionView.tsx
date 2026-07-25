@@ -79,8 +79,9 @@ type PreSessionViewProps = {
  * optionally generate a workout, review (and tweak) a live preview of the queue,
  * then tap Start. The preview is built/refreshed by `useWorkoutPreview`; Start
  * creates the session (the ONLY create path besides joining — sessions are never
- * created lazily) and replaces the user's queue with the preview, so
- * SessionScreen re-renders into InSessionView when `sessionId` flips.
+ * created lazily) and queues the preview behind the live queue without moving the
+ * current climb, so SessionScreen re-renders into InSessionView when `sessionId`
+ * flips.
  */
 function previewKeyExtractor(previewItem: PreviewItem): string {
   return previewItem.item.uuid;
@@ -95,7 +96,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const bottomChrome = useBottomChromeMetrics();
   const { data: activeBoard } = useActiveBoard();
   const { isAuthenticated } = useAuth();
-  const { startSession, setQueue } = useQueueActions();
+  const { startSession, appendGeneratedSession } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const { showToast } = useToast();
 
@@ -222,10 +223,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
       }
 
       if (selection.type === 'on') {
-        // Replace the queue with the reviewed preview (set the first climb
-        // current so the session opens on climb #1). setQueue dispatches
-        // UPDATE_QUEUE locally + best-effort party sync.
-        setQueue(generatedItems, generatedItems[0]);
+        // Queue the reviewed preview behind whatever's already going, leaving
+        // the current climb alone so the wall doesn't repaint and hand-queued
+        // climbs survive. Opens on climb #1 only when nothing is current.
+        appendGeneratedSession(generatedItems);
         track(SHARED_EVENTS.SessionQueueGenerated, {
           workoutType: selection.options.type,
           boardName: activeBoard.boardType,
@@ -248,7 +249,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     refreshingUuids,
     plannedCount,
     startSession,
-    setQueue,
+    appendGeneratedSession,
     showToast,
     t,
   ]);

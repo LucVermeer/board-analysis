@@ -54,7 +54,8 @@ const queueMutations = vi.hoisted(() => ({
   setCurrentClimb: vi.fn(async () => {}),
   mirrorCurrentClimb: vi.fn(async () => {}),
   publishPlaybackState: vi.fn(async () => {}),
-  setQueue: vi.fn(async () => {}),
+  // Typed args so tests can assert the wire payload (queue + current) directly.
+  setQueue: vi.fn(async (_queue: ClimbQueueItem[], _currentClimbQueueItem?: ClimbQueueItem) => {}),
   replaceQueueItem: vi.fn(async () => {}),
   reportWallDisconnect: vi.fn(async () => {}),
   confirmClimbOnWall: vi.fn(async () => {}),
@@ -145,6 +146,7 @@ type Snapshot = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   addToQueue: ReturnType<typeof useQueue>['addToQueue'];
   setCurrentClimb: ReturnType<typeof useQueue>['setCurrentClimb'];
+  appendGeneratedSession: ReturnType<typeof useQueue>['appendGeneratedSession'];
   startSession: ReturnType<typeof useQueue>['startSession'];
   joinSession: ReturnType<typeof useQueue>['joinSession'];
 };
@@ -159,6 +161,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
       playlistSuggestionSource,
       addToQueue: queue.addToQueue,
       setCurrentClimb: queue.setCurrentClimb,
+      appendGeneratedSession: queue.appendGeneratedSession,
       startSession: queue.startSession,
       joinSession: queue.joinSession,
     });
@@ -168,6 +171,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     playlistSuggestionSource,
     queue.addToQueue,
     queue.setCurrentClimb,
+    queue.appendGeneratedSession,
     queue.startSession,
     queue.joinSession,
     onSnapshot,
@@ -487,5 +491,182 @@ describe('QueueProvider local solo queue', () => {
 
     expect(sessionStore.setStoredSessionId).toHaveBeenCalledWith('session-2');
     expect(queueSnapshotStore.clearStoredQueueSnapshot).toHaveBeenCalled();
+  });
+
+  it('appendGeneratedSession keeps the current climb and the hand-queued climbs around it', async () => {
+    // Mid-project: working "item-b", with "item-c" queued up next by hand.
+    const itemA = makeQueueItem('item-a');
+    const itemB = makeQueueItem('item-b');
+    const itemC = makeQueueItem('item-c');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA, itemB, itemC], itemB));
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-b');
+    });
+
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession([makeQueueItem('gen-1'), makeQueueItem('gen-2')]);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual([
+        'item-a',
+        'item-b',
+        'item-c',
+        'gen-1',
+        'gen-2',
+      ]);
+    });
+    // The pointer never moves, so the BLE auto-sender has nothing to react to and
+    // the wall stays on the climb the user is actually projecting.
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-b');
+    // "item-c" was queued by hand before generating and must survive.
+    expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toContain('item-c');
+  });
+
+  it('appendGeneratedSession opens on the first generated climb when nothing is current', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.length).toBeGreaterThan(0);
+    });
+
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession([makeQueueItem('gen-1'), makeQueueItem('gen-2')]);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['gen-1', 'gen-2']);
+    });
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('gen-1');
+  });
+
+  it('appendGeneratedSession opens on the first generated climb when the queue has items but none is current', async () => {
+    // Browsed climbs into the queue without activating any of them. There's no
+    // wall to protect, so the session opens on its own first climb rather than
+    // silently activating something the user only ever queued.
+    const itemA = makeQueueItem('item-a');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA], null));
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a']);
+    });
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem).toBeNull();
+
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession([makeQueueItem('gen-1'), makeQueueItem('gen-2')]);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a', 'gen-1', 'gen-2']);
+    });
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('gen-1');
+  });
+
+  it('appendGeneratedSession leaves an empty generated list alone', async () => {
+    const itemA = makeQueueItem('item-a');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA], itemA));
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-a');
+    });
+
+    queueMutations.setQueue.mockClear();
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession([]);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a']);
+    });
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-a');
+    // A no-op append must not broadcast a SET_QUEUE that changes nothing.
+    expect(queueMutations.setQueue).not.toHaveBeenCalled();
+  });
+
+  it('appendGeneratedSession broadcasts the merged queue with the carried current to party peers', async () => {
+    sessionStore.getStoredSessionId.mockResolvedValue('session-1');
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionStatus')
+        ? Promise.resolve({ sessionStatus: 'active' })
+        : Promise.resolve({ createSession: { id: 'session-new' } }),
+    );
+    const itemA = makeQueueItem('item-a');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(null);
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    act(() => {
+      snapshots.at(-1)?.setCurrentClimb(itemA);
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-a');
+    });
+
+    const generated = [makeQueueItem('gen-1'), makeQueueItem('gen-2')];
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession(generated);
+    });
+
+    await waitFor(() => {
+      expect(queueMutations.setQueue).toHaveBeenCalled();
+    });
+    const [wireQueue = [], wireCurrent] = queueMutations.setQueue.mock.calls.at(-1) ?? [];
+    expect(wireQueue.map((entry) => entry.uuid)).toEqual(['item-a', 'gen-1', 'gen-2']);
+    expect(wireCurrent?.uuid).toBe('item-a');
+  });
+
+  it('appendGeneratedSession drops an unresolved current climb from the party payload but keeps it locally', async () => {
+    // Documents a pre-existing setQueue contract (#2527): a thin/partially-synced
+    // item can't form a valid ClimbInput, so it never goes on the wire. Carrying
+    // the current climb forward makes that path easier to hit — peers land on the
+    // generated session with no current until the item hydrates and re-syncs.
+    sessionStore.getStoredSessionId.mockResolvedValue('session-1');
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionStatus')
+        ? Promise.resolve({ sessionStatus: 'active' })
+        : Promise.resolve({ createSession: { id: 'session-new' } }),
+    );
+    const thin = makeQueueItem('thin-item');
+    thin.climb = { ...thin.climb, frames: '' };
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(null);
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    act(() => {
+      snapshots.at(-1)?.setCurrentClimb(thin);
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('thin-item');
+    });
+
+    queueMutations.setQueue.mockClear();
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession([makeQueueItem('gen-1')]);
+    });
+
+    await waitFor(() => {
+      expect(queueMutations.setQueue).toHaveBeenCalled();
+    });
+    const [wireQueue = [], wireCurrent] = queueMutations.setQueue.mock.calls.at(-1) ?? [];
+    expect(wireQueue.map((entry) => entry.uuid)).toEqual(['gen-1']);
+    expect(wireCurrent).toBeUndefined();
+    // Locally the thin item is still the current climb and still in the queue.
+    expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['thin-item', 'gen-1']);
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('thin-item');
   });
 });
