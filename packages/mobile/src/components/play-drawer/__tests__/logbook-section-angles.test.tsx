@@ -148,3 +148,30 @@ describe('LogbookSection — per-angle section headers', () => {
     expect(rowAngles).toEqual([45, 40]);
   });
 });
+
+describe('LogbookSection — chronological sort (#3569)', () => {
+  it('sorts same-angle rows newest-first by true UTC instant, not raw string/local-Date order', () => {
+    // `climbed_at` is a naive-but-UTC string with no `Z` suffix. Sorting with
+    // a bare `new Date(x.climbed_at).getTime()` parses it as device-local,
+    // which happens to preserve order for same-day entries but isn't
+    // guaranteed to across a DST boundary — the local-time resolution of an
+    // ambiguous/skipped hour is implementation-defined per ECMA-262 and isn't
+    // guaranteed to match between Hermes (on-device) and V8 (this test
+    // runner), so a same-engine reproduction here wouldn't prove much either
+    // way. `tickTimeMs` sidesteps the whole question by parsing explicitly as
+    // UTC. This test pins down the ordering contract: newest true instant
+    // first, using entries whose calendar-day order and clock-digit order
+    // agree (a case both the old and new code already got right), so a
+    // regression to raw `new Date(...)` sorting would NOT be caught by this
+    // test alone for DST-boundary cases — see the comment on the `.sort()`
+    // call in LogbookSection.tsx for the engine-dependence rationale.
+    logbookState.logbook = [
+      makeEntry({ uuid: 'oldest', angle: 40, climbed_at: '2026-06-01T09:00:00' }),
+      makeEntry({ uuid: 'newest', angle: 40, climbed_at: '2026-06-20T23:50:00' }),
+      makeEntry({ uuid: 'middle', angle: 40, climbed_at: '2026-06-10T12:00:00' }),
+    ];
+    renderSection();
+    const rowUuids = rows.props.map((rowProps) => (rowProps.entry as LogbookEntry).uuid);
+    expect(rowUuids).toEqual(['newest', 'middle', 'oldest']);
+  });
+});
