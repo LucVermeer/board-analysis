@@ -127,15 +127,26 @@ export class RNBleAdapter implements BluetoothAdapter {
     let selectedDeviceId: string;
     try {
       // Scan UNFILTERED and filter results in JS (isLikelyBoardDevice below).
-      // A hardware service-UUID ScanFilter never matches by name and, on Android,
-      // is unreliable for a 128-bit UUID a box carries only in its scan-response
-      // PDU — so it silently drops Aurora (Kilter/Tension) boxes whose UUID/name
-      // arrives that way, giving an empty device picker (regression 0710be7a8:
-      // Android 2.2.2 Kilter empty-picker rate ~23% vs ~6% on 2.1.0). MoonBoard
-      // already required an unfiltered scan; Aurora now matches it. The JS filter
-      // reads ble-plx's merged advertise+scan-response record, so it still
-      // surfaces both Aurora-built (`Kilter Board#serial@N`) and Kilter-built
-      // bare-name (`Kilter Board`) boxes while rejecting non-boards.
+      // A hardware service-UUID ScanFilter never matches by name, and on Android
+      // its offloaded matcher is unreliable for a 128-bit UUID a box carries only
+      // in its scan-response PDU — such a box can be dropped before JS ever sees
+      // it. MoonBoard already required an unfiltered scan; Aurora matches it since
+      // #3806. The JS filter reads ble-plx's merged advertise+scan-response
+      // record, so it still surfaces both Aurora-built (`Kilter Board#serial@N`)
+      // and Kilter-built bare-name (`Kilter Board`) boxes while rejecting
+      // non-boards.
+      //
+      // Do NOT read this as "the Aurora scan filter caused the Android
+      // empty-picker regression" — an earlier version of this comment did, and it
+      // sent at least one investigation down a dead end (#3821). The filter was
+      // cleared: 2.1.0 shipped the same filter and was healthy, and the ~2x rise
+      // in Android `devicesTotal=0` tracks the Expo 57 / React Native 0.86 native
+      // scan-reliability drop instead. #3806 (unfiltering) was explicitly
+      // robustness-only; #3811 (LowLatency, see scan-options.ts) is the
+      // root-cause mitigation. Unfiltering here buys name-only discovery, not a
+      // regression fix — and it is an ANDROID argument: iOS CoreBluetooth scans
+      // actively in the foreground and merges ADV + SCAN_RSP before filtering, so
+      // the native iOS path keeps its service filter on purpose.
       // High-power scan options (LowLatency on Android) — see scan-options.ts.
       void bleManager.startDeviceScan(null, HIGH_POWER_BOARD_SCAN_OPTIONS, (scanError, scannedDevice) => {
         if (scanError) {

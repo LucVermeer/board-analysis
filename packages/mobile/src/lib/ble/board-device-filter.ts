@@ -30,6 +30,17 @@ const STRICT_AURORA_SERIAL_SUFFIX = /#[A-Za-z0-9-]+@\d+$/;
  * native side has already vouched for the peripheral. This does not widen
  * Android or new-binary filtering; `RNBleAdapter` always passes an array
  * (possibly empty), never `undefined`.
+ *
+ * LOAD-BEARING NATIVE INVARIANT behind that vouch: `BoardBleModule.swift` gained
+ * `getConnectedDevice` and the `serviceUuids` field on the `scanResult` payload
+ * in the SAME commit (d5774dc0b). `NativeIosBleAdapter` gates unfiltered scanning
+ * on `nativeBleSupportsConnectionAdoption()`, which probes `getConnectedDevice`,
+ * so no shipped binary can scan unfiltered while omitting `serviceUuids` — the
+ * `undefined` branch below is only ever reached on a binary whose native scan
+ * really did filter. If those two capabilities are ever split across native
+ * builds, an unfiltered Aurora scan would hit this branch and surface every BLE
+ * peripheral in the gym. Keep them together, or replace the vouch with an
+ * explicit capability flag on the payload.
  */
 export function isLikelyBoardDevice({
   name,
