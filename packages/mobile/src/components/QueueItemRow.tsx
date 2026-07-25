@@ -332,6 +332,23 @@ function QueueItemRowComponent({
     return drag.makeHandleGesture(rowIndex, item.uuid, queueIndex).blocksExternalGesture(singleTapRef, longPressRef);
   }, [isDraggable, drag, rowIndex, queueIndex, item.uuid]);
 
+  // The history-row tick button's own tap. Like the drag handle, it
+  // `blocksExternalGesture`s the row's tap/long-press so a touch that starts on the
+  // tick opens Log Ascent without also firing the row press — which would make the
+  // history climb current, open the Play Drawer, and dismiss the Queue Sheet. Only
+  // built for history rows (see showTick). Mirrors ClimbListRow's moreButtonGesture.
+  const tickGesture = useMemo(() => {
+    if (!isHistoryItem || isEditMode || !onTickHistory) return null;
+    return Gesture.Tap()
+      .maxDuration(300)
+      .maxDistance(15)
+      .blocksExternalGesture(singleTapRef, longPressRef)
+      .onStart(() => {
+        'worklet';
+        runOnJS(handleTickPress)();
+      });
+  }, [isHistoryItem, isEditMode, onTickHistory, handleTickPress]);
+
   // Take the layout event directly so the same stable function can be passed to
   // `onLayout` — an inline `(event) => ...` wrapper would be a fresh arrow each
   // render, defeating the row's memoization on the wrapping `Animated.View`.
@@ -346,7 +363,7 @@ function QueueItemRowComponent({
   // falls back to the placeholder label instead of an empty accessibility string.
   const climbName = item.climb?.name || t('mobile.queue.unknownClimb');
 
-  const showTick = isHistoryItem && !isEditMode && !!onTickHistory;
+  const showTick = !!tickGesture;
   const showDragHandle = !!dragHandleGesture && !isEditMode;
 
   // History rows pin the grade for the angle the climb was CLIMBED at, which can
@@ -405,17 +422,17 @@ function QueueItemRowComponent({
         )}
 
         {/* Trailing action: tick (history) or drag handle (upcoming) */}
-        {showTick ? (
-          <Pressable
-            testID="tick-button"
-            onPress={handleTickPress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.logAscent')}
-            style={styles.trailingButton}
-          >
-            <Icon name="tick" size={26} color={brandColors.success} />
-          </Pressable>
+        {showTick && tickGesture ? (
+          <GestureDetector gesture={tickGesture}>
+            <View
+              testID="tick-button"
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.queue.logAscent')}
+              style={styles.trailingButton}
+            >
+              <Icon name="tick" size={26} color={brandColors.success} />
+            </View>
+          </GestureDetector>
         ) : showDragHandle && dragHandleGesture ? (
           <GestureDetector gesture={dragHandleGesture}>
             <View
