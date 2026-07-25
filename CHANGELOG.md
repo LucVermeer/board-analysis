@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Pick an angle mid-session and it sticks — reconnecting no longer snaps the wall back to the old angle while your change is still syncing to the crew. ([#3917](https://github.com/boardsesh/boardsesh/pull/3917))
 - Fixed your gym's details getting overwritten by our board-location sync. Once you or a moderator edit, claim, or remove a gym or board, those changes stick, and the sync won't reshape or resurrect them on its next run. ([#3845](https://github.com/boardsesh/boardsesh/pull/3845))
 - Your queue no longer vanishes if starting a session hiccups — a flaky connection while you tap Start keeps every climb you lined up, and your crew still sees it once you're back online. ([#3896](https://github.com/boardsesh/boardsesh/pull/3896))
 - Logging ticks while a board download runs no longer errors out — offline saves go through even mid-sync. ([#3887](https://github.com/boardsesh/boardsesh/pull/3887))

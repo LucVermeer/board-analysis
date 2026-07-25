@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-25T09:53:12.837Z",
+  "generatedAt": "2026-07-25T09:59:57.159Z",
   "entries": [
+    {
+      "prNumber": 3917,
+      "category": "fixed",
+      "title": "Pick an angle mid-session and it sticks — reconnecting no longer snaps the wall back to the old angle while your change is still syncing to the crew.",
+      "mergedAt": "2026-07-25T09:57:21Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3917"
+    },
     {
       "prNumber": 3845,
       "category": "fixed",
