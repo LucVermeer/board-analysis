@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-25T12:53:03.604Z",
+  "generatedAt": "2026-07-25T21:00:13.819Z",
   "entries": [
+    {
+      "prNumber": 3224,
+      "category": "fixed",
+      "title": "Start a generated session and your board stays lit on the climb you're working. The session queues up behind it, and anything you'd already lined up stays in the queue — nothing gets wiped.",
+      "mergedAt": "2026-07-25T20:59:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3224"
+    },
     {
       "prNumber": 3915,
       "category": "fixed",

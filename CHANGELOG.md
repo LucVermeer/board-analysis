@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Start a generated session and your board stays lit on the climb you're working. The session queues up behind it, and anything you'd already lined up stays in the queue — nothing gets wiped. ([#3224](https://github.com/boardsesh/boardsesh/pull/3224))
 - Tapping the ✓ on a past climb in the queue now just logs the ascent — it no longer also jumps you into that climb and closes the queue. ([#3915](https://github.com/boardsesh/boardsesh/pull/3915))
 - Pick an angle mid-session and it sticks — reconnecting no longer snaps the wall back to the old angle while your change is still syncing to the crew. ([#3917](https://github.com/boardsesh/boardsesh/pull/3917))
 - Fixed your gym's details getting overwritten by our board-location sync. Once you or a moderator edit, claim, or remove a gym or board, those changes stick, and the sync won't reshape or resurrect them on its next run. ([#3845](https://github.com/boardsesh/boardsesh/pull/3845))
