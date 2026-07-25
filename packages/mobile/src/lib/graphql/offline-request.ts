@@ -179,18 +179,25 @@ registerOfflineOperation<BoardseshGradesForAnglesVariables, BoardseshGradesForAn
  */
 export async function offlineAwareRequest<TResponse>(document: string, variables?: Variables): Promise<TResponse> {
   const operation = OFFLINE_OPERATIONS.get(document);
+  // Carry a local source we already resolved on the way to the network so the
+  // network-failure catch below can reuse it instead of re-probing. Only set on
+  // the online miss-retry path — the one path that reaches the network with a
+  // confirmed-serviceable local source.
+  let localDb: SQLiteDatabase | null = null;
+  let localServiceable = false;
   if (operation) {
     const isOnline = onlineManager.isOnline();
     // Consult local sources when OFFLINE (always) or, while ONLINE, only when the
     // flag enables the local-first optimization.
     if (!isOnline || isOfflineEngineEnabled()) {
-      const db = getDatabaseHandle();
+      localDb = getDatabaseHandle();
       // The `variables !== undefined` guard makes a registered document called
       // without variables degrade to HTTP rather than throw in a destructure;
       // the offline fallback below still applies either way. `as never` re-narrows
       // the storage-erased generics — see the OFFLINE_OPERATIONS declaration.
-      if (db && variables !== undefined && (await operation.canServeLocal(db, variables as never))) {
-        const localResponse = (await operation.resolveLocal(db, variables as never)) as TResponse;
+      if (localDb && variables !== undefined && (await operation.canServeLocal(localDb, variables as never))) {
+        localServiceable = true;
+        const localResponse = (await operation.resolveLocal(localDb, variables as never)) as TResponse;
         // A known-key miss falls through to the network while online — the row
         // may simply not have synced yet. Offline, the miss stands (it has the
         // same shape as offlineFallback).
@@ -211,8 +218,10 @@ export async function offlineAwareRequest<TResponse>(document: string, variables
     // online (see the doc above). Flag-independent, like every other on-disk read.
     // Nothing local to serve → rethrow the real error unchanged.
     if (operation && variables !== undefined) {
-      const db = getDatabaseHandle();
-      if (db && (await operation.canServeLocal(db, variables as never))) {
+      // Reuse the db + canServeLocal result from the miss-retry path when we have
+      // them; otherwise (flag off, or db not resolved above) probe now.
+      const db = localDb ?? getDatabaseHandle();
+      if (db && (localServiceable || (await operation.canServeLocal(db, variables as never)))) {
         return (await operation.resolveLocal(db, variables as never)) as TResponse;
       }
     }
