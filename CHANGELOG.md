@@ -4,6 +4,13 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-25
+
+### Fixed
+
+- Your 8am flash no longer shows up as an afternoon send — logbook times in the per-climb history now match your phone's clock. ([#3904](https://github.com/boardsesh/boardsesh/pull/3904))
+- Your setter tab isn't shy anymore — your own climbs show on your profile now. ([#3903](https://github.com/boardsesh/boardsesh/pull/3903))
+
 ## 2026-07-24
 
 ### New

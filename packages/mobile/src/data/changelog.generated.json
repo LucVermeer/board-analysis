@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-07-24T22:09:43.939Z",
+  "generatedAt": "2026-07-25T06:51:26.143Z",
   "entries": [
+    {
+      "prNumber": 3904,
+      "category": "fixed",
+      "title": "Your 8am flash no longer shows up as an afternoon send — logbook times in the per-climb history now match your phone's clock.",
+      "mergedAt": "2026-07-25T06:50:56Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3904"
+    },
+    {
+      "prNumber": 3903,
+      "category": "fixed",
+      "title": "Your setter tab isn't shy anymore — your own climbs show on your profile now.",
+      "mergedAt": "2026-07-25T06:50:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3903"
+    },
     {
       "prNumber": 3456,
       "category": "fixed",
