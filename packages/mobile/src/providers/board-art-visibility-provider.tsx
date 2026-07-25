@@ -4,6 +4,11 @@ import { BoardArtVisibilityContext } from '../components/board-art-visibility-co
 import { useDeviceLayout } from '../hooks/use-device-layout';
 import { tabsActiveSegment } from '../lib/route-segments';
 
+// The top-level tab names ((tabs)/<name>). Typing the `tab` prop as this union
+// (not a bare string) makes a typo in a layout's `tab="…"` a compile error rather
+// than a tab that silently reports hidden forever on iPad.
+export type BoardArtTab = 'climbs' | 'discover' | 'home' | 'profile' | 'record' | 'wall';
+
 /**
  * Wraps one iPad tab's stack so its board art blanks while another tab is the
  * focused destination. The iPad shell keeps every tab mounted
@@ -16,7 +21,7 @@ import { tabsActiveSegment } from '../lib/route-segments';
  * visible): its tabs already freeze/detach on blur, and re-decoding board art on
  * every tab return would flash the thumbnails for no memory win.
  */
-export function BoardArtVisibilityProvider({ tab, children }: { tab: string; children: ReactNode }) {
+export function BoardArtVisibilityProvider({ tab, children }: { tab: BoardArtTab; children: ReactNode }) {
   const { isPad } = useDeviceLayout();
   const segments = useSegments();
   // Non-iPad: always visible. On iPad: visible only while THIS tab is the focused

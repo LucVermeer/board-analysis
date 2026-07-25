@@ -9,14 +9,14 @@ vi.mock('expo-router', () => ({ useSegments: () => segments.value }));
 const deviceLayout = vi.hoisted(() => ({ isPad: true }));
 vi.mock('../../hooks/use-device-layout', () => ({ useDeviceLayout: () => ({ isPad: deviceLayout.isPad }) }));
 
-import { BoardArtVisibilityProvider } from '../board-art-visibility-provider';
+import { BoardArtVisibilityProvider, type BoardArtTab } from '../board-art-visibility-provider';
 import { useBoardArtVisible } from '../../components/board-art-visibility-context';
 
 function VisibleProbe() {
   return createElement('span', { 'data-visible': String(useBoardArtVisible()) });
 }
 
-function renderWithin(tab: string) {
+function renderWithin(tab: BoardArtTab) {
   return render(createElement(BoardArtVisibilityProvider, { tab, children: createElement(VisibleProbe) }));
 }
 
