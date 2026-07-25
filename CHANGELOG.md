@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Your queue no longer vanishes if starting a session hiccups — a flaky connection while you tap Start keeps every climb you lined up, and your crew still sees it once you're back online. ([#3896](https://github.com/boardsesh/boardsesh/pull/3896))
+- Logging ticks while a board download runs no longer errors out — offline saves go through even mid-sync. ([#3887](https://github.com/boardsesh/boardsesh/pull/3887))
+  Browsing your downloaded boards stays smooth while a sync, board removal, or storage cleanup is happening in the background.
 - In signed-in party sessions, who's leading and your own presence now heal correctly after a dropped update — no more stale leader badge or ghosted-self until someone reshuffles the crew. ([#3911](https://github.com/boardsesh/boardsesh/pull/3911))
 - Your downloaded boards now open with no signal — even from a cold start, and even when the wifi's lying to you. Grab every climb for your board at home, then walk into a dead-zone gym (airplane mode, or that captive-portal wifi that connects but never loads) and go straight to your list. (For testers on the offline-downloads flag.) ([#3898](https://github.com/boardsesh/boardsesh/pull/3898))
 - Logged a send at the wrong angle? Edit the send and set the angle — it now sticks, and your stats move with it. ([#3893](https://github.com/boardsesh/boardsesh/pull/3893))

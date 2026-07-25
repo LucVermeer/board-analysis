@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-25T07:41:36.678Z",
+  "generatedAt": "2026-07-25T07:48:20.531Z",
   "entries": [
+    {
+      "prNumber": 3896,
+      "category": "fixed",
+      "title": "Your queue no longer vanishes if starting a session hiccups — a flaky connection while you tap Start keeps every climb you lined up, and your crew still sees it once you're back online.",
+      "mergedAt": "2026-07-25T07:45:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3896"
+    },
+    {
+      "prNumber": 3887,
+      "category": "fixed",
+      "title": "Logging ticks while a board download runs no longer errors out — offline saves go through even mid-sync.",
+      "mergedAt": "2026-07-25T07:44:54Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3887",
+      "body": "Browsing your downloaded boards stays smooth while a sync, board removal, or storage cleanup is happening in the background."
+    },
     {
       "prNumber": 3911,
       "category": "fixed",
