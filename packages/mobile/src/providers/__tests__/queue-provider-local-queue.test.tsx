@@ -553,6 +553,7 @@ describe('QueueProvider local solo queue', () => {
       expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-a');
     });
 
+    queueMutations.setQueue.mockClear();
     act(() => {
       snapshots.at(-1)?.appendGeneratedSession([]);
     });
@@ -561,6 +562,8 @@ describe('QueueProvider local solo queue', () => {
       expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a']);
     });
     expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-a');
+    // A no-op append must not broadcast a SET_QUEUE that changes nothing.
+    expect(queueMutations.setQueue).not.toHaveBeenCalled();
   });
 
   it('appendGeneratedSession broadcasts the merged queue with the carried current to party peers', async () => {
