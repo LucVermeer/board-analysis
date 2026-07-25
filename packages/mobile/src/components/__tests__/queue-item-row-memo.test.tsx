@@ -19,6 +19,13 @@ const captured = vi.hoisted(() => ({
   deletePress: null as null | (() => void),
 }));
 
+// Per-instance call logs for the RNGH gestures created below, one array pushed per
+// `Gesture.Pan()` call in creation order. Lets a test inspect exactly what was
+// chained onto a specific gesture — e.g. the swipe Pan's `failOffsetY` thresholds.
+const gestureCalls = vi.hoisted(() => ({
+  panLogs: [] as { method: string; args: unknown[] }[][],
+}));
+
 vi.mock('react-native', () => {
   const passthrough =
     (tag: string) =>
@@ -71,14 +78,30 @@ vi.mock('react-native-reanimated', () => {
 });
 
 vi.mock('react-native-gesture-handler', () => {
-  const makeBuilder = () => {
+  // A chainable gesture builder that logs every method call into `log`, so a test
+  // can assert exactly how a gesture was configured (e.g. `.failOffsetY([-14, 14])`
+  // on the swipe Pan). Every method returns the same proxy so chains resolve.
+  const makeBuilder = (log: { method: string; args: unknown[] }[]) => {
     const builder: Record<string, (...args: unknown[]) => unknown> = {};
-    const proxy: typeof builder = new Proxy(builder, { get: () => () => proxy });
+    const proxy: typeof builder = new Proxy(builder, {
+      get:
+        (_target, prop: string) =>
+        (...args: unknown[]) => {
+          log.push({ method: prop, args });
+          return proxy;
+        },
+    });
     return proxy;
   };
   return {
     GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-    Gesture: { Pan: () => makeBuilder() },
+    Gesture: {
+      Pan: () => {
+        const log: { method: string; args: unknown[] }[] = [];
+        gestureCalls.panLogs.push(log);
+        return makeBuilder(log);
+      },
+    },
   };
 });
 
@@ -149,6 +172,7 @@ describe('QueueItemRow React.memo', () => {
     captured.rowPress = null;
     captured.tickPress = null;
     captured.deletePress = null;
+    gestureCalls.panLogs = [];
     vi.clearAllMocks();
   });
 
@@ -262,5 +286,37 @@ describe('QueueItemRow React.memo', () => {
     rerender(<QueueItemRow item={second} {...rowProps} />);
 
     expect(captured.deletePress).toBe(deletePress);
+  });
+
+  // Regression guard for #3295: the swipe-to-remove Pan bailed on a ±5px vertical
+  // wobble (`.failOffsetY([-5, 5])`) before its ±10px horizontal activation, so a
+  // natural horizontal swipe failed the Pan and the row's tap fell through and just
+  // selected the climb instead of revealing Delete. The Y bail must stay wider than
+  // the X activation so the swipe survives normal wobble (mirrors SwipeableRow,
+  // extracted from this component, which already widened this exact value). The real
+  // cross-gesture arbitration only exists in the native runtime — see the on-device
+  // QA matrix in the PR body — but the threshold itself is guarded here.
+  it('gives the swipe-to-remove Pan a vertical bail wide enough to survive swipe wobble', () => {
+    const item = makeItem('a', 'Crimp Master');
+    render(
+      <QueueItemRow
+        item={item}
+        position={1}
+        board={board}
+        isCurrentClimb={false}
+        onPress={onPress}
+        onRemove={onRemove}
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+
+    // No `drag` prop, so the only Gesture.Pan() created is the row's swipe gesture.
+    expect(gestureCalls.panLogs).toHaveLength(1);
+    const swipeCalls = gestureCalls.panLogs[0];
+
+    const activeOffsetX = swipeCalls.find((call) => call.method === 'activeOffsetX');
+    const failOffsetY = swipeCalls.find((call) => call.method === 'failOffsetY');
+    expect(activeOffsetX?.args).toEqual([[-10, 10]]);
+    expect(failOffsetY?.args).toEqual([[-14, 14]]);
   });
 });

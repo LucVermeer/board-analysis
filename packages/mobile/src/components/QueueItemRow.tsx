@@ -152,8 +152,17 @@ function QueueItemRowComponent({
     () =>
       Gesture.Pan()
         .enabled(swipeEnabled)
+        // Activate once the drag is clearly horizontal (10px), and bail once it's
+        // clearly vertical (14px). A tighter [-5, 5] Y bail was so narrow that the
+        // normal vertical wobble of a horizontal swipe tripped it before the 10px X
+        // activation — the Pan failed, never engaged, and the row's tap fell through
+        // and just selected the climb instead of revealing Delete (#3295). 14px
+        // tolerates that wobble while still ceding to a real vertical scroll (which
+        // crosses 14px in Y well before 10px in X). Mirrors SwipeableRow, extracted
+        // from this component, which already widened this exact value for the same
+        // reason.
         .activeOffsetX([-10, 10])
-        .failOffsetY([-5, 5])
+        .failOffsetY([-14, 14])
         .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
           // Only allow swiping left
           if (event.translationX > 0) {
