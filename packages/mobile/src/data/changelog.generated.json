@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-25T07:48:20.531Z",
+  "generatedAt": "2026-07-25T09:53:12.837Z",
   "entries": [
+    {
+      "prNumber": 3845,
+      "category": "fixed",
+      "title": "Fixed your gym's details getting overwritten by our board-location sync. Once you or a moderator edit, claim, or remove a gym or board, those changes stick, and the sync won't reshape or resurrect them on its next run.",
+      "mergedAt": "2026-07-25T07:50:42Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3845"
+    },
     {
       "prNumber": 3896,
       "category": "fixed",
