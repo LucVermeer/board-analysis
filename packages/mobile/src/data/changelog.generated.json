@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-25T09:59:57.159Z",
+  "generatedAt": "2026-07-25T12:53:03.604Z",
   "entries": [
+    {
+      "prNumber": 3915,
+      "category": "fixed",
+      "title": "Tapping the ✓ on a past climb in the queue now just logs the ascent — it no longer also jumps you into that climb and closes the queue.",
+      "mergedAt": "2026-07-25T10:51:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3915"
+    },
     {
       "prNumber": 3917,
       "category": "fixed",
