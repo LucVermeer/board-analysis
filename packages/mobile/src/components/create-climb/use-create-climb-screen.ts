@@ -373,9 +373,21 @@ export function useCreateClimbScreen({
   // climb. The mutation input (`ClimbInput`) is a strict subset of Climb, so
   // these placeholder grade fields are never sent to the server — they only
   // satisfy the type and render neutral values in the queue UI.
+  //
+  // Board identity (boardType/layoutId) is required, not optional: the queue item
+  // round-trips through `toClimbInput` to party peers and into the board-presence
+  // report, and the BLE auto-sender reads it to tell a board/layout "spill" from a
+  // sendable climb. Omitting it left a freshly created climb board-less on the wire —
+  // peers received a climb they couldn't place, and the presence row lost its board.
+  //
+  // Only fields `climbToQueueItem` actually forwards are set here; adding ones it
+  // strips (userId / description / mirrored / is_draft) would be dead weight until
+  // that boundary and both subscription selection sets widen together.
   const buildProvisionalClimb = useCallback(
     (uuid: string, frames: string): Climb => ({
       uuid,
+      boardType: board.boardName,
+      layoutId: board.layoutId,
       name: name.trim() || t('createClimbForm.draftBadge'),
       frames,
       setter_username: profile?.displayName ?? '',
@@ -386,8 +398,14 @@ export function useCreateClimbScreen({
       stars: 0,
       difficulty_error: '0',
       benchmark_difficulty: null,
+      is_no_match: noMatch,
+      userAscents: 0,
+      userAttempts: 0,
+      // The editor emits a single static frame (no multi-frame playback).
+      framesCount: 1,
+      framesPace: null,
     }),
-    [name, profile, board.angle, t],
+    [name, noMatch, profile, board.angle, board.boardName, board.layoutId, t],
   );
 
   // Push the freshly saved climb into the queue as the current climb so the
