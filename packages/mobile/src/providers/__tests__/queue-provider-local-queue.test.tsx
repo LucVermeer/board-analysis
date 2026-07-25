@@ -543,6 +543,30 @@ describe('QueueProvider local solo queue', () => {
     expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('gen-1');
   });
 
+  it('appendGeneratedSession opens on the first generated climb when the queue has items but none is current', async () => {
+    // Browsed climbs into the queue without activating any of them. There's no
+    // wall to protect, so the session opens on its own first climb rather than
+    // silently activating something the user only ever queued.
+    const itemA = makeQueueItem('item-a');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA], null));
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a']);
+    });
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem).toBeNull();
+
+    act(() => {
+      snapshots.at(-1)?.appendGeneratedSession([makeQueueItem('gen-1'), makeQueueItem('gen-2')]);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a', 'gen-1', 'gen-2']);
+    });
+    expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('gen-1');
+  });
+
   it('appendGeneratedSession leaves an empty generated list alone', async () => {
     const itemA = makeQueueItem('item-a');
     queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA], itemA));

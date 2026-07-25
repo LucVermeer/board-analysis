@@ -79,8 +79,9 @@ type PreSessionViewProps = {
  * optionally generate a workout, review (and tweak) a live preview of the queue,
  * then tap Start. The preview is built/refreshed by `useWorkoutPreview`; Start
  * creates the session (the ONLY create path besides joining — sessions are never
- * created lazily) and replaces the user's queue with the preview, so
- * SessionScreen re-renders into InSessionView when `sessionId` flips.
+ * created lazily) and queues the preview behind the live queue without moving the
+ * current climb, so SessionScreen re-renders into InSessionView when `sessionId`
+ * flips.
  */
 function previewKeyExtractor(previewItem: PreviewItem): string {
   return previewItem.item.uuid;
