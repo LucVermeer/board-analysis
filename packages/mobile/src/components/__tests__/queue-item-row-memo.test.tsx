@@ -13,11 +13,14 @@ import type { QueueDragControls } from '../play-drawer/use-queue-drag';
 const renderCounter = vi.hoisted(() => ({ count: 0 }));
 
 // Capture the latest callback handed to the row's tap gesture, long-press gesture,
-// trailing tick button, and delete button so a test can assert identity across
-// re-renders. `rowPress`/`longPress` come from `Gesture.Tap()`/`Gesture.LongPress()`'s
-// `.onStart(...)` (the row moved off RN core Pressable's onPress/onLongPress onto RNGH
-// gestures — see QueueItemRow.tsx). `tapRef`/`longPressRef` capture the `.withRef(...)`
-// arguments so a test can confirm the drag handle's Pan blocks exactly those refs.
+// history-row tick-button gesture, and delete button so a test can assert identity
+// across re-renders. `rowPress`/`longPress`/`tickPress` come from `Gesture.Tap()`/
+// `Gesture.LongPress()`'s `.onStart(...)` — the row AND its trailing tick moved off RN
+// core Pressable onto RNGH gestures (see QueueItemRow.tsx). The row tap is the one that
+// calls `.withRef(...)`; a nested no-ref tap is the tick button (they'd otherwise share
+// the `rowPress` slot). `tapRef`/`longPressRef` capture the `.withRef(...)` arguments so
+// a test can confirm the drag handle and the tick both block exactly those refs.
+// `deletePress` still comes from the delete Pressable.
 const captured = vi.hoisted(() => ({
   rowPress: null as null | (() => void),
   longPress: null as null | (() => void),
@@ -48,9 +51,9 @@ vi.mock('react-native', () => {
     PlatformColor: (name: string) => name,
     View: passthrough('div'),
     // Capture by testID so any future Pressable addition doesn't silently
-    // overwrite the wrong slot.
+    // overwrite the wrong slot. (The tick button is now an RNGH gesture, not a
+    // Pressable — its callback is captured in the Gesture.Tap mock below.)
     Pressable: ({ children, onPress, testID }: { children?: ReactNode; onPress?: () => void; testID?: string }) => {
-      if (testID === 'tick-button' && onPress) captured.tickPress = onPress;
       if (testID === 'delete-button' && onPress) captured.deletePress = onPress;
       return createElement('button', null, children);
     },
@@ -116,9 +119,20 @@ vi.mock('react-native-gesture-handler', () => {
       Tap: () => {
         const log: { method: string; args: unknown[] }[] = [];
         gestureCalls.tapLogs.push(log);
+        // A history row renders two taps: its own row tap (calls `.withRef(...)`) and
+        // the tick button's tap (no ref, calls `.blocksExternalGesture(...)`). Route
+        // each tap's `onStart` by whether it carried a ref so the two don't clobber a
+        // single slot — row tap → rowPress, nested tick tap → tickPress.
+        let hasRef = false;
         return makeBuilder(log, (method, arg) => {
-          if (method === 'onStart' && typeof arg === 'function') captured.rowPress = arg as () => void;
-          if (method === 'withRef') captured.tapRef = arg;
+          if (method === 'withRef') {
+            hasRef = true;
+            captured.tapRef = arg;
+          }
+          if (method === 'onStart' && typeof arg === 'function') {
+            if (hasRef) captured.rowPress = arg as () => void;
+            else captured.tickPress = arg as () => void;
+          }
         });
       },
       LongPress: () => {
@@ -427,6 +441,42 @@ describe('QueueItemRow React.memo', () => {
 
     const blocksCall = handleGestureCalls.find((call) => call.method === 'blocksExternalGesture');
     expect(blocksCall).toBeDefined();
+    expect(blocksCall?.args).toEqual([captured.tapRef, captured.longPressRef]);
+  });
+
+  // Regression guard for the tick side of #3683: on a history row the trailing tick
+  // sits inside the row's tap/long-press arena. Without a blocking relationship a tap
+  // on the tick fires BOTH its own Log-Ascent handler and the row tap (which makes the
+  // history climb current, opens the Play Drawer, and dismisses the Queue Sheet). Like
+  // the drag handle, the tick's Tap must `blocksExternalGesture` the row's tap/long-
+  // press so a touch that starts on the tick is claimed by it alone. Mirrors
+  // ClimbListRow's moreButtonGesture. (Native arbitration only exists on-device — see
+  // the tick-tap case in the PR body's QA matrix.)
+  it('wires the history-row tick button to block the row tap/long-press gestures', () => {
+    const onTickHistory = vi.fn();
+    const item = makeItem('a', 'Crimp Master');
+    render(
+      <QueueItemRow
+        item={item}
+        position={1}
+        board={board}
+        isCurrentClimb={false}
+        isHistoryItem
+        onPress={onPress}
+        onRemove={onRemove}
+        onToggleSelect={onToggleSelect}
+        onTickHistory={onTickHistory}
+      />,
+    );
+
+    // The row registers its own tap (with a ref); the tick registers a second tap (no
+    // ref) that blocks the row gestures. Find the tick's tap by its block call and
+    // assert it targets exactly the row's tap/long-press refs.
+    expect(captured.tapRef).not.toBeNull();
+    expect(captured.longPressRef).not.toBeNull();
+    const tickLog = gestureCalls.tapLogs.find((calls) => calls.some((call) => call.method === 'blocksExternalGesture'));
+    expect(tickLog).toBeDefined();
+    const blocksCall = tickLog?.find((call) => call.method === 'blocksExternalGesture');
     expect(blocksCall?.args).toEqual([captured.tapRef, captured.longPressRef]);
   });
 
