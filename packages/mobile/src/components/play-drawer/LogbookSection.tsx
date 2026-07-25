@@ -3,7 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { useLogbook } from '@boardsesh/board-react';
-import { groupEntriesByAngle } from '@boardsesh/profile-stats';
+import { groupEntriesByAngle, tickTimeMs } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { LogbookEntryRow } from './LogbookEntryRow';
@@ -32,7 +32,14 @@ export const LogbookSection = memo(function LogbookSection({
     () =>
       logbook
         .filter((entry) => entry.climb_uuid === climbUuid)
-        .sort((a, b) => new Date(b.climbed_at).getTime() - new Date(a.climbed_at).getTime()),
+        // `climbed_at` is a naive (no `Z`/offset) UTC string — `tickTimeMs`
+        // parses it as UTC before comparing. `new Date(naiveString)` instead
+        // parses it as device-local, which is fine for same-day entries but
+        // isn't guaranteed to preserve order across a DST boundary: resolving
+        // an ambiguous/skipped local hour is implementation-defined per
+        // ECMA-262, so Hermes (on-device) isn't guaranteed to agree with V8
+        // (tests) — `tickTimeMs` sidesteps the question entirely (#3569).
+        .sort((a, b) => tickTimeMs(b.climbed_at) - tickTimeMs(a.climbed_at)),
     [logbook, climbUuid],
   );
 

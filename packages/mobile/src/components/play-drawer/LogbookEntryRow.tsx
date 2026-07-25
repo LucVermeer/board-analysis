@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { LogbookEntry } from '@boardsesh/board-react';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { BOULDER_GRADES } from '@boardsesh/board-constants/boulder-grade-mapping';
+import { parseTickTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { normalizeAscentStatus, type AscentStatusValue } from '../../lib/ascent-status-utils';
@@ -20,7 +21,12 @@ type LogbookEntryRowProps = {
 };
 
 // Hoisted so every row shares one cache lookup key instead of allocating a
-// fresh options object per call (#3155).
+// fresh options object per call (#3155). Note: the cache in
+// intl-formatter-cache.ts keys only on (locale, options), not on the
+// process's TZ — a formatter built under one TZ stays cached for that key
+// even if TZ later changes, which is fine at runtime (TZ is fixed for the
+// life of the app) but means tests exercising more than one TZ against this
+// cache must call `vi.resetModules()` between them.
 const CLIMBED_AT_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   month: 'short',
   day: 'numeric',
@@ -29,8 +35,15 @@ const CLIMBED_AT_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
 };
 
+// `entry.climbed_at` is a naive `boardsesh_ticks.climbed_at` string with no
+// `Z`/offset (see @boardsesh/profile-stats/format-tick-time). Parsing it with
+// a bare `new Date(iso)` gets it interpreted as browser/device-local time
+// instead of UTC, which silently displays the raw UTC digits as if they were
+// already local (#3569). `parseTickTime` recovers the true UTC instant and
+// converts it to local before we ever hand a `Date` to `Intl.DateTimeFormat`.
 function formatClimbedAt(iso: string): string {
-  const date = new Date(iso);
+  if (!iso) return iso;
+  const date = parseTickTime(iso).toDate();
   if (Number.isNaN(date.getTime())) return iso;
   return getCachedDateTimeFormat(undefined, CLIMBED_AT_FORMAT_OPTIONS).format(date);
 }
