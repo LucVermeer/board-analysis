@@ -3,8 +3,8 @@
 // Liquid Glass: the board-agnostic CollapsingLargeTitleHeader (no board pill —
 // unlike Climbs/Discover) with an account-avatar island on the left, an optional
 // filter island on the right (the Progress sub-tab only), and the
-// Progress/Sessions/Logbook segmented control (glass-track-wrapped) as its
-// below-row content.
+// Progress/Sessions/Logbook/Climbs/Social segmented control (glass-track-wrapped)
+// as its below-row content.
 //
 // Material: an absolutely-positioned, onHeightChange-measured M3 small app bar
 // (mirroring ClimbTopChrome) — the account avatar, dashboard title via
@@ -26,7 +26,7 @@ import { MaterialTabs } from '../navigation/MaterialTabs';
 import { CollapsingLargeTitleHeader, GlassActionToolbar, GlassToolbarAction } from '../chrome';
 import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 
-export type ProfileTabKey = 'progress' | 'sessions' | 'logbook' | 'social';
+export type ProfileTabKey = 'progress' | 'sessions' | 'logbook' | 'climbs' | 'social';
 
 export type ProfileTopChromeProps = {
   /** Selected sub-tab; drives the segmented control's pill / the active tab. */
@@ -52,6 +52,7 @@ function useSegmentOptions() {
       { key: 'progress' as const, label: t('tabs.progress') },
       { key: 'sessions' as const, label: t('tabs.sessions') },
       { key: 'logbook' as const, label: t('tabs.logbook') },
+      { key: 'climbs' as const, label: t('tabs.climbs') },
       { key: 'social' as const, label: t('tabs.social') },
     ],
     [t],
