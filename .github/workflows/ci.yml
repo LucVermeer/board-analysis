@@ -39,6 +39,7 @@ jobs:
       # PR-only guard signal: did this PR edit the OTA-owned changelog data file?
       # Defaults false off PRs (the OTA bot legitimately rewrites it on push).
       changelogData: ${{ github.event_name == 'pull_request' && steps.filter.outputs.changelogData || 'false' }}
+      dbMigrations: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.dbMigrations }}
       # True if any downstream job's gate would fire. setup gates on this so
       # docs-only / firmware-only PRs skip the bun-install + build:db pass
       # nothing downstream would consume. Must mirror the union of every
@@ -106,6 +107,11 @@ jobs:
             changelogData:
               - 'packages/mobile/src/data/changelog.generated.json'
               - 'CHANGELOG.md'
+            dbMigrations:
+              - 'packages/db/drizzle/**'
+              - 'packages/db/src/schema/**'
+              - 'scripts/check-db-migrations.ts'
+              - 'scripts/lib/drizzle-migrations.ts'
 
   setup:
     needs: [changes]
@@ -246,9 +252,10 @@ jobs:
 
   db-migrations:
     needs: [changes]
-    # Cheap (a few file reads, no DB, no build), so it gates on the whole
-    # packages/db path rather than trying to be clever about which files matter.
-    if: needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
+    # Gated on the migration folder and the schema it is checked against, not on
+    # the whole sharedDeps blob (which also covers packages/shared, shared-schema,
+    # board-constants and the sync packages).
+    if: needs.changes.outputs.dbMigrations == 'true' || needs.changes.outputs.rootCi == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

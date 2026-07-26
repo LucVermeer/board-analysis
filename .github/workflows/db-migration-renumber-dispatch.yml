@@ -22,9 +22,12 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # Collapse a burst of migration merges into a single fan-out.
   group: db-migration-renumber-dispatch
-  cancel-in-progress: true
+  # Queue, never cancel. Cancelling a fan-out mid-loop would silently drop every PR
+  # it hadn't reached yet, and they would stay stranded until the *next* migration
+  # merge. A queued second run is cheap — it re-scans and skips anything already
+  # renumbered, because it only acts on real collisions.
+  cancel-in-progress: false
 
 jobs:
   fan-out:
