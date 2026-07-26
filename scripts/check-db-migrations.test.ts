@@ -117,15 +117,15 @@ describe('checkAgainstBase', () => {
 
 describe('parseArgs', () => {
   it('defaults to comparing against origin/main', () => {
-    expect(parseArgs([])).toEqual({ base: 'origin/main' });
+    expect(parseArgs([])).toEqual({ base: 'origin/main', repo: null });
   });
 
   it('skips the `--` that `vp run <task> -- <args>` forwards', () => {
-    expect(parseArgs(['--', '--base', 'HEAD~1'])).toEqual({ base: 'HEAD~1' });
+    expect(parseArgs(['--', '--base', 'HEAD~1'])).toEqual({ base: 'HEAD~1', repo: null });
   });
 
   it('supports opting out of the base comparison', () => {
-    expect(parseArgs(['--no-base'])).toEqual({ base: null });
+    expect(parseArgs(['--no-base'])).toEqual({ base: null, repo: null });
   });
 
   it('rejects an unknown flag rather than ignoring it', () => {

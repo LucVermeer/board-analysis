@@ -140,6 +140,19 @@ describe('renderComment', () => {
   });
 });
 
+describe('renderComment notes', () => {
+  it('passes an inherited-orphan warning through without claiming it blocked', () => {
+    // Main can already carry an orphan (0177_illegal_omega_red sat there for weeks).
+    // Inheriting one must not wedge the renumber, so it is a note, not a block.
+    const body = renderComment(
+      result({ notes: ['`main` carries an orphaned migration (0177_illegal_omega_red.sql).'] }),
+    );
+    expect(body).toContain('Renumbered onto');
+    expect(body).toContain('0177_illegal_omega_red.sql');
+    expect(body).not.toContain('Nothing was pushed');
+  });
+});
+
 describe('parseArgs', () => {
   it('defaults to rebase, fetching, and committing', () => {
     expect(parseArgs([])).toEqual({
@@ -148,6 +161,7 @@ describe('parseArgs', () => {
       dryRun: false,
       fetch: true,
       install: false,
+      repo: null,
     });
   });
 

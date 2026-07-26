@@ -141,6 +141,20 @@ jobs:
             || { echo "::error::Branch moved between the gate and checkout."; exit 1; }
           test "$BRANCH" != "main"
 
+      # Every PR in today's backlog was opened before this tooling existed, so their
+      # branches have no `scripts/db-renumber-migration.ts` and no `db:renumber`
+      # task. Run main's copy against the PR's checkout instead — the script imports
+      # nothing but Node builtins and its own lib/ sibling, so it needs no install of
+      # its own. Kept out of the workspace root would be tidier, but actions/checkout
+      # requires a path inside it; the script stages explicitly rather than
+      # `git add -A`, so this directory can never end up in the commit.
+      - name: Check out the renumber tooling from main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .renumber-tooling
+          persist-credentials: false
+
       - uses: oven-sh/setup-bun@v2
       - uses: voidzero-dev/setup-vp@v1
         with:
@@ -155,7 +169,17 @@ jobs:
         run: |
           git config user.name 'boardsesh-repo-bot[bot]'
           git config user.email 'boardsesh-repo-bot[bot]@users.noreply.github.com'
-          vp run db:renumber -- --strategy "${{ github.event.inputs.strategy || 'rebase' }}"
+          # `bun <file>` rather than `vp run db:renumber`: bun executes TypeScript
+          # directly, so main's script runs without a second install.
+          bun .renumber-tooling/scripts/db-renumber-migration.ts \
+            --repo "$GITHUB_WORKSPACE" \
+            --strategy "${{ github.event.inputs.strategy || 'rebase' }}"
+
+      - name: Validate the resulting migration folder
+        if: steps.renumber.outputs.status == 'renumbered'
+        run: |
+          bun .renumber-tooling/scripts/check-db-migrations.ts \
+            --repo "$GITHUB_WORKSPACE" --base origin/main
 
       # The real gate. Nothing in per-PR CI applies migrations today, so this is the
       # only thing between a bad renumber and main. VERIFY_MIGRATION_JOURNAL asserts

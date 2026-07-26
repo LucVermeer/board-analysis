@@ -204,12 +204,14 @@ function readTreeAtRef(repoRoot: string, ref: string): TreeState | null {
 
 export interface Options {
   base: string | null;
+  /** The repository to validate, when it isn't the one this script lives in. */
+  repo: string | null;
 }
 
 export function parseArgs(argv: readonly string[]): Options {
   // Defaults to origin/main so a bare local run gets the collision and stale-`when`
   // checks too, not just the tree-only ones. An unreadable ref degrades to a warning.
-  const options: Options = { base: 'origin/main' };
+  const options: Options = { base: 'origin/main', repo: null };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     switch (flag) {
@@ -226,6 +228,13 @@ export function parseArgs(argv: readonly string[]): Options {
       case '--no-base':
         options.base = null;
         break;
+      case '--repo': {
+        const value = argv[index + 1];
+        if (value === undefined) throw new Error('missing value for --repo');
+        options.repo = value;
+        index += 1;
+        break;
+      }
       default:
         throw new Error(`unknown argument: ${flag}`);
     }
@@ -234,8 +243,8 @@ export function parseArgs(argv: readonly string[]): Options {
 }
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const options = parseArgs(argv);
+  const repoRoot = options.repo ? resolve(options.repo) : resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
   const head = readTree(repoRoot);
   const base = options.base ? readTreeAtRef(repoRoot, options.base) : null;

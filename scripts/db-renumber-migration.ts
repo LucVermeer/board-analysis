@@ -239,6 +239,23 @@ function listRefDir(git: Git, ref: string, path: string): string[] {
   return output ? output.split('\n').filter(Boolean) : [];
 }
 
+/**
+ * Read a file's exact bytes out of a ref.
+ *
+ * Deliberately NOT the trimming `Git` wrapper: that is right for command output
+ * like SHAs and path lists, and wrong for file contents. Trimming here would eat a
+ * migration's trailing newline and silently rewrite the author's file — the one
+ * thing this script promises never to do.
+ */
+function readBlob(repoRoot: string, ref: string, path: string): string {
+  return execFileSync('git', ['show', `${ref}:${path}`], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
+  });
+}
+
 class Blocked extends Error {}
 
 function block(reason: string): never {
@@ -494,7 +511,7 @@ function run(repoRoot: string, options: Options): RenumberResult {
     return result;
   }
 
-  const mainJournal = parseJournal(git(['show', `${options.base}:${JOURNAL_PATH}`]));
+  const mainJournal = parseJournal(readBlob(repoRoot, options.base, JOURNAL_PATH));
   const nextFree = nextFreeIndex(mainJournal, mainFilenames);
   if (!collides(added, nextFree)) {
     console.log(
@@ -508,7 +525,7 @@ function run(repoRoot: string, options: Options): RenumberResult {
 
   // Capture the author's bytes before any history rewrite can touch them.
   const originals = new Map<string, string>(
-    added.map((file: MigrationFile) => [file.tag, git(['show', `${originalHead}:${DRIZZLE_DIR}/${file.filename}`])]),
+    added.map((file: MigrationFile) => [file.tag, readBlob(repoRoot, originalHead, `${DRIZZLE_DIR}/${file.filename}`)]),
   );
 
   // Everything outside the migration folder that this branch, and only this branch,
@@ -560,15 +577,19 @@ function run(repoRoot: string, options: Options): RenumberResult {
 
     const outcome = runGenerate(repoRoot, tail.from.suffix);
     if (outcome.generated === null) {
-      // The branch edits schema files but produces no delta versus main — most
-      // likely main already landed the same change. Don't guess: place it by hand
-      // and let the workflow's `drizzle-kit migrate` be the real arbiter, since a
-      // duplicate DDL fails there loudly and nothing gets pushed.
-      result.notes.push(
-        `\`drizzle-kit generate\` produced no migration (${outcome.detail}). The file was renumbered as-is; ` +
-          'if `main` already made this change the verification step will fail and nothing will be pushed.',
+      // A schema migration MUST come with a regenerated snapshot. Placing it by
+      // hand would leave main's older snapshot as the newest in the chain, so the
+      // next `drizzle-kit generate` anyone runs would diff against a schema state
+      // that understates reality and propose the same DDL a second time. Better to
+      // stop and say why: the two live causes are "main already made this change"
+      // and "drizzle wants to disambiguate a rename", and both need a human.
+      block(
+        `\`drizzle-kit generate\` produced no migration for \`${tail.from.tag}\` (${outcome.detail}).\n\n` +
+          'A schema migration needs a regenerated snapshot, so it cannot be renumbered by hand. ' +
+          'Most often this means `main` already landed the same change, or drizzle needs you to say ' +
+          'whether a table/column was created or renamed. Rebase locally and run ' +
+          '`bunx drizzle-kit generate` from `packages/db` to see the prompt.',
       );
-      placeMigration(repoRoot, tail, originals.get(tail.from.tag) ?? '', when);
     } else {
       if (outcome.generated !== tail.toFilename) {
         block(
@@ -641,15 +662,29 @@ function run(repoRoot: string, options: Options): RenumberResult {
     }
   }
 
+  // Only orphans this run *introduced* are a reason to stop. Main can already carry
+  // one — 0177_illegal_omega_red.sql sat there for weeks — and inheriting it must
+  // not wedge every renumber. `vp run check:db-migrations` is what reports those.
+  const inheritedOrphans = findOrphans(mainJournal, mainFilenames);
   const orphans = findOrphans(
     parseJournal(readFileSync(resolve(repoRoot, JOURNAL_PATH), 'utf8')),
     readdirSync(resolve(repoRoot, DRIZZLE_DIR)),
   );
-  if (orphans.sqlWithoutEntry.length > 0 || orphans.entryWithoutSql.length > 0) {
+  const newOrphanFiles = orphans.sqlWithoutEntry.filter(
+    (filename) => !inheritedOrphans.sqlWithoutEntry.includes(filename),
+  );
+  const newOrphanEntries = orphans.entryWithoutSql.filter((tag) => !inheritedOrphans.entryWithoutSql.includes(tag));
+  if (newOrphanFiles.length > 0 || newOrphanEntries.length > 0) {
     block(
       'The renumber left the migration folder inconsistent ' +
-        `(orphan files: ${orphans.sqlWithoutEntry.join(', ') || 'none'}; ` +
-        `orphan entries: ${orphans.entryWithoutSql.join(', ') || 'none'}).`,
+        `(orphan files: ${newOrphanFiles.join(', ') || 'none'}; ` +
+        `orphan entries: ${newOrphanEntries.join(', ') || 'none'}).`,
+    );
+  }
+  if (inheritedOrphans.sqlWithoutEntry.length > 0) {
+    result.notes.push(
+      `\`main\` carries an orphaned migration (${inheritedOrphans.sqlWithoutEntry.join(', ')}) with no journal ` +
+        'entry, so it never runs. Not caused by this PR — worth deleting on main.',
     );
   }
 
@@ -659,7 +694,12 @@ function run(repoRoot: string, options: Options): RenumberResult {
     return result;
   }
 
-  git(['add', '-A']);
+  // Stage exactly what we touched, never `git add -A`. This commit lands on someone
+  // else's branch, so it must not be able to sweep in a stray build artifact, an
+  // untracked scratch file, or the tooling checkout CI places in the workspace.
+  git(['add', '--', DRIZZLE_DIR]);
+  for (const path of result.rewritten) git(['add', '--', path]);
+
   const subject =
     moves.length === 1 && moves[0]
       ? `chore(db): renumber ${moves[0].from.suffix} to ${padIndex(moves[0].toIndex)} after main`
