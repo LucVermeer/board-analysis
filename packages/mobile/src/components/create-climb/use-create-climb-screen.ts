@@ -380,9 +380,11 @@ export function useCreateClimbScreen({
   // sendable climb. Omitting it left a freshly created climb board-less on the wire —
   // peers received a climb they couldn't place, and the presence row lost its board.
   //
-  // Only fields `climbToQueueItem` actually forwards are set here; adding ones it
-  // strips (userId / description / mirrored / is_draft) would be dead weight until
-  // that boundary and both subscription selection sets widen together.
+  // Ownership and draft state ride along too (#3927 widened the queue boundary
+  // and both subscription selection sets to carry them). Without these the climb
+  // you just made lands in the queue as if it belonged to nobody, so the play
+  // drawer's owner-only Edit action never appears on your own fresh draft —
+  // `computeCanUpdate` reads exactly userId + is_draft + published_at.
   const buildProvisionalClimb = useCallback(
     (uuid: string, frames: string): Climb => ({
       uuid,
@@ -391,6 +393,8 @@ export function useCreateClimbScreen({
       name: name.trim() || t('createClimbForm.draftBadge'),
       frames,
       setter_username: profile?.displayName ?? '',
+      userId: profile?.id ?? null,
+      description,
       angle: board.angle,
       ascensionist_count: 0,
       difficulty: '',
@@ -399,13 +403,17 @@ export function useCreateClimbScreen({
       difficulty_error: '0',
       benchmark_difficulty: null,
       is_no_match: noMatch,
+      // Not-yet-saved climbs are drafts by definition; once saved, mirror the
+      // tracked row so a published climb doesn't queue as a draft.
+      is_draft: savedClimb?.isDraft ?? true,
+      published_at: savedClimb?.publishedAt ?? null,
       userAscents: 0,
       userAttempts: 0,
       // The editor emits a single static frame (no multi-frame playback).
       framesCount: 1,
       framesPace: null,
     }),
-    [name, noMatch, profile, board.angle, board.boardName, board.layoutId, t],
+    [name, description, noMatch, profile, savedClimb, board.angle, board.boardName, board.layoutId, t],
   );
 
   // Push the freshly saved climb into the queue as the current climb so the
