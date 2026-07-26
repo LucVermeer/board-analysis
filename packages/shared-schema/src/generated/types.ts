@@ -401,6 +401,18 @@ export type AttachBetaLinkInput = {
   tickUuid?: InputMaybe<Scalars['ID']['input']>;
 };
 
+/**
+ * Input for attaching a stray board (from strayBoardsForGym) to a gym. Unlike
+ * linkBoardToGym, the caller need not own the board — the gate is edit access to
+ * the target gym plus the board actually being a stray candidate for it.
+ */
+export type AttachBoardToGymInput = {
+  /** Stray board UUID to attach */
+  boardUuid: Scalars['ID']['input'];
+  /** Gym UUID to attach the board to */
+  gymUuid: Scalars['ID']['input'];
+};
+
 /** Stored credentials for an Aurora Climbing board account. */
 export type AuroraCredential = {
   __typename?: 'AuroraCredential';
@@ -2925,6 +2937,13 @@ export type Mutation = {
    * (boardType, climbUuid, link).
    */
   attachBetaLink: Scalars['Boolean']['output'];
+  /**
+   * Attach a stray board (surfaced by strayBoardsForGym) to a gym in one tap.
+   * Re-points the board's gym_id to this gym. The caller need not own the board;
+   * the gate is edit access to the target gym, and the board must be a genuine
+   * stray candidate for it (a merged-twin board or a nearby unlinked/SYSTEM one).
+   */
+  attachBoardToGym: Scalars['Boolean']['output'];
   authorizeControllerForSession: Scalars['Boolean']['output'];
   /**
    * Confirm which board a (non-unique) serial routes to after the user picks
@@ -3380,6 +3399,11 @@ export type MutationAddQueueItemArgs = {
 /** Root mutation type for all write operations. */
 export type MutationAttachBetaLinkArgs = {
   input: AttachBetaLinkInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationAttachBoardToGymArgs = {
+  input: AttachBoardToGymInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -4907,6 +4931,15 @@ export type Query = {
    */
   smartPlaylist: SmartPlaylistResult;
   /**
+   * Boards that probably belong to a gym but aren't linked to it yet, for the
+   * gym's Boards tab. Requires edit access to the gym. Returns two kinds of
+   * candidate: boards on a listing whose merged_into chain resolves to this gym
+   * (they should have followed the merge), and boards within ~150 m of the gym's
+   * location that are either unlinked or attached to a synced (SYSTEM) listing at
+   * the same spot. Merged-twin candidates first, then nearest. Capped at 25.
+   */
+  strayBoardsForGym: Array<StrayBoard>;
+  /**
    * Pull Boardsesh grades for a board type, changed since the cursor (reference data).
    * Optional layoutId/sizeId scope grades to the climbs of that layout/size via board_climbs.
    */
@@ -5482,6 +5515,11 @@ export type QuerySimilarClimbsArgs = {
 /** Root query type for all read operations. */
 export type QuerySmartPlaylistArgs = {
   input: GetSmartPlaylistInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryStrayBoardsForGymArgs = {
+  gymUuid: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -6914,6 +6952,34 @@ export type SocialEntityType =
 
 export type SortMode = 'controversial' | 'hot' | 'new' | 'top';
 
+/**
+ * A board that probably belongs to a gym but isn't linked to it yet — either it
+ * followed a listing that got merged into this gym, or it sits at the gym's
+ * coordinates while unlinked or attached to a synced (SYSTEM) listing.
+ */
+export type StrayBoard = {
+  __typename?: 'StrayBoard';
+  /** Name of the gym this board is currently linked to; null when unlinked. */
+  currentGymName?: Maybe<Scalars['String']['output']>;
+  /** The gym this board is currently linked to (a merged twin or a synced listing); null when unlinked. */
+  currentGymUuid?: Maybe<Scalars['ID']['output']>;
+  /** Metres from this gym's location to the board; null when either lacks coordinates. */
+  distanceMeters?: Maybe<Scalars['Float']['output']>;
+  /** The board's display name. */
+  name: Scalars['String']['output'];
+  /** Why this board is a candidate for this gym. */
+  reason: StrayBoardReason;
+  /** The board's unique identifier. */
+  uuid: Scalars['ID']['output'];
+};
+
+/** Why a board is a candidate to attach to a gym in strayBoardsForGym. */
+export type StrayBoardReason =
+  /** The board sits on a listing that was merged into this gym. */
+  | 'MERGED_TWIN'
+  /** The board is physically within ~150 m of this gym but isn't linked to it. */
+  | 'NEARBY';
+
 /** Input for submitAppFeedback mutation. */
 export type SubmitAppFeedbackInput = {
   angle?: InputMaybe<Scalars['Int']['input']>;
@@ -7807,6 +7873,7 @@ export type ResolversTypes = ResolversObject<{
   AscentFeedItem: ResolverTypeWrapper<AscentFeedItem>;
   AscentFeedResult: ResolverTypeWrapper<AscentFeedResult>;
   AttachBetaLinkInput: AttachBetaLinkInput;
+  AttachBoardToGymInput: AttachBoardToGymInput;
   AuroraCredential: ResolverTypeWrapper<AuroraCredential>;
   AuroraCredentialStatus: ResolverTypeWrapper<AuroraCredentialStatus>;
   BetaLink: ResolverTypeWrapper<BetaLink>;
@@ -8100,6 +8167,8 @@ export type ResolversTypes = ResolversObject<{
   SmartPlaylistType: SmartPlaylistType;
   SocialEntityType: SocialEntityType;
   SortMode: SortMode;
+  StrayBoard: ResolverTypeWrapper<StrayBoard>;
+  StrayBoardReason: StrayBoardReason;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
   SubmitAppFeedbackInput: SubmitAppFeedbackInput;
   Subscription: ResolverTypeWrapper<{}>;
@@ -8167,6 +8236,7 @@ export type ResolversParentTypes = ResolversObject<{
   AscentFeedItem: AscentFeedItem;
   AscentFeedResult: AscentFeedResult;
   AttachBetaLinkInput: AttachBetaLinkInput;
+  AttachBoardToGymInput: AttachBoardToGymInput;
   AuroraCredential: AuroraCredential;
   AuroraCredentialStatus: AuroraCredentialStatus;
   BetaLink: BetaLink;
@@ -8436,6 +8506,7 @@ export type ResolversParentTypes = ResolversObject<{
   SmartPlaylistCount: SmartPlaylistCount;
   SmartPlaylistMeta: SmartPlaylistMeta;
   SmartPlaylistResult: SmartPlaylistResult;
+  StrayBoard: StrayBoard;
   String: Scalars['String']['output'];
   SubmitAppFeedbackInput: SubmitAppFeedbackInput;
   Subscription: {};
@@ -9977,6 +10048,12 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationAttachBetaLinkArgs, 'input'>
   >;
+  attachBoardToGym?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAttachBoardToGymArgs, 'input'>
+  >;
   authorizeControllerForSession?: Resolver<
     ResolversTypes['Boolean'],
     ParentType,
@@ -11432,6 +11509,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QuerySmartPlaylistArgs, 'input'>
   >;
+  strayBoardsForGym?: Resolver<
+    Array<ResolversTypes['StrayBoard']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryStrayBoardsForGymArgs, 'gymUuid'>
+  >;
   syncClimbGrades?: Resolver<
     ResolversTypes['SyncResult'],
     ParentType,
@@ -12272,6 +12355,19 @@ export type SmartPlaylistResultResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type StrayBoardResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['StrayBoard'] = ResolversParentTypes['StrayBoard'],
+> = ResolversObject<{
+  currentGymName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  currentGymUuid?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  distanceMeters?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  reason?: Resolver<ResolversTypes['StrayBoardReason'], ParentType, ContextType>;
+  uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SubscriptionResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['Subscription'] = ResolversParentTypes['Subscription'],
@@ -12796,6 +12892,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SmartPlaylistCount?: SmartPlaylistCountResolvers<ContextType>;
   SmartPlaylistMeta?: SmartPlaylistMetaResolvers<ContextType>;
   SmartPlaylistResult?: SmartPlaylistResultResolvers<ContextType>;
+  StrayBoard?: StrayBoardResolvers<ContextType>;
   Subscription?: SubscriptionResolvers<ContextType>;
   SyncCursor?: SyncCursorResolvers<ContextType>;
   SyncDeletion?: SyncDeletionResolvers<ContextType>;
