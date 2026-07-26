@@ -5,11 +5,13 @@ import {
   movesToFrames,
   moveToHoldState,
   moonBoardGradeToDifficultyId,
+  moonBoardGradeConflictFields,
   uuidv5,
   MOONBOARD_UUID_NAMESPACE,
   HOLD_STATE_CODES,
   type MoonBoardMove,
 } from './moonboard-helpers.js';
+import { sqlText } from '../src/test-utils/sql-text.js';
 
 void describe('coordinateToHoldId', () => {
   void it('converts A1 to hold ID 1 (first hold, bottom-left)', () => {
@@ -152,5 +154,40 @@ void describe('uuidv5', () => {
     // Well-known test vector: uuid5("python.org", DNS namespace) = "886313e1-3b8a-5372-9b90-0c9aee199e5d"
     const uuid = uuidv5('python.org', MOONBOARD_UUID_NAMESPACE);
     assert.equal(uuid, '886313e1-3b8a-5372-9b90-0c9aee199e5d');
+  });
+});
+
+// issue #3530: a re-run of the deprecated single-file MoonBoard importers must
+// never let a stale/absent incoming grade clobber a newer stored one. These
+// assertions check the actual rendered SQL text (via sqlText, the same
+// technique moonboard-catalog-helpers.test.ts uses for catalogAliasConflictUpdate)
+// so a regression that reverts any one field back to a bare `excluded.*` (no
+// fallback) fails here, not just a check for the fragment's absence. sqlText
+// can't render the interpolated Column object itself (it only walks plain
+// string/queryChunks arrays), so the stored-value side renders blank — these
+// assertions pin the part sqlText CAN see: that each field is COALESCE-wrapped
+// with `excluded.<column>` as the first (incoming) argument.
+void describe('moonBoardGradeConflictFields', () => {
+  void it('COALESCEs displayDifficulty, taking excluded.display_difficulty as the incoming side', () => {
+    const fields = moonBoardGradeConflictFields();
+    assert.match(sqlText(fields.displayDifficulty), /^coalesce\(excluded\.display_difficulty,/i);
+  });
+
+  void it('COALESCEs benchmarkDifficulty, taking excluded.benchmark_difficulty as the incoming side', () => {
+    const fields = moonBoardGradeConflictFields();
+    assert.match(sqlText(fields.benchmarkDifficulty), /^coalesce\(excluded\.benchmark_difficulty,/i);
+  });
+
+  void it('COALESCEs difficultyAverage, taking excluded.difficulty_average as the incoming side', () => {
+    const fields = moonBoardGradeConflictFields();
+    assert.match(sqlText(fields.difficultyAverage), /^coalesce\(excluded\.difficulty_average,/i);
+  });
+
+  void it('never takes any of the three fields straight from excluded with no fallback', () => {
+    const fields = moonBoardGradeConflictFields();
+    for (const [name, fragment] of Object.entries(fields)) {
+      const text = sqlText(fragment).toLowerCase();
+      assert.ok(text.startsWith('coalesce('), `${name} should be COALESCE-wrapped, got: ${text}`);
+    }
   });
 });

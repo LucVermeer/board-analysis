@@ -11,9 +11,11 @@ import {
   moveToHoldState,
   MOONBOARD_UUID_NAMESPACE,
   moonBoardGradeToDifficultyId,
+  moonBoardGradeConflictFields,
   type MoonBoardMove,
 } from './moonboard-helpers.js';
 import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
+import { assertMoonBoardImportAllowed } from './moonboard-import-guard.js';
 // Import the dependency-free `./characteristics` subpath (not the package root,
 // which pulls in graphql) so this resolves in the isolated dev-db image build,
 // where shared-schema is dropped into node_modules without its deps installed.
@@ -25,6 +27,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // DEPRECATED for prod: superseded by import-moonboard-catalog.ts (full catalog
 // dataset, all 7 boards, both angles, merge-in-place). Still used by the dev-db Docker
 // bootstrap, which bakes in the 2023 community dump — leave it wired there.
+//
+// Refuses to run against anything but a local/dev-tooling database (see
+// moonboard-import-guard.ts) — a re-run of this stale 2023 snapshot can
+// regress newer grades/benchmarks (issue #3530). To deliberately run it
+// against a restored snapshot or staging copy, set
+// MOONBOARD_IMPORT_ALLOW_REMOTE=1.
 // =============================================================================
 // Data Source
 // =============================================================================
@@ -133,6 +141,7 @@ async function importMoonBoardProblems() {
   const databaseUrl = getScriptDatabaseUrl();
   const dbHost = databaseUrl.split('@')[1]?.split('/')[0] || 'unknown';
   console.info(`🔄 Importing MoonBoard problems to: ${dbHost}`);
+  assertMoonBoardImportAllowed(databaseUrl, 'import-moonboard-problems');
   console.info(`📂 Reading dump from: ${dumpPath}`);
 
   const { db, close } = createScriptDb(databaseUrl);
@@ -304,13 +313,14 @@ async function importMoonBoardProblems() {
           .onConflictDoUpdate({
             target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
             set: {
-              displayDifficulty: sql`excluded.display_difficulty`,
-              benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
+              // COALESCEd (issue #3530): this script reads a fixed 2023
+              // snapshot, so a re-run must never overwrite a newer stored
+              // grade/benchmark flag with a stale-or-absent one.
+              ...moonBoardGradeConflictFields(),
               // Upstream is monotonic; the total is rebuilt as upstream + existing
               // Boardsesh so a re-run never clobbers accrued tick counts.
               upstreamAscensionistCount: resolvedUpstreamAscensionistCount,
               ascensionistCount: sql`${resolvedUpstreamAscensionistCount} + coalesce(${boardClimbStats.boardseshAscensionistCount}, 0)`,
-              difficultyAverage: sql`excluded.difficulty_average`,
               // Manufacturer average lands in upstream_quality_average (COALESCEd:
               // an unrated source row preserves the stored last-known rating);
               // quality_average is the blend of it and Boardsesh's own votes.
