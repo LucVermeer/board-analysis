@@ -31,9 +31,13 @@ export function resolveMoonBoardImportDecision(
 
 /**
  * Enforces resolveMoonBoardImportDecision for a deprecated MoonBoard importer
- * script. Exits the process (never returns) when the run must not proceed.
- * Callers must print the resolved target host themselves before calling this,
- * so the operator sees it regardless of which branch is taken.
+ * script. Callers must print the resolved target host themselves before
+ * calling this, so the operator sees it regardless of which branch is taken.
+ *
+ * Return type is `void`, not `never`: only the 'remote-refused' branch calls
+ * process.exit (which TypeScript types as `never`) — the 'local' and
+ * 'remote-allowed' branches return normally, so the function as a whole does
+ * have a reachable return path and `never` would be inaccurate here.
  */
 export function assertMoonBoardImportAllowed(databaseUrl: string, scriptLabel: string): void {
   const decision = resolveMoonBoardImportDecision(databaseUrl, process.env[MOONBOARD_IMPORT_ALLOW_REMOTE_ENV_VAR]);
