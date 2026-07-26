@@ -55,8 +55,9 @@ type GlassSurfaceProps = {
   role?: keyof MaterialSurfaceContainers;
   /**
    * Material-only: the M3 elevation CAST (level0–5). Omit to keep the legacy
-   * `shadows.sm`. The material branch applies it on the same view as the
-   * background + radius (no `overflow:'hidden'`), so a rounded surface still casts.
+   * `shadows.sm`. The cast always lands on the outermost view; if the consumer's
+   * `style` asks for `overflow: 'hidden'`, that clip is hoisted onto an inner
+   * wrapper so it can't swallow the cast (see the material branch).
    */
   level?: MaterialElevationLevel;
 };
@@ -119,23 +120,39 @@ export function GlassSurface({
   // Material: opaque M3 tonal surface. Depth is tone-FIRST — `role` picks the
   // surface-container tone, `level` adds the elevation cast (both default to the
   // legacy base + `shadows.sm` so unmigrated consumers don't shift). Background +
-  // radius + cast live on the SAME view (no `overflow: 'hidden'`, which would clip
-  // the shadow) so even a rounded surface casts. Fallback/tint composite on top.
+  // radius + cast live on the outermost view so even a rounded surface casts;
+  // fallback/tint composite on top.
+  //
+  // Android draws the cast from the elevated view's own outline, so an
+  // `overflow: 'hidden'` on that same view clips the shadow down to nothing (the
+  // card then melts into the background — #3058). Consumers legitimately need the
+  // clip to keep scrolling content inside the rounded corners, so rather than ask
+  // every one of them to choose, hoist it: the cast stays on the unclipped outer
+  // view, and the clip moves to an inner wrapper around `children`. The wrapper is
+  // added ONLY when a clip was asked for, so unclipped consumers keep today's tree.
   if (mode === 'material') {
     const materialBg = role ? m3SurfaceContainers[role] : baseColor;
     const elevationStyle = level ? materialElevation[level] : shadows.sm;
+    // `'scroll'` clips on Android exactly like `'hidden'` (a plain View never
+    // scrolls — that needs a ScrollView), so it swallows the cast the same way and
+    // collapses to the same clip on the wrapper.
+    const consumerOverflow = StyleSheet.flatten(style)?.overflow;
+    const clipsChildren = consumerOverflow === 'hidden' || consumerOverflow === 'scroll';
     // When a `role` tone is given it IS the surface — an opaque `fallbackColor`
     // would paint over and hide it, so skip the fallback layer (the translucent
     // `tint` still composites). Without a role, keep the legacy fallback-over-base.
     return (
-      <View style={[style, radius, elevationStyle, { backgroundColor: materialBg }]} pointerEvents={pointerEvents}>
+      <View
+        style={[style, clipsChildren && styles.unclipped, radius, elevationStyle, { backgroundColor: materialBg }]}
+        pointerEvents={pointerEvents}
+      >
         {!role && fallbackColor ? (
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: fallbackColor }]} />
         ) : null}
         {tintColor ? (
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: tintColor }]} />
         ) : null}
-        {children}
+        {clipsChildren ? <View style={[styles.clipLayer, radius]}>{children}</View> : children}
       </View>
     );
   }
@@ -176,3 +193,33 @@ export function GlassSurface({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  /** Cancels a consumer clip on the elevated view so the Android cast survives. */
+  unclipped: {
+    overflow: 'visible',
+  },
+  /**
+   * The hoisted clip, sized so the children lay out the way they did when they
+   * were direct descendants: `stretch` fills the cross axis, `flexGrow` absorbs
+   * any definite height the surface was given, and `flexShrink` keeps the clip
+   * bounds on the box when content overruns.
+   *
+   * `flexBasis` deliberately stays `auto` — this is NOT `flex: 1`. With
+   * `flexBasis: 0` an auto-height surface would measure its only in-flow child at
+   * zero, size itself to zero, and then have no free space to grow back into, so
+   * the whole surface would collapse (the reaction menu card is exactly that
+   * shape). `auto` starts from the content size, which is what an auto-height
+   * surface wants, and still leaves free space for `flexGrow` to take when the
+   * surface does have a definite height.
+   *
+   * It clips at the surface's PADDING box, so a surface that both pads and clips
+   * would round its corners inside the padding; no consumer does both today.
+   */
+  clipLayer: {
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+});
