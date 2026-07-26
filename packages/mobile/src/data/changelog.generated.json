@@ -1,6 +1,51 @@
 {
-  "generatedAt": "2026-07-26T06:01:51.391Z",
+  "generatedAt": "2026-07-26T06:07:42.167Z",
   "entries": [
+    {
+      "prNumber": 3934,
+      "category": "fixed",
+      "title": "Pick a climb while the wall is busy and it now reaches your crew's queue instead of only yours. Rattle off a fast burst of picks and the last one can still go missing — that half is tracked in #3936.",
+      "mergedAt": "2026-07-26T06:05:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3934",
+      "body": "Swipe onto the next playlist climb during a throttled session and the crew gets it too, not just you.\nDrop a climb right after picking it and it stays dropped — no phantom re-add landing on everyone's queue seconds later."
+    },
+    {
+      "prNumber": 3944,
+      "category": "fixed",
+      "title": "iPad and iPhone: board art no longer piles up in memory without limit, so a long day on the wall won't end in a crash.",
+      "mergedAt": "2026-07-26T06:04:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3944",
+      "body": "Wall displays: the kiosk board now renders each climb at the size it's actually shown instead of full resolution."
+    },
+    {
+      "prNumber": 3939,
+      "category": "fixed",
+      "title": "Log a redpoint that finally goes first try this session and it saves as **one try**, not two.",
+      "mergedAt": "2026-07-26T06:03:26Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3939",
+      "body": "The tries picker showed 1 while your logbook quietly stored 2 for any climb you'd been on before — so first-go sends were padding your session attempts and your try counts.\nThe **+** button now moves the number that actually gets saved, and if you over-count a flash you can drop it back to 1 instead of being stuck on Send.\nTicks logged before this fix still carry the extra try — you can correct any of them from the logbook edit sheet."
+    },
+    {
+      "prNumber": 3930,
+      "category": "fixed",
+      "title": "[x] none (internal analytics hygiene, no user-facing change)",
+      "mergedAt": "2026-07-26T06:02:56Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3930"
+    },
+    {
+      "prNumber": 3843,
+      "category": "new",
+      "title": "Spot boards that belong to your gym but slipped onto another listing or a merged one, and attach them to your gym in one tap.",
+      "mergedAt": "2026-07-26T06:02:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3843"
+    },
+    {
+      "prNumber": 3842,
+      "category": "new",
+      "title": "See what your crew's saying about your gym, and reply, right from the manage console.",
+      "mergedAt": "2026-07-26T06:02:06Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3842"
+    },
     {
       "prNumber": 3956,
       "category": "fixed",

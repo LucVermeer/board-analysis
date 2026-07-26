@@ -6,8 +6,23 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-26
 
+### New
+
+- Spot boards that belong to your gym but slipped onto another listing or a merged one, and attach them to your gym in one tap. ([#3843](https://github.com/boardsesh/boardsesh/pull/3843))
+- See what your crew's saying about your gym, and reply, right from the manage console. ([#3842](https://github.com/boardsesh/boardsesh/pull/3842))
+
 ### Fixed
 
+- Pick a climb while the wall is busy and it now reaches your crew's queue instead of only yours. Rattle off a fast burst of picks and the last one can still go missing — that half is tracked in #3936. ([#3934](https://github.com/boardsesh/boardsesh/pull/3934))
+  Swipe onto the next playlist climb during a throttled session and the crew gets it too, not just you.
+  Drop a climb right after picking it and it stays dropped — no phantom re-add landing on everyone's queue seconds later.
+- iPad and iPhone: board art no longer piles up in memory without limit, so a long day on the wall won't end in a crash. ([#3944](https://github.com/boardsesh/boardsesh/pull/3944))
+  Wall displays: the kiosk board now renders each climb at the size it's actually shown instead of full resolution.
+- Log a redpoint that finally goes first try this session and it saves as **one try**, not two. ([#3939](https://github.com/boardsesh/boardsesh/pull/3939))
+  The tries picker showed 1 while your logbook quietly stored 2 for any climb you'd been on before — so first-go sends were padding your session attempts and your try counts.
+  The **+** button now moves the number that actually gets saved, and if you over-count a flash you can drop it back to 1 instead of being stuck on Send.
+  Ticks logged before this fix still carry the extra try — you can correct any of them from the logbook edit sheet.
+- [x] none (internal analytics hygiene, no user-facing change) ([#3930](https://github.com/boardsesh/boardsesh/pull/3930))
 - Join your own session from a second phone and you can now just leave it — ending the session for everyone is a separate, deliberate step. ([#3956](https://github.com/boardsesh/boardsesh/pull/3956))
   Leave someone else's session without being offered a button that kills it for the whole crew.
   Your crew sees you drop out straight away instead of waiting a minute for the connection to time out.
