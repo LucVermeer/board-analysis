@@ -74,13 +74,14 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
       name: climb.name,
       frames: climb.frames,
       setter_username: climb.setter_username,
-      // NOTE: userId / description / mirrored / is_draft / published_at are deliberately
-      // NOT carried here yet. `toClimbInput` would send them to party peers, but the
-      // subscription selection set (SUBSCRIPTION_CLIMB_FIELDS in lib/graphql/operations.ts,
-      // and web's CLIMB_FIELDS) doesn't select them, so peers would rebuild the climb
-      // without them and the next peer-side setQueue would write the gap back. Widening
-      // this boundary has to land together with both selection sets and
-      // `toClimbQueueItem` — see #3927.
+      // Mirror state, so re-deriving a queue item from an already-mirrored climb
+      // keeps the flip. A search / detail response never sets this (no climbs
+      // column backs it, and no resolver populates it) — it only ever arrives on
+      // a climb that has already been through the queue, via a peer's
+      // `mirrorCurrentClimb`. The paths that would otherwise lose it all rebuild
+      // an item from such a climb: the climb-actions preview, the play-drawer
+      // open, and the "on the wall" preview.
+      mirrored: climb.mirrored,
       angle: climb.angle,
       ascensionist_count: climb.ascensionist_count,
       difficulty: climb.difficulty,
