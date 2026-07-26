@@ -138,7 +138,8 @@
       "members": "Members",
       "insights": "Insights",
       "overview": "Overview",
-      "profile": "Profile"
+      "profile": "Profile",
+      "comments": "Comments"
     },
     "insights": {
       "subtitle": "How your boards did this week compared with last.",
@@ -360,6 +361,10 @@
     "profile": {
       "heading": "Gym profile",
       "description": "Your gym's name, address, and what climbers see on the public page."
+    },
+    "comments": {
+      "intro": "Reply to your gym's comment thread without leaving the console.",
+      "heading": "What your crew's saying"
     }
   },
   "branding": {

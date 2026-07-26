@@ -26,12 +26,22 @@ import InsightsTab from '@/app/components/gym-entity/manage/insights-tab';
 import BrandingTab from '@/app/components/gym-entity/manage/branding-tab';
 import OverviewTab from '@/app/components/gym-entity/manage/overview-tab';
 import ProfileTab from '@/app/components/gym-entity/manage/profile-tab';
+import CommentsTab from '@/app/components/gym-entity/manage/comments-tab';
 import GymSlugGuard from '@/app/components/gym-entity/manage/gym-slug-guard';
 import ConfirmDialog from '@/app/components/gym-entity/manage/confirm-dialog';
 import { decideManageNavigation, type ManageNavigation } from '@/app/components/gym-entity/manage/manage-nav-guard';
 
-type ManageTab = 'overview' | 'kiosks' | 'insights' | 'branding' | 'profile' | 'boards' | 'members';
-const VALID_TABS: ManageTab[] = ['overview', 'kiosks', 'insights', 'branding', 'profile', 'boards', 'members'];
+type ManageTab = 'overview' | 'kiosks' | 'insights' | 'branding' | 'profile' | 'boards' | 'members' | 'comments';
+const VALID_TABS: ManageTab[] = [
+  'overview',
+  'kiosks',
+  'insights',
+  'branding',
+  'profile',
+  'boards',
+  'members',
+  'comments',
+];
 const DEFAULT_TAB: ManageTab = 'overview';
 
 // Reuses the My Gyms role labels (common:myGyms.*) so the console header and the
@@ -181,6 +191,7 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
         <Tab value="profile" label={t('manage.tabs.profile')} sx={{ textTransform: 'none' }} />
         <Tab value="boards" label={t('manage.tabs.boards')} sx={{ textTransform: 'none' }} />
         <Tab value="members" label={t('manage.tabs.members')} sx={{ textTransform: 'none' }} />
+        <Tab value="comments" label={t('manage.tabs.comments')} sx={{ textTransform: 'none' }} />
       </Tabs>
 
       {activeTab === 'overview' && <OverviewTab gym={gym} />}
@@ -198,6 +209,7 @@ export default function ManageGymContent({ initialGym }: { initialGym: Gym }) {
           canGrantAccess={gym.canGrantAccess ?? false}
         />
       )}
+      {activeTab === 'comments' && <CommentsTab gym={gym} />}
 
       <ConfirmDialog
         open={pendingNavigation !== null}

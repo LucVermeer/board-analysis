@@ -39,6 +39,7 @@ vi.mock('@/app/components/gym-entity/manage/kiosks-tab', () => ({ default: () =>
 vi.mock('@/app/components/gym-entity/manage/insights-tab', () => ({ default: () => <div data-testid="insights" /> }));
 vi.mock('@/app/components/gym-entity/manage/branding-tab', () => ({ default: () => <div data-testid="branding" /> }));
 vi.mock('@/app/components/gym-entity/manage/gym-boards-tab', () => ({ default: () => <div data-testid="boards" /> }));
+vi.mock('@/app/components/gym-entity/manage/comments-tab', () => ({ default: () => <div data-testid="comments" /> }));
 vi.mock('@/app/components/gym-entity/gym-member-management', () => ({ default: () => <div data-testid="members" /> }));
 
 // Controllable Profile-tab stub: buttons that fire the same callbacks the real
@@ -97,6 +98,19 @@ describe('ManageGymContent default tab', () => {
 
     // Overview is the default landing surface; the Profile stub must not mount.
     expect(screen.getByTestId('overview')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'make-dirty' })).toBeNull();
+  });
+});
+
+describe('ManageGymContent comments tab', () => {
+  it('registers the Comments tab and renders it for ?tab=comments', () => {
+    searchState.params = 'tab=comments';
+    render(<ManageGymContent initialGym={makeGym()} />);
+
+    // queryBy* returns null rather than throwing, so these assert presence for real.
+    expect(screen.queryByRole('tab', { name: 'Comments' })).not.toBeNull();
+    expect(screen.queryByTestId('comments')).not.toBeNull();
+    // The profile stub must not mount while Comments is the active tab.
     expect(screen.queryByRole('button', { name: 'make-dirty' })).toBeNull();
   });
 });
