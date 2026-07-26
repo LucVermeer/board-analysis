@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-26
+
+### Fixed
+
+- The tick next to the grade on the now-playing bar sits level with the text instead of floating above it. Same for the checkmarks in playlists, filters, and settings. ([#3038](https://github.com/boardsesh/boardsesh/pull/3038))
+
 ## 2026-07-25
 
 ### Fixed

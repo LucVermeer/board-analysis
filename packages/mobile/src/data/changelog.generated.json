@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-25T22:37:08.329Z",
+  "generatedAt": "2026-07-26T02:04:14.350Z",
   "entries": [
+    {
+      "prNumber": 3038,
+      "category": "fixed",
+      "title": "The tick next to the grade on the now-playing bar sits level with the text instead of floating above it. Same for the checkmarks in playlists, filters, and settings.",
+      "mergedAt": "2026-07-26T02:03:11Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3038"
+    },
     {
       "prNumber": 3337,
       "category": "fixed",
