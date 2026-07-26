@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vite-plus/test';
+import { parse, visit } from 'graphql';
+import { typeDefs } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '../../queue-control/types';
 import { toClimbQueueItemInput } from '../types';
+
+/** Field names declared on the GraphQL `ClimbInput` type, read from the schema. */
+function climbInputFieldNames(): Set<string> {
+  const fields = new Set<string>();
+  visit(parse(typeDefs.join('\n\n')), {
+    InputObjectTypeDefinition(node) {
+      if (node.name.value !== 'ClimbInput') return;
+      for (const field of node.fields ?? []) fields.add(field.name.value);
+    },
+  });
+  return fields;
+}
 
 function makeItem(overrides: Partial<ClimbQueueItem['climb']> = {}): ClimbQueueItem {
   return {
@@ -48,5 +62,23 @@ describe('toClimbQueueItemInput', () => {
     const input = toClimbQueueItemInput(makeItem({ boardseshDifficulty: undefined, boardseshConfidence: undefined }));
     expect(input.climb.boardseshDifficulty).toBeNull();
     expect(input.climb.boardseshConfidence).toBeNull();
+  });
+
+  // Both subscription selection sets SELECT these two, so omitting them from the
+  // input made every web-originated write clear tags the peer was rendering.
+  it('round-trips the no-match / characteristics tags peers already select', () => {
+    const input = toClimbQueueItemInput(makeItem({ is_no_match: true, characteristics: ['method_footless'] }));
+    expect(input.climb.is_no_match).toBe(true);
+    expect(input.climb.characteristics).toEqual(['method_footless']);
+  });
+
+  // Drift guard (#3927). Derived from the schema, never hand-listed: a field
+  // added to `ClimbInput` that web forgets to send here is a field web silently
+  // clears on every write, and a field sent here that the schema doesn't declare
+  // is rejected server-side. Both directions must stay closed, so this is set
+  // EQUALITY rather than a subset check.
+  it('sends exactly the field set the GraphQL ClimbInput declares', () => {
+    const sent = new Set(Object.keys(toClimbQueueItemInput(makeItem()).climb));
+    expect(sent).toEqual(climbInputFieldNames());
   });
 });

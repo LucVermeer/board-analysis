@@ -74,6 +74,20 @@ export const ClimbInputSchema = z.object({
     .transform((v) => v ?? ''),
   mirrored: z.boolean().nullish(),
   benchmark_difficulty: z.string().max(50).nullish(),
+  // `is_no_match` / `characteristics` must be declared here even though nothing
+  // server-side reads them: `z.object()` STRIPS undeclared keys, and `setQueue`
+  // / `joinSession` persist the PARSED item (unlike the single-item mutations,
+  // which discard the parse result and store the GraphQL-coerced input). Both
+  // fields ride every client's selection set already, so omitting them here made
+  // a full-queue sync silently erase the no-match / method badge the client had
+  // just sent — the same drift class as #3927, from the server side.
+  is_no_match: z.boolean().nullish(),
+  // Deliberately NOT `z.enum(CLIMB_CHARACTERISTICS)`. `parseArrayTolerant` drops
+  // the WHOLE queue item when its schema fails, so enum-validating here would let
+  // a newer client's unknown characteristic silently delete a queue slot for
+  // everyone — exactly the failure mode #3857 fixed for `uuid`. Bounded plain
+  // strings give the memory-exhaustion guard without that footgun.
+  characteristics: z.array(z.string().max(50)).max(20).nullish(),
   // Whether this climb is still an unpublished draft. Round-trips through
   // the queue so peers can gate the Edit affordance locally.
   is_draft: z.boolean().nullish(),

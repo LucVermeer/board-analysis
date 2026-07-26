@@ -277,6 +277,11 @@ export function toClimbQueueItemInput(item: LocalClimbQueueItem): ClimbQueueItem
       difficulty_error: item.climb.difficulty_error,
       mirrored: item.climb.mirrored,
       benchmark_difficulty: item.climb.benchmark_difficulty,
+      // Both selection sets already SELECT these two, so leaving them off the
+      // input meant every web-originated write cleared the no-match / method
+      // tags that peers were rendering.
+      is_no_match: item.climb.is_no_match ?? null,
+      characteristics: item.climb.characteristics ?? null,
       // Round-trip draft/publish state so peers can decide locally whether
       // to surface the Edit affordance without re-querying the DB.
       is_draft: item.climb.is_draft ?? null,
