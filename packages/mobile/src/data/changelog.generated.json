@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-26T02:04:14.350Z",
+  "generatedAt": "2026-07-26T05:11:50.750Z",
   "entries": [
+    {
+      "prNumber": 3961,
+      "category": "fixed",
+      "title": "MoonBoard walls are readable in dark mode again — hold numbers, letters and the black holds all show up instead of disappearing into the background.",
+      "mergedAt": "2026-07-26T05:10:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3961"
+    },
     {
       "prNumber": 3038,
       "category": "fixed",

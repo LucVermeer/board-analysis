@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- MoonBoard walls are readable in dark mode again — hold numbers, letters and the black holds all show up instead of disappearing into the background. ([#3961](https://github.com/boardsesh/boardsesh/pull/3961))
 - The tick next to the grade on the now-playing bar sits level with the text instead of floating above it. Same for the checkmarks in playlists, filters, and settings. ([#3038](https://github.com/boardsesh/boardsesh/pull/3038))
 
 ## 2026-07-25
