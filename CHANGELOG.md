@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Join your own session from a second phone and you can now just leave it — ending the session for everyone is a separate, deliberate step. ([#3956](https://github.com/boardsesh/boardsesh/pull/3956))
+  Leave someone else's session without being offered a button that kills it for the whole crew.
+  Your crew sees you drop out straight away instead of waiting a minute for the connection to time out.
 - MoonBoard walls are readable in dark mode again — hold numbers, letters and the black holds all show up instead of disappearing into the background. ([#3961](https://github.com/boardsesh/boardsesh/pull/3961))
 - The tick next to the grade on the now-playing bar sits level with the text instead of floating above it. Same for the checkmarks in playlists, filters, and settings. ([#3038](https://github.com/boardsesh/boardsesh/pull/3038))
 

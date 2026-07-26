@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-26T05:11:50.750Z",
+  "generatedAt": "2026-07-26T06:01:51.391Z",
   "entries": [
+    {
+      "prNumber": 3956,
+      "category": "fixed",
+      "title": "Join your own session from a second phone and you can now just leave it — ending the session for everyone is a separate, deliberate step.",
+      "mergedAt": "2026-07-26T06:00:45Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3956",
+      "body": "Leave someone else's session without being offered a button that kills it for the whole crew.\nYour crew sees you drop out straight away instead of waiting a minute for the connection to time out."
+    },
     {
       "prNumber": 3961,
       "category": "fixed",
