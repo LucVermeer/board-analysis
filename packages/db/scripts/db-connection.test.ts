@@ -44,6 +44,13 @@ void test('rejects addresses just outside the Tailscale CGNAT range', () => {
   assert.equal(isLocalDatabaseUrl('postgresql://user:pass@100.128.0.0:5432/db'), false);
 });
 
+void test('rejects octets that only look numeric to a loose parser (scientific notation, signs)', () => {
+  // `Number('1e2')` is 100 — without a strict digit check, this would parse
+  // as 100.100.0.1 and wrongly match the CGNAT range.
+  assert.equal(isLocalDatabaseUrl('postgresql://user:pass@100.1e2.0.1:5432/db'), false);
+  assert.equal(isLocalDatabaseUrl('postgresql://user:pass@+100.64.0.1:5432/db'), false);
+});
+
 void test('fails closed on malformed or empty URLs', () => {
   assert.equal(isLocalDatabaseUrl('not a url at all'), false);
   assert.equal(isLocalDatabaseUrl(''), false);

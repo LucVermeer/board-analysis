@@ -11,6 +11,9 @@ void test('a local database is always allowed, regardless of the override', () =
   assert.equal(resolveMoonBoardImportDecision(LOCAL_URL, 'true'), 'local');
 });
 
+// The override is a distinct env var from DB_URL, so pointing DB_URL at the
+// wrong host never implicitly sets it — a mistyped DB_URL alone (override
+// undefined) is exactly this "refused by default" case.
 void test('a remote database is refused by default', () => {
   assert.equal(resolveMoonBoardImportDecision(REMOTE_URL, undefined), 'remote-refused');
 });
@@ -24,11 +27,4 @@ void test('a remote database stays refused for any near-miss override value (fai
   assert.equal(resolveMoonBoardImportDecision(REMOTE_URL, 'yes'), 'remote-refused');
   assert.equal(resolveMoonBoardImportDecision(REMOTE_URL, ''), 'remote-refused');
   assert.equal(resolveMoonBoardImportDecision(REMOTE_URL, '01'), 'remote-refused');
-});
-
-void test('a mistyped DB_URL cannot accidentally carry the override — the two are independent inputs', () => {
-  // The override is a distinct env var from DB_URL, so pointing DB_URL at the
-  // wrong host never implicitly sets it; simulating "operator only set DB_URL"
-  // means allowRemoteEnvValue is undefined here.
-  assert.equal(resolveMoonBoardImportDecision(REMOTE_URL, undefined), 'remote-refused');
 });

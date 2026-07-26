@@ -48,13 +48,20 @@ const LOOPBACK_OR_COMPOSE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', 
 // env var on every run. Do NOT remove this without confirming
 // scripts/dev-db-discover.ts no longer produces these host shapes.
 //
+// A plain decimal octet — no leading `+`/`-`, no scientific notation, no
+// fractional part. Required before `Number(...)`: that coercion accepts
+// "1e2" as 100, which would otherwise let e.g. "100.1e2.0.1" slip through as
+// a CGNAT address.
+const DECIMAL_OCTET = /^\d{1,3}$/;
+
 // Tailscale's CGNAT range (RFC 6598, carved out for Tailscale's own use):
 // 100.64.0.0/10, i.e. first octet 100 and second octet 64-127 inclusive.
 function isTailscaleCgnatAddress(hostname: string): boolean {
   const octets = hostname.split('.');
   if (octets.length !== 4) return false;
+  if (!octets.every((octet) => DECIMAL_OCTET.test(octet))) return false;
   const parsed = octets.map(Number);
-  if (parsed.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return false;
+  if (parsed.some((octet) => octet > 255)) return false;
   const [first, second] = parsed;
   return first === 100 && second >= 64 && second <= 127;
 }
