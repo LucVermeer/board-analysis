@@ -30,6 +30,23 @@ export function getScriptDatabaseUrl(): string {
   return databaseUrl;
 }
 
+/**
+ * Host:port to show a human, e.g. in "Importing to: <host>" log lines. Uses
+ * `new URL()` rather than a naive `split('@')[1]?.split('/')[0]` — a
+ * password or path containing `@`/`/` can throw that off, which matters here
+ * because operators are meant to read this line and decide whether the
+ * target looks right. Falls back to 'unknown' on an unparseable URL (matches
+ * isLocalDatabaseUrl's fail-closed stance: never claim a host that wasn't
+ * actually resolved).
+ */
+export function describeDatabaseHost(databaseUrl: string): string {
+  try {
+    return new URL(databaseUrl).host || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 // `postgres` (the docker-compose service name — setup-development-db.sh's
 // POSTGRES_HOST default) is a bare, single-label hostname with no TLD, so in
 // principle a split-DNS/VPN setup could resolve it to something other than
@@ -37,7 +54,9 @@ export function getScriptDatabaseUrl(): string {
 // hostname this repo's own dev tooling produces (unlike an invented remote
 // host, this isn't a guess), and nothing in Boardsesh's real infrastructure
 // (Railway/Neon, reached by full public hostnames) is ever named `postgres`.
-const LOOPBACK_OR_COMPOSE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
+// 127.0.0.1 is covered by isLoopbackIpv4Address below (the whole 127.0.0.0/8
+// block), so it's deliberately not repeated here.
+const LOOPBACK_OR_COMPOSE_HOSTNAMES = new Set(['localhost', '::1', 'postgres']);
 
 // NOTE ON "LOCAL": a Tailscale address/hostname is NOT local in the everyday
 // sense — it's routed over the internet to a real machine. It counts as
@@ -61,15 +80,32 @@ const LOOPBACK_OR_COMPOSE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', 
 // a CGNAT address.
 const DECIMAL_OCTET = /^\d{1,3}$/;
 
+// Parses a dotted-quad IPv4 hostname into four 0-255 octets, or null if it
+// isn't one (wrong segment count, non-decimal segment per DECIMAL_OCTET, or a
+// segment over 255). Shared by every IPv4-range check below so "what counts
+// as a valid octet" can't drift between them.
+function parseIpv4Octets(hostname: string): [number, number, number, number] | null {
+  const segments = hostname.split('.');
+  if (segments.length !== 4 || !segments.every((segment) => DECIMAL_OCTET.test(segment))) return null;
+  const octets = segments.map(Number);
+  if (octets.some((octet) => octet > 255)) return null;
+  return octets as [number, number, number, number];
+}
+
+// The full IPv4 loopback block (RFC 1122 §3.2.1.3), not just 127.0.0.1: Linux
+// commonly resolves the local hostname to 127.0.1.1, and any 127.x.x.x is
+// loopback by definition.
+function isLoopbackIpv4Address(hostname: string): boolean {
+  const octets = parseIpv4Octets(hostname);
+  return octets !== null && octets[0] === 127;
+}
+
 // Tailscale's CGNAT range (RFC 6598, carved out for Tailscale's own use):
 // 100.64.0.0/10, i.e. first octet 100 and second octet 64-127 inclusive.
 function isTailscaleCgnatAddress(hostname: string): boolean {
-  const octets = hostname.split('.');
-  if (octets.length !== 4) return false;
-  if (!octets.every((octet) => DECIMAL_OCTET.test(octet))) return false;
-  const parsed = octets.map(Number);
-  if (parsed.some((octet) => octet > 255)) return false;
-  const [first, second] = parsed;
+  const octets = parseIpv4Octets(hostname);
+  if (octets === null) return false;
+  const [first, second] = octets;
   return first === 100 && second >= 64 && second <= 127;
 }
 
@@ -87,8 +123,10 @@ function isLocaltestMeHostname(hostname: string): boolean {
  * True when `databaseUrl` resolves to a host that is unambiguously local or
  * dev-tooling infrastructure, never a real (prod/staging) database:
  *
- *  - Loopback / the `postgres` docker-compose service name (Dockerfile.dev-db
- *    and setup-development-db.sh always target one of these).
+ *  - The full IPv4 loopback block (`127.0.0.0/8`, not just `127.0.0.1` —
+ *    Linux commonly resolves the local hostname to `127.0.1.1`), `::1`, or
+ *    the `postgres` docker-compose service name (Dockerfile.dev-db and
+ *    setup-development-db.sh always target one of these).
  *  - `*.localtest.me` (resolves to 127.0.0.1; used elsewhere in this repo for
  *    subdomain-aware local dev).
  *  - A Tailscale-reached dev box: MagicDNS (`*.ts.net`) or CGNAT
@@ -110,6 +148,7 @@ export function isLocalDatabaseUrl(databaseUrl: string): boolean {
 
   return (
     LOOPBACK_OR_COMPOSE_HOSTNAMES.has(normalizedHost) ||
+    isLoopbackIpv4Address(normalizedHost) ||
     isLocaltestMeHostname(normalizedHost) ||
     isTailscaleMagicDnsHostname(normalizedHost) ||
     isTailscaleCgnatAddress(normalizedHost)

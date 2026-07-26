@@ -14,7 +14,7 @@ import {
   moonBoardGradeConflictFields,
   type MoonBoardMove,
 } from './moonboard-helpers.js';
-import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
+import { createScriptDb, getScriptDatabaseUrl, describeDatabaseHost } from './db-connection.js';
 import { assertMoonBoardImportAllowed } from './moonboard-import-guard.js';
 // Import the dependency-free `./characteristics` subpath (not the package root,
 // which pulls in graphql) so this resolves in the isolated dev-db image build,
@@ -139,8 +139,7 @@ async function importMoonBoardProblems() {
   }
 
   const databaseUrl = getScriptDatabaseUrl();
-  const dbHost = databaseUrl.split('@')[1]?.split('/')[0] || 'unknown';
-  console.info(`🔄 Importing MoonBoard problems to: ${dbHost}`);
+  console.info(`🔄 Importing MoonBoard problems to: ${describeDatabaseHost(databaseUrl)}`);
   assertMoonBoardImportAllowed(databaseUrl, 'import-moonboard-problems');
   console.info(`📂 Reading dump from: ${dumpPath}`);
 

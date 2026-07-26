@@ -10,7 +10,7 @@ import {
   type MoonBoard2024DumpFile,
 } from './moonboard-2024-helpers.js';
 import { moonBoardGradeConflictFields } from './moonboard-helpers.js';
-import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
+import { createScriptDb, getScriptDatabaseUrl, describeDatabaseHost } from './db-connection.js';
 import { assertMoonBoardImportAllowed } from './moonboard-import-guard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,8 +74,7 @@ async function importMoonBoard2024() {
   }
 
   const databaseUrl = getScriptDatabaseUrl();
-  const dbHost = databaseUrl.split('@')[1]?.split('/')[0] || 'unknown';
-  console.info(`🔄 Importing MoonBoard 2024 problems to: ${dbHost}`);
+  console.info(`🔄 Importing MoonBoard 2024 problems to: ${describeDatabaseHost(databaseUrl)}`);
   assertMoonBoardImportAllowed(databaseUrl, 'import-moonboard-2024');
   console.info(`📂 Reading export from: ${exportPath}`);
   console.info(`   Layout ${layoutId}, angle ${angle}`);
