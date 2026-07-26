@@ -344,11 +344,24 @@ function mergeBaseRef(git: Git, base: string): void {
         tryGit(git, ['rm', '-qf', '--', path]);
       }
     } else {
+      // An add/add on the same .sql path. Resolve to the branch's body BEFORE
+      // staging — a bare `git add` here would commit the conflict markers.
+      //
+      // Note the orientation is the OPPOSITE of the rebase path above. Merging
+      // main into the branch makes `--ours` the branch and `--theirs` main; a
+      // rebase replays the branch onto main, so there `--ours` is main. Both want
+      // the branch's body, so they need different flags.
+      if (tryGit(git, ['checkout', '--ours', '--', path]) === null) {
+        git(['checkout', base, '--', path]);
+      }
       git(['add', '--', path]);
     }
   }
   git(['add', '-A', '--', DRIZZLE_DIR]);
   tryGit(git, ['-c', 'core.editor=true', 'commit', '--no-edit']);
+  if (tryGit(git, ['diff', '--name-only', '--diff-filter=U']) !== '') {
+    block('The merge left unresolved conflicts in the migration folder.');
+  }
 }
 
 /**

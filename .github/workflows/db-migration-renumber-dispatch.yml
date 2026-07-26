@@ -59,13 +59,20 @@ jobs:
               mainFiles = await listMigrations('main');
               // Max of the journal tail and every on-disk prefix — the two can
               // disagree when an orphaned .sql sits above the tail.
-              mainNext = Math.max(
-                ...journal.entries.map((entry) => entry.idx),
-                ...journal.entries.map((entry) => indexOf(`${entry.tag}.sql`)),
-                ...mainFiles.map(indexOf),
-              ) + 1;
+              mainNext =
+                Math.max(
+                  ...journal.entries.map((entry) => entry.idx),
+                  ...journal.entries.map((entry) => indexOf(`${entry.tag}.sql`)),
+                  ...mainFiles.map(indexOf),
+                ) + 1;
             } catch (error) {
               core.setFailed(`Could not read main's migration state (${error}) — dispatched nothing.`);
+              return;
+            }
+            // Spreading empty arrays into Math.max yields -Infinity, which would make
+            // every PR look like a collision and force-push the lot. Fail closed.
+            if (!Number.isFinite(mainNext) || mainNext <= 0) {
+              core.setFailed(`Computed an implausible next migration number (${mainNext}) — dispatched nothing.`);
               return;
             }
             core.info(`main's next free migration number is ${pad(mainNext)}.`);

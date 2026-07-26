@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -137,6 +141,39 @@ describe('renderComment', () => {
     expect(renderComment(result({ rewritten: ['packages/db/src/testing/dedup-replay.ts'] }))).toContain(
       'dedup-replay.ts',
     );
+  });
+});
+
+describe('conflict-resolution orientation', () => {
+  // Guards a bug that shipped once: the merge path staged conflicted .sql files
+  // without resolving them, committing conflict markers into the author's history.
+  // `--ours`/`--theirs` mean opposite things in a merge and a rebase, so each path
+  // needs its own flag to end up with the same thing (the branch's body).
+  const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'db-renumber-migration.ts'), 'utf8');
+
+  const bodyOf = (fnName: string): string => {
+    const start = source.indexOf(`function ${fnName}(`);
+    expect(start, `${fnName} not found`).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf('\n}\n', start));
+  };
+
+  it('takes --theirs when rebasing (the replayed branch commit)', () => {
+    expect(bodyOf('rebaseOntoBase')).toContain("'--theirs'");
+  });
+
+  it('takes --ours when merging (the branch being merged into)', () => {
+    expect(bodyOf('mergeBaseRef')).toContain("'--ours'");
+  });
+
+  it('never stages a conflicted path without resolving it first', () => {
+    for (const fnName of ['rebaseOntoBase', 'mergeBaseRef']) {
+      const body = bodyOf(fnName);
+      const stageIndex = body.indexOf("git(['add', '--', path])");
+      expect(stageIndex, `${fnName} should stage the resolved path`).toBeGreaterThan(-1);
+      const resolveIndex = Math.max(body.indexOf("'--ours'"), body.indexOf("'--theirs'"));
+      expect(resolveIndex, `${fnName} must resolve the conflict at all`).toBeGreaterThan(-1);
+      expect(resolveIndex, `${fnName} resolves before staging`).toBeLessThan(stageIndex);
+    }
   });
 });
 
