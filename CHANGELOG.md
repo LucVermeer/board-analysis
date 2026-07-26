@@ -13,6 +13,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Your logbook keeps syncing even when one old ascent is broken beyond repair — Boardsesh sets that one aside and carries on instead of quietly freezing every send, attempt and circuit behind it. ([#3960](https://github.com/boardsesh/boardsesh/pull/3960))
+- Animated multi-frame climbs now show up instead of quietly going missing — around 40 on the two layouts we measured, and every new one from here on. ([#3951](https://github.com/boardsesh/boardsesh/pull/3951))
+- Your playlists are yours. If someone else connects the same board account, their sync can no longer rename, empty, or delete the circuits you've synced — and if two accounts are already tangled together, neither can overwrite the other. ([#3931](https://github.com/boardsesh/boardsesh/pull/3931))
+  When your circuits can't sync because another Boardsesh account is connected to the same board login, the board card says so in your language, instead of leaving you with an empty playlist list. It reads as a heads-up, not a broken account — your sends and ratings are still coming through.
 - Backend correctness fix with no user-facing note yet. The race this closes is real and user-visible in party mode, but `setQueue` can still overwrite a concurrent add (#3933), so a "shared queues are reliable now" note would overclaim. The changelog entry belongs with #3933, once the guarantee actually holds end to end. ([#3932](https://github.com/boardsesh/boardsesh/pull/3932))
 - Long-press a climb on Android and the action menu now floats above the wall properly instead of melting into the background ([#3941](https://github.com/boardsesh/boardsesh/pull/3941))
   Screen readers announce the tap-anywhere-to-close area as a close button, not as the climb

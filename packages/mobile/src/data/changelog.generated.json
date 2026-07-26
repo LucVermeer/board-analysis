@@ -1,6 +1,28 @@
 {
-  "generatedAt": "2026-07-26T06:24:45.186Z",
+  "generatedAt": "2026-07-26T22:57:27.330Z",
   "entries": [
+    {
+      "prNumber": 3960,
+      "category": "fixed",
+      "title": "Your logbook keeps syncing even when one old ascent is broken beyond repair — Boardsesh sets that one aside and carries on instead of quietly freezing every send, attempt and circuit behind it.",
+      "mergedAt": "2026-07-26T22:57:07Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3960"
+    },
+    {
+      "prNumber": 3951,
+      "category": "fixed",
+      "title": "Animated multi-frame climbs now show up instead of quietly going missing — around 40 on the two layouts we measured, and every new one from here on.",
+      "mergedAt": "2026-07-26T22:55:53Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3951"
+    },
+    {
+      "prNumber": 3931,
+      "category": "fixed",
+      "title": "Your playlists are yours. If someone else connects the same board account, their sync can no longer rename, empty, or delete the circuits you've synced — and if two accounts are already tangled together, neither can overwrite the other.",
+      "mergedAt": "2026-07-26T22:55:39Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3931",
+      "body": "When your circuits can't sync because another Boardsesh account is connected to the same board login, the board card says so in your language, instead of leaving you with an empty playlist list. It reads as a heads-up, not a broken account — your sends and ratings are still coming through."
+    },
     {
       "prNumber": 3932,
       "category": "fixed",
