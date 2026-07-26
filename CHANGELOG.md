@@ -13,6 +13,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Long-press a climb on Android and the action menu now floats above the wall properly instead of melting into the background ([#3941](https://github.com/boardsesh/boardsesh/pull/3941))
+  Screen readers announce the tap-anywhere-to-close area as a close button, not as the climb
+- The Edit button now shows up on your own climbs while they're sitting in the queue, not just in search ([#3958](https://github.com/boardsesh/boardsesh/pull/3958))
+  Drafts keep their draft state through the queue, so you can jump straight back in and keep working
+  Mirrored climbs stay mirrored when you preview them, and no-match tags stop vanishing after a queue sync
 - Pick a climb while the wall is busy and it now reaches your crew's queue instead of only yours. Rattle off a fast burst of picks and the last one can still go missing — that half is tracked in #3936. ([#3934](https://github.com/boardsesh/boardsesh/pull/3934))
   Swipe onto the next playlist climb during a throttled session and the crew gets it too, not just you.
   Drop a climb right after picking it and it stays dropped — no phantom re-add landing on everyone's queue seconds later.

@@ -1,6 +1,22 @@
 {
-  "generatedAt": "2026-07-26T06:07:42.167Z",
+  "generatedAt": "2026-07-26T06:18:17.260Z",
   "entries": [
+    {
+      "prNumber": 3941,
+      "category": "fixed",
+      "title": "Long-press a climb on Android and the action menu now floats above the wall properly instead of melting into the background",
+      "mergedAt": "2026-07-26T06:17:49Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3941",
+      "body": "Screen readers announce the tap-anywhere-to-close area as a close button, not as the climb"
+    },
+    {
+      "prNumber": 3958,
+      "category": "fixed",
+      "title": "The Edit button now shows up on your own climbs while they're sitting in the queue, not just in search",
+      "mergedAt": "2026-07-26T06:17:21Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3958",
+      "body": "Drafts keep their draft state through the queue, so you can jump straight back in and keep working\nMirrored climbs stay mirrored when you preview them, and no-match tags stop vanishing after a queue sync"
+    },
     {
       "prNumber": 3934,
       "category": "fixed",
