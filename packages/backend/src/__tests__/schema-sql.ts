@@ -1132,6 +1132,17 @@ export const schemaSQL = `
     "deleted_at" timestamp DEFAULT now() NOT NULL
   );
 
+  -- Mirrors packages/db schema/app/sync-daemon-leases.ts (migration 0187).
+  -- Best-effort single-active-instance lease for the sync daemons.
+  DROP TABLE IF EXISTS "sync_daemon_leases" CASCADE;
+  CREATE TABLE IF NOT EXISTS "sync_daemon_leases" (
+    "daemon_name" text PRIMARY KEY NOT NULL,
+    "holder_id" text NOT NULL,
+    "acquired_at" timestamp DEFAULT now() NOT NULL,
+    "heartbeat_at" timestamp DEFAULT now() NOT NULL,
+    "hostname" text
+  );
+
   -- Mirrors 0146: sync cursor indexes lead with board_type; deleted_at serves
   -- the daily prune's DELETE WHERE deleted_at < cutoff.
   CREATE INDEX IF NOT EXISTS "sync_deletions_deleted_at_idx" ON "sync_deletions" ("deleted_at");
