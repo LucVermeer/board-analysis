@@ -39,10 +39,11 @@ bunx drizzle-kit generate --name describes_what_it_does
 and stop on an interactive prompt.
 
 Data-only migrations (backfills, one-off corrections) have no schema delta, so
-`generate` produces nothing. Write the `.sql` by hand and add the journal entry with
-`vp run db:renumber` or by hand — and give it no snapshot, so main's tail stays the
-newest. Several existing backfills use a `_bs_migration_guards` row to stay idempotent;
-that guard key is a semantic identity, **not** the filename, and must never be renumbered.
+`generate` produces nothing to diff. Use `bunx drizzle-kit generate --custom --name …`,
+which writes an empty `.sql` and the journal entry for you, then fill in the body.
+Several existing backfills use a `_bs_migration_guards` row to stay idempotent; that
+guard key is a semantic identity, **not** the filename, so it must never be renumbered —
+which is why the renumber bot never rewrites anything inside a migration body.
 
 ## When main takes your number
 
