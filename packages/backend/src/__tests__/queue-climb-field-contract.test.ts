@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
+import { readFileSync } from 'fs';
 import { parse, visit } from 'graphql';
 import { typeDefs } from '@boardsesh/shared-schema';
+import { QUEUE_UPDATES } from '@boardsesh/graphql/operations/queue-session';
 import { ClimbInputSchema, ClimbQueueItemSchema } from '../validation/schemas/climbs';
 
 /**
@@ -34,7 +36,55 @@ function inputTypeFieldNames(typeName: string): Set<string> {
   return fields;
 }
 
+/** Field names selected inside every `climb { ... }` selection set of an operation. */
+function climbSelectionFieldNames(operationSource: string): Set<string> {
+  const fields = new Set<string>();
+  visit(parse(operationSource), {
+    Field(node) {
+      if (node.name.value !== 'climb' || !node.selectionSet) return;
+      for (const selection of node.selectionSet.selections) {
+        if (selection.kind === 'Field') fields.add(selection.name.value);
+      }
+    },
+  });
+  return fields;
+}
+
+/**
+ * Mobile hand-maintains its selection set as a plain template string, so read it
+ * out of the source text rather than importing the mobile package (which would
+ * drag React Native deps into this backend test). Same technique as
+ * `operations-schema-validation.test.ts`.
+ */
+function mobileSubscriptionClimbFields(): Set<string> {
+  const source = readFileSync(
+    new URL('../../../../packages/mobile/src/lib/graphql/operations.ts', import.meta.url),
+    'utf-8',
+  );
+  const match = source.match(/SUBSCRIPTION_CLIMB_FIELDS\s*=\s*`([\s\S]*?)`/);
+  if (!match?.[1]) {
+    throw new Error('Could not extract SUBSCRIPTION_CLIMB_FIELDS from mobile operations.ts');
+  }
+  return climbSelectionFieldNames(`{ climb { ${match[1]} } }`);
+}
+
 const climbInputFields = inputTypeFieldNames('ClimbInput');
+
+/**
+ * The ONLY fields a client may write but never broadcast.
+ *
+ * `userAscents` / `userAttempts` are the signed-in user's own tick counts for
+ * that climb. Putting them on a shared queue payload would show every peer YOUR
+ * send count on THEIR queue row, so they are deliberately absent from both read
+ * paths. The price is that they behave exactly like the bug this file guards
+ * against: a peer's full-queue write clears them, and you get them back only on
+ * the next search/detail fetch. That trade is intentional — do NOT "fix" the
+ * asymmetry by adding them to the selection sets. Broadcasting per-user data to
+ * every participant is a privacy regression, not a parity fix.
+ */
+const NEVER_BROADCAST = new Set(['userAscents', 'userAttempts']);
+
+const expectedReadPathFields = new Set([...climbInputFields].filter((field) => !NEVER_BROADCAST.has(field)));
 
 describe('queue climb field parity: GraphQL ClimbInput <-> backend Zod schema', () => {
   it('found the ClimbInput type in the schema', () => {
@@ -117,4 +167,41 @@ describe('queue climb field parity: GraphQL ClimbInput <-> backend Zod schema', 
 
     expect(result.success).toBe(true);
   });
+});
+
+describe('queue climb field parity: the two READ paths', () => {
+  const sharedFields = climbSelectionFieldNames(QUEUE_UPDATES);
+  const mobileFields = mobileSubscriptionClimbFields();
+
+  it('found a non-empty field set on both read paths', () => {
+    expect(sharedFields.size).toBeGreaterThan(0);
+    expect(mobileFields.size).toBeGreaterThan(0);
+  });
+
+  // Anchored to the schema rather than to each other. Comparing the two
+  // selection sets alone would stay green if BOTH drifted away from what
+  // clients write — which is exactly how #3927 survived: `climbToQueueItem` and
+  // both selection sets agreed with each other, and all three disagreed with
+  // `toClimbInput`.
+  for (const [name, fields] of [
+    ['shared CLIMB_FIELDS (packages/shared/graphql/src/operations/queue-session.ts)', sharedFields],
+    ['mobile SUBSCRIPTION_CLIMB_FIELDS (packages/mobile/src/lib/graphql/operations.ts)', mobileFields],
+  ] as const) {
+    it(`${name} selects exactly what ClimbInput declares, minus the never-broadcast fields`, () => {
+      const notRead = [...expectedReadPathFields].filter((field) => !fields.has(field));
+      const readButNeverWritten = [...fields].filter((field) => !expectedReadPathFields.has(field));
+
+      expect(
+        notRead,
+        `This selection set is missing fields that clients WRITE, so they will FLAP: this peer ` +
+          `rebuilds the item without them and its next full-queue write pushes the gap back to ` +
+          `everyone. Add them here, or (if per-user) to NEVER_BROADCAST with a reason.`,
+      ).toEqual([]);
+      expect(
+        readButNeverWritten,
+        'This selection set reads fields that no client writes, so they can only ever be null. ' +
+          'Either add them to ClimbInput or drop them from the selection set.',
+      ).toEqual([]);
+    });
+  }
 });

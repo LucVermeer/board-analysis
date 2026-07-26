@@ -1,13 +1,23 @@
 // GraphQL Operations for Boardsesh Queue Client
 // These operations are used by the web app to communicate with the backend
 
-// Fragment for reusable climb fields
+// Fragment for reusable climb fields.
+//
+// This selection set is the READ half of the queue climb boundary and must stay
+// in lockstep with what clients WRITE (`ClimbInput`). A field that is written
+// but not selected here does not merely go missing — it FLAPS: the peer rebuilds
+// the item without it, and that peer's next full-queue write pushes the gap back
+// to everyone, so the originator loses it on the following FullSync. The exact
+// field set is enforced by
+// `packages/backend/src/__tests__/queue-climb-field-contract.test.ts`. See #3927.
 const CLIMB_FIELDS = `
   uuid
   boardType
   layoutId
   setter_username
+  userId
   name
+  description
   frames
   framesCount
   framesPace
@@ -21,6 +31,8 @@ const CLIMB_FIELDS = `
   benchmark_difficulty
   is_no_match
   characteristics
+  is_draft
+  published_at
   boardseshDifficulty
   boardseshConfidence
 `;
