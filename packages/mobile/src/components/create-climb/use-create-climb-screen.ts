@@ -393,6 +393,10 @@ export function useCreateClimbScreen({
       name: name.trim() || t('createClimbForm.draftBadge'),
       frames,
       setter_username: profile?.displayName ?? '',
+      // Null until the profile query resolves, same as setter_username above, so
+      // a climb queued during a cold start shows no Edit action until the next
+      // save replaces the item. Self-correcting and not worth a queue-item
+      // update path; revisit if it shows up in offline-first flows.
       userId: profile?.id ?? null,
       description,
       angle: board.angle,

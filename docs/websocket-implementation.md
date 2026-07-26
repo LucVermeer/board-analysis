@@ -128,6 +128,14 @@ The queue-action surface itself (add/remove/set-current/navigate/mirror/replace/
 
 Party mode deliberately does **not** clear the queue on navigation (`setBoardContext` early-returns while a session is active), and the reducer applies peer `CurrentClimbChanged` broadcasts unconditionally — so a member connected to a different wall can legitimately receive a current climb their board can't light. Since issue #3193, both platforms' BLE auto-senders classify the current climb against the active board (`classifyClimbBoardCompatibility` in `@boardsesh/board-config`, boardType + layoutId only; missing metadata never blocks) and skip a known mismatch instead of dark-firing the wall. The invariant: **solo** advances the local queue to the next compatible item (or clears the wall); **party** only clears its own wall and never advances the shared current climb — the session state every peer sees is untouched, and members on the right wall keep climbing. Climb identity rides the wire via `boardType`/`layoutId` on `ClimbInput` (`toClimbQueueItemInput` on web, `toClimbInput` on mobile).
 
+### Queue climb field contract (why fields "flap")
+
+A queue climb crosses several independently-maintained field lists: the write paths (`toClimbInput` on mobile, `toClimbQueueItemInput` on web), the backend's Zod `ClimbInputSchema`, and the read paths (`CLIMB_FIELDS` in `@boardsesh/graphql`, `SUBSCRIPTION_CLIMB_FIELDS` on mobile, plus mobile's `toClimbQueueItem` rebuild). When one drifts, the field does not simply go missing — it **flaps**: a peer whose read path omits it rebuilds the item without it, and that peer's next full-queue write (`setQueue` / `joinSession`) pushes the gap back to everyone, so the originator loses it on the following FullSync. A flapping field is worse than a consistently absent one.
+
+Two non-obvious narrowing points bit us in #3927: `climbToQueueItem` hand-picked a narrower set than `toClimbInput` sent, and `setQueue` / `joinSession` persist the **parsed** Zod output (the single-item mutations keep the GraphQL-coerced input instead), so any field missing from `ClimbInputSchema` is silently stripped server-side on a full-queue sync.
+
+The contract is enforced by `packages/backend/src/__tests__/queue-climb-field-contract.test.ts`, which reads every list from its live source and compares by set equality against the GraphQL `ClimbInput` type. `userAscents` / `userAttempts` are the only deliberate exception — they are per-user tick counts and must never be broadcast, at the cost of behaving exactly like the bug the test guards against.
+
 ## Technology Stack
 
 | Component          | Technology                        | Purpose                                                       |
