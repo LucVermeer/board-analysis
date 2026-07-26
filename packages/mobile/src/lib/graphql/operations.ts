@@ -1204,16 +1204,27 @@ export type SessionUpdateEvent = {
 };
 
 // Fields the queue UI needs from each climb in a subscription payload.
-// Must stay in sync with `climbToQueueItem` in PlayDrawer.tsx and with
-// `SubscriptionClimb` in queue-conversion.ts — when these drift, queue
-// items received from the server (FullSync on connect, peer mutations)
-// arrive with empty grade / quality / rating, so the queue row and the
-// re-opened drawer can't render the grade.
-const SUBSCRIPTION_CLIMB_FIELDS = `
+//
+// Must stay in sync with `SubscriptionClimb` / `toClimbQueueItem` in
+// lib/queue-conversion.ts and with `climbToQueueItem` in
+// lib/climb-to-queue-item.ts. When these drift, queue items received from the
+// server (FullSync on connect, peer mutations) arrive with the missing field
+// blank — and worse, a field we WRITE but don't select here flaps: this client
+// rebuilds the item without it, then its next full-queue write pushes the gap
+// back to every peer. `userAscents` / `userAttempts` are the deliberate
+// exception; see the contract test for why.
+//
+// Exported so `lib/__tests__/queue-conversion.test.ts` can assert the rebuild
+// covers exactly this set instead of hand-listing it. The exact field set is
+// enforced by packages/backend/src/__tests__/queue-climb-field-contract.test.ts
+// (which reads this const straight out of the source). See #3927.
+export const SUBSCRIPTION_CLIMB_FIELDS = `
   uuid
   boardType
   layoutId
+  userId
   name
+  description
   frames
   setter_username
   angle
@@ -1226,6 +1237,8 @@ const SUBSCRIPTION_CLIMB_FIELDS = `
   mirrored
   is_no_match
   characteristics
+  is_draft
+  published_at
   framesCount
   framesPace
   boardseshDifficulty

@@ -7,10 +7,11 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
  *
  * Keep these fields in sync with `SUBSCRIPTION_CLIMB_FIELDS` in
  * `src/lib/graphql/operations.ts` and with `climbToQueueItem` in
- * `src/components/play-drawer/PlayDrawer.tsx`. If the subscription drops a
- * field, the queue UI loses it on every server-driven update (FullSync on
- * connect, peer mutations), so the queue row's grade pill and the
- * re-opened play drawer end up blank.
+ * `src/lib/climb-to-queue-item.ts`. If the subscription drops a field, the queue
+ * UI loses it on every server-driven update (FullSync on connect, peer
+ * mutations), so the queue row's grade pill and the re-opened play drawer end up
+ * blank — and a field this client WRITES but does not rebuild here FLAPS, since
+ * its next full-queue write then pushes the gap back to every peer. See #3927.
  */
 export type SubscriptionClimb = {
   uuid: string;
@@ -19,7 +20,14 @@ export type SubscriptionClimb = {
   // peers / pre-metadata items (then the spill guard treats it as sendable).
   boardType?: string | null;
   layoutId?: number | null;
+  // Owner identity, so the owner-only Edit action can be gated locally on a
+  // queued climb without a per-climb refetch. Null for Aurora-synced climbs that
+  // predate Boardsesh accounts.
+  userId?: string | null;
   name: string;
+  // Carried so forking or editing a queued climb keeps its description
+  // (use-create-climb-navigation seeds the editor from it).
+  description?: string | null;
   frames: string;
   setter_username: string;
   angle: number;
@@ -35,6 +43,10 @@ export type SubscriptionClimb = {
   mirrored?: boolean | null;
   is_no_match?: boolean | null;
   characteristics?: string[] | null;
+  // Draft / publish state, so the 24h post-publish edit window can be evaluated
+  // locally on a queued climb (computeCanUpdate reads exactly these two).
+  is_draft?: boolean | null;
+  published_at?: string | null;
   framesCount?: number | null;
   framesPace?: number | null;
   // Boardsesh grade carried on the subscription payload so a peer-broadcast climb
@@ -61,7 +73,9 @@ export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): Climb
       uuid: subscriptionItem.climb.uuid,
       boardType: subscriptionItem.climb.boardType ?? undefined,
       layoutId: subscriptionItem.climb.layoutId,
+      userId: subscriptionItem.climb.userId,
       name: subscriptionItem.climb.name,
+      description: subscriptionItem.climb.description,
       frames: subscriptionItem.climb.frames,
       setter_username: subscriptionItem.climb.setter_username,
       angle: subscriptionItem.climb.angle,
@@ -74,6 +88,8 @@ export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): Climb
       mirrored: subscriptionItem.climb.mirrored,
       is_no_match: subscriptionItem.climb.is_no_match,
       characteristics: subscriptionItem.climb.characteristics,
+      is_draft: subscriptionItem.climb.is_draft,
+      published_at: subscriptionItem.climb.published_at,
       framesCount: subscriptionItem.climb.framesCount,
       framesPace: subscriptionItem.climb.framesPace,
       boardseshDifficulty: subscriptionItem.climb.boardseshDifficulty,

@@ -219,18 +219,22 @@ describe('climbToQueueItem board identity at the queue boundary', () => {
     expect(climb.layoutId).toBe(9);
   });
 
-  // Pins the CURRENT contract, deliberately. These five are droppable here only
-  // because the subscription selection sets (SUBSCRIPTION_CLIMB_FIELDS, and web's
-  // CLIMB_FIELDS) don't select them either, so the local copy and the peer copy agree.
-  // Carrying them here alone would make a peer's rebuild disagree with the creator's
-  // and let the next peer-side setQueue write the gap back. When #3927 lands,
-  // this expectation flips to `toMatchObject` — it is here so the boundary can't be
-  // widened by halves without someone reading this comment.
-  it('does not yet carry ownership / draft state (blocked on the subscription set)', () => {
+  // #3927 landed. Both subscription selection sets (SUBSCRIPTION_CLIMB_FIELDS and
+  // the shared CLIMB_FIELDS) now select these, so a peer's rebuild agrees with the
+  // creator's copy and no full-queue write pushes a gap back.
+  //
+  // Do NOT narrow this again without also narrowing both selection sets and
+  // `toClimbInput` in the same change. Carrying a field on the write path while a
+  // peer's read path omits it makes the field FLAP — it appears, then a peer's
+  // setQueue clears it for everyone — which is worse than consistently missing.
+  it('carries ownership / draft state so peers can gate Edit locally', () => {
     const { climb } = climbToQueueItem(peerClimb);
-    expect(climb.userId).toBeUndefined();
-    expect(climb.description).toBeUndefined();
-    expect(climb.is_draft).toBeUndefined();
-    expect(climb.published_at).toBeUndefined();
+    expect(climb).toMatchObject({
+      userId: 'user-2',
+      description: 'crimpy',
+      mirrored: true,
+      is_draft: false,
+      published_at: '2026-07-01T00:00:00Z',
+    });
   });
 });

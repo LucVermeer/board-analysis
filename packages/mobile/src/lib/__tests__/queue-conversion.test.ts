@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest';
+import { parse, visit } from 'graphql';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../queue-conversion';
+import { SUBSCRIPTION_CLIMB_FIELDS } from '../graphql/operations';
+
+// Parse the selection set with graphql's own parser rather than splitting on
+// whitespace: an alias (`uuid: id`), an argument, or a directive would make a
+// naive split produce field names that don't exist, leaving the guard below
+// green while silently comparing the wrong set. Mirrors `climbSelectionFieldNames`
+// in the backend contract test.
+function selectedClimbFieldNames(): Set<string> {
+  const fields = new Set<string>();
+  visit(parse(`{ climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }`), {
+    Field(node) {
+      if (node.name.value !== 'climb' || !node.selectionSet) return;
+      for (const selection of node.selectionSet.selections) {
+        if (selection.kind === 'Field') fields.add(selection.alias?.value ?? selection.name.value);
+      }
+    },
+  });
+  return fields;
+}
 
 // A reconnect FullSync wholesale-replaces the queue (and currentClimbQueueItem)
 // from the subscription payload. If toClimbQueueItem drops a field the
@@ -74,5 +94,32 @@ describe('toClimbQueueItem (SEED-2 fields)', () => {
     expect(result.climb.boardType).toBeUndefined();
     // layoutId falls through as undefined; the spill guard reads nullish as "unknown".
     expect(result.climb.layoutId).toBeUndefined();
+  });
+
+  it('carries owner identity and draft state so Edit can be gated on a queued climb', () => {
+    const result = toClimbQueueItem(
+      makeSubscriptionItem({
+        userId: 'user-1',
+        description: 'crimpy',
+        is_draft: false,
+        published_at: '2026-07-01T00:00:00Z',
+      }),
+    );
+
+    expect(result.climb.userId).toBe('user-1');
+    expect(result.climb.description).toBe('crimpy');
+    expect(result.climb.is_draft).toBe(false);
+    expect(result.climb.published_at).toBe('2026-07-01T00:00:00Z');
+  });
+
+  // Drift guard (#3927). Derived from the live selection set, never hand-listed:
+  // a field the subscription selects but this rebuild drops is silently lost on
+  // every FullSync, and a field rebuilt here that the subscription does not
+  // select can only ever be undefined. Set EQUALITY closes both directions, so
+  // adding a sixth field to one side alone turns this red.
+  it('rebuilds exactly the field set SUBSCRIPTION_CLIMB_FIELDS selects', () => {
+    const rebuilt = new Set(Object.keys(toClimbQueueItem(makeSubscriptionItem()).climb));
+
+    expect(rebuilt).toEqual(selectedClimbFieldNames());
   });
 });

@@ -5,7 +5,7 @@ vi.mock('expo-crypto', () => ({
   randomUUID: () => 'generated-uuid',
 }));
 
-import { climbToQueueItem } from '../climb-to-queue-item';
+import { climbToQueueItem, toClimbInput } from '../climb-to-queue-item';
 
 // A climb queued from search / detail must keep its multi-frame playback
 // metadata so playback uses the setter's pace rather than DEFAULT_PACE_MS.
@@ -48,5 +48,52 @@ describe('climbToQueueItem (SEED-2 frame metadata)', () => {
 
     expect(result.climb.framesCount).toBeNull();
     expect(result.climb.framesPace).toBeNull();
+  });
+});
+
+describe('climbToQueueItem ownership / draft state (#3927)', () => {
+  it('carries the fields the owner-only Edit gate reads', () => {
+    const result = climbToQueueItem(
+      makeClimb({
+        userId: 'user-1',
+        description: 'crimpy',
+        mirrored: true,
+        is_draft: false,
+        published_at: '2026-07-01T00:00:00Z',
+      }),
+    );
+
+    expect(result.climb).toMatchObject({
+      userId: 'user-1',
+      description: 'crimpy',
+      mirrored: true,
+      is_draft: false,
+      published_at: '2026-07-01T00:00:00Z',
+    });
+  });
+
+  /**
+   * The sharpest guard in the #3927 fix, and the one that needs no allowlist.
+   *
+   * `toClimbInput` is what this client SENDS to peers; `climbToQueueItem` is what
+   * it keeps LOCALLY. A field in one but not the other is a bug in whichever
+   * direction it points:
+   *
+   *   - in `toClimbInput` only  -> the local item never has it, so we broadcast a
+   *     null over whatever a peer had, clearing it for everyone.
+   *   - in `climbToQueueItem` only -> we render it locally but never send it, so
+   *     it silently vanishes for every peer and for us on the next FullSync.
+   *
+   * They must be the same set. Both are read live via `Object.keys`, so a sixth
+   * field added to one side only turns this red with no edit to this test — which
+   * is precisely what did NOT happen when these two drifted apart and produced
+   * #3927.
+   */
+  it('keeps exactly the same field set as toClimbInput', () => {
+    const climb = makeClimb();
+    const kept = new Set(Object.keys(climbToQueueItem(climb).climb));
+    const sent = new Set(Object.keys(toClimbInput(climb)));
+
+    expect(kept).toEqual(sent);
   });
 });

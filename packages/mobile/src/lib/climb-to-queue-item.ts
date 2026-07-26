@@ -60,6 +60,14 @@ export function toClimbInput(climb: Climb): ClimbInput {
  * triggers a server-side validation error and surfaces as the generic
  * "Action failed" toast. Pick the exact fields here and let TypeScript verify
  * the shape, so callers can't drift.
+ *
+ * This must carry the SAME field set as `toClimbInput` above. Anything it drops
+ * that `toClimbInput` sends is a field this client silently strips on its way
+ * into the queue; anything it carries that a peer's selection set omits FLAPS,
+ * because the peer rebuilds without it and its next full-queue write pushes the
+ * gap back to everyone. `climb-to-queue-item.test.ts` asserts the two key sets
+ * are equal, and `queue-climb-field-contract.test.ts` ties both to the schema.
+ * See #3927.
  */
 export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; uuid?: string }): ClimbQueueItem {
   return {
@@ -74,13 +82,21 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
       name: climb.name,
       frames: climb.frames,
       setter_username: climb.setter_username,
-      // NOTE: userId / description / mirrored / is_draft / published_at are deliberately
-      // NOT carried here yet. `toClimbInput` would send them to party peers, but the
-      // subscription selection set (SUBSCRIPTION_CLIMB_FIELDS in lib/graphql/operations.ts,
-      // and web's CLIMB_FIELDS) doesn't select them, so peers would rebuild the climb
-      // without them and the next peer-side setQueue would write the gap back. Widening
-      // this boundary has to land together with both selection sets and
-      // `toClimbQueueItem` — see #3927.
+      // Owner identity, so the owner-only Edit action can be gated on a queued
+      // climb (use-climb-actions / ClimbActionsSheet read exactly this, and the
+      // play drawer feeds them the queue item's climb). Null for Aurora-synced
+      // climbs that predate Boardsesh accounts.
+      userId: climb.userId,
+      // Carried so forking or editing a queued climb keeps its description.
+      description: climb.description,
+      // Mirror state, so re-deriving a queue item from an already-mirrored climb
+      // keeps the flip. A search / detail response never sets this (no climbs
+      // column backs it, and no resolver populates it) — it only ever arrives on
+      // a climb that has already been through the queue, via a peer's
+      // `mirrorCurrentClimb`. The paths that would otherwise lose it all rebuild
+      // an item from such a climb: the climb-actions preview, the play-drawer
+      // open, and the "on the wall" preview.
+      mirrored: climb.mirrored,
       angle: climb.angle,
       ascensionist_count: climb.ascensionist_count,
       difficulty: climb.difficulty,
@@ -90,6 +106,10 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
       benchmark_difficulty: climb.benchmark_difficulty,
       is_no_match: climb.is_no_match,
       characteristics: climb.characteristics,
+      // Draft / publish state — the other two inputs to the Edit gate
+      // (`computeCanUpdate` reads exactly these).
+      is_draft: climb.is_draft,
+      published_at: climb.published_at,
       userAscents: climb.userAscents,
       userAttempts: climb.userAttempts,
       // Carry multi-frame playback metadata so a climb queued from search /
