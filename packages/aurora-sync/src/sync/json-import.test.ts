@@ -167,7 +167,8 @@ describe('mirrored ascents (#3521)', () => {
   });
 
   it('leaves a record without a mirror flag non-mirrored, exactly as before', () => {
-    // Every legacy Kilter export takes this path.
+    // Every legacy Kilter export takes this path, as does any export that turns
+    // out not to carry the field at all.
     expect(buildJsonImportAscentTickRow(USER_ID, 'kilter', makeAscent(), CLIMB_UUID, CLIMBED_AT, NOW).isMirror).toBe(
       false,
     );
@@ -180,16 +181,21 @@ describe('mirrored ascents (#3521)', () => {
   // The export is a bespoke rendering, not the API shape, so we can't assume it
   // encodes booleans as JSON booleans. A strict z.boolean() would 400 the WHOLE
   // import on `1` or `"true"` — a much worse bug than the one being fixed — so
-  // the schema takes the value untyped and readExportBool coerces it, matching
-  // the live pull's toBool.
+  // the schema takes the value untyped and readExportBool coerces it, a
+  // superset of the live pull's toBool (it also reads the title-case spelling
+  // most languages produce when they stringify a boolean).
   it.each([
     { value: true, expected: true },
     { value: 1, expected: true },
     { value: '1', expected: true },
     { value: 'true', expected: true },
+    { value: 'True', expected: true },
+    { value: 'TRUE', expected: true },
     { value: false, expected: false },
     { value: 0, expected: false },
     { value: 'false', expected: false },
+    { value: 'False', expected: false },
+    { value: '', expected: false },
     { value: null, expected: false },
     { value: undefined, expected: false },
   ])('accepts is_mirror encoded as $value without failing validation → $expected', ({ value, expected }) => {

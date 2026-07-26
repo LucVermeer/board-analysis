@@ -150,17 +150,19 @@ describe('aurora import — #3521 mirrored ascents', () => {
 
     const rows = await ticksForUser();
     expect(rows).toHaveLength(1);
-    expect(rows[0].is_mirror === true).toBe(false);
+    expect(rows[0].is_mirror).not.toBe(true);
   });
 
   it('heals a pre-fix non-mirrored row on re-import, in place and without a twin', async () => {
-    // First import reproduces the OLD bug: the flag is stripped, so the tick is
-    // written non-mirrored.
+    // Stands in for the state the old importer left behind: a tick stored
+    // non-mirrored for a climb the user actually climbed mirrored. Reached here
+    // by importing a record with no flag, since the pre-fix code path (zod
+    // stripping the flag on the way in) no longer exists to reproduce directly.
     await importJsonExportData(importDb, USER_ID, BOARD, parsedExportPayload({ ascents: [ascentRecord()] }));
 
     let rows = await ticksForUser();
     expect(rows).toHaveLength(1);
-    expect(rows[0].is_mirror === true).toBe(false);
+    expect(rows[0].is_mirror).not.toBe(true);
     const originalUuid = rows[0].uuid;
     const originalAuroraId = rows[0].aurora_id;
 
@@ -210,7 +212,7 @@ describe('aurora import — #3521 mirrored ascents', () => {
 
     const rows = await ticksForUser();
     expect(rows).toHaveLength(1);
-    expect(rows[0].is_mirror === true).toBe(false);
+    expect(rows[0].is_mirror).not.toBe(true);
   });
 
   it('never rewrites the synthetic aurora_id when orientation changes', async () => {

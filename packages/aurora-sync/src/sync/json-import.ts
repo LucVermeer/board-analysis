@@ -190,7 +190,16 @@ export type ImportProgressEvent =
  * is every legacy Kilter export — as false. #3521
  */
 export function readExportBool(value: unknown): boolean {
-  return value === true || value === 1 || value === '1' || value === 'true';
+  if (typeof value === 'string') {
+    // Case-insensitive on the string form, which `toBool` isn't: the export is
+    // rendered by some Aurora-side script we've never seen, and a stringified
+    // boolean from most languages comes out title-case ("True"). Reading one
+    // more spelling costs nothing; missing it would silently drop the flag all
+    // over again.
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true';
+  }
+  return value === true || value === 1;
 }
 
 /**

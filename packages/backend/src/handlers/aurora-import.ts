@@ -97,6 +97,7 @@ const SHAPE_MAX_KEY_LENGTH = 40;
 function describeExportRecordShape(records: unknown[]): string {
   const keys = new Set<string>();
   for (const record of records.slice(0, SHAPE_SAMPLE_RECORDS)) {
+    if (keys.size >= SHAPE_MAX_KEYS) break;
     if (!record || typeof record !== 'object' || Array.isArray(record)) continue;
     for (const key of Object.keys(record)) {
       if (keys.size >= SHAPE_MAX_KEYS) break;
