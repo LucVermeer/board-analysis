@@ -244,6 +244,30 @@ jobs:
       - name: Typecheck (cache-driven affected)
         run: vp run typecheck
 
+  db-migrations:
+    needs: [changes]
+    # Cheap (a few file reads, no DB, no build), so it gates on the whole
+    # packages/db path rather than trying to be clever about which files matter.
+    if: needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Needs origin/main reachable to compare numbering and `when` against it.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Validate the migration folder
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          vp run check:db-migrations -- --base origin/main
+
   codegen-drift:
     needs: [changes, setup]
     # codegen.ts pulls GraphQL documents from packages/web/app/**/*.{ts,tsx}
@@ -737,6 +761,7 @@ jobs:
       - setup
       - lint
       - typecheck
+      - db-migrations
       - codegen-drift
       - i18n
       - test-default

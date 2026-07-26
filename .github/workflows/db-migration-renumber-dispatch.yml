@@ -1,0 +1,139 @@
+name: DB Migration Renumber Dispatch
+
+# When a migration lands on `main`, every other open migration PR is stranded: they
+# all appended to the same `_journal.json` tail, so they go from MERGEABLE to
+# CONFLICTING the instant one of them merges. This fans out a renumber run for each
+# one, so the queue drains instead of serializing behind whoever merged first.
+#
+# Uses GITHUB_TOKEN, not the App token: `workflow_dispatch` is the documented
+# exception to "events triggered by GITHUB_TOKEN don't create a workflow run", so
+# `actions: write` is all this needs. Only the force-push in the worker needs the App.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/db/drizzle/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: read
+
+concurrency:
+  # Collapse a burst of migration merges into a single fan-out.
+  group: db-migration-renumber-dispatch
+  cancel-in-progress: true
+
+jobs:
+  fan-out:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch a renumber for every stranded migration PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const DRIZZLE_DIR = 'packages/db/drizzle';
+            const MIGRATION_RE = /^(\d{4})_.+\.sql$/;
+            const pad = (index) => String(index).padStart(4, '0');
+
+            const listMigrations = async (ref) => {
+              const { data } = await github.rest.repos.getContent({
+                owner: context.repo.owner, repo: context.repo.repo, path: DRIZZLE_DIR, ref,
+              });
+              return data.filter((item) => item.type === 'file' && MIGRATION_RE.test(item.name)).map((item) => item.name);
+            };
+            const indexOf = (name) => Number(MIGRATION_RE.exec(name)[1]);
+
+            // Fail closed. If main's state can't be established we dispatch NOTHING
+            // rather than force-pushing every migration PR on a bad reading.
+            let mainFiles, mainNext;
+            try {
+              const { data: journalFile } = await github.rest.repos.getContent({
+                owner: context.repo.owner, repo: context.repo.repo,
+                path: `${DRIZZLE_DIR}/meta/_journal.json`, ref: 'main',
+              });
+              const journal = JSON.parse(Buffer.from(journalFile.content, 'base64').toString('utf8'));
+              mainFiles = await listMigrations('main');
+              // Max of the journal tail and every on-disk prefix — the two can
+              // disagree when an orphaned .sql sits above the tail.
+              mainNext = Math.max(
+                ...journal.entries.map((entry) => entry.idx),
+                ...journal.entries.map((entry) => indexOf(`${entry.tag}.sql`)),
+                ...mainFiles.map(indexOf),
+              ) + 1;
+            } catch (error) {
+              core.setFailed(`Could not read main's migration state (${error}) — dispatched nothing.`);
+              return;
+            }
+            core.info(`main's next free migration number is ${pad(mainNext)}.`);
+
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100,
+            });
+            const repoFull = `${context.repo.owner}/${context.repo.repo}`;
+            const baseNames = new Set(mainFiles);
+            const dispatched = [];
+            const skipped = [];
+
+            for (const pr of prs) {
+              if (!pr.labels.some((label) => label.name === 'db-migration')) continue;
+
+              if (pr.labels.some((label) => label.name === 'renumber:skip')) {
+                skipped.push([pr.number, 'opted out via renumber:skip']);
+                continue;
+              }
+              if (pr.head.repo?.full_name !== repoFull) {
+                // The App is installed on this repo only, so it cannot push to a fork
+                // even with maintainer_can_modify. Nothing to do but say so.
+                skipped.push([pr.number, 'fork PR — renumber by hand']);
+                continue;
+              }
+
+              let added;
+              try {
+                added = (await listMigrations(pr.head.sha)).filter((name) => !baseNames.has(name)).map(indexOf);
+              } catch (error) {
+                skipped.push([pr.number, `could not read its migration folder (${error.status ?? error})`]);
+                continue;
+              }
+              if (added.length === 0) {
+                skipped.push([pr.number, 'labelled but adds no migration']);
+                continue;
+              }
+              // Only act on a REAL collision. A PR already sitting above main has
+              // nothing to renumber, and force-pushing it would be pure churn.
+              if (Math.min(...added) >= mainNext) {
+                skipped.push([pr.number, `already above main (${added.map(pad).join(', ')})`]);
+                continue;
+              }
+              dispatched.push({ number: pr.number, added });
+            }
+
+            for (const entry of dispatched) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'db-migration-renumber.yml',
+                // Always the default-branch copy, so the worker's gates are never
+                // editable from the PR being acted on.
+                ref: 'main',
+                inputs: { pr: String(entry.number) },
+              });
+              core.notice(`Dispatched renumber for #${entry.number} (holds ${entry.added.map(pad).join(', ')}).`);
+            }
+
+            // A complete ledger: every labelled PR is either dispatched or has a
+            // stated reason. Silent truncation would read as "nothing to do".
+            for (const [number, reason] of skipped) core.info(`skip #${number}: ${reason}`);
+
+            await core.summary
+              .addHeading('Migration renumber fan-out', 3)
+              .addRaw(`main's next free number is \`${pad(mainNext)}\`.`)
+              .addList([
+                ...dispatched.map((entry) => `Dispatched #${entry.number} (holds ${entry.added.map(pad).join(', ')})`),
+                ...skipped.map(([number, reason]) => `Skipped #${number} — ${reason}`),
+              ])
+              .write();

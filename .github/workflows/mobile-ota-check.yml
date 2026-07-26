@@ -153,6 +153,53 @@ jobs:
               });
             }
 
+      # Makes the native train queryable: `gh pr list --label native-fingerprint`.
+      # Purely a marker — nothing dispatches on it and the check-run below stays
+      # neutral, because a native change is a legitimate outcome, not a failure.
+      # `unknown` deliberately leaves the label untouched: the resolver is ~5%
+      # non-deterministic (see MAX_DIFF_CONFIRMATIONS in the check script), and a
+      # flake must not flip a label either way.
+      - name: Label native fingerprint changes
+        if: github.event_name == 'push' && steps.ota.outputs.overall != 'unknown' && steps.ota.outputs.overall != ''
+        uses: actions/github-script@v7
+        env:
+          OVERALL: ${{ steps.ota.outputs.overall }}
+        with:
+          script: |
+            const LABEL = 'native-fingerprint';
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${context.payload.ref.replace('refs/heads/', '')}`,
+              state: 'open',
+            });
+            if (prs.length === 0) return;
+            const pr = prs[0];
+
+            const wanted = process.env.OVERALL === 'native-change-required';
+            const has = pr.labels.some((label) => label.name === LABEL);
+            if (wanted === has) return;
+
+            if (wanted) {
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name: LABEL });
+              } catch {
+                await github.rest.issues.createLabel({
+                  ...context.repo,
+                  name: LABEL,
+                  color: 'd93f0b',
+                  description: "Moves the Expo native fingerprint — needs a new store binary, won't ship OTA",
+                });
+              }
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: pr.number, labels: [LABEL] });
+            } else {
+              try {
+                await github.rest.issues.removeLabel({ ...context.repo, issue_number: pr.number, name: LABEL });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
       - name: Publish neutral check-run
         if: always()
         uses: actions/github-script@v7
