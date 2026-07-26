@@ -10,8 +10,8 @@ import { useTranslation } from 'react-i18next';
 import {
   createInitialTickState,
   deriveAscentType,
-  getMinAttempts,
   clampAttempts,
+  MIN_ATTEMPT_COUNT,
   type TickStatus,
 } from '@boardsesh/play-view';
 import { Text } from '../Text';
@@ -173,8 +173,12 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     return grades.find((grade) => grade.difficultyId === tickState.difficulty)?.name;
   }, [tickState.difficulty, grades]);
 
+  // The ascent TYPE reacts to the tries count (1 try on a climb you've never
+  // touched is a flash), but the tries COUNT never reacts back — the picker
+  // floors at MIN_ATTEMPT_COUNT for every status, which is the same floor
+  // clampAttempts applies on save. That one-way dependency is what keeps the
+  // displayed number and the saved number identical (#2888).
   const ascentType = deriveAscentType(hasPriorHistory, tickState.attemptCount);
-  const minAttempts = useMemo(() => getMinAttempts(ascentType), [ascentType]);
 
   // Keep the dismiss-analytics snapshot current so LogAscentSheet can read
   // field-completeness at close time — its X-button/pan-down paths never
@@ -239,6 +243,10 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       track(SHARED_EVENTS.TickButtonClicked, { climbUuid, layoutId: layoutId ?? null });
       setLastError(null);
 
+      // Defence in depth against the server's flash-is-one-try rule, not a
+      // second opinion on what the climber picked: for every value the picker
+      // can show and every status these buttons can produce, this is a no-op.
+      // The shared quick-tick-state test pins that.
       const finalAttempts = clampAttempts(tickState.attemptCount, status);
 
       saveTick.mutate(
@@ -368,7 +376,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         <View style={styles.rowPicker}>
           <InlineTriesPicker
             attemptCount={tickState.attemptCount}
-            minAttempts={minAttempts}
+            minAttempts={MIN_ATTEMPT_COUNT}
             onSelect={handleTriesSelect}
           />
         </View>

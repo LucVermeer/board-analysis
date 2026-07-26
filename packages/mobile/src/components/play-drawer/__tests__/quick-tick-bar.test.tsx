@@ -56,7 +56,36 @@ vi.mock('../../Text', () => ({
 }));
 vi.mock('../../Icon', () => ({ Icon: () => createElement('span') }));
 vi.mock('../InlineStarPicker', () => ({ InlineStarPicker: () => null }));
-vi.mock('../InlineTriesPicker', () => ({ InlineTriesPicker: () => null }));
+// Stub InlineTriesPicker as a faithful miniature of the real one: it RENDERS
+// the count it was handed and applies the same `minAttempts` floor on
+// decrement. That makes the displayed number readable from the DOM, so the
+// tries tests can assert "what the picker showed is what got saved" without
+// hardcoding the expected number on the save side (issue #2888).
+vi.mock('../InlineTriesPicker', () => ({
+  InlineTriesPicker: ({
+    attemptCount,
+    minAttempts = 1,
+    onSelect,
+  }: {
+    attemptCount: number;
+    minAttempts?: number;
+    onSelect: (value: number) => void;
+  }) =>
+    createElement(
+      'div',
+      null,
+      createElement('button', {
+        'data-testid': 'tries-decrement',
+        disabled: attemptCount <= minAttempts,
+        onClick: () => onSelect(Math.max(minAttempts, attemptCount - 1)),
+      }),
+      createElement('span', { 'data-testid': 'tries-value' }, String(attemptCount)),
+      createElement('button', {
+        'data-testid': 'tries-increment',
+        onClick: () => onSelect(attemptCount + 1),
+      }),
+    ),
+}));
 // Stub GradeSingleSelectRail: clicking the rail always selects the first
 // loaded grade, so a test can drive grade selection without the real chip UI.
 vi.mock('../../grade', () => ({
@@ -144,6 +173,30 @@ function renderBar(overrides: Partial<QuickTickBarProps> = {}) {
       ...overrides,
     }),
   );
+}
+
+/** The number the tries picker is currently showing the climber. */
+function displayedTries(container: HTMLElement): number {
+  return Number(container.querySelector('[data-testid="tries-value"]')?.textContent);
+}
+
+function buttonWithText(container: HTMLElement, text: string): HTMLButtonElement | undefined {
+  return Array.from(container.querySelectorAll('button')).find((node) => node.textContent === text);
+}
+
+/** Board fixture with a mounted provider and NO history for this climb+angle. */
+function boardWithoutHistory() {
+  return { logbook: [], logbookByClimbAngle: new Map<string, LogbookEntry[]>(), getLogbook: vi.fn() };
+}
+
+/** Board fixture with a mounted provider and one prior tick for this climb+angle. */
+function boardWithHistory() {
+  const tick = { climb_uuid: CLIMB_UUID, angle: ANGLE } as unknown as LogbookEntry;
+  return {
+    logbook: [tick],
+    logbookByClimbAngle: new Map<string, LogbookEntry[]>([[logbookClimbAngleKey(CLIMB_UUID, ANGLE), [tick]]]),
+    getLogbook: vi.fn(),
+  };
 }
 
 beforeEach(() => {
@@ -319,5 +372,120 @@ describe('QuickTickBar analytics', () => {
       SHARED_EVENTS.TickLogged,
       expect.objectContaining({ climbUuid: CLIMB_UUID, platform: 'mobile', surface: 'mobile_quick_tick' }),
     );
+  });
+});
+
+// Issue #2888. The tries picker and the save path must always agree: the
+// number the climber can see is the number that reaches their logbook. These
+// assert the SAVED value against the value read back out of the picker, never
+// against a literal, so they stay honest if the form's defaults move.
+describe('QuickTickBar tries count', () => {
+  it('saves the single try it is showing when a redpoint goes first go this session', () => {
+    boardState.current = boardWithHistory();
+    const { container } = renderBar();
+
+    // Prior history, untouched picker: one try, and the button offers a Send
+    // (not a Flash) because the climber has been on this climb before.
+    const shownTries = displayedTries(container);
+    expect(shownTries).toBe(1);
+    const sendButton = buttonWithText(container, 'playView.tickBar.sendSaveLabel');
+    expect(sendButton).toBeTruthy();
+
+    fireEvent.click(sendButton as Element);
+
+    // Read the shown count BEFORE the click — a successful save resets the
+    // form, so the picker is back at its default by the time this runs.
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
+      status: 'send',
+      attemptCount: shownTries,
+    });
+    // The try the climber never made. Before the fix this stored 2.
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({ attemptCount: 1 });
+  });
+
+  it('reports the shown count to analytics, not a rewritten one', () => {
+    boardState.current = boardWithHistory();
+    const { container } = renderBar();
+
+    fireEvent.click(buttonWithText(container, 'playView.tickBar.sendSaveLabel') as Element);
+
+    expect(track).toHaveBeenCalledWith(
+      SHARED_EVENTS.QuickTickSaved,
+      expect.objectContaining({ status: 'send', attemptCount: 1 }),
+    );
+  });
+
+  it('keeps the Send label while saving one try — the label and the count are independent', () => {
+    // Guards the other half of the fix: dropping the floor must not turn a
+    // repeat ascent into a Flash. Prior history means Send at any count.
+    boardState.current = boardWithHistory();
+    const { container } = renderBar();
+
+    expect(buttonWithText(container, 'playView.tickBar.flashSaveLabel')).toBeUndefined();
+    fireEvent.click(buttonWithText(container, 'playView.tickBar.sendSaveLabel') as Element);
+
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({ status: 'send', attemptCount: 1 });
+  });
+
+  it('makes the first plus press change what gets stored', () => {
+    // Before the fix, 1 and 2 both saved as 2, so the first press of + moved
+    // the display and nothing else. (2 saving as 2 passes either way — this
+    // earns its keep next to the one-try test above, not on its own.)
+    boardState.current = boardWithHistory();
+    const { container, getByTestId } = renderBar();
+
+    fireEvent.click(getByTestId('tries-increment'));
+    const shownTries = displayedTries(container);
+    expect(shownTries).toBe(2);
+
+    fireEvent.click(buttonWithText(container, 'playView.tickBar.sendSaveLabel') as Element);
+
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({ attemptCount: shownTries });
+  });
+
+  it('saves the shown count when the climber logs an attempt instead of an ascent', () => {
+    boardState.current = boardWithHistory();
+    const { container, getByTestId } = renderBar();
+
+    fireEvent.click(getByTestId('tries-increment'));
+    fireEvent.click(getByTestId('tries-increment'));
+    const shownTries = displayedTries(container);
+    expect(shownTries).toBe(3);
+
+    fireEvent.click(buttonWithText(container, 'mobile.logAscent.attempt') as Element);
+
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({
+      status: 'attempt',
+      attemptCount: shownTries,
+    });
+  });
+
+  it('lets a climber walk back up to Flash after over-counting their tries', () => {
+    // The old floor made Send a one-way door: bump a first-ever go to 2 tries
+    // and the minus button locked at 2, so an accidental tap cost you the
+    // flash. The round trip is safe because the button label follows the count
+    // in view — the climber sees it go Flash → Send → Flash.
+    boardState.current = boardWithoutHistory();
+    const { container, getByTestId } = renderBar();
+
+    expect(displayedTries(container)).toBe(1);
+    expect(buttonWithText(container, 'playView.tickBar.flashSaveLabel')).toBeTruthy();
+
+    fireEvent.click(getByTestId('tries-increment'));
+    expect(displayedTries(container)).toBe(2);
+    expect(buttonWithText(container, 'playView.tickBar.sendSaveLabel')).toBeTruthy();
+    expect(buttonWithText(container, 'playView.tickBar.flashSaveLabel')).toBeUndefined();
+
+    // The floor the old code raised to 2 the moment the label flipped to Send,
+    // which greyed this button out and stranded the climber on "Send".
+    expect((getByTestId('tries-decrement') as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(getByTestId('tries-decrement'));
+
+    expect(displayedTries(container)).toBe(1);
+    const flashButton = buttonWithText(container, 'playView.tickBar.flashSaveLabel');
+    expect(flashButton).toBeTruthy();
+
+    fireEvent.click(flashButton as Element);
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({ status: 'flash', attemptCount: 1 });
   });
 });
