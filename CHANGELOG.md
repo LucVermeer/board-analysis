@@ -13,6 +13,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Backend correctness fix with no user-facing note yet. The race this closes is real and user-visible in party mode, but `setQueue` can still overwrite a concurrent add (#3933), so a "shared queues are reliable now" note would overclaim. The changelog entry belongs with #3933, once the guarantee actually holds end to end. ([#3932](https://github.com/boardsesh/boardsesh/pull/3932))
 - Long-press a climb on Android and the action menu now floats above the wall properly instead of melting into the background ([#3941](https://github.com/boardsesh/boardsesh/pull/3941))
   Screen readers announce the tap-anywhere-to-close area as a close button, not as the climb
 - The Edit button now shows up on your own climbs while they're sitting in the queue, not just in search ([#3958](https://github.com/boardsesh/boardsesh/pull/3958))

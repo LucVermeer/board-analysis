@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-26T06:18:17.260Z",
+  "generatedAt": "2026-07-26T06:24:45.186Z",
   "entries": [
+    {
+      "prNumber": 3932,
+      "category": "fixed",
+      "title": "Backend correctness fix with no user-facing note yet. The race this closes is real and user-visible in party mode, but `setQueue` can still overwrite a concurrent add (#3933), so a \"shared queues are reliable now\" note would overclaim. The changelog entry belongs with #3933, once the guarantee actually holds end to end.",
+      "mergedAt": "2026-07-26T06:18:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3932"
+    },
     {
       "prNumber": 3941,
       "category": "fixed",
