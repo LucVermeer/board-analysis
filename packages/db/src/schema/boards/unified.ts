@@ -488,6 +488,61 @@ export const boardLayoutAliases = pgTable(
   }),
 );
 
+// Climbs a catalog sync read from upstream but could not turn into a
+// board_climbs row — the hold encoding didn't decode, or a hold has no
+// placement on the resolved layout. Before this table existed the ingest
+// counted them and moved on, so a climb could be missing from Boardsesh
+// forever with nothing but a rotating log line to show for it (issue #3523).
+//
+// `raw_holds` is the reason this table is worth its weight: it stores the
+// verbatim upstream hold string, so the next time the upstream encoding
+// drifts we can decode it from rows we already have instead of re-running
+// the reverse-engineering exercise from scratch.
+//
+// No foreign keys, deliberately:
+//   - climb_uuid has no FK to board_climbs.uuid — the entire premise is that
+//     we could NOT create that row. A FK would reject every insert.
+//   - layout_id has no FK to board_layouts either. It is a diagnostic
+//     breadcrumb (and is null when the layout itself failed to resolve);
+//     a catalog row disappearing upstream must never break skip reporting.
+//
+// `reason` is validated in TypeScript rather than by a CHECK constraint:
+// drizzle-kit has a history in this repo of emitting a spurious destructive
+// DROP when regenerating CHECK constraints, and a diagnostic table is not
+// worth that risk. See KilterSkipReason in packages/kilter-sync.
+//
+// Rows are never deleted. A skipped climb that a later run ingests
+// successfully gets `resolved_at` stamped, so the table doubles as a record
+// of what a decoder fix actually recovered.
+export const boardClimbIngestSkips = pgTable(
+  'board_climb_ingest_skips',
+  {
+    boardType: text('board_type').notNull(),
+    climbUuid: text('climb_uuid').notNull(),
+    // Resolved board_layouts.id. Nullable: the layout may not have resolved.
+    layoutId: integer('layout_id'),
+    // Upstream layout key the climb was read from (Grips product_layout_uuid).
+    sourceLayoutUuid: text('source_layout_uuid'),
+    // 'unplaceable_hole' | 'unparsable_concat' | 'frame_out_of_range'
+    reason: text('reason').notNull(),
+    // Human-readable specifics for the reason, e.g. 'holeId=1734'.
+    detail: text('detail'),
+    // The VERBATIM upstream hold string (Grips `climb_concat`).
+    rawHolds: text('raw_holds').notNull(),
+    framesCount: integer('frames_count'),
+    climbName: text('climb_name'),
+    setterUsername: text('setter_username'),
+    firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+    // Stamped when a later sync managed to ingest this climb.
+    resolvedAt: timestamp('resolved_at'),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.boardType, table.climbUuid] }),
+    openIdx: index('board_climb_ingest_skips_open_idx').on(table.boardType, table.reason, table.resolvedAt),
+  }),
+);
+
 // Per-user-per-climb rating, separate from the per-tick quality/difficulty
 // pair on boardsesh_ticks. Kilter exposes ratings as their own first-class
 // resource (POST /api/climb-rating/) and we need a stable home for both
@@ -842,6 +897,14 @@ export const boardCircuits = pgTable(
     })
       .onUpdate('cascade')
       .onDelete('cascade'),
+    // "This Aurora account's circuits" — the lookup behind
+    // hasForeignOwnedCircuitPlaylists, which runs once per credential per sync
+    // cycle. The PK is (board_type, uuid) and a foreign key does NOT create an
+    // index on its own columns, so without this the predicate seq-scans the
+    // whole table. The no-conflict path (every healthy user) matches nothing,
+    // so LIMIT 1 can't cut the scan short — it reads to the end every time.
+    // Cheap now (857 rows in prod), linear in circuit count forever.
+    userIdx: index('board_circuits_user_idx').on(table.boardType, table.userId),
   }),
 );
 
