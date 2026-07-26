@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DUPLICATE_BOARD_ACCOUNT_CIRCUITS_SYNC_ERROR } from '@boardsesh/shared-schema/sync-error-codes';
 import { KilterApiError } from '../api/errors';
 import type { KilterCredentialRecord, RunnerDb } from './types';
 
@@ -94,6 +95,11 @@ describe('SyncRunner.syncNextUser', () => {
 
     mockDecrypt.mockImplementation((value: string) => `decrypted-${value}`);
     mockEncrypt.mockImplementation((value: string) => `encrypted-${value}`);
+    // Default to a clean cycle. syncKilterUserData returns a result object the
+    // runner destructures (skippedForeignCircuits drives the duplicate-account
+    // sync_error), so a bare `undefined` resolve would throw rather than fail
+    // an assertion.
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 0 });
 
     process.env.DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://test:test@localhost:5432/test';
     process.env.KILTER_OAUTH_CLIENT_ID = 'kilter-test-client';
@@ -123,7 +129,7 @@ describe('SyncRunner.syncNextUser', () => {
       token_type: 'Bearer',
       // No refresh_token rotation in this case.
     });
-    mockSyncKilterUserData.mockResolvedValue(undefined);
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 0 });
 
     const summary = await runner.syncNextUser();
 
@@ -310,7 +316,7 @@ describe('SyncRunner.syncNextUser', () => {
       // refresh_token is different from `decrypted-enc-refresh` → triggers re-encrypt+write
       refresh_token: 'rotated-refresh-token',
     });
-    mockSyncKilterUserData.mockResolvedValue(undefined);
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 0 });
 
     await runner.syncNextUser();
 
@@ -332,7 +338,7 @@ describe('SyncRunner.syncNextUser', () => {
       token_type: 'Bearer',
       refresh_token: 'decrypted-enc-refresh', // matches the decrypted incoming value → no rotation
     });
-    mockSyncKilterUserData.mockResolvedValue(undefined);
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 0 });
 
     await runner.syncNextUser();
 
@@ -384,12 +390,56 @@ describe('SyncRunner.syncNextUser', () => {
     vi.spyOn(privates, 'getNextCredentialToSync').mockResolvedValue(credential({ consecutiveFailures: 3 }));
 
     mockRefreshAccessToken.mockResolvedValue({ access_token: 'tok', expires_in: 300, token_type: 'Bearer' });
-    mockSyncKilterUserData.mockResolvedValue(undefined);
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 0 });
 
     await runner.syncNextUser();
 
     const activeUpdate = updates.find((u) => u.set.syncStatus === 'active');
     expect(activeUpdate?.set.consecutiveFailures).toBe(0);
     expect(activeUpdate?.set.lastSyncError).toBeNull();
+  });
+
+  it('surfaces the duplicate-account sync_error CODE when circuits were skipped, without failing the cycle (#3526)', async () => {
+    // Everything else synced; only the circuits were refused because another
+    // Boardsesh account owns the playlists. The credential must stay 'active'
+    // (a failed status would stop the daemon re-picking it) but carry the
+    // machine-readable code the board card localises — an empty playlist list
+    // with no explanation reads as "I have no circuits".
+    const runner = new SyncRunner();
+    const privates = runner as unknown as SyncRunnerPrivates;
+    const { db, updates } = createDbShim();
+    vi.spyOn(privates, 'getClient').mockReturnValue({ client: {}, db });
+    vi.spyOn(privates, 'getNextCredentialToSync').mockResolvedValue(credential());
+
+    mockRefreshAccessToken.mockResolvedValue({ access_token: 'tok', expires_in: 300, token_type: 'Bearer' });
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 3 });
+
+    const summary = await runner.syncNextUser();
+
+    expect(summary.successful).toBe(1);
+    expect(summary.failed).toBe(0);
+    const activeUpdate = updates.find((u) => u.set.syncStatus === 'active');
+    expect(activeUpdate?.set.syncStatus).toBe('active');
+    // A code, not a sentence: `es` / `fr` users get their own wording, and a
+    // raw English string here is exactly what the board card can't localise.
+    expect(activeUpdate?.set.syncError).toBe(DUPLICATE_BOARD_ACCOUNT_CIRCUITS_SYNC_ERROR);
+    // Observability field stays clean: this was not a sync failure.
+    expect(activeUpdate?.set.lastSyncError).toBeNull();
+  });
+
+  it('leaves sync_error null on a clean cycle', async () => {
+    const runner = new SyncRunner();
+    const privates = runner as unknown as SyncRunnerPrivates;
+    const { db, updates } = createDbShim();
+    vi.spyOn(privates, 'getClient').mockReturnValue({ client: {}, db });
+    vi.spyOn(privates, 'getNextCredentialToSync').mockResolvedValue(credential());
+
+    mockRefreshAccessToken.mockResolvedValue({ access_token: 'tok', expires_in: 300, token_type: 'Bearer' });
+    mockSyncKilterUserData.mockResolvedValue({ skippedForeignCircuits: 0 });
+
+    await runner.syncNextUser();
+
+    const activeUpdate = updates.find((u) => u.set.syncStatus === 'active');
+    expect(activeUpdate?.set.syncError).toBeNull();
   });
 });

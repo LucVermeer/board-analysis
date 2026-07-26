@@ -4,7 +4,8 @@ import { eq, ne, and, or, isNotNull, sql } from 'drizzle-orm';
 
 import { auroraCredentials } from '@boardsesh/db/schema/auth';
 import { credentialBackoffMs, credentialRetryReadySql, selfHealStaleClimbStats } from '@boardsesh/db/queries';
-import { syncUserData } from '../sync/user-sync';
+import { DUPLICATE_BOARD_ACCOUNT_CIRCUITS_SYNC_ERROR } from '@boardsesh/shared-schema/sync-error-codes';
+import { syncUserData, hasForeignOwnedCircuitPlaylists } from '../sync/user-sync';
 import { syncSharedData } from '../sync/shared-sync';
 import {
   AURORA_LOCATION_BOARDS,
@@ -467,11 +468,57 @@ export class SyncRunner {
 
     await this.updateStoredToken(cred.userId, cred.boardType, token);
 
-    const { client } = this.getClient();
+    const { client, db } = this.getClient();
     this.log(`[SyncRunner] Syncing user ${cred.userId} for ${boardType}...`);
     await syncUserData(client, boardType, token, cred.auroraUserId, cred.userId, undefined, this.log.bind(this));
     const succeededAt = new Date();
-    await this.updateCredentialStatus(cred.userId, cred.boardType, 'active', null, succeededAt, {
+
+    // Circuits whose playlist belongs to another Boardsesh user get refused by
+    // the ownership guard in upsertTableData. The cycle still counts as a
+    // success — logs, bids and everything else synced fine, and flipping to
+    // 'error' would stop the daemon re-picking this credential. But surface it:
+    // an empty playlist list with no explanation is indistinguishable from "I
+    // have no circuits", and this user has no way to know another account holds
+    // the same board login (#3526).
+    //
+    // Asked as a STATE question, not "did this cycle refuse anything". Aurora's
+    // user sync is incremental, so a cycle where nothing changed upstream
+    // returns no circuit rows and would clear a per-cycle flag straight back to
+    // null — the message would flash once and vanish. This version persists
+    // while the duplicate link does, and clears itself when it's resolved.
+    //
+    // Fail-open, and deliberately so. Every row this cycle wrote is already
+    // committed; the only thing left is a cosmetic status field. Letting this
+    // read throw would hand the whole cycle to the catch at syncNextUser —
+    // bumping consecutive_failures, widening the backoff, writing a
+    // last_sync_error and leaving last_sync_at un-advanced — so a successful
+    // sync would be recorded as a failure over a message. Swallow it, log it,
+    // and report no duplicate; the check is a pure state read, so the next
+    // cycle re-evaluates it from scratch and self-heals.
+    const hasDuplicateCircuitOwner = await hasForeignOwnedCircuitPlaylists(
+      db,
+      boardType,
+      cred.auroraUserId,
+      cred.userId,
+    ).catch((error: unknown) => {
+      this.log(
+        `[SyncRunner] Duplicate-circuit-owner check failed for user ${cred.userId} (${boardType}); treating as no duplicate: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    });
+    // A CODE, not a sentence. The board card is the surface that shows this,
+    // and it renders in the viewer's language — so the daemon states the
+    // condition and the client owns the wording.
+    const duplicateCircuitOwnerError = hasDuplicateCircuitOwner ? DUPLICATE_BOARD_ACCOUNT_CIRCUITS_SYNC_ERROR : null;
+    if (duplicateCircuitOwnerError) {
+      this.log(
+        `[SyncRunner] User ${cred.userId}: circuits not syncing — the ${boardType} account is linked to another Boardsesh user who owns the playlists (see #3526)`,
+      );
+    }
+
+    await this.updateCredentialStatus(cred.userId, cred.boardType, 'active', duplicateCircuitOwnerError, succeededAt, {
       credentialFailureCount: 0,
       lastCredentialFailureAt: null,
       // Success advances the attempt clock too (they coincide on a clean
