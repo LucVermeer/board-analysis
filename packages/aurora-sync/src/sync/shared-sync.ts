@@ -28,10 +28,10 @@ import { convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-st
 import {
   populateDenormalizedColumns,
   blendedQualityAverageSql,
+  setterSyncNotificationUuid,
   snapshotClimbStatsHistoryIfDue,
 } from '@boardsesh/db/queries';
 import { setterFollows, notifications, userBoardMappings, userFollows } from '@boardsesh/db/schema';
-import { randomUUID } from 'crypto';
 
 // Common ancestor of `PostgresJsDatabase` and the `PgTransaction` Drizzle
 // hands you inside `db.transaction(async (tx) => …)`. Both expose the same
@@ -1110,11 +1110,25 @@ export async function createSetterSyncNotifications(
 
     if (recipientIds.size === 0) continue;
 
+    // The batch's HEAD climb identifies the notification, so the dedup below
+    // only holds while two concurrent syncs derive the same head. They do
+    // today: both pre-read the same set of new climbs, and climbsBySetter
+    // preserves Aurora's response order, which is identical for both. If you
+    // ever sort, filter or re-chunk `climbs` before this point, keep it
+    // deterministic — a differing head uuid gives the two runs different
+    // notification uuids and the duplicate lands despite the unique constraint.
     const firstClimbUuid = climbs[0].uuid;
+    const actorId = linkedUserId ?? null;
+    // Deterministic uuid, so a repeat of this exact notification collides on
+    // notifications.uuid (already NOT NULL UNIQUE) instead of landing twice.
+    // New-climb detection is a pre-read of existing uuids, so two shared syncs
+    // running at once both classify the same climbs as new — this is the
+    // backstop for that, independent of the cooldown claim that stops the two
+    // runs overlapping in the first place. See setterSyncNotificationUuid.
     const notificationValues = Array.from(recipientIds).map((recipientId) => ({
-      uuid: randomUUID(),
+      uuid: setterSyncNotificationUuid({ recipientId, entityId: firstClimbUuid, actorId }),
       recipientId,
-      actorId: linkedUserId ?? null,
+      actorId,
       type: 'new_climbs_synced' as const,
       entityType: 'climb' as const,
       entityId: firstClimbUuid,
@@ -1125,7 +1139,9 @@ export async function createSetterSyncNotifications(
     // tops out around 10 900 rows — a popular setter with more followers
     // than that would silently fail without the chunk.
     await processBatches(notificationValues, async (chunk) => {
-      await db.insert(notifications).values(chunk);
+      // No conflict target: `uuid` is the only unique constraint on the table,
+      // so an untargeted DO NOTHING is unambiguous and needs no index predicate.
+      await db.insert(notifications).values(chunk).onConflictDoNothing();
     });
     log(
       `[SharedSync] Created ${notificationValues.length} notifications for setter "${setterUsername}" (${climbs.length} new climbs on ${boardName})`,

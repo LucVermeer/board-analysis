@@ -26,23 +26,21 @@ export type SyncRunnerConfig = {
    * cycling through user-sync within this window only trigger one shared-sync
    * for that board. Defaults to 1 hour.
    *
-   * The cooldown is tracked in-memory on the SyncRunner instance — a daemon
-   * crash, restart, or fresh `aurora-sync` invocation resets it for every
-   * board. That's intentional: the post-restart "first user wins" cycle
-   * picks up shared changes that may have accumulated while we were down,
-   * and even at the worst case we only re-sync once per process boot.
+   * The cooldown is persisted in `board_shared_syncs` under a synthetic
+   * `__local_*` cursor and claimed with a compare-and-set, so it survives a
+   * restart and is shared across instances. It used to be an in-memory Map,
+   * which meant every deploy re-fired a full shared sync per board on its first
+   * cycle, and two overlapping containers each had their own copy — the pair of
+   * behaviours that let followers get duplicate setter notifications.
    */
   sharedSyncCooldownMs?: number;
 };
 
-export type DaemonOptions = {
-  timeZone?: string;
-  quietHoursStart?: number;
-  quietHoursEnd?: number;
-  quietPollMs?: number;
-  minDelayMinutes?: number;
-  maxDelayMinutes?: number;
-};
+// The daemon loop itself lives in @boardsesh/sync-runtime (shared with
+// kilter-sync). This package used to carry a forked copy of both the type and
+// the loop; re-exporting keeps `@boardsesh/aurora-sync`'s public surface
+// unchanged while there is only one implementation to maintain.
+export type { DaemonOptions } from '@boardsesh/sync-runtime';
 
 export type SyncSummary = {
   total: number;
