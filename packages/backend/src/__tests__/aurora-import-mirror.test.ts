@@ -150,7 +150,7 @@ describe('aurora import — #3521 mirrored ascents', () => {
 
     const rows = await ticksForUser();
     expect(rows).toHaveLength(1);
-    expect(rows[0].is_mirror).not.toBe(true);
+    expect(rows[0].is_mirror).toBe(false);
   });
 
   it('heals a pre-fix non-mirrored row on re-import, in place and without a twin', async () => {
@@ -162,7 +162,7 @@ describe('aurora import — #3521 mirrored ascents', () => {
 
     let rows = await ticksForUser();
     expect(rows).toHaveLength(1);
-    expect(rows[0].is_mirror).not.toBe(true);
+    expect(rows[0].is_mirror).toBe(false);
     const originalUuid = rows[0].uuid;
     const originalAuroraId = rows[0].aurora_id;
 
@@ -212,7 +212,7 @@ describe('aurora import — #3521 mirrored ascents', () => {
 
     const rows = await ticksForUser();
     expect(rows).toHaveLength(1);
-    expect(rows[0].is_mirror).not.toBe(true);
+    expect(rows[0].is_mirror).toBe(false);
   });
 
   it('never rewrites the synthetic aurora_id when orientation changes', async () => {
