@@ -146,6 +146,16 @@ export function moveToHoldState(move: MoonBoardMove): string {
  * source, where an incoming benchmark flag is trusted outright), these two
  * scripts are lower-trust snapshots, so all three fields are COALESCEd here,
  * including benchmarkDifficulty. See issue #3530.
+ *
+ * LIMITATION (by design, not an oversight): COALESCE only stops NULL from
+ * clobbering a non-null value. It can't detect "this incoming value is a
+ * non-null but stale grade from the frozen 2023/2024 dump" — a climb whose
+ * grade genuinely changed since that dump would still take the old value on
+ * a re-run. The two defenses in this fix are independent on purpose: the host
+ * guard (moonboard-import-guard.ts) is what actually stops a re-run from
+ * touching real data; this COALESCE only bounds the damage if that guard is
+ * deliberately bypassed (MOONBOARD_IMPORT_ALLOW_REMOTE=1) or the target is a
+ * restored copy that still has a legitimate reason to re-run these scripts.
  */
 export function moonBoardGradeConflictFields(): {
   displayDifficulty: SQL;

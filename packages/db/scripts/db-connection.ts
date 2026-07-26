@@ -30,6 +30,13 @@ export function getScriptDatabaseUrl(): string {
   return databaseUrl;
 }
 
+// `postgres` (the docker-compose service name — setup-development-db.sh's
+// POSTGRES_HOST default) is a bare, single-label hostname with no TLD, so in
+// principle a split-DNS/VPN setup could resolve it to something other than
+// the local compose network. Accepted anyway: it's the actual, confirmed
+// hostname this repo's own dev tooling produces (unlike an invented remote
+// host, this isn't a guess), and nothing in Boardsesh's real infrastructure
+// (Railway/Neon, reached by full public hostnames) is ever named `postgres`.
 const LOOPBACK_OR_COMPOSE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
 
 // NOTE ON "LOCAL": a Tailscale address/hostname is NOT local in the everyday

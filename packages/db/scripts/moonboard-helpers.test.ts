@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import type { SQL } from 'drizzle-orm';
 import {
   coordinateToHoldId,
   movesToFrames,
@@ -12,6 +13,34 @@ import {
   type MoonBoardMove,
 } from './moonboard-helpers.js';
 import { sqlText } from '../src/test-utils/sql-text.js';
+
+/**
+ * sqlText (see its own doc comment) can't render an interpolated drizzle
+ * Column — it only walks plain string/queryChunks arrays, so the COALESCE
+ * fallback side renders blank there. That leaves a real gap: a regression
+ * that swaps in the WRONG stored column as a field's fallback (e.g.
+ * displayDifficulty silently falling back to benchmarkDifficulty's column)
+ * would still render as `coalesce(excluded.display_difficulty, )` and pass
+ * every sqlText-based assertion below. This helper reaches into the
+ * fragment's queryChunks directly and duck-types the drizzle Column shape
+ * (has both `name` and `table`, unlike a plain string chunk) to recover the
+ * actual stored-side column name, so that class of regression is caught too.
+ * Test-only — production code must keep using sqlText/plain SQL, not this.
+ */
+function isDrizzleColumnChunk(chunk: unknown): chunk is { name: string } {
+  return (
+    chunk !== null &&
+    typeof chunk === 'object' &&
+    'table' in chunk &&
+    typeof (chunk as { name?: unknown }).name === 'string'
+  );
+}
+
+function fallbackColumnName(fragment: SQL): string | undefined {
+  const chunks = (fragment as unknown as { queryChunks: unknown[] }).queryChunks;
+  const columnChunk = chunks.find(isDrizzleColumnChunk);
+  return columnChunk?.name;
+}
 
 void describe('coordinateToHoldId', () => {
   void it('converts A1 to hold ID 1 (first hold, bottom-left)', () => {
@@ -168,19 +197,22 @@ void describe('uuidv5', () => {
 // assertions pin the part sqlText CAN see: that each field is COALESCE-wrapped
 // with `excluded.<column>` as the first (incoming) argument.
 void describe('moonBoardGradeConflictFields', () => {
-  void it('COALESCEs displayDifficulty, taking excluded.display_difficulty as the incoming side', () => {
+  void it('COALESCEs displayDifficulty: excluded.display_difficulty incoming, display_difficulty stored fallback', () => {
     const fields = moonBoardGradeConflictFields();
     assert.match(sqlText(fields.displayDifficulty), /^coalesce\(excluded\.display_difficulty,/i);
+    assert.equal(fallbackColumnName(fields.displayDifficulty), 'display_difficulty');
   });
 
-  void it('COALESCEs benchmarkDifficulty, taking excluded.benchmark_difficulty as the incoming side', () => {
+  void it('COALESCEs benchmarkDifficulty: excluded.benchmark_difficulty incoming, benchmark_difficulty stored fallback', () => {
     const fields = moonBoardGradeConflictFields();
     assert.match(sqlText(fields.benchmarkDifficulty), /^coalesce\(excluded\.benchmark_difficulty,/i);
+    assert.equal(fallbackColumnName(fields.benchmarkDifficulty), 'benchmark_difficulty');
   });
 
-  void it('COALESCEs difficultyAverage, taking excluded.difficulty_average as the incoming side', () => {
+  void it('COALESCEs difficultyAverage: excluded.difficulty_average incoming, difficulty_average stored fallback', () => {
     const fields = moonBoardGradeConflictFields();
     assert.match(sqlText(fields.difficultyAverage), /^coalesce\(excluded\.difficulty_average,/i);
+    assert.equal(fallbackColumnName(fields.difficultyAverage), 'difficulty_average');
   });
 
   void it('never takes any of the three fields straight from excluded with no fallback', () => {
