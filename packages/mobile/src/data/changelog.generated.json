@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-27T12:43:01.724Z",
+  "generatedAt": "2026-07-27T13:19:25.470Z",
   "entries": [
+    {
+      "prNumber": 3935,
+      "category": "new",
+      "title": "Open a preview build straight from its pull request — tap the link, confirm, and the app restarts on it.",
+      "mergedAt": "2026-07-27T13:18:27Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3935"
+    },
     {
       "prNumber": 3613,
       "category": "new",

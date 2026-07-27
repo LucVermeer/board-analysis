@@ -12,6 +12,7 @@ A new version shipped to the App Store and Play Store.
 
 ### New
 
+- Open a preview build straight from its pull request — tap the link, confirm, and the app restarts on it. ([#3935](https://github.com/boardsesh/boardsesh/pull/3935))
 - Android tablets get the full wall layout: browse climbs and light them in two panes side by side, with a live "on the wall" column — built for a tablet bolted to the gym wall. ([#3613](https://github.com/boardsesh/boardsesh/pull/3613))
   The tablet layout now follows Material 3 on Android, with a navigation rail down the side instead of the phone's bottom tabs.
 
