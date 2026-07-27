@@ -1,0 +1,13 @@
+# Schema barrel files are append-only export lists, so two branches that each add
+# a table both append to the same last line and conflict on every rebase — even
+# though the resolution is always "keep both". `merge=union` is git's built-in
+# answer for exactly this file shape: it takes the lines from both sides.
+#
+# This is what makes automatic migration renumbering (vp run db:renumber, and
+# .github/workflows/db-migration-renumber.yml) useful in practice. Without it,
+# essentially every table-adding PR conflicts here and needs a human.
+#
+# Safe because the failure mode is loud: if both sides add the *same* export, the
+# union keeps both copies and TypeScript fails the build. It never silently drops
+# a line, which is the outcome that would actually hurt.
+packages/db/src/schema/**/index.ts merge=union

@@ -1,1 +1,0 @@
-ALTER TABLE "board_sessions" ADD COLUMN "notes" text;

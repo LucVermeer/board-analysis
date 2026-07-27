@@ -39,6 +39,7 @@ jobs:
       # PR-only guard signal: did this PR edit the OTA-owned changelog data file?
       # Defaults false off PRs (the OTA bot legitimately rewrites it on push).
       changelogData: ${{ github.event_name == 'pull_request' && steps.filter.outputs.changelogData || 'false' }}
+      dbMigrations: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.dbMigrations }}
       # True if any downstream job's gate would fire. setup gates on this so
       # docs-only / firmware-only PRs skip the bun-install + build:db pass
       # nothing downstream would consume. Must mirror the union of every
@@ -106,6 +107,11 @@ jobs:
             changelogData:
               - 'packages/mobile/src/data/changelog.generated.json'
               - 'CHANGELOG.md'
+            dbMigrations:
+              - 'packages/db/drizzle/**'
+              - 'packages/db/src/schema/**'
+              - 'scripts/check-db-migrations.ts'
+              - 'scripts/lib/drizzle-migrations.ts'
 
   setup:
     needs: [changes]
@@ -243,6 +249,31 @@ jobs:
       # full set.
       - name: Typecheck (cache-driven affected)
         run: vp run typecheck
+
+  db-migrations:
+    needs: [changes]
+    # Gated on the migration folder and the schema it is checked against, not on
+    # the whole sharedDeps blob (which also covers packages/shared, shared-schema,
+    # board-constants and the sync packages).
+    if: needs.changes.outputs.dbMigrations == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Needs origin/main reachable to compare numbering and `when` against it.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Validate the migration folder
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          vp run check:db-migrations -- --base origin/main
 
   codegen-drift:
     needs: [changes, setup]
@@ -737,6 +768,7 @@ jobs:
       - setup
       - lint
       - typecheck
+      - db-migrations
       - codegen-drift
       - i18n
       - test-default

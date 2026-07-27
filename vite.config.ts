@@ -164,6 +164,13 @@ export default defineConfig({
         dependsOn: ['db:up'],
         cache: false,
       },
+      // Rebase onto origin/main and move this branch's migration to the next free
+      // number, keeping the author's SQL. Run it when main takes your number; CI
+      // runs the same task from .github/workflows/db-migration-renumber.yml.
+      'db:renumber': {
+        command: 'tsx scripts/db-renumber-migration.ts',
+        cache: false,
+      },
       'db:seed-social': {
         command: 'bun run --filter=@boardsesh/db db:seed-social',
         dependsOn: ['db:up'],
@@ -339,6 +346,14 @@ export default defineConfig({
       'verify:graphql-treeshake': {
         command: 'bun packages/web/scripts/verify-graphql-treeshake.ts',
         dependsOn: ['build:web'],
+        cache: false,
+      },
+      // Guards the migration folder against the failures that are invisible in
+      // review and silent at deploy time: a .sql with no journal entry (never
+      // runs), a journal entry with no .sql (crashes the migrator), a duplicate
+      // number, and a `when` that isn't newer than main's (skipped forever).
+      'check:db-migrations': {
+        command: 'tsx scripts/check-db-migrations.ts',
         cache: false,
       },
       'check:i18n': {
