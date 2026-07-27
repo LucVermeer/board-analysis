@@ -9,7 +9,9 @@ import {
   mapMoonBoard2024Problem,
   type MoonBoard2024DumpFile,
 } from './moonboard-2024-helpers.js';
-import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
+import { moonBoardGradeConflictFields } from './moonboard-helpers.js';
+import { createScriptDb, getScriptDatabaseUrl, describeDatabaseHost } from './db-connection.js';
+import { assertMoonBoardImportAllowed } from './moonboard-import-guard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +22,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // boards (both angles) from the full catalog dataset with real quality +
 // ascensionist data and merges in place. Kept for reference / the older
 // single-file format.
+//
+// Refuses to run against anything but a local/dev-tooling database (see
+// moonboard-import-guard.ts) — a re-run of this no-grade export can regress
+// newer grades/benchmarks (issue #3530). To deliberately run it against a
+// restored snapshot or staging copy, set MOONBOARD_IMPORT_ALLOW_REMOTE=1.
 // =============================================================================
 // Imports the full MoonBoard 2024 catalog (~35k problems) at angle 40 from the
 // "Problems Moonboard 2024 40.json" catalog file. The format
@@ -67,8 +74,8 @@ async function importMoonBoard2024() {
   }
 
   const databaseUrl = getScriptDatabaseUrl();
-  const dbHost = databaseUrl.split('@')[1]?.split('/')[0] || 'unknown';
-  console.info(`🔄 Importing MoonBoard 2024 problems to: ${dbHost}`);
+  console.info(`🔄 Importing MoonBoard 2024 problems to: ${describeDatabaseHost(databaseUrl)}`);
+  assertMoonBoardImportAllowed(databaseUrl, 'import-moonboard-2024');
   console.info(`📂 Reading export from: ${exportPath}`);
   console.info(`   Layout ${layoutId}, angle ${angle}`);
 
@@ -212,9 +219,10 @@ async function importMoonBoard2024() {
           .onConflictDoUpdate({
             target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
             set: {
-              displayDifficulty: sql`excluded.display_difficulty`,
-              benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
-              difficultyAverage: sql`excluded.difficulty_average`,
+              // COALESCEd (issue #3530): this script reads a fixed, no-grade
+              // export, so a re-run must never overwrite a newer stored
+              // grade/benchmark flag with a stale-or-absent one.
+              ...moonBoardGradeConflictFields(),
               qualityNormalized: sql`true`,
               upstreamSyncedAt: sql`excluded.upstream_synced_at`,
             },

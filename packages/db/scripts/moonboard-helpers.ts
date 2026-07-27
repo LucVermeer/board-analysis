@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { sql, type SQL } from 'drizzle-orm';
+import { boardClimbStats } from '../src/schema/boards/unified.js';
 
 // =============================================================================
 // Mapping constants
@@ -128,4 +130,41 @@ export function moveToHoldState(move: MoonBoardMove): string {
   if (move.isStart) return 'STARTING';
   if (move.isEnd) return 'FINISH';
   return 'HAND';
+}
+
+/**
+ * ON CONFLICT SET fragments for the three MoonBoard grade fields
+ * (display/benchmark/average difficulty), shared by the two deprecated
+ * single-file importers (import-moonboard-problems.ts, import-moonboard-2024.ts).
+ *
+ * Both scripts read a fixed historical snapshot (the 2023 community dump / a
+ * 2024 no-grade export) that can be older than the current catalog import, so
+ * a re-run must never let an incoming `excluded.*` value overwrite a newer
+ * stored grade with a stale-or-absent one. COALESCE keeps whichever side is
+ * non-null, preferring the incoming value only when it actually has one.
+ * Unlike import-moonboard-catalog.ts (the authoritative, currently-maintained
+ * source, where an incoming benchmark flag is trusted outright), these two
+ * scripts are lower-trust snapshots, so all three fields are COALESCEd here,
+ * including benchmarkDifficulty. See issue #3530.
+ *
+ * LIMITATION (by design, not an oversight): COALESCE only stops NULL from
+ * clobbering a non-null value. It can't detect "this incoming value is a
+ * non-null but stale grade from the frozen 2023/2024 dump" — a climb whose
+ * grade genuinely changed since that dump would still take the old value on
+ * a re-run. The two defenses in this fix are independent on purpose: the host
+ * guard (moonboard-import-guard.ts) is what actually stops a re-run from
+ * touching real data; this COALESCE only bounds the damage if that guard is
+ * deliberately bypassed (MOONBOARD_IMPORT_ALLOW_REMOTE=1) or the target is a
+ * restored copy that still has a legitimate reason to re-run these scripts.
+ */
+export function moonBoardGradeConflictFields(): {
+  displayDifficulty: SQL;
+  benchmarkDifficulty: SQL;
+  difficultyAverage: SQL;
+} {
+  return {
+    displayDifficulty: sql`coalesce(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
+    benchmarkDifficulty: sql`coalesce(excluded.benchmark_difficulty, ${boardClimbStats.benchmarkDifficulty})`,
+    difficultyAverage: sql`coalesce(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
+  };
 }
