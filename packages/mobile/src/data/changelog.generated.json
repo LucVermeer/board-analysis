@@ -1,6 +1,22 @@
 {
-  "generatedAt": "2026-07-26T22:57:27.330Z",
+  "generatedAt": "2026-07-27T00:26:11.547Z",
   "entries": [
+    {
+      "prNumber": 3965,
+      "category": "fixed",
+      "title": "Open a climb you've already sent and the tick sheet no longer flashes up a green **Flash** button before your logbook loads — so a repeat can't get filed as a first-go send you never did.",
+      "mergedAt": "2026-07-27T00:25:14Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3965",
+      "body": "Logging an ascent on the web form no longer refuses a send that took one try. A redpoint that finally goes first go is a send, and now it saves like one."
+    },
+    {
+      "prNumber": 3957,
+      "category": "fixed",
+      "title": "Followers stop getting the same \"new climbs from &lt;setter&gt;\" alert twice after a deploy.",
+      "mergedAt": "2026-07-26T23:26:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3957",
+      "body": "Your board stops showing a sync error for a sync that actually worked."
+    },
     {
       "prNumber": 3960,
       "category": "fixed",

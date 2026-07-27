@@ -4,6 +4,13 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-27
+
+### Fixed
+
+- Open a climb you've already sent and the tick sheet no longer flashes up a green **Flash** button before your logbook loads — so a repeat can't get filed as a first-go send you never did. ([#3965](https://github.com/boardsesh/boardsesh/pull/3965))
+  Logging an ascent on the web form no longer refuses a send that took one try. A redpoint that finally goes first go is a send, and now it saves like one.
+
 ## 2026-07-26
 
 ### New
@@ -13,6 +20,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Followers stop getting the same "new climbs from &lt;setter&gt;" alert twice after a deploy. ([#3957](https://github.com/boardsesh/boardsesh/pull/3957))
+  Your board stops showing a sync error for a sync that actually worked.
 - Your logbook keeps syncing even when one old ascent is broken beyond repair — Boardsesh sets that one aside and carries on instead of quietly freezing every send, attempt and circuit behind it. ([#3960](https://github.com/boardsesh/boardsesh/pull/3960))
 - Animated multi-frame climbs now show up instead of quietly going missing — around 40 on the two layouts we measured, and every new one from here on. ([#3951](https://github.com/boardsesh/boardsesh/pull/3951))
 - Your playlists are yours. If someone else connects the same board account, their sync can no longer rename, empty, or delete the circuits you've synced — and if two accounts are already tangled together, neither can overwrite the other. ([#3931](https://github.com/boardsesh/boardsesh/pull/3931))
