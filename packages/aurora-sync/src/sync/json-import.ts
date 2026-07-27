@@ -57,6 +57,15 @@ const auroraExportAscentSchema = z.object({
   grade: z.string().optional(),
   is_ascent: z.boolean().optional(),
   tries: z.number().optional(),
+  // Declared so zod stops silently stripping it: an undeclared key never
+  // reaches the row builder, which is why every imported tick was written
+  // non-mirrored (#3521). Typed `unknown` rather than `z.boolean()` on
+  // purpose — the export is a bespoke rendering, not the API shape, so we
+  // don't know how it encodes booleans. A strict boolean would reject the
+  // WHOLE import with a 400 if Aurora emits `1` / `"true"` / `null`, which
+  // is a far worse failure than the orientation bug. `readExportBool` does
+  // the coercion instead, exactly like the live pull's `toBool`.
+  is_mirror: z.unknown().optional(),
 });
 
 export type AuroraExportAscent = z.infer<typeof auroraExportAscentSchema>;
@@ -67,6 +76,11 @@ const auroraExportAttemptSchema = z.object({
   count: z.number(),
   climbed_at: z.string(),
   created_at: z.string(),
+  // Same reasoning as the ascent schema above (#3521). Attempts matter as much
+  // as sends here: Tension/TB2 — the board where a quarter of live ticks are
+  // mirrored — delivers its bids inside `ascents` with `is_ascent: false`, and
+  // those records flow through `exportAscentToAttempt` into this shape.
+  is_mirror: z.unknown().optional(),
 });
 
 export type AuroraExportAttempt = z.infer<typeof auroraExportAttemptSchema>;
@@ -169,6 +183,43 @@ export type ImportProgressEvent =
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Coerce an export flag whose wire encoding we can't pin down. Mirrors the live
+ * pull's `toBool` (apply-user-logbook.ts) so both sync paths agree on what
+ * counts as true, and treats anything else — including a missing field, which
+ * is every legacy Kilter export — as false. #3521
+ */
+export function readExportBool(value: unknown): boolean {
+  if (typeof value === 'string') {
+    // Case-insensitive on the string form, which `toBool` isn't: the export is
+    // rendered by some Aurora-side script we've never seen, and a stringified
+    // boolean from most languages comes out title-case ("True"). Reading one
+    // more spelling costs nothing; missing it would silently drop the flag all
+    // over again.
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true';
+  }
+  return value === true || value === 1;
+}
+
+/**
+ * The synthetic `aurora_id` for an imported tick.
+ *
+ * FROZEN: the inputs to this hash must not change. Every previously imported
+ * tick carries the resulting id in `boardsesh_ticks.aurora_id`, where it is
+ * both the ON CONFLICT arbiter for a re-import (see `batchInsertTicks`) and the
+ * handle the live Aurora pull uses to claim placeholders (`aurora_id LIKE
+ * 'json-import-%'`). Adding a field rewrites every id in place, which severs
+ * the upsert channel that in-place corrections depend on — the #3390 quality
+ * rescale and the #3301 attempt heal both reached existing rows through it —
+ * and orphans rows whose stored climbed_at has since been moved by the live
+ * pull. Changing this is a data-integrity event needing a migration and human
+ * sign-off, not a refactor; `json-import.test.ts` pins the output to catch it.
+ *
+ * In particular, mirror is deliberately NOT part of the key (#3521): see the
+ * dedup comment in `importJsonExportData` for why the natural key can't carry
+ * it either.
+ */
 export function generateJsonImportAuroraId(
   userId: string,
   climbUuid: string,
@@ -227,7 +278,9 @@ export function buildJsonImportAscentTickRow(
     boardType,
     climbUuid,
     angle: ascent.angle,
-    isMirror: false,
+    // Absent from the export (every legacy Kilter file) → false, exactly as
+    // before. Present → recorded, instead of being thrown away. #3521
+    isMirror: readExportBool(ascent.is_mirror),
     // Conservative initial value. Aurora's `count` is attempts within a
     // single climbed_at session, not "no prior attempts ever" — so we can't
     // call this a flash here. correctFlashStatusForUser runs on the final
@@ -281,6 +334,10 @@ export function exportAscentToAttempt(ascent: AuroraExportAscent): AuroraExportA
     count: ascent.tries ?? ascent.count,
     climbed_at: ascent.climbed_at,
     created_at: ascent.created_at,
+    // Carry orientation across the reclassification, or every Tension/TB2 bid
+    // — the shape where mirrored logs actually concentrate — would lose it on
+    // the way into the attempt path. #3521
+    is_mirror: ascent.is_mirror,
   };
 }
 
@@ -978,6 +1035,90 @@ async function healMislabeledJsonImportAttempts(
 }
 
 // ---------------------------------------------------------------------------
+// Self-healing remediation for #3521
+// ---------------------------------------------------------------------------
+
+/** Natural key of an export record the user climbed mirrored. */
+type MirroredTickKey = {
+  climbUuid: string;
+  angle: number;
+  climbedAt: string;
+};
+
+/**
+ * Set `is_mirror` on rows an earlier import wrote as non-mirrored because the
+ * export's mirror field was being stripped before it ever reached the row
+ * builder (#3521).
+ *
+ * A re-import can't fix those rows on its own: the cross-source dedup below
+ * SKIPS a record whose natural key already exists, so the ON CONFLICT upsert
+ * never runs for it. This UPDATE is the only channel that reaches them, and
+ * re-importing the file is the obvious thing a user does to correct their
+ * logbook. Same shape as the #3301 heal above: matched on the natural key
+ * (climb_uuid, angle, climbed_at) of this user's own json_import rows,
+ * in-place, never a delete and never a twin.
+ *
+ * Two guards the #3301 heal doesn't have:
+ *  - Only ever flips false → true, and only from records the export marks
+ *    mirrored. An export that carries no mirror field produces an empty key
+ *    list and this never runs, so the change is inert on files that lack it.
+ *  - Skips locally-edited rows (updated_at > aurora_synced_at), the same test
+ *    the live pull uses, so a user who fixed the orientation by hand in
+ *    Boardsesh doesn't get overwritten by a stale re-import.
+ *
+ * Returns the number of rows healed.
+ */
+async function healJsonImportMirrorFlags(
+  db: PgDatabase<PgQueryResultHKT, Record<string, unknown>>,
+  boardType: BoardType,
+  userId: string,
+  keys: MirroredTickKey[],
+  now: string,
+): Promise<number> {
+  if (keys.length === 0) return 0;
+
+  let healed = 0;
+  for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+    const batch = keys.slice(i, i + BATCH_SIZE);
+    const payload = JSON.stringify(
+      batch.map((key) => ({
+        climb_uuid: key.climbUuid,
+        angle: key.angle,
+        climbed_at: key.climbedAt,
+      })),
+    );
+
+    const result = await db.execute(sql`
+      UPDATE boardsesh_ticks AS t SET
+        is_mirror = true,
+        updated_at = ${now}::timestamp,
+        aurora_synced_at = ${now}::timestamp
+      FROM jsonb_to_recordset(${payload}::jsonb) AS u(
+        climb_uuid text,
+        angle integer,
+        climbed_at text
+      )
+      WHERE t.user_id = ${userId}
+        AND t.board_type = ${boardType}
+        AND t.origin = 'json_import'
+        AND t.is_mirror IS DISTINCT FROM true
+        AND (t.aurora_synced_at IS NULL OR t.updated_at <= t.aurora_synced_at)
+        AND t.climb_uuid = u.climb_uuid
+        AND t.angle = u.angle
+        AND t.climbed_at = u.climbed_at::timestamp
+      RETURNING t.uuid
+    `);
+
+    // drizzle's execute() return shape differs by driver (postgres-js returns
+    // the rows array; Neon HTTP wraps them in { rows }), so normalize both.
+    const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
+    healed += rows.length;
+  }
+
+  return healed;
+}
+
+// ---------------------------------------------------------------------------
 // Main import function
 // ---------------------------------------------------------------------------
 
@@ -1276,7 +1417,34 @@ export async function importJsonExportData(
     });
   }
 
+  // Natural keys of every record the export marks mirrored, used to heal rows a
+  // pre-#3521 import wrote non-mirrored (see self-heal below). Empty whenever
+  // the export carries no mirror field, which makes the heal a no-op there.
+  const mirroredTickKeys: MirroredTickKey[] = [];
+  for (const record of [...trueAscents, ...allAttempts]) {
+    if (!readExportBool(record.is_mirror)) continue;
+    const climbUuid = nameToUuid.get(record.climb);
+    if (!climbUuid) continue;
+    mirroredTickKeys.push({
+      climbUuid,
+      angle: record.angle,
+      climbedAt: normalizeTimestamp(record.climbed_at),
+    });
+  }
+
   // Step 5: Collect ascent rows to insert (in-memory dedup first)
+  //
+  // The dedup key deliberately omits mirror (#3521). Adding it would let a
+  // mirrored and a non-mirrored record at the same (climb, angle, instant) both
+  // pass — and since `generateJsonImportAuroraId` is frozen, both would carry
+  // the SAME aurora_id and land in one INSERT … ON CONFLICT DO UPDATE batch,
+  // which Postgres rejects outright (21000, "cannot affect row a second time"),
+  // failing the whole chunk. Splitting that pair needs the id key to change
+  // too, which is a migration, not a one-liner. So the pre-existing behaviour
+  // stands: such a pair collapses to one row (the first one wins, the second is
+  // counted as skipped). It needs two logs of the same climb at the same angle
+  // in the same second, which Aurora's second-resolution climbed_at makes very
+  // rare, and the outcome is a skip, not corruption.
   const ascentRows = trueAscents.reduce<JsonImportTickRow[]>((rows, ascent) => {
     const climbUuid = nameToUuid.get(ascent.climb);
     if (!climbUuid) {
@@ -1319,7 +1487,7 @@ export async function importJsonExportData(
       boardType,
       climbUuid,
       angle: attempt.angle,
-      isMirror: false,
+      isMirror: readExportBool(attempt.is_mirror),
       status: 'attempt',
       attemptCount: attempt.count,
       quality: null,
@@ -1338,8 +1506,9 @@ export async function importJsonExportData(
   }, []);
 
   // Step 7: Batch-insert ascents and attempts, plus self-heal any pre-#3301
-  // mislabeled sends, all in one transaction.
+  // mislabeled sends and pre-#3521 dropped mirror flags, all in one transaction.
   let healedMislabeledSends = 0;
+  let healedMirrorFlags = 0;
   await db.transaction(async (tx) => {
     result.ascents.imported = await batchInsertTicks(
       tx,
@@ -1355,6 +1524,9 @@ export async function importJsonExportData(
         attemptCount: sql`excluded.attempt_count`,
         quality: sql`excluded.quality`,
         difficulty: sql`excluded.difficulty`,
+        // #3521: a row reached by the upsert (rather than skipped by the dedup)
+        // takes the export's orientation too, instead of keeping a stale false.
+        isMirror: sql`excluded.is_mirror`,
         climbedAt: sql`excluded.climbed_at`,
         updatedAt: sql`excluded.updated_at`,
         auroraSyncedAt: sql`excluded.aurora_synced_at`,
@@ -1371,6 +1543,7 @@ export async function importJsonExportData(
         climbUuid: sql`excluded.climb_uuid`,
         angle: sql`excluded.angle`,
         attemptCount: sql`excluded.attempt_count`,
+        isMirror: sql`excluded.is_mirror`,
         climbedAt: sql`excluded.climbed_at`,
         updatedAt: sql`excluded.updated_at`,
         auroraSyncedAt: sql`excluded.aurora_synced_at`,
@@ -1385,6 +1558,11 @@ export async function importJsonExportData(
     // skips inserting a twin for these keys, so this UPDATE is what actually
     // corrects the stale row. Never deletes.
     healedMislabeledSends = await healMislabeledJsonImportAttempts(tx, boardType, userId, reclassifiedAttemptKeys, now);
+
+    // Remediation (#3521): set is_mirror on rows a pre-fix import wrote
+    // non-mirrored. Same reason as above — the dedup skips these keys, so the
+    // upsert never reaches them and this UPDATE is the only correction channel.
+    healedMirrorFlags = await healJsonImportMirrorFlags(tx, boardType, userId, mirroredTickKeys, now);
   });
 
   // Structured breadcrumb (info-level, not an error) so we can measure how often
@@ -1393,6 +1571,17 @@ export async function importJsonExportData(
   // console (with key=value fields) rather than the backend winston logger on
   // purpose: this shared package must not depend on `packages/backend`, and it
   // already logs via console elsewhere. The backend captures stdout regardless.
+  // Counterpart breadcrumb for #3521. Whether Aurora's account export carries a
+  // mirror field at all was unverified when this shipped — no real export was
+  // available to check — so this is how prod answers it: a non-zero
+  // mirroredRecords on a real import confirms the field exists and is named
+  // `is_mirror`. Counts only, no user content.
+  if (mirroredTickKeys.length > 0 || healedMirrorFlags > 0) {
+    console.info(
+      `[aurora-import][3521] mirrored records: boardType=${boardType} mirroredRecords=${mirroredTickKeys.length} healedMirrorFlags=${healedMirrorFlags}`,
+    );
+  }
+
   if (reclassifiedAttempts.length > 0 || healedMislabeledSends > 0) {
     console.info(
       `[aurora-import][3301] merged-shape logbook: boardType=${boardType} reclassifiedAttempts=${reclassifiedAttempts.length} healedMislabeledSends=${healedMislabeledSends}`,

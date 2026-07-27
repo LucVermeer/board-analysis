@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import {
+  auroraExportSchema,
   buildImportedClimbRow,
   buildJsonImportAscentTickRow,
   exportAscentToAttempt,
@@ -9,6 +10,7 @@ import {
   importedPlaceholderConflictPolicy,
   isExportAscentActuallyAttempt,
   publishedClimbKey,
+  readExportBool,
   type AuroraExportAscent,
 } from './json-import';
 
@@ -108,6 +110,141 @@ describe('merged-shape attempt reclassification (#3301)', () => {
   it('falls back to count when tries is absent', () => {
     const attempt = exportAscentToAttempt(makeAscent({ is_ascent: false, count: 3 }));
     expect(attempt.count).toBe(3);
+  });
+
+  // #3521: Tension/TB2 is both the merged-shape board and the board where a
+  // quarter of live ticks are mirrored, so orientation has to survive the
+  // ascents → attempt coercion or the fix misses exactly the affected users.
+  it('carries the mirror flag across the reclassification', () => {
+    expect(exportAscentToAttempt(makeAscent({ is_ascent: false, is_mirror: true })).is_mirror).toBe(true);
+    expect(exportAscentToAttempt(makeAscent({ is_ascent: false })).is_mirror).toBeUndefined();
+  });
+});
+
+/**
+ * #3521 — `is_mirror` was never declared on the export schema, so zod stripped
+ * it before the row builder ran and every imported tick was written
+ * non-mirrored. Whether Aurora's account export actually carries the field was
+ * NOT verified when this landed: the export is requested by emailing Aurora
+ * support, no real one was available, and its shape shares no field names with
+ * the live API (`climb` name vs `climb_uuid`, `stars` vs `quality`, `grade` vs
+ * `difficulty`) — so the live pull reading `is_mirror` proves nothing about it.
+ * These fixtures are hand-built from the shapes already in this repo, not
+ * copied from a real export. If the field is absent or spelled differently in
+ * the real file, every assertion below still holds and the importer behaves
+ * exactly as it did before.
+ */
+describe('mirrored ascents (#3521)', () => {
+  it('keeps is_mirror through schema validation instead of stripping it', () => {
+    const parsed = auroraExportSchema.parse({
+      user: { username: 'tester' },
+      ascents: [{ ...makeAscent(), is_mirror: true }],
+      attempts: [
+        {
+          climb: 'Test Climb',
+          angle: 40,
+          count: 1,
+          climbed_at: '2026-06-02 10:00:00',
+          created_at: '2026-06-02 10:00:00',
+          is_mirror: true,
+        },
+      ],
+    });
+    expect(parsed.ascents[0].is_mirror).toBe(true);
+    expect(parsed.attempts[0].is_mirror).toBe(true);
+  });
+
+  it('records a mirrored ascent as mirrored', () => {
+    const row = buildJsonImportAscentTickRow(
+      USER_ID,
+      'tension',
+      makeAscent({ is_mirror: true }),
+      CLIMB_UUID,
+      CLIMBED_AT,
+      NOW,
+    );
+    expect(row.isMirror).toBe(true);
+  });
+
+  it('leaves a record without a mirror flag non-mirrored, exactly as before', () => {
+    // Every legacy Kilter export takes this path, as does any export that turns
+    // out not to carry the field at all.
+    expect(buildJsonImportAscentTickRow(USER_ID, 'kilter', makeAscent(), CLIMB_UUID, CLIMBED_AT, NOW).isMirror).toBe(
+      false,
+    );
+    expect(
+      buildJsonImportAscentTickRow(USER_ID, 'kilter', makeAscent({ is_mirror: false }), CLIMB_UUID, CLIMBED_AT, NOW)
+        .isMirror,
+    ).toBe(false);
+  });
+
+  // The export is a bespoke rendering, not the API shape, so we can't assume it
+  // encodes booleans as JSON booleans. A strict z.boolean() would 400 the WHOLE
+  // import on `1` or `"true"` — a much worse bug than the one being fixed — so
+  // the schema takes the value untyped and readExportBool coerces it, a
+  // superset of the live pull's toBool (it also reads the title-case spelling
+  // most languages produce when they stringify a boolean).
+  it.each([
+    { value: true, expected: true },
+    { value: 1, expected: true },
+    { value: '1', expected: true },
+    { value: 'true', expected: true },
+    { value: 'True', expected: true },
+    { value: 'TRUE', expected: true },
+    { value: false, expected: false },
+    { value: 0, expected: false },
+    { value: 'false', expected: false },
+    { value: 'False', expected: false },
+    { value: '', expected: false },
+    { value: null, expected: false },
+    { value: undefined, expected: false },
+  ])('accepts is_mirror encoded as $value without failing validation → $expected', ({ value, expected }) => {
+    const parsed = auroraExportSchema.safeParse({
+      user: { username: 'tester' },
+      ascents: [{ ...makeAscent(), is_mirror: value }],
+    });
+    expect(parsed.success).toBe(true);
+    expect(readExportBool(value)).toBe(expected);
+  });
+});
+
+/**
+ * The synthetic aurora_id is a FROZEN key, not an implementation detail.
+ *
+ * It is persisted on every previously imported tick, where it serves as the ON
+ * CONFLICT arbiter for re-imports and as the handle the live Aurora pull uses
+ * to claim placeholders. Changing the hash inputs rewrites every existing id,
+ * which severs the upsert channel that in-place corrections rely on (the #3390
+ * quality rescale and the #3301 attempt heal both reached existing rows through
+ * it) and can leave twins behind for users whose climbed_at has since moved.
+ *
+ * If this test fails, you are looking at a data-integrity event that needs a
+ * migration and human sign-off — not a refactor to be re-baselined. #3521
+ */
+describe('generateJsonImportAuroraId is frozen', () => {
+  it('produces the same ids it produced before mirror support was added', () => {
+    expect(generateJsonImportAuroraId(USER_ID, CLIMB_UUID, 40, CLIMBED_AT, 'ascents')).toBe(
+      'json-import-0ac4059892bcc26b5e00127dc55c4791',
+    );
+    expect(generateJsonImportAuroraId(USER_ID, CLIMB_UUID, 40, CLIMBED_AT, 'bids')).toBe(
+      'json-import-19a4e6d0a89940c54fb24cc5a4c3d4e4',
+    );
+  });
+
+  it('gives a mirrored and a non-mirrored record at the same instant the same id', () => {
+    // Not an accident: mirror is deliberately absent from both the id hash and
+    // the dedup key. Letting them diverge would put two rows carrying the same
+    // aurora_id into one ON CONFLICT batch, which Postgres rejects (21000).
+    const mirrored = buildJsonImportAscentTickRow(
+      USER_ID,
+      'tension',
+      makeAscent({ is_mirror: true }),
+      CLIMB_UUID,
+      CLIMBED_AT,
+      NOW,
+    );
+    const plain = buildJsonImportAscentTickRow(USER_ID, 'tension', makeAscent(), CLIMB_UUID, CLIMBED_AT, NOW);
+    expect(mirrored.auroraId).toBe(plain.auroraId);
   });
 });
 

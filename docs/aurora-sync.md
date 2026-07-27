@@ -446,6 +446,10 @@ changes, and the `/api/board-credentials/kilter/handoff` +
 - **Same file re-imported**: Deterministic `auroraId` based on `sha256(climbUuid:angle:climbedAt:type)` ensures `onConflictDoUpdate` handles idempotency.
 - **Cross-source (API + JSON)**: Before inserting, existing ticks are fetched and matched by `(climbUuid, angle, climbedAt)` with normalized timestamps. Matching entries are skipped.
 
+Both keys are frozen, and neither includes mirror (#3521). The synthetic `auroraId` is persisted on every imported tick, so changing its inputs rewrites ids that existing rows already carry — which breaks the upsert path that in-place corrections run through, and is a migration, not a refactor. Adding mirror to the cross-source key alone is worse: two records differing only by orientation would then both pass dedup while still hashing to the same `auroraId`, and Postgres rejects two such rows in one `ON CONFLICT DO UPDATE` batch (`21000`), failing the chunk. The trade-off is that a mirrored and a non-mirrored log of the same climb at the same second collapse to one row.
+
+Because the dedup skips rather than upserts, a re-import can't correct an existing row through the insert path. Corrections are explicit `UPDATE`s scoped to the user's own `json_import` rows and matched on the natural key — `healMislabeledJsonImportAttempts` (#3301, send mislabeled as an attempt) and `healJsonImportMirrorFlags` (#3521, orientation dropped). Both are in-place and never delete.
+
 ### Climb Name Resolution
 
 Climb names are resolved via `board_climbs` table using a composite index on `(board_type, name)`. When multiple climbs share the same name (rare), listed public climbs are preferred first, then the importing user's own climbs, then unlisted Aurora catalog climbs. Within the same tier, the climb with the highest `ascensionist_count` is chosen.
