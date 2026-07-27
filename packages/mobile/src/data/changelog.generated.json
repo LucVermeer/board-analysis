@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-27T00:26:11.547Z",
+  "generatedAt": "2026-07-27T11:33:29.754Z",
   "entries": [
+    {
+      "prNumber": 3968,
+      "category": "fixed",
+      "title": "Sign in with Apple or Google from Boardsesh in your browser, with failed or cancelled attempts returning you to the app so you can try again.",
+      "mergedAt": "2026-07-27T11:32:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3968"
+    },
     {
       "prNumber": 3965,
       "category": "fixed",

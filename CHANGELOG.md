@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Sign in with Apple or Google from Boardsesh in your browser, with failed or cancelled attempts returning you to the app so you can try again. ([#3968](https://github.com/boardsesh/boardsesh/pull/3968))
 - Open a climb you've already sent and the tick sheet no longer flashes up a green **Flash** button before your logbook loads — so a repeat can't get filed as a first-go send you never did. ([#3965](https://github.com/boardsesh/boardsesh/pull/3965))
   Logging an ascent on the web form no longer refuses a send that took one try. A redpoint that finally goes first go is a send, and now it saves like one.
 
