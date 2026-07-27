@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-27T11:38:49.704Z",
+  "generatedAt": "2026-07-27T12:43:01.724Z",
   "entries": [
     {
       "prNumber": 3613,
@@ -2312,6 +2312,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-27T11:37:13Z",
+      "sha": "09ce6340d5439a07bcf0af45adb618f538824a0a",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "755a7ed588d0a0ee11925da1da3c0d1177452ea8",
+        "ios": "293188182ca1c491d8313afb17dd66938ff89449"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-17T11:38:50+10:00",

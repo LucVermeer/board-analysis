@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-27
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ### New
 
 - Android tablets get the full wall layout: browse climbs and light them in two panes side by side, with a live "on the wall" column — built for a tablet bolted to the gym wall. ([#3613](https://github.com/boardsesh/boardsesh/pull/3613))
