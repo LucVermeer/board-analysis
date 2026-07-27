@@ -30,7 +30,11 @@ import {
  * — the PHYSICAL screen, not the app window (which shrinks under Split View /
  * multi-window / DeX) — and rotation-invariant via `max`/`min`, so memoized once.
  */
-export function useDeviceLayout(): DeviceLayout & { isTablet: boolean; wallDeviceClass: WallDeviceClass } {
+export function useDeviceLayout(): DeviceLayout & {
+  isPad: boolean;
+  isTablet: boolean;
+  wallDeviceClass: WallDeviceClass;
+} {
   const { width } = useWindowDimensions();
   // `Platform.isPad` is iOS-only (undefined on Android), so guard on the OS too.
   const isPad = Platform.OS === 'ios' && Platform.isPad === true;
@@ -50,7 +54,7 @@ export function useDeviceLayout(): DeviceLayout & { isTablet: boolean; wallDevic
   const isAndroidTablet = Platform.OS === 'android' && isTablet;
   const wallDeviceClass = resolveWallDeviceClass({ screenLongSide, isPad, isAndroidTablet });
   return useMemo(
-    () => ({ ...resolveDeviceLayout({ width, isTablet }), isTablet, wallDeviceClass }),
-    [width, isTablet, wallDeviceClass],
+    () => ({ ...resolveDeviceLayout({ width, isTablet }), isPad, isTablet, wallDeviceClass }),
+    [width, isPad, isTablet, wallDeviceClass],
   );
 }
