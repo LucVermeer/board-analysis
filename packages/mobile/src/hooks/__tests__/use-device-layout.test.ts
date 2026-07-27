@@ -37,8 +37,8 @@ describe('useDeviceLayout', () => {
     expect(result.current).toMatchObject({
       isPad: true,
       isTablet: true,
-      wallDeviceClass: expect.any(String) as unknown as string,
-      widthClass: expect.any(String) as unknown as string,
+      wallDeviceClass: expect.any(String),
+      widthClass: expect.any(String),
     });
   });
 
