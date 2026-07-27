@@ -10,8 +10,11 @@
  *   Production (`--channel <name>`) — `eoas publish` to our self-hosted
  *     expo-open-ota server. Requires EXPO_UPDATES_URL (the server's manifest
  *     endpoint — eoas derives the upload host from updates.url in app.config)
- *     and EXPO_TOKEN (Expo API auth for branch/channel mapping). The channel
- *     name maps to a same-named branch on the server.
+ *     and EOO_TOKEN (the app-scoped expo-open-ota API key; the V3 control-plane
+ *     server rejects Expo tokens). The `--channel <name>` value is used as the
+ *     server BRANCH name; the channel→branch mapping is a separate step
+ *     (a one-time dashboard action for production; scripts/ota-channel-map.ts
+ *     for per-PR previews).
  *
  * Usage:
  *   vp run mobile:publish                              # preview: current git branch
@@ -23,7 +26,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pathWithoutBrokenBunxShims } from './lib/eoas';
+import { EOAS_PACKAGE_SPEC, pathWithoutBrokenBunxShims } from './lib/eoas';
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MOBILE_DIR = resolve(ROOT_DIR, 'packages', 'mobile');
@@ -69,13 +72,16 @@ function publishToSelfHostedChannel(channelName: string, platform: string, expli
   const serverUrl = process.env.EXPO_UPDATES_URL;
   if (!serverUrl) {
     console.error('[mobile:publish] --channel requires EXPO_UPDATES_URL (the expo-open-ota manifest endpoint,');
-    console.error('[mobile:publish] e.g. https://ota.boardsesh.com/manifest). eoas derives the upload host from it.');
+    console.error(
+      '[mobile:publish] e.g. https://updates.boardsesh.com/manifest). eoas derives the upload host from it.',
+    );
     console.error('[mobile:publish] See docs/mobile-ota-updates.md.');
     process.exit(1);
   }
-  if (!process.env.EXPO_TOKEN) {
-    console.error('[mobile:publish] --channel requires EXPO_TOKEN (Expo API auth for branch/channel mapping).');
-    console.error('[mobile:publish] Run `bunx eas login` locally, or set EXPO_TOKEN in CI.');
+  if (!process.env.EOO_TOKEN) {
+    console.error('[mobile:publish] --channel requires EOO_TOKEN (an app-scoped expo-open-ota API key).');
+    console.error('[mobile:publish] The V3 control-plane server rejects Expo tokens; mint a key in the dashboard');
+    console.error('[mobile:publish] and set EOO_TOKEN locally / in CI. See docs/mobile-ota-updates.md.');
     process.exit(1);
   }
 
@@ -83,13 +89,18 @@ function publishToSelfHostedChannel(channelName: string, platform: string, expli
   const commitSubject = getCommitSubject();
   const updateMessage = explicitMessage ?? `${commitHash} ${commitSubject}`.trim();
 
-  // eoas publish targets a server branch; the channel baked into the binary
-  // maps to a same-named branch (channel "production" → branch "production").
-  // Pin the major (matches the eas-cli@16 convention below): eoas 3.x is already
-  // in alpha, and an unpinned @latest could pull a breaking release into the
-  // production publish path with no change in this repo.
+  // eoas@3.0.5 publish targets a server BRANCH (--branch holds the uploaded
+  // update). We deliberately do NOT pass --channel: in eoas@3 it's a DEPRECATED
+  // client-side no-op — it only sets RELEASE_CHANNEL during config resolution; it
+  // is NOT sent to the server, does NOT create a channel, and does NOT drive
+  // rollouts. Channel creation + channel→branch mapping is a separate step
+  // (scripts/ota-channel-map.ts for per-PR previews; a one-time dashboard action
+  // for production). Progressive rollouts are branch + runtimeVersion scoped
+  // (--rollout-percentage targets a branch's runtimeVersion), not channel scoped.
+  // EOAS_PACKAGE_SPEC pins the CLI to the exact deployed V3 server version
+  // (control-plane requires an exact match); see scripts/lib/eoas.ts.
   const eoasArgs = [
-    'eoas@2',
+    EOAS_PACKAGE_SPEC,
     'publish',
     '--branch',
     channelName,

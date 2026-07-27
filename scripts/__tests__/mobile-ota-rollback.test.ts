@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildEoasArgs, parseRollbackArgs, validateRollbackOptions } from '../mobile-ota-rollback';
+import { EOAS_PACKAGE_SPEC } from '../lib/eoas';
 
 describe('parseRollbackArgs', () => {
   it('defaults to rolling the production branch back to embedded, all platforms', () => {
@@ -24,20 +25,21 @@ describe('parseRollbackArgs', () => {
 });
 
 describe('buildEoasArgs', () => {
-  it('maps the embedded mode to `eoas rollback`', () => {
+  it('maps the embedded mode to `eoas rollback --nonInteractive` (non-TTY safe)', () => {
     expect(buildEoasArgs({ branch: 'production', platform: 'all', mode: 'embedded' })).toEqual([
-      'eoas@2',
+      EOAS_PACKAGE_SPEC,
       'rollback',
       '--branch',
       'production',
       '--platform',
       'all',
+      '--nonInteractive',
     ]);
   });
 
   it('maps the republish mode to `eoas republish`', () => {
     expect(buildEoasArgs({ branch: 'production', platform: 'ios', mode: 'republish' })).toEqual([
-      'eoas@2',
+      EOAS_PACKAGE_SPEC,
       'republish',
       '--branch',
       'production',

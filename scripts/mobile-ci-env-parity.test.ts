@@ -233,24 +233,63 @@ describe('mobile OTA preview channel isolation + S3 lifecycle coupling', () => {
     expect(sweep).toMatch(/\^pr-\[0-9\]\+\$/);
   });
 
-  it('keeps the channel-name prefix equal to the documented S3 lifecycle prefix', () => {
-    // expo-open-ota keys updates as <branch>/<rtv>/<ts>/…, so the S3 lifecycle rule
-    // that bounds storage is scoped to the channel-name prefix. If the workflow's
-    // channel prefix and the documented lifecycle prefix ever diverge, previews
-    // either never expire (storage leak) or the rule could match production.
+  it('scopes the S3 lifecycle prefix to <appId>/pr- (ends with the channel prefix, and documented)', () => {
+    // V3 (control-plane) keys updates as <appId>/<branch>/<rtv>/<ts>/…, so the S3
+    // lifecycle rule that bounds per-PR preview storage is scoped to `<appId>/pr-`
+    // — NOT a bare `pr-`. It MUST end with the workflow's channel-name prefix (so
+    // it matches only pr-<n> channels) and can never match `<appId>/production/…`.
+    // Post-V3 the channel-name prefix and the S3 key prefix differ, so they're two
+    // constants in mobile-ota-setup.ts; if they drift, previews either never expire
+    // (storage leak) or the rule hits production. The docs must document the exact
+    // appId-scoped prefix.
     const preview = readWorkflow(OTA_PREVIEW);
     const guard = preview.match(/\^(pr-)\[0-9\]\+\$/);
     expect(guard, 'preview workflow must guard channels as ^pr-[0-9]+$').not.toBeNull();
     const channelPrefix = guard![1];
 
+    const setup = readFileSync(resolve(REPO_ROOT, 'scripts/mobile-ota-setup.ts'), 'utf8');
+    const appId = setup.match(/OTA_APP_ID\s*=\s*'([^']+)'/)?.[1];
+    const channelConst = setup.match(/PREVIEW_CHANNEL_PREFIX\s*=\s*'([^']+)'/)?.[1];
+    expect(appId, 'setup must define OTA_APP_ID').toBeTruthy();
+    expect(channelConst, 'setup PREVIEW_CHANNEL_PREFIX must equal the workflow channel prefix').toBe(channelPrefix);
+    // Guard the DEFINITION, not a value we reconstruct: PREVIEW_S3_PREFIX must be
+    // composed as `${OTA_APP_ID}/${PREVIEW_CHANNEL_PREFIX}`. A hardcoded rewrite
+    // (e.g. 'previews/') that stopped matching pr- keys would then fail here instead
+    // of silently leaking preview storage.
+    expect(setup, 'PREVIEW_S3_PREFIX must be composed from OTA_APP_ID + PREVIEW_CHANNEL_PREFIX').toMatch(
+      /PREVIEW_S3_PREFIX\s*=\s*`\$\{OTA_APP_ID\}\/\$\{PREVIEW_CHANNEL_PREFIX\}`/,
+    );
+    const s3Prefix = `${appId}/${channelConst}`;
+    expect(s3Prefix.endsWith(channelPrefix), 'the composed S3 prefix must end with the channel-name prefix').toBe(true);
+
     const docs = readFileSync(resolve(REPO_ROOT, 'docs/mobile-ota-updates.md'), 'utf8');
     expect(docs.toLowerCase(), 'docs must describe the S3 lifecycle rule').toContain('lifecycle');
-    expect(docs, `docs must document the lifecycle prefix \`${channelPrefix}\``).toContain(`\`${channelPrefix}\``);
+    expect(docs, `docs must document the appId-scoped lifecycle prefix \`${s3Prefix}\``).toContain(s3Prefix);
+  });
+
+  it('keeps the OTA app id identical across app.config, the shared const, the map helper, and setup', () => {
+    // The expo-app-id header is baked by app.config.ts (inline — Expo's config loader
+    // can't import a sibling .ts) and mirrored in src/lib/ota-app-id.ts for the in-app
+    // channel switcher; the channel-map helper (DEFAULT_APP_ID) and the setup runbook
+    // (OTA_APP_ID) address the same app. A drift 404s ("Unknown app id") or mis-routes
+    // previews, and the id is a fingerprint input — so pin all four equal.
+    const idFrom = (rel: string, name: string): string | undefined => {
+      const src = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
+      return (
+        src.match(new RegExp(`${name}\\s*=\\s*process\\.env\\.[A-Z_]+\\s*\\?\\?\\s*'([0-9a-fA-F-]+)'`))?.[1] ??
+        src.match(new RegExp(`${name}\\s*=\\s*'([0-9a-fA-F-]+)'`))?.[1]
+      );
+    };
+    const shared = idFrom('packages/mobile/src/lib/ota-app-id.ts', 'OTA_APP_ID');
+    expect(shared, 'src/lib/ota-app-id must define OTA_APP_ID').toBeTruthy();
+    expect(idFrom('packages/mobile/app.config.ts', 'OTA_APP_ID'), 'app.config OTA_APP_ID').toBe(shared);
+    expect(idFrom('scripts/ota-channel-map.ts', 'DEFAULT_APP_ID'), 'ota-channel-map DEFAULT_APP_ID').toBe(shared);
+    expect(idFrom('scripts/mobile-ota-setup.ts', 'OTA_APP_ID'), 'mobile-ota-setup OTA_APP_ID').toBe(shared);
   });
 
   it('uses pull_request (never pull_request_target) so fork jobs get no secrets', () => {
     // pull_request_target would run PR-author code with the production-capable
-    // EXPO_TOKEN — the exact thing this design forbids. Match the YAML trigger key
+    // EOO_TOKEN — the exact thing this design forbids. Match the YAML trigger key
     // (a comment may legitimately name the anti-pattern to warn against it).
     const preview = readWorkflow(OTA_PREVIEW);
     expect(preview).toMatch(/^on:/m);
@@ -259,7 +298,7 @@ describe('mobile OTA preview channel isolation + S3 lifecycle coupling', () => {
   });
 
   it('gates the token-bearing publish behind the ota-preview environment', () => {
-    // The publish job runs PR-author HEAD code with EXPO_TOKEN, so it must sit in a
+    // The publish job runs PR-author code with EOO_TOKEN, so it must sit in a
     // protected environment (configured with required reviewers) — not run free.
     const preview = readWorkflow(OTA_PREVIEW);
     expect(preview).toMatch(/^\s+environment:\s*ota-preview\s*$/m);
