@@ -25,19 +25,20 @@ export function isBottomAccessoryAvailable(): boolean {
 export function useNativeTabBar(): boolean {
   const { variant } = useTheme();
   const glassCapable = useGlassCapability();
-  const { isPad } = useDeviceLayout();
-  // The iPad adaptive shell renders JS `Tabs` at EVERY iPad width — a glass rail at
-  // regular width, the Material bar in a narrow split (Slide Over / Split View) — and
-  // never `NativeTabs`, so a resize across the breakpoint keeps one navigator mounted
-  // (see `_layout`). So the native tab bar — and the bottom accessory + tab-bar search
-  // role it hosts — is never on screen on iPad. Everything that branches on this
-  // predicate (the climb-list search mode, the accessory mount, bottom-chrome
-  // geometry) must treat iPad as "no native tab bar", or it reaches for a native
-  // accessory / search bar that has no bar to live in — and on an iPad in a narrow
-  // split that would skip the native accessory AND suppress the JS PersistentQueueBar,
-  // dropping the now-playing bar entirely. (`isPad` subsumes the old regular-width
-  // check, since a `regular` width only ever resolves on an iPad.)
-  if (isPad) return false;
+  const { isTablet } = useDeviceLayout();
+  // The tablet adaptive shell renders JS `Tabs` at EVERY tablet width — a rail at
+  // regular width, the Material bar in a narrow split (Slide Over / Split View /
+  // Android multi-window) — and never `NativeTabs`, so a resize across the breakpoint
+  // keeps one navigator mounted (see `_layout`). So the native tab bar — and the
+  // bottom accessory + tab-bar search role it hosts — is never on screen on a tablet.
+  // Everything that branches on this predicate (the climb-list search mode, the
+  // accessory mount, bottom-chrome geometry) must treat a tablet as "no native tab
+  // bar", or it reaches for a native accessory / search bar that has no bar to live
+  // in — and on a tablet in a narrow split that would skip the native accessory AND
+  // suppress the JS PersistentQueueBar, dropping the now-playing bar entirely.
+  // (`isTablet` subsumes the old regular-width check, since a `regular` width only
+  // ever resolves on a tablet. Android is always false below via the variant check.)
+  if (isTablet) return false;
   return variant === 'liquidGlass' && glassCapable;
 }
 

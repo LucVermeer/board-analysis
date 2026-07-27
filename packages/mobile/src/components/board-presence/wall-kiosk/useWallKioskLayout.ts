@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, type LayoutChangeEvent } from 'react-native';
+import { Dimensions, Platform, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resolveWallKioskLayout, type WallKioskInsets, type WallKioskLayout } from './wall-kiosk-layout';
 import {
@@ -71,7 +71,12 @@ export function useWallKioskLayout(boardAspectRatio: number | null): WallKioskLa
   const resolved = useMemo(() => {
     const shortSide = pane ? Math.min(pane.width, pane.height) : 0;
     const screen = Dimensions.get('screen');
-    const physicalLongSideMm = estimatePhysicalLongSideMm(Math.max(screen.width, screen.height));
+    // The physical-size estimate assumes iPad points-per-inch. On Android
+    // `Dimensions` returns density-bucketed dp with no reliable ppi, so pass null and
+    // let resolveHeroScale fall back to the pane short side (the external-display /
+    // unknown-model path) rather than compute a wrong physical size.
+    const physicalLongSideMm =
+      Platform.OS === 'ios' ? estimatePhysicalLongSideMm(Math.max(screen.width, screen.height)) : null;
     const heroScale = resolveHeroScale({ physicalLongSideMm, paneShortSide: shortSide });
     const baseType = resolveWallKioskTypeScale(shortSide, heroScale);
 

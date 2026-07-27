@@ -18,11 +18,11 @@ const cfg = vi.hoisted(() => ({
   // (Material, plus Liquid Glass on iOS < 26 / Android) takes the JS tab bar.
   glassCapable: true,
   platformOS: 'ios' as 'ios' | 'android',
-  // 'regular' takes the iPad sidebar shell; 'compact' keeps the phone tab bars.
+  // 'regular' takes the tablet sidebar shell; 'compact' keeps the phone tab bars.
   widthClass: 'compact' as 'compact' | 'regular',
-  // iPad in a narrow split: compact width but still an iPad, which the shell keeps on
-  // JS Tabs (never NativeTabs). Independent of widthClass; 'regular' always implies iPad.
-  isPad: false,
+  // Tablet in a narrow split: compact width but still a tablet, which the shell keeps on
+  // JS Tabs (never NativeTabs). Independent of widthClass; 'regular' always implies tablet.
+  isTablet: false,
   // Window width drives the wall surface in the regular shell: a dedicated column
   // (landscape) vs a strip atop the pane (portrait) — see resolveWallSurface.
   windowWidth: 1024,
@@ -87,19 +87,22 @@ vi.mock('../../../src/hooks/use-on-accessory-surface', () => ({
 }));
 
 vi.mock('../../../src/hooks/use-device-layout', () => ({
-  // `regular` is only ever reached on an iPad (an iPhone is always compact), so it
-  // always implies isPad; cfg.isPad additionally models an iPad in a narrow split.
+  // `regular` is only ever reached on a tablet (a phone is always compact), so it
+  // always implies isTablet; cfg.isTablet additionally models a tablet in a narrow split.
   useDeviceLayout: () => ({
     widthClass: cfg.widthClass,
     expanded: false,
-    isPad: cfg.widthClass === 'regular' || cfg.isPad,
+    isTablet: cfg.widthClass === 'regular' || cfg.isTablet,
     wallDeviceClass: cfg.wallDeviceClass,
   }),
 }));
 
-vi.mock('../../../src/components/navigation/IpadSidebar', () => ({
-  IpadSidebar: ({ showWallCell = true }: { showWallCell?: boolean }) =>
-    createElement('aside', { 'data-ipad-sidebar': 'true', 'data-show-wall-cell': String(showWallCell) }),
+// The shell renders TabletSidebar (the variant router → IpadSidebar glass rail or
+// MaterialNavigationRail); mock it so the layout tests don't reach into either rail's
+// native surface. The per-variant routing is covered by the variant-component tests.
+vi.mock('../../../src/components/navigation/TabletSidebar', () => ({
+  TabletSidebar: ({ showWallCell = true }: { showWallCell?: boolean }) =>
+    createElement('aside', { 'data-tablet-sidebar': 'true', 'data-show-wall-cell': String(showWallCell) }),
 }));
 
 vi.mock('../../../src/components/play-drawer/IpadPlayPane', () => ({
@@ -132,7 +135,9 @@ vi.mock('../../../src/providers/theme-provider', () => ({
     systemColors: {
       label: '#F5F2FB',
       secondaryLabel: '#A9A2B6',
+      separator: 'rgba(60,55,75,0.18)',
     },
+    m3: { outlineVariant: '#49454F' },
   }),
 }));
 
@@ -257,7 +262,7 @@ describe('TabLayout', () => {
     cfg.glassCapable = true;
     cfg.platformOS = 'ios';
     cfg.widthClass = 'compact';
-    cfg.isPad = false;
+    cfg.isTablet = false;
     cfg.windowWidth = 1024;
     cfg.boardPresenceEnabled = false;
     cfg.boardPresenceBoardId = null;
@@ -322,7 +327,7 @@ describe('TabLayout', () => {
     // shell routes it through JS Tabs + the Material bar so a resize across the 700pt
     // boundary doesn't swap navigator types — NativeTabs never renders on iPad, and
     // there's no rail at compact width.
-    cfg.isPad = true;
+    cfg.isTablet = true;
     cfg.widthClass = 'compact';
     cfg.variant = 'liquidGlass';
     cfg.glassCapable = true;
@@ -331,7 +336,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-tabs-material="true"]')).not.toBeNull();
     expect(container.querySelector('[data-tabs="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')).toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).toBeNull();
     expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
       'home',
       'climbs',
@@ -350,13 +355,13 @@ describe('TabLayout', () => {
 
     const { container } = render(<TabLayout />);
 
-    expect(container.querySelector('[data-ipad-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     // The right column hosts the PlayDrawer pane (replaces the floating accessory bar).
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
     // At narrow-regular width (1024) the wall has no room for a column, so it stays
     // the sidebar cell — no dedicated column, rail cell shown.
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
     expect(container.querySelector('[data-tabs="true"]')).toBeNull();
     expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
       'home',
@@ -371,6 +376,48 @@ describe('TabLayout', () => {
     expect(cfg.materialScreens.find((screen) => screen.name === 'wall')?.options).toMatchObject({ href: null });
   });
 
+  it('mounts the same shell on an Android tablet (Material variant, regular width, no NativeTabs)', () => {
+    // An Android tablet resolves the Material variant and, at regular width, takes the
+    // adaptive-shell branch exactly like an iPad: the rail (TabletSidebar → the M3
+    // navigation rail) carries navigation over a hidden JS Tabs bar, with the detail
+    // pane beside it. The native glass tab bar never exists on Android.
+    cfg.platformOS = 'android';
+    cfg.variant = 'material';
+    cfg.glassCapable = false;
+    cfg.widthClass = 'regular';
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
+    expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
+      'home',
+      'climbs',
+      'record',
+      'wall',
+      'discover',
+      'profile',
+    ]);
+  });
+
+  it('keeps a compact Android tablet (small multi-window split) on the Material bar, no rail', () => {
+    // A tablet in a small freeform / split-screen window is still a tablet (sw600dp,
+    // launch-fixed) but reads `compact` from the live width — so it stays on the single
+    // JS Tabs navigator + Material bar with no rail, mirroring an iPad in a narrow split.
+    cfg.platformOS = 'android';
+    cfg.variant = 'material';
+    cfg.glassCapable = false;
+    cfg.widthClass = 'compact';
+    cfg.isTablet = true;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tabs-material="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).toBeNull();
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
+  });
+
   it('suppresses the detail pane on the tightest regular portraits, keeping the list full width', () => {
     // iPad mini portrait (744): sidebar (96) + the pane's 320pt floor would leave the
     // browse list ~328pt — below the 400pt readable floor — so resolveDetailPaneSurface
@@ -380,7 +427,7 @@ describe('TabLayout', () => {
 
     const { container } = render(<TabLayout />);
 
-    expect(container.querySelector('[data-ipad-sidebar="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
     // No room for a wall column at this width either — the wall stays the sidebar cell.
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
@@ -399,10 +446,34 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).not.toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
     // The detail pane mounts alongside the list and the dedicated wall column — the
     // pixel widths of each are covered by size-class.test.ts (resolveDetailPaneWidth,
     // WALL_COLUMN_WIDTH), so assert the surfaces are present, not their arithmetic.
+    expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
+  });
+
+  it('shows the dedicated wall column on a landscape Android tablet with a bound board', () => {
+    // The chosen v1 scope: a wide Android tablet is panel-capable (no dp floor), so
+    // the wall graduates to its own column beside the browse list + detail pane —
+    // exactly the wall-mounted-gym-tablet scenario, in Material dress.
+    cfg.platformOS = 'android';
+    cfg.variant = 'material';
+    cfg.glassCapable = false;
+    cfg.widthClass = 'regular';
+    cfg.windowWidth = 1280;
+    cfg.wallDeviceClass = 'panel-capable';
+    cfg.boardPresenceEnabled = true;
+    cfg.boardPresenceBoardId = 1;
+    cfg.activeBoard = { uuid: 'board-1' };
+
+    const { container } = render(<TabLayout />);
+
+    // `data-ipad-*` markers keep the shared components' names: IpadPlayPane /
+    // IpadWallColumn are variant-agnostic and render on Android too (only the glass
+    // IpadSidebar is iOS-specific, swapped for the rail via TabletSidebar).
+    expect(container.querySelector('[data-ipad-wall-column="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tablet-sidebar="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
   });
 
@@ -421,7 +492,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
     // No rich wall surface on this device → the ambient sidebar cell stays the launcher.
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('hides the wall column while the "On the Wall" tab is the focused destination', () => {
@@ -443,7 +514,7 @@ describe('TabLayout', () => {
     expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
     // The surface still EXISTS for this layout, so the sidebar cell stays hidden — it
     // doesn't pop back in merely because the wall tab is open.
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
     // Kiosk stays lit while the wall tab is focused.
     expect(keepAwake.activate).toHaveBeenCalledWith('wall');
   });
@@ -471,7 +542,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('false');
   });
 
   it('keeps the sidebar wall cell when tight regular width suppresses the play pane', () => {
@@ -487,7 +558,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-play-pane="true"]')).toBeNull();
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('keeps the sidebar wall cell in portrait while the active board config is unresolved', () => {
@@ -503,7 +574,7 @@ describe('TabLayout', () => {
 
     expect(container.querySelector('[data-ipad-play-pane="true"]')).not.toBeNull();
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('keeps the wall as the sidebar cell (no column) when no board is bound', () => {
@@ -518,7 +589,7 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('does not reserve a wall column when a board is BLE-bound but no active board is resolved', () => {
@@ -534,7 +605,7 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-ipad-wall-column="true"]')).toBeNull();
-    expect(container.querySelector('[data-ipad-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
+    expect(container.querySelector('[data-tablet-sidebar="true"]')?.getAttribute('data-show-wall-cell')).toBe('true');
   });
 
   it('does not render the Record badge when no status is active', () => {

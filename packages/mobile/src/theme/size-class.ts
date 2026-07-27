@@ -43,16 +43,58 @@ export type DeviceLayout = {
 };
 
 /**
- * Resolve the size class from the app window width and whether the device is an
- * iPad. Only iPad opts into the adaptive shell — every iPhone stays `compact`
- * regardless of width — and an iPad in a narrow split is `compact` too, so the
- * sidebar appears only when there is genuinely room for two columns.
+ * Resolve the size class from the app window width and whether the device is a
+ * tablet (an iPad, or an Android tablet — see {@link resolveIsTablet}). Only a
+ * tablet opts into the adaptive shell — every phone stays `compact` regardless of
+ * width — and a tablet in a narrow split is `compact` too, so the sidebar appears
+ * only when there is genuinely room for two columns.
  */
-export function resolveDeviceLayout({ width, isPad }: { width: number; isPad: boolean }): DeviceLayout {
-  if (!isPad || width < REGULAR_WIDTH_BREAKPOINT) {
+export function resolveDeviceLayout({ width, isTablet }: { width: number; isTablet: boolean }): DeviceLayout {
+  if (!isTablet || width < REGULAR_WIDTH_BREAKPOINT) {
     return { widthClass: 'compact', expanded: false };
   }
   return { widthClass: 'regular', expanded: width >= EXPANDED_WIDTH_BREAKPOINT };
+}
+
+/**
+ * Android's tablet threshold: a device whose smallest screen width is at least
+ * this many dp is a tablet. This is the `sw600dp` resource qualifier Android and
+ * Material 3 use to switch to tablet layouts, so we match the platform's own line.
+ */
+export const TABLET_MIN_SHORT_SIDE_DP = 600;
+
+/**
+ * A structural mirror of react-native's `Platform.OS` union, kept local so this
+ * module stays react-native-free (it unit-tests as plain functions). `Platform.OS`
+ * is assignable to it, and typing the param this way — rather than `string` —
+ * catches a mistyped OS branch at the call site instead of silently never matching.
+ */
+export type PlatformOS = 'ios' | 'android' | 'windows' | 'macos' | 'web';
+
+/**
+ * Whether this device opts into the adaptive shell: an iPad, or an Android tablet
+ * whose smallest screen width clears {@link TABLET_MIN_SHORT_SIDE_DP}. Pure (the
+ * platform and the physical-screen short side are injected) so it unit-tests
+ * without react-native, mirroring the width resolvers; the React wrapper reads
+ * `Platform.OS` / `Dimensions.get('screen')` in `use-device-layout.ts`.
+ *
+ * Launch-fixed like `Platform.isPad` — the short side comes from the PHYSICAL
+ * screen, not the app window (which shrinks under Split View / multi-window / DeX),
+ * so an Android tablet in a small freeform window is still a tablet (`isTablet`
+ * true) but resolves `compact` from the live width, exactly like an iPad in a
+ * narrow Split View. The mount decision must not flip the navigator type
+ * mid-session; the live axis is `widthClass`.
+ */
+export function resolveIsTablet({
+  platformOS,
+  isPad,
+  screenShortSide,
+}: {
+  platformOS: PlatformOS;
+  isPad: boolean;
+  screenShortSide: number;
+}): boolean {
+  return isPad || (platformOS === 'android' && screenShortSide >= TABLET_MIN_SHORT_SIDE_DP);
 }
 
 /**
@@ -64,19 +106,30 @@ export type WallDeviceClass = 'panel-capable' | 'sheet-only';
 
 /**
  * Resolve the wall device class from the physical screen long side (see
- * {@link WALL_PANEL_MIN_DEVICE_LONG_SIDE}). Non-iPad is always `sheet-only` —
- * phones never mount the panel — so this is only consulted on iPad. Pure (the
- * long side is injected), so it unit-tests without react-native like the width
- * resolvers; the React wrapper reads `Dimensions.get('screen')` in
- * `use-device-layout.ts`.
+ * {@link WALL_PANEL_MIN_DEVICE_LONG_SIDE}).
+ *
+ * - **Android tablets are always `panel-capable`.** The iPad points floor exists
+ *   only because iPad points can't separate an iPad mini from an 11" Pro at the
+ *   same size class; on Android the live width budget (`resolveWallSurface`)
+ *   already decides column/strip/none, and density-bucketed dp isn't comparable to
+ *   the iPad point floor anyway. So the floor is iOS-only.
+ * - **iPad** keeps the launch-fixed points floor.
+ * - **Phones** are always `sheet-only` — they never mount the panel.
+ *
+ * Pure (the long side + device flags are injected), so it unit-tests without
+ * react-native like the width resolvers; the React wrapper reads
+ * `Dimensions.get('screen')` in `use-device-layout.ts`.
  */
 export function resolveWallDeviceClass({
   screenLongSide,
   isPad,
+  isAndroidTablet,
 }: {
   screenLongSide: number;
   isPad: boolean;
+  isAndroidTablet: boolean;
 }): WallDeviceClass {
+  if (isAndroidTablet) return 'panel-capable';
   if (!isPad || screenLongSide < WALL_PANEL_MIN_DEVICE_LONG_SIDE) return 'sheet-only';
   return 'panel-capable';
 }

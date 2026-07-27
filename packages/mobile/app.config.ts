@@ -591,6 +591,11 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
       // Play device filtering. Unconditional (EAS-safe) — it's a pure manifest
       // addition with no signing/credential implications.
       './plugins/with-android-bluetooth-feature',
+      // Lets sw600dp tablets rotate to landscape (the adaptive-shell canvas) while
+      // phones stay portrait — the Android counterpart to the iOS `~ipad`
+      // orientation override, set at runtime in MainActivity since
+      // android:screenOrientation can't be resource-qualified by screen size.
+      './plugins/with-android-tablet-orientation',
       // Declares com.android.vending as a visible package under Android 11+
       // package-visibility filtering, so the Play Install Referrer native module
       // (packages/mobile/modules/install-referrer) can bind to the Play Store

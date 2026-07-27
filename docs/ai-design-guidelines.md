@@ -311,16 +311,64 @@ borderless)` builds a Pressable `android_ripple` config at that state-layer opac
 
 ---
 
-## iPad adaptive layout
+## Large-screen adaptive layout (iPad + Android tablet)
 
-iPad (only — no Android tablets) gets a multi-column shell; every iPhone, and an iPad in a narrow
-split, falls through to the phone UI **verbatim**. The size class is pure and unit-tested in
-`theme/size-class.ts` (`resolveDeviceLayout`), fed window width by `hooks/use-device-layout.ts`:
+A **tablet** — an iPad, or an Android tablet — gets a multi-column shell; every phone, and a tablet in
+a narrow split, falls through to the phone UI **verbatim**. The shell is drawn in each platform's own
+chrome: **Liquid Glass** on iPad (the glass `IpadSidebar` rail), **Material 3** on an Android tablet
+(the `MaterialNavigationRail`), routed by variant through `TabletSidebar` (`createVariantComponent`).
+The size class is pure and unit-tested in `theme/size-class.ts` (`resolveDeviceLayout`), fed window
+width by `hooks/use-device-layout.ts`:
 
-- **`compact`** — every iPhone, plus an iPad window narrower than `REGULAR_WIDTH_BREAKPOINT` (700pt:
-  Slide Over / a narrow Split View). Renders today's phone UI; no phase may regress it.
-- **`regular`** — an iPad window wide enough for the glass sidebar (`IpadSidebar`, replacing the bottom
-  tab bar) + a content column + a detail pane. `expanded` (≥1024pt) is a flag on top.
+- **`compact`** — every phone, plus a tablet window narrower than `REGULAR_WIDTH_BREAKPOINT` (700dp:
+  iPad Slide Over / a narrow Split View, Android split-screen / freeform / DeX). Renders today's phone
+  UI; no phase may regress it.
+- **`regular`** — a tablet window wide enough for the sidebar rail (replacing the bottom tab bar) + a
+  content column + a detail pane. `expanded` (≥1024dp) is a flag on top.
+
+**Eligibility, not idiom.** The shell admits iPad (`Platform.isPad`) **and** Android tablets — a
+device whose smallest physical-screen width clears **600dp** (`resolveIsTablet`, Android's own
+`sw600dp` tablet qualifier), fed to the same `resolveDeviceLayout`. The signal is launch-fixed (the
+physical screen, not the window), so a tablet in a small multi-window/DeX split is still a tablet but
+reads `compact` from the live width — identical to an iPad in a narrow Split View. The breakpoints
+(700/1024dp) are **shared across both variants**, so iPad and Android tablets resolve identically at
+the same dp. They map onto M3's window size classes as a stricter-than-minimum floor (we need room for
+two panes, not just a rail): M3 **Compact** `<600` → phone UI; M3 **Medium** `600–840` → our `regular`
+admits at ≥700; M3 **Expanded** `≥840` → our `expanded` flag fires at ≥1024. A cheap 10" Android
+tablet (≈800dp portrait / ≈1280dp landscape) always clears `regular`; a 7–8" tablet is `compact` in
+portrait (genuinely too narrow for two panes) and `regular` in landscape.
+
+**The rail is variant-skinned, IA-identical.** The Material `MaterialNavigationRail` mirrors
+`MaterialTabBar`'s M3 roles laid out vertically — a `secondaryContainer` active-indicator pill
+(`material.navRail`, 56×32), `onSecondaryContainer` glyph, `onSurface` active label, `onSurfaceVariant`
+inactive, active/inactive glyph pairs matching the bottom bar — on an `m3SurfaceContainers.low` surface
+(depth by tone, flat, no cast). It shares the **96dp** `SIDEBAR_WIDTH` with the glass rail (96 ≥ M3's
+80dp minimum), because that width is injected into every master-detail width-budget resolver and a
+per-variant width would fork the budget. Same destinations, same top-tablist / bottom-pinned-Profile
+structure. **No rail FAB / no header** — an IA-parity guardrail: the glass rail has neither, so a
+Material-only rail FAB would fork information architecture between the two tablet variants; if ever
+wanted, add it to both together.
+
+**Panes read M3 depth by tone, not iOS hairlines.** On the Material variant the shell column
+separators come from `m3.outlineVariant` (the M3 faint-divider role), and the panes' `GlassSurface`
+degrades to an opaque M3 tonal surface (`useEffectiveSurfaceMode` → `material` on Android). Frame the
+detail (play) pane as an M3 **List-Detail** detail pane and the wall column as an M3 **Supporting
+pane**.
+
+**The live wall reaches Android tablets too.** `resolveWallDeviceClass` marks any Android tablet
+`panel-capable` — there is **no** dp physical-size floor on Android (the iPad points floor
+`WALL_PANEL_MIN_DEVICE_LONG_SIDE` exists only because iPad points can't separate a mini from a Pro at
+the same size class; density-bucketed Android dp isn't comparable to it, and the live width budget in
+`resolveWallSurface` already decides column/strip/none). So a 10" Android tablet in landscape gets the
+dedicated wall column, a narrower one gets the strip. The kiosk hero-type distance scale skips the
+iPad points-per-inch estimate on Android (no reliable ppi from RN JS) and falls back to the pane short
+side. True Android distance-DPI calibration (native `DisplayMetrics.xdpi`) and Material You dynamic
+color are follow-ups.
+
+**Android tablets must rotate.** The app is portrait-locked app-wide; the `with-android-tablet-orientation`
+config plugin lets `sw600dp` tablets rotate to landscape (the shell's whole point) while phones stay
+portrait — the Android counterpart to the iOS `~ipad` orientation override. It's a native change, so it
+ships in a native build, not an OTA.
 
 **The right column is master-detail, not status.** At `regular` width the shell is
 `sidebar · active-tab content · detail pane` (`(tabs)/_layout.tsx`). The detail pane (`IpadPlayPane` →
@@ -368,13 +416,15 @@ tab-bar analogue, so its active row follows the same chrome-glyph rule as `Nativ
 pill as the active affordance — not a brand-violet tint. Brand colour stays for genuine accents, per the
 chrome-glyph rule documented under Iconography.
 
-**The shell is width-adaptive, not idiom-adaptive.** Size class is driven by `Platform.isPad` (fixed at
-process launch) plus the live window width; only width is live. The guarantee is "the right layout for
-the current window width on iPad," not a layout that re-derives the device idiom across Stage Manager or
-an external display. Note also the deliberate choice of a bespoke 96pt icon-over-label rail instead of a
-`UISplitViewController` sidebar: a Phase-1 call that keeps the rail simple but means it won't inherit
-system sidebar behaviours (collapse control, pointer magnetism). Revisit in Phase 2+ whether to adopt a
-true wide text sidebar or the iPadOS 18 floating-tab-bar-to-sidebar pattern.
+**The shell is width-adaptive, not idiom-adaptive.** Size class is driven by the launch-fixed tablet
+flag (`Platform.isPad`, or Android `sw600dp`) plus the live window width; only width is live. The
+guarantee is "the right layout for the current window width on a tablet," not a layout that re-derives
+the device idiom across Stage Manager, DeX, or an external display. Note also the deliberate choice of a
+bespoke 96dp icon-over-label rail instead of a `UISplitViewController` sidebar (iOS) / a full Material
+navigation **drawer** (Android, `expanded` width): a Phase-1 call that keeps the rail simple but means
+it won't inherit system sidebar behaviours (collapse control, pointer magnetism). Revisit in Phase 2+
+whether to adopt a true wide text sidebar / the iPadOS 18 floating-tab-bar-to-sidebar pattern, and the
+M3 navigation drawer at expanded width.
 
 ---
 

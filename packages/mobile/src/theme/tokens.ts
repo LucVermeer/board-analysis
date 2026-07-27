@@ -146,6 +146,13 @@ export const material = {
     /** Resting elevation of the solid Android nav surface (M3 nav bar = level 2). */
     surfaceElevation: 2,
   },
+  navRail: {
+    /** Tonal pill behind the focused rail item's icon (M3 navigation-rail spec:
+     *  56×32 — narrower than the 64-wide bottom-nav pill). */
+    activeIndicatorWidth: 56,
+    activeIndicatorHeight: 32,
+    activeIndicatorRadius: 16,
+  },
   sheet: {
     /** M3 bottom-sheet top corner radius (iOS keeps borderRadius.xl = 16). */
     cornerRadius: 28,
