@@ -6,6 +6,11 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-27
 
+### New
+
+- Android tablets get the full wall layout: browse climbs and light them in two panes side by side, with a live "on the wall" column — built for a tablet bolted to the gym wall. ([#3613](https://github.com/boardsesh/boardsesh/pull/3613))
+  The tablet layout now follows Material 3 on Android, with a navigation rail down the side instead of the phone's bottom tabs.
+
 ### Fixed
 
 - Sign in with Apple or Google from Boardsesh in your browser, with failed or cancelled attempts returning you to the app so you can try again. ([#3968](https://github.com/boardsesh/boardsesh/pull/3968))

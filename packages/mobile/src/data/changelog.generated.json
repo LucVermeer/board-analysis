@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-27T11:33:29.754Z",
+  "generatedAt": "2026-07-27T11:38:49.704Z",
   "entries": [
+    {
+      "prNumber": 3613,
+      "category": "new",
+      "title": "Android tablets get the full wall layout: browse climbs and light them in two panes side by side, with a live \"on the wall\" column — built for a tablet bolted to the gym wall.",
+      "mergedAt": "2026-07-27T11:37:08Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3613",
+      "body": "The tablet layout now follows Material 3 on Android, with a navigation rail down the side instead of the phone's bottom tabs."
+    },
     {
       "prNumber": 3968,
       "category": "fixed",
