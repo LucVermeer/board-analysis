@@ -7,14 +7,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseSerialNumber } from '@boardsesh/ble-protocol';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { track } from '../analytics';
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
 import { HIGH_POWER_BOARD_SCAN_OPTIONS } from './scan-options';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 import { describeBlePermissionDenial } from './android-location-permission';
-import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { track } from '../analytics';
 
 const SCAN_TIMEOUT_MS = 15_000;
 
