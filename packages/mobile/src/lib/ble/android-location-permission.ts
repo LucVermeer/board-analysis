@@ -41,17 +41,39 @@ export async function getAndroidLocationPermissionState(): Promise<boolean | nul
 }
 
 /**
- * Prompt for fine location, used only by the Android 12+ empty-scan hint on
- * binaries whose manifest predates the `neverForLocation` disavowal. Fine (not
- * coarse) because the app's other location surface — "boards near you" — already
- * asks for fine, so this reuses one grant instead of creating a second.
+ * Prompt for location, used only by the Android 12+ empty-scan hint on binaries
+ * whose manifest predates the `neverForLocation` disavowal.
+ *
+ * Fine AND coarse, in one `requestMultiple`, for two reasons — and the hint is
+ * only ever shown on API 31+, so both of them bite every single time:
+ *
+ *  1. Since Android 12 the platform *ignores* a request for `ACCESS_FINE_LOCATION`
+ *     on its own when the app targets 31+: no dialog appears at all and logcat
+ *     prints "ACCESS_FINE_LOCATION must be requested with ACCESS_COARSE_LOCATION".
+ *     `PermissionsAndroid.request` forwards exactly one permission through to
+ *     `ActivityCompat.requestPermissions`, so it cannot pair coarse in for us.
+ *  2. From Android 12 the dialog offers "Precise" / "Approximate". Picking
+ *     Approximate grants coarse and denies fine — and coarse is enough, because
+ *     AOSP's scan-delivery gate accepts either. Treating that as a denial would
+ *     leave the user staring at a grant button for a permission they just gave.
+ *
+ * Resolves true when EITHER permission ended up granted — the same rule
+ * `getAndroidLocationPermissionState` applies, so the grant button and the check
+ * that decides whether to show it can never disagree.
  */
 export async function requestAndroidScanLocationPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
 
   try {
-    const permissionResult = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-    return permissionResult === PermissionsAndroid.RESULTS.GRANTED;
+    const results = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+    ]);
+
+    return (
+      results[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+      results[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
+    );
   } catch {
     return false;
   }

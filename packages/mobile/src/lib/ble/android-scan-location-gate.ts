@@ -38,8 +38,11 @@
  * Highest Android `versionCode` known to ship a manifest WITHOUT
  * `neverForLocation` on `BLUETOOTH_SCAN`.
  *
- * Sourced from the `build-android-v<version>-<versionCode>-<sha>` release tags,
- * whose ceiling at the time of writing is `build-android-v2.3.0-2000753`. There
+ * Sourced from the `build-android-v<version>-<versionCode>-<shortFingerprint>`
+ * release tags (the trailing segment is the first 12 chars of the runtime
+ * fingerprint, not a commit sha — see `.github/workflows/android-apk-rn.yml`),
+ * whose ceiling at the time of writing is
+ * `build-android-v2.3.0-2000753-cb1ef0528755`. There
  * is no `versionCode` in `app.config.ts` to read — CI computes it per build and
  * seds it into `android/app/build.gradle` — so this constant tracks the shipped
  * tag ceiling instead.

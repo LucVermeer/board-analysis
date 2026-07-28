@@ -87,7 +87,7 @@ describe('BluetoothQuickstartSheet', () => {
     scan.status = 'done';
     scan.serials = [];
     scan.start.mockClear();
-    scan.reset.mockClear();
+    scan.reset.mockReset();
     boards.data = [];
     boards.isLoading = false;
     locationHint.shouldOfferLocationGrant = false;
@@ -116,9 +116,19 @@ describe('BluetoothQuickstartSheet', () => {
 
   it('restarts the scan after the user grants location', async () => {
     // This sheet owns its scan lifecycle (unlike the device picker), so a grant
-    // should get the user a fresh scan without them reopening the sheet.
+    // should get the user a fresh scan without them reopening the sheet. The
+    // whole chain has to hold: grant -> reset() -> status back to 'idle' -> the
+    // mount effect fires start() again. Asserting only that reset() was called
+    // would stay green if that effect stopped watching `status`, which is the
+    // half that actually restarts the scan.
+    scan.reset.mockImplementation(() => {
+      scan.status = 'idle';
+    });
     locationHint.shouldOfferLocationGrant = true;
-    const { container } = renderSheet();
+    const { container, rerender } = renderSheet();
+
+    // The scan already finished ('done'), so nothing has restarted it yet.
+    expect(scan.start).not.toHaveBeenCalled();
 
     const grantButton = container.querySelector('[data-button="settings:ble.locationHintGrant"]');
     expect(grantButton).not.toBeNull();
@@ -126,6 +136,14 @@ describe('BluetoothQuickstartSheet', () => {
 
     await waitFor(() => {
       expect(scan.reset).toHaveBeenCalledOnce();
+    });
+
+    // useBoardScan is mocked, so the status flip can't re-render on its own the
+    // way the real hook's state update would.
+    rerender(<BluetoothQuickstartSheet active onClose={vi.fn()} onSelect={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(scan.start).toHaveBeenCalledOnce();
     });
   });
 

@@ -102,24 +102,24 @@ export const BluetoothQuickstartSheet = forwardRef<BottomSheet, BluetoothQuickst
               {t('mobile.bluetooth.noResults')}
             </Text>
             {/* Android is withholding the results — say so instead of leaving a
-                bare "none in range" the user can't act on. */}
-            {locationHint.shouldOfferLocationGrant || locationHint.wasGranted ? (
+                bare "none in range" the user can't act on. No "location allowed"
+                follow-up copy here: a grant restarts the scan immediately, so
+                this whole branch is gone by the time it would render. */}
+            {locationHint.shouldOfferLocationGrant ? (
               <>
                 <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.stateText}>
                   {t('settings:ble.locationHintTitle')}
                 </Text>
                 <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.stateText}>
-                  {locationHint.wasGranted ? t('settings:ble.locationHintGranted') : t('settings:ble.locationHintBody')}
+                  {t('settings:ble.locationHintBody')}
                 </Text>
-                {locationHint.shouldOfferLocationGrant && (
-                  <Button
-                    title={t('settings:ble.locationHintGrant')}
-                    onPress={handleGrantLocation}
-                    variant="text"
-                    size="medium"
-                    loading={locationHint.isRequesting}
-                  />
-                )}
+                <Button
+                  title={t('settings:ble.locationHintGrant')}
+                  onPress={handleGrantLocation}
+                  variant="text"
+                  size="medium"
+                  loading={locationHint.isRequesting}
+                />
               </>
             ) : (
               // The zero-result state used to end here, with nothing to try next.

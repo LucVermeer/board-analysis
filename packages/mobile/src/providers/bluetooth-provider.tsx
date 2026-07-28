@@ -894,12 +894,21 @@ export function BluetoothProvider({
   // Whether the app held a location permission when this picker session opened.
   // Read once per session (PermissionsAndroid.check never prompts) so a
   // devicesTotal=0 flush can be split into "the OS suppressed the results" vs
-  // "nothing was there" — see android-scan-location-gate.ts. null off Android.
+  // "nothing was there" — see android-scan-location-gate.ts. null off Android,
+  // and also null if the user dismissed the picker before the async check landed
+  // (rare; PostHog's auto-captured $os separates that from a genuine iOS null).
   const pickerLocationPermissionRef = useRef<boolean | null>(null);
+  // Monotonic id for the open picker session. A `check` that resolves after its
+  // own session was flushed must not write into the next session's answer.
+  const pickerSessionIdRef = useRef(0);
   useEffect(() => {
     if (pickerState) {
       if (pickerResolutionStatsRef.current === null) {
+        const sessionId = pickerSessionIdRef.current + 1;
+        pickerSessionIdRef.current = sessionId;
+        pickerLocationPermissionRef.current = null;
         void getAndroidLocationPermissionState().then((granted) => {
+          if (pickerSessionIdRef.current !== sessionId) return;
           pickerLocationPermissionRef.current = granted;
         });
       }
@@ -914,6 +923,9 @@ export function BluetoothProvider({
     if (!finalStats) return;
     pickerResolutionStatsRef.current = null;
     const androidLocationPermissionGranted = pickerLocationPermissionRef.current;
+    // Retire the session id as well as the value, so an in-flight check from the
+    // session we are flushing right now can no longer land anywhere.
+    pickerSessionIdRef.current += 1;
     pickerLocationPermissionRef.current = null;
     track(SHARED_EVENTS.BlePickerDevicesResolved, {
       ...finalStats,

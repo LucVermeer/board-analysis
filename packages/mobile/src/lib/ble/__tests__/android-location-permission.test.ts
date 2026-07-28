@@ -62,13 +62,43 @@ describe('requestAndroidScanLocationPermission', () => {
     resetReactNativePermissionHarness();
   });
 
-  it('prompts for fine location and reports the grant', async () => {
+  it('asks for fine AND coarse together — Android 12 silently drops a fine-only request', async () => {
+    // The hint is only ever shown on API 31+, so this is not an edge case: an
+    // app targeting 31+ that requests ACCESS_FINE_LOCATION alone gets no dialog
+    // at all and "ACCESS_FINE_LOCATION must be requested with
+    // ACCESS_COARSE_LOCATION" in logcat. PermissionsAndroid.request forwards a
+    // single permission, so requestMultiple is the only way to pair them.
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      ACCESS_FINE_LOCATION: 'granted',
+      ACCESS_COARSE_LOCATION: 'granted',
+    });
+
     await expect(requestAndroidScanLocationPermission()).resolves.toBe(true);
-    expect(reactNativePermissionHarness.permissionsAndroid.request).toHaveBeenCalledWith('ACCESS_FINE_LOCATION');
+    expect(reactNativePermissionHarness.permissionsAndroid.requestMultiple).toHaveBeenCalledWith([
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_COARSE_LOCATION',
+    ]);
+    expect(reactNativePermissionHarness.permissionsAndroid.request).not.toHaveBeenCalled();
+  });
+
+  it('counts "Approximate" as a grant — coarse alone unblocks scan delivery', async () => {
+    // Android 12+ dialogs offer Precise/Approximate. Approximate grants coarse
+    // and denies fine; AOSP's scan-delivery gate takes either, so calling that a
+    // denial would leave the user staring at a button for a permission they just
+    // gave, and would stop the quickstart sheet re-scanning.
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      ACCESS_FINE_LOCATION: 'denied',
+      ACCESS_COARSE_LOCATION: 'granted',
+    });
+
+    await expect(requestAndroidScanLocationPermission()).resolves.toBe(true);
   });
 
   it('reports a denial', async () => {
-    reactNativePermissionHarness.permissionsAndroid.request.mockResolvedValue('denied');
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      ACCESS_FINE_LOCATION: 'denied',
+      ACCESS_COARSE_LOCATION: 'never_ask_again',
+    });
 
     await expect(requestAndroidScanLocationPermission()).resolves.toBe(false);
   });
@@ -77,6 +107,7 @@ describe('requestAndroidScanLocationPermission', () => {
     reactNativePermissionHarness.platform.OS = 'ios';
 
     await expect(requestAndroidScanLocationPermission()).resolves.toBe(false);
+    expect(reactNativePermissionHarness.permissionsAndroid.requestMultiple).not.toHaveBeenCalled();
     expect(reactNativePermissionHarness.permissionsAndroid.request).not.toHaveBeenCalled();
   });
 });
