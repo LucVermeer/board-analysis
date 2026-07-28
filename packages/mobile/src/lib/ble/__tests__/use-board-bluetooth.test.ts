@@ -194,6 +194,41 @@ describe('useBoardBluetooth', () => {
     expect(createBluetoothAdapter).not.toHaveBeenCalled();
   });
 
+  it('reports a denied BLE permission to analytics — the Alert used to be the only trace', async () => {
+    // Before this event existed, a refusal raised a dialog and emitted nothing,
+    // so a whole class of "Bluetooth doesn't work" was invisible in telemetry.
+    // The location state rides along because on Android 12+ a permission denial
+    // and a location-suppressed empty scan look identical from the outside.
+    reactNativePermissionHarness.platform.Version = 33;
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'denied',
+      BLUETOOTH_CONNECT: 'denied',
+    });
+    reactNativePermissionHarness.permissionsAndroid.check.mockResolvedValue(false);
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    await waitFor(() => {
+      expect(mockTrack).toHaveBeenCalledWith('Bluetooth Permission Denied', {
+        surface: 'connect',
+        boardName: 'kilter',
+        platform: 'android',
+        androidApiLevel: 33,
+        androidLocationPermissionGranted: false,
+      });
+    });
+  });
+
   it('ignores a second connect while one is already in flight', async () => {
     let resolveRequest!: (connection: { deviceId: string; deviceName?: string }) => void;
     const fakeAdapter = makeFakeAdapter({

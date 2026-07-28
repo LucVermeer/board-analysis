@@ -62,6 +62,12 @@ export function useAndroidScanLocationHint(active: boolean): AndroidScanLocation
   }, [active, buildHidesResults]);
 
   const requestLocationPermission = useCallback(async () => {
+    // Retire any read that is still in flight before the dialog goes up. The
+    // system prompt is the newer, more authoritative answer; a `check` that
+    // started earlier and resolves `false` afterwards would otherwise sail past
+    // the readId guard (the counter having never moved) and put the grant button
+    // straight back in front of a user who just accepted.
+    activeReadRef.current += 1;
     setIsRequesting(true);
     try {
       const granted = await requestAndroidScanLocationPermission();

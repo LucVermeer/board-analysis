@@ -132,4 +132,31 @@ describe('useAndroidScanLocationHint', () => {
     // picker that has since found boards or closed.
     expect(result.current.shouldOfferLocationGrant).toBe(false);
   });
+
+  it('drops a late permission read that resolves after the user granted', async () => {
+    // The system prompt is the newer, more authoritative answer. A `check` that
+    // started before it and lands after must not put the grant button straight
+    // back in front of someone who just accepted.
+    let resolveCheck: ((granted: boolean) => void) | undefined;
+    permissions.getAndroidLocationPermissionState.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveCheck = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useAndroidScanLocationHint(true));
+
+    await act(async () => {
+      await result.current.requestLocationPermission();
+    });
+    expect(result.current.wasGranted).toBe(true);
+
+    await act(async () => {
+      resolveCheck?.(false);
+    });
+
+    expect(result.current.shouldOfferLocationGrant).toBe(false);
+    expect(result.current.wasGranted).toBe(true);
+  });
 });

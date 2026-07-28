@@ -147,7 +147,9 @@ export const SHARED_EVENTS = {
   // Alert (connect) or flipped the sheet to 'unavailable' (quickstart scan) and
   // emitted nothing at all, leaving a whole class of "Bluetooth doesn't work"
   // invisible in telemetry. Props: { surface: 'connect' | 'quickstart_scan',
-  // platform, androidApiLevel, androidLocationPermissionGranted }.
+  // platform, androidApiLevel, androidLocationPermissionGranted }, plus
+  // `boardName` on the 'connect' surface only (the quickstart scan runs before
+  // any board is chosen, so it has none to report).
   BluetoothPermissionDenied: 'Bluetooth Permission Denied',
   // Fired once per device-picker session (on close) with tallies of how each
   // listed device's board preview resolved: saved board, recorded serial

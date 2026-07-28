@@ -489,7 +489,7 @@
     "locationHintTitle": "Android a besoin de la localisation pour voir les boards",
     "locationHintBody": "Sur Android 12 et versions ultérieures, les résultats de la recherche Bluetooth restent masqués tant que la localisation n'est pas autorisée. Boardsesh n'utilise pas votre position pour trouver les boards, et une prochaine mise à jour supprimera définitivement cette exigence.",
     "locationHintGrant": "Autoriser la localisation",
-    "locationHintGranted": "Localisation autorisée. Fermez cette fenêtre et relancez la connexion pour voir votre board.",
+    "locationHintGranted": "Localisation autorisée. Fermez et relancez la connexion pour voir votre board.",
     "cancel": "Annuler",
     "connectBoard": "Connecter la board",
     "relightBoard": "Rallumer la board",

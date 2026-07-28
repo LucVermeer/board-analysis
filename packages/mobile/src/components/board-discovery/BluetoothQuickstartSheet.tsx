@@ -33,7 +33,11 @@ export const BluetoothQuickstartSheet = forwardRef<BottomSheet, BluetoothQuickst
     const { status, serials, start, reset } = useBoardScan();
     const { data: boards = [], isLoading: isResolving } = useBoardsBySerialNumbers(serials);
 
-    const scanFinishedEmpty = status === 'done' && boards.length === 0;
+    // `!isResolving` matters: the scan reports 'done' the moment the radio work
+    // finishes, while `boards` stays empty until GraphQL has turned the serials
+    // into boards. Without it, a scan that found plenty of boards spends the
+    // resolution window looking exactly like a scan that found none.
+    const scanFinishedEmpty = status === 'done' && boards.length === 0 && !isResolving;
     // Same Android 12+ scan-result suppression the device picker guards against —
     // this sheet runs its own scan through use-board-scan, so it needs its own
     // hint. See lib/ble/android-scan-location-gate.ts.
@@ -94,7 +98,7 @@ export const BluetoothQuickstartSheet = forwardRef<BottomSheet, BluetoothQuickst
         );
       }
 
-      if (status === 'done') {
+      if (scanFinishedEmpty) {
         return (
           <View style={styles.state}>
             <Icon name="search" size={40} color={systemColors.tertiaryLabel} />

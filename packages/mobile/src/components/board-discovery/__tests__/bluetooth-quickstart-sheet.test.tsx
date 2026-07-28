@@ -170,4 +170,22 @@ describe('BluetoothQuickstartSheet', () => {
     renderSheet();
     expect(locationHint.lastActive).toBe(false);
   });
+
+  it('waits out serial resolution before calling the scan empty', () => {
+    // The radio work finishes ('done') well before GraphQL turns the serials
+    // into boards. Treating that window as "no boards in range" would flash the
+    // empty state — and, on Android, a location hint — over a scan that in fact
+    // found several.
+    scan.status = 'done';
+    scan.serials = ['1234'];
+    boards.data = [];
+    boards.isLoading = true;
+
+    const { container } = renderSheet();
+
+    expect(locationHint.lastActive).toBe(false);
+    expect(hasText(container, 'mobile.bluetooth.noResults')).toBe(false);
+    expect(hasText(container, 'settings:ble.troubleshootTips')).toBe(false);
+    expect(hasText(container, 'mobile.bluetooth.resolving')).toBe(true);
+  });
 });
