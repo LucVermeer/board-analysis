@@ -12,6 +12,9 @@ import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
 import { HIGH_POWER_BOARD_SCAN_OPTIONS } from './scan-options';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
+import { describeBlePermissionDenial } from './android-location-permission';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { track } from '../analytics';
 
 const SCAN_TIMEOUT_MS = 15_000;
 
@@ -58,6 +61,11 @@ export function useBoardScan(): BoardScan {
     if (!isCurrentScanAttempt()) return;
 
     if (!permissionsGranted) {
+      // Previously silent: the sheet just flipped to 'unavailable' and nothing
+      // told us a denial (rather than a dead radio) was behind it.
+      void describeBlePermissionDenial().then((denialContext) => {
+        track(SHARED_EVENTS.BluetoothPermissionDenied, { ...denialContext, surface: 'quickstart_scan' });
+      });
       setStatus('unavailable');
       return;
     }

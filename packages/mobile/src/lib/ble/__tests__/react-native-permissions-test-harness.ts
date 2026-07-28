@@ -8,6 +8,7 @@ export const reactNativePermissionHarness = {
   permissionsAndroid: {
     PERMISSIONS: {
       ACCESS_FINE_LOCATION: 'ACCESS_FINE_LOCATION',
+      ACCESS_COARSE_LOCATION: 'ACCESS_COARSE_LOCATION',
       BLUETOOTH_SCAN: 'BLUETOOTH_SCAN',
       BLUETOOTH_CONNECT: 'BLUETOOTH_CONNECT',
       POST_NOTIFICATIONS: 'POST_NOTIFICATIONS',
@@ -18,6 +19,7 @@ export const reactNativePermissionHarness = {
     },
     requestMultiple: vi.fn(),
     request: vi.fn(),
+    check: vi.fn(),
   },
 };
 
@@ -29,4 +31,5 @@ export function resetReactNativePermissionHarness(): void {
     BLUETOOTH_CONNECT: 'granted',
   });
   reactNativePermissionHarness.permissionsAndroid.request.mockResolvedValue('granted');
+  reactNativePermissionHarness.permissionsAndroid.check.mockResolvedValue(false);
 }

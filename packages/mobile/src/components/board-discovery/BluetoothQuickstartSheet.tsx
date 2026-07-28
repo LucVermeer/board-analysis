@@ -1,15 +1,17 @@
-import { forwardRef, useEffect } from 'react';
+import { forwardRef, useCallback, useEffect } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import type BottomSheet from '@expo/ui/community/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { useBoardScan } from '../../lib/ble/use-board-scan';
+import { useAndroidScanLocationHint } from '../../lib/ble/use-android-scan-location-hint';
 import { useBoardsBySerialNumbers } from '../../lib/graphql/hooks';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { Sheet } from '../Sheet';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { Button } from '../Button';
 import { ActivityIndicator } from '../ActivityIndicator';
 
 type BluetoothQuickstartSheetProps = {
@@ -27,9 +29,25 @@ type BluetoothQuickstartSheetProps = {
 export const BluetoothQuickstartSheet = forwardRef<BottomSheet, BluetoothQuickstartSheetProps>(
   function BluetoothQuickstartSheet({ active, onClose, onSelect }, ref) {
     const { systemColors } = useTheme();
-    const { t } = useTranslation('boards');
+    const { t } = useTranslation(['boards', 'settings']);
     const { status, serials, start, reset } = useBoardScan();
     const { data: boards = [], isLoading: isResolving } = useBoardsBySerialNumbers(serials);
+
+    const scanFinishedEmpty = status === 'done' && boards.length === 0;
+    // Same Android 12+ scan-result suppression the device picker guards against —
+    // this sheet runs its own scan through use-board-scan, so it needs its own
+    // hint. See lib/ble/android-scan-location-gate.ts.
+    const locationHint = useAndroidScanLocationHint(scanFinishedEmpty);
+    const { requestLocationPermission } = locationHint;
+    const handleGrantLocation = useCallback(() => {
+      // Rescan straight away on a grant — unlike the picker (whose scan is owned
+      // by the connect flow) this sheet controls its own scan lifecycle.
+      void requestLocationPermission().then((granted) => {
+        // reset() drops the scan back to 'idle', which the mount effect above
+        // picks up and restarts — no explicit start() (that would race it).
+        if (granted) reset();
+      });
+    }, [requestLocationPermission, reset]);
 
     // Start scanning when the sheet opens; reset back to idle when it closes so
     // the next open re-scans from scratch.
@@ -83,6 +101,32 @@ export const BluetoothQuickstartSheet = forwardRef<BottomSheet, BluetoothQuickst
             <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.stateText}>
               {t('mobile.bluetooth.noResults')}
             </Text>
+            {/* Android is withholding the results — say so instead of leaving a
+                bare "none in range" the user can't act on. */}
+            {locationHint.shouldOfferLocationGrant || locationHint.wasGranted ? (
+              <>
+                <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.stateText}>
+                  {t('settings:ble.locationHintTitle')}
+                </Text>
+                <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.stateText}>
+                  {locationHint.wasGranted ? t('settings:ble.locationHintGranted') : t('settings:ble.locationHintBody')}
+                </Text>
+                {locationHint.shouldOfferLocationGrant && (
+                  <Button
+                    title={t('settings:ble.locationHintGrant')}
+                    onPress={handleGrantLocation}
+                    variant="text"
+                    size="medium"
+                    loading={locationHint.isRequesting}
+                  />
+                )}
+              </>
+            ) : (
+              // The zero-result state used to end here, with nothing to try next.
+              <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.stateText}>
+                {t('settings:ble.troubleshootTips')}
+              </Text>
+            )}
           </View>
         );
       }

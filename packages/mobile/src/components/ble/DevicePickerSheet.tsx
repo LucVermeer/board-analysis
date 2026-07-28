@@ -11,6 +11,7 @@ import { androidSafeSnapPoints } from '../sheet-snap-points';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { BleBoardConfig } from '../../lib/ble/board-config-match';
 import { noListedBoardMatchesSelectedType } from '../../lib/ble/picker-resolution-stats';
+import { useAndroidScanLocationHint } from '../../lib/ble/use-android-scan-location-hint';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
@@ -95,6 +96,18 @@ export function DevicePickerSheet({
   const showScanningState = isScanning && devices.length === 0;
   const showEmptyState = !isScanning && devices.length === 0;
 
+  // On Android 12+ binaries whose manifest predates the `neverForLocation`
+  // disavowal, an empty list with location denied is the OS hiding scan results,
+  // not a board problem — so replace the hardware troubleshooting with copy that
+  // is actually actionable. Retires itself on newer builds; see
+  // lib/ble/android-scan-location-gate.ts.
+  const locationHint = useAndroidScanLocationHint(showEmptyState);
+  const showLocationHint = locationHint.shouldOfferLocationGrant || locationHint.wasGranted;
+  const { requestLocationPermission } = locationHint;
+  const handleGrantLocation = useCallback(() => {
+    void requestLocationPermission();
+  }, [requestLocationPermission]);
+
   return (
     <BottomSheetModal
       ref={sheetRef}
@@ -152,10 +165,31 @@ export function DevicePickerSheet({
       )}
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
+        {/* The OS is withholding results — say so instead of blaming the board. */}
+        {showLocationHint && (
+          <View style={styles.troubleshoot}>
+            <Text variant="footnote" color={systemColors.secondaryLabel}>
+              {t('ble.locationHintTitle')}
+            </Text>
+            <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.troubleshootTip}>
+              {locationHint.wasGranted ? t('ble.locationHintGranted') : t('ble.locationHintBody')}
+            </Text>
+            {locationHint.shouldOfferLocationGrant && (
+              <Button
+                title={t('ble.locationHintGrant')}
+                onPress={handleGrantLocation}
+                variant="text"
+                size="medium"
+                loading={locationHint.isRequesting}
+              />
+            )}
+          </View>
+        )}
+
         {/* Only when the board they want may be missing — not when it's clearly
             listed, and not while the initial scan is still running (showEmptyState
             gates the zero-device path on the scan having finished empty). */}
-        {(showEmptyState || noneMatchedSelectedType) && (
+        {!showLocationHint && (showEmptyState || noneMatchedSelectedType) && (
           <View style={styles.troubleshoot}>
             <Text variant="footnote" color={systemColors.secondaryLabel}>
               {t('ble.troubleshootTitle')}

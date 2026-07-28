@@ -86,6 +86,10 @@ const graphql = vi.hoisted(() => ({
   request: vi.fn(async () => ({ board: null as unknown })),
 }));
 
+const blePermissions = vi.hoisted(() => ({
+  getAndroidLocationPermissionState: vi.fn(async (): Promise<boolean | null> => null),
+}));
+
 vi.mock('react-native', () => ({
   Alert: { alert: alert.alert },
 }));
@@ -107,6 +111,10 @@ vi.mock('../../lib/ble/resolve-serials', () => ({
 
 vi.mock('../../lib/ble/bluetooth-status-store', () => ({
   registerBluetoothConnection: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('../../lib/ble/android-location-permission', () => ({
+  getAndroidLocationPermissionState: blePermissions.getAndroidLocationPermissionState,
 }));
 
 vi.mock('../../lib/haptics', () => ({
@@ -323,6 +331,8 @@ describe('BluetoothProvider mismatch switch', () => {
     resolvedBoards.value = new Map();
     activeBoard.setActiveBoard.mockClear();
     activeBoard.setActiveBoard.mockResolvedValue(undefined);
+    blePermissions.getAndroidLocationPermissionState.mockClear();
+    blePermissions.getAndroidLocationPermissionState.mockResolvedValue(null);
     graphql.request.mockClear();
     graphql.request.mockResolvedValue({ board: null });
     bluetooth.options = undefined;
@@ -576,11 +586,18 @@ describe('BluetoothProvider mismatch switch', () => {
     expect(lastAlertButtons()).toHaveLength(2);
   });
 
-  it('flushes one resolution-stats event when the picker closes', () => {
+  it('flushes one resolution-stats event when the picker closes', async () => {
     bluetooth.state.pickerState = makeMismatchingPickerState();
     resolvedBoards.value = new Map([['SN-2', { kind: 'saved', board: makeBoard() }]]);
+    // Without this property a devicesTotal=0 flush can't be split into "Android
+    // suppressed the results" vs "no board was there" — the whole point of the
+    // Android 12+ location work. See android-scan-location-gate.ts.
+    blePermissions.getAndroidLocationPermissionState.mockResolvedValue(false);
 
     const { rerender } = renderProvider(KILTER_PROPS);
+    await waitFor(() => {
+      expect(blePermissions.getAndroidLocationPermissionState).toHaveBeenCalledTimes(1);
+    });
     // Open picker → tallies are tracked but nothing is emitted yet.
     expect(analytics.track).not.toHaveBeenCalledWith('BLE Picker Devices Resolved', expect.anything());
 
@@ -601,6 +618,7 @@ describe('BluetoothProvider mismatch switch', () => {
       resolvedRecorded: 0,
       unresolvedWithSerial: 0,
       boardName: 'kilter',
+      androidLocationPermissionGranted: false,
     });
 
     // A later unrelated re-render must not re-emit the summary.
