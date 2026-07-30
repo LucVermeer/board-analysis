@@ -164,6 +164,26 @@ describe('offline board snapshots', () => {
     expect(getOfflineBoards()).toEqual([]);
   });
 
+  it('clears a corrupt stored value even though it reads as empty', () => {
+    // The early-out must read the raw bytes, not the shape-guarded view: a card that
+    // fails the guard still carries the previous account's board name on disk.
+    mockStorage.set('offlineBoardsV1', '[{"uuid":"a","name":"Someone else\'s wall"}]');
+    setSpy.mockClear();
+
+    clearOfflineBoards();
+
+    expect(setSpy).toHaveBeenCalled();
+    expect(mockStorage.get('offlineBoardsV1')).toBe('[]');
+  });
+
+  it('does not write when there is nothing to clear', () => {
+    clearOfflineBoards();
+    setSpy.mockClear();
+
+    clearOfflineBoards();
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
   it('reads a corrupt or non-array stored value as empty rather than throwing', () => {
     mockStorage.set('offlineBoardsV1', '{"not":"an array"}');
     expect(getOfflineBoards()).toEqual([]);

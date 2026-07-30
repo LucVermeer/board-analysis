@@ -453,8 +453,10 @@ export default function ManageBoards() {
         ListHeaderComponent={
           showOfflineList ? (
             <View style={styles.listHeader}>
+              {/* Only the offline branch actually has no signal — the profile-failure
+                  and lying-connection branches have bars and a dead request. */}
               <Text variant="subheadline" style={styles.offlineNotice}>
-                {t('mobile.offline.pickerNotice')}
+                {isOffline ? t('mobile.offline.pickerNotice') : t('mobile.offline.pickerNoticeUnreachable')}
               </Text>
             </View>
           ) : items.length > 0 ? (

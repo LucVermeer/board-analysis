@@ -273,6 +273,7 @@
       "enableMessageWithSize": "Environ {{size}}. Télécharge toutes les voies de cette board pour les parcourir et enregistrer tes croix hors ligne.",
       "enableConfirm": "Télécharger",
       "pickerNotice": "Pas de réseau — voici les boards que tu as téléchargées.",
+      "pickerNoticeUnreachable": "Impossible de charger tes boards pour l'instant — voici celles que tu as téléchargées.",
       "pickerEmptyTitle": "Rien de téléchargé pour le moment",
       "pickerEmptyBody": "Les boards que tu rends disponibles hors ligne apparaissent ici. Télécharge-en une quand tu as du réseau."
     }

@@ -53,7 +53,10 @@ export function offlineBoardRows(input: OfflineBoardRowsInput): UserBoard[] {
   rows.sort((left, right) => {
     if (left.uuid === activeUuid) return -1;
     if (right.uuid === activeUuid) return 1;
-    return left.name.localeCompare(right.name);
+    // Device locale on purpose — a Spanish user should get Spanish collation for their
+    // own board names. `sensitivity: 'base'` keeps "gym wall" and "Gym Wall" adjacent
+    // instead of splitting the list by capitalisation.
+    return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
   });
   return rows;
 }

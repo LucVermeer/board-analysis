@@ -114,7 +114,15 @@ export function pruneOfflineBoards(knownUuids: readonly string[]): void {
   setSetting(SETTING_KEY, next);
 }
 
-/** Drop every card. Used at the sign-out boundary (see `auth-provider`). */
+/**
+ * Drop every card. Used at the sign-out boundary (see `auth-provider`).
+ *
+ * The early-out reads the RAW stored value, not `getOfflineBoards()`: a stored value
+ * that is corrupt or fails the shape guard reads as empty but is still bytes on disk,
+ * and sign-out has to clear those too.
+ */
 export function clearOfflineBoards(): void {
+  const stored = getSetting(SETTING_KEY);
+  if (Array.isArray(stored) && stored.length === 0) return;
   setSetting(SETTING_KEY, []);
 }

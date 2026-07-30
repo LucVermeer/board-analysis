@@ -319,8 +319,10 @@ export default function BoardSelection() {
         contentContainerStyle={[styles.container, { paddingBottom: scrollBottomPadding }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* "No signal" is only true on the offline branch. The lying-connection branch
+            has bars — it just can't reach us — so it gets its own line. */}
         <Text variant="subheadline" style={styles.offlineNotice}>
-          {t('mobile.offline.pickerNotice')}
+          {isOffline ? t('mobile.offline.pickerNotice') : t('mobile.offline.pickerNoticeUnreachable')}
         </Text>
         {offlineItems.length > 0 ? (
           <Section title={t('mobile.discovery.yourBoardsTitle')}>

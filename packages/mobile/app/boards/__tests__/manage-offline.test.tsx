@@ -108,6 +108,8 @@ vi.mock('react-i18next', () => ({
         'mobile.manage.followingHeader': 'Following',
         'mobile.manage.edit': 'Edit',
         'mobile.offline.pickerNotice': "No signal — here are the boards you've downloaded.",
+        'mobile.offline.pickerNoticeUnreachable':
+          "Can't reach your boards right now — here are the ones you've downloaded.",
       };
       return map[key] ?? key;
     },
@@ -317,6 +319,8 @@ describe('My Boards with no usable network list', () => {
     expect(screen.queryByText('Something went wrong')).toBeNull();
     expect(screen.getByText('Marco garage')).toBeTruthy();
     expect(screen.queryByText('Your boards')).toBeNull();
+    // Online with a dead profile request: the notice must not claim there is no signal.
+    expect(screen.getByText("Can't reach your boards right now — here are the ones you've downloaded.")).toBeTruthy();
     expect(document.querySelector('[data-board="board-a"]')?.getAttribute('data-readonly')).toBe('true');
   });
 

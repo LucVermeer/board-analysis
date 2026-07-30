@@ -73,6 +73,8 @@ vi.mock('react-i18next', () => ({
         'mobile.errorTitle': 'Something went wrong',
         'mobile.errorRetry': 'Try again',
         'mobile.offline.pickerNotice': "No signal — here are the boards you've downloaded.",
+        'mobile.offline.pickerNoticeUnreachable':
+          "Can't reach your boards right now — here are the ones you've downloaded.",
         'mobile.offline.pickerEmptyTitle': 'Nothing downloaded yet',
         'mobile.offline.pickerEmptyBody': 'Boards you make available offline show up here.',
         'mobile.discovery.yourBoardsTitle': 'Your boards',
@@ -245,6 +247,9 @@ describe('board picker with no usable network list', () => {
 
     const row = screen.getByRole('button', { name: 'Marco garage' });
     expect(screen.queryByText('Something went wrong')).toBeNull();
+    // The device has bars here, so "No signal" would be a lie.
+    expect(screen.getByText("Can't reach your boards right now — here are the ones you've downloaded.")).toBeTruthy();
+    expect(screen.queryByText("No signal — here are the boards you've downloaded.")).toBeNull();
 
     fireEvent.click(row);
     await waitFor(() => expect(setActiveBoardMock).toHaveBeenCalledTimes(1));
