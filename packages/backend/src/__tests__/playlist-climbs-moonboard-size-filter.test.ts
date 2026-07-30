@@ -50,7 +50,10 @@ async function seedStats(boardType: string, uuid: string, angle: number, display
 
 describe('playlistClimbs / setterClimbsFull — size filter skips non-size-scoped boards (real DB)', () => {
   beforeAll(async () => {
-    // Playlist tables aren't in the global per-file reset list, so own the cleanup.
+    // Playlist tables aren't in the global per-file reset list, so own the
+    // cleanup. Truncating is safe here: every vitest worker runs against its own
+    // throwaway database (worker-db.ts, keyed on VITEST_POOL_ID) and files
+    // inside a worker run one at a time, so no other file is mid-seed.
     await db.execute(sql`TRUNCATE TABLE playlist_climbs, playlist_ownership, playlists RESTART IDENTITY CASCADE`);
 
     // MoonBoard climbs: compatible_size_ids stays NULL, as in production —
