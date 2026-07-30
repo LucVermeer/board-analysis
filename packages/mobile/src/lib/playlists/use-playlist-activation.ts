@@ -25,6 +25,7 @@ import {
   PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
 } from '@boardsesh/playlists-react';
 import { createPlaylistSuggestionSource, getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
+import { canAddClimbToBoard } from '@boardsesh/board-config';
 import { useActiveClimbUuid, usePlaylistSuggestionSource, useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -32,6 +33,7 @@ import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
 import { reportHandledError } from '../error-reporting';
 import { toSchemaClimb } from '../climb-types';
+import { getPlaylistRenderBoardTarget } from './playlist-climb-render-board';
 import type { PlaylistRenderBoard } from './use-playlist-render-board';
 
 // Playlists whose board-scoped fetch has already been reported as empty this app
@@ -47,6 +49,29 @@ const reportedEmptyBoardFetches = new Set<string>();
  */
 export function _resetEmptyBoardFetchReportsForTests(): void {
   reportedEmptyBoardFetches.clear();
+}
+
+/**
+ * How many of the loaded climbs the active board could actually render.
+ *
+ * The canary below compares the board-scoped fetch against THIS, not against the
+ * raw loaded count. The playlist detail list runs the resolver in all-boards mode
+ * on purpose, so `allClimbs` also carries climbs on other board types, other
+ * layouts, and climbs whose holds don't exist on the active size — a board-scoped
+ * fetch dropping every one of those is correct behaviour, not a defect, and
+ * reporting it would bury the signal the canary exists to give.
+ *
+ * `canAddClimbToBoard` is the same predicate the playlist rows use to decide
+ * whether to dim a climb as incompatible, so "the list showed it as climbable
+ * here" and "the board-scoped query should have returned it" stay in agreement.
+ */
+function countClimbsThisBoardCanRender(climbs: Climb[], board: PlaylistRenderBoard): number {
+  const target = getPlaylistRenderBoardTarget(board);
+  let count = 0;
+  for (const climb of climbs) {
+    if (canAddClimbToBoard(climb, target).ok) count += 1;
+  }
+  return count;
 }
 
 /** A single page of the suggestion-refresh fetch. */
@@ -181,12 +206,12 @@ export function usePlaylistActivation({
   const playlistSuggestionSourceRef = useRef(playlistSuggestionSource);
   playlistSuggestionSourceRef.current = playlistSuggestionSource;
 
-  // How many climbs the screen has loaded, mirrored into a ref so the empty-fetch
-  // canary below can read it without putting `allClimbs` in
+  // The climbs the screen has loaded, mirrored into a ref so the empty-fetch
+  // canary below can read them without putting `allClimbs` in
   // `replaceQueueWithPlaylist`'s deps — that array's identity changes on every
   // page-in and would churn the whole activation callback chain.
-  const loadedClimbCountRef = useRef(allClimbs.length);
-  loadedClimbCountRef.current = allClimbs.length;
+  const loadedClimbsRef = useRef(allClimbs);
+  loadedClimbsRef.current = allClimbs;
 
   // The queue item the returned callback built for this tap. queueApi.setCurrentClimb
   // dispatches that exact instance so the drawer's navigation anchor and the queue
@@ -333,17 +358,28 @@ export function usePlaylistActivation({
         const climbs = options.loadedClimbs ?? (await fetchAllClimbsForBoard({ signal: abortController.signal }));
         if (abortController.signal.aborted) return;
         // Canary. A board-scoped fetch that comes back empty for a playlist the
-        // detail list has already rendered climbs for degrades into a perfectly
-        // plausible one-item queue (buildPlaylistQueue appends the tapped climb),
-        // with no error anywhere — which is exactly how #3891's MoonBoard size
-        // filter stayed invisible for months. Sentry-only, once per playlist per
-        // session, so the next instance of that class pages us instead of a user.
-        if (climbs.length === 0 && loadedClimbCountRef.current > 0 && !reportedEmptyBoardFetches.has(sourceId)) {
-          reportedEmptyBoardFetches.add(sourceId);
-          reportHandledError(new Error('Playlist board-scoped fetch returned no climbs'), {
-            tags: { source: 'playlist', op: 'replace-queue-empty' },
-            extra: { sourceId, loadedCount: loadedClimbCountRef.current },
+        // detail list has already rendered climbable rows for degrades into a
+        // perfectly plausible one-item queue (buildPlaylistQueue appends the
+        // tapped climb), with no error anywhere — which is exactly how #3891's
+        // MoonBoard size filter stayed invisible for months. Sentry-only, once
+        // per playlist per session, so the next instance of that class pages us
+        // instead of a user. Gated on climbs this board CAN render, so a playlist
+        // full of off-board climbs (legitimately empty here) stays silent.
+        if (climbs.length === 0 && activeBoard && !reportedEmptyBoardFetches.has(sourceId)) {
+          const renderableCount = countClimbsThisBoardCanRender(loadedClimbsRef.current, {
+            boardName: activeBoard.boardType,
+            layoutId: activeBoard.layoutId,
+            sizeId: activeBoard.sizeId,
+            setIds: activeBoard.setIds,
+            angle: activeBoard.angle,
           });
+          if (renderableCount > 0) {
+            reportedEmptyBoardFetches.add(sourceId);
+            reportHandledError(new Error('Playlist board-scoped fetch returned no climbs'), {
+              tags: { source: 'playlist', op: 'replace-queue-empty' },
+              extra: { sourceId, renderableCount, loadedCount: loadedClimbsRef.current.length },
+            });
+          }
         }
         // Re-check live queue state after the async load: new future items may
         // have landed while the ordered list streamed in, and replacement still
@@ -380,7 +416,7 @@ export function usePlaylistActivation({
         setIsReplacingQueue(false);
       }
     },
-    [fetchAllClimbsForBoard, getQueueSnapshot, openPlayDrawer, setQueue, showToast, sourceId, t],
+    [activeBoard, fetchAllClimbsForBoard, getQueueSnapshot, openPlayDrawer, setQueue, showToast, sourceId, t],
   );
 
   const cancelQueueReplacement = useCallback(() => {

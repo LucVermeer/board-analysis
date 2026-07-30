@@ -79,7 +79,7 @@ vi.mock('../../climb-to-queue-item', () => ({
   }),
 }));
 
-function makeClimb(uuid: string): Climb {
+function makeClimb(uuid: string, overrides: Partial<Climb> = {}): Climb {
   return {
     uuid,
     name: `Climb ${uuid}`,
@@ -92,6 +92,7 @@ function makeClimb(uuid: string): Climb {
     stars: 3,
     difficulty_error: '0',
     benchmark_difficulty: null,
+    ...overrides,
   };
 }
 
@@ -516,7 +517,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
       await waitFor(() => {
         expect(mocks.reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
           tags: { source: 'playlist', op: 'replace-queue-empty' },
-          extra: { sourceId: 'playlist:empty-fetch-1', loadedCount: 3 },
+          extra: { sourceId: 'playlist:empty-fetch-1', renderableCount: 3, loadedCount: 3 },
         });
       });
       // Documents the degraded-but-not-crashed behaviour: the tapped climb is still
@@ -566,6 +567,54 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
       await waitFor(() => expect(fetchPage).toHaveBeenCalled());
       expect(mocks.reportHandledError).not.toHaveBeenCalled();
+    });
+
+    it('stays silent when the loaded climbs are all on a board this one cannot render', async () => {
+      // The detail list runs the resolver in ALL-BOARDS mode on purpose, so
+      // `allClimbs` carries climbs from other board types and layouts. A playlist
+      // declared on kilter layout 1 whose climbs were all added from a Tension
+      // board legitimately fetches nothing here — reporting it would drown the
+      // signal this canary exists to give.
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-4',
+        allClimbs: [
+          makeClimb('a', { boardType: 'tension', layoutId: 9 }),
+          makeClimb('b', { boardType: 'tension', layoutId: 9 }),
+        ],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => expect(fetchPage).toHaveBeenCalled());
+      expect(mocks.reportHandledError).not.toHaveBeenCalled();
+    });
+
+    it('still reports when only some of the loaded climbs belong to the active board', async () => {
+      // The mixed case is the one that matters: one climbable row plus a pile of
+      // off-board ones still means the board-scoped fetch owed us that row.
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-5',
+        allClimbs: [makeClimb('a', { boardType: 'tension', layoutId: 9 }), tapped],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => {
+        expect(mocks.reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'replace-queue-empty' },
+          extra: { sourceId: 'playlist:empty-fetch-5', renderableCount: 1, loadedCount: 2 },
+        });
+      });
     });
 
     it('keeps the queue unchanged and shows a toast when the full playlist fetch fails', async () => {
