@@ -60,6 +60,9 @@ export function useOfflineBoards(): UserBoard[] {
  */
 export function rememberOfflineBoards(boards: readonly UserBoard[]): void {
   const incoming = boards.filter(isOfflineBoardCard);
+  // Nothing usable to add: this is an ADD-only call, so it never empties the list.
+  // Forgetting is `forgetOfflineBoardScope` (per scope) or `clearOfflineBoards` (all),
+  // which keeps a refetch that momentarily returns nothing from wiping the picker.
   if (incoming.length === 0) return;
   const current = getOfflineBoards();
   const incomingUuids = new Set(incoming.map((board) => board.uuid));

@@ -218,9 +218,9 @@ export default function ManageBoards() {
   const isOffline = useIsOffline();
   const offlineCards = useOfflineBoards();
   const profileUnavailable = !currentUserId && !isProfileLoading;
-  const useOfflineList = isOffline || profileUnavailable || (isError && myBoards.length === 0);
+  const shouldUseOfflineList = isOffline || profileUnavailable || (isError && myBoards.length === 0);
   const offlineItems = useMemo(() => {
-    if (!useOfflineList) return EMPTY_ITEMS;
+    if (!shouldUseOfflineList) return EMPTY_ITEMS;
     return offlineBoardRows({
       cards: offlineCards,
       cachedMyBoards: myBoards,
@@ -235,10 +235,10 @@ export default function ManageBoards() {
         isActive: board.uuid === activeUuid,
       }),
     );
-  }, [useOfflineList, offlineCards, myBoards, activeBoard, downloadedScopeKeys, activeUuid]);
+  }, [shouldUseOfflineList, offlineCards, myBoards, activeBoard, downloadedScopeKeys, activeUuid]);
   // Only take over the screen when there is actually something to show; otherwise the
   // existing loading/error states still tell the more honest story.
-  const showOfflineList = useOfflineList && offlineItems.length > 0;
+  const showOfflineList = shouldUseOfflineList && offlineItems.length > 0;
   // Keep the snapshots fresh from the live list while online (renames, and a backfill
   // for boards downloaded before this existed).
   useRememberDownloadedBoards(boardConnection?.boards);
