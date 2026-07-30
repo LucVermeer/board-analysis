@@ -1,5 +1,6 @@
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
+import { isSizeScopedBoard } from '@boardsesh/board-config';
 import { db } from '../../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
@@ -55,8 +56,16 @@ async function fetchSpecificBoardClimbs(
     climbJoinConditions.push(eq(tables.climbs.layoutId, input.layoutId));
   }
 
-  if (input.sizeId != null) {
-    climbJoinConditions.push(sql`${input.sizeId} = ANY(${tables.climbs.compatibleSizeIds})`);
+  // Size-scope the join only for boards that actually have size variants.
+  // MoonBoard has one fixed product size, so its climbs carry NULL
+  // `compatible_size_ids` — and `sizeId = ANY(NULL)` is NULL, never true, which
+  // silently dropped every MoonBoard row from this join (#3891). `isSizeScopedBoard`
+  // is the one guard for that; the sibling call sites are the main climb search
+  // (`create-climb-filters.ts`) and the sync pull (`sync/queries.ts`). Array
+  // containment (`@>`) rather than `= ANY` so the existing
+  // board_climbs_compatible_size_ids_idx GIN index applies, matching those callers.
+  if (input.sizeId != null && isSizeScopedBoard(boardName)) {
+    climbJoinConditions.push(sql`${tables.climbs.compatibleSizeIds} @> ARRAY[${input.sizeId}]::int[]`);
   }
 
   const inputAngle = input.angle ?? 40;
