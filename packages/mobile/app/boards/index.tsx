@@ -35,6 +35,11 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing } from '../../src/theme/tokens';
 
+// Module-level so an absent board list keeps a stable identity: offline
+// `boardConnection` is always undefined, and a fresh `[]` per render would
+// recompute the offline rows on every commit.
+const EMPTY_BOARDS: UserBoard[] = [];
+
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const bottomChrome = useBottomChromeMetrics();
@@ -61,7 +66,7 @@ export default function BoardSelection() {
     refetch,
     isRefetching,
   } = useMyBoards(undefined, { enabled: isAuthenticated });
-  const myBoards = boardConnection?.boards ?? [];
+  const myBoards = boardConnection?.boards ?? EMPTY_BOARDS;
   // Keep the offline snapshots in step with the live list (renames, and a backfill
   // for boards downloaded before this existed). No-ops while offline.
   useRememberDownloadedBoards(boardConnection?.boards);

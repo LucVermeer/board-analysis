@@ -279,6 +279,31 @@ describe('My Boards with no usable network list', () => {
     expect(document.querySelector('[data-board="net-1"]')?.getAttribute('data-readonly')).toBe('false');
   });
 
+  it('degrades to the read-only list, not the error state, when the profile fails online', () => {
+    // Reviewer-flagged path: online, boards loaded, but the profile settled with no
+    // id (e.g. a 401 on that query alone). Today that shows the hard error state;
+    // owned-vs-followed is unclassifiable, so the read-only list is the honest render.
+    state.isOffline = false;
+    state.profileId = undefined;
+    state.isProfileLoading = false;
+    state.myBoards = {
+      data: { boards: [board({ uuid: 'net-1', name: 'Network board' })] },
+      isLoading: false,
+      isError: false,
+      isRefetching: false,
+    };
+    state.offlineCards = [board({ uuid: 'board-a', name: 'Marco garage' })];
+    state.enabledBoards = ['kilter:8:17'];
+    state.downloadedScopeKeys = ['kilter:8:17'];
+
+    render(createElement(ManageBoards));
+
+    expect(screen.queryByText('Something went wrong')).toBeNull();
+    expect(screen.getByText('Marco garage')).toBeTruthy();
+    expect(screen.queryByText('Your boards')).toBeNull();
+    expect(document.querySelector('[data-board="board-a"]')?.getAttribute('data-readonly')).toBe('true');
+  });
+
   it('still shows the retry state offline when nothing has been downloaded', () => {
     state.isOffline = true;
 

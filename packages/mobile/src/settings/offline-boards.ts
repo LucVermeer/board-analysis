@@ -53,6 +53,10 @@ export function useOfflineBoards(): UserBoard[] {
  * every settings write calls `emitChange()`, which clears the whole per-key
  * snapshot cache and re-renders every `useSetting` consumer app-wide. This runs on
  * each successful `myBoards` fetch, so a no-op refresh must stay a no-op.
+ *
+ * The comparison is `JSON.stringify`, so it is key-order sensitive. That is the safe
+ * direction to be wrong in: reordered fields on the wire cost one redundant write
+ * (and the stored bytes really did change), never a missed update.
  */
 export function rememberOfflineBoards(boards: readonly UserBoard[]): void {
   const incoming = boards.filter(isOfflineBoardCard);
