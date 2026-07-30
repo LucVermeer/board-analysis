@@ -5,9 +5,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   findUnappliedMigrations,
+  formatBaselinedGapWarning,
   formatMigrationGapError,
+  partitionMissingMigrations,
   type ExpectedMigration,
 } from '../../../scripts/lib/migration-ledger.js';
+import {
+  EMPTY_LEDGER_BASELINE,
+  PRODUCTION_LEDGER_BASELINE,
+  type LedgerBaseline,
+} from '../../../scripts/lib/migration-ledger-baseline.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +55,47 @@ export interface MigrationJournalReport {
    * drizzle would have written rather than told to compute one.
    */
   missing: ExpectedMigration[];
+  /**
+   * The part of `missing` the recorded baseline accounts for. Reported on every
+   * run but never fatal — production carried these before the gate existed.
+   */
+  baselinedMissing: ExpectedMigration[];
+  /** The part of `missing` that is new. Anything here fails the deploy. */
+  unbaselinedMissing: ExpectedMigration[];
+  /** The baseline this report was judged against. */
+  baseline: LedgerBaseline;
+}
+
+/**
+ * The production baseline describes *this repo's* journal, so it only applies to
+ * this repo's migrations folder. Every test builds a synthetic folder in a temp
+ * directory, where a tag list drawn from `packages/db/drizzle` would be both
+ * meaningless and — via the journal-membership check below — an error.
+ */
+function resolveBaseline(migrationsFolder: string, override?: LedgerBaseline): LedgerBaseline {
+  if (override) {
+    return override;
+  }
+  return migrationsFolder === DRIZZLE_MIGRATIONS_FOLDER ? PRODUCTION_LEDGER_BASELINE : EMPTY_LEDGER_BASELINE;
+}
+
+/**
+ * A baselined tag that no longer exists in the journal is dead weight at best
+ * and a silently weakened gate at worst: a typo, or a tag that was renamed while
+ * the gap it names is still there under the new name. Cheap to check, and it
+ * fails on the file reads alone — no database needed — so
+ * `migration-ledger-baseline.test.ts` catches it at PR time rather than mid-deploy.
+ */
+function assertBaselineTagsAreJournalled(baseline: LedgerBaseline, expected: readonly ExpectedMigration[]): void {
+  const journalTags = new Set(expected.map((migration) => migration.tag));
+  const unknownTags = baseline.tags.filter((tag) => !journalTags.has(tag));
+  if (unknownTags.length > 0) {
+    throw new Error(
+      `Migration ledger baseline is stale: ${unknownTags.join(', ')} ${unknownTags.length === 1 ? 'is' : 'are'} ` +
+        'not in the migration journal. Remove the tag from scripts/lib/migration-ledger-baseline.ts, or correct it ' +
+        'if the migration was renamed.',
+    );
+  }
 }
 
 /**
@@ -112,29 +160,62 @@ export function readExpectedMigrations(
 export async function inspectMigrationJournal(
   readLedgerHashes: ReadLedgerHashes,
   migrationsFolder: string = DRIZZLE_MIGRATIONS_FOLDER,
+  baselineOverride?: LedgerBaseline,
 ): Promise<MigrationJournalReport> {
   const expected = readExpectedMigrations(migrationsFolder);
+  const baseline = resolveBaseline(migrationsFolder, baselineOverride);
+  assertBaselineTagsAreJournalled(baseline, expected);
   const ledgerHashes = await readLedgerHashes();
   const missingTags = findUnappliedMigrations(expected, ledgerHashes);
   const missingTagSet = new Set(missingTags);
+  const missing = expected.filter((migration) => missingTagSet.has(migration.tag));
+  const { baselined, unbaselined } = partitionMissingMigrations(missing, baseline.tags);
   return {
     expectedCount: expected.length,
     ledgerCount: ledgerHashes.length,
     missingTags,
-    missing: expected.filter((migration) => missingTagSet.has(migration.tag)),
+    missing,
+    baselinedMissing: baselined,
+    unbaselinedMissing: unbaselined,
+    baseline,
   };
 }
 
-/** Throws with every missing tag named, or returns the (clean) report. */
+/**
+ * Throws with every unbaselined missing tag named, or returns the report.
+ *
+ * Baselined tags do not throw — see `migration-ledger-baseline.ts` — but the
+ * report still carries them so callers can print them, which
+ * `migrate.ts` and `verify-migration-journal.ts` both do.
+ */
 export async function assertMigrationJournalApplied(
   readLedgerHashes: ReadLedgerHashes,
   migrationsFolder: string = DRIZZLE_MIGRATIONS_FOLDER,
+  baselineOverride?: LedgerBaseline,
 ): Promise<MigrationJournalReport> {
-  const report = await inspectMigrationJournal(readLedgerHashes, migrationsFolder);
-  if (report.missingTags.length > 0) {
-    throw new Error(formatMigrationGapError(report.missingTags, report.expectedCount, report.ledgerCount));
+  const report = await inspectMigrationJournal(readLedgerHashes, migrationsFolder, baselineOverride);
+  if (report.unbaselinedMissing.length > 0) {
+    throw new Error(
+      formatMigrationGapError(
+        report.unbaselinedMissing.map((migration) => migration.tag),
+        report.expectedCount,
+        report.ledgerCount,
+      ),
+    );
   }
   return report;
+}
+
+/** The baselined-gap line both `migrate.ts` and the CLI print, or null when there is nothing to say. */
+export function describeBaselinedGap(report: MigrationJournalReport): string | null {
+  if (report.baselinedMissing.length === 0) {
+    return null;
+  }
+  return formatBaselinedGapWarning(
+    report.baselinedMissing.map((migration) => migration.tag),
+    report.baseline.recordedAt,
+    report.expectedCount,
+  );
 }
 
 /** Env var that turns the deploy gate on. Set by production-deploy.yml and db-migration-renumber.yml. */
@@ -157,9 +238,10 @@ export async function runMigrationJournalGate(
   env: Record<string, string | undefined>,
   readLedgerHashes: ReadLedgerHashes,
   migrationsFolder: string = DRIZZLE_MIGRATIONS_FOLDER,
+  baselineOverride?: LedgerBaseline,
 ): Promise<MigrationJournalReport | null> {
   if (env[VERIFY_MIGRATION_JOURNAL_ENV] !== '1') {
     return null;
   }
-  return assertMigrationJournalApplied(readLedgerHashes, migrationsFolder);
+  return assertMigrationJournalApplied(readLedgerHashes, migrationsFolder, baselineOverride);
 }

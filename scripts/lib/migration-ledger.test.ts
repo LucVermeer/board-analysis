@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { findUnappliedMigrations, formatMigrationGapError, type ExpectedMigration } from './migration-ledger';
+import {
+  findUnappliedMigrations,
+  formatBaselinedGapWarning,
+  formatMigrationGapError,
+  partitionMissingMigrations,
+  type ExpectedMigration,
+} from './migration-ledger';
 
 function expectedFrom(...tags: string[]): ExpectedMigration[] {
   return tags.map((tag) => ({ tag, hash: `hash-of-${tag}` }));
@@ -58,6 +64,71 @@ describe('findUnappliedMigrations', () => {
 
   it('returns nothing for an empty journal', () => {
     expect(findUnappliedMigrations([], hashesFor('0000_a'))).toEqual([]);
+  });
+});
+
+describe('partitionMissingMigrations', () => {
+  it('separates the recorded backlog from a new gap', () => {
+    const missing = expectedFrom('0000_old_gap', '0187_new_gap');
+    const { baselined, unbaselined } = partitionMissingMigrations(missing, ['0000_old_gap']);
+    expect(baselined.map((migration) => migration.tag)).toEqual(['0000_old_gap']);
+    expect(unbaselined.map((migration) => migration.tag)).toEqual(['0187_new_gap']);
+  });
+
+  it('keeps the hash on both sides', () => {
+    // Baselined tags still print their repair hash — that is how the backlog
+    // gets shrunk without re-deriving a sha256 by hand.
+    const { baselined } = partitionMissingMigrations(expectedFrom('0000_old_gap'), ['0000_old_gap']);
+    expect(baselined).toEqual([{ tag: '0000_old_gap', hash: 'hash-of-0000_old_gap' }]);
+  });
+
+  it('preserves journal order within each side', () => {
+    const missing = expectedFrom('0000_a', '0001_b', '0002_c', '0003_d');
+    const { baselined, unbaselined } = partitionMissingMigrations(missing, ['0002_c', '0000_a']);
+    expect(baselined.map((migration) => migration.tag)).toEqual(['0000_a', '0002_c']);
+    expect(unbaselined.map((migration) => migration.tag)).toEqual(['0001_b', '0003_d']);
+  });
+
+  it('matches on tag, not hash', () => {
+    // Byte-identical SQL shares a hash. Baselining a tolerated old migration
+    // must not also excuse an unrelated new one that copied its body.
+    const duplicateHash = 'identical-sql-body';
+    const missing: ExpectedMigration[] = [
+      { tag: '0000_tolerated', hash: duplicateHash },
+      { tag: '0187_new_copy', hash: duplicateHash },
+    ];
+    const { unbaselined } = partitionMissingMigrations(missing, ['0000_tolerated']);
+    expect(unbaselined.map((migration) => migration.tag)).toEqual(['0187_new_copy']);
+  });
+
+  it('leaves everything unbaselined when the baseline is empty', () => {
+    const missing = expectedFrom('0000_a', '0001_b');
+    const { baselined, unbaselined } = partitionMissingMigrations(missing, []);
+    expect(baselined).toEqual([]);
+    expect(unbaselined).toEqual(missing);
+  });
+
+  it('ignores baseline tags that are not missing', () => {
+    // The healthy end state: a repaired tag still listed in the baseline is
+    // dead weight, not a failure.
+    const { baselined, unbaselined } = partitionMissingMigrations([], ['0000_already_repaired']);
+    expect(baselined).toEqual([]);
+    expect(unbaselined).toEqual([]);
+  });
+});
+
+describe('formatBaselinedGapWarning', () => {
+  it('names every tolerated tag, the date, and where to shrink the list', () => {
+    const message = formatBaselinedGapWarning(['0069_mature_morg', '0103_thick_puck'], '2026-07-30', 188);
+    expect(message).toContain('0069_mature_morg');
+    expect(message).toContain('0103_thick_puck');
+    expect(message).toContain('2 of 188');
+    expect(message).toContain('2026-07-30');
+    expect(message).toContain('scripts/lib/migration-ledger-baseline.ts');
+  });
+
+  it('says the deploy is not blocked, so the line is not read as a failure', () => {
+    expect(formatBaselinedGapWarning(['0069_mature_morg'], '2026-07-30', 188)).toContain('not blocked');
   });
 });
 

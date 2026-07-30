@@ -140,6 +140,9 @@ tag with the ledger hash that tag's repair row needs:
    • 0187_sad_freak  (ledger hash 9f2c…)
 ```
 
+Tags in the recorded baseline (see below) print the same way but as a `⚠️` and without
+setting the exit code.
+
 Take the hash from that output rather than computing a sha256 yourself. The whole reason
 this check calls drizzle's own `readMigrationFiles` is that a re-derived hash drifts on
 encoding, BOM, line endings, or a drizzle change — and a repair row carrying a hash drizzle
@@ -173,6 +176,36 @@ Repair each named tag by hand, in this order:
 
 Extra ledger rows matching no journal entry are ignored — renumbering leaves those behind
 legitimately, and failing on them would block deploys for benign residue.
+
+#### The recorded baseline
+
+The gate's first armed run found 20 of production's 188 journal entries with no ledger row
+— a backlog going back to the initial schema, not the regression the check was built for —
+and blocked the production deploy, because `migrate` is the `needs:` gate for both
+`deploy-web` and `deploy-production-backend`.
+
+Those 20 tags are listed in `scripts/lib/migration-ledger-baseline.ts` and subtracted before
+the gate throws. A gap in any other tag still fails the deploy, which keeps the case that
+matters: a freshly appended migration skipped by the high-water mark (the `0129` incident) is
+caught on the first deploy after it happens.
+
+The baseline is a stopgap, not a resolution. Two mechanisms produce those 20 tags and only
+one of them is harmless:
+
+- **The `.sql` changed after production applied it.** The ledger holds the hash of the file
+  as it ran, so an edit orphans the row. `0103_thick_puck` landed as a bare `CREATE TABLE`
+  and was rewritten with `IF NOT EXISTS` guards the next day; 11 of the 20 have more than one
+  content version in git history.
+- **The migration never ran.** Then production is missing that DDL right now, and the
+  baseline is hiding it.
+
+Telling them apart needs the production schema in front of you, tag by tag — the four repair
+steps above, then delete that tag's line from the baseline. `vp run db:verify-journal` prints
+the baselined tags with their repair hashes on every run and exits 0; a tag outside the
+baseline exits 1.
+
+Adding a tag to the baseline is not a normal fix. A new gap means DDL that did not reach
+production, and baselining it ships the outage this check was written to prevent.
 
 ## Why the schema barrel is union-merged
 

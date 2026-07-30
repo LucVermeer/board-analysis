@@ -26,8 +26,10 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { findUnappliedMigrations } from '../../../scripts/lib/migration-ledger.js';
+import type { LedgerBaseline } from '../../../scripts/lib/migration-ledger-baseline.js';
 import {
   assertMigrationJournalApplied,
+  describeBaselinedGap,
   inspectMigrationJournal,
   readExpectedMigrations,
   readLedgerHashesWith,
@@ -412,6 +414,101 @@ describe('migration journal verification (#2933)', () => {
     await assert.rejects(
       runMigrationJournalGate({ VERIFY_MIGRATION_JOURNAL: '1' }, emptyLedger, migrationsFolder),
       /Missing: 0000_a, 0001_b/,
+    );
+  });
+
+  it('tolerates a baselined gap and still fails on the one beside it', async (context) => {
+    const adminUrl = localDatabaseUrl();
+    if (!adminUrl) {
+      context.skip('set DATABASE_URL to a local Postgres to run');
+      return;
+    }
+    // The production shape after the gate first armed: a gap that predates the
+    // check (baselined) sitting alongside one that does not. Only the second may
+    // block a deploy — but the first must still be reported, or nobody repairs it.
+    const migrationsFolder = makeTempFolder('baselined');
+    const scratchUrl = await createScratchDatabase(adminUrl, 'baselined');
+    writeMigrationsFolder(migrationsFolder, PHASE_ONE);
+    await applyMigrations(scratchUrl, migrationsFolder);
+
+    // 0000_a's row goes missing (a restore, or an earlier hand repair), and a
+    // second migration lands below the high-water mark and is skipped.
+    const [firstEntry] = readExpectedMigrations(migrationsFolder);
+    await withScratchClient(scratchUrl, async (client) => {
+      await client`DELETE FROM drizzle."__drizzle_migrations" WHERE hash = ${firstEntry.hash}`;
+    });
+    writeMigrationsFolder(migrationsFolder, [...PHASE_ONE, STALE_WHEN_ENTRY]);
+    await applyMigrations(scratchUrl, migrationsFolder);
+
+    const baseline: LedgerBaseline = { recordedAt: '2026-07-30', source: 'test', tags: ['0000_a'] };
+    const report = await withScratchClient(scratchUrl, (client) =>
+      inspectMigrationJournal(readLedgerHashesWith(client), migrationsFolder, baseline),
+    );
+    assert.deepEqual(report.missingTags, ['0000_a', '0002_stale_when']);
+    assert.deepEqual(
+      report.baselinedMissing.map((migration) => migration.tag),
+      ['0000_a'],
+    );
+    assert.deepEqual(
+      report.unbaselinedMissing.map((migration) => migration.tag),
+      ['0002_stale_when'],
+    );
+    // The repair hash travels with the baselined tag too — that is what shrinking
+    // the baseline needs.
+    assert.equal(report.baselinedMissing[0].hash, firstEntry.hash);
+    const warning = describeBaselinedGap(report);
+    assert.ok(warning?.includes('0000_a'), 'a tolerated gap must still be named on every run');
+    assert.ok(!warning?.includes('0002_stale_when'));
+
+    await assert.rejects(
+      withScratchClient(scratchUrl, (client) =>
+        runMigrationJournalGate({ VERIFY_MIGRATION_JOURNAL: '1' }, readLedgerHashesWith(client), migrationsFolder, {
+          ...baseline,
+        }),
+      ),
+      /Missing: 0002_stale_when/,
+      'the unbaselined gap must still fail the deploy, and the message must not blame the baselined one',
+    );
+
+    // Baseline both and the deploy proceeds — the state production is in today.
+    const bothBaselined = await withScratchClient(scratchUrl, (client) =>
+      runMigrationJournalGate({ VERIFY_MIGRATION_JOURNAL: '1' }, readLedgerHashesWith(client), migrationsFolder, {
+        ...baseline,
+        tags: ['0000_a', '0002_stale_when'],
+      }),
+    );
+    assert.deepEqual(bothBaselined?.unbaselinedMissing, []);
+    assert.equal(bothBaselined?.baselinedMissing.length, 2);
+  });
+
+  it('rejects a baseline tag that is not in the journal', async () => {
+    // A renamed or mistyped tag would silently tolerate nothing while looking
+    // like it tolerated something. No database needed.
+    const migrationsFolder = makeTempFolder('stale-baseline');
+    writeMigrationsFolder(migrationsFolder, PHASE_ONE);
+
+    await assert.rejects(
+      inspectMigrationJournal(async () => [], migrationsFolder, {
+        recordedAt: '2026-07-30',
+        source: 'test',
+        tags: ['0000_a', '0404_never_existed'],
+      }),
+      /baseline is stale: 0404_never_existed/,
+    );
+  });
+
+  it('applies the production baseline only to the real migrations folder', async () => {
+    // The default baseline names tags from packages/db/drizzle. A synthetic
+    // folder must get an empty one, or every scenario above would trip the
+    // journal-membership check instead of testing what it means to test.
+    const migrationsFolder = makeTempFolder('default-baseline');
+    writeMigrationsFolder(migrationsFolder, PHASE_ONE);
+
+    const report = await inspectMigrationJournal(async () => [], migrationsFolder);
+    assert.deepEqual(report.baseline.tags, []);
+    assert.deepEqual(
+      report.unbaselinedMissing.map((migration) => migration.tag),
+      ['0000_a', '0001_b'],
     );
   });
 

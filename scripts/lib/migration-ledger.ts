@@ -73,6 +73,29 @@ export function findUnappliedMigrations(
 }
 
 /**
+ * Splits a gap into the part a recorded baseline already accounts for and the
+ * part that is new. Only the new part fails a deploy; see
+ * `migration-ledger-baseline.ts` for why the baseline exists at all.
+ *
+ * Tag-keyed rather than hash-keyed, unlike `findUnappliedMigrations`: a journal
+ * tag is a filename and therefore unique, while a hash deliberately is not.
+ * Baselining by hash would tolerate a second, unrelated migration that happened
+ * to carry byte-identical SQL.
+ */
+export function partitionMissingMigrations(
+  missing: readonly ExpectedMigration[],
+  baselinedTags: readonly string[],
+): { baselined: ExpectedMigration[]; unbaselined: ExpectedMigration[] } {
+  const baselinedTagSet = new Set(baselinedTags);
+  const baselined: ExpectedMigration[] = [];
+  const unbaselined: ExpectedMigration[] = [];
+  for (const migration of missing) {
+    (baselinedTagSet.has(migration.tag) ? baselined : unbaselined).push(migration);
+  }
+  return { baselined, unbaselined };
+}
+
+/**
  * What the operator does next. Shared so the deploy-gate throw and the
  * `db:verify-journal` CLI (which prints its tag list across lines) cannot drift
  * into telling two different stories about the same condition.
@@ -99,5 +122,25 @@ export function formatMigrationGapError(
     `${plural} no row in drizzle.__drizzle_migrations (${ledgerCount} rows present). ` +
     `Missing: ${missingTags.join(', ')}. ` +
     MIGRATION_GAP_REMEDIATION
+  );
+}
+
+/**
+ * Printed on every armed run, not only when something else is wrong. A tolerated
+ * gap that stops being mentioned is a gap nobody repairs — and the honest reading
+ * of these tags is "production may be missing this DDL", not "resolved".
+ */
+export function formatBaselinedGapWarning(
+  baselinedTags: readonly string[],
+  recordedAt: string,
+  expectedCount: number,
+): string {
+  const subject =
+    baselinedTags.length === 1 ? 'migration has no ledger row and is' : 'migrations have no ledger row and are';
+  return (
+    `${baselinedTags.length} of ${expectedCount} journal ${subject} covered by the ` +
+    `baseline recorded ${recordedAt} — the deploy is not blocked on it. Repair pending: ` +
+    `${baselinedTags.join(', ')}. See docs/db-migrations.md and shrink the list in ` +
+    'scripts/lib/migration-ledger-baseline.ts as each one is repaired.'
   );
 }
