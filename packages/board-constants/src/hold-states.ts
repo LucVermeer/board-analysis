@@ -147,29 +147,58 @@ export function getBoardStrokeWidthMultiplier(board: BoardName): number {
 // Warned hold states to avoid log spam
 const warnedHoldStates = new Set<string>();
 
+/** One comma-separated frame of an Aurora `frames` string. */
+export type FrameSegment = {
+  /**
+   * `true` when the segment restates the climb's whole lit set (a snapshot),
+   * `false` when it is a delta on the previous frame. Frame 0 is always
+   * absolute — it starts from a dark board either way.
+   */
+  absolute: boolean;
+  /** Frame body with the `"` delta marker removed. Empty for a hold frame. */
+  body: string;
+};
+
 /**
- * Split a comma-separated frames string into one delta per index.
+ * Split a comma-separated frames string into typed frame segments.
  *
- * The Aurora frames format encodes multi-frame routes as a sequence of
- * delta frames separated by commas. Each delta contains:
+ * The Aurora frames format encodes multi-frame routes as comma-separated
+ * frames. Each frame contains:
  *   `p<hold>r<role>` — set a hold to a role
  *   `x<hold>` — turn a hold off (removed from the accumulated lit state)
  *
- * Aurora prefixes every frame after the first with a literal `"`
- * character (e.g. `p1r43,"x1p2r43,"x2p3r43`); strip it so consumers see a
- * clean delta. Frames are NOT self-contained snapshots — call
- * `accumulateFramesToMaps` to fold the deltas into per-frame lit-state
- * snapshots suitable for rendering or BLE.
+ * **The leading `"` is meaningful, not noise.** A frame that starts with a
+ * literal `"` is a *delta* on the previous frame; a frame after index 0 that
+ * does NOT start with `"` is an *absolute snapshot* that restates the full
+ * lit set from scratch. The legacy Aurora catalog contains both kinds —
+ * 295 of the 709 multi-frame climbs carry at least one absolute frame — so
+ * treating every frame as a delta leaves holds lit that the climb turned off
+ * (issue #3947). Our own Kilter Grips importer emits `,"` unconditionally,
+ * so climbs ingested through that path are pure delta.
  *
- * Returns an empty array for the empty string. Strips empty segments so
- * trailing commas don't produce phantom frames.
+ * A `"`-only segment is a legitimate **hold frame**: a delta with no changes,
+ * i.e. "keep the current lights for one more pace tick". It must be kept, or
+ * the animation is shortened and every later frame index shifts.
+ *
+ * Frames are NOT self-contained maps — call `accumulateFramesToMaps` to fold
+ * them into per-frame lit-state snapshots suitable for rendering or BLE.
+ *
+ * Returns an empty array for the empty string, and drops every empty
+ * *unquoted* segment — a trailing or a doubled comma — because such a
+ * segment would otherwise decode as an absolute snapshot that lights
+ * nothing, i.e. a one-tick blackout of the whole wall. An empty *quoted*
+ * segment is the hold frame described above and is kept.
  */
-export function splitFramesString(frames: string): string[] {
+export function parseFramesSegments(frames: string): FrameSegment[] {
   if (!frames) return [];
   return frames
     .split(',')
-    .map((segment) => (segment.startsWith('"') ? segment.slice(1) : segment))
-    .filter((segment) => segment.length > 0);
+    .map((segment, index) =>
+      index > 0 && segment.startsWith('"')
+        ? { absolute: false, body: segment.slice(1) }
+        : { absolute: true, body: segment },
+    )
+    .filter((segment) => !segment.absolute || segment.body !== '');
 }
 
 /**
@@ -195,20 +224,27 @@ function tokeniseFrameDelta(
 }
 
 /**
- * Fold a multi-frame Aurora route into per-frame accumulated snapshots.
+ * Fold a multi-frame Aurora route into per-frame lit-state snapshots.
  *
- * Each output map at index N is the cumulative lit-state after applying
- * deltas 0..N — holds stay lit across frames unless explicitly turned
- * off via an `x<holdId>` token. The first map (index 0) starts from an
- * empty board and applies frame 0's sets. For single-frame climbs this
- * is equivalent to `convertLitUpHoldsStringToMap(frames, board)[0]`.
+ * Each output map at index N is what the board looks like on frame N:
+ * a delta frame carries the previous snapshot forward (holds stay lit
+ * unless an `x<holdId>` token turns them off); an absolute frame after
+ * index 0 clears the accumulator first, because it restates the full lit
+ * set itself. A `"`-only hold frame repeats the previous snapshot and
+ * still counts as its own frame.
+ *
+ * There is one output map per comma-separated frame, so the length always
+ * matches the climb's `frames_count`. For single-frame climbs this is
+ * equivalent to `convertLitUpHoldsStringToMap(frames, board)[0]`.
  */
 export function accumulateFramesToMaps(frames: string, board: BoardName): LitUpHoldsMap[] {
-  const deltas = splitFramesString(frames);
+  const segments = parseFramesSegments(frames);
   const result: LitUpHoldsMap[] = [];
-  const accumulator: LitUpHoldsMap = {};
-  for (const frame of deltas) {
-    for (const token of tokeniseFrameDelta(frame)) {
+  let accumulator: LitUpHoldsMap = {};
+  for (const [index, segment] of segments.entries()) {
+    // An absolute frame restates the whole lit set, so nothing carries over.
+    if (segment.absolute && index > 0) accumulator = {};
+    for (const token of tokeniseFrameDelta(segment.body)) {
       if (token.kind === 'off') {
         delete accumulator[token.holdId];
         continue;
@@ -259,54 +295,67 @@ export function accumulatedMapsToFrameStrings(maps: LitUpHoldsMap[], board: Boar
 }
 
 /**
- * Convert lit up holds string to a map of frames.
- * Each frame maps hold IDs to their state, color, and display color.
+ * True when a decoded hold state is the `{holdId}={code}` sentinel that
+ * `accumulateFramesToMaps` emits for a role code missing from
+ * `HOLD_STATE_MAP`, rather than a real hold state.
+ *
+ * The predicate lives here, next to the code that produces the sentinel, so
+ * the readers that drop those rows (`shared-sync.ts`, `climb-similarity.ts`,
+ * `backfill-board-climb-holds.ts`) share one definition instead of each
+ * re-deriving "contains an `=`" from the shape.
  */
-export function convertLitUpHoldsStringToMap(litUpHolds: string, board: BoardName): Record<number, LitUpHoldsMap> {
-  return litUpHolds
-    .split(',')
-    .filter((frame) => frame)
-    .reduce(
-      (frameMap, frameString, frameIndex) => {
-        const frameHoldsMap = Object.fromEntries(
-          frameString
-            .split('p')
-            .filter((hold) => hold)
-            .map((holdData) => holdData.split('r').map((str) => Number(str)))
-            .map(([holdId, stateCode]) => {
-              const stateInfo = HOLD_STATE_MAP[board]?.[stateCode];
-              if (!stateInfo) {
-                const warnKey = `${board}:${stateCode}`;
-                if (!warnedHoldStates.has(warnKey)) {
-                  warnedHoldStates.add(warnKey);
-                  console.warn(
-                    `HOLD_STATE_MAP is missing values for ${board} status code: ${stateCode} (this warning is only shown once per status code)`,
-                  );
-                }
-                return [
-                  holdId || 0,
-                  {
-                    state: `${holdId}=${stateCode}` as HoldState,
-                    color: '#FFF',
-                    displayColor: '#FFF',
-                  },
-                ];
-              }
-              const { name, color, displayColor } = stateInfo;
-              return [holdId, { state: name, color, displayColor: displayColor || color }];
-            }),
-        );
-        frameMap[frameIndex] = frameHoldsMap as LitUpHoldsMap;
-        return frameMap;
-      },
-      {} as Record<number, LitUpHoldsMap>,
-    );
+export function isSentinelHoldState(state: string | null | undefined): boolean {
+  return !state || state.includes('=');
 }
 
-/** Collapse a possibly multi-frame frames string to its final lit snapshot. */
+/**
+ * Convert a frames string into a map of frame index → lit-state snapshot.
+ * Each frame maps hold IDs to their state, color, and display color.
+ *
+ * This was a second parser for the same string: it split on `p` and then on
+ * `r`, so it understood neither the `x` off-token nor the `"` delta marker.
+ * On `"x1192p1370r13` the first element is `'"x1192'`, `Number(...)` gives
+ * `NaN`, and the unknown-code branch emitted a phantom `hold_id 0` with the
+ * state `NaN=undefined` (issue #3948). It now delegates to
+ * `accumulateFramesToMaps` — one grammar, one parser.
+ *
+ * Single-frame strings (99.9% of the catalog, and every caller that reads
+ * index `[0]`, since frame 0 is always absolute) produce identical output.
+ * Unknown role codes still get the `{holdId}={code}` sentinel that
+ * `climb-similarity.ts` and `backfill-board-climb-holds.ts` filter on.
+ */
+export function convertLitUpHoldsStringToMap(litUpHolds: string, board: BoardName): Record<number, LitUpHoldsMap> {
+  const frameMap: Record<number, LitUpHoldsMap> = {};
+  accumulateFramesToMaps(litUpHolds, board).forEach((map, frameIndex) => {
+    frameMap[frameIndex] = map;
+  });
+  return frameMap;
+}
+
+/**
+ * Collapse every frame of a route into one snapshot: a hold is lit if any
+ * frame lights it, and the last frame to set it wins the role.
+ *
+ * This is what a *static* render of a multi-frame climb should show — a
+ * thumbnail, a share card, a kiosk tile, the ESP32's steady LED state.
+ * Picking a single frame instead shows a fragment: for an animation no one
+ * frame is the climb, and for a route/circuit the last frame has already
+ * dropped every hold an earlier `x` token cleared.
+ *
+ * It is a real visual change for the 709 multi-frame climbs in the catalog
+ * (0.11%): 611 of them render busier than they used to, none sparser, and
+ * the median goes from 20 lit holds to 42. Nothing else in the catalog moves.
+ */
+export function flattenFramesToUnion(maps: LitUpHoldsMap[]): LitUpHoldsMap {
+  const union: LitUpHoldsMap = {};
+  for (const map of maps) Object.assign(union, map);
+  return union;
+}
+
+/** Collapse a possibly multi-frame frames string to one static snapshot. */
 export function toFlatFrames(frames: string | null | undefined, board: BoardName): string {
   if (!frames) return '';
   if (!frames.includes(',') && !frames.includes('x')) return frames;
-  const maps = accumulateFramesToMaps(frames, board);
-  return accumulatedMapsToFrameStrings(maps, board).at(-1) ?? '';
+  const union = flattenFramesToUnion(accumulateFramesToMaps(frames, board));
+  return accumulatedMapsToFrameStrings([union], board)[0] ?? '';
 }

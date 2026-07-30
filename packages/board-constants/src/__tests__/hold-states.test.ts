@@ -5,11 +5,15 @@ import {
   BOARD_RENDER_DEFAULTS,
   getBoardStrokeWidthMultiplier,
   convertLitUpHoldsStringToMap,
-  splitFramesString,
+  parseFramesSegments,
   accumulateFramesToMaps,
   accumulatedMapsToFrameStrings,
+  flattenFramesToUnion,
+  isSentinelHoldState,
+  toFlatFrames,
 } from '../hold-states';
 import type { BoardName } from '@boardsesh/shared-schema';
+import oracle from './__fixtures__/aurora-frames-oracle.json';
 
 describe('HOLD_STATE_MAP', () => {
   const boards: BoardName[] = ['kilter', 'tension', 'moonboard', 'decoy', 'touchstone', 'grasshopper', 'soill'];
@@ -129,30 +133,72 @@ describe('convertLitUpHoldsStringToMap', () => {
       displayColor: '#00DD00',
     });
   });
+
+  it('does not invent a hold_id 0 from an x token or a leading quote (#3948)', () => {
+    // The old `split('p')` parser saw `'"x1192'` as its first element,
+    // `Number(...)` gave NaN, and the unknown-code branch emitted
+    // `[holdId || 0, { state: 'NaN=undefined' }]` — a phantom hold 0 that
+    // aurora-sync then wrote straight into board_climb_holds.
+    const result = convertLitUpHoldsStringToMap('p1369r13,"x1192p1370r13', 'kilter');
+    for (const frame of Object.values(result)) {
+      expect(frame[0]).toBeUndefined();
+      for (const hold of Object.values(frame)) {
+        expect(hold.state).not.toContain('NaN');
+      }
+    }
+    expect(Object.keys(result[1]).sort()).toEqual(['1369', '1370']);
+  });
+
+  it('still emits the {holdId}={code} sentinel for an unmapped role code', () => {
+    // climb-similarity.ts and backfill-board-climb-holds.ts both filter on
+    // the `=`; changing that shape would silently let garbage through.
+    const result = convertLitUpHoldsStringToMap('p100r999', 'kilter');
+    expect(result[0][100].state).toBe('100=999');
+  });
 });
 
-describe('splitFramesString', () => {
+describe('parseFramesSegments', () => {
   it('returns an empty array for the empty string', () => {
-    expect(splitFramesString('')).toEqual([]);
+    expect(parseFramesSegments('')).toEqual([]);
   });
 
-  it('returns a single segment for a single-frame string', () => {
-    expect(splitFramesString('p100r42p200r43')).toEqual(['p100r42p200r43']);
+  it('returns a single absolute segment for a single-frame string', () => {
+    expect(parseFramesSegments('p100r42p200r43')).toEqual([{ absolute: true, body: 'p100r42p200r43' }]);
   });
 
-  it('splits multi-frame strings on commas', () => {
-    expect(splitFramesString('p100r42,p200r43,p300r44')).toEqual(['p100r42', 'p200r43', 'p300r44']);
+  it('marks quoted frames as deltas and unquoted later frames as absolute', () => {
+    // The leading `"` is the encoding's own signal for "this frame is a
+    // delta on the previous one". A later frame without it restates the
+    // whole lit set. Collapsing the two is issue #3947.
+    expect(parseFramesSegments('p1r1,"x1p2r1,p3r1')).toEqual([
+      { absolute: true, body: 'p1r1' },
+      { absolute: false, body: 'x1p2r1' },
+      { absolute: true, body: 'p3r1' },
+    ]);
   });
 
-  it('drops empty segments from trailing or doubled commas', () => {
-    expect(splitFramesString('p100r42,,p200r43,')).toEqual(['p100r42', 'p200r43']);
+  it('keeps a bare-quote hold frame instead of dropping it', () => {
+    // `"` on its own is a delta with no changes: hold the current lights
+    // for one more pace tick. 956 of these exist in the catalog.
+    expect(parseFramesSegments('p1r1,",p2r1')).toEqual([
+      { absolute: true, body: 'p1r1' },
+      { absolute: false, body: '' },
+      { absolute: true, body: 'p2r1' },
+    ]);
   });
 
-  it('strips the leading double-quote Aurora prefixes on later frames', () => {
-    // Real Aurora frames look like: `frame0,"frame1,"frame2` — the quote
-    // sits at the start of every frame after the first and must be stripped
-    // before downstream parsers see it.
-    expect(splitFramesString('p100r42,"x100p200r43,"x200p300r44')).toEqual(['p100r42', 'x100p200r43', 'x200p300r44']);
+  it('drops empty unquoted segments from trailing or doubled commas', () => {
+    // An empty *unquoted* segment would decode as an absolute snapshot that
+    // lights nothing — a one-tick blackout of the whole wall — so it is not
+    // a frame. The empty *quoted* segment two tests up is, and stays.
+    expect(parseFramesSegments('p100r42,"p200r43,')).toEqual([
+      { absolute: true, body: 'p100r42' },
+      { absolute: false, body: 'p200r43' },
+    ]);
+    expect(parseFramesSegments('p100r42,,p200r43')).toEqual([
+      { absolute: true, body: 'p100r42' },
+      { absolute: true, body: 'p200r43' },
+    ]);
   });
 });
 
@@ -198,6 +244,57 @@ describe('accumulateFramesToMaps', () => {
     expect(result).toHaveLength(1);
     expect(result[0][100]).toBeUndefined();
   });
+
+  it('resets on an unquoted later frame — it is a snapshot, not a delta (#3947)', () => {
+    // Frame 1 carries no `"`, so it restates the full lit set: holds 100
+    // and 200 go dark. Before the fix this returned {100, 200, 300}.
+    const result = accumulateFramesToMaps('p100r1p200r2,p300r2', 'tension');
+    expect(result).toHaveLength(2);
+    expect(Object.keys(result[0]).sort()).toEqual(['100', '200']);
+    expect(Object.keys(result[1])).toEqual(['300']);
+  });
+
+  it('keeps a bare-quote hold frame as its own repeated snapshot (#3947)', () => {
+    // Before the fix the `"`-only segment vanished, so this decoded to two
+    // frames and frame 1 was {100, 300} — the animation lost a beat and
+    // every later frame index shifted.
+    const result = accumulateFramesToMaps('p100r1,",p300r2', 'tension');
+    expect(result).toHaveLength(3);
+    expect(Object.keys(result[1])).toEqual(['100']);
+    expect(result[1]).toEqual(result[0]);
+    expect(Object.keys(result[2])).toEqual(['300']);
+  });
+});
+
+describe('accumulateFramesToMaps against the Kilter Grips oracle', () => {
+  // The expected snapshots in this fixture are decoded from Grips'
+  // `h{hole}p{role}s{start}e{end}` encoding — explicit inclusive frame
+  // ranges, no delta semantics — not from our own reader. See the
+  // fixture's `_provenance` block. Four of the five climbs decode wrong
+  // on the pre-#3947 reader.
+  for (const climb of oracle.climbs) {
+    it(`${climb.kind}: ${climb.name} (${climb.climbUuid})`, () => {
+      const maps = accumulateFramesToMaps(climb.auroraFrames, 'kilter');
+      expect(maps).toHaveLength(climb.framesCount);
+      expect(maps).toHaveLength(climb.expectedFrames.length);
+      const decoded = maps.map((map) =>
+        Object.fromEntries(Object.entries(map).map(([holdId, hold]) => [holdId, hold.state])),
+      );
+      const expected = climb.expectedFrames.map((frame) =>
+        Object.fromEntries(
+          Object.entries(frame).map(([placementId, roleCode]) => {
+            // A fixture role code outside HOLD_STATE_MAP means the fixture is
+            // wrong, not the parser — say so instead of throwing a TypeError
+            // from a `.name` on undefined.
+            const stateInfo = HOLD_STATE_MAP.kilter[roleCode];
+            expect(stateInfo, `oracle fixture role code ${roleCode} is not in HOLD_STATE_MAP.kilter`).toBeDefined();
+            return [placementId, stateInfo?.name];
+          }),
+        ),
+      );
+      expect(decoded).toEqual(expected);
+    });
+  }
 });
 
 describe('accumulatedMapsToFrameStrings', () => {
@@ -219,5 +316,57 @@ describe('accumulatedMapsToFrameStrings', () => {
     ];
     const [string0] = accumulatedMapsToFrameStrings(maps, 'moonboard');
     expect(string0).toBe('p100r42');
+  });
+});
+
+describe('flattenFramesToUnion / toFlatFrames', () => {
+  it('returns the frames string untouched when there is only one frame', () => {
+    expect(toFlatFrames('p100r1p200r2', 'tension')).toBe('p100r1p200r2');
+  });
+
+  it('returns the empty string for null, undefined and empty input', () => {
+    expect(toFlatFrames(null, 'tension')).toBe('');
+    expect(toFlatFrames(undefined, 'tension')).toBe('');
+    expect(toFlatFrames('', 'tension')).toBe('');
+  });
+
+  it('keeps a hold an x token cleared — the static render is the whole route', () => {
+    // The last frame lights only hold 200; the route as a whole used both.
+    expect(toFlatFrames('p100r1p200r2,"x100', 'tension')).toBe('p100r1p200r2');
+  });
+
+  it('unions absolute frames instead of showing the last fragment', () => {
+    // Frame 1 is unquoted, so on its own it is just hold 300.
+    expect(toFlatFrames('p100r1p200r2,p300r3', 'tension')).toBe('p100r1p200r2p300r3');
+  });
+
+  it('lets the last frame that sets a hold win its role', () => {
+    const union = flattenFramesToUnion(accumulateFramesToMaps('p100r1,"p100r3', 'tension'));
+    expect(union[100].state).toBe('FINISH');
+  });
+
+  it('returns an empty map for no frames', () => {
+    expect(flattenFramesToUnion([])).toEqual({});
+  });
+});
+
+describe('isSentinelHoldState', () => {
+  it('flags the {holdId}={code} sentinel an unmapped role code produces', () => {
+    const [frame] = accumulateFramesToMaps('p100r999', 'kilter');
+    expect(isSentinelHoldState(frame[100].state)).toBe(true);
+  });
+
+  it('treats a missing state as a sentinel too', () => {
+    expect(isSentinelHoldState('')).toBe(true);
+    expect(isSentinelHoldState(null)).toBe(true);
+    expect(isSentinelHoldState(undefined)).toBe(true);
+  });
+
+  it('passes every real hold state on every board', () => {
+    for (const stateMap of Object.values(HOLD_STATE_MAP)) {
+      for (const info of Object.values(stateMap)) {
+        expect(isSentinelHoldState(info.name), `${info.name} is a real state`).toBe(false);
+      }
+    }
   });
 });
