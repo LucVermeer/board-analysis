@@ -428,6 +428,38 @@ describe('InlinePlaylistPicker', () => {
     expect(queryByLabelText('actions.playlist.create.submit')).toBeNull();
   });
 
+  it('toasts a failed create-then-add when the picker went away mid-request', async () => {
+    // The same hole as the toggle path, one flow over: the create succeeds, the
+    // picker unmounts, then the add rejects. This one used to be gated on
+    // isCurrent() — false after unmount — so it reported nothing at all. The form
+    // is already closed by the time the add runs, so a stale token here means the
+    // picker is gone, which is exactly when the toast is the only channel left.
+    const created = makePlaylist('p-new', 'Projects');
+    playlistContext.createPlaylist.mockResolvedValueOnce(created);
+    const pending = deferred<void>();
+    const rejection = pending.promise.then(() => {
+      throw new Error('offline');
+    });
+    rejection.catch(() => {});
+    playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+    const { getByLabelText, unmount } = renderPicker();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    fireEvent.change(getByLabelText('name-input'), { target: { value: 'Projects' } });
+    fireEvent.click(getByLabelText('actions.playlist.create.submit'));
+    await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+
+    unmount();
+    pending.resolve();
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith('actions.playlist.toast.addFailedNamed:playlist=Projects', 'error');
+    });
+    expect(reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { source: 'playlist', op: 'create-then-add' },
+    });
+  });
+
   it('shows a create failure inline and keeps the form open without adding', async () => {
     playlistContext.createPlaylist.mockRejectedValueOnce(new Error('create failed'));
     const { getByLabelText, getByText } = renderPicker();
