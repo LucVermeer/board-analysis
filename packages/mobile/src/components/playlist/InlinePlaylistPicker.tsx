@@ -26,6 +26,8 @@ import { useClimbPlaylistMemberships } from '../../hooks/use-climb-playlist-memb
 import { getHttpClient } from '../../lib/graphql/client';
 import { usePlaylistsContext, type Playlist } from '../../providers/playlists-provider';
 import { useTheme } from '../../providers/theme-provider';
+import { useToast } from '../../providers/toast-provider';
+import { reportHandledError } from '../../lib/error-reporting';
 import { sortPlaylistsByName } from '../../lib/sort-filter-playlists';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { borderRadius, spacing } from '../../theme/tokens';
@@ -90,10 +92,13 @@ const playlistKey = (playlist: Playlist) => playlist.id;
  * by the reaction overlay (`ClimbReactionMenu`) and the add-to-playlist
  * `ModalSheet` (`AddToPlaylistSheet`).
  *
- * Feedback is inline, never a toast: a toast fired while a `FullWindowOverlay`
- * or native sheet is on screen renders behind it and is invisible. Success is
- * the optimistic checkmark itself; failures revert the optimistic state and
- * surface an inline error line.
+ * Feedback is inline *while the picker is on screen*: a toast fired while a
+ * `FullWindowOverlay` or native sheet is up renders behind it and is invisible.
+ * Success is the optimistic checkmark itself; failures revert the optimistic
+ * state and surface an inline error line. Once the host is gone (the climber
+ * dismissed the sheet/overlay while the request was still in flight — which on
+ * gym wifi is most of the window) the inline line has nowhere to render, so the
+ * failure goes out as a toast on whatever screen they dismissed to (#3891).
  */
 export function InlinePlaylistPicker({
   climb,
@@ -146,6 +151,31 @@ export function InlinePlaylistPicker({
 
   const [error, setError] = useState<string | null>(null);
 
+  // Whether this picker is still on screen. Read inside a settled request's catch
+  // block to pick the channel the climber can actually see — see `surfaceFailure`.
+  const mountedRef = useRef(true);
+
+  /**
+   * Report a membership failure through whichever channel is visible right now.
+   * Mounted: the inline error line (a root toast would render behind the sheet /
+   * FullWindowOverlay hosting us). Unmounted: a toast, which is now the only
+   * surface left — `setError` on a dead component is a silent no-op, and that is
+   * how a failed add used to reach nobody at all (#3891). Mutually exclusive, so
+   * there is never a double signal; the choice is made at the moment the
+   * rejection lands, not when the tap happened.
+   */
+  const { showToast } = useToast();
+  const surfaceFailure = useCallback(
+    (inlineMessage: string, toastMessage: string) => {
+      if (mountedRef.current) {
+        setError(inlineMessage);
+      } else {
+        showToast(toastMessage, 'error');
+      }
+    },
+    [showToast],
+  );
+
   const sortedPlaylists = useMemo(() => sortPlaylistsByName(playlists), [playlists]);
 
   // Write a membership set to the cache and mirror it into the shared chip store
@@ -193,7 +223,16 @@ export function InlinePlaylistPicker({
           writeMembership(
             willBeMember ? current.filter((uuid) => uuid !== playlist.uuid) : [...new Set([...current, playlist.uuid])],
           );
-          setError(t(willBeMember ? 'actions.playlist.toast.addFailed' : 'actions.playlist.toast.removeFailed'));
+          surfaceFailure(
+            t(willBeMember ? 'actions.playlist.toast.addFailed' : 'actions.playlist.toast.removeFailed'),
+            t(willBeMember ? 'actions.playlist.toast.addFailedNamed' : 'actions.playlist.toast.removeFailedNamed', {
+              playlist: playlist.name,
+            }),
+          );
+          // Unconditional, regardless of mount state: before this, a toggle that
+          // failed after the host was dismissed left no trace anywhere — not even
+          // in a release build's logs (the console.warn below is __DEV__-only).
+          reportHandledError(toggleError, { tags: { source: 'playlist', op: 'toggle-membership' } });
           if (__DEV__) {
             console.warn('[playlist] toggle membership failed', {
               playlistUuid: playlist.uuid,
@@ -207,7 +246,18 @@ export function InlinePlaylistPicker({
         togglingRef.current.delete(playlist.uuid);
       }
     },
-    [queryClient, membershipKey, members, writeMembership, addToPlaylist, removeFromPlaylist, climb.uuid, angle, t],
+    [
+      queryClient,
+      membershipKey,
+      members,
+      writeMembership,
+      addToPlaylist,
+      removeFromPlaylist,
+      climb.uuid,
+      angle,
+      surfaceFailure,
+      t,
+    ],
   );
 
   // === Inline create form ===
@@ -223,7 +273,13 @@ export function InlinePlaylistPicker({
   // continuation (add + UI updates) aborts instead of adding the climb after the
   // user backed out.
   const createRequestIdRef = useRef(0);
-  useEffect(() => () => void (createRequestIdRef.current += 1), []);
+  useEffect(
+    () => () => {
+      createRequestIdRef.current += 1;
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   const resetCreate = useCallback(() => {
     setName('');
@@ -297,7 +353,14 @@ export function InlinePlaylistPicker({
       const current = queryClient.getQueryData<string[]>(membershipKey) ?? [...members];
       writeMembership([...new Set([...current, created.uuid])]);
     } catch (addError) {
-      if (isCurrent()) setError(t('actions.playlist.toast.addFailed'));
+      // Not gated on isCurrent(): the form is already closed by this point, so a
+      // stale token here means the picker went away — exactly the case that needs
+      // the toast rather than a no-op setError.
+      surfaceFailure(
+        t('actions.playlist.toast.addFailed'),
+        t('actions.playlist.toast.addFailedNamed', { playlist: created.name }),
+      );
+      reportHandledError(addError, { tags: { source: 'playlist', op: 'create-then-add' } });
       if (__DEV__) {
         console.warn('[playlist] created playlist but failed to add climb', {
           playlistUuid: created.uuid,
@@ -323,6 +386,7 @@ export function InlinePlaylistPicker({
     membershipKey,
     members,
     writeMembership,
+    surfaceFailure,
     t,
   ]);
 

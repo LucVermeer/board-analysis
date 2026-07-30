@@ -20,6 +20,8 @@ const queryClientMock = vi.hoisted(() => ({
   cancelQueries: vi.fn(async () => {}),
 }));
 const membershipStore = vi.hoisted(() => ({ setMembershipForClimb: vi.fn() }));
+const showToast = vi.hoisted(() => vi.fn());
+const reportHandledError = vi.hoisted(() => vi.fn());
 
 vi.mock('react-native', () => ({
   ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
@@ -64,9 +66,17 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
+// Interpolating values into the key keeps the named-toast copy assertable without
+// pulling in a real i18n instance.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) =>
+      values ? `${key}:${Object.entries(values).map(([name, value]) => `${name}=${String(value)}`)}` : key,
+  }),
 }));
+
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast }) }));
+vi.mock('../../../lib/error-reporting', () => ({ reportHandledError }));
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: qstate.data, isLoading: qstate.loading }),
@@ -202,6 +212,8 @@ describe('InlinePlaylistPicker', () => {
     queryClientMock.setQueryData.mockReset();
     queryClientMock.cancelQueries.mockClear();
     membershipStore.setMembershipForClimb.mockReset();
+    showToast.mockReset();
+    reportHandledError.mockReset();
   });
 
   it('shows the sign-in blurb and no create button when signed out', () => {
@@ -271,6 +283,109 @@ describe('InlinePlaylistPicker', () => {
     // Optimistic write then revert to the previous set.
     expect(queryClientMock.setQueryData).toHaveBeenNthCalledWith(1, expect.anything(), ['p-1']);
     expect(queryClientMock.setQueryData).toHaveBeenNthCalledWith(2, expect.anything(), []);
+  });
+
+  // #3891: the climber taps a playlist, sees the optimistic checkmark, and
+  // dismisses the sheet/overlay before the request settles — which on gym wifi is
+  // most of the window. The catch block still runs (the rollback below proves it),
+  // but `setError` on an unmounted component is a silent no-op, so the failure used
+  // to reach nobody: no banner, no toast, no Sentry. These four cases pin the
+  // routing; 5 and 6 are only meaningful as a pair (each alone is satisfied by an
+  // always-toast or a never-toast implementation).
+  describe('failure feedback survives the host being dismissed', () => {
+    function setupDeferredAdd(members: string[] = []) {
+      playlistContext.playlists = [makePlaylist('p-1', 'Minimoon circuit')];
+      qstate.data = members;
+      const pending = deferred<void>();
+      const rejection = pending.promise.then(() => {
+        throw new Error('offline');
+      });
+      // Swallow the rejection here so an unhandled-rejection warning can't fail the
+      // run; the component has its own catch on the same promise.
+      rejection.catch(() => {});
+      return { pending, rejection };
+    }
+
+    it('toasts the failure, naming the playlist, when the picker unmounted before the add settled', async () => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, unmount } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      // Optimistic checkmark is already written — this is what the climber saw
+      // before dismissing.
+      expect(queryClientMock.setQueryData).toHaveBeenNthCalledWith(1, expect.anything(), ['p-1']);
+
+      unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith(
+          'actions.playlist.toast.addFailedNamed:playlist=Minimoon circuit',
+          'error',
+        );
+      });
+      // The optimistic membership is still rolled back, so the checkmark is gone
+      // when the picker is reopened.
+      expect(membershipStore.setMembershipForClimb).toHaveBeenLastCalledWith('climb-1', []);
+    });
+
+    it('keeps the failure inline and does NOT toast while the picker is still mounted', async () => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, getByText } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      pending.resolve();
+
+      await waitFor(() => expect(getByText('actions.playlist.toast.addFailed')).not.toBeNull());
+      // A root toast would render behind the sheet / FullWindowOverlay hosting the
+      // picker, so this one must stay inline.
+      expect(showToast).not.toHaveBeenCalled();
+    });
+
+    it('toasts the remove failure (not the add copy) when the picker is gone', async () => {
+      const { pending, rejection } = setupDeferredAdd(['p-1']);
+      playlistContext.removeFromPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, unmount } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.removeFromPlaylist).toHaveBeenCalled());
+      unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith(
+          'actions.playlist.toast.removeFailedNamed:playlist=Minimoon circuit',
+          'error',
+        );
+      });
+      // Membership is restored, so the checkmark comes back.
+      expect(membershipStore.setMembershipForClimb).toHaveBeenLastCalledWith('climb-1', ['p-1']);
+    });
+
+    it.each([
+      ['mounted', false],
+      ['unmounted', true],
+    ])('reports the toggle failure to Sentry while %s', async (_label, dismiss) => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, unmount } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      if (dismiss) unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'toggle-membership' },
+        });
+      });
+      expect(reportHandledError).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('creates a playlist inline and adds the climb to it', async () => {
