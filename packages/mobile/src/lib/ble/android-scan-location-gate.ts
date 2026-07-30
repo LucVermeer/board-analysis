@@ -16,35 +16,40 @@
 // an honest "Android is hiding the scan results until Location is allowed" hint
 // plus a grant button.
 //
-// WHY THE HINT DOES NOT RETIRE ITSELF
-// -----------------------------------
-// The obvious design is to compare the running binary's Android `versionCode`
+// WHY THE HINT IS NOT RETIRED ON A VERSION CODE (YET)
+// ---------------------------------------------------
+// The tempting design is to compare the running binary's Android `versionCode`
 // against the last release that shipped without the flag, so the hint falls away
-// once a fixed build goes out. That is wrong here: the manifest keeps
-// `BLUETOOTH_SCAN` WITHOUT `neverForLocation` on purpose — react-native-ble-plx
-// caps ACCESS_FINE_LOCATION at `maxSdkVersion=30` when the flag is present,
-// which would break expo-location (board/session discovery) and expo-maps on
-// Android 12+. See the `android.permissions` block in
-// `packages/mobile/app.config.ts`. Every build we ship next therefore still
-// needs location, while a version comparison would have retired the hint on the
-// very next build number and left those users back on "make sure your board is
-// powered on".
+// once a fixed build goes out. There is nothing to compare against: no shipped
+// or in-flight binary carries `neverForLocation`, so the floor would have to be
+// "the first build that has it" — a number that does not exist until the
+// manifest change actually ships. Keying off the last build we know about
+// instead retires the hint for the *next* build number, i.e. for a binary that
+// still needs it.
 //
-// So the gate is an explicit constant that the PR removing that manifest
-// constraint has to flip. Note that the flag is a native change: it can only
-// arrive in a new binary, whereas this JS constant reaches OLD binaries over the
-// air. That PR must therefore also re-introduce a `versionCode` floor
-// (expo-application's `nativeBuildVersion`) so binaries built before the
-// manifest change keep the hint.
+// (For the record, adding the flag is a one-line manifest edit, not a blocked
+// one. `packages/mobile/app.config.ts` says ble-plx would cap
+// ACCESS_FINE_LOCATION at `maxSdkVersion=30`; running `expo prebuild --platform
+// android` both ways shows the cap is real but the flag is not — Expo's
+// `android.permissions` mod declares `BLUETOOTH_SCAN` first and ble-plx's
+// `addScanPermissionToManifest` early-returns on an existing element, so its
+// prop is all cap and no flag. Setting the attribute ourselves gets the flag
+// without the cap.)
+//
+// So the gate is an explicit constant that the PR adding the flag has to flip.
+// That flag is a native change reaching only new binaries, while this JS
+// constant reaches OLD binaries over the air — so the PR that flips it must
+// also gate on a `versionCode` floor (expo-application's `nativeBuildVersion`)
+// set to the first build that contains the flag, or every 2.2.x/2.3.x install
+// loses a hint it still needs.
 
 /**
  * Whether the shipped Android manifest declares `BLUETOOTH_SCAN` with
  * `android:usesPermissionFlags="neverForLocation"`.
  *
- * False, and deliberately so: `packages/mobile/app.config.ts` documents why the
- * flag stays off (it would cap ACCESS_FINE_LOCATION at `maxSdkVersion=30` and
- * break expo-location + expo-maps). Flip this only in the PR that actually adds
- * the flag to the manifest, and read the note above about old binaries first.
+ * False: no released or in-flight binary carries the flag yet. Flip this only
+ * in the PR that actually adds it to the manifest, and read the note above
+ * about old binaries first — flipping it alone strands them.
  */
 export const MANIFEST_HAS_NEVER_FOR_LOCATION = false;
 

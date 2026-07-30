@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   androidBuildHidesScanResultsWithoutLocation,
   MANIFEST_HAS_NEVER_FOR_LOCATION,
+  type AndroidScanLocationGateInput,
 } from '../android-scan-location-gate';
 
 describe('androidBuildHidesScanResultsWithoutLocation', () => {
@@ -14,11 +15,9 @@ describe('androidBuildHidesScanResultsWithoutLocation', () => {
     ).toBe(true);
   });
 
-  it('keeps flagging the newest Android release', () => {
-    // Regression guard: an earlier revision retired the hint for any binary with
-    // a versionCode above the last shipped one. app.config.ts keeps
-    // `neverForLocation` OFF on purpose, so the next build still needs location
-    // and must still get the hint.
+  it('keeps flagging the newest Android API level', () => {
+    // Upper-bound sanity: the gate reads the API level only for the Android 12
+    // floor, so a future platform release must not change the answer.
     expect(
       androidBuildHidesScanResultsWithoutLocation({
         platformOs: 'android',
@@ -45,12 +44,29 @@ describe('androidBuildHidesScanResultsWithoutLocation', () => {
     ).toBe(false);
   });
 
-  it('pins the manifest flag to what app.config.ts actually declares', () => {
-    // `packages/mobile/app.config.ts` documents why `BLUETOOTH_SCAN` keeps its
-    // `neverForLocation` flag off (react-native-ble-plx would cap
-    // ACCESS_FINE_LOCATION at maxSdkVersion=30 and break expo-location +
-    // expo-maps). Flipping this constant without changing the manifest turns the
-    // hint off for users who still need it.
+  it('pins the manifest flag to what the shipped manifest actually declares', () => {
+    // READ THIS BEFORE FLIPPING THE CONSTANT TO MAKE THIS TEST PASS.
+    //
+    // No released or in-flight Android binary declares `BLUETOOTH_SCAN` with
+    // `android:usesPermissionFlags="neverForLocation"`. The flag is native, so it
+    // can only reach a NEW binary — but this constant is JS and rides an OTA
+    // straight into every 2.2.x/2.3.x install that is still missing it. Flipping
+    // it on its own therefore turns the hint off for exactly the users who need
+    // it, and they go back to "make sure your board is powered on".
+    //
+    // The PR that adds the flag must gate on a versionCode floor as well
+    // (expo-application's `nativeBuildVersion`), set to the first build that
+    // contains it. An earlier revision of this module carried such a floor keyed
+    // to the LAST build without the flag, which retired the hint on the very next
+    // build number; the floor has to name a build that actually has the flag.
     expect(MANIFEST_HAS_NEVER_FOR_LOCATION).toBe(false);
+
+    // The gate takes no build-number input today. Re-adding one is a type error
+    // here until this exhaustive map is updated alongside it.
+    const gateInputKeys: Record<keyof AndroidScanLocationGateInput, true> = {
+      platformOs: true,
+      androidApiLevel: true,
+    };
+    expect(Object.keys(gateInputKeys).sort()).toEqual(['androidApiLevel', 'platformOs']);
   });
 });
