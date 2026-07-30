@@ -12,47 +12,41 @@
 // BLUETOOTH_CONNECT (correct, and what we want long term), so a user who
 // declined the separate "find boards near you" location prompt gets a
 // permanently empty board picker with troubleshooting copy blaming their board.
+// This module decides when to swap the misleading hardware troubleshooting for
+// an honest "Android is hiding the scan results until Location is allowed" hint
+// plus a grant button.
 //
-// The real fix is the manifest flag, but that moves the native fingerprint and
-// therefore cannot reach installed binaries over the air. This module is the
-// JS-only half: it decides when to swap the misleading hardware troubleshooting
-// for an honest "Android is hiding the scan results until Location is allowed"
-// hint plus a grant button.
+// WHY THE HINT DOES NOT RETIRE ITSELF
+// -----------------------------------
+// The obvious design is to compare the running binary's Android `versionCode`
+// against the last release that shipped without the flag, so the hint falls away
+// once a fixed build goes out. That is wrong here: the manifest keeps
+// `BLUETOOTH_SCAN` WITHOUT `neverForLocation` on purpose — react-native-ble-plx
+// caps ACCESS_FINE_LOCATION at `maxSdkVersion=30` when the flag is present,
+// which would break expo-location (board/session discovery) and expo-maps on
+// Android 12+. See the `android.permissions` block in
+// `packages/mobile/app.config.ts`. Every build we ship next therefore still
+// needs location, while a version comparison would have retired the hint on the
+// very next build number and left those users back on "make sure your board is
+// powered on".
 //
-// SELF-RETIRING GATE
-// ------------------
-// The hint must disappear the moment a binary ships with the manifest flag,
-// otherwise we would be asking for a permission we no longer need. We compare
-// the running binary's Android `versionCode` (expo-application's
-// `nativeBuildVersion`) against the highest versionCode that shipped WITHOUT the
-// flag. versionCode is monotonic across our Android releases (see
-// .github/workflows/android-apk-rn.yml — `max(sideload floor, Play ceiling + 1)`),
-// so every build produced after the manifest fix lands is strictly greater and
-// automatically opts out.
-//
-// Deliberately NOT gated on `expoConfig.extra` or any other JS-side constant:
-// an OTA update rewrites those on old binaries, so they cannot distinguish an
-// old binary running new JS from a new binary.
+// So the gate is an explicit constant that the PR removing that manifest
+// constraint has to flip. Note that the flag is a native change: it can only
+// arrive in a new binary, whereas this JS constant reaches OLD binaries over the
+// air. That PR must therefore also re-introduce a `versionCode` floor
+// (expo-application's `nativeBuildVersion`) so binaries built before the
+// manifest change keep the hint.
 
 /**
- * Highest Android `versionCode` known to ship a manifest WITHOUT
- * `neverForLocation` on `BLUETOOTH_SCAN`.
+ * Whether the shipped Android manifest declares `BLUETOOTH_SCAN` with
+ * `android:usesPermissionFlags="neverForLocation"`.
  *
- * Sourced from the `build-android-v<version>-<versionCode>-<shortFingerprint>`
- * release tags (the trailing segment is the first 12 chars of the runtime
- * fingerprint, not a commit sha — see `.github/workflows/android-apk-rn.yml`),
- * whose ceiling at the time of writing is
- * `build-android-v2.3.0-2000753-cb1ef0528755`. There
- * is no `versionCode` in `app.config.ts` to read — CI computes it per build and
- * seds it into `android/app/build.gradle` — so this constant tracks the shipped
- * tag ceiling instead.
- *
- * When the `neverForLocation` manifest change ships, this value does NOT need
- * updating: the fixed build's versionCode is necessarily higher, so it falls out
- * of the gate on its own. It only needs raising if a build BETWEEN this value
- * and the manifest fix somehow still lacks the flag.
+ * False, and deliberately so: `packages/mobile/app.config.ts` documents why the
+ * flag stays off (it would cap ACCESS_FINE_LOCATION at `maxSdkVersion=30` and
+ * break expo-location + expo-maps). Flip this only in the PR that actually adds
+ * the flag to the manifest, and read the note above about old binaries first.
  */
-export const LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL = 2_000_753;
+export const MANIFEST_HAS_NEVER_FOR_LOCATION = false;
 
 /** Android 12. Below this, BLE scanning genuinely requires location and the app already asks for it. */
 const ANDROID_12_API_LEVEL = 31;
@@ -62,8 +56,6 @@ export type AndroidScanLocationGateInput = {
   platformOs: string;
   /** `Platform.Version` on Android, i.e. the API level. */
   androidApiLevel: number;
-  /** expo-application's `nativeBuildVersion` — the Android `versionCode` as a string. */
-  nativeBuildVersion: string | null;
 };
 
 /**
@@ -71,24 +63,16 @@ export type AndroidScanLocationGateInput = {
  * results for a caller without location permission — i.e. when granting
  * location is a real remedy for an empty scan.
  *
- * Returns false off Android, below Android 12 (the app already requests fine
+ * Returns false off Android and below Android 12 (the app already requests fine
  * location there, and a denial surfaces as an explicit failure rather than an
- * empty list), and on any build newer than the last un-disavowed one.
+ * empty list).
  */
 export function androidBuildHidesScanResultsWithoutLocation({
   platformOs,
   androidApiLevel,
-  nativeBuildVersion,
 }: AndroidScanLocationGateInput): boolean {
   if (platformOs !== 'android') return false;
   if (androidApiLevel < ANDROID_12_API_LEVEL) return false;
 
-  const versionCode = Number.parseInt(nativeBuildVersion ?? '', 10);
-  // Unreadable build number: assume the un-fixed manifest. The hint is only ever
-  // reachable when a scan ALREADY came back empty and location is ALREADY
-  // denied, so being wrong here costs one superfluous tip; being wrong the other
-  // way leaves affected users staring at "make sure your board is powered on".
-  if (Number.isNaN(versionCode)) return true;
-
-  return versionCode <= LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL;
+  return !MANIFEST_HAS_NEVER_FOR_LOCATION;
 }

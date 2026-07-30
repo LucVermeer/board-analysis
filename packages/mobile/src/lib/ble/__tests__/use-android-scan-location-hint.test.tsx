@@ -2,13 +2,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
-const nativeBuild = vi.hoisted(() => ({ version: '2000700' as string | null }));
-vi.mock('expo-application', () => ({
-  get nativeBuildVersion() {
-    return nativeBuild.version;
-  },
-}));
-
 const platform = vi.hoisted(() => ({ OS: 'android' as string, apiLevel: 34 }));
 vi.mock('react-native', () => ({
   get Platform() {
@@ -24,20 +17,18 @@ const permissions = vi.hoisted(() => ({
 vi.mock('../android-location-permission', () => permissions);
 
 import { useAndroidScanLocationHint } from '../use-android-scan-location-hint';
-import { LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL } from '../android-scan-location-gate';
 
 describe('useAndroidScanLocationHint', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     platform.OS = 'android';
     platform.apiLevel = 34;
-    nativeBuild.version = '2000700';
     permissions.androidApiLevel.mockImplementation(() => platform.apiLevel);
     permissions.getAndroidLocationPermissionState.mockResolvedValue(false);
     permissions.requestAndroidScanLocationPermission.mockResolvedValue(true);
   });
 
-  it('offers the grant once an empty scan meets a location denial on an un-fixed build', async () => {
+  it('offers the grant once an empty scan meets a location denial', async () => {
     const { result } = renderHook(() => useAndroidScanLocationHint(true));
 
     await waitFor(() => {
@@ -64,8 +55,8 @@ describe('useAndroidScanLocationHint', () => {
     expect(result.current.shouldOfferLocationGrant).toBe(false);
   });
 
-  it('never reads the permission on a build that already carries the manifest flag', async () => {
-    nativeBuild.version = String(LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL + 1);
+  it('never reads the permission below Android 12', async () => {
+    platform.apiLevel = 30;
     const { result } = renderHook(() => useAndroidScanLocationHint(true));
 
     expect(permissions.getAndroidLocationPermissionState).not.toHaveBeenCalled();

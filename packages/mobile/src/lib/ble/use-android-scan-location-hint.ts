@@ -1,10 +1,9 @@
 // Drives the "Android is hiding the scan results until Location is allowed"
 // empty-state hint. See android-scan-location-gate.ts for why the hint exists
-// and how it retires itself.
+// and why it stays until the manifest changes.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import * as Application from 'expo-application';
 import {
   androidApiLevel,
   getAndroidLocationPermissionState,
@@ -42,7 +41,6 @@ export function useAndroidScanLocationHint(active: boolean): AndroidScanLocation
   const buildHidesResults = androidBuildHidesScanResultsWithoutLocation({
     platformOs: Platform.OS,
     androidApiLevel: androidApiLevel(),
-    nativeBuildVersion: Application.nativeBuildVersion,
   });
 
   useEffect(() => {

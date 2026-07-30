@@ -1,33 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import {
   androidBuildHidesScanResultsWithoutLocation,
-  LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL,
+  MANIFEST_HAS_NEVER_FOR_LOCATION,
 } from '../android-scan-location-gate';
 
-const LAST_UNFIXED = LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL;
-
 describe('androidBuildHidesScanResultsWithoutLocation', () => {
-  it('flags a shipped Android 12+ build whose manifest predates the disavowal', () => {
+  it('flags Android 12+ while the manifest still omits the disavowal', () => {
     expect(
       androidBuildHidesScanResultsWithoutLocation({
         platformOs: 'android',
         androidApiLevel: 31,
-        nativeBuildVersion: String(LAST_UNFIXED),
       }),
     ).toBe(true);
   });
 
-  it('retires itself on the next Android build', () => {
-    // The whole point of the gate: the binary that carries the manifest fix has
-    // a strictly higher versionCode (CI's max(sideload floor, Play ceiling + 1)),
-    // so nobody has to remember to delete this hint.
+  it('keeps flagging the newest Android release', () => {
+    // Regression guard: an earlier revision retired the hint for any binary with
+    // a versionCode above the last shipped one. app.config.ts keeps
+    // `neverForLocation` OFF on purpose, so the next build still needs location
+    // and must still get the hint.
     expect(
       androidBuildHidesScanResultsWithoutLocation({
         platformOs: 'android',
-        androidApiLevel: 34,
-        nativeBuildVersion: String(LAST_UNFIXED + 1),
+        androidApiLevel: 36,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('stays off below Android 12, where the app already requests fine location', () => {
@@ -35,7 +32,6 @@ describe('androidBuildHidesScanResultsWithoutLocation', () => {
       androidBuildHidesScanResultsWithoutLocation({
         platformOs: 'android',
         androidApiLevel: 30,
-        nativeBuildVersion: String(LAST_UNFIXED),
       }),
     ).toBe(false);
   });
@@ -45,28 +41,16 @@ describe('androidBuildHidesScanResultsWithoutLocation', () => {
       androidBuildHidesScanResultsWithoutLocation({
         platformOs: 'ios',
         androidApiLevel: 0,
-        nativeBuildVersion: '1',
       }),
     ).toBe(false);
   });
 
-  it('assumes the un-fixed manifest when the build number is unreadable', () => {
-    for (const nativeBuildVersion of [null, '', 'not-a-number']) {
-      expect(
-        androidBuildHidesScanResultsWithoutLocation({
-          platformOs: 'android',
-          androidApiLevel: 33,
-          nativeBuildVersion,
-        }),
-      ).toBe(true);
-    }
-  });
-
-  it('pins the constant to the shipped Android release-tag ceiling', () => {
-    // Sourced from the highest `build-android-v<version>-<versionCode>-<sha>`
-    // tag. Raising this by hand is only ever right if a build newer than it also
-    // shipped without `neverForLocation`; lowering it silently strands the fleet
-    // this hint exists for.
-    expect(LAST_ANDROID_VERSION_CODE_WITHOUT_SCAN_DISAVOWAL).toBe(2_000_753);
+  it('pins the manifest flag to what app.config.ts actually declares', () => {
+    // `packages/mobile/app.config.ts` documents why `BLUETOOTH_SCAN` keeps its
+    // `neverForLocation` flag off (react-native-ble-plx would cap
+    // ACCESS_FINE_LOCATION at maxSdkVersion=30 and break expo-location +
+    // expo-maps). Flipping this constant without changing the manifest turns the
+    // hint off for users who still need it.
+    expect(MANIFEST_HAS_NEVER_FOR_LOCATION).toBe(false);
   });
 });

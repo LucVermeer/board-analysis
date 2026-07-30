@@ -10,7 +10,7 @@ import type { DiscoveredDevice } from '../../../lib/ble/types';
 const stats = vi.hoisted(() => ({ noneMatchedSelectedType: false }));
 
 // The Android 12+ location-suppression hint. Mocked at the hook boundary so the
-// sheet tests stay free of PermissionsAndroid / expo-application plumbing; the
+// sheet tests stay free of PermissionsAndroid plumbing; the
 // hook's own rules are covered by android-scan-location-gate.test.ts.
 const locationHint = vi.hoisted(() => ({
   shouldOfferLocationGrant: false,
