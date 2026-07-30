@@ -12,6 +12,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Your board no longer shows as connected when the connection actually died on the first send — you get told to move closer and try again instead of tapping into a dark wall. ([#3998](https://github.com/boardsesh/boardsesh/pull/3998))
+  If the first send after connecting doesn't land, the next climb you pick actually gets written to the wall, and your crew no longer sees it as lit when it isn't.
+- Connecting to a board no longer needs Location permission on Android 12 and newer. ([#3981](https://github.com/boardsesh/boardsesh/pull/3981))
 - Pick climbs back to back in a party session and none of them go missing. A quick double-pick now lands right ([#4005](https://github.com/boardsesh/boardsesh/pull/4005))
   after the current climb for the whole crew instead of at the bottom, and a climb you picked while the app was
   throttling still reaches them rather than vanishing.

@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-30T23:02:46.230Z",
+  "generatedAt": "2026-07-30T23:08:13.383Z",
   "entries": [
+    {
+      "prNumber": 3998,
+      "category": "fixed",
+      "title": "Your board no longer shows as connected when the connection actually died on the first send — you get told to move closer and try again instead of tapping into a dark wall.",
+      "mergedAt": "2026-07-30T23:05:21Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3998",
+      "body": "If the first send after connecting doesn't land, the next climb you pick actually gets written to the wall, and your crew no longer sees it as lit when it isn't."
+    },
+    {
+      "prNumber": 3981,
+      "category": "fixed",
+      "title": "Connecting to a board no longer needs Location permission on Android 12 and newer.",
+      "mergedAt": "2026-07-30T23:04:18Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3981"
+    },
     {
       "prNumber": 4005,
       "category": "fixed",
