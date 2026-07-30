@@ -26,8 +26,9 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { findUnappliedMigrations } from '../../../scripts/lib/migration-ledger.js';
-import type { LedgerBaseline } from '../../../scripts/lib/migration-ledger-baseline.js';
+import { PRODUCTION_LEDGER_BASELINE, type LedgerBaseline } from '../../../scripts/lib/migration-ledger-baseline.js';
 import {
+  DRIZZLE_MIGRATIONS_FOLDER,
   assertMigrationJournalApplied,
   describeBaselinedGap,
   inspectMigrationJournal,
@@ -440,7 +441,7 @@ describe('migration journal verification (#2933)', () => {
     writeMigrationsFolder(migrationsFolder, [...PHASE_ONE, STALE_WHEN_ENTRY]);
     await applyMigrations(scratchUrl, migrationsFolder);
 
-    const baseline: LedgerBaseline = { recordedAt: '2026-07-30', source: 'test', tags: ['0000_a'] };
+    const baseline: LedgerBaseline = { recordedAt: '2026-07-30', source: 'test', migrations: [firstEntry] };
     const report = await withScratchClient(scratchUrl, (client) =>
       inspectMigrationJournal(readLedgerHashesWith(client), migrationsFolder, baseline),
     );
@@ -474,11 +475,84 @@ describe('migration journal verification (#2933)', () => {
     const bothBaselined = await withScratchClient(scratchUrl, (client) =>
       runMigrationJournalGate({ VERIFY_MIGRATION_JOURNAL: '1' }, readLedgerHashesWith(client), migrationsFolder, {
         ...baseline,
-        tags: ['0000_a', '0002_stale_when'],
+        migrations: readExpectedMigrations(migrationsFolder).filter((migration) => migration.tag !== '0001_b'),
       }),
     );
     assert.deepEqual(bothBaselined?.unbaselinedMissing, []);
     assert.equal(bothBaselined?.baselinedMissing.length, 2);
+  });
+
+  it('stops tolerating a baselined migration once its .sql changes', async (context) => {
+    const adminUrl = localDatabaseUrl();
+    if (!adminUrl) {
+      context.skip('set DATABASE_URL to a local Postgres to run');
+      return;
+    }
+    // Editing an applied migration does not re-run it — drizzle's mark is past it
+    // — so a tag-only exemption would report "known gap, deploy on" while the new
+    // statements exist in no database. The recorded hash is what makes that fatal.
+    const migrationsFolder = makeTempFolder('edited');
+    const scratchUrl = await createScratchDatabase(adminUrl, 'edited');
+    writeMigrationsFolder(migrationsFolder, PHASE_ONE);
+    await applyMigrations(scratchUrl, migrationsFolder);
+
+    const [entryAsRecorded] = readExpectedMigrations(migrationsFolder);
+    await withScratchClient(scratchUrl, async (client) => {
+      await client`DELETE FROM drizzle."__drizzle_migrations" WHERE hash = ${entryAsRecorded.hash}`;
+    });
+    const baseline: LedgerBaseline = { recordedAt: '2026-07-30', source: 'test', migrations: [entryAsRecorded] };
+
+    // As recorded: tolerated.
+    const tolerated = await withScratchClient(scratchUrl, (client) =>
+      runMigrationJournalGate({ VERIFY_MIGRATION_JOURNAL: '1' }, readLedgerHashesWith(client), migrationsFolder, {
+        ...baseline,
+      }),
+    );
+    assert.deepEqual(tolerated?.unbaselinedMissing, []);
+
+    // Same tag, new body: fatal, and the message points at the edit.
+    writeMigrationsFolder(migrationsFolder, [
+      { ...PHASE_ONE[0], sql: `${PHASE_ONE[0].sql} ALTER TABLE mjv_t_a ADD COLUMN added_later int;` },
+      PHASE_ONE[1],
+    ]);
+    const edited = readExpectedMigrations(migrationsFolder)[0];
+    assert.notEqual(edited.hash, entryAsRecorded.hash, 'the edit must change the hash drizzle expects');
+
+    const report = await withScratchClient(scratchUrl, (client) =>
+      inspectMigrationJournal(readLedgerHashesWith(client), migrationsFolder, { ...baseline }),
+    );
+    assert.deepEqual(report.baselinedMissing, []);
+    assert.deepEqual(
+      report.editedSinceBaseline.map((migration) => migration.tag),
+      ['0000_a'],
+    );
+    assert.equal(describeBaselinedGap(report), null, 'nothing is tolerated, so there is no warning to print');
+
+    await assert.rejects(
+      withScratchClient(scratchUrl, (client) =>
+        runMigrationJournalGate({ VERIFY_MIGRATION_JOURNAL: '1' }, readLedgerHashesWith(client), migrationsFolder, {
+          ...baseline,
+        }),
+      ),
+      /0000_a[\s\S]*no longer hashes to the recorded value/,
+    );
+  });
+
+  it('keeps the production baseline hashes in step with the files on disk', () => {
+    // The recorded hashes come from drizzle's readMigrationFiles, so they can only
+    // be checked where drizzle is a dependency. Editing a baselined .sql reddens
+    // this at PR time instead of turning the exemption fatal mid-deploy.
+    const currentHashByTag = new Map(
+      readExpectedMigrations().map((migration) => [migration.tag, migration.hash] as const),
+    );
+    for (const migration of PRODUCTION_LEDGER_BASELINE.migrations) {
+      assert.equal(
+        currentHashByTag.get(migration.tag),
+        migration.hash,
+        `${migration.tag} no longer hashes to its recorded baseline value — an applied migration was edited, ` +
+          'so the new statements are in no database. Write a new migration instead.',
+      );
+    }
   });
 
   it('rejects a baseline tag that is not in the journal', async () => {
@@ -486,12 +560,13 @@ describe('migration journal verification (#2933)', () => {
     // like it tolerated something. No database needed.
     const migrationsFolder = makeTempFolder('stale-baseline');
     writeMigrationsFolder(migrationsFolder, PHASE_ONE);
+    const [firstEntry] = readExpectedMigrations(migrationsFolder);
 
     await assert.rejects(
       inspectMigrationJournal(async () => [], migrationsFolder, {
         recordedAt: '2026-07-30',
         source: 'test',
-        tags: ['0000_a', '0404_never_existed'],
+        migrations: [firstEntry, { tag: '0404_never_existed', hash: 'hash-of-a-tag-that-never-existed' }],
       }),
       /baseline is stale: 0404_never_existed/,
     );
@@ -505,11 +580,29 @@ describe('migration journal verification (#2933)', () => {
     writeMigrationsFolder(migrationsFolder, PHASE_ONE);
 
     const report = await inspectMigrationJournal(async () => [], migrationsFolder);
-    assert.deepEqual(report.baseline.tags, []);
+    assert.deepEqual(report.baseline.migrations, []);
     assert.deepEqual(
       report.unbaselinedMissing.map((migration) => migration.tag),
       ['0000_a', '0001_b'],
     );
+  });
+
+  it('recognises the real migrations folder however its path was written', async () => {
+    // A trailing slash or a path built with join() names the same folder, and
+    // falling through to the empty baseline there would show up as a blocked
+    // production deploy rather than as an error that explains itself.
+    for (const spelling of [
+      DRIZZLE_MIGRATIONS_FOLDER,
+      `${DRIZZLE_MIGRATIONS_FOLDER}/`,
+      path.join(DRIZZLE_MIGRATIONS_FOLDER, '..', 'drizzle'),
+    ]) {
+      const report = await inspectMigrationJournal(async () => [], spelling);
+      assert.deepEqual(
+        report.baseline.migrations,
+        PRODUCTION_LEDGER_BASELINE.migrations,
+        `${spelling} must resolve to the production baseline`,
+      );
+    }
   });
 
   it('keeps findUnappliedMigrations multiset-aware for byte-identical migrations', () => {

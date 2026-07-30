@@ -23,7 +23,7 @@
 import postgres from 'postgres';
 import { describeDatabaseHost, getScriptDatabaseUrl } from './db-connection.js';
 import { inspectMigrationJournal, readLedgerHashesWith } from './migration-journal.js';
-import { MIGRATION_GAP_REMEDIATION } from '../../../scripts/lib/migration-ledger.js';
+import { formatEditedBaselineNote, MIGRATION_GAP_REMEDIATION } from '../../../scripts/lib/migration-ledger.js';
 
 async function verifyMigrationJournal(): Promise<void> {
   const databaseUrl = getScriptDatabaseUrl();
@@ -50,6 +50,9 @@ async function verifyMigrationJournal(): Promise<void> {
       );
       for (const migration of report.unbaselinedMissing) {
         console.error(`   • ${migration.tag}  (ledger hash ${migration.hash})`);
+      }
+      if (report.editedSinceBaseline.length > 0) {
+        console.error(`   ${formatEditedBaselineNote(report.editedSinceBaseline.map((migration) => migration.tag))}`);
       }
       console.error(`   ${MIGRATION_GAP_REMEDIATION}`);
       process.exitCode = 1;

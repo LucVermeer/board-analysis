@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   findUnappliedMigrations,
   formatBaselinedGapWarning,
+  formatEditedBaselineNote,
   formatMigrationGapError,
   partitionMissingMigrations,
   type ExpectedMigration,
@@ -70,7 +71,7 @@ describe('findUnappliedMigrations', () => {
 describe('partitionMissingMigrations', () => {
   it('separates the recorded backlog from a new gap', () => {
     const missing = expectedFrom('0000_old_gap', '0187_new_gap');
-    const { baselined, unbaselined } = partitionMissingMigrations(missing, ['0000_old_gap']);
+    const { baselined, unbaselined } = partitionMissingMigrations(missing, expectedFrom('0000_old_gap'));
     expect(baselined.map((migration) => migration.tag)).toEqual(['0000_old_gap']);
     expect(unbaselined.map((migration) => migration.tag)).toEqual(['0187_new_gap']);
   });
@@ -78,26 +79,52 @@ describe('partitionMissingMigrations', () => {
   it('keeps the hash on both sides', () => {
     // Baselined tags still print their repair hash — that is how the backlog
     // gets shrunk without re-deriving a sha256 by hand.
-    const { baselined } = partitionMissingMigrations(expectedFrom('0000_old_gap'), ['0000_old_gap']);
+    const { baselined } = partitionMissingMigrations(expectedFrom('0000_old_gap'), expectedFrom('0000_old_gap'));
     expect(baselined).toEqual([{ tag: '0000_old_gap', hash: 'hash-of-0000_old_gap' }]);
   });
 
   it('preserves journal order within each side', () => {
     const missing = expectedFrom('0000_a', '0001_b', '0002_c', '0003_d');
-    const { baselined, unbaselined } = partitionMissingMigrations(missing, ['0002_c', '0000_a']);
+    const { baselined, unbaselined } = partitionMissingMigrations(missing, expectedFrom('0002_c', '0000_a'));
     expect(baselined.map((migration) => migration.tag)).toEqual(['0000_a', '0002_c']);
     expect(unbaselined.map((migration) => migration.tag)).toEqual(['0001_b', '0003_d']);
   });
 
-  it('matches on tag, not hash', () => {
-    // Byte-identical SQL shares a hash. Baselining a tolerated old migration
-    // must not also excuse an unrelated new one that copied its body.
+  it('stops tolerating a baselined migration whose .sql changed', () => {
+    // The exemption is (tag, hash). Editing an applied migration gives drizzle a
+    // new expected hash while the old `when` keeps it from replaying, so a
+    // tag-only exemption would wave through DDL that never ran.
+    const missing: ExpectedMigration[] = [{ tag: '0103_thick_puck', hash: 'hash-after-the-edit' }];
+    const { baselined, unbaselined, editedSinceBaseline } = partitionMissingMigrations(missing, [
+      { tag: '0103_thick_puck', hash: 'hash-when-recorded' },
+    ]);
+    expect(baselined).toEqual([]);
+    expect(unbaselined.map((migration) => migration.tag)).toEqual(['0103_thick_puck']);
+    expect(editedSinceBaseline.map((migration) => migration.tag)).toEqual(['0103_thick_puck']);
+  });
+
+  it('reports an unbaselined tag as new, not as edited', () => {
+    // editedSinceBaseline exists to route the operator to the diff instead of the
+    // ledger, so it must not collect gaps the baseline never mentioned.
+    const { editedSinceBaseline } = partitionMissingMigrations(
+      expectedFrom('0187_new_gap'),
+      expectedFrom('0000_old_gap'),
+    );
+    expect(editedSinceBaseline).toEqual([]);
+  });
+
+  it('does not let one tolerated migration excuse another with identical SQL', () => {
+    // Byte-identical .sql files share a hash, so a hash-only match would let a new
+    // migration inherit a tolerated one's exemption.
     const duplicateHash = 'identical-sql-body';
     const missing: ExpectedMigration[] = [
       { tag: '0000_tolerated', hash: duplicateHash },
       { tag: '0187_new_copy', hash: duplicateHash },
     ];
-    const { unbaselined } = partitionMissingMigrations(missing, ['0000_tolerated']);
+    const { baselined, unbaselined } = partitionMissingMigrations(missing, [
+      { tag: '0000_tolerated', hash: duplicateHash },
+    ]);
+    expect(baselined.map((migration) => migration.tag)).toEqual(['0000_tolerated']);
     expect(unbaselined.map((migration) => migration.tag)).toEqual(['0187_new_copy']);
   });
 
@@ -108,12 +135,21 @@ describe('partitionMissingMigrations', () => {
     expect(unbaselined).toEqual(missing);
   });
 
-  it('ignores baseline tags that are not missing', () => {
-    // The healthy end state: a repaired tag still listed in the baseline is
+  it('ignores baseline entries that are not missing', () => {
+    // The healthy end state: a repaired entry still listed in the baseline is
     // dead weight, not a failure.
-    const { baselined, unbaselined } = partitionMissingMigrations([], ['0000_already_repaired']);
+    const { baselined, unbaselined } = partitionMissingMigrations([], expectedFrom('0000_already_repaired'));
     expect(baselined).toEqual([]);
     expect(unbaselined).toEqual([]);
+  });
+});
+
+describe('formatEditedBaselineNote', () => {
+  it('names the tag and says to write a new migration instead', () => {
+    const note = formatEditedBaselineNote(['0103_thick_puck']);
+    expect(note).toContain('0103_thick_puck');
+    expect(note).toContain('no longer hashes to the recorded value');
+    expect(note).toContain('never re-runs');
   });
 });
 

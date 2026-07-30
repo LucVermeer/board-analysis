@@ -191,7 +191,15 @@ jobs:
             | grep -vE '(/node_modules/|/generated/|^packages/board-controller/|^embedded/)' \
             > changed-lintable.txt || true
           if [ -s changed-lintable.txt ]; then
-            xargs -r vp check < changed-lintable.txt
+            # Same stdout redirect as the full-repo step below, and for the same
+            # reason: vp panics on EAGAIN when it flushes a long warning list to the
+            # runner's non-blocking stdout, and xargs reports that crash as 123 with
+            # the diagnostics cut off mid-line. A PR touching one warning-heavy file
+            # is enough to hit it. Writing to a regular file never EAGAINs; vp's real
+            # exit code is preserved so lint errors still fail the job.
+            xargs -r vp check < changed-lintable.txt > vp-check.log 2>&1 && status=0 || status=$?
+            cat vp-check.log || true
+            exit $status
           else
             echo "No lintable files changed."
           fi

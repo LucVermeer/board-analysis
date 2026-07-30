@@ -184,10 +184,17 @@ The gate's first armed run found 20 of production's 188 journal entries with no 
 and blocked the production deploy, because `migrate` is the `needs:` gate for both
 `deploy-web` and `deploy-production-backend`.
 
-Those 20 tags are listed in `scripts/lib/migration-ledger-baseline.ts` and subtracted before
-the gate throws. A gap in any other tag still fails the deploy, which keeps the case that
-matters: a freshly appended migration skipped by the high-water mark (the `0129` incident) is
-caught on the first deploy after it happens.
+Those 20 migrations are listed in `scripts/lib/migration-ledger-baseline.ts` and subtracted
+before the gate throws. A gap in any other journal entry still fails the deploy, which keeps
+the case that matters: a freshly appended migration skipped by the high-water mark (the `0129`
+incident) is caught on the first deploy after it happens.
+
+Each entry pins the hash its `.sql` had when the gap was recorded, and the exemption only
+applies at that exact content. Edit a baselined migration and drizzle expects a new hash while
+the old `when` still stops it replaying — a tag-only exemption would report "known gap, deploy
+on" while the edited DDL ran nowhere. Instead the gap turns fatal with the edit named, and
+`vp run test:db:migration-journal` catches the drift at PR time. Applied migrations are not
+editable; write a new one.
 
 The baseline is a stopgap, not a resolution. Two mechanisms produce those 20 tags and only
 one of them is harmless:

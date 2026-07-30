@@ -62,6 +62,11 @@ export interface MigrationJournalReport {
   baselinedMissing: ExpectedMigration[];
   /** The part of `missing` that is new. Anything here fails the deploy. */
   unbaselinedMissing: ExpectedMigration[];
+  /**
+   * Baselined tags whose `.sql` no longer hashes to the recorded value. A subset
+   * of `unbaselinedMissing` — fatal, but with a different next step.
+   */
+  editedSinceBaseline: ExpectedMigration[];
   /** The baseline this report was judged against. */
   baseline: LedgerBaseline;
 }
@@ -71,12 +76,18 @@ export interface MigrationJournalReport {
  * this repo's migrations folder. Every test builds a synthetic folder in a temp
  * directory, where a tag list drawn from `packages/db/drizzle` would be both
  * meaningless and — via the journal-membership check below — an error.
+ *
+ * Both sides are normalised through `path.resolve` before comparing: a trailing
+ * slash or a `path.join`-built argument naming the same folder would otherwise
+ * fall through to the empty baseline, and the visible symptom of that would be a
+ * blocked production deploy rather than an error explaining itself.
  */
 function resolveBaseline(migrationsFolder: string, override?: LedgerBaseline): LedgerBaseline {
   if (override) {
     return override;
   }
-  return migrationsFolder === DRIZZLE_MIGRATIONS_FOLDER ? PRODUCTION_LEDGER_BASELINE : EMPTY_LEDGER_BASELINE;
+  const isRepoFolder = path.resolve(migrationsFolder) === path.resolve(DRIZZLE_MIGRATIONS_FOLDER);
+  return isRepoFolder ? PRODUCTION_LEDGER_BASELINE : EMPTY_LEDGER_BASELINE;
 }
 
 /**
@@ -88,7 +99,7 @@ function resolveBaseline(migrationsFolder: string, override?: LedgerBaseline): L
  */
 function assertBaselineTagsAreJournalled(baseline: LedgerBaseline, expected: readonly ExpectedMigration[]): void {
   const journalTags = new Set(expected.map((migration) => migration.tag));
-  const unknownTags = baseline.tags.filter((tag) => !journalTags.has(tag));
+  const unknownTags = baseline.migrations.map((migration) => migration.tag).filter((tag) => !journalTags.has(tag));
   if (unknownTags.length > 0) {
     throw new Error(
       `Migration ledger baseline is stale: ${unknownTags.join(', ')} ${unknownTags.length === 1 ? 'is' : 'are'} ` +
@@ -169,7 +180,7 @@ export async function inspectMigrationJournal(
   const missingTags = findUnappliedMigrations(expected, ledgerHashes);
   const missingTagSet = new Set(missingTags);
   const missing = expected.filter((migration) => missingTagSet.has(migration.tag));
-  const { baselined, unbaselined } = partitionMissingMigrations(missing, baseline.tags);
+  const { baselined, unbaselined, editedSinceBaseline } = partitionMissingMigrations(missing, baseline.migrations);
   return {
     expectedCount: expected.length,
     ledgerCount: ledgerHashes.length,
@@ -177,6 +188,7 @@ export async function inspectMigrationJournal(
     missing,
     baselinedMissing: baselined,
     unbaselinedMissing: unbaselined,
+    editedSinceBaseline,
     baseline,
   };
 }
@@ -200,6 +212,7 @@ export async function assertMigrationJournalApplied(
         report.unbaselinedMissing.map((migration) => migration.tag),
         report.expectedCount,
         report.ledgerCount,
+        report.editedSinceBaseline.map((migration) => migration.tag),
       ),
     );
   }
