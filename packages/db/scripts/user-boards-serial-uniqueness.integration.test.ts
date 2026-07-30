@@ -20,6 +20,25 @@ type ExecuteDb = {
 
 type CountRow = { count: number | string };
 
+// drizzle-orm >= 0.44 wraps driver failures in a DrizzleQueryError whose
+// `message` is a generic "Failed query: ..." string — the underlying
+// PostgresError (with the real "duplicate key"/constraint text) lives on
+// `.cause`. Walk the cause chain (bounded, in case of cycles) so the
+// assertion below actually inspects the Postgres error text instead of the
+// wrapper's own message. Mirrors packages/backend/src/utils/postgres-errors.ts.
+function messageChainMatches(error: unknown, pattern: RegExp): boolean {
+  let current: unknown = error;
+  let depth = 0;
+  while (current && depth < 5) {
+    if (current instanceof Error && pattern.test(current.message)) {
+      return true;
+    }
+    current = current instanceof Error ? current.cause : undefined;
+    depth += 1;
+  }
+  return false;
+}
+
 function localDatabaseUrl(): string | null {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -112,6 +131,11 @@ describe('user_boards serial uniqueness — system catalog exemption', () => {
       await db.execute(sql`DELETE FROM user_boards WHERE serial_number = ${sharedSerial}`);
 
       await ensureUser(db, otherOwnerId, 'serial-uniqueness-test@example.com');
+      // The SYSTEM catalog user isn't seeded by any migration (production relies
+      // on location-sync's own idempotent upsert) — seed it here so this test is
+      // self-contained on a fresh DB. ON CONFLICT DO NOTHING keeps it safe on a
+      // DB where the row already exists from a prior sync or test run.
+      await ensureUser(db, SYSTEM_USER_ID, 'system@boardsesh.internal');
 
       // Two SYSTEM-owned boards with the same serial must both persist.
       await insertBoard(db, {
@@ -149,7 +173,7 @@ describe('user_boards serial uniqueness — system catalog exemption', () => {
             ownerId: otherOwnerId,
             serial: sharedSerial,
           }),
-        /user_boards_unique_owner_serial|duplicate key/i,
+        (error: unknown) => messageChainMatches(error, /user_boards_unique_owner_serial|duplicate key/i),
         'a non-system owner must not bind the same serial twice',
       );
 
