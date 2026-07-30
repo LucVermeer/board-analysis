@@ -23,12 +23,15 @@ import {
   estimateScopeDownload,
 } from '@boardsesh/offline-sync';
 import { useBoardDownloads } from '../../src/offline/use-board-downloads';
+import { useRememberDownloadedBoards } from '../../src/offline/use-remember-downloaded-boards';
 import { useSnapshotManifest } from '../../src/offline/use-snapshot-manifest';
 import { formatBytes } from '../../src/lib/format-bytes';
 import {
   getSetting,
   useSetting,
   setOfflineBoardEnabled,
+  forgetOfflineBoardScope,
+  useOfflineBoards,
   offlineBoardKeyForBoard,
   offlineBoardScopeForBoard,
 } from '../../src/settings';
@@ -40,10 +43,13 @@ import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import { BoardManageRow } from '../../src/components/board-discovery/BoardManageRow';
 import { boardDownloadState, boardIsBootstrapping } from '../../src/components/board-discovery/board-offline-state';
 import { buildManageItems, type ManageItem } from '../../src/components/board-discovery/manage-items';
+import { offlineBoardRows } from '../../src/components/board-discovery/offline-board-items';
+import { useIsOffline } from '../../src/hooks/use-is-offline';
 import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing } from '../../src/theme/tokens';
 
 const EMPTY_BOARDS: UserBoard[] = [];
+const EMPTY_ITEMS: ManageItem[] = [];
 
 const keyExtractor = (item: ManageItem) => item.key;
 const getItemType = (item: ManageItem) => item.type;
@@ -121,10 +127,12 @@ export default function ManageBoards() {
   // Per-scope "downloaded" signal: which scopes actually have a board_climbs
   // checkpoint. Refetched whenever a cycle finishes (isSyncing → false), so a
   // board flips to "Available offline" only once its own data has landed.
+  // Ungated by the flag: the offline fallback below needs it too, and a device that
+  // still holds downloads after a kill-switch rollback must not be stranded. One
+  // cheap indexed read, shared with the Storage screen's cache entry.
   const { data: downloadedScopeKeys, refetch: refetchDownloaded } = useQuery({
     queryKey: ['downloadedScopeKeys'],
     queryFn: () => getDownloadedScopeKeys(db),
-    enabled: offlineDownloadsEnabled,
   });
   const downloadedSet = useMemo(() => new Set(downloadedScopeKeys ?? []), [downloadedScopeKeys]);
   useEffect(() => {
@@ -140,6 +148,9 @@ export default function ManageBoards() {
         // Disabling just drops the setting entry; the cached rows + checkpoint stay
         // so re-enabling resumes instantly, so no confirm is needed.
         setOfflineBoardEnabled(scope, false);
+        // Drop the offline picker's snapshots for this scope too, so it stops
+        // offering a board the user just opted out of.
+        forgetOfflineBoardScope(scope);
         return;
       }
       // How big is this download? Only the snapshot path can answer honestly, and
@@ -197,6 +208,40 @@ export default function ManageBoards() {
       }),
     [myBoards, currentUserId, activeUuid, t],
   );
+
+  // Offline this screen has TWO independent failures, and the profile is the fatal
+  // one: `useProfile` is a plain network query, so with no signal `currentUserId` is
+  // undefined and the guard below shows a hard "Something went wrong" state no matter
+  // what the board list does. Fall back to a flat list of the boards this device
+  // downloaded — owned-vs-followed genuinely cannot be classified without the profile
+  // id, so the headers are dropped rather than guessed.
+  const isOffline = useIsOffline();
+  const offlineCards = useOfflineBoards();
+  const profileUnavailable = !currentUserId && !isProfileLoading;
+  const useOfflineList = isOffline || profileUnavailable || (isError && myBoards.length === 0);
+  const offlineItems = useMemo(() => {
+    if (!useOfflineList) return EMPTY_ITEMS;
+    return offlineBoardRows({
+      cards: offlineCards,
+      cachedMyBoards: myBoards,
+      activeBoard: activeBoard ?? null,
+      downloadedScopeKeys: downloadedScopeKeys ?? [],
+    }).map(
+      (board): ManageItem => ({
+        type: 'board',
+        key: board.uuid,
+        board,
+        isOwned: board.isOwned,
+        isActive: board.uuid === activeUuid,
+      }),
+    );
+  }, [useOfflineList, offlineCards, myBoards, activeBoard, downloadedScopeKeys, activeUuid]);
+  // Only take over the screen when there is actually something to show; otherwise the
+  // existing loading/error states still tell the more honest story.
+  const showOfflineList = useOfflineList && offlineItems.length > 0;
+  // Keep the snapshots fresh from the live list while online (renames, and a backfill
+  // for boards downloaded before this existed).
+  useRememberDownloadedBoards(boardConnection?.boards);
 
   const onCreate = useCallback(() => {
     router.push('/boards/create');
@@ -276,6 +321,9 @@ export default function ManageBoards() {
           board={item.board}
           isOwned={item.isOwned}
           isActive={item.isActive}
+          // Offline every row affordance except the offline toggle is a network
+          // mutation (edit, delete, unfollow), so the row goes read-only.
+          readOnly={showOfflineList}
           isEditing={isEditing}
           isMutating={isMutating}
           downloadState={downloadState}
@@ -294,6 +342,7 @@ export default function ManageBoards() {
       unfollowBoard.isPending,
       unfollowBoard.variables,
       isEditing,
+      showOfflineList,
       offlineDownloadsEnabled,
       enabledSet,
       isSyncing,
@@ -310,7 +359,7 @@ export default function ManageBoards() {
 
   // Edit / Done lives in the native header. Only offered when there are boards to
   // manage; collapse edit mode if the list empties out (last board removed).
-  const hasBoards = myBoards.length > 0;
+  const hasBoards = myBoards.length > 0 && !showOfflineList;
   useEffect(() => {
     if (!hasBoards && isEditing) setIsEditing(false);
   }, [hasBoards, isEditing]);
@@ -353,7 +402,7 @@ export default function ManageBoards() {
   // Wait for the profile too: owned-vs-followed is keyed on currentUserId, so
   // rendering before it resolves would file the user's own boards under
   // "Following" (myBoards can win the race on a cold open / deep link).
-  if ((isLoading && myBoards.length === 0) || (isProfileLoading && !currentUserId)) {
+  if (!showOfflineList && ((isLoading && myBoards.length === 0) || (isProfileLoading && !currentUserId))) {
     return (
       <View style={[styles.centered, { backgroundColor: systemColors.background }]}>
         <ActivityIndicator size="large" />
@@ -364,7 +413,7 @@ export default function ManageBoards() {
   // Boards failed with nothing cached, OR the profile settled without an id —
   // without currentUserId we can't classify owned vs followed, so never render
   // the list; offer a retry that refetches both.
-  if ((isError && myBoards.length === 0) || !currentUserId) {
+  if (!showOfflineList && ((isError && myBoards.length === 0) || !currentUserId)) {
     return (
       <View style={[styles.centered, { backgroundColor: systemColors.background }]}>
         <Icon name="error" size={40} color={iosSystemColors.systemRed} />
@@ -388,14 +437,20 @@ export default function ManageBoards() {
   return (
     <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
       <FlashList
-        data={items}
+        data={showOfflineList ? offlineItems : items}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         getItemType={getItemType}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingBottom }}
         ListHeaderComponent={
-          items.length > 0 ? (
+          showOfflineList ? (
+            <View style={styles.listHeader}>
+              <Text variant="subheadline" style={styles.offlineNotice}>
+                {t('mobile.offline.pickerNotice')}
+              </Text>
+            </View>
+          ) : items.length > 0 ? (
             <View style={styles.listHeader}>
               <Button title={t('mobile.discovery.create')} variant="outlined" onPress={onCreate} />
             </View>
@@ -429,6 +484,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[4],
     paddingBottom: spacing[2],
+  },
+  offlineNotice: {
+    opacity: 0.7,
   },
   sectionHeader: {
     paddingHorizontal: spacing[4],

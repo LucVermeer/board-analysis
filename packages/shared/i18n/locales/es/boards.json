@@ -271,7 +271,10 @@
       "enableTitle": "¿Descargar {{name}}?",
       "enableMessage": "Descarga todas las vías de este plafón para explorarlas y registrar tus ascensos sin conexión.",
       "enableMessageWithSize": "Unos {{size}}. Descarga todas las vías de este plafón para explorarlas y registrar tus ascensos sin conexión.",
-      "enableConfirm": "Descargar"
+      "enableConfirm": "Descargar",
+      "pickerNotice": "Sin conexión: estos son los plafones que has descargado.",
+      "pickerEmptyTitle": "Todavía no has descargado nada",
+      "pickerEmptyBody": "Los plafones que dejes disponibles sin conexión aparecen aquí. Descarga uno cuando tengas conexión."
     }
   },
   "boardEntity": {

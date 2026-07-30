@@ -29,6 +29,12 @@ type BoardManageRowProps = {
    * destructive action never depends on the hard-to-hit swipe gesture.
    */
   isEditing?: boolean;
+  /**
+   * No network: hide every affordance that is a server mutation (tap-to-edit, the
+   * swipe delete/unfollow) and leave only the local offline toggle. The row still
+   * shows the board, its subtitle and its download status.
+   */
+  readOnly?: boolean;
   /** A mutation targeting this row is in flight — show a spinner and disable the swipe. */
   isMutating: boolean;
   /**
@@ -64,6 +70,7 @@ function BoardManageRowComponent({
   isOwned,
   isActive,
   isEditing = false,
+  readOnly = false,
   isMutating,
   downloadState,
   downloadCount,
@@ -203,7 +210,7 @@ function BoardManageRowComponent({
 
       {isMutating ? (
         <ActivityIndicator size="small" />
-      ) : !isEditing && isOwned ? (
+      ) : !isEditing && !readOnly && isOwned ? (
         <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
       ) : null}
     </View>
@@ -211,8 +218,10 @@ function BoardManageRowComponent({
 
   return (
     <SwipeableRow
-      onPress={isOwned && !isEditing ? () => onEdit(board) : undefined}
-      pressAccessibilityLabel={isOwned && !isEditing ? t('mobile.manage.editAria', { name: board.name }) : undefined}
+      onPress={isOwned && !isEditing && !readOnly ? () => onEdit(board) : undefined}
+      pressAccessibilityLabel={
+        isOwned && !isEditing && !readOnly ? t('mobile.manage.editAria', { name: board.name }) : undefined
+      }
       onAction={isOwned ? () => onDelete(board) : () => onUnfollow(board)}
       actionLabel={
         isOwned
@@ -221,7 +230,7 @@ function BoardManageRowComponent({
       }
       actionIcon={isOwned ? 'delete' : 'minus.circle'}
       actionColor={isOwned ? iosSystemColors.systemRed : iosSystemColors.systemOrange}
-      enabled={!isMutating && !isEditing}
+      enabled={!isMutating && !isEditing && !readOnly}
       resetKey={board.uuid}
     >
       {content}

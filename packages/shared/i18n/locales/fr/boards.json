@@ -271,7 +271,10 @@
       "enableTitle": "Télécharger {{name}} ?",
       "enableMessage": "Télécharge toutes les voies de cette board pour les parcourir et enregistrer tes croix hors ligne.",
       "enableMessageWithSize": "Environ {{size}}. Télécharge toutes les voies de cette board pour les parcourir et enregistrer tes croix hors ligne.",
-      "enableConfirm": "Télécharger"
+      "enableConfirm": "Télécharger",
+      "pickerNotice": "Pas de réseau — voici les boards que tu as téléchargées.",
+      "pickerEmptyTitle": "Rien de téléchargé pour le moment",
+      "pickerEmptyBody": "Les boards que tu rends disponibles hors ligne apparaissent ici. Télécharge-en une quand tu as du réseau."
     }
   },
   "boardEntity": {
