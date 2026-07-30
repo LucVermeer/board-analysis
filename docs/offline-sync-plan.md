@@ -793,6 +793,22 @@ the list is cleared at sign-out because it carries the previous account's board 
 The picker offers a snapshot only when its scope is in `getDownloadedScopeKeys()` —
 the honest "will actually serve climbs" signal — plus the active board unconditionally.
 
+Card lifecycle, since no single event covers it:
+
+- **Written** by `enableBoardsOffline` (the one download funnel) and refreshed from a
+  live `myBoards` by `useRememberDownloadedBoards`, which remembers boards whose scope
+  is in `syncEnabledBoards`. Deliberately not "or already downloaded": toggling
+  "Available offline" off leaves the rows and checkpoint on disk so re-enabling
+  resumes instantly, so a downloaded-keyed refresh would re-write the card the toggle
+  just dropped.
+- **Dropped per scope** (`forgetOfflineBoardScope`) when offline is turned off or the
+  data is removed — the download is per scope, so every board sharing it loses its card.
+- **Dropped per board** (`forgetOfflineBoard`) on delete and unfollow, and pruned
+  against a **complete** `myBoards` (`hasMore === false`) for the deleted-on-another-
+  device case. A card the backend no longer knows is worse than a stale row: activating
+  it writes a dead `uuid` into `active-board-store` and board presence. `myBoards` pages
+  at 20, which is why the prune refuses to run on a truncated page.
+
 ## Account lifecycle
 
 On logout or account switch:

@@ -9,6 +9,7 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 // must then render no toggle and no offline status caption — the pre-offline UI.
 
 const offlineToggleProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
+const swipeableProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -25,7 +26,13 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('../../SwipeableRow', () => ({
-  SwipeableRow: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  SwipeableRow: (props: { children?: ReactNode }) => {
+    // Recorded, not just rendered: `onPress` (tap-to-edit) and `enabled` (the swipe
+    // delete/unfollow) are the affordances read-only mode has to take away, and both
+    // live on this wrapper rather than in the row's own markup.
+    swipeableProps.last = props as Record<string, unknown>;
+    return createElement('div', null, props.children);
+  },
 }));
 vi.mock('../../BoardImageNative', () => ({
   BoardImageNative: () => createElement('div', { 'data-testid': 'board-image' }),
@@ -66,7 +73,7 @@ vi.mock('../../../providers/theme-provider', () => ({
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../../Icon', () => ({ Icon: () => createElement('span', { 'data-icon': 'true' }) }));
+vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => createElement('span') }));
 
 import { BoardManageRow } from '../BoardManageRow';
@@ -95,6 +102,7 @@ const rowProps = {
 afterEach(() => {
   cleanup();
   offlineToggleProps.last = null;
+  swipeableProps.last = null;
 });
 
 describe('BoardManageRow offline toggle gating', () => {
@@ -130,6 +138,36 @@ describe('BoardManageRow offline toggle gating', () => {
     const { queryByText } = render(<BoardManageRow {...rowProps} downloadState="downloading" downloadCount={42} />);
     expect(queryByText('mobile.offline.downloadingCount')).not.toBeNull();
     expect(queryByText('mobile.offline.bootstrapping')).toBeNull();
+  });
+});
+
+describe('BoardManageRow read-only mode', () => {
+  // #3897: with no usable connection every row affordance except the offline toggle is
+  // a server mutation, so the row must not offer them at all — a swipe-to-delete that
+  // can only fail is worse than no swipe.
+  it('offers tap-to-edit, the swipe action and the chevron by default', () => {
+    const { container } = render(<BoardManageRow {...rowProps} downloadState={undefined} />);
+    expect(swipeableProps.last?.onPress).toBeTypeOf('function');
+    expect(swipeableProps.last?.enabled).toBe(true);
+    expect(container.querySelector('[data-icon="chevron.right"]')).not.toBeNull();
+  });
+
+  it('takes all three away when read-only', () => {
+    const { container } = render(<BoardManageRow {...rowProps} readOnly downloadState={undefined} />);
+    expect(swipeableProps.last?.onPress).toBeUndefined();
+    expect(swipeableProps.last?.pressAccessibilityLabel).toBeUndefined();
+    expect(swipeableProps.last?.enabled).toBe(false);
+    expect(container.querySelector('[data-icon="chevron.right"]')).toBeNull();
+  });
+
+  it('keeps the offline toggle, which is a local write', () => {
+    const onToggleOffline = vi.fn();
+    const { getByTestId } = render(
+      <BoardManageRow {...rowProps} readOnly downloadState="downloaded" onToggleOffline={onToggleOffline} />,
+    );
+    expect(getByTestId('offline-toggle')).not.toBeNull();
+    (offlineToggleProps.last?.onPress as () => void)();
+    expect(onToggleOffline).toHaveBeenCalledWith(board);
   });
 });
 

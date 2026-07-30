@@ -1,50 +1,49 @@
 import { useEffect } from 'react';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useQuery } from '@tanstack/react-query';
-import { getDownloadedScopeKeys } from '@boardsesh/offline-sync';
-import type { UserBoard } from '@boardsesh/shared-schema';
-import { rememberOfflineBoards, useSetting, offlineBoardKeyForBoard } from '../settings';
+import type { UserBoardConnection } from '@boardsesh/shared-schema';
+import { rememberOfflineBoards, pruneOfflineBoards, useSetting, offlineBoardKeyForBoard } from '../settings';
 import { useIsOffline } from '../hooks/use-is-offline';
 
 /**
- * Keep the offline picker's board snapshots fresh whenever `myBoards` resolves
- * online.
+ * Keep the offline picker's board snapshots in step with the live `myBoards` list.
  *
  * `useBoardDownloads` snapshots a board at the moment offline is enabled, which
- * covers every new download. This hook covers the two gaps that leaves:
+ * covers every new download. This hook covers the three gaps that leaves:
  *
  * - a board renamed or reconfigured on another device would otherwise show its old
  *   name offline forever;
  * - a board downloaded on a build that predates this feature has no snapshot at all,
- *   and is backfilled here the first time the app is online.
+ *   and is backfilled the next time this screen is open online;
+ * - a board deleted or unfollowed on ANOTHER device would keep its card forever —
+ *   nothing local ever fires for it — so a complete server list also prunes.
  *
- * Only boards whose scope is enabled or already downloaded are remembered — the
- * picker must not offer a board whose climbs aren't on disk, and there is no reason
- * to persist the rest of `myBoards`.
+ * Only boards whose scope is in `syncEnabledBoards` are remembered. Deliberately not
+ * "or already downloaded": a plain "Available offline" toggle-off leaves the rows and
+ * checkpoint on disk so re-enabling resumes instantly, so the scope stays downloaded
+ * and this hook would re-remember the board the toggle just forgot. Enabled is also
+ * sufficient for the pre-fix backfill — enabling is the only way to download.
  *
- * Not gated on the offline-downloads flag: this reads data already on disk and one
- * setting, and a flag flipped off must not strand a device that has downloads.
+ * Not gated on the offline-downloads flag: this reads one setting, and a flag flipped
+ * off must not strand a device that has downloads.
  */
-export function useRememberDownloadedBoards(boards: readonly UserBoard[] | undefined): void {
+export function useRememberDownloadedBoards(connection: UserBoardConnection | undefined): void {
   const isOffline = useIsOffline();
-  const db = useSQLiteContext();
   const [enabledBoards] = useSetting('syncEnabledBoards');
-  // Shares the ['downloadedScopeKeys'] cache entry My Boards and the Storage screen
-  // already populate, so this is at most one extra indexed read per session.
-  const { data: downloadedScopeKeys } = useQuery({
-    queryKey: ['downloadedScopeKeys'],
-    queryFn: () => getDownloadedScopeKeys(db),
-  });
+  const boards = connection?.boards;
+  // Absent connection → assume incomplete, so the prune below can never run on a
+  // list we have no reason to trust.
+  const hasMore = connection?.hasMore ?? true;
 
   useEffect(() => {
     // Offline, `boards` is either stale or absent — refreshing from it would either
     // no-op or overwrite good snapshots with older ones.
     if (isOffline || !boards) return;
-    const scopesToRemember = new Set([...enabledBoards, ...(downloadedScopeKeys ?? [])]);
-    if (scopesToRemember.size === 0) return;
-    const downloadedBoards = boards.filter((board) => scopesToRemember.has(offlineBoardKeyForBoard(board)));
+    const enabledScopes = new Set(enabledBoards);
+    const downloadedBoards = boards.filter((board) => enabledScopes.has(offlineBoardKeyForBoard(board)));
     // `rememberOfflineBoards` skips the write when nothing changed, which is what
     // keeps this effect from churning every `useSetting` consumer on each refetch.
     rememberOfflineBoards(downloadedBoards);
-  }, [isOffline, boards, enabledBoards, downloadedScopeKeys]);
+    // Only a COMPLETE list can say a board is gone. `myBoards` pages at 20, so a
+    // truncated first page would otherwise delete every card past it.
+    if (!hasMore) pruneOfflineBoards(boards.map((board) => board.uuid));
+  }, [isOffline, boards, hasMore, enabledBoards]);
 }

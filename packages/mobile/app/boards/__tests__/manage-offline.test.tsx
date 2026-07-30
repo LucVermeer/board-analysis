@@ -9,16 +9,26 @@
 // id, so the headers are dropped rather than guessed) with the network affordances
 // hidden.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import type { UserBoard } from '@boardsesh/shared-schema';
 
 type Children = { children?: ReactNode };
 type ButtonProps = { title: string; onPress?: () => void };
-type ManageRowProps = { board: UserBoard; readOnly?: boolean; downloadState?: string };
+type ManageRowProps = {
+  board: UserBoard;
+  readOnly?: boolean;
+  downloadState?: string;
+  onDelete: (board: UserBoard) => void;
+  onUnfollow: (board: UserBoard) => void;
+};
 
 const routerMock = vi.hoisted(() => ({ push: vi.fn() }));
 const setOptionsMock = vi.hoisted(() => vi.fn());
+const forgetOfflineBoardMock = vi.hoisted(() => vi.fn());
+const deleteBoardMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const unfollowBoardMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const confirmMock = vi.hoisted(() => vi.fn().mockResolvedValue(false));
 
 const state = vi.hoisted(() => ({
   isOffline: false,
@@ -128,8 +138,8 @@ vi.mock('../../../src/lib/graphql/hooks', () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-  useDeleteBoard: () => ({ isPending: false, variables: undefined, mutateAsync: vi.fn() }),
-  useUnfollowBoard: () => ({ isPending: false, variables: undefined, mutateAsync: vi.fn() }),
+  useDeleteBoard: () => ({ isPending: false, variables: undefined, mutateAsync: deleteBoardMock }),
+  useUnfollowBoard: () => ({ isPending: false, variables: undefined, mutateAsync: unfollowBoardMock }),
 }));
 
 vi.mock('../../../src/lib/graphql/use-active-board', () => ({
@@ -141,7 +151,7 @@ vi.mock('../../../src/providers/auth-provider', () => ({
   useAuth: () => ({ isAuthenticated: true, refreshAuthState: vi.fn() }),
 }));
 vi.mock('../../../src/providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock('../../../src/providers/dialog-provider', () => ({ useConfirm: () => vi.fn().mockResolvedValue(false) }));
+vi.mock('../../../src/providers/dialog-provider', () => ({ useConfirm: () => confirmMock }));
 vi.mock('../../../src/providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: {
@@ -175,6 +185,7 @@ vi.mock('../../../src/settings', () => ({
   getSetting: () => state.enabledBoards,
   useSetting: () => [state.enabledBoards, vi.fn()],
   setOfflineBoardEnabled: vi.fn(),
+  forgetOfflineBoard: (uuid: string) => forgetOfflineBoardMock(uuid),
   forgetOfflineBoardScope: vi.fn(),
   useOfflineBoards: () => state.offlineCards,
   offlineBoardKeyForBoard: (input: { boardType: string; layoutId: number; sizeId: number }) =>
@@ -206,11 +217,13 @@ vi.mock('../../../src/components/ActivityIndicator', () => ({
   ActivityIndicator: () => createElement('div', { 'data-testid': 'spinner' }),
 }));
 vi.mock('../../../src/components/board-discovery/BoardManageRow', () => ({
-  BoardManageRow: ({ board: rowBoard, readOnly, downloadState }: ManageRowProps) =>
+  BoardManageRow: ({ board: rowBoard, readOnly, downloadState, onDelete, onUnfollow }: ManageRowProps) =>
     createElement(
       'div',
       { 'data-board': rowBoard.uuid, 'data-readonly': String(!!readOnly), 'data-download-state': downloadState ?? '' },
       rowBoard.name,
+      createElement('button', { type: 'button', onClick: () => onDelete(rowBoard) }, `delete ${rowBoard.uuid}`),
+      createElement('button', { type: 'button', onClick: () => onUnfollow(rowBoard) }, `unfollow ${rowBoard.uuid}`),
     ),
 }));
 
@@ -218,6 +231,9 @@ const { default: ManageBoards } = await import('../manage');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteBoardMock.mockResolvedValue(undefined);
+  unfollowBoardMock.mockResolvedValue(undefined);
+  confirmMock.mockResolvedValue(false);
   state.isOffline = false;
   state.profileId = undefined;
   state.isProfileLoading = false;
@@ -302,6 +318,58 @@ describe('My Boards with no usable network list', () => {
     expect(screen.getByText('Marco garage')).toBeTruthy();
     expect(screen.queryByText('Your boards')).toBeNull();
     expect(document.querySelector('[data-board="board-a"]')?.getAttribute('data-readonly')).toBe('true');
+  });
+
+  it('forgets a deleted board so its card cannot outlive it', async () => {
+    // A plain toggle-off leaves the download in place, so the scope stays "downloaded"
+    // and forgetOfflineBoardScope never fires here. Without the per-uuid forget the
+    // card lives forever and hands a uuid the backend has dropped to setActiveBoard.
+    confirmMock.mockResolvedValue(true);
+    state.profileId = 'me';
+    state.myBoards = {
+      data: { boards: [board({ uuid: 'net-1', name: 'Network board' })] },
+      isLoading: false,
+      isError: false,
+      isRefetching: false,
+    };
+
+    render(createElement(ManageBoards));
+    fireEvent.click(screen.getByText('delete net-1'));
+
+    await waitFor(() => expect(forgetOfflineBoardMock).toHaveBeenCalledWith('net-1'));
+  });
+
+  it('forgets an unfollowed board too', async () => {
+    state.profileId = 'me';
+    state.myBoards = {
+      data: { boards: [board({ uuid: 'net-1', name: 'Network board', isOwned: false, ownerId: 'someone' })] },
+      isLoading: false,
+      isError: false,
+      isRefetching: false,
+    };
+
+    render(createElement(ManageBoards));
+    fireEvent.click(screen.getByText('unfollow net-1'));
+
+    await waitFor(() => expect(forgetOfflineBoardMock).toHaveBeenCalledWith('net-1'));
+  });
+
+  it('keeps the card when the delete mutation fails', async () => {
+    confirmMock.mockResolvedValue(true);
+    deleteBoardMock.mockRejectedValue(new Error('offline'));
+    state.profileId = 'me';
+    state.myBoards = {
+      data: { boards: [board({ uuid: 'net-1', name: 'Network board' })] },
+      isLoading: false,
+      isError: false,
+      isRefetching: false,
+    };
+
+    render(createElement(ManageBoards));
+    fireEvent.click(screen.getByText('delete net-1'));
+
+    await waitFor(() => expect(deleteBoardMock).toHaveBeenCalled());
+    expect(forgetOfflineBoardMock).not.toHaveBeenCalled();
   });
 
   it('still shows the retry state offline when nothing has been downloaded', () => {

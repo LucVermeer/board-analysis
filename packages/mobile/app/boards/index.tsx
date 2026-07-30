@@ -67,9 +67,10 @@ export default function BoardSelection() {
     isRefetching,
   } = useMyBoards(undefined, { enabled: isAuthenticated });
   const myBoards = boardConnection?.boards ?? EMPTY_BOARDS;
-  // Keep the offline snapshots in step with the live list (renames, and a backfill
-  // for boards downloaded before this existed). No-ops while offline.
-  useRememberDownloadedBoards(boardConnection?.boards);
+  // Keep the offline snapshots in step with the live list: renames, a backfill for
+  // boards downloaded before this existed, and a prune of boards the server no longer
+  // lists. No-ops while offline.
+  useRememberDownloadedBoards(boardConnection);
 
   // Offline (or a connection that reports online while every request fails), the
   // network board list is unavailable: `myBoards` is a plain `getHttpClient` query,
@@ -148,15 +149,18 @@ export default function BoardSelection() {
         // errors are handled inside and intentionally don't reach the catch below
         // (which only guards the board-switch write above).
         //
-        // Skipped offline: adoption is a follow mutation plus a download confirm, so
-        // with no signal the only thing it can produce is a "Could not follow X" error
-        // toast on a board the user already has downloaded.
-        if (!isOffline) void adoptFoundBoard(board);
+        // Skipped whenever the rows came from the local snapshots: adoption is a follow
+        // mutation plus a download confirm, so with no usable connection the only thing
+        // it can produce is a "Could not follow X" error toast on a board the user
+        // already has downloaded. Gated on `isLocalOnly`, not `isOffline` — the
+        // lying-connection branch (captive portal, dead upstream) renders the same rows
+        // with `isOffline === false`, and its requests fail just as hard.
+        if (!isLocalOnly) void adoptFoundBoard(board);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, adoptFoundBoard, router, boardReturnTo, showToast, t, fromOnboarding, isOffline],
+    [setActiveBoard, adoptFoundBoard, router, boardReturnTo, showToast, t, fromOnboarding, isLocalOnly],
   );
 
   const myBoardItems = useMemo(

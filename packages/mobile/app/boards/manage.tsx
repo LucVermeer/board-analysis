@@ -30,6 +30,7 @@ import {
   getSetting,
   useSetting,
   setOfflineBoardEnabled,
+  forgetOfflineBoard,
   forgetOfflineBoardScope,
   useOfflineBoards,
   offlineBoardKeyForBoard,
@@ -239,9 +240,9 @@ export default function ManageBoards() {
   // Only take over the screen when there is actually something to show; otherwise the
   // existing loading/error states still tell the more honest story.
   const showOfflineList = shouldUseOfflineList && offlineItems.length > 0;
-  // Keep the snapshots fresh from the live list while online (renames, and a backfill
-  // for boards downloaded before this existed).
-  useRememberDownloadedBoards(boardConnection?.boards);
+  // Keep the snapshots fresh from the live list while online (renames, a backfill for
+  // boards downloaded before this existed, and a prune of boards the server dropped).
+  useRememberDownloadedBoards(boardConnection);
 
   const onCreate = useCallback(() => {
     router.push('/boards/create');
@@ -266,6 +267,10 @@ export default function ManageBoards() {
       if (!confirmed) return;
       try {
         await deleteBoard.mutateAsync(board.uuid);
+        // The offline picker's snapshot goes with it. The download itself stays (a
+        // sibling board can share the scope), but a card for a board the backend has
+        // dropped must never reach setActiveBoard.
+        forgetOfflineBoard(board.uuid);
         // The deleted board can't stay the active selection — drop it so the app
         // routes to the picker instead of a board that no longer exists.
         if (activeUuid === board.uuid) await clearActiveBoard();
@@ -280,6 +285,8 @@ export default function ManageBoards() {
     async (board: UserBoard) => {
       try {
         await unfollowBoard.mutateAsync(board.uuid);
+        // Same as delete: the board is no longer the user's, so its offline card goes.
+        forgetOfflineBoard(board.uuid);
         if (activeUuid === board.uuid) await clearActiveBoard();
       } catch {
         showToast(t('mobile.manage.unfollowError'), 'error');

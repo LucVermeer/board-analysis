@@ -14,6 +14,8 @@ export {
   getOfflineBoards,
   useOfflineBoards,
   rememberOfflineBoards,
+  forgetOfflineBoard,
   forgetOfflineBoardScope,
+  pruneOfflineBoards,
   clearOfflineBoards,
 } from './offline-boards';

@@ -26,7 +26,9 @@ vi.mock('react-native-mmkv', () => {
 import {
   getOfflineBoards,
   rememberOfflineBoards,
+  forgetOfflineBoard,
   forgetOfflineBoardScope,
+  pruneOfflineBoards,
   clearOfflineBoards,
 } from '../offline-boards';
 import { resetAllSettings } from '../hooks';
@@ -112,6 +114,47 @@ describe('offline board snapshots', () => {
     setSpy.mockClear();
 
     forgetOfflineBoardScope({ boardType: 'tension', layoutId: 12, sizeId: 3 });
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('forgets one board by uuid, leaving its scope sibling alone', () => {
+    // Delete / unfollow is per board, not per scope: "Marco's garage" and "Gym wall"
+    // can share one Kilter Original 12x12 download, and unfollowing one must not take
+    // the other off the offline picker.
+    rememberOfflineBoards([board({ uuid: 'garage', name: 'Garage' }), board({ uuid: 'gym', name: 'Gym' })]);
+
+    forgetOfflineBoard('gym');
+
+    expect(getOfflineBoards().map((card) => card.uuid)).toEqual(['garage']);
+  });
+
+  it('does not write when the uuid being forgotten has no card', () => {
+    rememberOfflineBoards([board({ uuid: 'garage', name: 'Garage' })]);
+    setSpy.mockClear();
+
+    forgetOfflineBoard('never-stored');
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('prunes cards absent from a complete server list', () => {
+    // The board was deleted or unfollowed on another device, so no local call ever
+    // fires for it — without this it would sit in the picker forever and hand a dead
+    // uuid to setActiveBoard.
+    rememberOfflineBoards([
+      board({ uuid: 'garage', name: 'Garage' }),
+      board({ uuid: 'gone', name: 'Unfollowed elsewhere' }),
+    ]);
+
+    pruneOfflineBoards(['garage', 'some-board-with-no-card']);
+
+    expect(getOfflineBoards().map((card) => card.uuid)).toEqual(['garage']);
+  });
+
+  it('does not write when every card is still on the server list', () => {
+    rememberOfflineBoards([board({ uuid: 'garage', name: 'Garage' })]);
+    setSpy.mockClear();
+
+    pruneOfflineBoards(['garage', 'gym']);
     expect(setSpy).not.toHaveBeenCalled();
   });
 

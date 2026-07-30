@@ -87,6 +87,33 @@ export function forgetOfflineBoardScope(scope: OfflineBoardScope): void {
   setSetting(SETTING_KEY, next);
 }
 
+/** Forget one board by `uuid`. Used when the server no longer has it (delete, unfollow). */
+export function forgetOfflineBoard(uuid: string): void {
+  const current = getOfflineBoards();
+  const next = current.filter((card) => card.uuid !== uuid);
+  if (next.length === current.length) return;
+  setSetting(SETTING_KEY, next);
+}
+
+/**
+ * Drop every card whose board is absent from `knownUuids`.
+ *
+ * Only ever called with a COMPLETE server board list (`myBoards` with `hasMore`
+ * false). Without this, a board deleted or unfollowed on another device keeps its
+ * card forever: nothing else clears it, because a plain toggle-off leaves the
+ * downloaded rows in place and `forgetOfflineBoardScope` is keyed on the scope, not
+ * the board. A dead card is worse than a stale row — activating it writes a `uuid`
+ * the backend no longer knows into `active-board-store`, which is exactly the
+ * board-presence poisoning this feature refuses to risk with synthetic uuids.
+ */
+export function pruneOfflineBoards(knownUuids: readonly string[]): void {
+  const known = new Set(knownUuids);
+  const current = getOfflineBoards();
+  const next = current.filter((card) => known.has(card.uuid));
+  if (next.length === current.length) return;
+  setSetting(SETTING_KEY, next);
+}
+
 /** Drop every card. Used at the sign-out boundary (see `auth-provider`). */
 export function clearOfflineBoards(): void {
   setSetting(SETTING_KEY, []);

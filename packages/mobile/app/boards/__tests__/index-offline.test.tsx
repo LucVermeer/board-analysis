@@ -233,7 +233,7 @@ describe('board picker with no usable network list', () => {
     expect(screen.queryByText('Try again')).toBeNull();
   });
 
-  it('falls back to downloaded boards when the connection lies (online, every request fails)', () => {
+  it('falls back to downloaded boards when the connection lies (online, every request fails)', async () => {
     // Captive portal / gym wifi with a dead upstream: onlineManager reports online, so
     // retries never pause and the query really errors.
     state.isOffline = false;
@@ -243,8 +243,15 @@ describe('board picker with no usable network list', () => {
 
     render(createElement(BoardSelection));
 
-    expect(screen.getByRole('button', { name: 'Marco garage' })).toBeTruthy();
+    const row = screen.getByRole('button', { name: 'Marco garage' });
     expect(screen.queryByText('Something went wrong')).toBeNull();
+
+    fireEvent.click(row);
+    await waitFor(() => expect(setActiveBoardMock).toHaveBeenCalledTimes(1));
+    // The adopt guard must follow the rows, not `isOffline`: here `isOffline` is false
+    // but every request still fails, so a follow mutation can only produce the
+    // "Could not follow X" toast (plus a Sentry report) on a downloaded board.
+    expect(adoptFoundBoardMock).not.toHaveBeenCalled();
   });
 
   it('keeps a retry escape hatch when the connection lies and nothing is downloaded', () => {
@@ -255,6 +262,22 @@ describe('board picker with no usable network list', () => {
 
     expect(screen.getByText('Nothing downloaded yet')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
+  it('still adopts on tap when the network list is usable', async () => {
+    // The other direction of the same guard: online, selecting a board must still
+    // follow it and offer its download.
+    state.myBoards = {
+      data: { boards: [board({ uuid: 'net-1', name: 'Network board' })] },
+      isLoading: false,
+      isError: false,
+      isRefetching: false,
+    };
+
+    render(createElement(BoardSelection));
+    fireEvent.click(screen.getByRole('button', { name: 'Network board' }));
+
+    await waitFor(() => expect(adoptFoundBoardMock).toHaveBeenCalledTimes(1));
   });
 
   it('leaves the online screen untouched', () => {

@@ -1,22 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import type { UserBoard } from '@boardsesh/shared-schema';
+import type { UserBoard, UserBoardConnection } from '@boardsesh/shared-schema';
 
 const rememberOfflineBoardsMock = vi.hoisted(() => vi.fn());
+const pruneOfflineBoardsMock = vi.hoisted(() => vi.fn());
 
 const state = vi.hoisted(() => ({
   isOffline: false,
   enabledBoards: [] as string[],
-  downloadedScopeKeys: undefined as string[] | undefined,
 }));
 
-vi.mock('expo-sqlite', () => ({ useSQLiteContext: () => ({}) }));
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: state.downloadedScopeKeys }) }));
-vi.mock('@boardsesh/offline-sync', () => ({ getDownloadedScopeKeys: vi.fn(async () => []) }));
 vi.mock('../../hooks/use-is-offline', () => ({ useIsOffline: () => state.isOffline }));
 vi.mock('../../settings', () => ({
   rememberOfflineBoards: (boards: unknown) => rememberOfflineBoardsMock(boards),
+  pruneOfflineBoards: (uuids: unknown) => pruneOfflineBoardsMock(uuids),
   useSetting: () => [state.enabledBoards, vi.fn()],
   offlineBoardKeyForBoard: (input: { boardType: string; layoutId: number; sizeId: number }) =>
     `${input.boardType}:${input.layoutId}:${input.sizeId}`,
@@ -34,47 +32,85 @@ const board = (overrides: Partial<UserBoard> & { uuid: string; name: string }): 
     ...overrides,
   }) as unknown as UserBoard;
 
+const connection = (boards: UserBoard[], hasMore = false): UserBoardConnection => ({
+  boards,
+  totalCount: boards.length,
+  hasMore,
+});
+
 const garage = board({ uuid: 'garage', name: 'Marco garage' });
 const tension = board({ uuid: 'tension', name: 'Tension wall', boardType: 'tension', layoutId: 12, sizeId: 3 });
+
+const rememberedUuids = () => (rememberOfflineBoardsMock.mock.calls[0]?.[0] as UserBoard[]).map((entry) => entry.uuid);
 
 beforeEach(() => {
   vi.clearAllMocks();
   state.isOffline = false;
   state.enabledBoards = [];
-  state.downloadedScopeKeys = undefined;
 });
 
 describe('useRememberDownloadedBoards', () => {
-  it('remembers only the boards whose scope is enabled or already downloaded', () => {
+  it('remembers only the boards whose scope is enabled for offline', () => {
     state.enabledBoards = ['kilter:8:17'];
 
-    renderHook(() => useRememberDownloadedBoards([garage, tension]));
+    renderHook(() => useRememberDownloadedBoards(connection([garage, tension])));
 
     expect(rememberOfflineBoardsMock).toHaveBeenCalledTimes(1);
-    expect((rememberOfflineBoardsMock.mock.calls[0]?.[0] as UserBoard[]).map((entry) => entry.uuid)).toEqual([
-      'garage',
-    ]);
+    expect(rememberedUuids()).toEqual(['garage']);
   });
 
-  it('backfills a board that was downloaded before snapshots existed', () => {
-    // Nothing in syncEnabledBoards for this scope, but the data is on disk — this is
-    // the pre-fix-build upgrade path.
-    state.downloadedScopeKeys = ['tension:12:3'];
+  it('backfills a board downloaded before snapshots existed', () => {
+    // The pre-fix-build upgrade path: the download predates this feature, so there is
+    // no card — but enabling is the only way to download, so the scope is still listed.
+    state.enabledBoards = ['tension:12:3'];
 
-    renderHook(() => useRememberDownloadedBoards([garage, tension]));
+    renderHook(() => useRememberDownloadedBoards(connection([garage, tension])));
 
-    expect((rememberOfflineBoardsMock.mock.calls[0]?.[0] as UserBoard[]).map((entry) => entry.uuid)).toEqual([
-      'tension',
-    ]);
+    expect(rememberedUuids()).toEqual(['tension']);
+  });
+
+  it('does not re-remember a board whose offline toggle was just turned off', () => {
+    // Turning "Available offline" off drops the scope from syncEnabledBoards but
+    // deliberately leaves the rows and checkpoint on disk so re-enabling resumes
+    // instantly. Keying the refresh off "downloaded" instead of "enabled" would write
+    // the card straight back and undo the forget two lines earlier in manage.tsx.
+    state.enabledBoards = [];
+
+    renderHook(() => useRememberDownloadedBoards(connection([garage])));
+
+    // `rememberOfflineBoards` is add-only and ignores an empty list, so what matters is
+    // that the board is not in it.
+    expect(rememberedUuids()).toEqual([]);
+  });
+
+  it('prunes cards for boards the server no longer lists', () => {
+    state.enabledBoards = ['kilter:8:17'];
+
+    renderHook(() => useRememberDownloadedBoards(connection([garage])));
+
+    // Deleted / unfollowed on another device: nothing local fires, so the complete
+    // list is the only signal that the board is gone.
+    expect(pruneOfflineBoardsMock).toHaveBeenCalledWith(['garage']);
+  });
+
+  it('never prunes from a truncated page', () => {
+    // myBoards pages at 20; pruning on the first page would delete every card past it.
+    state.enabledBoards = ['kilter:8:17'];
+
+    renderHook(() => useRememberDownloadedBoards(connection([garage], true)));
+
+    expect(rememberOfflineBoardsMock).toHaveBeenCalledTimes(1);
+    expect(pruneOfflineBoardsMock).not.toHaveBeenCalled();
   });
 
   it('does nothing while offline — the live list is stale or absent', () => {
     state.isOffline = true;
     state.enabledBoards = ['kilter:8:17'];
 
-    renderHook(() => useRememberDownloadedBoards([garage]));
+    renderHook(() => useRememberDownloadedBoards(connection([garage])));
 
     expect(rememberOfflineBoardsMock).not.toHaveBeenCalled();
+    expect(pruneOfflineBoardsMock).not.toHaveBeenCalled();
   });
 
   it('does nothing before the board list resolves', () => {
@@ -83,24 +119,20 @@ describe('useRememberDownloadedBoards', () => {
     renderHook(() => useRememberDownloadedBoards(undefined));
 
     expect(rememberOfflineBoardsMock).not.toHaveBeenCalled();
-  });
-
-  it('does nothing when no scope is enabled or downloaded', () => {
-    renderHook(() => useRememberDownloadedBoards([garage, tension]));
-
-    expect(rememberOfflineBoardsMock).not.toHaveBeenCalled();
+    expect(pruneOfflineBoardsMock).not.toHaveBeenCalled();
   });
 
   it('does not re-run on a re-render with the same inputs', () => {
     state.enabledBoards = ['kilter:8:17'];
-    const boards = [garage];
+    const stable = connection([garage]);
 
-    const { rerender } = renderHook(() => useRememberDownloadedBoards(boards));
+    const { rerender } = renderHook(() => useRememberDownloadedBoards(stable));
     rerender();
     rerender();
 
     // The effect deps must stay stable, or every myBoards refetch would churn the
     // settings store (and with it every useSetting consumer app-wide).
     expect(rememberOfflineBoardsMock).toHaveBeenCalledTimes(1);
+    expect(pruneOfflineBoardsMock).toHaveBeenCalledTimes(1);
   });
 });
