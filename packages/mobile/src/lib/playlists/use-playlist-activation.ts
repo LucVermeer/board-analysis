@@ -40,6 +40,15 @@ import type { PlaylistRenderBoard } from './use-playlist-render-board';
 // bad playlist could ship hundreds of identical events.
 const reportedEmptyBoardFetches = new Set<string>();
 
+/**
+ * Clear the once-per-session canary bookkeeping. Test-only: the Set above is
+ * module state that outlives an individual test, so without this a case that
+ * reuses a sourceId would see zero reports and pass for the wrong reason.
+ */
+export function _resetEmptyBoardFetchReportsForTests(): void {
+  reportedEmptyBoardFetches.clear();
+}
+
 /** A single page of the suggestion-refresh fetch. */
 export type PlaylistActivationPage = {
   climbs: Climb[];

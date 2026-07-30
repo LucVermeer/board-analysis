@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
 import type { UsePlaylistClimbActivationOptions } from '@boardsesh/playlists-react';
-import { usePlaylistActivation } from '../use-playlist-activation';
+import { usePlaylistActivation, _resetEmptyBoardFetchReportsForTests } from '../use-playlist-activation';
 
 // The shared `usePlaylistClimbActivation` is exercised by @boardsesh/playlists-react's
 // own tests. Here we mock it to capture the options the mobile wrapper builds —
@@ -127,6 +127,9 @@ function captured(): UsePlaylistClimbActivationOptions {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The canary's once-per-session Set is module state; clear it so a reused
+  // sourceId can't make a case pass by reporting nothing.
+  _resetEmptyBoardFetchReportsForTests();
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
   mocks.activeClimbUuid = null;
   mocks.suggestionSource = null;
