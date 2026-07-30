@@ -457,6 +457,43 @@ describe('smartPlaylist resolver', () => {
     expect(result.climbs[0]).toMatchObject({ uuid: 'c1', angle: 45 });
     expect(selectRefsMock).toHaveBeenCalledTimes(1);
   });
+
+  it('RECOMMENDED_* keeps hasMore true below the offset clamp when more climbs remain', async () => {
+    const ctx = makeCtx();
+    resolveTargetMock.mockResolvedValueOnce({ boardType: 'kilter', layoutId: 8, sizeId: 25, angle: 45, setIds: null });
+    selectRefsMock.mockResolvedValueOnce([]);
+    countRefsMock.mockResolvedValueOnce(1000);
+    // fetchUserMeta; hydrate short-circuits on an empty refs page.
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+
+    const result = await playlistQueries.smartPlaylist(
+      null,
+      { input: { type: 'RECOMMENDED_CROWD_FAVORITES', userId: 'user-123', page: 5, pageSize: 20 } },
+      ctx,
+    );
+
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('RECOMMENDED_* terminates paging at the offset clamp even when totalCount says more remain', async () => {
+    const ctx = makeCtx();
+    resolveTargetMock.mockResolvedValueOnce({ boardType: 'kilter', layoutId: 8, sizeId: 25, angle: 45, setIds: null });
+    selectRefsMock.mockResolvedValueOnce([]);
+    countRefsMock.mockResolvedValueOnce(1000);
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+
+    // MAX_RECOMMENDATION_OFFSET (500) / pageSize (20) clamps at page 25 — any
+    // request past it re-serves that same page, so hasMore must go false there
+    // or infinite scroll refetches the identical page forever.
+    const result = await playlistQueries.smartPlaylist(
+      null,
+      { input: { type: 'RECOMMENDED_CROWD_FAVORITES', userId: 'user-123', page: 30, pageSize: 20 } },
+      ctx,
+    );
+
+    expect(result.hasMore).toBe(false);
+    expect(selectRefsMock).toHaveBeenCalledWith('RECOMMENDED_CROWD_FAVORITES', expect.anything(), 'user-123', 25, 20);
+  });
 });
 
 describe('mySmartPlaylistCounts resolver', () => {

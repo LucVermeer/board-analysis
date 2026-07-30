@@ -178,7 +178,9 @@ describe('playlistClimbs (specific-board) surfaces framesCount/framesPace', () =
 
     // count query
     mockDb.select.mockReturnValueOnce(makeChain([{ count: 1 }]));
-    // climb data (fetchSpecificBoardClimbs)
+    // ref page (fetchSpecificBoardClimbs)
+    mockDb.select.mockReturnValueOnce(makeChain([{ climbUuid: 'climb-abc', playlistAngle: 40 }]));
+    // climb data (hydrateClimbsByRefs)
     mockDb.select.mockReturnValueOnce(makeChain([rawClimbRow()]));
 
     const result = await playlistClimbs(
@@ -195,11 +197,13 @@ describe('playlistClimbs (specific-board) surfaces framesCount/framesPace', () =
     const { playlistClimbs } = await import('../graphql/resolvers/playlists/queries/playlist-climbs');
 
     mockDb.select.mockReturnValueOnce(makeChain([{ count: 1 }]));
+    mockDb.select.mockReturnValueOnce(makeChain([{ climbUuid: 'climb-abc', playlistAngle: 40 }]));
     mockDb.select.mockReturnValueOnce(makeChain([rawClimbRow()]));
 
     await playlistClimbs(null, { input: { playlistId: '1', boardName: 'kilter', angle: 40 } }, makeCtx());
 
-    const dataSelectArg = mockDb.select.mock.calls[1]?.[0] as Record<string, unknown> | undefined;
+    // Third call is the hydrator's data select; first arg is the projection object
+    const dataSelectArg = mockDb.select.mock.calls[2]?.[0] as Record<string, unknown> | undefined;
     const keys = dataSelectArg ? Object.keys(dataSelectArg) : [];
     expect(keys).toContain('frames_count');
     expect(keys).toContain('frames_pace');

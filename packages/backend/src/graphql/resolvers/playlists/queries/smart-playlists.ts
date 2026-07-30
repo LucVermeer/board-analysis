@@ -295,7 +295,8 @@ export const smartPlaylist = async (
     if (!target) {
       return { meta: emptyMeta, climbs: [], totalCount: 0, hasMore: false };
     }
-    const recPage = Math.min(page, Math.floor(MAX_RECOMMENDATION_OFFSET / pageSize));
+    const maxRecPage = Math.floor(MAX_RECOMMENDATION_OFFSET / pageSize);
+    const recPage = Math.min(page, maxRecPage);
     const owner = await fetchUserMeta(input.userId);
     const [pageRefs, totalCount] = await Promise.all([
       selectRecommendationClimbRefs(input.type, target, input.userId, recPage, pageSize),
@@ -316,7 +317,10 @@ export const smartPlaylist = async (
       },
       climbs,
       totalCount,
-      hasMore: (recPage + 1) * pageSize < totalCount,
+      // Paging stops at the offset clamp: past maxRecPage every request would
+      // re-serve the same clamped page, so hasMore must go false there even
+      // when totalCount says otherwise (infinite-scroll loop otherwise).
+      hasMore: recPage < maxRecPage && (recPage + 1) * pageSize < totalCount,
     };
   }
 

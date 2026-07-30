@@ -3,7 +3,6 @@ import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } 
 import { isSizeScopedBoard, parseSetIds } from '@boardsesh/board-config';
 import { db } from '../../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
 import { validateInput } from '../../shared/helpers';
 import { GetPlaylistClimbsInputSchema } from '../../../../validation/schemas';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../../db/queries/util/table-select';
@@ -32,6 +31,12 @@ function paginateResults<T>(results: T[], pageSize: number) {
 
 /**
  * Specific-board mode: fetch climbs filtered by board type, layout, and size edges.
+ *
+ * Same two-step shape as the all-boards path: read the page of refs from
+ * playlistClimbs (with the board/layout/size filters on the join), then hand
+ * them to the shared hydrator, which joins stats/grades at the requested angle
+ * and falls back to the most-ascended angle when the climb has no stats there
+ * — so the selected angle never blanks a grade.
  */
 async function fetchSpecificBoardClimbs(
   playlistId: bigint,
@@ -94,78 +99,31 @@ async function fetchSpecificBoardClimbs(
     );
   }
 
-  const inputAngle = input.angle ?? 40;
-
-  const results = await db
+  const refRows = await db
     .select({
       climbUuid: dbSchema.playlistClimbs.climbUuid,
       playlistAngle: dbSchema.playlistClimbs.angle,
-      position: dbSchema.playlistClimbs.position,
-      uuid: tables.climbs.uuid,
-      layoutId: tables.climbs.layoutId,
-      setter_username: tables.climbs.setterUsername,
-      name: tables.climbs.name,
-      description: tables.climbs.description,
-      frames: tables.climbs.frames,
-      frames_count: tables.climbs.framesCount,
-      frames_pace: tables.climbs.framesPace,
-      ascensionist_count: tables.climbStats.ascensionistCount,
-      difficulty_id: sql<number | null>`ROUND(${tables.climbStats.displayDifficulty}::numeric, 0)`,
-      quality_average: sql<number>`ROUND(${tables.climbStats.qualityAverage}::numeric, 2)`,
-      difficulty_error: sql<number>`ROUND(${tables.climbStats.difficultyAverage}::numeric - ${tables.climbStats.displayDifficulty}::numeric, 2)`,
-      benchmark_difficulty: tables.climbStats.benchmarkDifficulty,
-      boardsesh_difficulty: sql<
-        number | null
-      >`COALESCE(${dbSchema.boardClimbGrades.universalGrade}, ${dbSchema.boardClimbGrades.localGrade})`,
-      boardsesh_confidence: dbSchema.boardClimbGrades.confidence,
     })
     .from(dbSchema.playlistClimbs)
     .innerJoin(tables.climbs, and(...climbJoinConditions))
-    .leftJoin(
-      tables.climbStats,
-      and(
-        eq(tables.climbStats.climbUuid, dbSchema.playlistClimbs.climbUuid),
-        eq(tables.climbStats.boardType, boardName),
-        eq(tables.climbStats.angle, inputAngle),
-      ),
-    )
-    // Boardsesh grade at the same angle the stats row was joined at (inputAngle).
-    .leftJoin(
-      dbSchema.boardClimbGrades,
-      and(
-        eq(dbSchema.boardClimbGrades.climbUuid, dbSchema.playlistClimbs.climbUuid),
-        eq(dbSchema.boardClimbGrades.boardType, boardName),
-        eq(dbSchema.boardClimbGrades.angle, inputAngle),
-      ),
-    )
     .where(eq(dbSchema.playlistClimbs.playlistId, playlistId))
     .orderBy(asc(dbSchema.playlistClimbs.position), asc(dbSchema.playlistClimbs.addedAt))
     .limit(pageSize + 1)
     .offset(page * pageSize);
 
-  const { items, hasMore } = paginateResults(results, pageSize);
+  const { items, hasMore } = paginateResults(refRows, pageSize);
 
-  const climbs: Climb[] = items.map((result) => ({
-    uuid: result.uuid || result.climbUuid,
-    layoutId: result.layoutId,
-    setter_username: result.setter_username || '',
-    name: result.name || '',
-    description: result.description || '',
-    frames: result.frames || '',
-    framesCount: result.frames_count ?? null,
-    framesPace: result.frames_pace ?? null,
-    angle: inputAngle,
-    ascensionist_count: Number(result.ascensionist_count || 0),
-    difficulty: getGradeLabel(result.difficulty_id),
-    quality_average: result.quality_average?.toString() || '0',
-    stars: getClimbStars(result.quality_average),
-    difficulty_error: result.difficulty_error?.toString() || '0',
-    benchmark_difficulty:
-      result.benchmark_difficulty && result.benchmark_difficulty > 0 ? result.benchmark_difficulty.toString() : null,
-    boardType: boardName,
-    boardseshDifficulty: result.boardsesh_difficulty == null ? null : Number(result.boardsesh_difficulty),
-    boardseshConfidence: toConfidenceTier(result.boardsesh_confidence),
-  }));
+  // The caller's angle (the wall the user is on) wins; a climb's added-at
+  // angle is the secondary signal, mirroring the all-boards path.
+  const angleOverrides = new Map<string, number | null>();
+  for (const row of items) {
+    angleOverrides.set(`${boardName}:${row.climbUuid}`, input.angle ?? row.playlistAngle ?? null);
+  }
+
+  const climbs = await hydrateClimbsByRefs(
+    items.map((row) => ({ climbUuid: row.climbUuid, boardType: boardName })),
+    { angleOverrides },
+  );
 
   return { climbs, hasMore };
 }
