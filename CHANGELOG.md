@@ -12,6 +12,17 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Pick climbs back to back in a party session and none of them go missing. A quick double-pick now lands right ([#4005](https://github.com/boardsesh/boardsesh/pull/4005))
+  after the current climb for the whole crew instead of at the bottom, and a climb you picked while the app was
+  throttling still reaches them rather than vanishing.
+- Switch boards with no signal — the picker now lists the boards you've downloaded instead of claiming you have none. ([#4004](https://github.com/boardsesh/boardsesh/pull/4004))
+  My Boards works offline too, so you can see what's downloaded from inside the gym dead zone.
+  No more "Could not follow" error when you pick a downloaded board offline.
+- The filter sheet's Reset button now actually resets everything — including any ([#3999](https://github.com/boardsesh/boardsesh/pull/3999))
+  climb name you'd typed in. And you can type or clear a climb name right there
+  in the sheet, front and center, so you don't have to hunt for the search bar
+  separately.
+  Closes #3606.
 - Starting a session on older iPhones and on iPad in Split View: the "Start" button no longer hides under the floating climb bar, so you can actually tap it instead of hitting the log-ascent tick by mistake. ([#3974](https://github.com/boardsesh/boardsesh/pull/3974))
 - This is an internal hardening fix. Today's "All" climb-type filter behavior on web is unchanged; this closes a dormant footgun that could have silently regressed it in a future refactor. ([#3976](https://github.com/boardsesh/boardsesh/pull/3976))
 - Animated climbs play back the way their setter drew them — routes and circuits were leaving holds lit long after the move was done, and one 19-frame Kilter problem lit 157 holds at its peak instead of 27. ([#3986](https://github.com/boardsesh/boardsesh/pull/3986))

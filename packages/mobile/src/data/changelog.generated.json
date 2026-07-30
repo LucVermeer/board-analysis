@@ -1,6 +1,30 @@
 {
-  "generatedAt": "2026-07-30T12:27:16.131Z",
+  "generatedAt": "2026-07-30T23:02:46.230Z",
   "entries": [
+    {
+      "prNumber": 4005,
+      "category": "fixed",
+      "title": "Pick climbs back to back in a party session and none of them go missing. A quick double-pick now lands right",
+      "mergedAt": "2026-07-30T23:02:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4005",
+      "body": "after the current climb for the whole crew instead of at the bottom, and a climb you picked while the app was\nthrottling still reaches them rather than vanishing."
+    },
+    {
+      "prNumber": 4004,
+      "category": "fixed",
+      "title": "Switch boards with no signal — the picker now lists the boards you've downloaded instead of claiming you have none.",
+      "mergedAt": "2026-07-30T23:01:52Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4004",
+      "body": "My Boards works offline too, so you can see what's downloaded from inside the gym dead zone.\nNo more \"Could not follow\" error when you pick a downloaded board offline."
+    },
+    {
+      "prNumber": 3999,
+      "category": "fixed",
+      "title": "The filter sheet's Reset button now actually resets everything — including any",
+      "mergedAt": "2026-07-30T23:01:20Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3999",
+      "body": "climb name you'd typed in. And you can type or clear a climb name right there\nin the sheet, front and center, so you don't have to hunt for the search bar\nseparately.\nCloses #3606."
+    },
     {
       "prNumber": 3974,
       "category": "fixed",
