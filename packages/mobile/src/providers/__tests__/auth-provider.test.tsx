@@ -260,8 +260,11 @@ vi.mock('../../notifications', () => ({
 // The provider clears the per-user offline-boards setting on sign-out. Stub the
 // settings barrel so the test's static graph never pulls react-native-mmkv (→ the
 // react-native Flow entry, which Rolldown's collection scan can't parse under RN 0.86).
+const setSettingMock = vi.hoisted(() => vi.fn());
+const clearOfflineBoardsMock = vi.hoisted(() => vi.fn());
 vi.mock('../../settings', () => ({
-  setSetting: vi.fn(),
+  setSetting: (...args: unknown[]) => setSettingMock(...args),
+  clearOfflineBoards: () => clearOfflineBoardsMock(),
 }));
 
 // The provider registers its forced-sign-out cleanup against this lib-layer hook
@@ -330,6 +333,8 @@ describe('AuthProvider.signOut', () => {
     disposeWsClientMock.mockReset();
     reportErrorMock.mockReset();
     redirectMock.mockReset();
+    setSettingMock.mockReset();
+    clearOfflineBoardsMock.mockReset();
     // Default: a signed-in session whose token is fresh, so checkAuth flips
     // isAuthenticated to true without taking the refresh branch.
     getAuthTokenMock.mockResolvedValue('jwt-token');
@@ -399,6 +404,11 @@ describe('AuthProvider.signOut', () => {
     expect(clearSessionCommentDraftMock).not.toHaveBeenCalled();
     expect(resetHttpClientMock).toHaveBeenCalledTimes(1);
     expect(disposeWsClientMock).toHaveBeenCalledTimes(1);
+    // Shared-device privacy: the per-user offline selection AND the board snapshots
+    // the offline picker replays (which carry board NAMES) must not survive into the
+    // next account. Asserted, not left to code review.
+    expect(setSettingMock).toHaveBeenCalledWith('syncEnabledBoards', []);
+    expect(clearOfflineBoardsMock).toHaveBeenCalledTimes(1);
     // Active board cache was wiped — both the targeted removeQueries and the
     // subsequent clear() do this; verifying the end state is enough.
     expect(queryClient.getQueryData(['activeBoard'])).toBeUndefined();

@@ -3,7 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { GraphQLFetch } from '@boardsesh/offline-sync';
-import { getSetting, setOfflineBoardEnabled, offlineBoardScopeForBoard } from '../settings';
+import { getSetting, setOfflineBoardEnabled, offlineBoardScopeForBoard, rememberOfflineBoards } from '../settings';
 import { getHttpClient } from '../lib/graphql/client';
 import { setSyncProgress } from '../sync';
 import { triggerSync, drainMutationQueue } from './offline-sync-adapter';
@@ -41,6 +41,12 @@ export function useBoardDownloads() {
       for (const board of list) {
         setOfflineBoardEnabled(offlineBoardScopeForBoard(board), true);
       }
+      // Snapshot the board identities while we hold them. This is the single funnel
+      // for every offline enable (the My Boards toggle, adopt-found-board, the
+      // "download all" settings toggle), so the offline picker gets its rows without
+      // any caller having to remember to persist them. A scope key alone can't name
+      // a board — see settings/offline-boards.ts.
+      rememberOfflineBoards(list);
       triggerSync(db, queryClient, graphqlFetch, () => getSetting('syncEnabledBoards'), drainQueue, {
         onProgress: setSyncProgress,
         snapshotSource,

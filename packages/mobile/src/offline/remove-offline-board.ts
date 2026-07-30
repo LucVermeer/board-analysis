@@ -17,7 +17,7 @@ import {
   type OfflineDatabase,
   type ScopeTeardownResult,
 } from '@boardsesh/offline-sync';
-import { getSetting, setOfflineBoardEnabled } from '../settings';
+import { getSetting, setOfflineBoardEnabled, forgetOfflineBoardScope } from '../settings';
 import { reportHandledError } from '../lib/error-reporting';
 
 /** The query keys that read board reference rows, derived from the tables we delete from. */
@@ -77,6 +77,9 @@ export async function removeOfflineBoard(params: {
   const { db, queryClient, scope } = params;
 
   setOfflineBoardEnabled(scope, false);
+  // The offline picker's snapshots for this scope go with the data. Left behind,
+  // they'd offer a board whose climbs have just been deleted.
+  forgetOfflineBoardScope(scope);
   beginLocalPurge();
 
   const retainedScopes = getSetting('syncEnabledBoards')
