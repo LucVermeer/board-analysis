@@ -9,12 +9,15 @@ import type { Climb } from '@boardsesh/shared-schema';
 const captured = vi.hoisted(() => ({
   actionArgs: null as Record<string, unknown> | null,
   pickerOnBack: undefined as undefined | (() => void),
+  pickerOnDetachedFailure: undefined as undefined | ((message: string) => void),
   modalOnRequestClose: undefined as undefined | (() => void),
   boardImageProps: null as Record<string, unknown> | null,
   ran: undefined as undefined | string,
   glassSurfaceProps: null as Record<string, unknown> | null,
   fadeColors: null as readonly string[] | null,
 }));
+
+const showToast = vi.hoisted(() => vi.fn());
 
 // Drives the rendering branches: which material sits under the overlay, which
 // scheme, and how tall the window is (a short window forces the action list to
@@ -116,11 +119,19 @@ vi.mock('../../BoardImageNative', () => ({
 }));
 vi.mock('../../ClimbAttributeIcons', () => ({ ClimbAttributeIcons: () => null }));
 vi.mock('../../playlist/InlinePlaylistPicker', () => ({
-  InlinePlaylistPicker: ({ onBack }: { onBack?: () => void }) => {
+  InlinePlaylistPicker: ({
+    onBack,
+    onDetachedFailure,
+  }: {
+    onBack?: () => void;
+    onDetachedFailure?: (message: string) => void;
+  }) => {
     captured.pickerOnBack = onBack;
+    captured.pickerOnDetachedFailure = onDetachedFailure;
     return createElement('div', { 'data-picker': 'true' }, 'picker');
   },
 }));
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('../../../lib/board-details', () => ({
   getBoardRenderData: () => ({ boardWidth: 120, boardHeight: 120 }),
 }));
@@ -191,7 +202,9 @@ describe('ClimbReactionMenu view switching', () => {
   beforeEach(() => {
     captured.actionArgs = null;
     captured.pickerOnBack = undefined;
+    captured.pickerOnDetachedFailure = undefined;
     captured.modalOnRequestClose = undefined;
+    showToast.mockReset();
     captured.boardImageProps = null;
     captured.ran = undefined;
     captured.glassSurfaceProps = null;
@@ -268,6 +281,32 @@ describe('ClimbReactionMenu view switching', () => {
     act(() => captured.pickerOnBack?.());
     expect(container.querySelector('[data-picker="true"]')).toBeNull();
     expect(getByLabelText('Add to Playlist')).not.toBeNull();
+  });
+
+  // #3891. Back-to-menu unmounts the picker while this overlay is still presented,
+  // so "the picker is gone" does NOT mean "a toast is visible" — a root toast
+  // renders behind the FullWindowOverlay / Modal and self-dismisses in 3s. The
+  // overlay takes the message and fires it on the way out instead.
+  it('holds a detached playlist failure until the overlay itself is gone, then toasts it', () => {
+    const { getByLabelText, unmount } = renderMenu();
+    act(() => fireEvent.click(getByLabelText('Add to Playlist')));
+    expect(captured.pickerOnDetachedFailure).toBeTypeOf('function');
+
+    // The add rejects after back-to-menu: picker unmounted, overlay still up.
+    act(() => captured.pickerOnBack?.());
+    act(() => captured.pickerOnDetachedFailure?.("Couldn't add to Minimoon circuit"));
+    expect(showToast).not.toHaveBeenCalled();
+
+    unmount();
+    expect(showToast).toHaveBeenCalledWith("Couldn't add to Minimoon circuit", 'error');
+  });
+
+  it('does not toast on dismissal when no playlist failure was handed over', () => {
+    const { getByLabelText, unmount } = renderMenu();
+    act(() => fireEvent.click(getByLabelText('Add to Playlist')));
+    act(() => captured.pickerOnBack?.());
+    unmount();
+    expect(showToast).not.toHaveBeenCalled();
   });
 
   it('hardware back dismisses from the menu but only pops the picker from the playlist view', () => {

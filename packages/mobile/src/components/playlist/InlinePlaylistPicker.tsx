@@ -82,6 +82,19 @@ type InlinePlaylistPickerProps = {
    *  overlay (default), `BottomSheetFlatList` inside a `ModalSheet` so it scrolls
    *  with the sheet. Injected rather than `.map`-ing rows in a ScrollView. */
   ListComponent?: ComponentType<FlatListProps<Playlist>>;
+  /**
+   * Where a failure goes once it settles *after* this picker has unmounted.
+   * Defaults to a root toast, which is right when unmounting the picker IS the
+   * host going away — `AddToPlaylistSheet`'s data is only cleared on the sheet's
+   * `onFullyDismissed`, so by then the toast layer is on top.
+   *
+   * The reaction overlay outlives the picker: "back" pops to its action menu and
+   * unmounts us while the `FullWindowOverlay` (iOS) / transparent `Modal`
+   * (Android) is still presented, and a root toast renders BEHIND those (see
+   * toast-provider). Hosts in that shape must pass their own channel — one that
+   * holds the message until they are gone — or the failure is invisible again.
+   */
+  onDetachedFailure?: (message: string) => void;
 };
 
 const playlistKey = (playlist: Playlist) => playlist.id;
@@ -95,10 +108,12 @@ const playlistKey = (playlist: Playlist) => playlist.id;
  * Feedback is inline *while the picker is on screen*: a toast fired while a
  * `FullWindowOverlay` or native sheet is up renders behind it and is invisible.
  * Success is the optimistic checkmark itself; failures revert the optimistic
- * state and surface an inline error line. Once the host is gone (the climber
- * dismissed the sheet/overlay while the request was still in flight — which on
- * gym wifi is most of the window) the inline line has nowhere to render, so the
- * failure goes out as a toast on whatever screen they dismissed to (#3891).
+ * state and surface an inline error line. Once this picker is gone (the climber
+ * dismissed the sheet/overlay, or popped back to the reaction menu, while the
+ * request was still in flight — which on gym wifi is most of the window) the
+ * inline line has nowhere to render, so the failure is handed to
+ * `onDetachedFailure`, defaulting to a toast on whatever they dismissed to
+ * (#3891).
  */
 export function InlinePlaylistPicker({
   climb,
@@ -109,6 +124,7 @@ export function InlinePlaylistPicker({
   onBack,
   maxHeight,
   ListComponent = FlatList,
+  onDetachedFailure,
 }: InlinePlaylistPickerProps) {
   const { t } = useTranslation('climbs');
   const { t: tc } = useTranslation('common');
@@ -158,20 +174,34 @@ export function InlinePlaylistPicker({
   /**
    * Report a membership failure through whichever channel is visible right now.
    * Mounted: the inline error line (a root toast would render behind the sheet /
-   * FullWindowOverlay hosting us). Unmounted: a toast, which is now the only
-   * surface left — `setError` on a dead component is a silent no-op, and that is
-   * how a failed add used to reach nobody at all (#3891). Mutually exclusive, so
-   * there is never a double signal; the choice is made at the moment the
-   * rejection lands, not when the tap happened.
+   * FullWindowOverlay hosting us). Unmounted: hand it to the host's detached
+   * channel, defaulting to a toast — `setError` on a dead component is a silent
+   * no-op, and that is how a failed add used to reach nobody at all (#3891).
+   * Mutually exclusive, so there is never a double signal; the choice is made at
+   * the moment the rejection lands, not when the tap happened.
+   *
+   * The two messages differ on purpose: the inline line sits inside the picker
+   * the climber is looking at, so it stays generic, while the detached one has to
+   * say which playlist it is about.
    */
   const { showToast } = useToast();
+  // Read through a ref so a host that rebuilds the callback each render can't
+  // churn `surfaceFailure` (and through it `handleToggle`, and through that every
+  // memoized row).
+  const detachedFailureRef = useRef(onDetachedFailure);
+  detachedFailureRef.current = onDetachedFailure;
   const surfaceFailure = useCallback(
-    (inlineMessage: string, toastMessage: string) => {
+    (inlineMessage: string, detachedMessage: string) => {
       if (mountedRef.current) {
         setError(inlineMessage);
-      } else {
-        showToast(toastMessage, 'error');
+        return;
       }
+      const reportDetached = detachedFailureRef.current;
+      if (reportDetached) {
+        reportDetached(detachedMessage);
+        return;
+      }
+      showToast(detachedMessage, 'error');
     },
     [showToast],
   );
@@ -273,13 +303,16 @@ export function InlinePlaylistPicker({
   // continuation (add + UI updates) aborts instead of adding the climb after the
   // user backed out.
   const createRequestIdRef = useRef(0);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Set on mount as well as cleared on unmount: a mount/cleanup/mount cycle
+    // (StrictMode, Fast Refresh) would otherwise leave a live picker classified
+    // as detached forever, sending every failure to an invisible toast.
+    mountedRef.current = true;
+    return () => {
       createRequestIdRef.current += 1;
       mountedRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const resetCreate = useCallback(() => {
     setName('');
@@ -353,11 +386,15 @@ export function InlinePlaylistPicker({
       const current = queryClient.getQueryData<string[]>(membershipKey) ?? [...members];
       writeMembership([...new Set([...current, created.uuid])]);
     } catch (addError) {
-      // Not gated on isCurrent(): the form is already closed by this point, so a
-      // stale token here means the picker went away — exactly the case that needs
-      // the toast rather than a no-op setError.
+      // Not gated on isCurrent(). The token goes stale two ways here and both
+      // want the message shown: the picker went away (so `surfaceFailure` routes
+      // to the detached channel), or a SECOND inline create was submitted while
+      // this add was in flight (so the climber is looking at that form, and
+      // suppressing this would silently lose the first playlist's add). Because
+      // the second case can leave the create form open — where the list header's
+      // error line isn't rendered — both channels name the playlist.
       surfaceFailure(
-        t('actions.playlist.toast.addFailed'),
+        t('actions.playlist.toast.addFailedNamed', { playlist: created.name }),
         t('actions.playlist.toast.addFailedNamed', { playlist: created.name }),
       );
       reportHandledError(addError, { tags: { source: 'playlist', op: 'create-then-add' } });
@@ -525,9 +562,12 @@ export function InlinePlaylistPicker({
                 );
               })}
             </View>
-            {createError ? (
+            {/* The list header's error line isn't mounted while this form is open,
+                so a membership failure that lands here (an add from before the form
+                was opened) shows in the form's slot instead of nowhere. */}
+            {(createError ?? error) ? (
               <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
-                {createError}
+                {createError ?? error}
               </Text>
             ) : null}
             <View style={styles.createActions}>
