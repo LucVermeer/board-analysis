@@ -72,6 +72,52 @@ export function findUnappliedMigrations(
   return missingTags;
 }
 
+export interface MissingMigrationPartition {
+  /** Gaps the baseline accounts for, at the exact content it was recorded against. */
+  baselined: ExpectedMigration[];
+  /** Everything else. Anything here fails the deploy. */
+  unbaselined: ExpectedMigration[];
+  /**
+   * The subset of `unbaselined` whose tag *is* baselined but whose `.sql` no
+   * longer hashes to the recorded value — reported separately because the
+   * operator's next step is different: look at the edit, not at the ledger.
+   */
+  editedSinceBaseline: ExpectedMigration[];
+}
+
+/**
+ * Splits a gap into the part a recorded baseline already accounts for and the
+ * part that is new. Only the new part fails a deploy; see
+ * `migration-ledger-baseline.ts` for why the baseline exists at all.
+ *
+ * Matched on tag *and* hash. Tag alone would outlive the file it was recorded
+ * against: edit a baselined `.sql` and drizzle expects a new hash, the database
+ * still has no matching row, and the old `when` stops it from replaying — so the
+ * gate would wave through DDL that never ran, which is the failure it exists to
+ * catch. Hash alone would be wrong in the other direction, since byte-identical
+ * `.sql` files share a hash and an unrelated new migration could inherit a
+ * tolerated one's exemption.
+ */
+export function partitionMissingMigrations(
+  missing: readonly ExpectedMigration[],
+  baselinedMigrations: readonly ExpectedMigration[],
+): MissingMigrationPartition {
+  const recordedHashByTag = new Map(baselinedMigrations.map((migration) => [migration.tag, migration.hash]));
+  const partition: MissingMigrationPartition = { baselined: [], unbaselined: [], editedSinceBaseline: [] };
+  for (const migration of missing) {
+    const recordedHash = recordedHashByTag.get(migration.tag);
+    if (recordedHash === migration.hash) {
+      partition.baselined.push(migration);
+      continue;
+    }
+    partition.unbaselined.push(migration);
+    if (recordedHash !== undefined) {
+      partition.editedSinceBaseline.push(migration);
+    }
+  }
+  return partition;
+}
+
 /**
  * What the operator does next. Shared so the deploy-gate throw and the
  * `db:verify-journal` CLI (which prints its tag list across lines) cannot drift
@@ -92,12 +138,50 @@ export function formatMigrationGapError(
   missingTags: readonly string[],
   expectedCount: number,
   ledgerCount: number,
+  editedSinceBaselineTags: readonly string[] = [],
 ): string {
   const plural = missingTags.length === 1 ? 'migration has' : 'migrations have';
   return (
     `Migration journal verification failed: ${missingTags.length} of ${expectedCount} journal ` +
     `${plural} no row in drizzle.__drizzle_migrations (${ledgerCount} rows present). ` +
     `Missing: ${missingTags.join(', ')}. ` +
+    (editedSinceBaselineTags.length > 0 ? `${formatEditedBaselineNote(editedSinceBaselineTags)} ` : '') +
     MIGRATION_GAP_REMEDIATION
+  );
+}
+
+/**
+ * The one gap shape whose next step is not a ledger repair: a baselined `.sql`
+ * whose content changed. The recorded exemption no longer applies, and the edit
+ * itself is the thing to look at — an applied migration never re-runs, so the new
+ * statements are not in any database.
+ */
+export function formatEditedBaselineNote(editedSinceBaselineTags: readonly string[]): string {
+  const plural = editedSinceBaselineTags.length === 1 ? 'is' : 'are';
+  return (
+    `${editedSinceBaselineTags.join(', ')} ${plural} in the recorded ledger baseline but no longer ` +
+    `${editedSinceBaselineTags.length === 1 ? 'hashes' : 'hash'} to the recorded value: the .sql changed after ` +
+    'the baseline was taken, so the exemption no longer covers it. Move the new statements into a new migration ' +
+    'rather than editing an applied one — an edit never re-runs.'
+  );
+}
+
+/**
+ * Printed on every armed run, not only when something else is wrong. A tolerated
+ * gap that stops being mentioned is a gap nobody repairs — and the honest reading
+ * of these tags is "production may be missing this DDL", not "resolved".
+ */
+export function formatBaselinedGapWarning(
+  baselinedTags: readonly string[],
+  recordedAt: string,
+  expectedCount: number,
+): string {
+  const subject =
+    baselinedTags.length === 1 ? 'migration has no ledger row and is' : 'migrations have no ledger row and are';
+  return (
+    `${baselinedTags.length} of ${expectedCount} journal ${subject} covered by the ` +
+    `baseline recorded ${recordedAt} — the deploy is not blocked on it. Repair pending: ` +
+    `${baselinedTags.join(', ')}. See docs/db-migrations.md and shrink the list in ` +
+    'scripts/lib/migration-ledger-baseline.ts as each one is repaired.'
   );
 }

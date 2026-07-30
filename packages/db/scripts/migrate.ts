@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   DRIZZLE_MIGRATIONS_FOLDER,
+  describeBaselinedGap,
   readExpectedMigrations,
   readLedgerHashesWith,
   runMigrationJournalGate,
@@ -82,9 +83,15 @@ async function runMigrations() {
     // file connects on import and offers no seam of its own.
     const report = await runMigrationJournalGate(process.env, readLedgerHashesWith(client), migrationsFolder);
     if (report) {
+      // Named on every armed run, not only on failure: production's pre-gate
+      // backlog is tolerated, not resolved (scripts/lib/migration-ledger-baseline.ts).
+      const baselinedGap = describeBaselinedGap(report);
+      if (baselinedGap) {
+        console.warn(`⚠️  ${baselinedGap}`);
+      }
       console.info(
-        `✅ Verified all ${report.expectedCount} journal migrations are recorded ` +
-          `(${report.ledgerCount} ledger rows)`,
+        `✅ Verified all ${report.expectedCount - report.baselinedMissing.length} unbaselined journal ` +
+          `migrations are recorded (${report.ledgerCount} ledger rows)`,
       );
     }
 
