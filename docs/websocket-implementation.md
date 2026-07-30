@@ -741,6 +741,32 @@ Note that duplicate sequence numbers remain legal on one specific path: `setClim
 | `mirrorCurrentClimb`       | `ClimbMirrored`                     | Flips the mirror flag on the current climb and the matching queue item.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `setQueue`                 | `FullSync`                          | Bulk replaces queue + current climb. Used for offline → online reconciliation and playlist activation updates that must atomically preserve queue history, keep manually queued future items, and drop stale future suggested items. Also carries mobile's session generate: `appendGeneratedSession` (`queue-provider.tsx`) sends the existing queue with the generated items appended and the **current climb unchanged**, so peers see the session queued behind whatever's active rather than a wholesale replace that jumps everyone to climb #1. It falls back to the first generated climb only when nothing is current, matching web's `start-sesh-drawer`. |
 
+### Deferred queue-adds from the setCurrentClimb coalescer
+
+Rapid activations are coalesced client-side (`packages/shared/queue-runtime/src/set-current-climb-coalescer.ts`): one `setCurrentClimb` in flight, the most recent pending args win. A dropped `setCurrentClimb` costs two things, not one. The pointer move self-heals — the next activation or any peer broadcast re-establishes it — but a `shouldAddToQueue: true` payload's brand-new queue slot does not: the reducer already inserted it locally and no later activation retroactively adds it, so the climb would sit in that climber's queue and nobody else's.
+
+So both ways a pending activation can lose its `setCurrentClimb` fire the content half on its own as a plain `ADD_QUEUE_ITEM`:
+
+1. **superseded while pending** — a newer activation replaced it;
+2. **drained and then rejected** — rate limit or socket blip (#3936).
+
+The deferred add is fire-and-forget (awaiting it inside the drain would hold `inFlight` through a multi-second back-off and manufacture more supersedes) and carries the item's **live local index**, read at send time rather than at enqueue time. That index counts the items ahead of it the server already has, so the insert reproduces the sending client's order; an overshoot — an earlier item that has not landed yet — is clamped to an append by the resolver.
+
+When the item is no longer in the local queue at send time, `packages/shared/queue-react/src/create-queue-mutations.ts` splits by cause:
+
+| Cause of local absence                                                    | Behaviour           |
+| ------------------------------------------------------------------------- | ------------------- |
+| per-item remove / swipe / mobile clear-queue (one `removeQueueItem` each) | skip                |
+| wholesale local replace — web's Clear, mobile's playlist replace-my-queue | skip                |
+| wholesale **server** sync (`FullSync` → `INITIAL_QUEUE_DATA`)             | send, no `position` |
+| a **peer** removed the item mid-back-off                                  | send, no `position` |
+
+The last row is a known gap, not an oversight: a peer's removal arrives as a server delta and is indistinguishable from a sync at that layer, so the add fires and can resurrect a climb the peer just deleted. Closing it needs a delta-origin signal the mutations factory does not have.
+
+The server-sync row is the one that matters most. The burst's head activation is itself an add, so the server answers it with `FullSync` (published with no `clientId`, so the origin cannot suppress its own echo), which `INITIAL_QUEUE_DATA` applies by **replacing** the local queue. A rate-limited drain rejects seconds later, by which time the pending item's optimistic slot is already gone. Skipping on mere absence would make the whole recovery inert in exactly the interleaving it exists for.
+
+The burst _head_ — the call whose `enqueue` promise actually rejects — is not covered by the coalescer at all. Mobile recovers it caller-side (`recoverThrottledQueueAdd`); web does not. Tracked in #4009 and #4006.
+
 ### Tick Mode and Queue Bar Freeze
 
 When a user opens the inline tick bar (to log a send/flash/attempt for the current climb), the queue control bar freezes navigation to prevent the active climb from changing mid-tick. This is implemented client-side in `queue-control-bar.tsx`:
