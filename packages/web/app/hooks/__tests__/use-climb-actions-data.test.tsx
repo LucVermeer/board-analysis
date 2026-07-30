@@ -265,6 +265,35 @@ describe('useClimbActionsData', () => {
     });
   });
 
+  // Playlists are Boardsesh-native, not an Aurora feature, so MoonBoard climbs
+  // get the same membership read as Kilter/Tension. It used to be gated off,
+  // which left the "already in this playlist" checkmarks permanently blank.
+  it('reads playlist membership for MoonBoard climbs', async () => {
+    mockRequest.mockResolvedValueOnce({ favorites: [] });
+    mockRequest.mockResolvedValueOnce({
+      allUserPlaylists: {
+        playlists: [{ uuid: 'pl-moon', name: 'Moon circuit', climbCount: 4 }],
+        totalCount: 1,
+        hasMore: false,
+      },
+    });
+    mockRequest.mockResolvedValueOnce({
+      playlistsForClimbs: [{ climbUuid: 'climb-1', playlistUuids: ['pl-moon'] }],
+    });
+
+    const wrapper = createQueryWrapper();
+    const { result } = renderHook(() => useClimbActionsData({ ...defaultOptions, boardName: 'moonboard' }), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.playlistsProviderProps.playlistMemberships.get('climb-1')?.has('pl-moon')).toBe(true);
+    });
+    expect(mockRequest).toHaveBeenCalledWith('GET_PLAYLISTS_FOR_CLIMBS', {
+      input: { boardType: 'moonboard', layoutId: 1, climbUuids: ['climb-1', 'climb-2'] },
+    });
+  });
+
   it('addToPlaylist sends mutation and updates accumulated cache', async () => {
     mockRequest.mockResolvedValueOnce({ favorites: [] });
     mockRequest.mockResolvedValueOnce({
