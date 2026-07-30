@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
   queueItemCounter: 0,
+  reportHandledError: vi.fn(),
 }));
 
 const VIEW_ONLY_BOARD = { boardName: 'tension', layoutId: 9, sizeId: 5, setIds: '1,2', angle: 35 };
@@ -67,6 +68,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('../../graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: mocks.activeBoard }),
 }));
+vi.mock('../../error-reporting', () => ({ reportHandledError: mocks.reportHandledError }));
 // Unique uuid per call (mirrors the real randomUUID wrapper) — the "same item"
 // assertions below would be vacuous if every call minted the same uuid.
 vi.mock('../../climb-to-queue-item', () => ({
@@ -489,6 +491,78 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
       expect(result.current.queueReplaceSheet.visible).toBe(false);
       expect(mocks.setQueue).not.toHaveBeenCalled();
+    });
+
+    // #3891 canary. A board-scoped fetch that comes back empty for a playlist whose
+    // detail list already has climbs degrades into a plausible one-item queue —
+    // no error, no toast, just a circuit you can't swipe through. That is exactly
+    // how the MoonBoard size filter hid for months, so it now reports to Sentry.
+    it('reports (and does not silently one-item) an empty board-scoped fetch for a non-empty playlist', async () => {
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-1',
+        allClimbs: [makeClimb('a'), tapped, makeClimb('c')],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => {
+        expect(mocks.reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'replace-queue-empty' },
+          extra: { sourceId: 'playlist:empty-fetch-1', loadedCount: 3 },
+        });
+      });
+      // Documents the degraded-but-not-crashed behaviour: the tapped climb is still
+      // playable, it just has nowhere to swipe to. The canary is telemetry, not a fix.
+      const lastSetQueue = mocks.setQueue.mock.calls.at(-1);
+      expect(lastSetQueue?.[0].map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['b']);
+      expect(mocks.showToast).not.toHaveBeenCalled();
+    });
+
+    it('reports an empty board-scoped fetch at most once per playlist per session', async () => {
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-2',
+        allClimbs: [makeClimb('a'), tapped],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+      await waitFor(() => expect(mocks.reportHandledError).toHaveBeenCalledTimes(1));
+
+      // A climber poking at a broken playlist re-taps rows freely, and
+      // reportHandledError has no dedup of its own — one bad playlist must not
+      // become hundreds of identical Sentry events.
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+      await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2));
+      expect(mocks.reportHandledError).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report an empty board-scoped fetch for a playlist with no loaded climbs', async () => {
+      // Nothing loaded means nothing to disagree with — an empty playlist legitimately
+      // fetches nothing, and a false positive here would be permanent noise.
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-3',
+        allClimbs: [],
+      });
+
+      await act(async () => {
+        await result.current.activate(makeClimb('b'));
+      });
+
+      await waitFor(() => expect(fetchPage).toHaveBeenCalled());
+      expect(mocks.reportHandledError).not.toHaveBeenCalled();
     });
 
     it('keeps the queue unchanged and shows a toast when the full playlist fetch fails', async () => {

@@ -34,6 +34,12 @@ import { reportHandledError } from '../error-reporting';
 import { toSchemaClimb } from '../climb-types';
 import type { PlaylistRenderBoard } from './use-playlist-render-board';
 
+// Playlists whose board-scoped fetch has already been reported as empty this app
+// session. `reportHandledError` has no dedup or rate limit of its own, and a
+// climber poking at a broken playlist re-taps rows freely, so without this one
+// bad playlist could ship hundreds of identical events.
+const reportedEmptyBoardFetches = new Set<string>();
+
 /** A single page of the suggestion-refresh fetch. */
 export type PlaylistActivationPage = {
   climbs: Climb[];
@@ -165,6 +171,13 @@ export function usePlaylistActivation({
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const playlistSuggestionSourceRef = useRef(playlistSuggestionSource);
   playlistSuggestionSourceRef.current = playlistSuggestionSource;
+
+  // How many climbs the screen has loaded, mirrored into a ref so the empty-fetch
+  // canary below can read it without putting `allClimbs` in
+  // `replaceQueueWithPlaylist`'s deps — that array's identity changes on every
+  // page-in and would churn the whole activation callback chain.
+  const loadedClimbCountRef = useRef(allClimbs.length);
+  loadedClimbCountRef.current = allClimbs.length;
 
   // The queue item the returned callback built for this tap. queueApi.setCurrentClimb
   // dispatches that exact instance so the drawer's navigation anchor and the queue
@@ -310,6 +323,19 @@ export function usePlaylistActivation({
       try {
         const climbs = options.loadedClimbs ?? (await fetchAllClimbsForBoard({ signal: abortController.signal }));
         if (abortController.signal.aborted) return;
+        // Canary. A board-scoped fetch that comes back empty for a playlist the
+        // detail list has already rendered climbs for degrades into a perfectly
+        // plausible one-item queue (buildPlaylistQueue appends the tapped climb),
+        // with no error anywhere — which is exactly how #3891's MoonBoard size
+        // filter stayed invisible for months. Sentry-only, once per playlist per
+        // session, so the next instance of that class pages us instead of a user.
+        if (climbs.length === 0 && loadedClimbCountRef.current > 0 && !reportedEmptyBoardFetches.has(sourceId)) {
+          reportedEmptyBoardFetches.add(sourceId);
+          reportHandledError(new Error('Playlist board-scoped fetch returned no climbs'), {
+            tags: { source: 'playlist', op: 'replace-queue-empty' },
+            extra: { sourceId, loadedCount: loadedClimbCountRef.current },
+          });
+        }
         // Re-check live queue state after the async load: new future items may
         // have landed while the ordered list streamed in, and replacement still
         // clears them — so warn instead of clearing silently. Skipped once the
@@ -345,7 +371,7 @@ export function usePlaylistActivation({
         setIsReplacingQueue(false);
       }
     },
-    [fetchAllClimbsForBoard, getQueueSnapshot, openPlayDrawer, setQueue, showToast, t],
+    [fetchAllClimbsForBoard, getQueueSnapshot, openPlayDrawer, setQueue, showToast, sourceId, t],
   );
 
   const cancelQueueReplacement = useCallback(() => {
