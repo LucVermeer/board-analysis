@@ -11,6 +11,10 @@ import { type Session, toClimbQueueItemInput } from '../types';
 type UseQueueMutationsArgs = {
   client: Client | null;
   session: Session | null;
+  /** The live local queue. Only read to position a deferred queue-add (a
+   *  superseded or drained-then-throttled activation) where the climber sees
+   *  it, so peers get the same order (#3936). */
+  queue: LocalClimbQueueItem[];
   /** Fired while a throttled mutation backs off to retry — see the caller's
    *  "catching up" snackbar wiring (#2655). */
   onRateLimited?: (event: RateLimitRetryEvent) => void;
@@ -23,14 +27,24 @@ type UseQueueMutationsArgs = {
 // the coalescer + cross-session-leak semantics.
 export type QueueMutationsActions = SharedQueueMutationsActions<LocalClimbQueueItem>;
 
-export function useQueueMutations({ client, session, onRateLimited }: UseQueueMutationsArgs): QueueMutationsActions {
+export function useQueueMutations({
+  client,
+  session,
+  queue,
+  onRateLimited,
+}: UseQueueMutationsArgs): QueueMutationsActions {
   // Refs keep the injected getters reading live values without recreating the
   // shared hook's callbacks on every render.
   const clientRef = useRef(client);
   const sessionRef = useRef(session);
+  const queueRef = useRef(queue);
   const onRateLimitedRef = useRef(onRateLimited);
   clientRef.current = client;
   sessionRef.current = session;
+  // Assigned during render (like its siblings) so a deferred queue-add resolving
+  // in the same tick as a queue event reads the post-event queue, not the
+  // previous render's.
+  queueRef.current = queue;
   onRateLimitedRef.current = onRateLimited;
 
   // No `ensureReady`: web sessions are already joined (see use-session-lifecycle),
@@ -40,6 +54,7 @@ export function useQueueMutations({ client, session, onRateLimited }: UseQueueMu
     getClient: () => clientRef.current,
     getSessionId: () => sessionRef.current?.id ?? null,
     toQueueItemInput: toClimbQueueItemInput,
+    getQueuePosition: (uuid) => queueRef.current.findIndex((queueItem) => queueItem.uuid === uuid),
     onBestEffortError: (action, error) => {
       console.error(`Failed to ${action}:`, error);
     },

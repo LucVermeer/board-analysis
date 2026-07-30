@@ -424,6 +424,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     // created_at) makes the server reject the mutation and silently breaks queue
     // sync to peers. See toClimbInput.
     toQueueItemInput: (item) => ({ uuid: item.uuid, climb: toClimbInput(item.climb) }),
+    // Where a deferred queue-add (a superseded or drained-then-throttled
+    // activation) should land, so peers see the order this device shows. Read
+    // live off `stateRef` — assigned during render — because the send can fire
+    // seconds after the activation. Same read `recoverThrottledQueueAdd` uses.
+    getQueuePosition: (uuid) => stateRef.current.queue.findIndex((queueItem) => queueItem.uuid === uuid),
     ensureReady: async (capturedSessionId) => {
       if (!capturedSessionId) return null;
       await ensureJoined(capturedSessionId);

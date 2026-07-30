@@ -326,6 +326,10 @@ export class HeadlessParticipant {
       getClient: () => this.client,
       getSessionId: () => this.sessionId,
       toQueueItemInput,
+      // Wired to this participant's REAL reducer queue, not a stub: a `() => -1`
+      // would compile and silently switch every deferred queue-add off inside
+      // the harness that exists to exercise that seam end-to-end.
+      getQueuePosition: (uuid) => this.state.queue.findIndex((item) => item.uuid === uuid),
     });
   }
 

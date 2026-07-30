@@ -168,6 +168,10 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   const mutations = useQueueMutations({
     client: lifecycle.client,
     session: lifecycle.session,
+    // Positions a deferred queue-add (superseded or drained-then-throttled
+    // activation) where this client shows it, so peers get the same order
+    // (#3936). Same reducer state `queueRef` above mirrors.
+    queue: eventProcessor.queue,
     onRateLimited,
   });
 

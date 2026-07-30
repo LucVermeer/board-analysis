@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { ClimbQueueItemInput } from '@boardsesh/shared-schema';
+import { ADD_QUEUE_ITEM, SET_CURRENT_CLIMB } from '@boardsesh/graphql/operations/queue-session';
 
 const { executeMock } = vi.hoisted(() => ({ executeMock: vi.fn() }));
 vi.mock('@boardsesh/graphql-client', () => ({ execute: executeMock }));
@@ -25,9 +26,16 @@ beforeEach(() => {
   executeMock.mockResolvedValue(undefined);
 });
 
+const noQueue = () => -1;
+
 describe('useQueueMutations (React wrapper)', () => {
   it('keeps action identities stable across rerenders (factory built once)', () => {
-    const deps: QueueMutationsDeps<TestItem> = { getClient: () => client, getSessionId: () => 'S', toQueueItemInput };
+    const deps: QueueMutationsDeps<TestItem> = {
+      getClient: () => client,
+      getSessionId: () => 'S',
+      toQueueItemInput,
+      getQueuePosition: noQueue,
+    };
     const { result, rerender } = renderMutations(deps);
     const first = result.current;
     rerender({ ...deps });
@@ -40,6 +48,7 @@ describe('useQueueMutations (React wrapper)', () => {
       getClient: () => client,
       getSessionId: () => sessionId,
       toQueueItemInput,
+      getQueuePosition: noQueue,
     };
     const { result, rerender } = renderMutations(deps);
     const actions = result.current;
@@ -60,6 +69,7 @@ describe('useQueueMutations (React wrapper)', () => {
       getClient: () => client,
       getSessionId: () => null,
       toQueueItemInput,
+      getQueuePosition: noQueue,
     };
     const { result, rerender } = renderMutations(base);
     const webActions = result.current;
@@ -74,5 +84,46 @@ describe('useQueueMutations (React wrapper)', () => {
     // Mobile semantics now: the same disconnected action silently no-ops.
     await expect(result.current.removeQueueItem('x')).resolves.toBeUndefined();
     expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it('forwards getQueuePosition LIVE through the ref, not captured at mount', async () => {
+    // A deferred queue-add can fire long after mount, so a mount-time capture
+    // would position it against a stale queue (#3936). Observed through the
+    // only public surface that reads it: the coalescer's superseded queue-add.
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c: unknown, op: { query: string }) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return Promise.resolve();
+    });
+
+    const mountDeps: QueueMutationsDeps<TestItem> = {
+      getClient: () => client,
+      getSessionId: () => 'S',
+      toQueueItemInput,
+      getQueuePosition: () => 1,
+    };
+    const { result, rerender } = renderMutations(mountDeps);
+    // A later render brings a different local queue; the factory identity is
+    // unchanged, so only ref-forwarding can pick this up.
+    rerender({ ...mountDeps, getQueuePosition: () => 5 });
+
+    const actions = result.current;
+    const pA = actions.setCurrentClimb({ uuid: 'A', climb: { uuid: 'c-A' } }, true);
+    const pB = actions.setCurrentClimb({ uuid: 'B', climb: { uuid: 'c-B' } }, true);
+    const pC = actions.setCurrentClimb({ uuid: 'C', climb: { uuid: 'c-C' } }, true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const adds = executeMock.mock.calls.filter(([, op]) => op.query === ADD_QUEUE_ITEM);
+    expect(adds).toHaveLength(1);
+    expect(adds[0][1].variables).toEqual({ item: { uuid: 'B', climb: { uuid: 'c-B' } }, position: 5 });
+
+    firstResolve?.();
+    await Promise.all([pA, pB, pC]);
   });
 });

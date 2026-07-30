@@ -4,14 +4,22 @@
 // than the backend can process them. Stacking them up at the client is wasted
 // work — only the latest target climb matters. This factory implements
 // "serialize-and-supersede": at most one mutation in flight, the most recent
-// pending args win, and any superseded `shouldAddToQueue:true` payload still
-// gets its ADD_QUEUE_ITEM sent (so the queue mutation reaches the server even
-// when the setCurrentClimb is dropped).
+// pending args win.
+//
+// A dropped SET_CURRENT_CLIMB costs two things, not one. The pointer move
+// self-heals (the next activation or any peer broadcast re-establishes it), but
+// a `shouldAddToQueue:true` payload's brand-new queue slot does not — the
+// reducer already inserted it locally and no later activation retroactively
+// adds it, so the climb would sit in this climber's queue and nobody else's.
+// So both ways a pending activation can lose its setCurrentClimb fire the
+// content half on its own via `sendDeferredQueueAdd`:
+//   1. superseded while pending (a newer activation replaced it), and
+//   2. drained and then rejected (rate limit, socket blip) — #3936.
 //
 // Extracted from web's
 // `packages/web/app/components/persistent-session/hooks/use-queue-mutations.ts`
 // so mobile picks up the same semantics. Pure TS — no React, no GraphQL
-// client coupling. Callers wire `sendArgs` / `sendSupersededQueueAdd` to
+// client coupling. Callers wire `sendArgs` / `sendDeferredQueueAdd` to
 // their platform-specific transport.
 
 import type { ClimbQueueItem } from '@boardsesh/queue';
@@ -33,22 +41,24 @@ export type SetCurrentClimbCoalescerOptions<TContext = void, TItem = ClimbQueueI
    *  WS connection epoch — so a delayed drain dispatches against the same
    *  context the enqueue happened in, not whatever's current. */
   sendArgs: (args: SetCurrentClimbArgs<TItem>, context: TContext) => Promise<void>;
-  /** Fire-and-forget ADD_QUEUE_ITEM for a superseded request whose
-   *  shouldAddToQueue flag was true. Receives the context captured when
-   *  the now-superseded args were enqueued (not the current context) — so
-   *  a session that flipped between enqueue and supersede doesn't get a
-   *  stray queue-add. If omitted, superseded queue-adds are silently
-   *  dropped (matches the no-coalescing baseline mobile had before). */
-  sendSupersededQueueAdd?: (item: TItem, context: TContext) => Promise<void>;
+  /** Fire-and-forget ADD_QUEUE_ITEM for a pending request whose
+   *  shouldAddToQueue flag was true but whose SET_CURRENT_CLIMB never
+   *  landed — either because a newer activation superseded it, or because
+   *  it drained and then rejected. Receives the context captured when those
+   *  args were enqueued (not the current context) — so a session that
+   *  flipped in between doesn't get a stray queue-add. If omitted, deferred
+   *  queue-adds are silently dropped (matches the no-coalescing baseline
+   *  mobile had before). */
+  sendDeferredQueueAdd?: (item: TItem, context: TContext) => Promise<void>;
   /** Snapshot caller state at enqueue time. Whatever this returns is
    *  captured into the pending entry and threaded through to sendArgs /
-   *  sendSupersededQueueAdd. Defaults to `() => undefined`. */
+   *  sendDeferredQueueAdd. Defaults to `() => undefined`. */
   getContext?: () => TContext;
   /** Errors during the drain loop are swallowed — this is the sink. */
   onDrainError?: (error: unknown) => void;
-  /** Sink for errors when the fire-and-forget superseded ADD_QUEUE_ITEM
-   *  rejects. */
-  onSupersededQueueAddError?: (error: unknown) => void;
+  /** Sink for errors when the fire-and-forget deferred ADD_QUEUE_ITEM
+   *  rejects (or throws synchronously). */
+  onDeferredQueueAddError?: (error: unknown) => void;
 };
 
 export type SetCurrentClimbCoalescer<TItem = ClimbQueueItem> = {
@@ -73,11 +83,31 @@ export function createSetCurrentClimbCoalescer<TContext = void, TItem = ClimbQue
     ((err) => {
       console.error('Failed to send coalesced setCurrentClimb mutation:', err);
     });
-  const onSupersededQueueAddError =
-    options.onSupersededQueueAddError ??
+  const onDeferredQueueAddError =
+    options.onDeferredQueueAddError ??
     ((err) => {
-      console.error('Failed to add superseded queue item:', err);
+      console.error('Failed to add deferred queue item:', err);
     });
+
+  // Both loss paths (superseded-while-pending, drained-then-rejected) funnel
+  // here so they behave identically. Fire-and-forget by contract: a rate-limited
+  // ADD can sit in the transport's back-off for seconds, and awaiting it inside
+  // the drain loop would hold `inFlight` true, parking later activations as
+  // pending and manufacturing more supersedes.
+  function fireDeferredQueueAdd(lost: Pending): void {
+    const { item, shouldAddToQueue } = lost.args;
+    if (!shouldAddToQueue || item === null || options.sendDeferredQueueAdd === undefined) return;
+    try {
+      options.sendDeferredQueueAdd(item, lost.context).catch(onDeferredQueueAddError);
+    } catch (error) {
+      // The option type promises a Promise, but nothing stops a non-async
+      // implementation throwing synchronously. From the drain loop's `catch`
+      // that throw escapes the enclosing `finally`, so `inFlight` would stay
+      // true forever and every later activation would park as pending and never
+      // be sent. Route it to the same sink as a rejection.
+      onDeferredQueueAddError(error);
+    }
+  }
 
   return {
     async enqueue(args) {
@@ -90,16 +120,7 @@ export function createSetCurrentClimbCoalescer<TContext = void, TItem = ClimbQue
         // captured context — not the current one — so a session swap
         // between enqueue and supersede doesn't fire the queue-add against
         // the new session.
-        if (
-          state.pending !== null &&
-          state.pending.args.shouldAddToQueue &&
-          state.pending.args.item !== null &&
-          options.sendSupersededQueueAdd !== undefined
-        ) {
-          options
-            .sendSupersededQueueAdd(state.pending.args.item, state.pending.context)
-            .catch(onSupersededQueueAddError);
-        }
+        if (state.pending !== null) fireDeferredQueueAdd(state.pending);
         state.pending = { args, context };
         return;
       }
@@ -114,6 +135,12 @@ export function createSetCurrentClimbCoalescer<TContext = void, TItem = ClimbQue
           try {
             await options.sendArgs(next.args, next.context);
           } catch (error) {
+            // This drained activation's SET_CURRENT_CLIMB never landed, so its
+            // queue slot exists on this device and nowhere else. Recover the
+            // content half exactly like the superseded branch does (#3936).
+            // Before onDrainError, so a caller sink that throws can't swallow
+            // the recovery.
+            fireDeferredQueueAdd(next);
             onDrainError(error);
           }
         }

@@ -67,6 +67,7 @@ const queueMutations = vi.hoisted(() => ({
 // REAL ensureReady seam (the no-lazy-create contract) is testable directly.
 type CapturedMutationDeps = {
   getSessionId: () => string | null;
+  getQueuePosition: (uuid: string) => number;
   ensureReady?: (capturedSessionId: string | null) => Promise<string | null>;
 };
 const capturedMutationDeps = vi.hoisted(() => ({ current: null as CapturedMutationDeps | null }));
@@ -345,6 +346,46 @@ describe('QueueProvider local solo queue', () => {
       ]);
       expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('item-x');
     });
+  });
+
+  // The wiring typecheck cannot see: wrong ref, wrong field, inverted return.
+  // A deferred queue-add (a superseded or throttled-away activation) positions
+  // itself with this, so a broken binding silently reverts #3936 to appending.
+  it('exposes the live local queue index to the shared mutations (getQueuePosition)', async () => {
+    const itemA = makeQueueItem('item-a');
+    const itemB = makeQueueItem('item-b');
+    const itemC = makeQueueItem('item-c');
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(storedSnapshot([itemA, itemB, itemC], itemA));
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(capturedMutationDeps.current).not.toBeNull();
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual(['item-a', 'item-b', 'item-c']);
+    });
+    const deps = capturedMutationDeps.current;
+    if (!deps) throw new Error('mutation deps were not captured');
+
+    expect(deps.getQueuePosition('item-a')).toBe(0);
+    expect(deps.getQueuePosition('item-c')).toBe(2);
+    expect(deps.getQueuePosition('never-queued')).toBe(-1);
+
+    // Reads the LIVE reducer state, not a mount-time snapshot: activating a new
+    // climb slots it in after the current one, and the index follows.
+    act(() => {
+      snapshots.at(-1)?.setCurrentClimb(makeQueueItem('item-x'));
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((entry) => entry.uuid)).toEqual([
+        'item-a',
+        'item-x',
+        'item-b',
+        'item-c',
+      ]);
+    });
+    expect(deps.getQueuePosition('item-x')).toBe(1);
+    expect(deps.getQueuePosition('item-c')).toBe(3);
   });
 
   it('persists the solo queue after mutations (debounced)', async () => {

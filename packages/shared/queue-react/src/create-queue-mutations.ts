@@ -65,6 +65,17 @@ export type QueueMutationsDeps<TItem> = {
   /** Platform mapper: item -> wire input (web: toClimbQueueItemInput; mobile: thin {uuid,climb}). */
   toQueueItemInput: (item: TItem) => ClimbQueueItemInput;
   /**
+   * Live index of `uuid` in THIS client's local queue, or -1 when it is not
+   * queued here. Read at SEND time (never captured at enqueue time) for a
+   * deferred ADD_QUEUE_ITEM, so the insert reproduces the order the climber
+   * actually sees even when the send sat in rate-limit back-off for seconds.
+   *
+   * Required rather than optional: an absent implementation would silently fall
+   * back to appending, which is exactly the bug (#3936). Both bindings are
+   * compile-forced to supply it.
+   */
+  getQueuePosition: (uuid: string) => number;
+  /**
    * Optional session-resolution seam. When provided (mobile), it resolves and
    * joins the session before mutating, returning the resolved id (or null to
    * no-op — mobile returns null for a null `capturedSessionId`, keeping the
@@ -132,9 +143,26 @@ export type QueueMutationsActions<TItem> = {
 };
 
 export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): QueueMutationsActions<TItem> {
-  const { getClient, getSessionId, toQueueItemInput, ensureReady, onBestEffortError, onRateLimited } = deps;
+  const { getClient, getSessionId, toQueueItemInput, getQueuePosition, ensureReady, onBestEffortError, onRateLimited } =
+    deps;
 
   type Ready = { client: Client; sessionId: string };
+
+  // Bounded ledger of uuids the climber explicitly asked to drop. A deferred
+  // queue-add whose item has left the local queue is still sent (see
+  // sendDeferredQueueAdd for why), EXCEPT when it left because of a remove —
+  // resurrecting a climb the climber just dropped fights them. `removeQueueItem`
+  // is the single choke point for every explicit removal on both platforms
+  // (mobile: remove / clear-queue / the #3934 undo leg; web: queue-actions-core),
+  // so recording here needs no platform wiring. Bounded because a deferred add
+  // fires within seconds of the loss it is recovering; the cap follows the
+  // reducer's own `.slice(-50)` convention for correlation ids.
+  const REMOVED_UUID_MEMORY = 50;
+  const removedUuids: string[] = [];
+  function rememberRemovedUuid(uuid: string): void {
+    removedUuids.push(uuid);
+    if (removedUuids.length > REMOVED_UUID_MEMORY) removedUuids.shift();
+  }
 
   // Every queue mutation goes through here so the shared `execute` retry loop
   // (bounded back-off on RATE_LIMITED) and the `onRateLimited` notifier apply
@@ -180,7 +208,7 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
 
   // Serialize-and-supersede SET_CURRENT_CLIMB. `getContext` snapshots the
   // session id at enqueue; the captured value flows through sendArgs /
-  // sendSupersededQueueAdd so a session that flips mid-flight neither resurrects
+  // sendDeferredQueueAdd so a session that flips mid-flight neither resurrects
   // a stale climb nor fires a queue-add against the wrong session.
   const coalescer = createSetCurrentClimbCoalescer<string | null, TItem>({
     getContext: () => getSessionId(),
@@ -217,23 +245,51 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
         },
       });
     },
-    sendSupersededQueueAdd: async (item, capturedSessionId) => {
+    sendDeferredQueueAdd: async (item, capturedSessionId) => {
       const client = getClient();
       if (!client || !capturedSessionId || getSessionId() !== capturedSessionId) return;
       if (ensureReady) {
         // capturedSessionId is concrete, so this only joins — but honour a null
-        // return (session ended between supersede and drain) and bail rather
+        // return (session ended between the loss and this send) and bail rather
         // than fire an ADD against a dead session, mirroring the sendArgs path.
         const sessionId = await ensureReady(capturedSessionId);
         if (!sessionId) return;
       }
-      await runMutation(client, {
-        query: ADD_QUEUE_ITEM,
-        variables: { item: toQueueItemInput(item) },
-      });
+      const input = toQueueItemInput(item);
+      // Read the position AFTER the session guards (a dead-session bail costs
+      // nothing) and live rather than at enqueue time — a drained add can fire
+      // seconds later, after reorders.
+      const position = getQueuePosition(input.uuid);
+      if (position < 0) {
+        // The item is no longer in this client's local queue. Two very different
+        // reasons, and only one of them means "don't send":
+        //
+        // - The climber removed it. Honour that; a bare ADD would resurrect a
+        //   climb they just dropped onto the whole crew's queue.
+        if (removedUuids.includes(input.uuid)) return;
+        // - A wholesale server sync replaced the queue. The activation that
+        //   started this coalesced burst was itself an add, so the server
+        //   answered it with a FullSync, which INITIAL_QUEUE_DATA applies by
+        //   REPLACING the local queue — wiping the not-yet-sent optimistic slot
+        //   seconds before the rate-limited drain rejects. Dropping the add here
+        //   is precisely the bug (#3936): the crew never gets the climb and the
+        //   picker's pick vanishes. Send it without a position; the server
+        //   appends, which is no worse than the pre-fix behaviour and at least
+        //   the crew gets the climb.
+        await runMutation(client, { query: ADD_QUEUE_ITEM, variables: { item: input } });
+        return;
+      }
+      // The local index counts the items ahead of it that the server already
+      // has, so the insert reproduces this client's order. When an earlier item
+      // has not landed yet the index overshoots and the server clamps to an
+      // append (addQueueItem in the backend resolver) — degrading to the old
+      // behaviour rather than to a wrong position. Correct for both optimistic
+      // conventions (insert-after-current on activation, append on
+      // peek-promotion) without the coalescer knowing which one ran.
+      await runMutation(client, { query: ADD_QUEUE_ITEM, variables: { item: input, position } });
     },
     onDrainError: (error) => onBestEffortError?.('setCurrentClimb', error),
-    onSupersededQueueAddError: (error) => onBestEffortError?.('addQueueItem', error),
+    onDeferredQueueAddError: (error) => onBestEffortError?.('addQueueItem', error),
   });
 
   return {
@@ -247,6 +303,10 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
     },
 
     removeQueueItem: async (uuid) => {
+      // Recorded before the session guards: a remove that no-ops for want of a
+      // session is still the climber saying "drop this", and a deferred add
+      // must not resurrect it.
+      rememberRemovedUuid(uuid);
       const ready = await resolveCore({ allowCreate: false });
       if (!ready) return;
       await runMutation(ready.client, { query: REMOVE_QUEUE_ITEM, variables: { uuid } });
