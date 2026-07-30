@@ -31,6 +31,7 @@ export function useQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Queue
         getClient: () => depsRef.current.getClient(),
         getSessionId: () => depsRef.current.getSessionId(),
         toQueueItemInput: (item) => depsRef.current.toQueueItemInput(item),
+        getQueuePosition: (uuid) => depsRef.current.getQueuePosition(uuid),
         ensureReady: hasEnsureReady
           ? (capturedSessionId) => depsRef.current.ensureReady!(capturedSessionId)
           : undefined,

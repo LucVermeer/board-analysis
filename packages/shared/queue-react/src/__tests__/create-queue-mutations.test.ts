@@ -28,11 +28,18 @@ const toQueueItemInput = (it: TestItem) => ({ uuid: it.uuid, climb: it.climb }) 
 const client = {} as never; // execute is mocked, so the client value is opaque.
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+// Stands in for the client's local reducer queue. `getQueuePosition` is wired to
+// a real findIndex over it, so an expected `position` comes from seeded data
+// rather than a stub's canned return. Tests mutate it to model reorders, removes
+// and wholesale server syncs mid-flight.
+let localQueue: TestItem[] = [];
+
 function make(overrides: Partial<QueueMutationsDeps<TestItem>> = {}) {
   return createQueueMutations<TestItem>({
     getClient: () => client,
     getSessionId: () => 'S',
     toQueueItemInput,
+    getQueuePosition: (uuid) => localQueue.findIndex((queueItem) => queueItem.uuid === uuid),
     ...overrides,
   });
 }
@@ -42,6 +49,7 @@ const queriesFor = (query: string) => executeMock.mock.calls.filter(([, op]) => 
 beforeEach(() => {
   executeMock.mockReset();
   executeMock.mockResolvedValue(undefined);
+  localQueue = [];
 });
 
 describe('web mode (no ensureReady)', () => {
@@ -297,6 +305,298 @@ describe('setCurrentClimb coalescer', () => {
 
     firstResolve?.();
     await Promise.all([pA, pB, pC]);
+  });
+
+  it('carries the item local position on the superseded queue-add (#3936)', async () => {
+    // The picker's own queue: the superseded item B sits at index 2, because the
+    // reducer inserted it right after the current climb.
+    localQueue = [item('X'), item('cur'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return Promise.resolve();
+    });
+
+    const m = make();
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    const pC = m.setCurrentClimb(item('C'), true); // supersedes B -> ADD(B)
+    await flush();
+
+    // Exact variables: `position` is optional on this same object, so a partial
+    // match would stay green if it were dropped again — which IS the bug.
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(1);
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables).toEqual({
+      item: { uuid: 'B', climb: { uuid: 'c-B' } },
+      position: 2,
+    });
+
+    firstResolve?.();
+    await Promise.all([pA, pB, pC]);
+  });
+
+  it('fires a positioned ADD_QUEUE_ITEM when the DRAINED activation is throttled away (#3936)', async () => {
+    localQueue = [item('X'), item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return Promise.reject(new Error('RATE_LIMITED'));
+    });
+    const onBestEffortError = vi.fn();
+
+    const m = make({ onBestEffortError });
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true); // pending; drains, then throttled
+    // pB parked as pending synchronously, so releasing the head drains it now.
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(1);
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables).toEqual({
+      item: { uuid: 'B', climb: { uuid: 'c-B' } },
+      position: 3,
+    });
+    // The pointer loss is still reported (dev-log only) — the recovery does not
+    // replace the report.
+    expect(onBestEffortError).toHaveBeenCalledWith('setCurrentClimb', expect.any(Error));
+  });
+
+  // The interleaving that makes a bare "-1 -> skip" guard swallow the whole
+  // fix: the burst's HEAD activation is itself an add, so the server answers it
+  // with a FullSync, which INITIAL_QUEUE_DATA applies by REPLACING the local
+  // queue — wiping the pending item's not-yet-sent optimistic slot seconds
+  // before the rate-limited drain rejects.
+  it('still sends the deferred add when a wholesale server sync wiped the local slot', async () => {
+    localQueue = [item('X'), item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      // The drained send sits in rate-limit back-off. While it does, the
+      // FullSync triggered by A's own add lands: the server snapshot has no B.
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [item('X'), item('cur'), item('A')];
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    // pB parked as pending synchronously, so releasing the head drains it now.
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    // Dropping this add is the bug: the crew never gets the climb and the
+    // picker's pick vanishes. No position to honour, so the server appends.
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(1);
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables).toEqual({ item: { uuid: 'B', climb: { uuid: 'c-B' } } });
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables.position).toBeUndefined();
+  });
+
+  it('skips the deferred add when the climber REMOVED the item while it was backing off', async () => {
+    localQueue = [item('X'), item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    let removeDuringBackoff: (() => Promise<void>) | undefined;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = localQueue.filter((queueItem) => queueItem.uuid !== 'B');
+          void removeDuringBackoff?.();
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    removeDuringBackoff = () => m.removeQueueItem('B');
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    // pB parked as pending synchronously, so releasing the head drains it now.
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    // The climber dropped it. Re-adding would put a climb nobody asked for back
+    // on the whole crew's queue.
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(0);
+    expect(queriesFor(REMOVE_QUEUE_ITEM)).toHaveLength(1);
+  });
+
+  // Web's Clear button (`setQueue([])`) and mobile's playlist "replace my
+  // queue" (`setQueue([item], item)`) are climber-initiated removals that never
+  // call removeQueueItem — so the ledger has to learn about them from setQueue.
+  it('skips the deferred add when the climber REPLACED the whole queue while it was backing off', async () => {
+    localQueue = [item('X'), item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    let clearDuringBackoff: (() => Promise<void>) | undefined;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [];
+          void clearDuringBackoff?.();
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    clearDuringBackoff = () => m.setQueue([]);
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    // pB parked as pending synchronously, so releasing the head drains it now.
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(0);
+    expect(queriesFor(SET_QUEUE)).toHaveLength(1);
+  });
+
+  // The ordering guard on the replace diff: only activations enqueued BEFORE
+  // the replace can have been discarded by it. A climb picked afterwards and
+  // then wiped by a server sync must still reach the crew.
+  it('still sends the deferred add when the wholesale replace happened BEFORE the activation', async () => {
+    const m = make({ onBestEffortError: () => {} });
+    localQueue = [];
+    await m.setQueue([]);
+
+    localQueue = [item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [item('cur'), item('A')];
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(1);
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables).toEqual({ item: { uuid: 'B', climb: { uuid: 'c-B' } } });
+  });
+
+  // mobile's clearQueue fires one removeQueueItem per queued item in a single
+  // burst. A ring buffer smaller than the queue evicts the earliest entries of
+  // its own clear, and that climb reappears on the crew's just-emptied queue.
+  it('suppresses the FIRST item of a whole-queue clear far bigger than a 50-entry ledger', async () => {
+    const bulk = Array.from({ length: 60 }, (_, index) => item(`q${index}`));
+    localQueue = [item('cur'), ...bulk];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    let clearDuringBackoff: (() => Promise<unknown>) | undefined;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [];
+          void clearDuringBackoff?.();
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    // Oldest-first, exactly like the mobile provider's clearQueue.
+    clearDuringBackoff = () => Promise.allSettled(bulk.map((queueItem) => m.removeQueueItem(queueItem.uuid)));
+    const pA = m.setCurrentClimb(item('A'), true);
+    // q0 is the first uuid the clear records — the one a 50-entry ring drops.
+    const pQ0 = m.setCurrentClimb(bulk[0], true);
+    firstResolve?.();
+    await Promise.all([pA, pQ0]);
+    await flush();
+
+    expect(queriesFor(REMOVE_QUEUE_ITEM)).toHaveLength(60);
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(0);
+  });
+
+  it('reads the position at SEND time, not at enqueue time', async () => {
+    // B starts at index 0 and is reordered to index 2 while the throttled
+    // SET_CURRENT_CLIMB backs off. A captured-at-enqueue index would misplace it
+    // for the whole crew.
+    localQueue = [item('B'), item('X')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [item('X'), item('cur'), item('B')];
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    // pB parked as pending synchronously, so releasing the head drains it now.
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables).toEqual({
+      item: { uuid: 'B', climb: { uuid: 'c-B' } },
+      position: 2,
+    });
   });
 
   it('lazily creates a session from null on setCurrentClimb (mobile) and dispatches it', async () => {
