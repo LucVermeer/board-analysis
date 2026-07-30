@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-30T08:55:35.618Z",
+  "generatedAt": "2026-07-30T12:27:16.131Z",
   "entries": [
+    {
+      "prNumber": 3974,
+      "category": "fixed",
+      "title": "Starting a session on older iPhones and on iPad in Split View: the \"Start\" button no longer hides under the floating climb bar, so you can actually tap it instead of hitting the log-ascent tick by mistake.",
+      "mergedAt": "2026-07-30T12:26:07Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3974"
+    },
     {
       "prNumber": 3976,
       "category": "fixed",
@@ -2355,6 +2362,28 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-30T18:53:29+10:00",
+      "sha": "f3a1a22157313cf4e3aa9066244cfb900099bee8",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "fc4c61c1ea5468bca1c703fc3df8de4decfcfa44"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-07-30T18:47:51+10:00",
+      "sha": "f2998e0200562d36825942a7ed40b327a7d20e9e",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "3159f63f06534e4a7dc3345575c46604260f6b73"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-27T23:18:27+10:00",

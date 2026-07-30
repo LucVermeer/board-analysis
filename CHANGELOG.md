@@ -6,8 +6,13 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-07-30
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ### Fixed
 
+- Starting a session on older iPhones and on iPad in Split View: the "Start" button no longer hides under the floating climb bar, so you can actually tap it instead of hitting the log-ascent tick by mistake. ([#3974](https://github.com/boardsesh/boardsesh/pull/3974))
 - This is an internal hardening fix. Today's "All" climb-type filter behavior on web is unchanged; this closes a dormant footgun that could have silently regressed it in a future refactor. ([#3976](https://github.com/boardsesh/boardsesh/pull/3976))
 - Animated climbs play back the way their setter drew them — routes and circuits were leaving holds lit long after the move was done, and one 19-frame Kilter problem lit 157 holds at its peak instead of 27. ([#3986](https://github.com/boardsesh/boardsesh/pull/3986))
   Climbs with a pause frame no longer skip the pause and cut the animation short; the frame counter now matches what's on the wall.
