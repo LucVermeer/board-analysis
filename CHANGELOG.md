@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-30
+
+### Fixed
+
+- Sign up with Apple or Google now stays in the sign-up flow when your device switches to browser sign-in. ([#3984](https://github.com/boardsesh/boardsesh/pull/3984))
+
 ## 2026-07-27
 
 ### App update
@@ -18,6 +24,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Deliberately none. A release note would have to promise climbers that re-importing fixes their mirrored sends, and that promise is only true if Aurora's export carries the field — which is exactly what hasn't been verified. The key-name logging will tell us; a note can ship in the follow-up once it does. ([#3953](https://github.com/boardsesh/boardsesh/pull/3953))
+- Invisible to users: the phantom rows were never rendered on any surface. ([#3959](https://github.com/boardsesh/boardsesh/pull/3959))
 - Sign in with Apple or Google from Boardsesh in your browser, with failed or cancelled attempts returning you to the app so you can try again. ([#3968](https://github.com/boardsesh/boardsesh/pull/3968))
 - Open a climb you've already sent and the tick sheet no longer flashes up a green **Flash** button before your logbook loads — so a repeat can't get filed as a first-go send you never did. ([#3965](https://github.com/boardsesh/boardsesh/pull/3965))
   Logging an ascent on the web form no longer refuses a send that took one try. A redpoint that finally goes first go is a send, and now it saves like one.

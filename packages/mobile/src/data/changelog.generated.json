@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-07-27T13:19:25.470Z",
+  "generatedAt": "2026-07-30T08:48:47.570Z",
   "entries": [
+    {
+      "prNumber": 3984,
+      "category": "fixed",
+      "title": "Sign up with Apple or Google now stays in the sign-up flow when your device switches to browser sign-in.",
+      "mergedAt": "2026-07-30T08:47:52Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3984"
+    },
+    {
+      "prNumber": 3953,
+      "category": "fixed",
+      "title": "Deliberately none. A release note would have to promise climbers that re-importing fixes their mirrored sends, and that promise is only true if Aurora's export carries the field — which is exactly what hasn't been verified. The key-name logging will tell us; a note can ship in the follow-up once it does.",
+      "mergedAt": "2026-07-27T23:40:50Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3953"
+    },
+    {
+      "prNumber": 3959,
+      "category": "fixed",
+      "title": "Invisible to users: the phantom rows were never rendered on any surface.",
+      "mergedAt": "2026-07-27T23:39:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3959"
+    },
     {
       "prNumber": 3935,
       "category": "new",
@@ -2319,6 +2340,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-27T23:18:27+10:00",
+      "sha": "c72974b82c3712e7177af9a936089c5a7eebd67d",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "cb1ef052875503245ddefc51a4c1e983420e7d63",
+        "ios": "fb2506505587496f8f910a88bb77150774075a8d"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-27T11:37:13Z",
