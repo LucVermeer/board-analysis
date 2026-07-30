@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-30T08:48:47.570Z",
+  "generatedAt": "2026-07-30T08:55:35.618Z",
   "entries": [
+    {
+      "prNumber": 3976,
+      "category": "fixed",
+      "title": "This is an internal hardening fix. Today's \"All\" climb-type filter behavior on web is unchanged; this closes a dormant footgun that could have silently regressed it in a future refactor.",
+      "mergedAt": "2026-07-30T08:53:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3976"
+    },
+    {
+      "prNumber": 3986,
+      "category": "fixed",
+      "title": "Animated climbs play back the way their setter drew them — routes and circuits were leaving holds lit long after the move was done, and one 19-frame Kilter problem lit 157 holds at its peak instead of 27.",
+      "mergedAt": "2026-07-30T08:49:39Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3986",
+      "body": "Climbs with a pause frame no longer skip the pause and cut the animation short; the frame counter now matches what's on the wall.\nClimb cards on the web and shared climb images show the whole route for a multi-frame climb instead of a half-finished snapshot. (The mobile app's own thumbnails still draw the opening frame only — its renderer never read past the first comma. Tracked in #3988.)"
+    },
     {
       "prNumber": 3984,
       "category": "fixed",

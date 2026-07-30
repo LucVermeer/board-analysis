@@ -8,6 +8,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- This is an internal hardening fix. Today's "All" climb-type filter behavior on web is unchanged; this closes a dormant footgun that could have silently regressed it in a future refactor. ([#3976](https://github.com/boardsesh/boardsesh/pull/3976))
+- Animated climbs play back the way their setter drew them — routes and circuits were leaving holds lit long after the move was done, and one 19-frame Kilter problem lit 157 holds at its peak instead of 27. ([#3986](https://github.com/boardsesh/boardsesh/pull/3986))
+  Climbs with a pause frame no longer skip the pause and cut the animation short; the frame counter now matches what's on the wall.
+  Climb cards on the web and shared climb images show the whole route for a multi-frame climb instead of a half-finished snapshot. (The mobile app's own thumbnails still draw the opening frame only — its renderer never read past the first comma. Tracked in #3988.)
 - Sign up with Apple or Google now stays in the sign-up flow when your device switches to browser sign-in. ([#3984](https://github.com/boardsesh/boardsesh/pull/3984))
 
 ## 2026-07-27
