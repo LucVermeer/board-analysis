@@ -148,20 +148,52 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
 
   type Ready = { client: Client; sessionId: string };
 
-  // Bounded ledger of uuids the climber explicitly asked to drop. A deferred
-  // queue-add whose item has left the local queue is still sent (see
-  // sendDeferredQueueAdd for why), EXCEPT when it left because of a remove —
-  // resurrecting a climb the climber just dropped fights them. `removeQueueItem`
-  // is the single choke point for every explicit removal on both platforms
-  // (mobile: remove / clear-queue / the #3934 undo leg; web: queue-actions-core),
-  // so recording here needs no platform wiring. Bounded because a deferred add
-  // fires within seconds of the loss it is recovering; the cap follows the
-  // reducer's own `.slice(-50)` convention for correlation ids.
-  const REMOVED_UUID_MEMORY = 50;
-  const removedUuids: string[] = [];
+  // Ledger of uuids the climber explicitly asked to drop. A deferred queue-add
+  // whose item has left the local queue is still sent (see sendDeferredQueueAdd
+  // for why), EXCEPT when it left because the climber dropped it — resurrecting
+  // a climb they just removed fights them.
+  //
+  // Two mutations are the choke points for climber-initiated removal, and both
+  // record here, so no platform wiring is needed:
+  //   - `removeQueueItem` — per-item swipe/delete, mobile's clear-queue (which
+  //     fires one call per queued item) and the #3934 undo leg; web's queue
+  //     actions.
+  //   - `setQueue` — a WHOLESALE local replace. Web's Clear button
+  //     (`setQueue([])`) and mobile's playlist "replace my queue"
+  //     (`setQueue([item], item)`) never touch `removeQueueItem`, so the replace
+  //     diffs `addCandidateUuids` against the new queue (see the action below).
+  // NOT covered, deliberately, because this layer has no signal for it: a PEER
+  // removing the item mid-back-off arrives as a server delta, which is
+  // indistinguishable here from a wholesale sync, so it takes the append branch.
+  // Pre-existing on the superseded path, which appended unconditionally.
+  //
+  // Backed by an insertion-ordered Set rather than a small ring: mobile's
+  // `clearQueue` fires one `removeQueueItem` per queued item in a single burst,
+  // so a 50-entry ring evicted its own earliest entries on any queue longer than
+  // that and let one climb reappear on the queue the climber had just cleared.
+  // The cap only stops a pathological session growing without bound — it sits
+  // far above any realistic queue, and an entry costs ~40 bytes.
+  const REMOVED_UUID_MEMORY = 2000;
+  const removedUuids = new Set<string>();
   function rememberRemovedUuid(uuid: string): void {
-    removedUuids.push(uuid);
-    if (removedUuids.length > REMOVED_UUID_MEMORY) removedUuids.shift();
+    removedUuids.add(uuid);
+    if (removedUuids.size > REMOVED_UUID_MEMORY) {
+      const oldest = removedUuids.values().next();
+      if (!oldest.done) removedUuids.delete(oldest.value);
+    }
+  }
+
+  // uuids of recent activations that carried a queue-add — the only uuids a
+  // deferred add ever asks about, and so all a wholesale `setQueue` needs to
+  // diff against to work out what the climber just discarded (it never sees the
+  // previous queue). Order matters: an activation recorded AFTER a replace is
+  // not a candidate at replace time, so a climb picked after a Clear is never
+  // mistaken for one the Clear discarded.
+  const ADD_CANDIDATE_MEMORY = 32;
+  const addCandidateUuids: string[] = [];
+  function rememberAddCandidate(uuid: string): void {
+    addCandidateUuids.push(uuid);
+    if (addCandidateUuids.length > ADD_CANDIDATE_MEMORY) addCandidateUuids.shift();
   }
 
   // Every queue mutation goes through here so the shared `execute` retry loop
@@ -264,9 +296,10 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
         // The item is no longer in this client's local queue. Two very different
         // reasons, and only one of them means "don't send":
         //
-        // - The climber removed it. Honour that; a bare ADD would resurrect a
-        //   climb they just dropped onto the whole crew's queue.
-        if (removedUuids.includes(input.uuid)) return;
+        // - The climber dropped it, by a per-item remove or by replacing the
+        //   whole queue. Honour that; a bare ADD would resurrect a climb they
+        //   just discarded onto the whole crew's queue.
+        if (removedUuids.has(input.uuid)) return;
         // - A wholesale server sync replaced the queue. The activation that
         //   started this coalesced burst was itself an add, so the server
         //   answered it with a FullSync, which INITIAL_QUEUE_DATA applies by
@@ -319,6 +352,9 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
     },
 
     setCurrentClimb: async (item, shouldAddToQueue, correlationId) => {
+      // Only an activation that carries a queue-add can ever produce a deferred
+      // ADD, so only those uuids need tracking for the wholesale-replace diff.
+      if (item !== null && shouldAddToQueue) rememberAddCandidate(toQueueItemInput(item).uuid);
       // Web throws upfront when disconnected (no ensureReady); mobile enqueues
       // and lets the coalescer's sendArgs resolve / create the session.
       if (!ensureReady && (!getClient() || !getSessionId())) {
@@ -349,12 +385,29 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
     },
 
     setQueue: async (queue, currentClimbQueueItem) => {
+      const queueInputs = queue.map(toQueueItemInput);
+      // A wholesale replace is climber intent exactly like a per-item remove —
+      // web's Clear button and mobile's playlist "replace my queue" both land
+      // here and never touch `removeQueueItem`. Any recent activation missing
+      // from the new queue was just discarded, so its deferred add must not
+      // resurrect it. Recorded before the session guards: a replace that no-ops
+      // for want of a session is still the climber saying "drop these".
+      // (Mobile passes only the resolved items here, so an unresolved
+      // placeholder reads as discarded — harmless, since the ledger is
+      // consulted only once the item has also left the local queue, and an
+      // activation is always a resolved climb.)
+      if (addCandidateUuids.length > 0) {
+        const nextUuids = new Set(queueInputs.map((queueInput) => queueInput.uuid));
+        for (const candidate of addCandidateUuids) {
+          if (!nextUuids.has(candidate)) rememberRemovedUuid(candidate);
+        }
+      }
       const ready = await resolveCore({ allowCreate: false });
       if (!ready) return;
       await runMutation(ready.client, {
         query: SET_QUEUE,
         variables: {
-          queue: queue.map(toQueueItemInput),
+          queue: queueInputs,
           currentClimbQueueItem: currentClimbQueueItem ? toQueueItemInput(currentClimbQueueItem) : undefined,
         },
       });

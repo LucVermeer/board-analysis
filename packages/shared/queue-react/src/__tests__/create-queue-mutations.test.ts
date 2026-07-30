@@ -451,6 +451,118 @@ describe('setCurrentClimb coalescer', () => {
     expect(queriesFor(REMOVE_QUEUE_ITEM)).toHaveLength(1);
   });
 
+  // Web's Clear button (`setQueue([])`) and mobile's playlist "replace my
+  // queue" (`setQueue([item], item)`) are climber-initiated removals that never
+  // call removeQueueItem — so the ledger has to learn about them from setQueue.
+  it('skips the deferred add when the climber REPLACED the whole queue while it was backing off', async () => {
+    localQueue = [item('X'), item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    let clearDuringBackoff: (() => Promise<void>) | undefined;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [];
+          void clearDuringBackoff?.();
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    clearDuringBackoff = () => m.setQueue([]);
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    // pB parked as pending synchronously, so releasing the head drains it now.
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(0);
+    expect(queriesFor(SET_QUEUE)).toHaveLength(1);
+  });
+
+  // The ordering guard on the replace diff: only activations enqueued BEFORE
+  // the replace can have been discarded by it. A climb picked afterwards and
+  // then wiped by a server sync must still reach the crew.
+  it('still sends the deferred add when the wholesale replace happened BEFORE the activation', async () => {
+    const m = make({ onBestEffortError: () => {} });
+    localQueue = [];
+    await m.setQueue([]);
+
+    localQueue = [item('cur'), item('A'), item('B')];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [item('cur'), item('A')];
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const pA = m.setCurrentClimb(item('A'), true);
+    const pB = m.setCurrentClimb(item('B'), true);
+    firstResolve?.();
+    await Promise.all([pA, pB]);
+    await flush();
+
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(1);
+    expect(queriesFor(ADD_QUEUE_ITEM)[0][1].variables).toEqual({ item: { uuid: 'B', climb: { uuid: 'c-B' } } });
+  });
+
+  // mobile's clearQueue fires one removeQueueItem per queued item in a single
+  // burst. A ring buffer smaller than the queue evicts the earliest entries of
+  // its own clear, and that climb reappears on the crew's just-emptied queue.
+  it('suppresses the FIRST item of a whole-queue clear far bigger than a 50-entry ledger', async () => {
+    const bulk = Array.from({ length: 60 }, (_, index) => item(`q${index}`));
+    localQueue = [item('cur'), ...bulk];
+    let firstResolve: (() => void) | undefined;
+    let setCurrentCalls = 0;
+    let clearDuringBackoff: (() => Promise<unknown>) | undefined;
+    executeMock.mockImplementation((_c, op) => {
+      if (op.query !== SET_CURRENT_CLIMB) return Promise.resolve();
+      setCurrentCalls += 1;
+      if (setCurrentCalls === 1)
+        return new Promise<void>((resolve) => {
+          firstResolve = () => resolve();
+        });
+      return new Promise<void>((_resolve, reject) =>
+        setTimeout(() => {
+          localQueue = [];
+          void clearDuringBackoff?.();
+          reject(new Error('RATE_LIMITED'));
+        }, 0),
+      );
+    });
+
+    const m = make({ onBestEffortError: () => {} });
+    // Oldest-first, exactly like the mobile provider's clearQueue.
+    clearDuringBackoff = () => Promise.allSettled(bulk.map((queueItem) => m.removeQueueItem(queueItem.uuid)));
+    const pA = m.setCurrentClimb(item('A'), true);
+    // q0 is the first uuid the clear records — the one a 50-entry ring drops.
+    const pQ0 = m.setCurrentClimb(bulk[0], true);
+    firstResolve?.();
+    await Promise.all([pA, pQ0]);
+    await flush();
+
+    expect(queriesFor(REMOVE_QUEUE_ITEM)).toHaveLength(60);
+    expect(queriesFor(ADD_QUEUE_ITEM)).toHaveLength(0);
+  });
+
   it('reads the position at SEND time, not at enqueue time', async () => {
     // B starts at index 0 and is reordered to index 2 while the throttled
     // SET_CURRENT_CLIMB backs off. A captured-at-enqueue index would misplace it
