@@ -309,6 +309,23 @@ describe('ClimbReactionMenu view switching', () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
+  // The other order, and the one that used to lose the message: the climber
+  // dismisses the whole overlay while the add is still in flight. Cleanup has
+  // already run by the time the rejection lands, so there is no later flush to
+  // ride out on — the message has to toast the moment it arrives.
+  it('toasts immediately when the failure lands after the overlay is already gone', () => {
+    const { getByLabelText, unmount } = renderMenu();
+    act(() => fireEvent.click(getByLabelText('Add to Playlist')));
+    const reportDetachedFailure = captured.pickerOnDetachedFailure;
+    expect(reportDetachedFailure).toBeTypeOf('function');
+
+    unmount();
+    expect(showToast).not.toHaveBeenCalled();
+
+    act(() => reportDetachedFailure?.("Couldn't add to Minimoon circuit"));
+    expect(showToast).toHaveBeenCalledWith("Couldn't add to Minimoon circuit", 'error');
+  });
+
   it('hardware back dismisses from the menu but only pops the picker from the playlist view', () => {
     const { getByLabelText, onClose, container } = renderMenu();
 

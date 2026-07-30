@@ -184,21 +184,37 @@ export function ClimbReactionMenu({
   // auto-dismiss after 3s, so hold the message and fire it on the way out — the
   // unmount cleanup covers both dismissal and the parent tearing us down. Ref'd
   // showToast so the cleanup effect never re-runs and flushes early (#3891).
+  //
+  // Holding only works while there is still a cleanup to come. Dismiss the whole
+  // overlay while the request is in flight and the cleanup has already run by the
+  // time the rejection lands — writing to the ref then would park the message in a
+  // dead component forever. `overlayGoneRef` records that we are past cleanup, and
+  // a message arriving after it goes straight to the toast, which by then is the
+  // top layer anyway.
   const { showToast } = useToast();
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
   const pendingFailureRef = useRef<string | null>(null);
+  const overlayGoneRef = useRef(false);
   const holdFailureUntilDismissed = useCallback((message: string) => {
+    if (overlayGoneRef.current) {
+      showToastRef.current(message, 'error');
+      return;
+    }
     pendingFailureRef.current = message;
   }, []);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Reset on mount as well as set on unmount: a mount/cleanup/mount cycle
+    // (StrictMode, Fast Refresh) would otherwise leave a live overlay classified as
+    // gone, toasting failures behind itself where nobody sees them.
+    overlayGoneRef.current = false;
+    return () => {
+      overlayGoneRef.current = true;
       const pendingFailure = pendingFailureRef.current;
       pendingFailureRef.current = null;
       if (pendingFailure) showToastRef.current(pendingFailure, 'error');
-    },
-    [],
-  );
+    };
+  }, []);
 
   // Hardware back (Android) / VoiceOver escape: pop the playlist view first,
   // dismiss the whole overlay only from the top-level menu.

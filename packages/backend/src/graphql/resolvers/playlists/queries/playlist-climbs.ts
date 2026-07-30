@@ -1,6 +1,6 @@
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
-import { isSizeScopedBoard } from '@boardsesh/board-config';
+import { isSizeScopedBoard, parseSetIds } from '@boardsesh/board-config';
 import { db } from '../../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { getClimbStars, getGradeLabel, toConfidenceTier } from '@boardsesh/db/queries';
@@ -66,6 +66,28 @@ async function fetchSpecificBoardClimbs(
   // board_climbs_compatible_size_ids_idx GIN index applies, matching those callers.
   if (input.sizeId != null && isSizeScopedBoard(boardName)) {
     climbJoinConditions.push(sql`${tables.climbs.compatibleSizeIds} @> ARRAY[${input.sizeId}]::int[]`);
+  }
+
+  // Hold-set scoping, the same `required_set_ids <@ selected sets` containment the
+  // main climb search applies (`create-climb-filters.ts`). Dropping the broken size
+  // predicate for MoonBoard is what finally let MoonBoard rows through this join, and
+  // MoonBoard is exactly the board whose optional wooden / screw-on add-on sets are
+  // encoded in `required_set_ids` — without this, a wall built without those sets
+  // hands the play drawer climbs it cannot light in full.
+  //
+  // NULL is tolerated on every board here, where search only tolerates it for
+  // MoonBoard and drafts: `required_set_ids` is denormalised and backfilled
+  // asynchronously, and a playlist is a list the climber curated by hand. Missing
+  // provenance should not make one of their own climbs disappear — only a climb we
+  // positively know needs an uninstalled set is dropped.
+  const selectedSetIds = input.setIds == null ? [] : parseSetIds(input.setIds);
+  if (selectedSetIds.length > 0) {
+    climbJoinConditions.push(
+      sql`(${tables.climbs.requiredSetIds} IS NULL OR ${tables.climbs.requiredSetIds} <@ ARRAY[${sql.join(
+        selectedSetIds.map((setId) => sql`${setId}`),
+        sql`, `,
+      )}]::int[])`,
+    );
   }
 
   const inputAngle = input.angle ?? 40;
