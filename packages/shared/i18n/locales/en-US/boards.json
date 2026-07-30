@@ -271,7 +271,11 @@
       "enableTitle": "Download {{name}}?",
       "enableMessage": "Downloads all this board's climbs so you can browse and log sends with no signal.",
       "enableMessageWithSize": "About {{size}}. Downloads all this board's climbs so you can browse and log sends with no signal.",
-      "enableConfirm": "Download"
+      "enableConfirm": "Download",
+      "pickerNotice": "No signal — here are the boards you've downloaded.",
+      "pickerNoticeUnreachable": "Can't reach your boards right now — here are the ones you've downloaded.",
+      "pickerEmptyTitle": "Nothing downloaded yet",
+      "pickerEmptyBody": "Boards you make available offline show up here. Grab one while you have signal."
     }
   },
   "boardEntity": {

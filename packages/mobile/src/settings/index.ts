@@ -10,3 +10,12 @@ export {
   type OfflineBoardLike,
 } from '@boardsesh/offline-sync';
 export { isOfflineBoardEnabled, setOfflineBoardEnabled, useOfflineBoardEnabled } from './use-offline-board';
+export {
+  getOfflineBoards,
+  useOfflineBoards,
+  rememberOfflineBoards,
+  forgetOfflineBoard,
+  forgetOfflineBoardScope,
+  pruneOfflineBoards,
+  clearOfflineBoards,
+} from './offline-boards';

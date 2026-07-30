@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useQuery } from '@tanstack/react-query';
 import type BottomSheet from '@expo/ui/community/bottom-sheet';
 import type { UserBoard } from '@boardsesh/shared-schema';
+import { getDownloadedScopeKeys } from '@boardsesh/offline-sync';
 import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../src/lib/graphql/hooks';
 import { useActiveBoard, useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
 import { useAdoptFoundBoard } from '../../src/lib/board-discovery/use-adopt-found-board';
@@ -19,14 +22,23 @@ import { BoardCarousel } from '../../src/components/board-discovery/BoardCarouse
 import { BoardModeCard, type ModeCardState } from '../../src/components/board-discovery/BoardModeCard';
 import { BluetoothQuickstartSheet } from '../../src/components/board-discovery/BluetoothQuickstartSheet';
 import { userBoardToItem, popularConfigToItem } from '../../src/components/board-discovery/board-items';
+import { offlineBoardRows } from '../../src/components/board-discovery/offline-board-items';
 import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
+import { useIsOffline } from '../../src/hooks/use-is-offline';
+import { useOfflineBoards } from '../../src/settings';
+import { useRememberDownloadedBoards } from '../../src/offline/use-remember-downloaded-boards';
 import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
 import { setBoardRevealTipPending } from '../../src/lib/onboarding/onboarding-storage';
 import { track } from '../../src/lib/analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing } from '../../src/theme/tokens';
+
+// Module-level so an absent board list keeps a stable identity: offline
+// `boardConnection` is always undefined, and a fresh `[]` per render would
+// recompute the offline rows on every commit.
+const EMPTY_BOARDS: UserBoard[] = [];
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
@@ -54,7 +66,44 @@ export default function BoardSelection() {
     refetch,
     isRefetching,
   } = useMyBoards(undefined, { enabled: isAuthenticated });
-  const myBoards = boardConnection?.boards ?? [];
+  const myBoards = boardConnection?.boards ?? EMPTY_BOARDS;
+  // Keep the offline snapshots in step with the live list: renames, a backfill for
+  // boards downloaded before this existed, and a prune of boards the server no longer
+  // lists. No-ops while offline.
+  useRememberDownloadedBoards(boardConnection);
+
+  // Offline (or a connection that reports online while every request fails), the
+  // network board list is unavailable: `myBoards` is a plain `getHttpClient` query,
+  // and with `networkMode: 'offlineFirst'` its retryer PAUSES rather than erroring —
+  // so the screen used to render the "No boards yet — create one" empty state, a
+  // false claim whose only CTA also needs the network. Fall back to the boards this
+  // device has actually downloaded.
+  const isOffline = useIsOffline();
+  const db = useSQLiteContext();
+  // Ungated by the offline-downloads flag: this reads rows already on disk, and a
+  // flag flipped off must not strand a device that has downloads.
+  const { data: downloadedScopeKeys } = useQuery({
+    queryKey: ['downloadedScopeKeys'],
+    queryFn: () => getDownloadedScopeKeys(db),
+  });
+  const offlineCards = useOfflineBoards();
+  // `isError && nothing cached` is the lying-connection case: captive portal or gym
+  // wifi with a dead upstream, where onlineManager says online, the request fails for
+  // real, and retries never pause. Same belt-and-braces reasoning as
+  // offlineAwareRequest's network-failure catch.
+  const isLocalOnly = isOffline || (isError && myBoards.length === 0);
+  const offlineRows = useMemo(
+    () =>
+      isLocalOnly
+        ? offlineBoardRows({
+            cards: offlineCards,
+            cachedMyBoards: myBoards,
+            activeBoard: activeBoard ?? null,
+            downloadedScopeKeys: downloadedScopeKeys ?? [],
+          })
+        : [],
+    [isLocalOnly, offlineCards, myBoards, activeBoard, downloadedScopeKeys],
+  );
 
   const { data: popular } = usePopularBoardConfigs({ limit: 12 });
 
@@ -99,12 +148,19 @@ export default function BoardSelection() {
         // board already in My Boards a no-op for follow. Fire-and-forget: its own
         // errors are handled inside and intentionally don't reach the catch below
         // (which only guards the board-switch write above).
-        void adoptFoundBoard(board);
+        //
+        // Skipped whenever the rows came from the local snapshots: adoption is a follow
+        // mutation plus a download confirm, so with no usable connection the only thing
+        // it can produce is a "Could not follow X" error toast on a board the user
+        // already has downloaded. Gated on `isLocalOnly`, not `isOffline` — the
+        // lying-connection branch (captive portal, dead upstream) renders the same rows
+        // with `isOffline === false`, and its requests fail just as hard.
+        if (!isLocalOnly) void adoptFoundBoard(board);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, adoptFoundBoard, router, boardReturnTo, showToast, t, fromOnboarding],
+    [setActiveBoard, adoptFoundBoard, router, boardReturnTo, showToast, t, fromOnboarding, isLocalOnly],
   );
 
   const myBoardItems = useMemo(
@@ -121,6 +177,13 @@ export default function BoardSelection() {
         .filter((item): item is DiscoveryBoardItem => item !== null),
     [nearby?.boards, activeBoard?.uuid],
   );
+  const offlineItems = useMemo(
+    () =>
+      offlineRows
+        .map((board) => userBoardToItem(board, activeBoard?.uuid))
+        .filter((item): item is DiscoveryBoardItem => item !== null),
+    [offlineRows, activeBoard?.uuid],
+  );
   const popularItems = useMemo(
     () => (popular?.configs ?? []).map(popularConfigToItem).filter((item): item is DiscoveryBoardItem => item !== null),
     [popular?.configs],
@@ -132,7 +195,11 @@ export default function BoardSelection() {
   const onSelectMyBoard = useCallback(
     (item: DiscoveryBoardItem) => {
       const board =
-        myBoards.find((b) => b.uuid === item.key) ?? (nearby?.boards ?? []).find((b) => b.uuid === item.key);
+        myBoards.find((b) => b.uuid === item.key) ??
+        (nearby?.boards ?? []).find((b) => b.uuid === item.key) ??
+        // Offline rows come from the persisted snapshots, which aren't in either
+        // network list — without this an offline tap is dead.
+        offlineRows.find((b) => b.uuid === item.key);
       if (board) {
         void activateBoard(board);
       } else {
@@ -142,7 +209,7 @@ export default function BoardSelection() {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [myBoards, nearby?.boards, activateBoard, showToast, t],
+    [myBoards, nearby?.boards, offlineRows, activateBoard, showToast, t],
   );
   const nearbySection =
     nearbyItems.length > 0 ? (
@@ -217,7 +284,9 @@ export default function BoardSelection() {
             ? 'unavailable'
             : 'idle';
 
-  if (isMyBoardsLoading) {
+  // The offline branch must not be swallowed by the loading spinner: the very first
+  // offline render is still "fetching" before the retryer pauses.
+  if (isMyBoardsLoading && !isLocalOnly) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
@@ -236,6 +305,50 @@ export default function BoardSelection() {
           {t('mobile.signInSubtitle')}
         </Text>
         <Button title={t('mobile.signInCta')} onPress={() => router.push('/auth/login')} style={styles.stateButton} />
+      </ScrollView>
+    );
+  }
+
+  // No usable network list: offer what this device downloaded instead of the mode
+  // cards, Popular, and a "create a board" CTA that all need a connection.
+  if (isLocalOnly) {
+    return (
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.flex}
+        contentContainerStyle={[styles.container, { paddingBottom: scrollBottomPadding }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* "No signal" is only true on the offline branch. The lying-connection branch
+            has bars — it just can't reach us — so it gets its own line. */}
+        <Text variant="subheadline" style={styles.offlineNotice}>
+          {isOffline ? t('mobile.offline.pickerNotice') : t('mobile.offline.pickerNoticeUnreachable')}
+        </Text>
+        {offlineItems.length > 0 ? (
+          <Section title={t('mobile.discovery.yourBoardsTitle')}>
+            <BoardCarousel items={offlineItems} onSelect={onSelectMyBoard} />
+          </Section>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text variant="headline" style={styles.emptyTitle}>
+              {t('mobile.offline.pickerEmptyTitle')}
+            </Text>
+            <Text variant="subheadline" style={styles.emptySubtitle}>
+              {t('mobile.offline.pickerEmptyBody')}
+            </Text>
+            {/* Only the lying-connection case gets a retry — offline it would just
+                pause, and the user already knows they have no signal. */}
+            {isError ? (
+              <Button
+                title={t('mobile.errorRetry')}
+                variant="outlined"
+                loading={isRefetching}
+                onPress={() => void refetch()}
+                style={styles.emptyCta}
+              />
+            ) : null}
+          </View>
+        )}
       </ScrollView>
     );
   }
@@ -347,6 +460,10 @@ const styles = StyleSheet.create({
     gap: spacing[5],
   },
   onboardingHeader: {
+    paddingHorizontal: spacing[4],
+    opacity: 0.7,
+  },
+  offlineNotice: {
     paddingHorizontal: spacing[4],
     opacity: 0.7,
   },

@@ -34,7 +34,7 @@ import { clearSessionCommentDraft } from '../lib/session-comment-draft-store';
 import { setCurrentUserStorageOwner, type UserStorageOwner } from '../lib/user-storage-owner';
 import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 import { clearUserData, getDatabaseHandle } from '../db';
-import { setSetting } from '../settings';
+import { setSetting, clearOfflineBoards } from '../settings';
 import { getPendingCount, setSigningOut } from '@boardsesh/offline-sync';
 import { drainMutationQueue } from '../offline/offline-sync-adapter';
 import { stopTokenManagement } from '../notifications';
@@ -224,6 +224,10 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
       // rows + checkpoints survive (clearUserData preserves them), so if the next user
       // enables the same board the download resumes instantly.
       setSetting('syncEnabledBoards', []);
+      // ...and the board snapshots the offline picker replays. These carry the
+      // previous account's board NAMES, so on a shared device a missed clear would
+      // show one user's walls in the next user's picker.
+      clearOfflineBoards();
       // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
       // without this the next user to sign in on a shared device would inherit the
       // previous user's board until a manual switch.

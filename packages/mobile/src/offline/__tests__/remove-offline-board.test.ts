@@ -51,7 +51,9 @@ vi.mock('../../lib/error-reporting', () => ({
 import type { QueryClient } from '@tanstack/react-query';
 import { removeOfflineBoard, compactOfflineDatabase } from '../remove-offline-board';
 import { getSetting, setSetting, resetAllSettings } from '../../settings/hooks';
+import { getOfflineBoards, rememberOfflineBoards } from '../../settings/offline-boards';
 import type { OfflineBoardScope, OfflineDatabase } from '@boardsesh/offline-sync';
+import type { UserBoard } from '@boardsesh/shared-schema';
 
 const KILTER_12X14: OfflineBoardScope = { boardType: 'kilter', layoutId: 1, sizeId: 7 };
 const KILTER_8X12: OfflineBoardScope = { boardType: 'kilter', layoutId: 1, sizeId: 8 };
@@ -121,6 +123,19 @@ describe('removeOfflineBoard', () => {
 
     await expect(removeOfflineBoard({ db, queryClient, scope: KILTER_12X14 })).rejects.toThrow('disk went away');
     expect(getSetting('syncEnabledBoards')).toEqual([]);
+  });
+
+  // The offline picker replays snapshots taken at download time. Once the rows are
+  // gone, a surviving card offers a board with no climbs behind it.
+  it('forgets the offline picker snapshots for the scope it just deleted', async () => {
+    const card = (uuid: string, sizeId: number): UserBoard =>
+      ({ uuid, name: uuid, boardType: 'kilter', layoutId: 1, sizeId, setIds: '20', angle: 40 }) as unknown as UserBoard;
+    setSetting('syncEnabledBoards', ['kilter:1:7', 'kilter:1:8']);
+    rememberOfflineBoards([card('removed', 7), card('kept', 8)]);
+
+    await removeOfflineBoard({ db, queryClient, scope: KILTER_12X14 });
+
+    expect(getOfflineBoards().map((entry) => entry.uuid)).toEqual(['kept']);
   });
 
   it('invalidates the readers that could still hold deleted rows', async () => {

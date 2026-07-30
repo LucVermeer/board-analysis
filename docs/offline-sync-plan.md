@@ -769,6 +769,46 @@ async function saveTick(db: SQLiteDatabase, tickData: TickInput) {
 | Backend GraphQL API   | Mostly unchanged. New sync pull queries + sync_deletions + idempotent mutations + addFavorite/removeFavorite. |
 | Aurora sync daemon    | Unchanged. Picks up ticks without `aurora_id` and pushes to Aurora API.                                       |
 
+## Board identity offline (why snapshots, not scope keys)
+
+The board picker and My Boards get their list from `myBoards`, a network-only GraphQL
+query. Offline the client's `networkMode: 'offlineFirst'` makes it PAUSE rather than
+error, so both screens saw an empty list and told the user they had no boards (#3897).
+
+The enabled-boards setting can't stand in for that list. A scope key is
+`"boardType:layoutId:sizeId"` — it names a DOWNLOAD, not a board, and one download
+serves every board the user has on that layout+size ("Marco's garage" and "Gym wall"
+on the same Kilter Original 12x12 share one). It carries no `uuid`, `name`, `setIds`
+or `angle`, and `uuid` is server-issued: `setActiveBoard`, `BoardProvider`, the BLE
+wrapper and the board-presence subscription all key on it, so it can never be
+synthesised from board-config.
+
+So board identity is snapshotted at download time into one more MMKV settings key
+(`offlineBoardsV1`, see `packages/mobile/src/settings/offline-boards.ts`) as a flat
+list of `UserBoard`s deduped by `uuid` — never a scope-keyed map, which would hide one
+of two boards sharing a scope. Reads run through a runtime shape guard so a card
+written by an older build degrades (one fewer row) instead of crashing the picker, and
+the list is cleared at sign-out because it carries the previous account's board names.
+
+The picker offers a snapshot only when its scope is in `getDownloadedScopeKeys()` —
+the honest "will actually serve climbs" signal — plus the active board unconditionally.
+
+Card lifecycle, since no single event covers it:
+
+- **Written** by `enableBoardsOffline` (the one download funnel) and refreshed from a
+  live `myBoards` by `useRememberDownloadedBoards`, which remembers boards whose scope
+  is in `syncEnabledBoards`. Deliberately not "or already downloaded": toggling
+  "Available offline" off leaves the rows and checkpoint on disk so re-enabling
+  resumes instantly, so a downloaded-keyed refresh would re-write the card the toggle
+  just dropped.
+- **Dropped per scope** (`forgetOfflineBoardScope`) when offline is turned off or the
+  data is removed — the download is per scope, so every board sharing it loses its card.
+- **Dropped per board** (`forgetOfflineBoard`) on delete and unfollow, and pruned
+  against a **complete** `myBoards` (`hasMore === false`) for the deleted-on-another-
+  device case. A card the backend no longer knows is worse than a stale row: activating
+  it writes a dead `uuid` into `active-board-store` and board presence. `myBoards` pages
+  at 20, which is why the prune refuses to run on a truncated page.
+
 ## Account lifecycle
 
 On logout or account switch:
@@ -776,7 +816,8 @@ On logout or account switch:
 1. Cancel any in-progress sync pull or mutation queue drain.
 2. Delete user data tables from SQLite (`boardsesh_ticks`, `playlists`, `playlist_climbs`, `user_favorites`, `user_follows`, `setter_follows`, `playlist_follows`, `user_playlist_pins`, `pending_mutations`). Board reference data stays — no need to re-copy the 150-200MB pre-warmed database.
 3. Clear the TanStack Query cache.
-4. On new login, sync pull client fetches the new user's data (small, seconds).
+4. Reset `syncEnabledBoards` and the `offlineBoardsV1` snapshots (board names must not survive into the next account on a shared device).
+5. On new login, sync pull client fetches the new user's data (small, seconds).
 
 ## Performance targets
 
