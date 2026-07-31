@@ -69,6 +69,12 @@ const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.d
 // rating it has deleted — so without this predicate the stale star would show
 // on the ascent forever. A REMOVE-then-PUT redelivery re-adopts the row and
 // clears the marker, so a live rating is unaffected.
+//
+// The marker is Kilter-specific but this predicate is not: a marked row is
+// hidden whatever its rating's origin. That is correct today because
+// kilter-sync is the only writer of this table. The day an Aurora writer
+// lands, revisit it — an Aurora-origin row that adopted a kilter_id and then
+// took a Kilter REMOVE would be hidden even though its Aurora rating is live.
 const boardClimbRatingsJoinCondition = and(
   eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbRatings.boardType),
   eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbRatings.climbUuid),
