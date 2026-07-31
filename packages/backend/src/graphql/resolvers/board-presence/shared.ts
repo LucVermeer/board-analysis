@@ -300,12 +300,32 @@ export async function requireActiveBoardById(boardId: number): Promise<ActivePre
   return board;
 }
 
+export type BoardVisibility = Pick<typeof dbSchema.userBoards.$inferSelect, 'isPublic' | 'ownerId'>;
+
 /**
- * Whether a board is readable by an anonymous viewer: an active **public**
- * board or a system-owned shared per-config board (the serial-less
- * MoonBoard-style feeds anon is first-class for). Viewer-independent — this is
- * also the publish gate for the board-queue-preview producer, which has no
- * viewer at all. False for missing/deleted boards.
+ * THE anonymous board-visibility rule, applied to a board row already in hand:
+ * a **public** board, or a system-owned shared per-config board (the serial-less
+ * MoonBoard-style feeds anon is first-class for). Viewer-independent.
+ *
+ * Every board read reachable without a session MUST route its anonymous gate
+ * through this one predicate — `isBoardAnonReadable` (by id),
+ * `assertAnonReadableBoard` (throwing), and the `board(boardUuid)` entity read
+ * all call it, so a private board can never be visible on one anonymous surface
+ * and hidden on another.
+ *
+ * `isUnlisted` is deliberately NOT part of the rule: unlisted means "reachable
+ * by direct link, never enumerated", so an unlisted-but-public board stays
+ * readable by uuid. Enumerating reads (searchBoards, gymBoards) filter unlisted
+ * separately.
+ */
+export function isRowAnonReadable(board: BoardVisibility): boolean {
+  return board.isPublic || board.ownerId === SYSTEM_BOARD_OWNER_ID;
+}
+
+/**
+ * `isRowAnonReadable` for a board identified by id — for callers that don't
+ * already hold the row. Also the publish gate for the board-queue-preview
+ * producer, which has no viewer at all. False for missing/deleted boards.
  */
 export async function isBoardAnonReadable(boardId: number): Promise<boolean> {
   assertValidBoardId(boardId);
@@ -314,7 +334,7 @@ export async function isBoardAnonReadable(boardId: number): Promise<boolean> {
     .from(dbSchema.userBoards)
     .where(and(eq(dbSchema.userBoards.id, boardId), isNull(dbSchema.userBoards.deletedAt)))
     .limit(1);
-  return Boolean(board && (board.isPublic || board.ownerId === SYSTEM_BOARD_OWNER_ID));
+  return Boolean(board && isRowAnonReadable(board));
 }
 
 /**
@@ -345,8 +365,6 @@ export async function requireAnonReadableBoard(
   }
   return true;
 }
-
-type BoardVisibility = Pick<typeof dbSchema.userBoards.$inferSelect, 'isPublic' | 'ownerId'>;
 
 /**
  * Same shape as `requireActiveBoardById`, plus the `isPublic`/`ownerId`
@@ -392,7 +410,7 @@ export async function requireActiveBoardWithVisibilityById(
  */
 export function assertAnonReadableBoard(board: BoardVisibility, viewerUserId: string | null | undefined): void {
   if (viewerUserId) return;
-  if (!board.isPublic && board.ownerId !== SYSTEM_BOARD_OWNER_ID) {
+  if (!isRowAnonReadable(board)) {
     throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
 }
