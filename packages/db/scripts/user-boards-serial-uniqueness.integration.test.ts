@@ -12,7 +12,17 @@ import { sql, type SQLWrapper } from 'drizzle-orm';
 import { createScriptDb } from './db-connection.js';
 import { executeRows } from '../src/client/index.js';
 
+// Mirrors packages/location-sync/src/ids.ts and the ensureSystemUser() upsert in
+// packages/location-sync/src/upsert.ts. Kept as literals so @boardsesh/db doesn't
+// take a dependency on location-sync; seeding the identical row here means a later
+// real sync's ON CONFLICT DO NOTHING is a genuine no-op instead of leaving a
+// permanently wrong email/name behind on a dev database.
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+const SYSTEM_USER_EMAIL = 'system@boardsesh.com';
+const SYSTEM_USER_NAME = 'Boardsesh';
+
+const SERIAL_UNIQUENESS_INDEX = 'user_boards_unique_owner_serial';
+const UNIQUE_VIOLATION_CODE = '23505';
 
 type ExecuteDb = {
   execute(query: SQLWrapper | string): PromiseLike<unknown>;
@@ -20,23 +30,44 @@ type ExecuteDb = {
 
 type CountRow = { count: number | string };
 
-// drizzle-orm >= 0.44 wraps driver failures in a DrizzleQueryError whose
-// `message` is a generic "Failed query: ..." string — the underlying
-// PostgresError (with the real "duplicate key"/constraint text) lives on
-// `.cause`. Walk the cause chain (bounded, in case of cycles) so the
-// assertion below actually inspects the Postgres error text instead of the
-// wrapper's own message. Mirrors packages/backend/src/utils/postgres-errors.ts.
-function messageChainMatches(error: unknown, pattern: RegExp): boolean {
-  let current: unknown = error;
+type ErrorRecord = Record<string, unknown>;
+
+function asErrorRecord(error: unknown): ErrorRecord | null {
+  return typeof error === 'object' && error !== null ? (error as ErrorRecord) : null;
+}
+
+// drizzle-orm >= 0.44 wraps driver failures in a DrizzleQueryError whose own
+// fields are a generic "Failed query: ..." message — the underlying PostgresError
+// (with `code` and `constraint_name`) lives on `.cause`. Walk the cause chain
+// (bounded, in case of cycles) so the assertion below inspects the real Postgres
+// fields. Mirrors packages/backend/src/utils/postgres-errors.ts.
+function* errorChain(error: unknown): Generator<ErrorRecord> {
+  let currentRecord = asErrorRecord(error);
   let depth = 0;
-  while (current && depth < 5) {
-    if (current instanceof Error && pattern.test(current.message)) {
-      return true;
-    }
-    current = current instanceof Error ? current.cause : undefined;
+  while (currentRecord && depth < 5) {
+    yield currentRecord;
+    currentRecord = asErrorRecord(currentRecord.cause);
     depth += 1;
   }
-  return false;
+}
+
+// Assert on the structured Postgres fields rather than error message text. A
+// message match on "duplicate key" is satisfied by any unique violation on the
+// table — including user_boards_unique_owner_config and the uuid primary key —
+// so it would go green without proving anything about the serial index.
+function violatesConstraint(error: unknown, constraintName: string): boolean {
+  let sawUniqueViolation = false;
+  let sawConstraint = false;
+  for (const errorRecord of errorChain(error)) {
+    if (errorRecord.code === UNIQUE_VIOLATION_CODE) {
+      sawUniqueViolation = true;
+    }
+    const constraint = errorRecord.constraint ?? errorRecord.constraint_name;
+    if (constraint === constraintName) {
+      sawConstraint = true;
+    }
+  }
+  return sawUniqueViolation && sawConstraint;
 }
 
 function localDatabaseUrl(): string | null {
@@ -64,7 +95,7 @@ async function skipReason(commandDb: ExecuteDb): Promise<string | null> {
           to_regclass('public.user_boards')::text AS "boardsTable",
           EXISTS (
             SELECT 1 FROM pg_indexes
-            WHERE indexname = 'user_boards_unique_owner_serial'
+            WHERE indexname = ${SERIAL_UNIQUENESS_INDEX}
               AND indexdef LIKE '%00000000-0000-0000-0000-000000000000%'
           ) AS "systemExcluded"
       `,
@@ -81,22 +112,27 @@ async function skipReason(commandDb: ExecuteDb): Promise<string | null> {
   return null;
 }
 
-async function ensureUser(commandDb: ExecuteDb, id: string, email: string): Promise<void> {
+async function ensureUser(commandDb: ExecuteDb, id: string, email: string, name = 'Serial Test'): Promise<void> {
   await commandDb.execute(sql`
     INSERT INTO users (id, email, name)
-    VALUES (${id}, ${email}, ${'Serial Test'})
+    VALUES (${id}, ${email}, ${name})
     ON CONFLICT (id) DO NOTHING
   `);
 }
 
+// `layoutId` varies so two boards owned by the same non-system user can differ in
+// board config. Without that, a second insert would also collide with
+// user_boards_unique_owner_config (owner_id, board_type, layout_id, size_id,
+// set_ids) and Postgres would report that constraint instead — the rejection
+// would prove nothing about the serial index under test.
 async function insertBoard(
   commandDb: ExecuteDb,
-  values: { uuid: string; slug: string; ownerId: string; serial: string },
+  values: { uuid: string; slug: string; ownerId: string; serial: string; layoutId: number },
 ): Promise<void> {
   await commandDb.execute(sql`
     INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number, is_owned)
     VALUES (
-      ${values.uuid}, ${values.slug}, ${values.ownerId}, 'kilter', 1, 10, '20',
+      ${values.uuid}, ${values.slug}, ${values.ownerId}, 'kilter', ${values.layoutId}, 10, '20',
       ${'Serial Test Board'}, ${values.serial}, false
     )
   `);
@@ -133,9 +169,10 @@ describe('user_boards serial uniqueness — system catalog exemption', () => {
       await ensureUser(db, otherOwnerId, 'serial-uniqueness-test@example.com');
       // The SYSTEM catalog user isn't seeded by any migration (production relies
       // on location-sync's own idempotent upsert) — seed it here so this test is
-      // self-contained on a fresh DB. ON CONFLICT DO NOTHING keeps it safe on a
-      // DB where the row already exists from a prior sync or test run.
-      await ensureUser(db, SYSTEM_USER_ID, 'system@boardsesh.internal');
+      // self-contained on a fresh DB, using location-sync's exact identity so the
+      // row this test leaves behind is the row a real sync would have written.
+      // ON CONFLICT DO NOTHING keeps it safe when the row already exists.
+      await ensureUser(db, SYSTEM_USER_ID, SYSTEM_USER_EMAIL, SYSTEM_USER_NAME);
 
       // Two SYSTEM-owned boards with the same serial must both persist.
       await insertBoard(db, {
@@ -143,12 +180,14 @@ describe('user_boards serial uniqueness — system catalog exemption', () => {
         slug: 'serialuniq-sys-1',
         ownerId: SYSTEM_USER_ID,
         serial: sharedSerial,
+        layoutId: 1,
       });
       await insertBoard(db, {
         uuid: uuids.system2,
         slug: 'serialuniq-sys-2',
         ownerId: SYSTEM_USER_ID,
         serial: sharedSerial,
+        layoutId: 1,
       });
 
       const [systemCount] = await executeRows<CountRow>(
@@ -163,6 +202,7 @@ describe('user_boards serial uniqueness — system catalog exemption', () => {
         slug: 'serialuniq-other-1',
         ownerId: otherOwnerId,
         serial: sharedSerial,
+        layoutId: 1,
       });
       // ...but a second one for the same owner must violate the unique index.
       await assert.rejects(
@@ -172,8 +212,11 @@ describe('user_boards serial uniqueness — system catalog exemption', () => {
             slug: 'serialuniq-other-2',
             ownerId: otherOwnerId,
             serial: sharedSerial,
+            // A different layout so user_boards_unique_owner_config cannot fire
+            // and only the serial index can reject this row.
+            layoutId: 2,
           }),
-        (error: unknown) => messageChainMatches(error, /user_boards_unique_owner_serial|duplicate key/i),
+        (error: unknown) => violatesConstraint(error, SERIAL_UNIQUENESS_INDEX),
         'a non-system owner must not bind the same serial twice',
       );
 
