@@ -292,6 +292,38 @@ describe('hydrateClimbsByRefs', () => {
 
       expect(result[0].angle).toBe(40);
     });
+
+    // `wallAngle` is the angle of the wall the user is standing at, not a
+    // display hint: the queue, the board-presence broadcast and the logged
+    // ascent all read it back. So it survives the stats fallback that
+    // `angleOverrides` follows.
+    it('reports wallAngle verbatim even when the stats join fell back to another angle', async () => {
+      mockDb.select.mockReturnValueOnce(makeChain([{ ...baseRow, statsAngle: 50 }]));
+
+      const result = await hydrateClimbsByRefs([{ climbUuid: 'c1', boardType: 'kilter' }], { wallAngle: 40 });
+
+      expect(result[0].angle).toBe(40);
+    });
+
+    it('reports wallAngle when the climb has no stats row at all', async () => {
+      mockDb.select.mockReturnValueOnce(makeChain([{ ...baseRow, statsAngle: null }]));
+
+      const result = await hydrateClimbsByRefs([{ climbUuid: 'c1', boardType: 'kilter' }], { wallAngle: 25 });
+
+      expect(result[0].angle).toBe(25);
+    });
+
+    it('lets wallAngle win over a conflicting per-ref override', async () => {
+      mockDb.select.mockReturnValueOnce(makeChain([{ ...baseRow, statsAngle: 50 }]));
+
+      const overrides = new Map<string, number | null>([['kilter:c1', 30]]);
+      const result = await hydrateClimbsByRefs([{ climbUuid: 'c1', boardType: 'kilter' }], {
+        wallAngle: 40,
+        angleOverrides: overrides,
+      });
+
+      expect(result[0].angle).toBe(40);
+    });
   });
 
   describe('flattened Boardsesh grade fields', () => {

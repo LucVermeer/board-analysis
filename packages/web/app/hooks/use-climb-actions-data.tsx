@@ -209,8 +209,7 @@ export function useClimbActionsData({ boardName, layoutId, angle, climbUuids }: 
     {
       accumulatedKey: memAccKey,
       fetchKeyPrefix: memFetchKeyPrefix,
-      // MoonBoard doesn't support playlists (no playlist API in Aurora for MoonBoard)
-      enabled: isAuthenticated && !isAuthLoading && !!boardName && layoutId > 0 && boardName !== 'moonboard',
+      enabled: isAuthenticated && !isAuthLoading && !!boardName && layoutId > 0,
       fetchChunk: memFetchChunk,
       merge: mergeMapFn,
       initialValue: EMPTY_MAP,

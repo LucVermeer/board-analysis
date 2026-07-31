@@ -48,9 +48,11 @@ const EmojiPicker = dynamic(
   },
 );
 
-// Validate hex color format
+// Matches the server's PlaylistColorSchema (`^(#[0-9A-Fa-f]{6})?$`) exactly.
+// A shorthand `#abc` would pass a looser check here and then fail validation
+// server-side, sinking the whole updatePlaylist mutation, not just the colour.
 const isValidHexColor = (color: string): boolean => {
-  return /^#([0-9A-Fa-f]{3}){1,2}$/.test(color);
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
 };
 
 type PlaylistEditDrawerProps = {
@@ -111,19 +113,24 @@ export default function PlaylistEditDrawer({ open, playlist, onClose, onSuccess 
 
       // Extract and validate hex color
       let colorHex: string | undefined;
-      if (formValues.color && isValidHexColor(formValues.color)) {
+      if (!formValues.color) {
+        colorHex = '';
+      } else if (isValidHexColor(formValues.color)) {
         colorHex = formValues.color;
       }
 
+      // The server treats '' as "clear this field" and undefined as "leave
+      // unchanged" — the form is seeded from the playlist, so send the values
+      // as-is and an emptied description/icon/colour actually clears.
       const response = await executeGraphQL<UpdatePlaylistMutationResponse, UpdatePlaylistMutationVariables>(
         UPDATE_PLAYLIST,
         {
           input: {
             playlistId: playlist.uuid,
             name: formValues.name,
-            description: formValues.description || undefined,
+            description: formValues.description,
             color: colorHex,
-            icon: formValues.icon || undefined,
+            icon: formValues.icon,
             isPublic: formValues.isPublic,
           },
         },

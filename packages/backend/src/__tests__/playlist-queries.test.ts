@@ -341,20 +341,23 @@ describe('playlistClimbs resolver', () => {
     const countChain = createMockChain([{ count: 1 }]);
     mockDb.select.mockReturnValueOnce(countChain);
 
-    // 3. Climbs query (specific-board mode)
+    // 3. Refs query (specific-board mode)
+    const refsChain = createMockChain([{ climbUuid: 'climb-1', playlistAngle: 40 }]);
+    mockDb.select.mockReturnValueOnce(refsChain);
+
+    // 4. Hydrate query
     const climbsChain = createMockChain([
       {
         climbUuid: 'climb-1',
-        playlistAngle: 40,
-        position: 0,
-        uuid: 'climb-1',
         layoutId: 1,
+        boardType: 'kilter',
         setter_username: 'setter1',
         name: 'Kilter Climb',
         description: '',
         frames: '',
+        statsAngle: 40,
         ascensionist_count: 10,
-        difficulty: 'V5',
+        difficulty_id: 5,
         quality_average: 3.5,
         difficulty_error: 0.2,
         benchmark_difficulty: null,

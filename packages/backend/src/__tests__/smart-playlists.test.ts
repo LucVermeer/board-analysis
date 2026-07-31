@@ -127,6 +127,30 @@ const USER_ROW = {
   avatarUrl: 'https://img/marco-avatar.jpg',
 };
 
+/** A full page of recommendation refs, as `selectRecommendationClimbRefs` returns them. */
+function makeRecommendationRefs(count: number) {
+  return Array.from({ length: count }, (_, index) => ({ climbUuid: `rec-${index}`, boardType: 'kilter' }));
+}
+
+/** The hydrator row `hydrateClimbsByRefs` selects for one of those refs. */
+function hydratedRowFor(ref: { climbUuid: string; boardType: string }) {
+  return {
+    climbUuid: ref.climbUuid,
+    layoutId: 8,
+    boardType: ref.boardType,
+    setter_username: 'u',
+    name: `climb ${ref.climbUuid}`,
+    description: '',
+    frames: '',
+    statsAngle: 45,
+    ascensionist_count: 5,
+    difficulty_id: 20,
+    quality_average: 5,
+    difficulty_error: 0,
+    benchmark_difficulty: null,
+  };
+}
+
 describe('smartPlaylist resolver', () => {
   beforeEach(() => {
     // resetAllMocks (not clearAllMocks) so the `mockReturnValueOnce` queues
@@ -456,6 +480,49 @@ describe('smartPlaylist resolver', () => {
     expect(result.climbs).toHaveLength(1);
     expect(result.climbs[0]).toMatchObject({ uuid: 'c1', angle: 45 });
     expect(selectRefsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('RECOMMENDED_* keeps hasMore true below the offset clamp when more climbs remain', async () => {
+    const ctx = makeCtx();
+    const refs = makeRecommendationRefs(20);
+    resolveTargetMock.mockResolvedValueOnce({ boardType: 'kilter', layoutId: 8, sizeId: 25, angle: 45, setIds: null });
+    selectRefsMock.mockResolvedValueOnce(refs);
+    countRefsMock.mockResolvedValueOnce(1000);
+    // fetchUserMeta, then the hydrator's data select.
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+    mockDb.select.mockReturnValueOnce(makeChain(refs.map(hydratedRowFor)).chain);
+
+    const result = await playlistQueries.smartPlaylist(
+      null,
+      { input: { type: 'RECOMMENDED_CROWD_FAVORITES', userId: 'user-123', page: 5, pageSize: 20 } },
+      ctx,
+    );
+
+    expect(result.climbs).toHaveLength(20);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('RECOMMENDED_* terminates paging at the offset clamp even when totalCount says more remain', async () => {
+    const ctx = makeCtx();
+    const refs = makeRecommendationRefs(20);
+    resolveTargetMock.mockResolvedValueOnce({ boardType: 'kilter', layoutId: 8, sizeId: 25, angle: 45, setIds: null });
+    selectRefsMock.mockResolvedValueOnce(refs);
+    countRefsMock.mockResolvedValueOnce(1000);
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+    mockDb.select.mockReturnValueOnce(makeChain(refs.map(hydratedRowFor)).chain);
+
+    // MAX_RECOMMENDATION_OFFSET (500) / pageSize (20) clamps at page 25 — any
+    // request past it re-serves that same page, so hasMore must go false there
+    // or infinite scroll refetches the identical page forever.
+    const result = await playlistQueries.smartPlaylist(
+      null,
+      { input: { type: 'RECOMMENDED_CROWD_FAVORITES', userId: 'user-123', page: 30, pageSize: 20 } },
+      ctx,
+    );
+
+    expect(result.climbs).toHaveLength(20);
+    expect(result.hasMore).toBe(false);
+    expect(selectRefsMock).toHaveBeenCalledWith('RECOMMENDED_CROWD_FAVORITES', expect.anything(), 'user-123', 25, 20);
   });
 });
 

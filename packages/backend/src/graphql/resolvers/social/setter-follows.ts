@@ -1,4 +1,5 @@
 import { eq, and, count, sql, ilike, inArray } from 'drizzle-orm';
+import { isSizeScopedBoard } from '@boardsesh/board-config';
 import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
 import { executeRows } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
@@ -238,8 +239,10 @@ export const setterFollowQueries = {
         filterConditions.push(eq(tables.climbs.layoutId, layoutId));
       }
 
-      // Filter by compatible size if sizeId is provided
-      if (sizeId != null) {
+      // Filter by compatible size if sizeId is provided. MoonBoard climbs never
+      // have compatible_size_ids populated (single fixed size), so a size filter
+      // would drop every row: `1 = ANY(NULL)` is NULL.
+      if (sizeId != null && isSizeScopedBoard(boardName)) {
         filterConditions.push(sql`${sizeId} = ANY(${tables.climbs.compatibleSizeIds})`);
       }
 
